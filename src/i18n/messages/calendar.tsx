@@ -179,6 +179,46 @@ const en = {
   hideDetails: 'Hide my personal activities',
   hideDetailsTip: 'Leaders who view your calendar see only "Busy" and the time. People you invite still see the details.',
   hideDetailsFailed: 'Your setting couldn\'t be saved, so it has been put back.',
+
+  /**
+   * **UI V1, 2026-10-30 (UI-104)**: the fourth view, *Tugas* — the checklist, the count row, the popup, a tick and its
+   * *Urungkan* — the sources a task or an event comes from, a trip's day and the Trip row, the travel switch, the 1:1's
+   * coaching buttons and the type chips' *Event*. The report's words where it gives them (*Tugas*, *Dari*, *Selesai ·
+   * Urungkan*, *Sepanjang hari*, *Hari x/y*, *Trip*, *Start coaching session*, *Coach <name>*, *Pick who to coach*).
+   */
+  three_days: '3 Days',
+  previousDays: 'Previous 3 days',
+  nextDays: 'Next 3 days',
+  tasks: 'Tasks',
+  tasksCount: ({ count }: { count: string }) => `Tasks · ${count}`,
+  /** The popup's title: *Tasks · Mon, 28 Sep (4)*; the day and the count written by the caller. */
+  tasksTitle: ({ day, count }: { day: string; count: string }) => `Tasks · ${day} (${count})`,
+  /** A count pill's name: what it opens. */
+  tasksOn: ({ day, count }: { day: string; count: string }) => `Tasks on ${day}: ${count}`,
+  /** A compared person's tasks in the Agenda: *INDAH PERMATASARI · Tasks 2*. */
+  personTasks: ({ name, count }: { name: string; count: string }) => `${name} · Tasks ${count}`,
+  /** A coaching task's top line: who coached the person. */
+  from: ({ name }: { name: string }) => `From: ${name}`,
+  /** A task's checkbox, named by what it ticks. */
+  markDone: ({ name }: { name: string }) => `Done: ${name}`,
+  done: 'Done',
+  undo: 'Undo',
+  taskFailed: 'That task couldn\'t be updated. Try again.',
+  openLead: ({ name }: { name: string }) => `Open ${name}`,
+  openSession: ({ name }: { name: string }) => `Open the 1:1 with ${name}`,
+  sources: { lead: kept('Lead'), coaching: kept('Coaching'), event: kept('Event') },
+  /** A joined event's name: the type is the office's, as typed. */
+  joinedName: ({ title, type, time }: { title: string; type: string; time: string }) =>
+    `${kept('Event')}: ${title} (${type})${time ? `, ${time}` : ''}`,
+  tripDay: ({ n, of }: { n: number; of: number }) => `Day ${n}/${of}`,
+  allDay: 'All day',
+  startDate: 'Start date',
+  endDate: 'End date',
+  tripEndAfterStart: 'Choose an end after the start.',
+  startCoaching: 'Start coaching session',
+  coachPerson: ({ name }: { name: string }) => `Coach ${name}`,
+  pickWhoToCoach: 'Pick who to coach',
+  eventChip: kept('Event'),
 };
 
 const OWES_ID = { waiting: ', menunggu jawaban Anda', placed: ', diblok di kalender Anda' };
@@ -304,6 +344,33 @@ const id: MessagesOf<typeof en> = {
   hideDetails: 'Sembunyikan aktivitas pribadi saya',
   hideDetailsTip: `${kept('Leader')} yang melihat kalender Anda hanya melihat "Sibuk" dan jamnya. Orang yang Anda undang tetap melihat detailnya.`,
   hideDetailsFailed: 'Pengaturan Anda tidak dapat disimpan, jadi dikembalikan seperti semula.',
+
+  three_days: '3 Hari',
+  previousDays: '3 hari sebelumnya',
+  nextDays: '3 hari berikutnya',
+  tasks: 'Tugas',
+  tasksCount: ({ count }) => `Tugas · ${count}`,
+  tasksTitle: ({ day, count }) => `Tugas · ${day} (${count})`,
+  tasksOn: ({ day, count }) => `Tugas pada ${day}: ${count}`,
+  personTasks: ({ name, count }) => `${name} · Tugas ${count}`,
+  from: ({ name }) => `Dari: ${name}`,
+  markDone: ({ name }) => `Selesai: ${name}`,
+  done: 'Selesai',
+  undo: 'Urungkan',
+  taskFailed: 'Tugas itu tidak dapat diperbarui. Coba lagi.',
+  openLead: ({ name }) => `Buka ${name}`,
+  openSession: ({ name }) => `Buka ${kept('1:1')} dengan ${name}`,
+  sources: { lead: kept('Lead'), coaching: kept('Coaching'), event: kept('Event') },
+  joinedName: ({ title, type, time }) => `${kept('Event')}: ${title} (${type})${time ? `, ${time}` : ''}`,
+  tripDay: ({ n, of }) => `Hari ${n}/${of}`,
+  allDay: 'Sepanjang hari',
+  startDate: 'Tanggal mulai',
+  endDate: 'Tanggal selesai',
+  tripEndAfterStart: 'Pilih akhir setelah awal.',
+  startCoaching: `Mulai sesi ${kept('coaching')}`,
+  coachPerson: ({ name }) => `${kept('Coaching')} ${name}`,
+  pickWhoToCoach: `Pilih siapa yang di-${kept('coaching')}`,
+  eventChip: kept('Event'),
 };
 
 export const calendarMessages = defineMessages({ en, id });

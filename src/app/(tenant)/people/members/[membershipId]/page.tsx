@@ -538,7 +538,7 @@ export default function MemberPage({ params }: { params: Promise<{ membershipId:
 
       <h2 className="mb-3 mt-6 font-display text-lg font-bold text-navy">{t.reports}</h2>
       {reports.length === 0 ? (
-        <div className="rounded-lg border border-hairline bg-card">
+        <div className="rounded-lg border border-card-edge bg-card">
           <EmptyState title={t.noReports} />
         </div>
       ) : (

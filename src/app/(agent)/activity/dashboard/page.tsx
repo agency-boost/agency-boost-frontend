@@ -1,7 +1,7 @@
 'use client';
 
 import { ActivityDashboardPanel } from '@/components/activity-dashboard';
-import { ACTIVITY_TITLE, ActivityTabs } from '@/components/activity-tabs';
+import { ActivityTabs, useActivityTitle } from '@/components/activity-tabs';
 import { Page } from '@/components/page';
 import { useMessages } from '@/i18n/language-provider';
 import { activityMessages } from '@/i18n/messages/activity';
@@ -15,8 +15,10 @@ import { activityMessages } from '@/i18n/messages/activity';
  */
 export default function ActivityDashboardPage() {
   const t = useMessages(activityMessages);
+  const title = useActivityTitle();
   return (
-    <Page title={ACTIVITY_TITLE} subtitle={t.dashboard.subtitle}>
+    // UI-106 on a phone: *Activity* and the avatar, no sub-line; from 768px as before.
+    <Page title={title} subtitle={t.dashboard.subtitle} subtitleOnPhone={false}>
       <ActivityTabs />
       <ActivityDashboardPanel />
     </Page>

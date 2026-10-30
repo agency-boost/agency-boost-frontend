@@ -83,7 +83,7 @@ describe('P18.98-T4 training’s catalogue, language by language', () => {
   const texts = catalogueTexts(AREA, readFileSync(join(SRC, AREA), 'utf8'));
 
   it('reads both languages, so a silent zero cannot pass', () => {
-    expect(texts.en.map((t) => t.text)).toEqual(expect.arrayContaining(['Skills List', 'Nothing to open in this module yet.']));
+    expect(texts.en.map((t) => t.text)).toEqual(expect.arrayContaining(['Training Modules', 'Nothing to open in this module yet.']));
     expect(texts.id.map((t) => t.text)).toEqual(expect.arrayContaining(['Belum ada yang bisa dibuka di modul ini.']));
   });
 

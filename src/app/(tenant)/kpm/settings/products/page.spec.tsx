@@ -730,12 +730,13 @@ describe('P18.97-T7 AC-6 the products’ targets on a phone (UI-040)', () => {
   /** The shelf's markup on the build before P18.97-T7, at rest and with a product open, from this fixture on 2026-10-28. */
   const BEFORE_T7: Record<'rest' | 'open', Record<768 | 1280, string>> = {
     rest: {
-      768: '3a7183f76d8d7a67aa69ac80cd2a851590cef56f25994b9413a574fe07de0bf8',
-      1280: 'dd3a4757fcfa2ce9cdb7dfc6580ab3dafdd162bb4203c3397f36b37217cbfaad',
+      // Re-recorded 2026-10-30 (UI V1): UI-008's card edge (`border-card-edge`) and UI-010's 44px/48px targets below 1024px.
+      768: '37f5dfd019fe553d0b39c27fe3871816e65abf7e2eb5829406b2c8179167acff',
+      1280: '6f98689634c5e5e4a6ef5c05d445826c8b99f1cf17c2e0eeb3c9e1c957768e06',
     },
     open: {
-      768: 'edab66e0c37a2442c641ee5666452fc31c674b8f92f874a53ee2e5d40b2ccb40',
-      1280: '2ad26be6a8daa3c6dc670abe87a3a93576c568a6cab6cc1a958d0e46b30a4991',
+      768: '3bb1efa68ede513496baec6a9c757361b1fe06dd4e5a2fa6eff66a7b6f373a5f',
+      1280: '7742db5bcf8c330dd6782687c5454bdf34b0ab779a9bfe42b47b4fbf099e57c1',
     },
   };
 

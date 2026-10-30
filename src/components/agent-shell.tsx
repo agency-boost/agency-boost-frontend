@@ -1,34 +1,40 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import { usePathname } from 'next/navigation';
+import { useState } from 'react';
 import { AppShell, type NavItem, type NavSection } from '@/components/app-shell';
 import { RequireSession } from '@/components/require-session';
 import { ToastHost } from '@/components/ui/toast';
 import { shortOfRung, useLadder } from '@/components/ui/role-badge';
-import { kept } from '@/i18n/kept';
 import { useLanguage, useMessages } from '@/i18n/language-provider';
 import { shellMessages } from '@/i18n/messages/shell';
 import { viewSwitchFor } from '@/lib/landing';
 import { displayName } from '@/lib/display-name';
+import { fieldNav, type FieldDestination } from '@/lib/field-nav';
 import { profileLine } from '@/lib/profile-line';
 import { useSession } from '@/lib/session';
 import { useUnreadCount } from '@/lib/use-unread-count';
 import { useSignOut } from '@/lib/use-sign-out';
 
+/** The picker's dialog, loaded the first time *Search agent* is pressed (common.md: a dialog costs nothing until then). */
+const AgentSearchDialog = dynamic(
+  () => import('@/components/agent-search-dialog').then((m) => m.AgentSearchDialog),
+  { ssr: false },
+);
+
 /**
- * The chrome around every agent and leader screen (`Overall.html:2610-2691`).
+ * The chrome around every agent and leader screen — **the field shell** (UI V1, UI-004; D-13, D-20; ADR-0180).
  *
- * The nine sections, their order and their labels are the prototype's, verbatim — `Overall.html`'s eight,
- * and *Recruitment tools*, which `Recruitment_Section.html` adds after *Sales tools* (P17-T3). They
- * were previously two invented ones — `Your office` and `Your work` — which appear in no
- * prototype file, and which put Admin first when the prototype puts it last. A member who
- * leads nobody sees eight: *Unit tools* and *Group tree* follow the graph (`leadsSomeone`,
- * below), which is the one place this nav departs from the prototype's static markup.
+ * - **Below 1024px**: no dark app bar; each page's title row with the avatar at its end, the floating tab bar
+ *   (*Activity · Calendar · Home · Unit · Lainnya*) and the *Lainnya* sheet (`components/field-nav.tsx`).
+ * - **From 1024px**: the navy sidebar as before, **regrouped as the sheet is** — a first section with no heading, then
+ *   *Saya*, *Aktivitas*, *Tim saya*, *Program*, *KPM* — with today's look, the profile chip, the bell and the page
+ *   header's *ID | EN* switch where they were.
  *
- * Unbuilt items keep an `Upcoming` pill rather than disappearing, because the client asked on
- * 2026-10-01 for what is not built to be marked "like the others" (ADR-0070). The pill is not
- * this file's prototype: `Overall.html` draws no unbuilt item. It is the Owner app's
- * (`KPM_Owner.html:882`), and the console's *Soon* (`Superadmin.html:177-204`).
+ * Until UI V1 this drew `Overall.html`'s nine sections (`:2610-2691`) with *Recruitment tools* and *Core leader* added;
+ * the revision of 2026-10-30 replaced them (ADR-0180: for a page the revision draws, its report is the design source).
+ * Unbuilt items keep their *Segera hadir* pill (ADR-0070), as *Advanced analytics* does.
  */
 
 export function AgentShell({
@@ -93,184 +99,49 @@ function Chrome({
   const unread = useUnreadCount();
   const { signOut, busy } = useSignOut();
   const pathname = usePathname();
-  // The nav's words are kept English (`kept`, the glossary's §A.1); the chip's and the pill's are the reader's.
+  // The nav's words are kept English (`kept`, the glossary's §A.1); the groups' headings and the pill are the reader's.
   const t = useMessages(shellMessages);
   const language = useLanguage();
-
-  const on = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
+  const [searching, setSearching] = useState(false);
 
   const membership = me?.membership;
 
   /*
-   * Leading is the graph, not the rung (OD-23): a leader is someone with an active direct report,
-   * so an AAB who leads nobody is not one, and neither is an AB with no reports. *Unit tools*
-   * follows that predicate, as `roles-and-permissions.md` §4.2 item 3 and §4.5 say. *Group tree*
-   * follows it too (§4.2 item 2, amended 2026-10-01, P10.1-T2 AC-9): the tree an Agent would see
-   * is a leader node and themselves, and that is as true of a childless AAB. The prototype's nav
-   * is static for every rung (`Overall.html:2624-2678`), which is the leak §4.2 names. The routes
-   * keep their own guards; this decides what the sidebar offers, not what the API allows.
+   * **One model for the three menus** (UI V1, UI-004; D-20, ADR-0180): the tab bar, the *Lainnya* sheet and this
+   * sidebar are `fieldNav`'s, so the sheet and the sidebar have the same groups, order and members. Who sees what is
+   * today's rule, unchanged — leading is the graph (OD-23), *New Hires* as P18.96-T3 offers it, the *KPM* group to a
+   * Core Leader (ADR-0159 §3) — and every route keeps its own guard: the nav decides what is offered, never what is
+   * allowed.
    */
-  const leadsSomeone = (membership?.directCount ?? 0) > 0;
+  const nav = fieldNav(me, pathname);
 
-  const unitTools: NavSection = {
-    label: kept('Unit tools'),
-    divider: true,
-    items: [
-      // Live since the Unit Dashboard was built (P15-T2 AC-1; it was *Upcoming* from P10.1-T2 while
-      // the page was a sign), and where a leader lands (`landing.ts`, P15-T4 AC-4). Current on the
-      // reader's own unit and on every unit below them, `/unit/dashboard/{membershipId}`: one screen
-      // over another head. Nothing under `/coaching` matches it, nor it `/coaching`.
-      { label: kept('Unit dashboard'), href: '/unit/dashboard', icon: 'gauge', active: on('/unit/dashboard') },
-      // Live since the roster was built (P11-T6 AC-7). Every route under it is coaching — the reader's
-      // own notes and each person they coach — so the item stays current on all of them, as the
-      // prototype's returns to the roster from any of them (`Overall.html:10596`). A drill from the
-      // Unit Dashboard into a person's coaching tabs lands here, and this item is the current one.
-      { label: kept('Coaching session'), href: '/coaching', icon: 'chat', active: on('/coaching') },
-    ],
-  };
-
-  const groupTree: NavItem = { label: kept('Group tree'), href: '/group-tree', icon: 'tree', active: on('/group-tree') };
+  /**
+   * A destination as the sidebar draws it: its full name (D-20, *desktop has room*), *Segera hadir* for one with no
+   * screen, the amber check, and *Search agent* a control that opens the picker rather than a page.
+   */
+  const item = (d: FieldDestination): NavItem => ({
+    label: d.label,
+    href: d.href,
+    icon: d.icon,
+    active: d.active,
+    ...(d.soon ? { upcoming: true } : {}),
+    ...(d.done ? { done: true } : {}),
+    ...(d.opens === 'agentSearch' ? { onSelect: () => setSearching(true) } : {}),
+  });
 
   /*
-   * *New agent* (`Overall.html:2638-2647`) shows exactly what the reader has (P13-T7 AC-5), from the
-   * facts the session carries, so no page reads them again: *Your 90-day activation* while their own is
-   * open (OD-28, OD-120), with the prototype's amber check at 100% (`:6624`); *New hires* when they reach
-   * at least one open activation, an Agent with a direct report included (OD-122, `:6894-6895`); and
-   * the whole section hidden when neither applies (`:6638-6642`). Each route refuses a reader this
-   * would not offer it to — the nav decides what is offered, never what is allowed.
-   */
-  const newAgent: NavSection = {
-    label: kept('New agent'),
-    divider: true,
-    items: [
-      ...(me?.activation?.open
-        ? [{
-          label: kept('Your 90-day activation'), href: '/activation', icon: 'clipboard', active: on('/activation'),
-          done: me.activation.complete,
-        } satisfies NavItem]
-        : []),
-      /*
-       * P18.96-T3 AC-1 (ADR-0170 §1; UI-001): and to a leader who may add agents, so *+ Add agent* and *Review
-       * requests* are a tap away before their first hire — where the page itself is theirs (`new_hires:read_roster`).
-       */
-      ...(me?.newHires || (me?.permissions.includes('member:invite') && me.permissions.includes('new_hires:read_roster'))
-        ? [{ label: kept('New hires'), href: '/new-hires', icon: 'userPlus', active: on('/new-hires') } satisfies NavItem]
-        : []),
-    ],
-  };
-
-  /*
-   * **Core leader** (ADR-0159 §3, P18.8-T5 AC-5; the client's request of 2026-10-26): after *Campaign* and before
-   * *Admin*, to a Core Leader only — `membership.isCoreLeader`, the effective flag the session carries (tagged, on a
-   * leader rung). No prototype draws it. *Strategic Leader Forum* and *KPM analytics* open in this shell (both are
-   * cross-family routes, `RoleShell`); *Advanced analytics* has no screen, so it is disabled and marked *Soon*, the
-   * pill this shell's `upcomingLabel` names — as the console's own item (`tenant-shell.tsx`). The forum and the
-   * analytics refuse anybody this would not offer them to (404); the nav decides what is offered, never what is allowed.
-   */
-  const coreLeader = membership?.isCoreLeader === true;
-  const coreLeaderSection: NavSection = {
-    label: kept('Core leader'),
-    divider: true,
-    items: [
-      { label: kept('Strategic Leader Forum'), href: '/leader-meetings', icon: 'megaphone', active: on('/leader-meetings') },
-      { label: kept('KPM analytics'), href: '/kpm/analytics', icon: 'chart', active: on('/kpm/analytics') },
-      { label: kept('Advanced analytics'), href: '/kpm/advanced-analytics', icon: 'chartUp', upcoming: true },
-    ],
-  };
-
-  /*
-   * Nine sections in the prototype's order, Admin last, **with a line between every two** (client
-   * feedback, 2026-09-30; parity I-144). The prototype draws two lines here, before KPM and before
-   * Admin (`Overall.html:2660`, `:2672`), where the Owner's and the Super Admin's draw one before
-   * every group. Once every group became a toggle of its own (P10.1-T3), a heading with no line
-   * above it read as part of the group before it, so the client asked for the other two shells'
-   * rule here too. Every section but the last carries `divider`.
+   * **The desktop sidebar, regrouped** (UI-004; D-20): a first section with no heading — *Home · Activity · Calendar ·
+   * Unit Dashboard · Search agent* — then *Saya*, *Aktivitas*, *Tim saya*, *Program* and *KPM*, their headings 12px grey in
+   * sentence case (`AppShell`'s `field`). *Unit tools*, *Personal tools*, *Sales tools* and the rest are gone. A line
+   * between every two groups, as before (parity I-144).
    */
   const sections: readonly NavSection[] = [
-    {
-      label: kept('Personal tools'),
-      divider: true,
-      items: [
-        // Notifications is **not** here. It is the bell beside the identity chip at the foot
-        // of the sidebar — a glance rather than a place to work (client feedback,
-        // 2026-09-24).
-        { label: kept('Activity management'), href: '/activity/log', active: on('/activity'), icon: 'activity' },
-        { label: kept('Leads management'), href: '/leads', active: on('/leads'), icon: 'funnel' },
-        { label: kept('Goal settings'), href: '/goals', active: on('/goals'), icon: 'target' },
-        { label: kept('Personal summary'), href: '/summary', active: on('/summary'), icon: 'user' },
-        // The fifth, after *Personal summary*, in `Overall.html`'s sentence case: the section file draws it
-        // in a *Daily tools* group of its own (`Calendar_Section.html:254-260`), which is shell residue
-        // (`prototype-sources.md`, *The rule*). Every field role has a calendar (roles §4.2), so it
-        // follows no graph. Its glyph is not *Event list*'s (P12-T2 AC-1).
-        { label: kept('Calendar'), href: '/calendar', active: on('/calendar'), icon: 'schedule' },
-      ],
-    },
-    ...(leadsSomeone ? [unitTools] : []),
-    ...(newAgent.items.length > 0 ? [newAgent] : []),
-    {
-      label: kept('Training'),
-      divider: true,
-      // Live for every field rung, and the Owner and the Admin in their field view (P18.5-T1 AC-9): the
-      // prototype gates it for nobody (`Overall.html:2651`). Current on the list and every module's page.
-      items: [{ label: kept('Training modules'), href: '/training', icon: 'graduation', active: on('/training') }],
-    },
-    {
-      label: kept('Sales tools'),
-      items: [
-        // Live for every field role (Phase 14; roles §4.2): the prototype gates neither (`Overall.html:2656-2657`).
-        // **One entry since P18.8-T12** (ADR-0161 §5, the client's request of 2026-10-26): *Sales Attack Plan* opens the
-        // plan, and the tabs over both pages reach the catalog. It stays current on either address, the catalog's
-        // drawer `/product-catalog/{code}` included.
-        {
-          label: kept('Sales Attack Plan'), href: '/attack-plan', icon: 'compass',
-          active: on('/attack-plan') || on('/product-catalog'),
-        },
-      ],
-      divider: true,
-    },
-    {
-      /*
-       * The section file's one addition to the shell (`Recruitment_Section.html:251-254`): a group of its own
-       * after *Sales tools* and before the line above *KPM*, in `Overall.html`'s sentence case
-       * (`prototype-sources.md`, *What each file adds*; P17-T3 AC-1). Every field role's, and the Owner's
-       * and the Admin's in their field view, so it follows no graph. It opens the first tab and stays
-       * current on both (`/recruitment/*`). Its glyph, *People*, is no other item's here.
-       */
-      label: kept('Recruitment tools'),
-      divider: true,
-      items: [{ label: kept('Recruitment'), href: '/recruitment/attack-plan', icon: 'users', active: on('/recruitment') }],
-    },
-    {
-      label: kept('KPM'),
-      divider: true,
-      // Live for every field role (P18.5-T5 AC-4; I-150): the prototype gates it on nothing (`Overall.html:2662-2665`).
-      // Current over an event's modal too, `/events/{eventId}`.
-      items: [{ label: kept('Event list'), href: '/events', icon: 'calendar', active: on('/events') }],
-    },
-    {
-      label: kept('Campaign'),
-      // Live for every field role (P18.5-T7; roles §4.2): the prototype gates it on nothing (`Overall.html:2667-2670`).
-      // Current over a campaign's dialog too, `/campaigns/{code}`.
-      items: [{ label: kept('Campaign list'), href: '/campaigns', icon: 'trophy', active: on('/campaigns') }],
-      divider: true,
-    },
-    ...(coreLeader ? [coreLeaderSection] : []),
-    {
-      label: kept('Admin'),
-      items: [
-        ...(leadsSomeone ? [groupTree] : []),
-        {
-          label: kept('User management'),
-          icon: 'userPlus',
-          href: '/user-management/kpm',
-          active: on('/user-management'),
-          // No badge. P3.5-T5 AC-3 settled this: no prototype puts a count inside a nav
-          // anchor — `tab-badge` appears only on the sub-tab — and the count reached the
-          // shell as a prop from one page, which a group layout cannot receive. The
-          // specified badge lives on the Pending Requests sub-tab and still does.
-        },
-      ],
-    },
+    { label: null, divider: true, items: nav.top.map(item) },
+    ...nav.groups.map((group, i): NavSection => ({
+      label: t.fieldGroups[group.id],
+      items: group.items.map(item),
+      ...(i < nav.groups.length - 1 ? { divider: true } : {}),
+    })),
   ];
 
   /*
@@ -285,35 +156,54 @@ function Chrome({
     ? shortOfRung(rung)
     : (membership?.hierarchyRole ?? '').toUpperCase();
 
+  const name = (me && displayName(me.user)) || t.signedIn;
+  // The profile line (ADR-0159 §5, P18.8-T6 AC-2): the rung · Core Leader · the groups · the office.
+  const role = membership ? profileLine(shortRung, membership) : t.noOfficeYet;
+  // *Open Owner view* or *Open Admin view* (ADR-0114): back to the office console, for an Owner or an Admin who opened
+  // their field view. A field member has one view, and is offered nothing.
+  const viewSwitch = viewSwitchFor(me, 'field', language) ?? undefined;
+  const notifications = { href: '/notifications', unread };
 
   return (
     <AppShell
       sections={sections}
       user={{
-        name: (me && displayName(me.user)) || t.signedIn,
-        // The profile line (ADR-0159 §5, P18.8-T6 AC-2): the rung · Core Leader · the groups · the office.
-        role: membership ? profileLine(shortRung, membership) : t.noOfficeYet,
+        name,
+        role,
         initials: me?.user.initials ?? '??',
         email: me?.user.email,
         // The first of the phone's menu details (P18.95-T12 AC-3): the name in full, where the chip greets by the preferred one.
         fullName: me?.user.fullName,
       }}
-      // *Advanced analytics* under *Core leader* is the one item here with no screen yet: *Soon*, as the client wrote it.
+      // *Advanced analytics* is the one item here with no screen yet: *Soon*, as the client wrote it.
       upcomingLabel={t.soon}
       account={{
         href: '/profile',
         onSignOut: () => void signOut(),
         signingOut: busy,
-        // *Open Owner view* or *Open Admin view* (ADR-0114): back to the office console, for an Owner or an
-        // Admin who opened their field view. A field member has one view, and is offered nothing.
-        viewSwitch: viewSwitchFor(me, 'field', language) ?? undefined,
+        viewSwitch,
       }}
-      notifications={{ href: '/notifications', unread }}
+      notifications={notifications}
+      field={{
+        nav,
+        notifications,
+        account: {
+          name,
+          role,
+          initials: me?.user.initials ?? '??',
+          avatarUrl: me?.user.avatarUrl ?? null,
+          profileHref: '/profile',
+          onSignOut: () => void signOut(),
+          signingOut: busy,
+          viewSwitch,
+        },
+      }}
       title={title}
       subtitle={subtitle}
       actions={actions}
     >
       {children}
+      {searching && <AgentSearchDialog onClose={() => setSearching(false)} />}
     </AppShell>
   );
 }

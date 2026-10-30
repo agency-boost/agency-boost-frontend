@@ -1,5 +1,6 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import { useEffect, useState } from 'react';
 import { AspectCard } from '@/components/activation-parts';
 import { useCoachee } from '@/components/coaching-person';
@@ -9,7 +10,7 @@ import { Skeleton, SkeletonBar, SkeletonText } from '@/components/ui/skeleton';
 import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
 import { activationMessages } from '@/i18n/messages/activation';
 import {
-  FIRST_CASE_CLOSED, readMyActivation, readNewHire, type ActivationItemProgress, type ActivationView,
+  FIRST_CASE_CLOSED, readMyActivation, type ActivationItemProgress, type ActivationView,
 } from '@/lib/activation';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
@@ -122,31 +123,50 @@ function RecordState({
       </div>
     );
   }
-  if (!read.view) {
-    return (
-      <Skeleton label={t.record.loading}>
-        <div className="flex flex-col gap-4">
-          <div className="rounded-lg border border-hairline bg-card px-[22px] py-[18px]">
-            <SkeletonBar className="h-4 w-40" />
-            <SkeletonBar className="mt-4 h-1.5 w-full" />
-          </div>
-          <div className="rounded-lg border border-hairline bg-card px-5 py-4">
-            <SkeletonBar className="h-5 w-40" />
-            <SkeletonText lines={4} className="mt-4" />
-          </div>
-        </div>
-      </Skeleton>
-    );
-  }
+  if (!read.view) return <ActivationRecordSkeleton />;
   return <ActivationRecord view={read.view} />;
 }
 
-/** A coachee's tab, inside the person shell (T9 AC-3): the read a leader's detail makes. */
+/** The tab's wait: the record card's shape, then an aspect card. */
+function ActivationRecordSkeleton() {
+  const t = useMessages(activationMessages);
+  return (
+    <Skeleton label={t.record.loading}>
+      <div className="flex flex-col gap-4">
+        <div className="rounded-lg border border-card-edge bg-card px-[22px] py-[18px]">
+          <SkeletonBar className="h-4 w-40" />
+          <SkeletonBar className="mt-4 h-1.5 w-full" />
+        </div>
+        <div className="rounded-lg border border-card-edge bg-card px-5 py-4">
+          <SkeletonBar className="h-5 w-40" />
+          <SkeletonText lines={4} className="mt-4" />
+        </div>
+      </div>
+    </Skeleton>
+  );
+}
+
+/**
+ * **New hire detail, under the coaching page's one header** (UI V1, UI-029: *Activation = their new-hire detail —
+ * strip, tiles, checklist; not the New Hires list*; T6): `/new-hires/[membershipId]`'s page `embedded`, so the agent's
+ * name is never drawn twice. Loaded when the tab opens — the detail is the heaviest thing on it (the bundle).
+ * Somebody with no activation opens on the tab's own line, as before (T9 AC-3).
+ */
+const EmbeddedHireDetail = dynamic(() => import('@/components/new-hires').then((m) => m.NewHireDetail), {
+  loading: () => <ActivationRecordSkeleton />,
+});
+
+/** A coachee's tab, inside the person shell (T9 AC-3; UI-029): their new-hire detail. */
 export function CoacheeActivation() {
   const coachee = useCoachee();
   const t = useMessages(activationMessages).record;
-  const read = useActivationRead(() => readNewHire(coachee.membershipId), coachee.membershipId);
-  return <RecordState read={read} empty={t.coacheeNone({ name: coachee.name })} />;
+  return (
+    <EmbeddedHireDetail
+      membershipId={coachee.membershipId}
+      embedded
+      notFound={<Card><p className="text-center text-md text-muted">{t.coacheeNone({ name: coachee.name })}</p></Card>}
+    />
+  );
 }
 
 /** The reader's own, on `/coaching/me` (T9 AC-4, D-coaching-me): the read the hire's page makes. */

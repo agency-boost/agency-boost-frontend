@@ -37,10 +37,11 @@ describe('+ Add agent, the one form (P18.96-T3 AC-1)', () => {
   it('P18.96-T3 AC-1 holds Add agent until every field is given, and says which are missing', async () => {
     stubFetch({});
     open();
-    expect(screen.getByRole('button', { name: 'Add agent' })).toBeDisabled();
-    expect(screen.getByText('Still needed: Agent code, Name and WhatsApp number.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add & send invite' })).toBeDisabled();
+    // UI-024: grey until filled, with no *Still needed…* line on the screen — a screen reader still hears why.
+    expect(screen.getByText('Still needed: Agent code, Name and WhatsApp number.')).toHaveClass('sr-only');
     await fill();
-    expect(screen.getByRole('button', { name: 'Add agent' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Add & send invite' })).toBeEnabled();
   });
 
   it('P18.96-T3 AC-1 says a code with letters, a number WhatsApp cannot open and a later day under their own fields', async () => {
@@ -49,22 +50,22 @@ describe('+ Add agent, the one form (P18.96-T3 AC-1)', () => {
     await fill({ code: 'PRU-1', phone: '123' });
     expect(screen.getByText('Digits only, as on their contract.')).toBeInTheDocument();
     fireEvent.blur(screen.getByLabelText('WhatsApp number'));
-    expect(await screen.findByText('Enter a WhatsApp number, like 0812-3456-7890.')).toBeInTheDocument();
+    expect(await screen.findByText('Enter 9 to 13 digits after +62.')).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('Join date'), { target: { value: '2026-10-28' } });
     expect(screen.getByText(/^The join date cannot be after today, 27 Oct 2026\.$/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Add agent' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Add & send invite' })).toBeDisabled();
   });
 
   it('P18.96-T3 AC-2 an invite turns the dialog into its share step: WhatsApp with the message, the link to copy, a QR', async () => {
-    const { calls } = stubFetch({ 'POST /new-hires/agents': { body: { outcome: 'invited', ...shared({ leader: { membershipId: 'mem-me', name: 'Me' } }) } } });
+    const { calls } = stubFetch({ '/join/my-code': { body: { code: 'ME01', url: 'https://app.test/join?code=ME01' } }, 'POST /new-hires/agents': { body: { outcome: 'invited', ...shared({ leader: { membershipId: 'mem-me', name: 'Me' } }) } } });
     const { onAdded, onClose } = open();
     await fill();
     fireEvent.change(screen.getByLabelText('Join date'), { target: { value: '2026-10-20' } });
-    await userEvent.click(screen.getByRole('button', { name: 'Add agent' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Add & send invite' }));
 
     const post = calls.find((c) => c.url.includes('/new-hires/agents'))!;
     expect(JSON.parse(post.init.body as string)).toEqual({
-      agentCode: '80777', fullName: 'Yusuf Hidayat', phone: '0812-8077-7001', joinDate: '2026-10-20',
+      agentCode: '80777', fullName: 'Yusuf Hidayat', phone: '+6281280777001', joinDate: '2026-10-20',
     });
     const dialog = await screen.findByRole('dialog', { name: 'Invite Yusuf Hidayat' });
     expect(onAdded).toHaveBeenCalledWith(expect.objectContaining({ outcome: 'invited', link: LINK }));
@@ -88,11 +89,11 @@ describe('+ Add agent, the one form (P18.96-T3 AC-1)', () => {
     });
     const { onAdded, onClose } = open();
     await fill({ code: '80008' });
-    await userEvent.click(screen.getByRole('button', { name: 'Add agent' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Add & send invite' }));
     expect(onAdded).toHaveBeenLastCalledWith({ outcome: 'linked', member: { membershipId: 'mem-putri', fullName: 'Putri Anggraini' } });
     expect(onClose).toHaveBeenCalledTimes(1);
     await fill({ code: '87014' });
-    await userEvent.click(screen.getByRole('button', { name: 'Add agent' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Add & send invite' }));
     expect(onAdded).toHaveBeenLastCalledWith(expect.objectContaining({ outcome: 'transfer_requested' }));
     expect(onClose).toHaveBeenCalledTimes(2);
   });
@@ -106,18 +107,18 @@ describe('+ Add agent, the one form (P18.96-T3 AC-1)', () => {
     });
     const { onAdded } = open();
     await fill();
-    await userEvent.click(screen.getByRole('button', { name: 'Add agent' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Add & send invite' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('already has an invite waiting');
     expect(onAdded).not.toHaveBeenCalled();
     expect(screen.getByRole('dialog', { name: 'Add agent' })).toBeInTheDocument();
   });
 
   it('P18.96-T3 AC-1 for the Owner or an Admin on somebody’s unit: titled with it, and sends whose unit', async () => {
-    const { calls } = stubFetch({ 'POST /new-hires/agents': { body: { outcome: 'invited', ...shared() } } });
+    const { calls } = stubFetch({ '/join/my-code': { body: { code: 'ME01', url: 'https://app.test/join?code=ME01' } }, 'POST /new-hires/agents': { body: { outcome: 'invited', ...shared() } } });
     open({ leader: { membershipId: 'mem-sari', name: 'Sari Puspita' } });
     expect(screen.getByRole('dialog', { name: 'Add agent to Sari Puspita’s unit' })).toBeInTheDocument();
     await fill();
-    await userEvent.click(screen.getByRole('button', { name: 'Add agent' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Add & send invite' }));
     const post = calls.find((c) => c.url.includes('/new-hires/agents'))!;
     expect(JSON.parse(post.init.body as string)).toMatchObject({ leaderMembershipId: 'mem-sari' });
   });
@@ -126,9 +127,43 @@ describe('+ Add agent, the one form (P18.96-T3 AC-1)', () => {
     stubFetch({ 'POST /new-hires/agents': { body: { outcome: 'invited', ...shared({ existingAccount: true, phone: '12345678' }) } } });
     open();
     await fill({ phone: '0812-8077-7001' });
-    await userEvent.click(screen.getByRole('button', { name: 'Add agent' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Add & send invite' }));
     expect(await screen.findByText('Yusuf Hidayat already has an account, so the link asks them to sign in and accept.')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Share on WhatsApp' })).not.toBeInTheDocument();
     expect(screen.getByText('That number is not one WhatsApp can open. Copy the link and send it another way.')).toBeInTheDocument();
+  });
+
+  it('UI-024 the modal opens on the reader’s leader code: Kode leader, Salin tautan · Salin kode · QR · WhatsApp, then atau kirim undangan langsung', async () => {
+    stubFetch({ '/join/my-code': { body: { code: 'AGUS01', url: 'https://app.test/join?code=AGUS01' } } });
+    open();
+    const dialog = screen.getByRole('dialog', { name: 'Add agent' });
+    expect(await within(dialog).findByText('AGUS01')).toBeInTheDocument();
+    const block = dialog.querySelector('[data-invite-share="modal"]') as HTMLElement;
+    expect(within(block).getAllByRole('button').map((b) => b.textContent)).toEqual(['Copy link', 'Copy code', 'QR']);
+    expect(within(block).getByRole('link', { name: /WhatsApp/ })).toHaveAttribute('href', expect.stringContaining('wa.me/?text='));
+    expect(within(dialog).getByText('or send an invite directly')).toBeInTheDocument();
+    // The fixed +62 before the number, and the mockup's examples in the fields.
+    expect(within(dialog).getByText('+62')).toBeInTheDocument();
+    expect(within(dialog).getByLabelText('Agent code')).toHaveAttribute('placeholder', 'e.g. 70012345');
+  });
+
+  it('UI-024 on somebody else’s unit (the Owner’s choice) there is no leader code to share: the form alone', async () => {
+    const { calls } = stubFetch({});
+    open({ leader: { membershipId: 'mem-arief', name: 'Arief Hidayat' } });
+    await screen.findByRole('dialog');
+    expect(document.querySelector('[data-invite-share]')).toBeNull();
+    expect(calls.filter((c) => c.url.includes('/join/my-code'))).toEqual([]);
+  });
+
+  it('UI-024 sending the invite on WhatsApp closes the modal and hands the name back for the toast', async () => {
+    stubFetch({ 'POST /new-hires/agents': { body: { outcome: 'invited', ...shared() } } });
+    const onSent = vi.fn();
+    const { onClose } = open({ onSent });
+    await fill({ phone: '812 8077 7001' });
+    await userEvent.click(screen.getByRole('button', { name: 'Add & send invite' }));
+    const share = await screen.findByRole('link', { name: 'Share on WhatsApp' });
+    fireEvent.click(share);
+    expect(onClose).toHaveBeenCalled();
+    expect(onSent).toHaveBeenCalledWith('Yusuf Hidayat');
   });
 });

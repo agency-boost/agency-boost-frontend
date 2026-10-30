@@ -1,5 +1,11 @@
+'use client';
+
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { RouteTabs } from '@/components/ui/route-tabs';
 import { kept } from '@/i18n/kept';
+import { cn } from '@/lib/cn';
+import { usePhone } from '@/lib/use-phone';
 
 /**
  * Activity management's three sub-tabs (`Overall.html:2712-2716`).
@@ -26,15 +32,47 @@ import { kept } from '@/i18n/kept';
  */
 export const ACTIVITY_TITLE = kept('Activity Management');
 
+/**
+ * **The title on a phone: *Activity*** (UI V1, UI-106 and UI-004: *Title row "Activity" + avatar*) — the tab bar's own
+ * word, kept English in both languages. From 768px, *Activity Management* as before (UI-106's scope is the phone).
+ */
+export function useActivityTitle(): string {
+  return usePhone() ? kept('Activity') : ACTIVITY_TITLE;
+}
+
+const TABS = [
+  { href: '/activity/log', label: kept('Log Activity') },
+  { href: '/activity/dashboard', label: kept('Dashboard') },
+  { href: '/activity/ratio', label: kept('Ratio') },
+] as const;
+
+/**
+ * The three views. **On a phone, one segmented control** (UI V1, UI-106: *Log Activity | Dashboard | Ratio as one
+ * segmented control*): a white track, the current view a navy pill, each a link 44px tall sharing the track's width.
+ * From 768px, the underlined strip as before.
+ */
 export function ActivityTabs() {
+  const phone = usePhone();
+  const pathname = usePathname();
+  if (!phone) return <RouteTabs label={kept('Activity management')} tabs={TABS} />;
   return (
-    <RouteTabs
-      label={kept('Activity management')}
-      tabs={[
-        { href: '/activity/log', label: kept('Log Activity') },
-        { href: '/activity/dashboard', label: kept('Dashboard') },
-        { href: '/activity/ratio', label: kept('Ratio') },
-      ]}
-    />
+    <nav aria-label={kept('Activity management')} data-segmented="" className="mb-2.5 flex rounded-pill bg-card p-[3px]">
+      {TABS.map((tab) => {
+        const current = pathname === tab.href;
+        return (
+          <Link
+            key={tab.href}
+            href={tab.href}
+            aria-current={current ? 'page' : undefined}
+            className={cn(
+              'flex min-h-11 flex-1 items-center justify-center whitespace-nowrap rounded-pill px-2 text-base font-semibold',
+              current ? 'bg-navy text-white' : 'text-muted hover:text-navy',
+            )}
+          >
+            {tab.label}
+          </Link>
+        );
+      })}
+    </nav>
   );
 }

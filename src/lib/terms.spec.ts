@@ -78,7 +78,8 @@ describe.skipIf(!HAS_GLOSSARY)('P18.95-T9 AC-3 the terms against the glossary’
 describe('P18.95-T9 AC-3 each ⓘ’s name and line', () => {
   it('P18.95-T9 AC-3 names each ⓘ What is {term}?', () => {
     expect(termQuestion('APE')).toBe('What is APE?');
-    expect(termQuestion('TOUCHES')).toBe('What is a touch?');
+    // UI-106 (the owner): the count is *activities*, never *touches* — the ⓘ asks what counts as one.
+    expect(termQuestion('TOUCHES')).toBe('What is an activity?');
     expect(termQuestion('AS_BILLED')).toBe('What is as-billed?');
   });
 

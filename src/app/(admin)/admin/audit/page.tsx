@@ -83,7 +83,7 @@ export default function AuditPage() {
       )}
 
       {entries?.length === 0 && !error && (
-        <div className="rounded-lg border border-hairline bg-card">
+        <div className="rounded-lg border border-card-edge bg-card">
           <EmptyState
             title={
               scope ? t.emptyOffice : t.emptyPlatform

@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
+import { FieldChromeContext, TabBar, TitleAvatar, TitleBell, useFieldChrome, type FieldChrome } from '@/components/field-nav';
 import { LanguageSwitch } from '@/components/language-switch';
 import { NotificationBell } from '@/components/notification-bell';
 import { SidebarUserMenu } from '@/components/sidebar-user-menu';
@@ -42,6 +43,11 @@ export interface NavItem {
    * that nobody notices until they collapse it.
    */
   readonly icon: NavIconName;
+  /**
+   * **Not a page: a control that opens something over the page** — the field sidebar's *Search agent*, which opens the
+   * agent search picker (UI-004, UI-012; D-14). Drawn as a button that opens a dialog; `href` is not followed.
+   */
+  readonly onSelect?: () => void;
 }
 
 export interface NavSection {
@@ -179,6 +185,20 @@ function NavLink({ item, pill, rail }: { item: NavItem; pill: string; rail: bool
       </a>
     );
   }
+  if (item.onSelect) {
+    return (
+      <button
+        type="button"
+        aria-haspopup="dialog"
+        data-nav-control=""
+        onClick={item.onSelect}
+        className={cn(className, 'w-full text-left')}
+        {...named}
+      >
+        {body}
+      </button>
+    );
+  }
   return (
     <Link
       href={item.href}
@@ -242,27 +262,82 @@ export function PageHeader({
   title,
   subtitle,
   actions,
+  control,
   subtitleOnPhone,
+  subtitleOnTablet,
+  bell = false,
 }: {
   title: string;
   subtitle?: React.ReactNode;
   actions?: React.ReactNode;
+  /**
+   * **The title row's control below 1024px** (UI V1, UI-004: *page title, then the page's main control, then the 36px
+   * avatar*): the period pill on `/unit/dashboard`, *Cari agen* on `/group-tree`, *+ Tambah agent* on `/new-hires`. Below
+   * 1024px it stands in for `actions`, which then show from 1024px only; absent, `actions` are the row's control at
+   * every width, as they always were.
+   */
+  control?: React.ReactNode;
   /**
    * `false`: **the sub-line is not drawn below 768px** — the client's *Remove* verdict on a page's sub-line (P18.95-T7
    * AC-1, row 25 of the review's *Grey text* table; ADR-0167 §7). At 768px and wider it reads as before. Absent, the
    * page that renders the shell said so through `SubtitleOnPhone` — a shell draws this header, not the page.
    */
   subtitleOnPhone?: boolean;
+  /**
+   * `false`: **not drawn from 768 to 1023px either** (UI V1, UI-004: *subtitle hidden on Mobile + Tablet* — `/goals`,
+   * `/training`, `/group-tree`, `/user-management/*`). Pass it with `subtitleOnPhone={false}`; from 1024px it reads.
+   */
+  subtitleOnTablet?: boolean;
+  /** **The bell, left of the avatar — on Home alone** (UI-004, the owner, 30 Oct). Below 1024px; the sidebar has its own. */
+  bell?: boolean;
 }) {
   const fromPage = useContext(SubtitleOnPhone);
   const onPhone = subtitleOnPhone ?? fromPage;
   const withLanguage = usePageLanguageSwitch();
+  const field = useFieldChrome();
+  /*
+   * **The field shell's title row** (UI V1, UI-004, UI-008): 20px/800 on a phone, 22px on a tablet, 24px on a desktop
+   * (`text-title`), navy. The other two shells keep their 28px from 768px and take the 20px on a phone (UI-008: *the type
+   * scale, Mobile everywhere*).
+   */
+  const titleClass = field
+    ? 'text-title font-extrabold text-navy lg:font-bold'
+    : 'text-3xl font-bold text-navy max-md:text-title max-md:font-extrabold';
   const heading = (
-    <div>
-      <h1 className="font-display text-3xl font-bold text-navy">{title}</h1>
-      {subtitle && <p className={cn('mt-1 text-md text-muted', !onPhone && REMOVED_ON_PHONE)}>{subtitle}</p>}
+    <div className={cn(field && 'min-w-0 max-lg:flex-1')}>
+      <h1 className={cn('font-display', titleClass)}>{title}</h1>
+      {subtitle && (
+        <p className={cn('mt-1 text-md text-muted', !onPhone && REMOVED_ON_PHONE, subtitleOnTablet === false && 'md:max-lg:hidden')}>
+          {subtitle}
+        </p>
+      )}
     </div>
   );
+  /*
+   * Below 1024px in the field shell `control` takes `actions`' place in the row; from 1024px `actions` are as before. With
+   * no `control`, `actions` are the row's at every width.
+   */
+  const rowControl = field && control !== undefined
+    ? <>{control !== null && <div className="shrink-0 lg:hidden">{control}</div>}{actions && <div className="max-lg:hidden">{actions}</div>}</>
+    : actions;
+
+  if (field) {
+    /*
+     * **One row: the title, the page's control, then — below 1024px — Home's bell and the avatar** (UI-004). 44px tall at
+     * least, top-aligned on a desktop as every header is (P10.1-T8) and centred below it, 12px above the content.
+     */
+    return (
+      <div className="mb-5 flex items-start gap-4 max-lg:mb-3 max-lg:min-h-11 max-lg:items-center max-lg:gap-2" data-title-row="">
+        <div className="flex min-w-0 flex-1 flex-wrap items-start justify-between gap-4 max-lg:items-center max-lg:gap-2">
+          {heading}
+          {rowControl}
+        </div>
+        {field.compact && bell && <TitleBell chrome={field} />}
+        {field.compact && <TitleAvatar chrome={field} />}
+        {withLanguage && <PageLanguageSwitch className="shrink-0" />}
+      </div>
+    );
+  }
   if (!withLanguage) {
     return (
       <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
@@ -289,29 +364,38 @@ export function PageHeader({
 }
 
 /**
- * **Whether a page's header draws the *ID | EN* switch** (P18.98-T2 AC-3): a shell's page, from 768px — on a phone the
- * switch is on the bar — while the switch is live, as it is since P18.98-T4's exit (2026-10-29). `AppShell` says the
- * first two; `PageHeader` is always in a shell.
+ * **Where a page's header draws the *ID | EN* switch** (P18.98-T2 AC-3): a shell's page, while the switch is live (as it
+ * is since P18.98-T4's exit, 2026-10-29) — **from 768px** in the office console and the platform console, where a phone's
+ * bar carries it; **from 1024px in the field shell** (UI V1, ADR-0180: on a phone and a tablet the switch is in the
+ * *Lainnya* sheet and *Profil saya*, nowhere else — which reverses I-533's placement there). `null` outside a shell.
+ * `AppShell` says which; `PageHeader` is always in a shell.
  */
-const PageHeaderLanguage = createContext(false);
+const PageHeaderLanguage = createContext<'md' | 'lg' | null>(null);
 
 /** Whether a page's own heading block should carry the switch: what `PageHeader` asks, and a page that draws its own. */
 export function usePageLanguageSwitch(): boolean {
-  const inShell = useContext(PageHeaderLanguage);
+  const from = useContext(PageHeaderLanguage);
   const { live } = useLanguageChoice();
-  return inShell && live;
+  return from !== null && live;
 }
 
 /**
- * **The *ID | EN* switch at a page header's top-right corner** (P18.98-T2 AC-3), right of the page's own actions: at the head of
- * every shell's page from 768px, where the title is. Its 44px targets sit centred on the title's line (`-my-[5px]`),
- * so the header is no taller for it. Hidden by its class below 768px as well, so a phone's first frame — before the
- * width is read — never shows it twice. A page that draws its own heading block (*Billing*, a coachee's name) puts this
- * in it; nothing at all outside a shell, or before the switch is live.
+ * **The *ID | EN* switch at a page header's top-right corner** (P18.98-T2 AC-3), right of the page's own actions: at the
+ * head of every shell's page from 768px — **from 1024px in the field shell** (UI V1) — where the title is. Its 44px
+ * targets sit centred on the title's line (`-my-[5px]`), so the header is no taller for it. Hidden by its class below
+ * that width as well, so a phone's first frame — before the width is read — never shows it twice. A page that draws its
+ * own heading block (*Billing*, a coachee's name) puts this in it; nothing at all outside a shell, or before the switch
+ * is live.
  */
 export function PageLanguageSwitch({ className }: { className?: string }) {
+  const from = useContext(PageHeaderLanguage);
   if (!usePageLanguageSwitch()) return null;
-  return <LanguageSwitch tone="page" className={cn('max-md:hidden md:-my-[5px]', className)} />;
+  return (
+    <LanguageSwitch
+      tone="page"
+      className={cn(from === 'lg' ? 'max-lg:hidden lg:-my-[5px]' : 'max-md:hidden md:-my-[5px]', className)}
+    />
+  );
 }
 
 /**
@@ -465,12 +549,18 @@ function NavGroups({
   closed,
   onToggle,
   pill,
+  sentenceCase = false,
 }: {
   sections: readonly NavSection[];
   rail: boolean;
   closed: ReadonlySet<string>;
   onToggle: (label: string) => void;
   pill: string;
+  /**
+   * **The field shell's headings: 12px grey, sentence case** (UI V1, UI-004; D-20: *Old "UNIT TOOLS" etc. go away*) — the
+   * *Lainnya* sheet's groups, as the sheet writes them. The other two shells keep their uppercase headings.
+   */
+  sentenceCase?: boolean;
 }) {
   return (
     <>
@@ -505,7 +595,9 @@ function NavGroups({
                    * uppercase at that contrast is a smudge, and this is the control that
                    * decides what the whole menu shows. `xs` at 65%, semibold.
                    */
-                  className="flex w-full items-center gap-2 rounded-md px-1.5 py-1.5 text-xs font-semibold uppercase tracking-wider text-white/65 hover:bg-white/[0.06] hover:text-white"
+                  className={sentenceCase
+                    ? 'flex w-full items-center gap-2 rounded-md px-1.5 py-1.5 text-xs font-semibold text-white/65 hover:bg-white/[0.06] hover:text-white'
+                    : 'flex w-full items-center gap-2 rounded-md px-1.5 py-1.5 text-xs font-semibold uppercase tracking-wider text-white/65 hover:bg-white/[0.06] hover:text-white'}
                 >
                   {section.label}
                   {/*
@@ -702,6 +794,7 @@ export function AppShell({
   title,
   subtitle,
   actions,
+  field,
   children,
 }: {
   sections: readonly NavSection[];
@@ -735,6 +828,14 @@ export function AppShell({
    * Omitted outside a session, where there is nothing to count.
    */
   notifications?: { href: string; unread: number };
+  /**
+   * **The field shell's chrome** (UI V1, UI-004; ADR-0180), passed by `AgentShell` alone. With it, **below 1024px** there
+   * is no sidebar, rail or dark bar: each page's title row carries the avatar (`PageHeader`), the floating tab bar sits at
+   * the foot of the screen and opens the *Lainnya* sheet; **from 1024px** the sidebar is as before, regrouped by the
+   * caller and its headings in sentence case. The whole frame is a V1 surface (`data-surface`, `globals.css`). The office
+   * console and the platform console pass nothing and are unchanged.
+   */
+  field?: FieldChrome;
   /**
    * The page's own heading, when the shell is rendered by a page.
    *
@@ -811,8 +912,19 @@ export function AppShell({
       // A private window, or storage switched off. Not a reason to fail the shell.
     }
   }, []);
-  const tablet = useMediaQuery('tablet', { beforePaint: true });
+  /*
+   * The field shell has no rail below 1024px — its sidebar is a desktop's alone (UI-004) — so its one choice is the
+   * desktop's, whatever the width.
+   */
+  const tablet = useMediaQuery('tablet', { beforePaint: true }) && !field;
   const rail = tablet ? tabletRail : deskRail;
+  /**
+   * Below 1024px in the field shell: the title row's avatar and the tab bar are drawn (UI-004). **Read after the paint,
+   * as `usePhone` is, not before it**: a state change in a layout effect re-rendered the page under the shell inside
+   * the commit, and a page reading its route's params through `use()` (Training's) suspended there and never came
+   * back. The sidebar is `max-lg:hidden` meanwhile, so the first frame on a phone is the page without its bar.
+   */
+  const compact = useMediaQuery(['phone', 'tablet']) && Boolean(field);
   const toggleRail = () => {
     const next = !rail;
     if (tablet) setTabletRail(next);
@@ -835,7 +947,14 @@ export function AppShell({
    */
   const phone = usePhone();
   const groups = (
-    <NavGroups sections={sections} rail={rail && !phone} closed={closed} onToggle={toggleGroup} pill={pill} />
+    <NavGroups
+      sections={sections}
+      rail={rail && !phone}
+      closed={closed}
+      onToggle={toggleGroup}
+      pill={pill}
+      sentenceCase={Boolean(field)}
+    />
   );
   const [menuOpen, setMenuOpen] = useState(false);
   const menuButton = useRef<HTMLButtonElement>(null);
@@ -849,113 +968,118 @@ export function AppShell({
   }, [pathname, phone]);
 
   return (
-    <div className="flex min-h-screen flex-col md:flex-row">
+    <div className={cn('flex min-h-screen flex-col', field ? 'lg:flex-row' : 'md:flex-row')} data-surface={field ? 'v1' : undefined}>
       {/* Below the prototype's 720px breakpoint the rail becomes a horizontal navy bar
           that keeps the brand and hides the nav and footer (`Overall.html:1421-1428`).
           It used to be `hidden md:flex`, which took the only route to sign out with it;
           the chip in it stayed (ADR-0085), and ☰ before the brand opens the nav (P18.95-T2). Since
           P18.95-T12 the chip and the bell there are one avatar, at the bar's right edge. */}
-      <aside
-        className={cn(
-          // `print:hidden`: a printed page is the page, not the app around it (`Overall.html:1022`, ADR-0061).
-          'sticky top-0 z-10 flex w-full shrink-0 flex-row items-center bg-navy px-4 py-3.5 text-sidebar-text print:hidden md:h-screen md:flex-col md:items-stretch md:py-5',
-          /*
-           * **An arbitrary value, not a theme key.** `w-sidebar-rail` would need a new entry in
-           * `tailwind.config.ts`, and Tailwind's JIT does not pick a config change up without a
-           * dev-server restart — so the class silently did not exist, the `w-full` underneath it
-           * won, and collapsing the sidebar covered the page. A width that can vanish is a bad
-           * width for the one class that decides whether anything else is visible.
-           */
-          rail ? 'md:w-[var(--sidebar-rail-width)] md:px-2' : 'md:w-sidebar',
-        )}
-      >
-        {/*
-          * **☰, before the brand, below 768px only** (P18.95-T2 AC-1). Hidden by its class rather than by
-          * `usePhone`, so a phone's first paint already has it and the brand does not move when the page
-          * wakes; nothing wider shows it. A 44px target, as every target on a phone; the glyph keeps the
-          * brand mark's place at the bar's edge.
-          */}
-        <button
-          ref={menuButton}
-          type="button"
-          // Only on a phone: from 768px it is not shown, and an open drawer left waiting would spring open
-          // the moment the window narrowed.
-          onClick={() => { if (phone) setMenuOpen(true); }}
-          aria-label={t.openMenu}
-          aria-haspopup="dialog"
-          aria-expanded={menuOpen && phone}
-          aria-controls={DRAWER_ID}
-          className="-ml-2 mr-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-white/[0.78] hover:bg-white/[0.06] hover:text-white md:hidden"
-        >
-          <MenuGlyph />
-        </button>
-        <div
+      {/* The field shell below 1024px draws no sidebar at all: its title rows and the tab bar stand in (UI-004). */}
+      {!(field && compact) && (
+        <aside
           className={cn(
-            'flex items-center gap-2 px-1 md:mb-3 md:border-b md:border-white/10 md:pb-4',
-            rail && 'md:flex-col md:gap-2 md:px-0',
+            // `print:hidden`: a printed page is the page, not the app around it (`Overall.html:1022`, ADR-0061).
+            'sticky top-0 z-10 flex w-full shrink-0 flex-row items-center bg-navy px-4 py-3.5 text-sidebar-text print:hidden md:h-screen md:flex-col md:items-stretch md:py-5',
+            // The field shell's sidebar is a desktop's alone: below 1024px its pages' title rows and the tab bar stand in (UI-004).
+            field && 'max-lg:hidden',
+            /*
+             * **An arbitrary value, not a theme key.** `w-sidebar-rail` would need a new entry in
+             * `tailwind.config.ts`, and Tailwind's JIT does not pick a config change up without a
+             * dev-server restart — so the class silently did not exist, the `w-full` underneath it
+             * won, and collapsing the sidebar covered the page. A width that can vanish is a bad
+             * width for the one class that decides whether anything else is visible.
+             */
+            rail ? 'md:w-[var(--sidebar-rail-width)] md:px-2' : 'md:w-sidebar',
           )}
         >
-          <BrandMark />
-          {/* The wordmark goes, the mark stays: it is the thing that says which product this
-              is, and 56px has room for exactly one of them. **And below 360px, once the language switch is on the
-              bar** (P18.98-T2): ☰, the mark, the switch and the avatar fill a 320px phone, so the wordmark is said
-              rather than drawn there — the page reflows instead of scrolling sideways (WCAG 1.4.10). */}
-          <Wordmark brandTag={brandTag} className={cn(rail && 'md:hidden', live && 'max-[359.98px]:sr-only') || undefined} />
-
           {/*
-            * **Beside the mark, not above the nav.** It was its own row under the brand, which
-            * read as the first thing in the menu rather than as a control on the frame. Here it
-            * is part of the chrome, where a window control belongs. Collapsed it drops beneath
-            * the mark, because 56px holds one of them at a time.
+            * **☰, before the brand, below 768px only** (P18.95-T2 AC-1). Hidden by its class rather than by
+            * `usePhone`, so a phone's first paint already has it and the brand does not move when the page
+            * wakes; nothing wider shows it. A 44px target, as every target on a phone; the glyph keeps the
+            * brand mark's place at the bar's edge.
             */}
-          {!phone && (
-            <button
-              type="button"
-              onClick={toggleRail}
-              aria-expanded={!rail}
-              aria-controls="sidebar-nav"
-              aria-label={rail ? t.expandSidebar : t.collapseSidebar}
-              title={rail ? t.expandSidebar : t.collapseSidebar}
-              className={cn(
-                'hidden h-8 w-8 shrink-0 items-center justify-center rounded-md text-white/[0.55] hover:bg-white/[0.06] hover:text-white md:flex',
-                !rail && 'md:ml-auto',
-              )}
-            >
-              <svg
-                aria-hidden
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.7"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="h-[18px] w-[18px] shrink-0"
+          <button
+            ref={menuButton}
+            type="button"
+            // Only on a phone: from 768px it is not shown, and an open drawer left waiting would spring open
+            // the moment the window narrowed.
+            onClick={() => { if (phone) setMenuOpen(true); }}
+            aria-label={t.openMenu}
+            aria-haspopup="dialog"
+            aria-expanded={menuOpen && phone}
+            aria-controls={DRAWER_ID}
+            className="-ml-2 mr-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-white/[0.78] hover:bg-white/[0.06] hover:text-white md:hidden"
+          >
+            <MenuGlyph />
+          </button>
+          <div
+            className={cn(
+              'flex items-center gap-2 px-1 md:mb-3 md:border-b md:border-white/10 md:pb-4',
+              rail && 'md:flex-col md:gap-2 md:px-0',
+            )}
+          >
+            <BrandMark />
+            {/* The wordmark goes, the mark stays: it is the thing that says which product this
+                is, and 56px has room for exactly one of them. **And below 360px, once the language switch is on the
+                bar** (P18.98-T2): ☰, the mark, the switch and the avatar fill a 320px phone, so the wordmark is said
+                rather than drawn there — the page reflows instead of scrolling sideways (WCAG 1.4.10). */}
+            <Wordmark brandTag={brandTag} className={cn(rail && 'md:hidden', live && 'max-[359.98px]:sr-only') || undefined} />
+
+            {/*
+              * **Beside the mark, not above the nav.** It was its own row under the brand, which
+              * read as the first thing in the menu rather than as a control on the frame. Here it
+              * is part of the chrome, where a window control belongs. Collapsed it drops beneath
+              * the mark, because 56px holds one of them at a time.
+              */}
+            {!phone && (
+              <button
+                type="button"
+                onClick={toggleRail}
+                aria-expanded={!rail}
+                aria-controls="sidebar-nav"
+                aria-label={rail ? t.expandSidebar : t.collapseSidebar}
+                title={rail ? t.expandSidebar : t.collapseSidebar}
+                className={cn(
+                  'hidden h-8 w-8 shrink-0 items-center justify-center rounded-md text-white/[0.55] hover:bg-white/[0.06] hover:text-white md:flex',
+                  !rail && 'md:ml-auto',
+                )}
               >
-                <rect x="3" y="4" width="18" height="16" rx="2" />
-                <path d="M9 4v16" />
-                <path d={rail ? 'm13 9 3 3-3 3' : 'm17 9-3 3 3 3'} />
-              </svg>
-            </button>
+                <svg
+                  aria-hidden
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.7"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="h-[18px] w-[18px] shrink-0"
+                >
+                  <rect x="3" y="4" width="18" height="16" rx="2" />
+                  <path d="M9 4v16" />
+                  <path d={rail ? 'm13 9 3 3-3 3' : 'm17 9-3 3 3 3'} />
+                </svg>
+              </button>
+            )}
+          </div>
+
+          {/* Wider than a phone, the nav is the sidebar's. On a phone it is the drawer's (below). */}
+          {!phone && (
+            <nav id="sidebar-nav" className="hidden min-h-0 flex-1 overflow-y-auto pr-0.5 md:block" aria-label={t.mainNav}>
+              {groups}
+            </nav>
           )}
-        </div>
 
-        {/* Wider than a phone, the nav is the sidebar's. On a phone it is the drawer's (below). */}
-        {!phone && (
-          <nav id="sidebar-nav" className="hidden min-h-0 flex-1 overflow-y-auto pr-0.5 md:block" aria-label={t.mainNav}>
-            {groups}
-          </nav>
-        )}
+          <SidebarFoot
+            rail={rail && !phone}
+            user={user}
+            account={account}
+            notifications={notifications}
+            phone={phone}
+          />
+        </aside>
+      )}
 
-        <SidebarFoot
-          rail={rail && !phone}
-          user={user}
-          account={account}
-          notifications={notifications}
-          phone={phone}
-        />
-      </aside>
-
-      {menuOpen && phone && (
+      {menuOpen && phone && !field && (
         <PhoneMenu
           onClose={() => setMenuOpen(false)}
           returnTo={menuButton}
@@ -966,15 +1090,32 @@ export function AppShell({
         </PhoneMenu>
       )}
 
-      <main className="min-w-0 flex-1 px-5 py-6 print:p-0 md:px-10 md:pb-14 md:pt-8">
-        {/* Wider than a phone the page's header carries the language switch; on a phone the bar does (P18.98-T2). */}
-        <PageHeaderLanguage.Provider value={!phone}>
-          {title !== undefined && (
-            <PageHeader title={title} subtitle={subtitle} actions={actions} />
-          )}
-          {children}
+      <main
+        className={cn(
+          'min-w-0 flex-1 print:p-0',
+          /*
+           * The field shell below 1024px (UI-004): the page's 16px gutter (24px on a tablet), its title row near the top
+           * with no bar above it, and room under the last line for the tab bar. From 1024px, as every shell is.
+           */
+          field
+            ? 'px-4 pb-[calc(var(--tab-bar-space)+1.5rem)] pt-2 md:px-6 md:pt-3 lg:px-10 lg:pb-14 lg:pt-8'
+            : 'px-5 py-6 md:px-10 md:pb-14 md:pt-8',
+        )}
+      >
+        {/*
+          * Where the page's header carries the language switch: from 768px, a phone's bar carrying it below (P18.98-T2) —
+          * and in the field shell from 1024px, the *Lainnya* sheet carrying it below (UI V1, ADR-0180).
+          */}
+        <PageHeaderLanguage.Provider value={field ? (compact ? null : 'lg') : phone ? null : 'md'}>
+          <FieldChromeContext.Provider value={field ? { ...field, compact } : null}>
+            {title !== undefined && (
+              <PageHeader title={title} subtitle={subtitle} actions={actions} />
+            )}
+            {children}
+          </FieldChromeContext.Provider>
         </PageHeaderLanguage.Provider>
       </main>
+      {field && compact && <TabBar chrome={{ ...field, compact }} />}
     </div>
   );
 }

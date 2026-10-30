@@ -2,7 +2,7 @@ import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AgentLayout from '@/app/(agent)/layout';
-import { renderInLayout, routeParams, stubFetch, type StubReply } from '@test/harness';
+import { atWidth, renderInLayout, routeParams, stubFetch, type StubReply } from '@test/harness';
 import {
   BOOTCAMP, CAN_NONE, conflict, eventList, guestEvent, KICKOFF, notFound, PRODUCT_REFRESH, PRULINK, READ_ONLY_RINA,
   RINA_EVENTS, RINA_ME, serverError, SHELL_STUBS, TOWN_HALL,
@@ -62,7 +62,8 @@ describe('/events, KPM Events (P18.5-T5, T6)', () => {
     it('P18.5-T5 AC-4 Event list is live in the nav, no pill, and current', async () => {
       list();
       await listReady();
-      const item = screen.getByRole('link', { name: 'Event list' });
+      // The field shell's sidebar since UI V1 (UI-004): *Event*, under *Program*.
+      const item = within(screen.getByRole('navigation', { name: 'Main' })).getByRole('link', { name: 'Event' });
       expect(item).toHaveAttribute('href', '/events');
       expect(item).not.toHaveAttribute('aria-disabled');
       expect(item).toHaveAttribute('aria-current', 'page');
@@ -735,5 +736,97 @@ describe('/events, KPM Events (P18.5-T5, T6)', () => {
       const box = await dialog('New Agent Bootcamp');
       expect(within(box).getByText('You scored this event 9/10 — "Clear and practical."')).toBeInTheDocument();
     });
+  });
+});
+
+/**
+ * **UI V1 on a phone** (UI-108; `campaign-event-mobile` 2): *All | Upcoming | Past* as one segmented control, two groups
+ * with counts, empty ones hidden; a card with its date block, *start – end*, the place's glyph and the audience only where
+ * it limits; **Join and Not going both on an upcoming card**, the chosen one filled, the other changing it and the
+ * chosen one undoing it; a past card's standing as a tinted pill. 375px.
+ */
+describe('UI-108 /events on a phone', () => {
+  beforeEach(() => {
+    nav.push.mockReset();
+    nav.replace.mockReset();
+    nav.back.mockReset();
+    atWidth(375);
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  const answers = (title: string) => screen.getByRole('group', { name: `Your answer for ${title}` });
+  const pressed = (title: string) => within(answers(title)).getAllByRole('button')
+    .filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.textContent);
+
+  it('UI-108 two groups with their counts, soonest and latest first; start – end, the place’s glyph, the limiting audience', async () => {
+    list();
+    await listReady();
+    await waitFor(() => expect(document.querySelector('[data-group="upcoming"]')).not.toBeNull());
+    expect(within(section('Upcoming')).getAllByRole('heading', { level: 3 }).map((h) => h.textContent))
+      .toEqual(['Product refresh briefing', 'Kickoff 2026']);
+    expect(section('Upcoming')).toHaveTextContent(/^Upcoming2/);
+    expect(within(section('Past')).getAllByRole('heading', { level: 3 }).map((h) => h.textContent))
+      .toEqual(['PRULink briefing', 'August Town Hall', 'New Agent Bootcamp']);
+    const refresh = card('Product refresh briefing');
+    // Start – end, spaces around the dash, the end from `endsAt` in the office's zone (English figures here); online.
+    expect(refresh).toHaveTextContent('15Oct');
+    expect(refresh).toHaveTextContent('14:00 – 16:00');
+    expect(refresh).toHaveTextContent('Online — Zoom');
+    // The audience only where it limits who can come.
+    expect(card('New Agent Bootcamp')).toHaveTextContent('· Select agents');
+    expect(refresh).not.toHaveTextContent('All agents');
+    // No emoji on a phone's card (UI-108, UI-102).
+    expect(within(section('Upcoming')).queryByText('🚀')).not.toBeInTheDocument();
+  });
+
+  it('UI-108 Join and Not going both on an upcoming card: the other changes it, the chosen one again undoes it', async () => {
+    const { calls } = list({
+      'POST /events/ev-kickoff/rsvp/cancel': { body: { ...KICKOFF, me: { rsvp: 'cancelled', claimed: false, feedback: null } } },
+      'POST /events/ev-kickoff/rsvp/withdraw': { body: { ...KICKOFF, me: { rsvp: null, claimed: false, feedback: null } } },
+      'POST /events/ev-refresh/rsvp/withdraw': { body: { ...PRODUCT_REFRESH, me: { rsvp: null, claimed: false, feedback: null } } },
+    });
+    await listReady();
+    await waitFor(() => expect(answers('Kickoff 2026')).toBeInTheDocument());
+    expect(pressed('Product refresh briefing')).toEqual(['Join']);
+    expect(pressed('Kickoff 2026')).toEqual([]);
+    await userEvent.click(within(answers('Kickoff 2026')).getByRole('button', { name: 'Not going' }));
+    await waitFor(() => expect(pressed('Kickoff 2026')).toEqual(['Not going']));
+    expect(await screen.findByText('You’re not going to Kickoff 2026'.replace('’', "'"))).toBeInTheDocument();
+    await userEvent.click(within(answers('Kickoff 2026')).getByRole('button', { name: 'Not going' }));
+    await waitFor(() => expect(pressed('Kickoff 2026')).toEqual([]));
+    await userEvent.click(within(answers('Product refresh briefing')).getByRole('button', { name: /Join/ }));
+    await waitFor(() => expect(pressed('Product refresh briefing')).toEqual([]));
+    expect(calls.filter((c) => c.init.method === 'POST').map((c) => c.url.replace('http://api.test/api/v1', ''))).toEqual([
+      '/events/ev-kickoff/rsvp/cancel', '/events/ev-kickoff/rsvp/withdraw', '/events/ev-refresh/rsvp/withdraw',
+    ]);
+  });
+
+  it('UI-108 a past card says where the reader stands as a tinted pill; the card opens the event', async () => {
+    list();
+    await listReady();
+    await waitFor(() => expect(document.querySelector('[data-group="past"]')).not.toBeNull());
+    expect(within(card('PRULink briefing')).getByText('Feedback pending')).toHaveAttribute('data-tone', 'amber');
+    expect(within(card('New Agent Bootcamp')).getByText('Feedback sent')).toHaveAttribute('data-tone', 'green');
+    expect(within(card('August Town Hall')).getByText('Didn’t join'.replace('’', "'"))).toHaveAttribute('data-tone', 'grey');
+    expect(within(card('PRULink briefing')).queryByRole('group')).not.toBeInTheDocument();
+    await userEvent.click(within(card('PRULink briefing')).getByRole('button', { name: 'PRULink briefing' }));
+    expect(nav.push).toHaveBeenCalledWith('/events/ev-prulink', { scroll: false });
+  });
+
+  it('UI-108 the filter is one segmented control; Past shows the past group alone', async () => {
+    list();
+    await listReady();
+    const filter = screen.getByRole('group', { name: 'Show events' });
+    expect(filter).toHaveClass('max-md:w-full', 'max-md:rounded-pill');
+    await userEvent.click(within(filter).getByRole('button', { name: 'Past' }));
+    await waitFor(() => expect(document.querySelector('[data-group="upcoming"]')).toBeNull());
+    expect(document.querySelector('[data-group="past"]')).not.toBeNull();
+  });
+
+  it('UI-108 a read-only support session reads the cards without Join or Not going', async () => {
+    list({ 'GET /events': { body: eventList(RINA_EVENTS, { can: CAN_NONE }) } }, READ_ONLY_RINA);
+    await listReady();
+    await waitFor(() => expect(document.querySelector('[data-group="upcoming"]')).not.toBeNull());
+    expect(screen.queryByRole('group', { name: 'Your answer for Kickoff 2026' })).not.toBeInTheDocument();
   });
 });

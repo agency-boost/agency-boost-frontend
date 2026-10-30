@@ -129,7 +129,7 @@ export function ActionItems({ meeting }: { meeting: MeetingView }) {
         <p className="text-sm font-bold uppercase tracking-[0.05em] text-muted">{t.tracker}</p>
         {editing && <span className="text-sm text-muted">{t.dragHint}</span>}
       </div>
-      <div className="overflow-hidden rounded-lg border border-hairline bg-card">
+      <div className="overflow-hidden rounded-lg border border-card-edge bg-card">
         {/* The table keeps its shape and scrolls inside its card on a phone; the page never does. */}
         <div className="overflow-x-auto">
           <table className="relative w-full min-w-[640px] border-collapse text-left text-base">

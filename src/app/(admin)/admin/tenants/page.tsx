@@ -71,7 +71,7 @@ export default function TenantsPage() {
       )}
 
       {tenants?.length === 0 && !error && (
-        <div className="rounded-lg border border-hairline bg-card">
+        <div className="rounded-lg border border-card-edge bg-card">
           <EmptyState
             title={t.list.empty}
             action={

@@ -114,19 +114,19 @@ describe('P18.96-T7 AC-3 (UI-009): one date formatter on the three screens', () 
   /** The dates each page carries, as each language writes them. */
   const SHOWN: Record<Language, { roster: string[]; detail: string[]; mine: string[] }> = {
     id: {
-      roster: ['30 Agu 2026', '23 Agu 2026', '21 Okt 2026', '27 Okt 2026'],
+      roster: ['27 Okt 2026'],
       detail: ['12 Agu 2026', '20 Sep 2026', '30 Sep 2026'],
       mine: ['6 Agu 2026', '10 Agu 2026', '30 Sep 2026'],
     },
     en: {
-      roster: ['30 Aug 2026', '23 Aug 2026', '21 Oct 2026', '27 Oct 2026'],
+      roster: ['27 Oct 2026'],
       detail: ['12 Aug 2026', '20 Sep 2026', '30 Sep 2026'],
       mine: ['6 Aug 2026', '10 Aug 2026', '30 Sep 2026'],
     },
   };
 
   describe.each(['id', 'en'] as const)('in %s (P18.98-T4)', (language) => {
-    it('P18.96-T7 AC-3 /new-hires: the roster’s join dates, first sales and leaving days, and Waiting to join, all the formatter’s', async () => {
+    it('P18.96-T7 AC-3, UI-024 /new-hires: no date on a roster row any more; Waiting to join’s, the formatter’s', async () => {
       stubFetch({
         ...SHELL_STUBS,
         '/new-hires': { body: ROSTER },
@@ -136,10 +136,10 @@ describe('P18.96-T7 AC-3 (UI-009): one date formatter on the three screens', () 
       });
       inLanguage(language, <NewHiresPage />, { me: { ...SARI_ME, permissions: [...SARI_ME.permissions, ...JOINING_PERMISSIONS] } });
       await screen.findByRole('region', { name: NAMES[language].waiting });
-      await screen.findByRole('region', { name: NAMES[language].notActivated });
+      await screen.findByRole('table');
       const { dates, wrong } = datesOnPage(language);
       expect(wrong).toEqual([]);
-      // The roster's (*30 Agu 2026*, *21 Okt 2026*) and the invite's join date (*27 Okt 2026*), one shape.
+      // UI-024: a row carries no join date, first-sale date or leaving day; the invite's join date (*27 Okt 2026*) remains.
       expect(dates).toEqual(expect.arrayContaining(SHOWN[language].roster));
     });
 

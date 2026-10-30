@@ -4,7 +4,7 @@ import { messagesIn } from '@/i18n/catalogue';
 import { DEFAULT_LANGUAGE, type Language } from '@/i18n/language';
 import { addAgentMessages } from '@/i18n/messages/add-agent';
 import { api } from './api-client';
-import { whatsAppNumber } from './leads';
+import { whatsAppNumber } from './phone-number';
 
 /**
  * **+ Add agent, its invites and its transfers** (P18.96-T3; ADR-0170; `functional/org-hierarchy.md`, *Adding an

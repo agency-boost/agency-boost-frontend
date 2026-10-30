@@ -148,6 +148,14 @@ const en = {
     goToSignIn: 'Go to sign in',
     failedLine: 'Verification links are single-use and expire after 24 hours. Sign in to request a new one.',
   },
+  /** `/verify-email-change/[token]` (UI V1, UI-111; ADR-0181): the link an email change sends to the new address. */
+  verifyChange: {
+    title: 'Confirm your new email',
+    /** `email` the address the account signs in with now. */
+    changed: ({ email }: { email: string }) => `Your email is now ${email}.`,
+    goToProfile: 'Go to My profile',
+    failedLine: 'Email change links are single-use and expire after 24 hours. Ask again from My profile.',
+  },
   /** `/choose-a-password` (P3.6-T4): an account whose password an operator generated. */
   choose: {
     title: 'Choose your own password',
@@ -263,6 +271,13 @@ const id: MessagesOf<typeof en> = {
     goToSignIn: 'Buka halaman masuk',
     failedLine: 'Tautan verifikasi hanya bisa dipakai sekali dan kedaluwarsa setelah 24 jam. Masuk untuk meminta tautan '
       + 'baru.',
+  },
+  verifyChange: {
+    title: 'Konfirmasi email baru Anda',
+    changed: ({ email }) => `Email Anda sekarang ${email}.`,
+    goToProfile: 'Buka Profil saya',
+    failedLine: 'Tautan perubahan email hanya bisa dipakai sekali dan kedaluwarsa setelah 24 jam. Minta lagi dari '
+      + 'Profil saya.',
   },
   choose: {
     title: 'Buat kata sandi Anda sendiri',

@@ -116,6 +116,41 @@ const en = {
   /** Names joined as a sentence joins them: *a*, *a and b*, *a, b and c*. */
   list: ({ items }: { items: readonly string[] }) =>
     (items.length <= 1 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`),
+  /**
+   * **UI V1** (2026-10-30; UI-110; `kpm-mobile` 1, 4, 5, 6): the forum on a phone in the field shell — the list's cards,
+   * the meeting's header, its *Overview*, *Agenda* and *Action Items* as the owner drew them.
+   */
+  v1: {
+    coreLeaders: ({ n }: { n: number }) => `${n} ${n === 1 ? kept('Core Leader') : kept('Core Leaders')}`,
+    openPill: ({ n }: { n: number }) => `${n} ${n === 1 ? 'item' : 'items'} not done`,
+    allMeetings: 'All meetings',
+    pdf: 'PDF',
+    editors: ({ n }: { n: number }) => `${n} ${n === 1 ? kept('leader') : kept('leaders')} can edit these minutes`,
+    overviewTab: kept('Overview'),
+    /** The branch's strip (`kpm-mobile` 4): *28 Manpower · 19 Agents · 9 Units · 5 AB · 4 AAB*. */
+    chips: { manpower: kept('Manpower'), agents: kept('Agents'), units: 'Units', ab: kept('AB'), aab: kept('AAB') },
+    asOf: ({ day }: { day: string }) => `as of ${day}`,
+    ytdHead: ({ year, last }: { year: string; last: string }) => `${kept('YTD')} ${year} vs ${last}`,
+    ofLast: ({ value }: { value: string }) => `of ${value}`,
+    waiting: 'Waiting for data',
+    metricOpen: ({ name }: { name: string }) => `${name}: every figure`,
+    addItem: 'Add item',
+    picChip: `+ Add PIC`,
+    pickPic: `Choose a PIC`,
+    picOf: ({ text }: { text: string }) => `PIC for ${text}`,
+    noPic: `No PIC`,
+    tick: ({ text }: { text: string }) => `Done: ${text}`,
+    addAction: 'Add action',
+    actionTitle: 'Action',
+    actionOpen: ({ text }: { text: string }) => `Edit: ${text}`,
+    removeAction: 'Remove action',
+    removeQuestion: 'Remove this action? It cannot be brought back.',
+    remove: 'Remove',
+    moveName: 'this action',
+    untitled: 'Untitled',
+    lockLine: ({ names, list }: { names: readonly string[]; list: (items: readonly string[]) => string }) =>
+      `Only ${list([...names, `tagged ${kept('Core Leaders')}`])} can edit`,
+  },
 };
 
 const id: MessagesOf<typeof en> = {
@@ -189,6 +224,35 @@ const id: MessagesOf<typeof en> = {
     if (items.length <= 1) return items.join('');
     if (items.length === 2) return `${items[0]} dan ${items[1]}`;
     return `${items.slice(0, -1).join(', ')}, dan ${items[items.length - 1]}`;
+  },
+  v1: {
+    coreLeaders: ({ n }) => `${n} ${n === 1 ? kept('Core Leader') : kept('Core Leaders')}`,
+    openPill: ({ n }) => `${n} item belum selesai`,
+    allMeetings: 'Semua rapat',
+    pdf: 'PDF',
+    editors: ({ n }) => `${n} ${kept('leader')} dapat mengubah notulen ini`,
+    overviewTab: kept('Overview'),
+    chips: { manpower: kept('Manpower'), agents: kept('Agents'), units: kept('Unit'), ab: kept('AB'), aab: kept('AAB') },
+    asOf: ({ day }) => `per ${day}`,
+    ytdHead: ({ year, last }) => `${kept('YTD')} ${year} vs ${last}`,
+    ofLast: ({ value }) => `dari ${value}`,
+    waiting: 'Menunggu data',
+    metricOpen: ({ name }) => `${name}: semua angkanya`,
+    addItem: 'Tambah item',
+    picChip: `+ PIC`,
+    pickPic: `Pilih PIC`,
+    picOf: ({ text }) => `PIC untuk ${text}`,
+    noPic: `Tanpa PIC`,
+    tick: ({ text }) => `Selesai: ${text}`,
+    addAction: 'Tambah tindakan',
+    actionTitle: 'Tindakan',
+    actionOpen: ({ text }) => `Ubah: ${text}`,
+    removeAction: 'Hapus tindakan',
+    removeQuestion: 'Hapus tindakan ini? Tindakan ini tidak dapat dikembalikan.',
+    remove: 'Hapus',
+    moveName: 'tindakan ini',
+    untitled: 'Tanpa judul',
+    lockLine: ({ names, list }) => `Hanya ${list([...names, `${kept('Core Leader')} yang di-tag`])} dapat mengubah`,
   },
 };
 

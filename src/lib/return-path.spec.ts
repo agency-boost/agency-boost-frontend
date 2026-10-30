@@ -115,15 +115,15 @@ describe('where the person who just signed in goes (2026-10-11)', () => {
   });
 
   it('to their own landing when they cannot: the reported case, an Agent or a leader after the Owner', () => {
-    expect(destinationAfterSignIn(COMPLIANCE, agent)).toBe('/activity/log');
-    expect(destinationAfterSignIn(COMPLIANCE, leader)).toBe('/unit/dashboard');
+    expect(destinationAfterSignIn(COMPLIANCE, agent)).toBe('/home');
+    expect(destinationAfterSignIn(COMPLIANCE, leader)).toBe('/home');
   });
 
   it('to their own landing with no next, an unsafe one, or one that is no page', () => {
     expect(destinationAfterSignIn('', owner)).toBe('/kpm/overview');
     expect(destinationAfterSignIn('?next=%2F', owner)).toBe('/kpm/overview');
     expect(destinationAfterSignIn('?next=%2F%2Fevil.test%2Fkpm%2Foverview', owner)).toBe('/kpm/overview');
-    expect(destinationAfterSignIn('?next=%2Fnope', agent)).toBe('/activity/log');
+    expect(destinationAfterSignIn('?next=%2Fnope', agent)).toBe('/home');
   });
 
   it('to sign in when the session could not be read after all', () => {

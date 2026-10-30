@@ -75,7 +75,7 @@ export function QuoteSheet({
   ];
 
   return (
-    <article className="rounded-lg border border-hairline bg-card px-5 py-7 md:px-10 md:py-9">
+    <article className="rounded-lg border border-card-edge bg-card px-5 py-7 md:px-10 md:py-9">
       <header className="mb-[22px] flex flex-wrap items-center justify-between gap-3 border-b-2 border-navy pb-[18px]">
         <div className="flex items-center gap-2.5">
           <QuoteMark />

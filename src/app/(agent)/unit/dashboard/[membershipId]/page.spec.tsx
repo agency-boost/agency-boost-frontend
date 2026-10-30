@@ -48,17 +48,14 @@ describe('a unit below the reader (P15-T4 AC-2)', () => {
     expect(calls[0].url).toBe('http://api.test/api/v1/unit/dashboard?period=month&for=mem-sari');
   });
 
-  it('P15-T4 AC-2 names the head’s row and groups for them, never You', async () => {
+  it('P15-T4 AC-2, UI-009, UI-011 names the head’s row and groups for them, never You; a row opens the person, ‹ back here', async () => {
     render();
     await screen.findByRole('table', { name: 'Your team’s roster' });
     expect(screen.queryByText(/^You \(/)).not.toBeInTheDocument();
-    expect(screen.getByRole('rowheader', { name: 'Sari Wulandari’s Unit · 4' })).toBeInTheDocument();
-    expect(screen.getByRole('rowheader', { name: 'Sari Wulandari’s Unit — Total' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Sari Wulandari’s Unit · 4' })).toHaveAttribute('aria-expanded', 'true');
     const head = screen.getByRole('link', { name: 'Sari Wulandari' });
-    expect(head).toHaveAttribute('href', '/coaching/mem-sari/summary');
-    expect(within(head.closest('tr')!).getByText('Personal')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'View details for Sari Wulandari' })).toBeInTheDocument();
-    expect(screen.queryByText('Your Unit — Total')).not.toBeInTheDocument();
+    expect(head).toHaveAttribute('href', '/coaching/mem-sari/summary?from=%2Funit%2Fdashboard%2Fmem-sari');
+    expect(screen.queryByText(/^Your Unit/)).not.toBeInTheDocument();
   });
 
   it('P15-T4 AC-2: a unit outside the reader’s own downline names its people without links to coaching tabs', async () => {
@@ -77,16 +74,14 @@ describe('a unit below the reader (P15-T4 AC-2)', () => {
     expect(screen.getByText('Sari Wulandari')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Sari Wulandari' })).not.toBeInTheDocument();
     expect(within(screen.getByRole('table', { name: 'Your team’s roster' })).queryAllByRole('link')).toHaveLength(0);
-    // The detail still opens: the ⌄ is the row's own control, not a drill.
-    expect(screen.getByRole('button', { name: 'View details for Sari Wulandari' })).toBeInTheDocument();
   });
 
-  it('P15-T4 AC-2, P18.95-T7 AC-1 says whose unit the tiles count, not you, and counts its team in the client’s line', async () => {
+  it('P15-T4 AC-2, UI-003 counts the unit’s team in its chips — direct, then AAB — and its recruitment Unit / AAB', async () => {
     render();
     await screen.findByRole('table');
-    expect(screen.getByText('4 direct · 2 under AABs')).toBeInTheDocument();
-    expect(screen.getByText('Sari Wulandari’s unit').closest('p')).toHaveTextContent('1 candidate');
-    expect(screen.getByText('Sari Wulandari’s AABs').closest('p')).toHaveTextContent('0 candidates');
+    const tile = (label: string) => screen.getByText(label).closest('[data-stat-tile]')!;
+    expect(tile('Your team')).toHaveTextContent('6agents4 direct2 AAB');
+    expect(tile('Recruitment October')).toHaveTextContent('1candidateUnit 1AAB 0');
     expect(screen.queryByText(/including you/)).not.toBeInTheDocument();
   });
 
@@ -103,8 +98,9 @@ describe('a unit below the reader (P15-T4 AC-2)', () => {
   it('P15-T4 AC-2 keeps the period on a unit below, and its switch reads that unit again', async () => {
     const { calls } = render([{ body: { ...SARI_UNIT, period: 'year' } }, { body: SARI_UNIT }], AGUS_ME, 'year');
     await screen.findByRole('table');
-    await userEvent.click(screen.getByRole('button', { name: 'This month' }));
-    expect(nav.replace).toHaveBeenCalledWith('/unit/dashboard/mem-sari?period=month', { scroll: false });
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Period' }), 'month');
+    // UI V1: the address carries the period only when it is not the first, *Bulan ini*.
+    expect(nav.replace).toHaveBeenCalledWith('/unit/dashboard/mem-sari', { scroll: false });
     await screen.findByRole('table');
     expect(calls.map((c) => c.url)).toEqual([
       'http://api.test/api/v1/unit/dashboard?period=year&for=mem-sari',
@@ -118,7 +114,7 @@ describe('a unit below the reader (P15-T4 AC-2)', () => {
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Unit Dashboard$/);
     expect(screen.getByRole('link', { name: 'Your Unit Dashboard' })).toHaveAttribute('href', '/unit/dashboard');
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
-    expect(screen.queryByRole('group', { name: 'Period' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: 'Period' })).not.toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/Sari|office|KPM|reports to|tagged to|untagged|unassigned/);
   });
 
@@ -156,6 +152,7 @@ describe('a unit below the reader (P15-T4 AC-2)', () => {
     renderInLayout(AgentLayout, <UnitBelowPage params={routeParams({ membershipId: 'mem-sari' })} />, { me: AGUS_ME });
     await screen.findByRole('table');
     const main = screen.getByRole('navigation', { name: 'Main' });
-    expect(within(main).getByRole('link', { name: 'Unit dashboard' })).toHaveAttribute('aria-current', 'page');
+    // The field shell's sidebar since UI V1 (UI-004): *Unit Dashboard*.
+    expect(within(main).getByRole('link', { name: 'Unit Dashboard' })).toHaveAttribute('aria-current', 'page');
   });
 });

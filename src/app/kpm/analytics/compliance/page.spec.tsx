@@ -79,7 +79,8 @@ describe('KPM analytics › Compliance, Events, and Campaigns (P18.6-T1, P18.6-T
       await tree();
       expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^KPM Analytics$/);
       const tabs = within(screen.getByRole('navigation', { name: 'KPM Analytics' }));
-      expect(tabs.getByRole('link', { name: 'Compliance, Events, and Campaigns' })).toHaveAttribute('aria-current', 'page');
+      // UI-109: the tab is *Compliance* (renamed); the panel's heading keeps the content's full name.
+      expect(tabs.getByRole('link', { name: 'Compliance' })).toHaveAttribute('aria-current', 'page');
       expect(screen.getByRole('heading', { level: 2, name: 'Compliance, Events, and Campaigns' })).toBeInTheDocument();
     });
 
@@ -807,7 +808,7 @@ describe('P18.98-T4 Compliance, Events, and Campaigns in Indonesian', () => {
     expect([...picker.querySelectorAll('optgroup')].map((g) => g.label)).toEqual(['Akan datang', 'Sudah lewat']);
     expect(picker.querySelector('option')).toHaveTextContent('Leaders’ huddle — 10 Okt');
     expect(picker.parentElement).toHaveTextContent(/Berjalan\s*10 Okt$/);
-    expect(unit('mem-hendra')).toHaveTextContent(/IkutMasukan/);
+    expect(unit('mem-hendra')).toHaveTextContent(/IkutFeedback/); // UI-108: *Feedback*, not *Masukan*
     expect(screen.getByRole('button', { name: /lebih dulu$/ })).toHaveTextContent('↓ Belum ikut lebih dulu');
   });
 

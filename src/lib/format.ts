@@ -146,6 +146,17 @@ export function formatMonthName(month: string, language: Language = DEFAULT_LANG
 }
 
 /**
+ * An office month's name **in full**, for a label that names the month — *Active Agent Oktober*, *Recruitment Oktober*
+ * (UI V1, UI-003): `Oktober` for `2026-10`, `October` in English. Built from its number, in UTC, so no zone moves it.
+ */
+export function formatMonthLong(month: string, language: Language = DEFAULT_LANGUAGE): string {
+  const [y, m] = month.split('-').map(Number);
+  if (!y || !m || m < 1 || m > 12) return '';
+  return new Intl.DateTimeFormat(language === 'id' ? 'id-ID' : 'en-GB', { month: 'long', timeZone: 'UTC' })
+    .format(new Date(Date.UTC(y, m - 1, 1)));
+}
+
+/**
  * The calendar month an instant falls in **in the office's zone** — `2026-10` at 01:00 on 1 October in
  * Jakarta, which is still September in UTC (invariant §9). For a default a screen offers, never for a
  * computation over data: those are the server's.
@@ -165,6 +176,17 @@ export function dayInZone(timeZone: string, at: Date): string {
   const parts = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(at);
   const part = (type: string) => parts.find((p) => p.type === type)?.value ?? '';
   return `${part('year')}-${part('month')}-${part('day')}`;
+}
+
+/**
+ * The minute of the day an instant falls on **in the office's zone** — `545` at 09:05 in Jakarta, which is 02:05 in
+ * UTC (invariant §9). As `dayInZone`: for what a screen shows before the server answers — Home's greeting until
+ * `GET /home`'s `now.minute` arrives (UI-100) — never for a computation over data.
+ */
+export function minuteInZone(timeZone: string, at: Date): number {
+  const parts = new Intl.DateTimeFormat('en-GB', { timeZone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(at);
+  const part = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? 0);
+  return (part('hour') % 24) * 60 + part('minute');
 }
 
 /** A calendar day's three numbers, as a local `Date` — never parsed as an instant. */
@@ -475,20 +497,23 @@ export function formatNumber(
 }
 
 /*
- * ── Percentages (ADR-0174 §1–§3, OD-226, OD-213; parity I-501) ──────────────────────────────────
+ * ── Percentages (ADR-0174 §1, §3, OD-226, OD-213; parity I-501; **UI V1, UI-080**) ─────────────────
  *
- * **A percentage is a whole number, rounded half up, with no *,0*** — `96%` for 27 of 28. The server rounds a
- * share once, in integers (`rateOver`), and this writes what it served: **no percentage is rounded twice**, and
- * a screen computes none (invariant §7). Two exceptions, each its caller's to ask for:
+ * **Every percentage is a whole number, rounded half up, with no *,0*** — `96%` for 27 of 28, `13%` for 12,5, `33%` for
+ * 33,3, `0%` for 0,4. The server rounds a share once, in integers (`rateOver`), and this writes what it served: **no
+ * percentage is rounded twice**, and a screen computes none (invariant §7).
  *
- * - **a ratio compared with its benchmark keeps its tenth**, `{ decimals: 1 }` — `29,6%` beside a `30%`
- *   benchmark, where `30%` would contradict *below* (`lib/ratio-format.ts`, `lib/ratio-balance.ts`);
- * - **a figure stated as a rule or as a record keeps the places it has**, `{ lossless: true }` — a benchmark as
- *   typed (`30%`, `15,5%`), a threshold (a campaign's, an MOC criterion's), a commission rate (`7,25%`), the
- *   carrier's persistency as Data upload shows it (`87,35%`), the rate an input echoes. Rounding one would state a
- *   different rule or misstate the file.
+ * **A ratio beside its benchmark is whole too** (UI-080, 2026-10-30, the owner; ADR-0180 — it reverses ADR-0174 §2's
+ * tenth): `29,6%` is written `30%`, and **its status is still judged on the unrounded value** — the server's `status`,
+ * or the caller's comparison of the raw figures — so it stays below a 30% target. One exception, the caller's to ask for:
  *
- * English writes the same figure with a point — `29.6%`, `7.25%` — and the same sign after it (§E).
+ * - **a figure stated as a rule or as a record keeps the places it has**, `{ lossless: true }` — a benchmark as typed
+ *   (`30%`, `15,5%`), a threshold (a campaign's, an MOC criterion's), a commission rate (`7,25%`), the carrier's
+ *   persistency as Data upload shows it (`87,35%`), the rate an input echoes. Rounding one would state a different rule
+ *   or misstate the file.
+ *
+ * *Leads per activity* is not a percentage and keeps its two places (`formatNumber`, `0,89`). English writes the same
+ * figure with a point where a rule keeps one — `7.25%` — and the same sign after it (§E).
  */
 
 /**
@@ -499,24 +524,36 @@ export function formatNumber(
 export const PERCENT_LOSSLESS_MAX_DECIMALS = 4;
 
 /**
- * A percentage, **whole** (ADR-0174 §1): `96%`, `58%` for 57,5, `100%`, `0%`. `value` is already in percent — 15
- * for 15%. Rounding is half up — away from zero for a negative change, `-13%` for -12,5 — `Intl`'s.
+ * **A percentage as a whole number, rounded half up** (UI-080): the number `formatPercent` writes, for a caller that
+ * must know it — `13` for 12,5, `30` for 29,6, `-13` for -12,5 (away from zero, as `Intl` and the server's
+ * `formatPercent` round). The binary noise of a product (`0.575 × 100` is `57.49999999999999`) is taken off first, so
+ * an exact half is a half.
+ */
+export function wholePercent(value: number): number {
+  if (!Number.isFinite(value)) return Number.NaN;
+  const exact = Number(value.toFixed(8));
+  const rounded = Math.sign(exact) * Math.floor(Math.abs(exact) + 0.5);
+  return rounded === 0 ? 0 : rounded;
+}
+
+/**
+ * A percentage, **whole** (UI-080; ADR-0174 §1): `96%`, `58%` for 57,5, `13%` for 12,5, `100%`, `0%` for 0,4. `value` is
+ * already in percent — 15 for 15%. Half up, away from zero for a negative change: `-13%` for -12,5.
  *
- * - `decimals` — the places always written: `{ decimals: 1 }` is a ratio beside its benchmark, `29,6%`, `30,0%`;
- * - `maxDecimals` — up to that many, trailing zeros dropped past `decimals`: a balance's split that needs a second
- *   place to stay on its side of the band, `{ decimals: 1, maxDecimals: 2 }` is `65,04%` and `40,0%`;
  * - `lossless` — a figure stated as a rule or a record: every place it has, up to
  *   {@link PERCENT_LOSSLESS_MAX_DECIMALS}, none when it has none — `7,25%`, `30%`.
+ *
+ * There is no `decimals` any more (UI-080): a ratio's tenth and a balance's split are whole like every other share.
  */
 export function formatPercent(
   value: number,
-  { decimals = 0, maxDecimals, lossless = false }: { decimals?: number; maxDecimals?: number; lossless?: boolean } = {},
+  { lossless = false }: { lossless?: boolean } = {},
   language: Language = DEFAULT_LANGUAGE,
 ): string {
   if (!Number.isFinite(value)) return '';
-  const max = Math.max(decimals, maxDecimals ?? (lossless ? PERCENT_LOSSLESS_MAX_DECIMALS : decimals));
+  if (!lossless) return `${inMarks(numberFormat(0, 0).format(wholePercent(value)), language)}%`;
   // `-0%` is written `0%`: a change that rounds to nothing has no sign.
-  return `${inMarks(unsigned(numberFormat(decimals, max).format(value)), language)}%`;
+  return `${inMarks(unsigned(numberFormat(0, PERCENT_LOSSLESS_MAX_DECIMALS).format(value)), language)}%`;
 }
 
 /**

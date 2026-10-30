@@ -2,6 +2,7 @@ import { messagesIn } from '@/i18n/catalogue';
 import { SOURCE_LANGUAGE, type Language } from '@/i18n/language';
 import { leadsMessages } from '@/i18n/messages/leads';
 import { api } from '@/lib/api-client';
+import { whatsAppNumber } from '@/lib/phone-number';
 
 export type LeadType = 'sales' | 'recruitment';
 export type LeadOutcome = 'won' | 'lost';
@@ -56,6 +57,21 @@ export interface Lead {
   flags: LeadFlag[];
   /** How late, in the office's own days. `null` unless `flags` carries `overdue`. */
   overdueDays: number | null;
+}
+
+/**
+ * **One move along a lead's ladder** (UI V1, UI-105): the lead sheet's *Riwayat*. When, and from which stage to which,
+ * by code — the office names the stage. Only `GET /leads/:id` carries them (`LeadDetail`); the list never does.
+ */
+export interface LeadMove {
+  at: string;
+  fromStatusCode: string | null;
+  toStatusCode: string;
+}
+
+/** One lead read by its id: the list's shape, and its moves, oldest first (UI-105). */
+export interface LeadDetail extends Lead {
+  history: LeadMove[];
 }
 
 export interface LeadPage {
@@ -133,51 +149,12 @@ export const flagLabel = (flag: LeadFlag, overdueDays: number | null, language: 
  */
 export const LEAD_ROWS_FIRST_SHOWN = 30;
 
-/** The digits a WhatsApp number may have, country code included: E.164's ceiling, and Indonesia's floor. */
-export const WHATSAPP_DIGITS = { min: 10, max: 15 } as const;
-
 /**
- * A phone number as `wa.me` takes it — digits only, Indonesia's `62` in front — or `null` when it does
- * not read as one (P13.1-T4 AC-2, ADR-0108 §2).
- *
- * The client's rule: no `+`, and a leading `0` becomes `62` (`0812…` → `62812…`). **Every other
- * character goes**, so the dashes and spaces the seed and the agents type (`0812-1100-2200`,
- * `+62 812 1100 2200`, `+62 0812…`, `0062 812…`) all read alike. A number typed without its trunk zero (`812…`) is an Indonesian
- * mobile too, and gets the same `62`. `62` is kept as it is. Anything that is then not 10 to 15 digits
- * is not a number WhatsApp can open, and the dialog offers no button rather than a link that fails.
+ * **WhatsApp's and the dialler's reading of a number** — `WHATSAPP_DIGITS`, `whatsAppNumber`, `whatsAppLink`, `callLink`
+ * (P13.1-T4 AC-2, P18.95-T4 AC-3) — live in `lib/phone-number.ts` with the rest of the phone's rules, so a screen that
+ * draws a WhatsApp button for a member loads no lead (P18.99-T16, the bundle). Re-exported here for the leads' screens.
  */
-export function whatsAppNumber(phone: string | null | undefined): string | null {
-  /*
-   * Two ways of writing the country code are read first (the exit review's finding 4): the international
-   * prefix `00` (`0062 812…`) is a `+`, and a trunk zero kept after the country code (`+62 0812…`, which
-   * people often type) is dropped — either would otherwise pass the length check as a number nobody has.
-   */
-  const digits = (phone ?? '').replace(/\D/g, '').replace(/^00/, '').replace(/^620/, '62');
-  if (!digits) return null;
-  const national = digits.startsWith('62')
-    ? digits
-    : digits.startsWith('0')
-      ? `62${digits.slice(1)}`
-      : digits.startsWith('8') ? `62${digits}` : digits;
-  return national.length >= WHATSAPP_DIGITS.min && national.length <= WHATSAPP_DIGITS.max ? national : null;
-}
-
-/** The chat link for a phone number, or `null` when there is no number WhatsApp could open. */
-export function whatsAppLink(phone: string | null | undefined): string | null {
-  const number = whatsAppNumber(phone);
-  return number ? `https://wa.me/${number}` : null;
-}
-
-/**
- * **A call, `tel:`, to the number WhatsApp is given** (P18.95-T4 AC-3, ADR-0167 §4; UI-016): the same digits,
- * read by the same rule, with the `+` a dialler needs for a country code — `0812-1100-2200` is
- * `tel:+6281211002200`. One rule for both, so a lead the 📞 can ring is a lead WhatsApp can open, and the
- * other way round. `null` where it cannot.
- */
-export function callLink(phone: string | null | undefined): string | null {
-  const number = whatsAppNumber(phone);
-  return number ? `tel:+${number}` : null;
-}
+export { callLink, WHATSAPP_DIGITS, whatsAppLink, whatsAppNumber } from './phone-number';
 
 /**
  * Why the 📞 and WhatsApp are held on a lead, in the reader's words — and where to put it right, which on a
@@ -274,7 +251,8 @@ export async function listEveryLead(
   }
 }
 
-export const readLead = (id: string) => api<Lead>(`/leads/${id}`);
+/** One lead, **with its moves** (`LeadDetail`, UI-105) — a `Lead` to every caller that reads no further. */
+export const readLead = (id: string) => api<LeadDetail>(`/leads/${id}`);
 
 /**
  * A new lead. Without `owner` it is the reader's own (`/leads`). **With one it is the coachee's**
@@ -316,3 +294,54 @@ export const deleteLead = (id: string) =>
  */
 export const reorderLeads = (ids: readonly string[]) =>
   api<{ ids: string[] }>('/leads/order', { method: 'PATCH', body: { ids } });
+
+/*
+ * ── `/leads` below 1024px: the compact list (UI V1, UI-105; D-10, D-18, D-19) ─────────────────────────────────────
+ */
+
+/** Which leads the type chips hold: every open lead, or one ladder's. */
+export type LeadTypeChip = 'all' | LeadType;
+
+/** How many open leads each chip holds: *Semua 67 · Sales 58 · Recruit 9*. A lead with no type yet is in *Semua* alone. */
+export function countByType(leads: readonly Lead[]): Record<LeadTypeChip, number> {
+  const counts: Record<LeadTypeChip, number> = { all: leads.length, sales: 0, recruitment: 0 };
+  for (const lead of leads) if (lead.type) counts[lead.type] += 1;
+  return counts;
+}
+
+/**
+ * **The pipeline strip's counts** (D-18): how many of one ladder's open leads sit on each of its stages, in the ladder's
+ * order — from the leads the screen holds, every one of them (`listEveryLead`), so the strip is the system's count and
+ * not a page's. A lead on a stage the office has since retired is counted under no cell, as it is on no stage the strip
+ * can name; it is still in the list.
+ */
+export function countByStage(
+  leads: readonly Lead[], type: LeadType, ladder: readonly { code: string }[],
+): Map<string, number> {
+  const counts = new Map(ladder.map((stage) => [stage.code, 0]));
+  for (const lead of leads) {
+    if (lead.type !== type || !lead.statusCode || !counts.has(lead.statusCode)) continue;
+    counts.set(lead.statusCode, (counts.get(lead.statusCode) ?? 0) + 1);
+  }
+  return counts;
+}
+
+/**
+ * **Where a lead's next action stands** (UI-105; UI-062's *Isi tindakan*): `overdue` when the server says so (`flags`,
+ * in the office's days), `today` on the office's today, `missing` with no date, else `upcoming`. `today` is the office's
+ * day (`dayInZone(OFFICE_TIME_ZONE)`), the caller's to hand in — for a word on screen, never a computation over data.
+ */
+export type NextActionState = 'overdue' | 'today' | 'missing' | 'upcoming';
+
+export function nextActionState(lead: Pick<Lead, 'flags' | 'nextActionDate'>, today: string): NextActionState {
+  if (!lead.nextActionDate) return 'missing';
+  if (lead.flags.includes('overdue')) return 'overdue';
+  return lead.nextActionDate === today ? 'today' : 'upcoming';
+}
+
+/** A name matches a search when it holds every word typed, in any order and any case: *rosa dam* finds *Ibu Rosa Damayanti*. */
+export function nameMatches(name: string, typed: string): boolean {
+  const words = typed.trim().toLocaleLowerCase('id').split(/\s+/).filter(Boolean);
+  const held = name.toLocaleLowerCase('id');
+  return words.every((word) => held.includes(word));
+}

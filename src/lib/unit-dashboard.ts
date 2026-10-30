@@ -2,6 +2,7 @@ import { messagesIn } from '@/i18n/catalogue';
 import { DEFAULT_LANGUAGE, SOURCE_LANGUAGE, type Language } from '@/i18n/language';
 import { unitDashboardMessages } from '@/i18n/messages/unit-dashboard';
 import { api } from './api-client';
+import type { ActivityRatio } from './activity';
 import type { LastOneOnOne, RosterStatus } from './coaching';
 import { formatMonth, formatOfficeDay, formatPercent, formatRupiahCompact, formatRupiahCompactPair, OFFICE_TIME_ZONE } from './format';
 import { groupDigits, parseDigits, toMajor, toMinor } from './goals';
@@ -136,6 +137,8 @@ export interface FollowUp {
 export interface UnitRow {
   membershipId: string;
   name: string;
+  /** Their profile photo as a signed link (UI V1, UI-111); `null` or absent for none: the avatar draws initials. */
+  photoUrl?: string | null;
   /** The reader's own row: *You ({first name})* ★, *Last 1:1* —, its drills to their own screens. */
   isReader: boolean;
   rung: UnitRung;
@@ -152,6 +155,8 @@ export interface UnitRow {
   goal: GoalCell;
   production: UnitProduction;
   leadsCounts: LeadsCounts;
+  /** *Closing* (UI V1, UI-028; O-4): their sales leads that reached *Paid and issued* in the period's window. */
+  closings: number;
   activity: UnitActivity;
   /** Coaching's own reading; `null` for *No 1:1 yet*, and on the reader's own row. */
   lastOneOnOne: LastOneOnOne | null;
@@ -196,15 +201,24 @@ export interface UnitTotalGoal {
 
 export interface PotentialActive {
   count: number;
+  /** Manpower (UI-013): everybody the group holds, its head and every new hire included. */
   of: number;
+}
+
+/** *Active Agent*'s tile (UI-013): out of manpower, with its *Unit* (head + direct agents) and *AAB* split. */
+export interface ActiveAgentTile extends PotentialActive {
+  unit: PotentialActive;
+  aab: PotentialActive;
 }
 
 export interface UnitTotal {
   goal: UnitTotalGoal;
   leadsCounts: LeadsCounts;
+  /** The rows' *Closing* summed (UI-028). */
+  closings: number;
   touches: CountAgainst;
   potentialActive: PotentialActive;
-  /** The new hires before a first sale whom `goal` and `potentialActive` leave out (ADR-0172 §2); named in their ⓘ. */
+  /** The new hires before a first sale whom `goal` leaves out (ADR-0172 §2), named in its ⓘ — in `potentialActive.of`. */
   newHires: number;
 }
 
@@ -222,7 +236,7 @@ export interface TeamTile {
   direct: number;
   units: number;
   underUnits: number;
-  /** Of `total`, the new hires before a first sale: in the team, and in neither production nor *on pace* (ADR-0172). */
+  /** Of `total`, the new hires before a first sale: in the team, out of production, in *Active Agent*'s `of` (UI-013). */
   newHires: number;
 }
 
@@ -239,7 +253,7 @@ export interface RecruitsTile {
 export interface UnitTiles {
   team: TeamTile;
   directGroupProduction: GroupProductionTile;
-  potentialActive: PotentialActive;
+  potentialActive: ActiveAgentTile;
   potentialRecruits: RecruitsTile;
 }
 
@@ -289,6 +303,8 @@ export interface UnitDashboardView {
   units: UnitGroup[];
   production: UnitProductionState;
   mdrt: MdrtHeader;
+  /** *Last updated* (UI-028): the office's day of its newest standing production import; `null` while it has none. */
+  lastUpload: string | null;
 }
 
 /**
@@ -677,3 +693,167 @@ function changed(cell: ProductionCell, typed: string): number | null {
   const minor = toMinor(parseDigits(typed));
   return minor === cell.valueMinor ? null : minor;
 }
+
+/*
+ * ── UI V1 (Phase 18.99 T4, 2026-10-30) ───────────────────────────────────────────────────────────
+ *
+ * The owner's redesign of the page (`revisions/2026-10-30-ui-v1`, UI-001 to UI-012, UI-028): *Overview | Activities*,
+ * the stat tiles, the roster's filter chips, its accordion on a phone and its compact tables, the row that opens the
+ * person's Personal Summary, and the Activities tab's table and ratio card. Every figure is still the server's.
+ */
+
+/** *Overview | Activities* (UI-001), kept in the address as `?tab=activities`. */
+export type UnitTab = 'overview' | 'activities';
+
+export function tabFrom(value: string | string[] | null | undefined): UnitTab {
+  const one = Array.isArray(value) ? value[0] : value;
+  return one === 'activities' ? 'activities' : 'overview';
+}
+
+/** *Minggu | Bulan* (UI-001): a week Monday to Sunday, or a calendar month. */
+export type ActivitySpan = 'week' | 'month';
+
+/** One period of the Activities tab, and where ‹ and › go from it. */
+export interface ActivityPeriod {
+  span: ActivitySpan;
+  from: string;
+  to: string;
+  /** The period holds the office's today: › is disabled. */
+  current: boolean;
+  previous: string;
+  next: string | null;
+}
+
+/** A count against one activity code; codes above zero only. */
+export interface CodeCount {
+  code: string;
+  count: number;
+}
+
+/** One person's column. */
+export interface ActivitiesPerson {
+  membershipId: string;
+  name: string;
+  isReader: boolean;
+  /** In the *Unit*: the head and their direct agents who lead nobody. Everybody is in the *Group*. */
+  inUnit: boolean;
+  /** Their profile photo, signed, when they have one (UI-111); initials otherwise. */
+  photoUrl?: string | null;
+  counts: CodeCount[];
+  total: number;
+}
+
+/** A scope's *Total* column, summed by the server. */
+export interface ScopeTotals {
+  counts: CodeCount[];
+  total: number;
+}
+
+export interface ActivitiesType {
+  code: string;
+  label: string;
+  status: 'active' | 'archived';
+}
+
+/** A section, as the office named and ordered it: content, never translated. */
+export interface ActivitiesSection {
+  code: string;
+  label: string;
+  status: 'active' | 'archived';
+  types: ActivitiesType[];
+}
+
+export interface ActivitiesTotals {
+  unit: ScopeTotals;
+  group: ScopeTotals;
+}
+
+/** *Ratio · 30 hari terakhir* (UI-001): the Ratio page's ratios over the *Unit* and the *Group*, always the last 30 days. */
+export interface ActivitiesRatios {
+  from: string;
+  to: string;
+  days: number;
+  unit: ActivityRatio[];
+  group: ActivityRatio[];
+}
+
+/** `GET /unit/dashboard/activities` (UI-001). */
+export interface UnitActivitiesView {
+  today: string;
+  period: ActivityPeriod;
+  head: UnitHead;
+  empty: boolean;
+  sections: ActivitiesSection[];
+  people: ActivitiesPerson[];
+  totals: ActivitiesTotals;
+  ratios: ActivitiesRatios;
+}
+
+/**
+ * The Activities tab's read: the period holding `date` (the office's today when none), for the reader's unit or `for`
+ * a leader's below them — 404 outside the reach, as the dashboard's own read. Each read of somebody else's counts is
+ * audited.
+ */
+export const readUnitActivities = (params: { span?: ActivitySpan; date?: string; for?: string } = {}) =>
+  api<UnitActivitiesView>('/unit/dashboard/activities' + query({ span: params.span, date: params.date, for: params.for }));
+
+/** *Unit | Group* (UI-001; D-16). */
+export type UnitScope = 'unit' | 'group';
+
+/** A scope's people, in the roster's order. */
+export const scopePeople = (view: Pick<UnitActivitiesView, 'people'>, scope: UnitScope) =>
+  (scope === 'unit' ? view.people.filter((p) => p.inUnit) : view.people);
+
+/** A person's or a total's count for a code: 0 where the server listed none. */
+export const countOf = (counts: readonly CodeCount[], code: string) => counts.find((c) => c.code === code)?.count ?? 0;
+
+/**
+ * **The heat map's step** (UI-001, D-17): 0 for nothing (a light *·*), then 1 to 3 by the count's share of the
+ * largest cell on the table — a third or less, two thirds or less, more. A count of 1 on a table whose largest is 1 is 3.
+ */
+export function heatStep(count: number, largest: number): 0 | 1 | 2 | 3 {
+  if (count <= 0 || largest <= 0) return 0;
+  const share = count / largest;
+  return share <= 1 / 3 ? 1 : share <= 2 / 3 ? 2 : 3;
+}
+
+/** The status the roster's chips filter by (UI-002, UI-005): *Perlu perhatian*, *Perlu dipantau*. */
+export type RosterFilter = 'all' | 'needs_attention' | 'watch_closely';
+
+/** How many rows hold each status the chips name. */
+export function statusTally(rows: readonly UnitRow[]): Record<RosterFilter, number> {
+  return {
+    all: rows.length,
+    needs_attention: rows.filter((r) => r.status === 'needs_attention').length,
+    watch_closely: rows.filter((r) => r.status === 'watch_closely').length,
+  };
+}
+
+export const matchesFilter = (row: UnitRow, filter: RosterFilter) => filter === 'all' || row.status === filter;
+
+/**
+ * **Where a row goes** (UI-011, the owner, 30 Oct: no inline expansion): the reader's own row to their own *Personal
+ * Summary*; anybody the reader coaches to their agent page on the *Personal Summary* tab, with `from` — this page's
+ * address — so its *‹* comes back here; `null` for somebody whose coaching pages would not be found (an Owner or an
+ * Admin outside their own downline), whose row is read-only.
+ */
+export function rowHref(row: Pick<UnitRow, 'membershipId' | 'isReader' | 'coached'>, from: string): string | null {
+  if (row.isReader) return '/summary';
+  if (!row.coached) return null;
+  return `/coaching/${encodeURIComponent(row.membershipId)}/summary?from=${encodeURIComponent(from)}`;
+}
+
+/**
+ * A compact sum split into its figure and its unit, for a tile's big number with the unit small beside it (UI-003):
+ * *Rp 333,5* and *jt*; *IDR 333.5* and *M*. A sum with no unit (under a thousand) is all figure.
+ */
+export function splitMoney(text: string): { value: string; unit: string | null } {
+  const match = /^(.*\d)\s?([A-Za-z]+)$/.exec(text);
+  return match ? { value: match[1], unit: match[2] } : { value: text, unit: null };
+}
+
+/** A goal's share as a bar's width, 0–100, from the server's percentage, or `null` with nothing to draw (`goalBar`). */
+export const goalShare = goalBar;
+
+/** Green from 100%, red under it (UI-005: *% colour follows the 100% rule only*), judged on the unrounded value. */
+export const goalMet = (attainmentPct: number) => attainmentPct >= 100;

@@ -1,54 +1,87 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import { Fragment, useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { CurrentStagePill, StepMarker, TickRow } from '@/components/capability/capability-parts';
 import { useCoacheeNotFound } from '@/components/coaching-person';
 import { SummaryCard } from '@/components/summary-card';
-import { ConfigBadge } from '@/components/ui/config-badge';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button, ErrorBanner, Textarea } from '@/components/ui/field';
-import { Skeleton, SkeletonBar, SkeletonText } from '@/components/ui/skeleton';
-import { InlineSaveStatus, useInlineSave, type InlineSaveStatusProps } from '@/components/ui/inline-save-status';
+import { LineIcon } from '@/components/ui/line-icon';
+import { SaveStateLabel, useSaveState } from '@/components/ui/save-state';
+import { Skeleton, SkeletonBar } from '@/components/ui/skeleton';
+import { useInlineSave, type InlineSaveStatusProps } from '@/components/ui/inline-save-status';
+import { TippedGlyph } from '@/components/ui/tipped-glyph';
 import { Toast, useToast } from '@/components/ui/toast';
+import { TonePill } from '@/components/ui/tone-pill';
 import { useLanguage, useMessages } from '@/i18n/language-provider';
 import { coachingLeaderNotesMessages } from '@/i18n/messages/coaching-leader-notes';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
+import { firstIncomplete, gridCount, ladderRungs, type LadderRung } from '@/lib/capability-view';
 import { cn } from '@/lib/cn';
 import {
-  capabilityTag, gridItems, gridNotApplicable, LEADER_NOTE_MAX, ladderStages, readCoachingProfile, readLeaderNotes,
-  saveCoachingProfile, saveLeaderNote, stageMilestones, trackerGrids,
-  type CapabilityGridRow, type CapabilityRow, type Coachee, type CoachingProfile, type LeaderNote, type LeaderNotes,
+  capabilityTag, gridItems, gridNotApplicable, LEADER_NOTE_MAX, readCoachingProfile, readLeaderNotes,
+  saveCoachingProfile, saveLeaderNote, trackerGrids,
+  type CapabilityGridRow, type Coachee, type CoachingProfile, type LeaderNote, type LeaderNotes,
 } from '@/lib/coaching';
 import { useCan } from '@/lib/session';
+import { useMediaQuery } from '@/lib/use-media-query';
+
+/** The ladder's sheet, loaded the first time it is opened (the 200 kB budget). */
+const LadderSheet = dynamic(() => import('@/components/capability/ladder-sheet').then((m) => m.LadderSheet), { ssr: false });
+
+/** A V1 card (UI-008): white, no border on the V1 surface, 16px corners. */
+const CARD = 'rounded-lg border border-card-edge bg-card px-4 py-3.5 lg:px-[18px] lg:py-4';
 
 /**
- * A coachee's *🔒 Leader Notes* tab (`Overall.html:4344-4382`, logic `:11189-11282`; P11-T9): the
- * *Capability mapping* ladder, the *Skill tracker* and the leader's *Personal notes*, inside the person
- * shell.
+ * A coachee's ***Capability mapping*** tab (`/coaching/[membershipId]/leader-notes`; P11-T9, redrawn by Phase 18.99 T10
+ * after the UI V1 report, UI-035 to UI-040): where they stand on the capability ladder, the skills their coaches track,
+ * and the reader's own note about them, which they never see.
  *
- * **Two reads, each failing in its own place.** The profile (`GET …/profile`) carries the office's
- * catalog with its archived rows, the ticks by code and the stage the server derived; the notes
- * (`GET …/leader-notes`) carry the reader's own note and those somebody below them wrote. A 404 from
- * either means the person is out of the reader's reach after all, and the shell shows its not-found
- * state.
+ * - **The ladder is one compact tile** (UI-035): the title with an ⓘ holding the privacy line (UI-038), a four-step
+ *   progress line, the current stage with its pill and ›. The whole tile opens the ladder in a sheet (a centred modal
+ *   on a desktop), each criterion listed once; nothing is ticked on the page itself.
+ * - **The *Skill tracker*** (UI-036, the name at every size): below 1024px each section a 44px accordion row with its
+ *   count, only the first incomplete one open, a section that does not apply a grey row with *Tidak berlaku* that opens
+ *   onto the reason and its greyed list; from 1024px the sections that apply as open columns, and each that does not
+ *   one row with its reason. Rows of 44px with 22px boxes below 1024px, 32px and 18px above (UI-037).
+ * - **The private note** (UI-039) says *Belum disimpan* while it differs from what was saved and *Tersimpan ✓* after,
+ *   and holds a reader who would leave it unsaved (`useSaveState`). From 1024px it is the right column, sticky (UI-040).
  *
- * **Nothing here outlives the tab.** Every answer is held in this component's state and nowhere else:
- * *Agent view* unmounts the tab (`coaching-person.tsx`), and what it read goes with it, so turning the
- * screen round leaves no note in the page (ADR-0078, roles §1.7). Coming back reads both again.
+ * **Two reads, each failing in its own place.** The profile (`GET …/profile`) carries the office's catalog with its
+ * archived rows, the ticks by code and the stage the server derived; the notes (`GET …/leader-notes`) carry the reader's
+ * own note and those somebody below them wrote. A 404 from either means the person is out of the reader's reach after
+ * all, and the shell shows its not-found state.
+ *
+ * **Nothing here outlives the tab.** Every answer is held in this component's state and nowhere else: leaving the tab
+ * unmounts it, and what it read goes with it (ADR-0078, roles §1.7). Coming back reads both again.
  *
  * Coaching's own strings use none of ADR-0084's six words, and none names a phase, an id or a code. They are the
- * catalogue's (`messages/coaching-leader-notes.ts`, P18.98-T4), in the reader's language.
+ * catalogue's (`messages/coaching-leader-notes.ts`), in the reader's language.
  */
 export function LeaderNotesTab({ coachee }: { coachee: Coachee }) {
   const canReadNotes = useCan('leader_notes:read');
   const { toast, show } = useToast();
   return (
-    <div className="flex min-w-0 flex-col gap-4">
-      <CapabilityProfile coachee={coachee} onToast={show} />
+    <div
+      className={cn(
+        'flex min-w-0 flex-col gap-3',
+        // UI-040: two columns from 1024px — the ladder and the tracker, then the note, 360px and sticky.
+        canReadNotes && 'lg:grid lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start lg:gap-6',
+      )}
+    >
+      <div className="flex min-w-0 flex-col gap-3 lg:gap-4">
+        <CapabilityProfile coachee={coachee} onToast={show} />
+      </div>
       {/*
         * A support session reads no note (ADR-0090): the permission is not the reader's there, so
         * nothing is asked for and the card is not drawn. The server refuses it either way.
         */}
-      {canReadNotes && <PersonalNotes coachee={coachee} onToast={show} />}
+      {canReadNotes && (
+        <div className="flex min-w-0 flex-col gap-3 lg:sticky lg:top-6 lg:gap-4" data-note-column="">
+          <PersonalNotes coachee={coachee} onToast={show} />
+        </div>
+      )}
       <Toast toast={toast} />
     </div>
   );
@@ -76,20 +109,19 @@ interface Held {
 /**
  * The profile, ticked as it is read and saved as it is ticked.
  *
- * **Every tick saves the whole tick set** at the version it was read (`PUT …/profile`), one save at a
- * time: a tick made while a save is in flight goes in the next one, with the version the last one
- * answered. **The stage is the server's**: the tag and the highlighted stage change when the save
- * answers, never from a count made here.
+ * **Every tick saves the whole tick set** at the version it was read (`PUT …/profile`), one save at a time: a tick made
+ * while a save is in flight goes in the next one, with the version the last one answered. **The stage is the server's**:
+ * the tile's stage, its progress line and the sheet's current stage change when the save answers, never from a count
+ * made here.
  *
- * A save another coach has moved past is `VERSION_CONFLICT`: the profile is read again and one line
- * says so. An item archived since it was read is `CONFIG_ARCHIVED`: read again, with the server's words.
+ * A save another coach has moved past is `VERSION_CONFLICT`: the profile is read again and one line says so. An item
+ * archived since it was read is `CONFIG_ARCHIVED`: read again, with the server's words.
  *
- * **Each tick says its save beside it** (P18.95-T1 AC-5, ADR-0167 §5; UI-007): *Saving… → Saved ✓*, or
- * *Couldn't save — retry*. A refused save puts the boxes back, so the retry ticks the box again and saves;
- * a re-read leaves nothing to retry. The milestone's toast stays.
+ * **Each tick says its save beside it** (P18.95-T1 AC-5): *Saving… → Saved ✓*, or *Couldn't save — retry*. A refused save
+ * puts the boxes back, so the retry ticks the box again and saves; a re-read leaves nothing to retry. The milestone's
+ * toast stays.
  */
 function CapabilityProfile({ coachee, onToast }: { coachee: Coachee; onToast: (message: string) => void }) {
-  const language = useLanguage();
   const t = useMessages(coachingLeaderNotesMessages);
   const { membershipId } = coachee;
   const gone = useCoacheeNotFound();
@@ -101,6 +133,7 @@ function CapabilityProfile({ coachee, onToast }: { coachee: Coachee; onToast: (m
   const [saveError, setSaveError] = useState<ApiError | null>(null);
   /** The one line a version conflict leaves: the profile changed somewhere else and was read again. */
   const [reread, setReread] = useState(false);
+  const [ladderOpen, setLadderOpen] = useState(false);
   const held = useRef<Held | null>(null);
   const inFlight = useRef<Promise<boolean | null> | null>(null);
   const again = useRef(false);
@@ -197,8 +230,8 @@ function CapabilityProfile({ coachee, onToast }: { coachee: Coachee; onToast: (m
     return inFlight.current;
   }, [membershipId, gone, onToast, readAgain, t.updated]);
 
-  /** Tick or untick one box, and save; `where` tells apart the same milestone listed under two stages. */
-  const toggle = useCallback((part: 'milestone' | 'skill', code: string, on: boolean, where = '') => {
+  /** Tick or untick one box, and save. A milestone is one code, listed once (UI-035). */
+  const toggle = useCallback((part: 'milestone' | 'skill', code: string, on: boolean) => {
     const tick = (): Promise<boolean | null> => {
       const mine = held.current;
       if (!mine) return Promise.resolve(null);
@@ -211,7 +244,7 @@ function CapabilityProfile({ coachee, onToast }: { coachee: Coachee; onToast: (m
       return save();
     };
     // A retry ticks the box again — a refusal put it back — and saves (AC-5).
-    void track(`${part}:${where}:${code}`, tick);
+    void track(`${part}:${code}`, tick);
   }, [save, track]);
 
   if (error) return <ErrorBanner {...error} />;
@@ -219,9 +252,8 @@ function CapabilityProfile({ coachee, onToast }: { coachee: Coachee; onToast: (m
 
   const milestoneTicks = new Set(ticks.milestones);
   const skillTicks = new Set(ticks.skills);
-  const tag = capabilityTag(profile.catalog, stageCode, language);
-
-  return (
+  const rungs = ladderRungs(profile.catalog, stageCode, milestoneTicks);
+  const notice = (
     <>
       {reread && (
         <p role="status" className="rounded-md border border-hairline bg-base px-3.5 py-2.5 text-sm text-navy">
@@ -229,221 +261,283 @@ function CapabilityProfile({ coachee, onToast }: { coachee: Coachee; onToast: (m
         </p>
       )}
       {saveError && <ErrorBanner {...saveError} />}
+    </>
+  );
 
-      <SummaryCard id="capability-mapping" title={t.capability} tag={tag ?? undefined} className="min-w-0">
-        {/*
-          * A catalog with no stage at all. Since ADR-0116 (2026-10-08) an office started Empty is given
-          * the platform ladder, so this is no longer reachable from a new office.
-          */}
-        {profile.catalog.stages.length === 0 && (
-          <EmptyState title={t.noStages} className="py-6" />
-        )}
-        <ol className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
-          {ladderStages(profile.catalog, stageCode).map((stage, i) => (
-            <Stage
-              key={stage.code}
-              n={i + 1}
-              label={stage.label}
-              current={stage.code === stageCode}
-              milestones={stageMilestones(stage, profile.catalog, milestoneTicks)}
-              ticked={milestoneTicks}
-              canTick={canTick}
-              onTick={(code, on) => toggle('milestone', code, on, stage.code)}
-              status={(code) => statusOf(`milestone:${stage.code}:${code}`)}
-            />
-          ))}
-        </ol>
-      </SummaryCard>
+  return (
+    <>
+      {/* Said in the sheet while it covers the page. */}
+      {!ladderOpen && notice}
 
-      <SummaryCard id="skill-tracker" title={t.tracker} className="min-w-0">
-        {profile.catalog.grids.length === 0 && (
-          <EmptyState title={t.noGrids} className="py-6" />
-        )}
-        <div className="grid grid-cols-1 items-start gap-x-[22px] gap-y-4 sm:grid-cols-2 xl:grid-cols-4">
-          {trackerGrids(profile.catalog, skillTicks).map((grid) => (
-            <SkillSection
-              key={grid.code}
-              grid={grid}
-              notApplicable={gridNotApplicable(grid, coachee.downline, coachee.pronoun, language)}
-              ticked={skillTicks}
-              canTick={canTick}
-              onTick={(code, on) => toggle('skill', code, on)}
-              status={(code) => statusOf(`skill::${code}`)}
-            />
-          ))}
-        </div>
-      </SummaryCard>
+      <CapabilityTile
+        coachee={coachee}
+        profile={profile}
+        stageCode={stageCode}
+        rungs={rungs}
+        onOpen={() => setLadderOpen(true)}
+      />
+      {ladderOpen && (
+        <LadderSheet
+          open
+          onClose={() => setLadderOpen(false)}
+          rungs={rungs}
+          ticked={milestoneTicks}
+          canTick={canTick}
+          onTick={(code, on) => toggle('milestone', code, on)}
+          statusOf={(code) => statusOf(`milestone:${code}`)}
+          notice={reread || saveError ? notice : undefined}
+        />
+      )}
+
+      <SkillTracker
+        coachee={coachee}
+        profile={profile}
+        ticked={skillTicks}
+        canTick={canTick}
+        onTick={(code, on) => toggle('skill', code, on)}
+        statusOf={(code) => statusOf(`skill:${code}`)}
+      />
     </>
   );
 }
 
 /**
- * The office stopped offering this row: it still renders where it was ticked, and is ticked anew
- * nowhere (P11-T9 AC-3). The badge the Activity Dashboard puts on a row the office archived.
+ * **The *Capability mapping* tile** (UI-035, ~100px on a phone where the ladder took 812): the title with its ⓘ — the
+ * privacy line, moved there from the note's card (UI-038) — the four-step progress line, and the current stage with
+ * *TAHAP SAAT INI* and ›. **The whole tile is one button** that opens the ladder; the ⓘ sits above it as its own button,
+ * so the two are never nested. Below the first stage the row says *Belum mencapai {first stage}*, with no pill.
  */
-function ArchivedBadge() {
-  const t = useMessages(coachingLeaderNotesMessages);
-  // The space is the label's, so the name a screen reader hears is *Cold calling Archived*, not one word.
-  return <>{' '}<ConfigBadge tone="navy" className="ml-1 align-middle">{t.archived}</ConfigBadge></>;
-}
-
-/**
- * One rung, `.cap-stage` (`Overall.html:1352-1361`): its number, its name, its milestones, and on the
- * current one the amber ground and *Current stage*.
- *
- * **Navy words on the amber.** The prototype puts white on amber-dark in the number and amber-dark on
- * an amber tint in the badge, and neither clears a contrast floor (`a11y.spec.tsx`); navy on amber
- * does, as the product's other amber grounds have it. The milestones are a group named by the stage,
- * because the same milestone is a checkbox in every stage that lists it.
- */
-function Stage({
-  n, label, current, milestones, ticked, canTick, onTick, status,
+function CapabilityTile({
+  coachee, profile, stageCode, rungs, onOpen,
 }: {
-  n: number;
-  label: string;
-  current: boolean;
-  milestones: CapabilityRow[];
-  ticked: ReadonlySet<string>;
-  canTick: boolean;
-  onTick: (code: string, on: boolean) => void;
-  /** Each box's save confirmation (P18.95-T1 AC-5), on the line under it — never inside its label. */
-  status: (code: string) => InlineSaveStatusProps;
+  coachee: Coachee;
+  profile: CoachingProfile;
+  stageCode: string | null;
+  rungs: readonly LadderRung[];
+  onOpen: () => void;
 }) {
   const t = useMessages(coachingLeaderNotesMessages);
-  const titleId = useId();
+  const language = useLanguage();
+  const headingId = useId();
+  const privacy = t.leaderOnly({ name: coachee.name });
+  const current = rungs.find((r) => r.state === 'current') ?? null;
+  // Below the first stage: *Belum mencapai {first}*, the most junior stage by seniority (`capabilityTag`).
+  const stageText = current ? current.stage.label : capabilityTag(profile.catalog, stageCode, language);
+  const empty = rungs.length === 0;
+
   return (
-    <li
-      className={cn(
-        'rounded-lg border-[1.5px] px-3.5 py-3.5',
-        current ? 'border-amber bg-amber/[0.08]' : 'border-hairline bg-base',
+    <section aria-labelledby={headingId} className={cn(CARD, 'relative')} data-capability-tile="">
+      {!empty && (
+        <button
+          type="button"
+          aria-haspopup="dialog"
+          aria-label={t.openLadder({ stage: stageText ?? '' })}
+          onClick={onOpen}
+          className="absolute inset-0 rounded-lg hover:bg-hover-row/60"
+        />
       )}
-    >
-      <span
-        aria-hidden="true"
-        className={cn(
-          'mb-2 flex h-[22px] w-[22px] items-center justify-center rounded-full text-xs font-bold',
-          current ? 'bg-amber text-navy' : 'bg-navy text-white',
-        )}
-      >
-        {n}
-      </span>
-      <p id={titleId} className="mb-2.5 text-base font-bold leading-tight text-navy">{label}</p>
-      <div role="group" aria-labelledby={titleId} className="flex flex-col gap-[7px]">
-        {milestones.map((m) => {
-          const on = ticked.has(m.code);
-          const archived = m.status === 'archived';
-          const locked = !canTick || archived;
-          return (
-            <Fragment key={m.code}>
-              <label
-                className={cn(
-                  'flex items-start gap-1.5 text-sm leading-snug',
-                  on ? 'font-medium text-navy' : 'text-muted',
-                  locked ? 'cursor-default' : 'cursor-pointer',
-                )}
-              >
-                <input
-                  type="checkbox"
-                  checked={on}
-                  disabled={locked}
-                  onChange={(e) => onTick(m.code, e.target.checked)}
-                  className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-success disabled:cursor-not-allowed"
-                />
-                <span>
-                  {m.label}
-                  {archived && <ArchivedBadge />}
-                </span>
-              </label>
-              <InlineSaveStatus {...status(m.code)} label={m.label} className="-mt-1 pl-5" />
-            </Fragment>
-          );
-        })}
+      <div className="flex min-h-7 items-center gap-1">
+        <h2 id={headingId} className="text-lg font-bold text-navy">{t.capability}</h2>
+        {/* Above the tile's button, so a tap on it shows the privacy line and never opens the ladder (UI-038). */}
+        <TippedGlyph
+          glyph={<LineIcon name="info" className="h-[18px] w-[18px]" />}
+          name={privacy}
+          tip={privacy}
+          align="fit"
+          className="relative z-[1]"
+        />
+        {!empty && <LineIcon name="chevronRight" className="pointer-events-none ml-auto text-signal-grey max-lg:hidden" />}
       </div>
-      {current && (
-        <span className="mt-2 inline-block rounded-pill bg-amber/15 px-[9px] py-0.5 text-2xs font-bold uppercase tracking-wide text-navy">
-          {t.currentStage}
-        </span>
+      {empty ? (
+        // An office made before ADR-0116 (2026-10-08) gave every office the platform ladder.
+        <EmptyState title={t.noStages} className="py-6" />
+      ) : (
+        <div className="pointer-events-none lg:flex lg:items-center lg:gap-4">
+          <ProgressLine rungs={rungs} />
+          <p className="flex min-h-10 items-center gap-2 text-lg font-bold leading-tight text-navy">
+            <span className="min-w-0">{stageText}</span>
+            {current && <CurrentStagePill />}
+            <LineIcon name="chevronRight" className="ml-auto text-signal-grey lg:hidden" />
+          </p>
+        </div>
       )}
-    </li>
+    </section>
   );
 }
 
 /**
- * One section of the *Skill tracker* (`.skill-section`, `Overall.html:1363-1377`): its title, its
- * items ticked by code, a ticked one bold. **No toast**, as in the prototype.
- *
- * A section for somebody's downline, when they have none, is drawn disabled with the prototype's note
- * in their pronoun, and the note describes the group. So is a section the office has archived, shown
- * only because an item of it is ticked. What was ticked stays ticked either way.
+ * **The progress line** (UI-035): a step per stage in the ladder's order, the line in the accent up to the current stage
+ * and grey after it. Drawn, not read: the stage's name beside it says where the coachee is, for a screen reader too.
  */
-function SkillSection({
-  grid, notApplicable, ticked, canTick, onTick, status,
-}: {
-  grid: CapabilityGridRow;
-  notApplicable: string | null;
-  ticked: ReadonlySet<string>;
-  canTick: boolean;
-  onTick: (code: string, on: boolean) => void;
-  /** Each box's save confirmation (P18.95-T1 AC-5), on the line under it. */
-  status: (code: string) => InlineSaveStatusProps;
-}) {
-  const titleId = useId();
-  const noteId = useId();
-  const sectionArchived = grid.status === 'archived';
-  const off = notApplicable !== null || sectionArchived;
+function ProgressLine({ rungs }: { rungs: readonly LadderRung[] }) {
   return (
-    <div role="group" aria-labelledby={titleId} aria-describedby={notApplicable ? noteId : undefined}>
-      <p
-        id={titleId}
-        className={cn('mb-2.5 text-sm font-bold uppercase tracking-wide', off ? 'text-muted/50' : 'text-muted')}
-      >
-        {grid.label}
-        {sectionArchived && <ArchivedBadge />}
-      </p>
-      {notApplicable && <p id={noteId} className="mb-1 text-sm italic text-muted">{notApplicable}</p>}
-      <div className="flex flex-col">
-        {gridItems(grid, ticked).map((item) => {
-          const on = ticked.has(item.code);
-          const archived = item.status === 'archived';
-          const locked = !canTick || off || archived;
-          return (
-            <Fragment key={item.code}>
-              <label
-                className={cn(
-                  'flex items-center gap-[9px] py-1 text-base',
-                  off ? 'text-navy/[0.45]' : 'text-navy',
-                  on && 'font-semibold',
-                  locked ? 'cursor-default' : 'cursor-pointer',
-                )}
-              >
-                <input
-                  type="checkbox"
-                  checked={on}
-                  disabled={locked}
-                  onChange={(e) => onTick(item.code, e.target.checked)}
-                  className="h-4 w-4 shrink-0 accent-success disabled:cursor-not-allowed disabled:opacity-50"
-                />
-                <span>
-                  {item.label}
-                  {archived && <ArchivedBadge />}
-                </span>
-              </label>
-              <InlineSaveStatus {...status(item.code)} label={item.label} className="pl-[25px]" />
-            </Fragment>
-          );
-        })}
-      </div>
+    <div aria-hidden="true" className="my-2 flex items-center lg:my-0 lg:w-[150px] lg:shrink-0" data-progress-line="">
+      {rungs.map((rung, i) => (
+        <Fragment key={rung.stage.code}>
+          {i > 0 && <span className={cn('h-[3px] flex-1', rung.state === 'next' ? 'bg-line' : 'bg-amber')} />}
+          <StepMarker state={rung.state} n={rung.n} />
+        </Fragment>
+      ))}
     </div>
   );
 }
 
+/**
+ * **The *Skill tracker*** (UI-036, UI-037). Below 1024px an accordion: each section a 44px row with its count, the first
+ * incomplete section that applies open and the rest closed; a section that does not apply — a downline section for
+ * somebody with nobody below — **stays visible** as a grey row with *Tidak berlaku* (the owner's override of D-08 here),
+ * and opening it shows the reason and the greyed list. From 1024px the sections that apply are open columns, and each
+ * that does not one row with its reason in italics. **No toast**, as in the prototype.
+ */
+function SkillTracker({
+  coachee, profile, ticked, canTick, onTick, statusOf,
+}: {
+  coachee: Coachee;
+  profile: CoachingProfile;
+  ticked: ReadonlySet<string>;
+  canTick: boolean;
+  onTick: (code: string, on: boolean) => void;
+  statusOf: (code: string) => InlineSaveStatusProps;
+}) {
+  const t = useMessages(coachingLeaderNotesMessages);
+  const language = useLanguage();
+  // A phone and a tablet draw the accordion; read before paint, so a desktop's columns never flash on a phone.
+  const compact = useMediaQuery(['phone', 'tablet'], { beforePaint: true });
+  const grids = trackerGrids(profile.catalog, ticked);
+  const reasonOf = (grid: CapabilityGridRow) => gridNotApplicable(grid, coachee.downline, coachee.pronoun, language);
+  const applies = (grid: CapabilityGridRow) => reasonOf(grid) === null && grid.status !== 'archived';
+  // The first incomplete section, as the profile was read: what the reader opens and closes after is theirs.
+  const [opened, setOpened] = useState<ReadonlySet<string>>(() => {
+    const first = firstIncomplete(grids, ticked, applies);
+    return new Set(first ? [first] : []);
+  });
+  const flip = (code: string) => setOpened((now) => {
+    const next = new Set(now);
+    if (next.has(code)) next.delete(code);
+    else next.add(code);
+    return next;
+  });
+
+  const sections = grids.map((grid) => ({ grid, reason: reasonOf(grid), ...gridCount(grid, ticked) }));
+  const rows = (grid: CapabilityGridRow, off: boolean) => gridItems(grid, ticked).map((item) => {
+    const archived = item.status === 'archived';
+    return (
+      <TickRow
+        key={item.code}
+        label={item.label}
+        archived={archived}
+        checked={ticked.has(item.code)}
+        locked={!canTick || off || archived}
+        muted={off}
+        onChange={(on) => onTick(item.code, on)}
+        status={statusOf(item.code)}
+      />
+    );
+  });
+
+  return (
+    <section aria-labelledby="skill-tracker" className={CARD} data-layout={compact ? 'accordion' : 'columns'}>
+      <h2 id="skill-tracker" className="flex min-h-7 items-center text-lg font-bold text-navy">{t.tracker}</h2>
+      {grids.length === 0 && <EmptyState title={t.noGrids} className="py-6" />}
+      {compact ? (
+        <div className="mt-1">
+          {sections.map(({ grid, reason, done, total }) => {
+            const sectionArchived = grid.status === 'archived';
+            const off = reason !== null || sectionArchived;
+            const isOpen = opened.has(grid.code);
+            const bodyId = `skill-section-${grid.code}`;
+            const titleId = `${bodyId}-title`;
+            return (
+              <div key={grid.code} data-section={grid.code}>
+                <h3 className="border-t border-divider">
+                  <button
+                    type="button"
+                    aria-expanded={isOpen}
+                    aria-controls={bodyId}
+                    onClick={() => flip(grid.code)}
+                    className={cn(
+                      'flex min-h-11 w-full items-center gap-2 text-left text-lg font-bold',
+                      reason !== null ? 'text-signal-grey' : 'text-navy',
+                    )}
+                  >
+                    <span id={titleId} className="min-w-0">
+                      {grid.label}
+                      {sectionArchived && <ArchivedWord />}
+                    </span>
+                    {reason !== null
+                      ? <TonePill tone="grey" className="ml-auto">{t.notApplicable}</TonePill>
+                      : <span className="ml-auto text-md font-bold text-muted">{done}/{total}</span>}
+                    <LineIcon name={isOpen ? 'chevronUp' : 'chevronDown'} className="text-signal-grey" />
+                  </button>
+                </h3>
+                {isOpen && (
+                  <div id={bodyId} role="group" aria-labelledby={titleId} className="pb-1">
+                    {reason !== null && <p className="py-1 text-base italic text-signal-grey">{reason}</p>}
+                    {rows(grid, off)}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <>
+          <div className="mt-2 grid grid-cols-2 items-start gap-x-6 gap-y-3">
+            {sections.filter((s) => s.reason === null).map(({ grid, done, total }) => {
+              const sectionArchived = grid.status === 'archived';
+              const titleId = `skill-section-${grid.code}-title`;
+              return (
+                <div key={grid.code} role="group" aria-labelledby={titleId} data-section={grid.code}>
+                  <h3 className="mb-1 flex h-8 items-center border-b border-divider text-md font-bold text-navy">
+                    <span id={titleId}>
+                      {grid.label}
+                      {sectionArchived && <ArchivedWord />}
+                    </span>
+                    <span className="ml-auto text-muted">{done}/{total}</span>
+                  </h3>
+                  {rows(grid, sectionArchived)}
+                </div>
+              );
+            })}
+          </div>
+          {sections.filter((s) => s.reason !== null).map(({ grid, reason }) => (
+            <p
+              key={grid.code}
+              data-section={grid.code}
+              className="mt-2 flex min-h-10 flex-wrap items-center gap-x-2.5 border-t border-divider text-base"
+            >
+              <span className="text-md font-bold text-signal-grey">
+                {grid.label}
+                {grid.status === 'archived' && <ArchivedWord />}
+              </span>
+              <span className="italic text-signal-grey">{reason}</span>
+            </p>
+          ))}
+        </>
+      )}
+    </section>
+  );
+}
+
+/** *Archived* after a section's name, as after a row's. */
+function ArchivedWord() {
+  const t = useMessages(coachingLeaderNotesMessages);
+  return <>{' '}<span className="text-xs font-semibold text-muted">{t.archived}</span></>;
+}
+
+/** The tile and the tracker on their way, shaped like them (UI-071's rule, here too): ~100px, then four rows. */
 function ProfileSkeleton() {
   const t = useMessages(coachingLeaderNotesMessages);
   return (
-    <Skeleton label={t.loading} className="rounded-lg border border-hairline bg-card px-[22px] py-[18px]">
-      <SkeletonBar className="mb-4 h-4 w-40" />
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
-        {[0, 1, 2, 3].map((i) => <SkeletonText key={i} lines={3} />)}
+    <Skeleton label={t.loading} className="flex flex-col gap-3 lg:gap-4">
+      <div className={CARD}>
+        <SkeletonBar className="h-5 w-40" />
+        <SkeletonBar className="mt-4 h-2 w-full lg:w-[150px]" />
+        <SkeletonBar className="mt-4 h-5 w-56" />
+      </div>
+      <div className={CARD}>
+        <SkeletonBar className="h-5 w-32" />
+        {[0, 1, 2, 3].map((i) => <SkeletonBar key={i} className="mt-5 h-4 w-full" />)}
       </div>
     </Skeleton>
   );
@@ -454,13 +548,14 @@ function ProfileSkeleton() {
  */
 
 /**
- * *Personal notes* (`Overall.html:4378-4380`): the reader's own note about the coachee, tagged
- * *Leader-only, never shown to {name}*, saved by *Save notes* and by nothing else — no autosave, as in
- * the prototype. Then each note somebody below the reader wrote, read-only, in the prototype's own card
- * for another leader's note, tagged *From {author}* (`:4594-4596`; ADR-0073).
+ * ***Catatan pribadi*** (`Overall.html:4378-4380`; UI-039, UI-040): the reader's own note about the coachee, saved by
+ * *Simpan catatan* and by nothing else — no autosave, as in the prototype. **The save state beside the button**
+ * (`useSaveState`, the shared one): *Belum disimpan* while the words differ from the saved note, *Tersimpan ✓* once
+ * they match again, and leaving with unsaved words asks first. The privacy line is the tile's ⓘ now (UI-038). Then each
+ * note somebody below the reader wrote, read-only, tagged *From {author}* (`:4594-4596`; ADR-0073).
  *
- * A save is pinned to the version the note was read at, 0 for a first note. A stale one is read again,
- * and one line says so.
+ * A save is pinned to the version the note was read at, 0 for a first note. A stale one is read again, and one line
+ * says so.
  */
 function PersonalNotes({ coachee, onToast }: { coachee: Coachee; onToast: (message: string) => void }) {
   const t = useMessages(coachingLeaderNotesMessages);
@@ -473,6 +568,8 @@ function PersonalNotes({ coachee, onToast }: { coachee: Coachee; onToast: (messa
   const [saveError, setSaveError] = useState<ApiError | null>(null);
   const [saving, setSaving] = useState(false);
   const [reread, setReread] = useState(false);
+  const saved = notes?.mine?.text ?? '';
+  const { state, guard } = useSaveState(text, saved, { saving, warnOnLeave: canWrite });
 
   const open = useCallback((next: LeaderNotes) => {
     setNotes(next);
@@ -498,8 +595,9 @@ function PersonalNotes({ coachee, onToast }: { coachee: Coachee; onToast: (messa
     setSaveError(null);
     setReread(false);
     try {
-      const saved = await saveLeaderNote(membershipId, { version: notes.mine?.version ?? 0, text });
-      setNotes({ ...notes, mine: { noteId: saved.noteId, text, version: saved.version, updatedAt: saved.updatedAt } });
+      const sent = text;
+      const answer = await saveLeaderNote(membershipId, { version: notes.mine?.version ?? 0, text: sent });
+      setNotes({ ...notes, mine: { noteId: answer.noteId, text: sent, version: answer.version, updatedAt: answer.updatedAt } });
       onToast(t.saved);
     } catch (err) {
       const shown = toDisplayError(err);
@@ -523,16 +621,21 @@ function PersonalNotes({ coachee, onToast }: { coachee: Coachee; onToast: (messa
   if (error) return <ErrorBanner {...error} />;
   if (!notes) {
     return (
-      <Skeleton label={t.loadingNotes} className="rounded-lg border border-hairline bg-card px-[22px] py-[18px]">
-        <SkeletonBar className="mb-4 h-4 w-32" />
-        <SkeletonBar className="h-[110px] w-full" />
+      <Skeleton label={t.loadingNotes} className={CARD}>
+        <SkeletonBar className="h-5 w-32" />
+        <SkeletonBar className="mt-3 h-24 w-full lg:h-[180px]" />
+        <SkeletonBar className="ml-auto mt-3 h-10 w-36" />
       </Skeleton>
     );
   }
 
+  // Nothing written and nothing typed: no state to say yet, so *Tersimpan ✓* never claims a note there is not.
+  const showState = state !== 'saved' || notes.mine !== null;
+
   return (
     <>
-      <SummaryCard id="personal-notes" title={t.notes} tag={<Wraps>{t.leaderOnly({ name: coachee.name })}</Wraps>} className="min-w-0">
+      <section aria-labelledby="personal-notes" className={cn(CARD, 'min-w-0')}>
+        <h2 id="personal-notes" className="mb-2 flex min-h-7 items-center text-lg font-bold text-navy">{t.notes}</h2>
         {reread && (
           <p role="status" className="mb-2.5 rounded-md border border-hairline bg-base px-3.5 py-2.5 text-sm text-navy">
             {t.notesReread}
@@ -545,14 +648,18 @@ function PersonalNotes({ coachee, onToast }: { coachee: Coachee; onToast: (messa
           onChange={(e) => setText(e.target.value)}
           readOnly={!canWrite}
           maxLength={LEADER_NOTE_MAX}
-          className="min-h-[110px] w-full resize-y px-3.5 py-3 text-md leading-normal"
+          className="min-h-24 w-full resize-y rounded-lg border-[1.5px] border-line px-3.5 py-3 text-md leading-normal lg:min-h-[180px]"
         />
         {canWrite && (
-          <div className="mt-2.5 flex justify-end">
-            <Button onClick={() => void save()} disabled={saving}>{t.save}</Button>
+          <div className="mt-2.5 flex items-center justify-between gap-3">
+            {showState ? <SaveStateLabel state={state} /> : <span />}
+            <Button onClick={() => void save()} disabled={saving} className="rounded-pill max-lg:min-h-12">
+              {t.save}
+            </Button>
           </div>
         )}
-      </SummaryCard>
+        {canWrite && guard}
+      </section>
 
       {notes.others.map((note) => <OtherNote key={note.noteId} note={note} />)}
     </>
@@ -560,17 +667,17 @@ function PersonalNotes({ coachee, onToast }: { coachee: Coachee; onToast: (messa
 }
 
 /**
- * A tag that carries a person's name may be longer than a phone's card is wide: it wraps there rather
- * than pushing the page sideways. The card's own tag stays on one line for everything else.
+ * A tag that carries a person's name may be longer than a phone's card is wide: it wraps there rather than pushing
+ * the page sideways. The card's own tag stays on one line for everything else.
  */
 function Wraps({ children }: { children: ReactNode }) {
   return <span className="whitespace-normal">{children}</span>;
 }
 
 /**
- * A note somebody below the reader wrote: *Personal notes*, tagged *From {author}* (`Overall.html:
- * 4594-4596`), its words as they wrote them and not editable — a note is written only by its author.
- * The heading carries the author for a screen reader too, so no two cards on the page share a name.
+ * A note somebody below the reader wrote: *Personal notes*, tagged *From {author}* (`Overall.html:4594-4596`), its words
+ * as they wrote them and not editable — a note is written only by its author. The heading carries the author for a
+ * screen reader too, so no two cards on the page share a name.
  */
 function OtherNote({ note }: { note: LeaderNote }) {
   const t = useMessages(coachingLeaderNotesMessages);
@@ -580,9 +687,9 @@ function OtherNote({ note }: { note: LeaderNote }) {
       id={id}
       title={<>{t.notes}<span className="sr-only">{t.notesFrom({ name: note.author.name })}</span></>}
       tag={<Wraps>{t.from({ name: note.author.name })}</Wraps>}
-      className="min-w-0"
+      className="min-w-0 px-4 py-3.5 lg:px-[18px] lg:py-4"
     >
-      <p className="min-h-[110px] whitespace-pre-wrap break-words rounded-md border border-hairline px-3.5 py-3 text-md leading-normal text-navy">
+      <p className="min-h-[96px] whitespace-pre-wrap break-words rounded-lg border-[1.5px] border-line px-3.5 py-3 text-md leading-normal text-navy">
         {note.text}
       </p>
     </SummaryCard>

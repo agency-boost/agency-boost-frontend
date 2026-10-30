@@ -186,3 +186,33 @@ export const MY_COACHING_TRAINING_HREF = '/coaching/me/training';
 
 /** The order the toggle draws the statuses in (`:3757-3761`). */
 export const TRAINING_STATUSES: readonly TrainingStatus[] = ['not_started', 'in_progress', 'done'];
+
+/*
+ * ── UI V1 (Phase 18.99 T10) ───────────────────────────────────────────────────────────────────────
+ */
+
+/**
+ * **A module's place in its skill** — *1/3* on the lesson card (UI-067): its position among the skill's offered
+ * modules in the office's order, and how many there are. Read from the catalog the layout already holds; `null` while
+ * it is not read, or when the module is not in it (a module page opened before the list answered).
+ */
+export function trainingModulePosition(
+  view: TrainingProgressView | null, skillCode: string, moduleCode: string,
+): { n: number; of: number } | null {
+  for (const category of view?.categories ?? []) {
+    const skill = category.skills.find((s) => s.code === skillCode);
+    const at = skill?.modules.findIndex((m) => m.code === moduleCode) ?? -1;
+    if (skill && at >= 0) return { n: at + 1, of: skill.modules.length };
+  }
+  return null;
+}
+
+/** A link's site, as the lesson card names it under the link's label (UI-067): *prudential.co.id*. `null` if unreadable. */
+export function linkDomain(url: string | null): string | null {
+  if (!url) return null;
+  try {
+    return new URL(url).hostname.replace(/^www\./, '') || null;
+  } catch {
+    return null;
+  }
+}

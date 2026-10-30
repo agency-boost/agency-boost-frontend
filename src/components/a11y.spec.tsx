@@ -246,12 +246,15 @@ describe('accessibility', () => {
     }
 
     const NAVY = '#1B2B4B';
-    const AMBER = '#F2994A';
+    // UI V1 (UI-008): the token table's accent replaced the prototype's #F2994A.
+    const AMBER = '#E8954A';
     const AMBER_DARK = '#D97F30';
     const AMBER_DEEP = '#B5651D';
     const AMBER_INK = '#A85E1B';
     const NAVY_SOFT = '#2E4370';
     const BASE = '#FAF9F7';
+    /** The V1 surface's warm grey ground (UI-008): below 768px everywhere, and the field shell at every width. */
+    const BASE_V1 = '#EDEDEA';
     const CARD = '#FFFFFF';
     const MUTED = '#5F5E5A';
     const SUCCESS = '#3B6D11';
@@ -260,6 +263,8 @@ describe('accessibility', () => {
 
     it('body text clears 4.5:1 on both surfaces', () => {
       expect(ratio(NAVY, BASE)).toBeGreaterThanOrEqual(4.5);
+      expect(ratio(NAVY, BASE_V1)).toBeGreaterThanOrEqual(4.5);
+      expect(ratio(MUTED, BASE_V1)).toBeGreaterThanOrEqual(4.5);
       expect(ratio(NAVY, CARD)).toBeGreaterThanOrEqual(4.5);
     });
 

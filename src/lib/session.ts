@@ -32,6 +32,18 @@ export interface Me {
      */
     locale?: Language;
     localeChosen?: boolean;
+    /**
+     * **Their photo** (`users.avatarUrl`; UI V1, UI-004, UI-111): the field shell's title-row avatar and the *Lainnya*
+     * sheet's account row draw it, and the initials where it is absent or `null`. Optional: `GET /auth/me` sends it
+     * once *Profil saya*'s photo upload is built (UI-111).
+     */
+    avatarUrl?: string | null;
+    /**
+     * **Their WhatsApp number** (`users.phone`; UI V1, UI-081, UI-101, D-22): `+62…` once saved through *Isi nomor
+     * WhatsApp* or their profile, as typed when an invite carried it, `null` when there is none. Optional so a fixture
+     * that is about something else need not.
+     */
+    phone?: string | null;
   };
   membership: {
     membershipId: string;

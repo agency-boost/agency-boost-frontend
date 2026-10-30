@@ -21,7 +21,8 @@ import { eventsMessages } from '@/i18n/messages/events';
 export default function EventsLayout({ children }: { children: ReactNode }) {
   const t = useMessages(eventsMessages);
   return (
-    <Page title={t.title} subtitle={t.sub} permission="event:read_list">
+    // No sub-line on a phone (UI V1, UI-108: *grey intro paragraphs* gone; D-08); from 768px as before.
+    <Page title={t.title} subtitle={t.sub} subtitleOnPhone={false} permission="event:read_list">
       <EventsScreen>{children}</EventsScreen>
     </Page>
   );

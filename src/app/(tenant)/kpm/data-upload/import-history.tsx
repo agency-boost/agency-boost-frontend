@@ -89,7 +89,7 @@ export function ImportHistory({
       )}
 
       {batches && batches.length > 0 && (
-        <ul className="rounded-lg border border-hairline bg-card px-4">
+        <ul className="rounded-lg border border-card-edge bg-card px-4">
           {batches.map((b) => (
             <li key={b.id} className="flex flex-wrap items-start justify-between gap-3 border-b border-hairline py-2.5 last:border-b-0">
               <div className="min-w-0">

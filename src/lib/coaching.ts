@@ -1,4 +1,5 @@
 import type { SubPeriodTarget } from './activity';
+import type { Lead } from './leads';
 import { shortOfRung } from '@/components/ui/role-badge';
 import { messagesIn } from '@/i18n/catalogue';
 import { SOURCE_LANGUAGE, type Language } from '@/i18n/language';
@@ -56,6 +57,8 @@ export interface LastOneOnOne {
 export interface RosterRow {
   membershipId: string;
   name: string;
+  /** Their profile photo as a signed link (UI V1, UI-111); `null` or absent for none: the avatar draws initials. */
+  photoUrl?: string | null;
   rung: RosterRung;
   /** 1 is a direct report; each level further down adds one. */
   depth: number;
@@ -122,9 +125,8 @@ export function lastOneOnOneOverdue(last: LastOneOnOne | null): boolean {
   return last === null || last.overdue;
 }
 
-/** *Coaching →* opens the person on their *Coaching Session* tab (`Overall.html:10661`). */
-export const coachingSessionHref = (membershipId: string) =>
-  `/coaching/${encodeURIComponent(membershipId)}/session`;
+/** *Coaching →*, the person's *Coaching Session* tab: in `lib/hrefs.ts`, so a screen can link here without this module. */
+export { coachingSessionHref } from './hrefs';
 
 /*
  * ── The person shell (P11-T7) ───────────────────────────────────────────────────────────────────
@@ -147,6 +149,8 @@ export interface CoacheeDownline {
 export interface Coachee {
   membershipId: string;
   name: string;
+  /** Their profile photo as a signed link (UI V1, UI-111); `null` or absent for none: the avatar draws initials. */
+  photoUrl?: string | null;
   /** Their own choice, for the sentences the tabs write about them (*Leads that need her*). */
   pronoun: Pronoun;
   rung: RosterRung;
@@ -170,13 +174,16 @@ export const readCoachee = (membershipId: string) =>
     api<Coachee>(`/coaching/coachees/${encodeURIComponent(membershipId)}`));
 
 /**
- * The person shell's tabs, by their place in the address (`Overall.html:3988-3995`): the prototype's six,
- * and *Activity* after *Goal Setting* at the client's request (P13.1-T9).
+ * The person shell's tabs, by their place in the address — **in the owner's order** (UI V1, UI-029): *Coaching Session ·
+ * Activity · Leads · Goal Setting · Personal Summary · Activation · Training · Capability mapping*, the session first and
+ * the default. *Leads* (`leads`) is the coachee's own leads, read-only — new with UI-029. *Capability mapping* keeps its
+ * address, `leader-notes`; only its name changed.
  */
-export type CoachingTab = 'summary' | 'goal-setting' | 'activity' | 'training' | 'activation' | 'session' | 'leader-notes';
+export type CoachingTab =
+  | 'session' | 'activity' | 'leads' | 'goal-setting' | 'summary' | 'activation' | 'training' | 'leader-notes';
 
-const COACHING_TABS: readonly CoachingTab[] = [
-  'summary', 'goal-setting', 'activity', 'training', 'activation', 'session', 'leader-notes',
+export const COACHING_TABS: readonly CoachingTab[] = [
+  'session', 'activity', 'leads', 'goal-setting', 'summary', 'activation', 'training', 'leader-notes',
 ];
 
 export const coachingTabHref = (membershipId: string, tab: CoachingTab) =>
@@ -340,6 +347,11 @@ export interface CoachingSession {
   finalizedBy: RosterPerson | null;
   /** The last day this reader may reopen it, `YYYY-MM-DD`; `null` when they may not at all. */
   reopenableUntil: string | null;
+  /**
+   * The date a new action item starts with (UI-060): the office's today plus a week, the server's. `null` where no row
+   * can be added.
+   */
+  defaultDueDate: string | null;
   /** The finalized session this one reviews; `null` for a coachee's first. */
   lastWeek: LastWeekRef | null;
   lastWeekItems: LastWeekItem[];
@@ -667,6 +679,40 @@ export function printGoalLine(
 /** A lead's next action: its note, or *Follow up with {name}* where it has none (`Overall.html:11054-11059`). */
 export const leadActionText = (action: { text: string | null; leadName: string }, language: Language = SOURCE_LANGUAGE) =>
   action.text || wordsIn(language).followUpWith({ name: action.leadName });
+
+/*
+ * ── The session's Leads card and the Leads tab (UI V1, UI-062, UI-029) ──────────────────────────
+ */
+
+/**
+ * **How many leads the session's Leads card shows before *Tampilkan semua (n)*** (UI-062: *show the first 5*; fewer than
+ * six, no toggle). A layout count, like a page size — not a domain constant.
+ */
+export const SESSION_LEADS_SHOWN = 5;
+
+/**
+ * **What a lead's next action is missing** (UI-062): `action` when it has neither a note nor a date — *Isi tindakan*,
+ * which opens the lead sheet — `date` when it has a note and no date — *Isi tanggal*, which opens the date picker — and
+ * `null` when it is dated. A lead with no date never drops out of the card for it (Ibu Shinta, the report's example).
+ */
+export type LeadGap = 'action' | 'date' | null;
+
+export function leadGap(lead: Pick<Lead, 'nextActionDate' | 'nextActionNote'>): LeadGap {
+  if (lead.nextActionDate) return null;
+  return lead.nextActionNote?.trim() ? 'date' : 'action';
+}
+
+/**
+ * **The Leads card's order** (UI-062): the leads missing a next action first (*Isi tindakan*, *Isi tanggal*), then the
+ * overdue — the server's flag, in the office's days — then by next-action date, nearest first. A stable sort: leads that
+ * tie keep the order the server sent. Compares the stored `YYYY-MM-DD` strings; it counts no days.
+ */
+export function sessionLeadOrder<L extends Pick<Lead, 'nextActionDate' | 'nextActionNote' | 'flags'>>(
+  leads: readonly L[],
+): L[] {
+  const rank = (lead: L) => (leadGap(lead) !== null ? 0 : lead.flags.includes('overdue') ? 1 : 2);
+  return [...leads].sort((a, b) => rank(a) - rank(b) || (a.nextActionDate ?? '').localeCompare(b.nextActionDate ?? ''));
+}
 
 /** *{i}. {Oct 3} — {note} (Leads: {name})* (`Overall.html:11178`). */
 export const printLeadActionLine = (

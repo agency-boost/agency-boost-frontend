@@ -9,6 +9,11 @@ import type { Voice } from './goal-words';
  * and its status, the cascade, the commitment, the disclaimer, and the states a plan can be in. The marker beside the
  * APE produced and the months left in words are `lib/goals.ts`' (`goal-words.ts`).
  *
+ * **UI V1 (P18.99-T5, 2026-10-30)**: the result card on top (UI-014), the commitment in the report's shorter sentence
+ * built from the result card's own three names (UI-017), the save state the shared one's (`save-state.tsx`, UI-019) and
+ * the ⚡ the shared marker's (`auto-marker.tsx`, UI-020) — so this area no longer holds a status, an *auto* badge or a
+ * per-month line.
+ *
  * **English is the source** of the keys, the prototype's words as built (`Overall.html:2860-3070`, the coaching tool's
  * `:5854-6104`); the Indonesian is the approved glossary's (OD-237; §B.0's voice), with the words it lacked added to the
  * glossary for approval's §B.10. **Kept English in both** (§A): the title; §A.4's Goal Settings KPI labels — *Annual APE
@@ -44,46 +49,43 @@ const en = {
 
   /** Step 1: the question, in the coaching tool's own words for somebody else's plan (`Overall.html:5860`). */
   target: { mine: "What's your APE target this year?", theirs: "What's their APE target this year?" },
-  /** The status beside *Save goal* (`:2854-2862`), and the button. */
-  status: { saving: 'Saving…', saved: 'Saved', unsaved: 'Not yet saved' },
+  /** The button (`:2854-2862`); its status is the shared save state's (UI-019). */
   save: 'Save goal',
   /** The two ways to set it (`:2865-2868`), and the pair's name for a screen reader. */
   how: { mine: 'How you want to set it', theirs: 'How to set it' },
   modes: { direct: 'Set APE target directly', fromSavings: 'Calculate from savings target' },
-  annualApe: kept('Annual APE target'),
-  annualSavings: kept('Annual savings target'),
-  commissionRate: kept('Commission rate'),
+  annualApe: 'Annual APE target',
+  annualSavings: 'Annual savings target',
+  commissionRate: 'Commission rate',
   commissionHint: '% of APE that becomes income / savings',
   apeTargetOf: 'That is an APE target of',
 
   /** Step 2. */
   progress: { mine: 'Your current progress', theirs: 'Current progress' },
   monthsLeftThisYear: 'Months left this year',
-  /** The prototype's `.auto-badge` (`:2913`): the field fills itself in. */
-  auto: 'auto',
   /** The months field's unit, beside its box. */
   months: 'months',
-  produced: kept('APE already produced this year'),
+  produced: 'APE already produced this year',
   remaining: 'Remaining needed',
-  monthlyTarget: kept("This month's APE target"),
+  monthlyTarget: "This month's APE target",
 
   /** Step 3. */
   toPolicies: 'From APE to policy count',
   caseSize: 'Average case size (APE per policy)',
   /** The prototype's 💡 tip, verbatim (`Overall.html:2971`), in a phone's ⓘ (grey text row 15). */
   caseSizeTip: 'APE per closing. Increase if one appointment often yields multiple policies.',
-  policiesPerMonth: kept('Policies per month'),
+  policiesPerMonth: 'Policies per month',
   /** *Policies per month*'s unit, inside its tile. */
   policies: 'policies',
-  policiesPerWeek: kept('Policies per week'),
+  policiesPerWeek: 'Policies per week',
 
   /** Step 4 (ADR-0160 §4): the client's label, and the prototype's. */
-  assumptions: kept('Conversion assumptions'),
-  appointmentToMeeting: kept('Appointment to Sales meeting'),
-  closingRate: kept('Closing rate'),
+  assumptions: 'Conversion assumptions',
+  appointmentToMeeting: kept('Appointment to meeting'),
+  closingRate: 'Closing rate',
 
   /** Step 5. */
-  activityTarget: kept('Monthly activity target'),
+  activityTarget: 'Monthly activity target',
   /** ADR-0047: the annual target is reached, so the cascade gives way to this. */
   passed: ({ who, strong }: { who: Voice; strong: Strong }) => (
     <>
@@ -91,8 +93,7 @@ const en = {
       going — there is nothing left for this plan to ask of {who.object}.
     </>
   ),
-  /** A stage's two figures (ADR-0160 §4–5): `n` written by the caller, *67/month* over *≈ 16/week*. */
-  perMonth: ({ n }: { n: string }) => `${n}/month`,
+  /** A result tile's week (ADR-0160 §5; UI-014): `n` written by the caller, *≈ 10/week*. */
   perWeek: ({ n }: { n: string }) => `≈ ${n}/week`,
   /** The inputs make no plan. */
   unworkable: 'This plan cannot be worked out from the numbers above. Check the case size and the two conversion '
@@ -104,18 +105,17 @@ const en = {
   commitment: ({ mine, date }: { mine: boolean; date: string | null }) =>
     `${mine ? 'My commitment' : 'Commitment'}${date ? ` (as of ${date})` : ''}`,
   /**
-   * **The commitment** (`:3071-3074`), the reader's in the first person and a coachee's in their pronoun. Every figure
-   * is the caller's, written in the figures' language; `strong` paints each amber. `monthsLeft` is `monthsLeftInWords`'
-   * (*about 2 months*), and `leadCount` the leads' number, for a plural only Indonesian chooses.
+   * **The commitment** (UI V1, UI-017: the owner's shorter sentence of 2026-10-30): this month's APE, the year's, and the
+   * result card's three figures **under the result card's own three names** (`stages`, passed by the caller), so the two
+   * cannot drift. Whose plan it is needs no pronoun. Every figure is the caller's, written in the figures' language;
+   * `strong` paints each amber.
    */
-  pledge: ({ strong, who, mine, annual, monthsLeft, monthly, leads, appointments, policies }: {
-    strong: Strong; who: Voice; mine: boolean; annual: string; monthsLeft: string; monthly: string; leads: string;
-    leadCount: number; appointments: string; policies: string;
+  pledge: ({ strong, monthly, annual, stages }: {
+    strong: Strong; monthly: string; annual: string; stages: readonly { n: string; label: string }[];
   }) => (
     <>
-      To reach APE {strong(annual)} this year ({monthsLeft} left), this month&apos;s target is APE{' '}
-      {strong(monthly)} — {mine ? 'I' : who.subject} will contact {strong(`${leads} leads`)}, get{' '}
-      {strong(`${appointments} appointments`)}, and close {strong(`${policies} policies`)} this month.
+      This month, APE {strong(monthly)} (on the way to {strong(annual)} this year):{' '}
+      {stages.map((stage, i) => <span key={stage.label}>{i > 0 ? ', ' : ''}{strong(`${stage.n} ${stage.label}`)}</span>)}.
     </>
   ),
   /** The retired section files' one admission that the cascade is an estimate (L-29). */
@@ -136,39 +136,37 @@ const id: MessagesOf<typeof en> = {
     mine: `Berapa ${kept('target')} ${kept('APE')} Anda tahun ini?`,
     theirs: `Berapa ${kept('target')} ${kept('APE')}-nya tahun ini?`,
   },
-  status: { saving: 'Menyimpan…', saved: 'Tersimpan', unsaved: 'Belum disimpan' },
   save: `Simpan ${kept('goal')}`,
   how: { mine: 'Cara Anda ingin mengaturnya', theirs: 'Cara mengaturnya' },
   modes: {
     direct: `Atur ${kept('target')} ${kept('APE')} langsung`,
     fromSavings: `Hitung dari ${kept('target')} tabungan`,
   },
-  annualApe: kept('Annual APE target'),
-  annualSavings: kept('Annual savings target'),
-  commissionRate: kept('Commission rate'),
+  annualApe: 'Target APE tahunan',
+  annualSavings: 'Target tabungan tahunan',
+  commissionRate: 'Persentase komisi',
   commissionHint: `% dari ${kept('APE')} yang menjadi penghasilan / tabungan`,
   apeTargetOf: `Setara dengan ${kept('target')} ${kept('APE')} sebesar`,
 
   progress: { mine: 'Progres Anda saat ini', theirs: 'Progres saat ini' },
   monthsLeftThisYear: 'Sisa bulan tahun ini',
-  auto: 'otomatis',
   months: 'bulan',
-  produced: kept('APE already produced this year'),
+  produced: 'APE yang sudah dicapai tahun ini',
   remaining: 'Sisa yang dibutuhkan',
-  monthlyTarget: kept("This month's APE target"),
+  monthlyTarget: 'Target APE bulan ini',
 
   toPolicies: `Dari ${kept('APE')} ke jumlah polis`,
   caseSize: `Rata-rata ${kept('case size')} (${kept('APE')} per polis)`,
   caseSizeTip: `${kept('APE')} per ${kept('closing')}. Naikkan jika satu janji temu sering menghasilkan lebih dari satu polis.`,
-  policiesPerMonth: kept('Policies per month'),
+  policiesPerMonth: 'Polis per bulan',
   policies: 'polis',
-  policiesPerWeek: kept('Policies per week'),
+  policiesPerWeek: 'Polis per minggu',
 
-  assumptions: kept('Conversion assumptions'),
-  appointmentToMeeting: kept('Appointment to Sales meeting'),
-  closingRate: kept('Closing rate'),
+  assumptions: 'Asumsi konversi',
+  appointmentToMeeting: kept('Appointment to meeting'),
+  closingRate: 'Tingkat closing',
 
-  activityTarget: kept('Monthly activity target'),
+  activityTarget: 'Target aktivitas bulanan',
   passed: ({ who, strong }) => (
     <>
       {strong(who.self
@@ -177,21 +175,18 @@ const id: MessagesOf<typeof en> = {
       Atur yang baru di atas, atau terus melaju — tidak ada lagi yang diminta rencana ini {who.self ? 'dari Anda' : 'darinya'}.
     </>
   ),
-  perMonth: ({ n }) => `${n}/bulan`,
   perWeek: ({ n }) => `≈ ${n}/minggu`,
   unworkable: 'Rencana ini tidak dapat dihitung dari angka di atas. Periksa '
     + `${kept('case size')} dan kedua tingkat konversi — masing-masing harus lebih dari nol.`,
   mapsTo: ({ numbers }) => `Terhubung ke aktivitas ${numbers} di ${kept('Activity Management')}.`,
 
   commitment: ({ mine, date }) => `${mine ? 'Komitmen saya' : 'Komitmen'}${date ? ` (per ${date})` : ''}`,
-  // *saya* in the reader's own, *dia* in a coachee's; a kept noun keeps its English plural (§B.0 rule 8): *1 lead*,
-  // *67 leads*; *janji temu* and *polis* have one form.
-  pledge: ({ strong, mine, annual, monthsLeft, monthly, leads, leadCount, appointments, policies }) => (
+  // The report's own sentence (UI-017, the owner's of 2026-10-30): *Bulan ini APE Rp 100 jt (menuju Rp 500 jt tahun ini):
+  // 40 Set appointment, 20 Sales meeting, 6 Submission polis.*
+  pledge: ({ strong, monthly, annual, stages }) => (
     <>
-      Untuk mencapai {kept('APE')} {strong(annual)} tahun ini ({monthsLeft} lagi), {kept('target')} bulan ini adalah{' '}
-      {kept('APE')} {strong(monthly)} — {mine ? 'saya' : 'dia'} akan menghubungi{' '}
-      {strong(`${leads} ${leadCount === 1 ? kept('lead') : kept('leads')}`)}, mendapatkan{' '}
-      {strong(`${appointments} janji temu`)}, dan {kept('closing')} {strong(`${policies} polis`)} bulan ini.
+      Bulan ini {kept('APE')} {strong(monthly)} (menuju {strong(annual)} tahun ini):{' '}
+      {stages.map((stage, i) => <span key={stage.label}>{i > 0 ? ', ' : ''}{strong(`${stage.n} ${stage.label}`)}</span>)}.
     </>
   ),
   disclaimer: 'Perkiraan untuk perencanaan pribadi — asumsi berbeda untuk setiap orang.',

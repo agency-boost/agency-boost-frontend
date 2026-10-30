@@ -1,7 +1,8 @@
 'use client';
 
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import { PlanIcon } from '@/components/plan/plan-icons';
 import { Button, ErrorBanner, TextInput } from '@/components/ui/field';
 import { TAB_PHONE, TAB_ROW_PHONE } from '@/components/ui/phone';
 import { Skeleton, SkeletonBar } from '@/components/ui/skeleton';
@@ -11,9 +12,10 @@ import { productCatalogMessages } from '@/i18n/messages/product-catalog';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import {
-  CATEGORY_TABS, catalogHref, drawerHref, filtersFrom, matchesSearch, productCount, readCatalog,
+  catalogHref, categoryTabs, drawerHref, filtersFrom, matchesSearch, productCount, readCatalog,
   type CatalogCard, type CatalogFilters, type ProductChannel,
 } from '@/lib/product-catalog';
+import { usePhone } from '@/lib/use-phone';
 
 /** What the drawer beneath the grid needs from it: how to close, and where the focus goes back to. */
 interface CatalogDrawerHost {
@@ -75,8 +77,14 @@ export function ProductTags({ channel, runOff }: { channel: ProductChannel; runO
  * sideways** (UI-015: three lines), fading on the side that has more, the chosen one in view (`use-tab-row.ts`).
  *
  * **Its words are the catalogue's** (P18.98-T4; ADR-0179 §4), `messages/product-catalog.ts`, in the reader's language:
- * the categories stay English as §A.3's tabs, the channels and the states are Indonesian in ID mode, and a product's
- * name and tagline are the company's or the office's, shown as typed (ADR-0179 §5).
+ * the categories, the channels and the states are Indonesian in ID mode (the categories since UI V1, UI-107), and a
+ * product's name is the company's or the office's, shown as typed (ADR-0179 §5) — its line the platform's Indonesian
+ * where the company still holds the platform's words (the server's, UI-107).
+ *
+ * **UI V1 on a phone** (UI-107; `attack-plan-mobile` 4; Mobile only): the search a white pill, the categories one
+ * swipeable row of white pills, the channel a small segmented *Semua | Konvensional | Syariah*, and each section **a list
+ * of compact rows** — the name with a *Syariah* tag, two lines of its description, › — five, then *Tampilkan n lagi*,
+ * in place of the tall cards (`PhoneShelf`). From 768px the grid of cards is as before.
  */
 export function ProductCatalog({ children }: { children?: ReactNode }) {
   const t = useMessages(productCatalogMessages);
@@ -126,12 +134,13 @@ export function ProductCatalog({ children }: { children?: ReactNode }) {
     <DrawerHost.Provider value={host}>
       {/* Behind the open drawer the grid takes no focus and no click: the dialog is modal (P14-T7 AC-11). */}
       <div className="min-w-0" inert={drawerOpen || undefined}>
-        <div className="mb-3.5">
+        <div className="relative mb-3.5 max-md:mb-2.5">
+          <PlanIcon name="search" className="pointer-events-none absolute left-3.5 top-1/2 h-[1.125rem] w-[1.125rem] -translate-y-1/2 text-signal-grey md:hidden" />
           <TextInput
             type="search"
             aria-label={t.searchName}
             placeholder={t.searchPlaceholder}
-            className="w-full max-w-sm"
+            className="w-full max-w-sm max-md:h-11 max-md:max-w-none max-md:rounded-pill max-md:border-transparent max-md:pl-10"
             value={term}
             onChange={(e) => setTerm(e.target.value)}
           />
@@ -154,13 +163,17 @@ export function ProductCatalog({ children }: { children?: ReactNode }) {
 
 function FilterBar({ filters, onChange }: { filters: CatalogFilters; onChange: (next: Partial<CatalogFilters>) => void }) {
   const t = useMessages(productCatalogMessages);
+  const language = useLanguage();
+  // On a phone (UI-107): white pills, the chosen one navy, borderless; 44px to the touch through a 4px reach above and below.
   const tab = (on: boolean) => cn(
     'rounded-md border px-3.5 py-2 text-base font-semibold',
-    on ? 'border-navy bg-navy text-white' : 'border-hairline bg-card text-muted hover:text-navy',
+    on ? 'border-navy bg-navy text-white' : 'border-hairline bg-card text-muted hover:text-navy max-md:border-transparent max-md:text-navy',
+    'max-md:flex max-md:h-9 max-md:items-center max-md:rounded-pill max-md:py-0',
   );
   const toggle = (on: boolean) => cn(
     'rounded-[6px] px-[13px] py-[7px] text-base font-semibold',
     on ? 'bg-navy text-white' : 'text-muted hover:text-navy',
+    'max-md:flex max-md:min-h-[2.375rem] max-md:items-center max-md:rounded-pill max-md:px-3 max-md:py-0 max-md:text-sm',
   );
   const channels: ['all' | ProductChannel, string][] = [
     ['all', t.all], ['conventional', t.channel.conventional], ['syariah', t.channel.syariah],
@@ -168,7 +181,7 @@ function FilterBar({ filters, onChange }: { filters: CatalogFilters; onChange: (
   // On a phone the pills are one row that scrolls inside its own box (P18.95-T6 AC-4), the chosen one in view.
   const row = useTabRow<HTMLDivElement>(filters.category);
   return (
-    <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+    <div className="mb-6 flex flex-wrap items-center justify-between gap-3 max-md:mb-1 max-md:gap-2">
       <div
         ref={row.ref}
         role="group"
@@ -176,7 +189,7 @@ function FilterBar({ filters, onChange }: { filters: CatalogFilters; onChange: (
         data-fade={row.fade}
         className={cn('flex flex-wrap gap-1.5', TAB_ROW_PHONE, 'max-md:w-full max-md:min-w-0')}
       >
-        {[{ value: 'all', label: t.allProducts }, ...CATEGORY_TABS].map((c) => (
+        {[{ value: 'all', label: t.allProducts }, ...categoryTabs(language)].map((c) => (
           <button
             key={c.value}
             type="button"
@@ -188,7 +201,7 @@ function FilterBar({ filters, onChange }: { filters: CatalogFilters; onChange: (
           </button>
         ))}
       </div>
-      <div role="group" aria-label={t.channels} className="inline-flex rounded-[9px] border border-hairline bg-card p-[3px]">
+      <div role="group" aria-label={t.channels} className="inline-flex rounded-[9px] border border-hairline bg-card p-[3px] max-md:rounded-pill max-md:border-transparent">
         {channels.map(([value, label]) => (
           <button
             key={value}
@@ -218,7 +231,8 @@ function Shelf({ products, filters, term, onOpen }: {
 }) {
   const t = useMessages(productCatalogMessages);
   const language = useLanguage();
-  const sections = CATEGORY_TABS
+  const phone = usePhone();
+  const sections = categoryTabs(language)
     .filter((c) => filters.category === 'all' || c.value === filters.category)
     .map((c) => ({
       ...c,
@@ -237,6 +251,8 @@ function Shelf({ products, filters, term, onOpen }: {
     );
   }
 
+  if (phone) return <PhoneShelf sections={sections} onOpen={onOpen} />;
+
   return (
     <>
       {sections.map((section) => (
@@ -253,7 +269,7 @@ function Shelf({ products, filters, term, onOpen }: {
                 data-product-card={p.code}
                 onClick={() => onOpen(p.code)}
                 className={cn(
-                  'flex flex-col gap-2 rounded-lg border border-hairline bg-card px-[18px] py-4 text-left',
+                  'flex flex-col gap-2 rounded-lg border border-card-edge bg-card px-[18px] py-4 text-left',
                   'transition-[border-color,box-shadow] hover:border-navy hover:shadow-modal',
                   // Faded as drawn (`.prod-card.legacy`): the tag says it, the fade only repeats it.
                   p.lifecycle === 'closed_to_new_business' && 'opacity-60',
@@ -272,6 +288,87 @@ function Shelf({ products, filters, term, onOpen }: {
   );
 }
 
+/** How many products a section shows on a phone before *Tampilkan n lagi* (UI-107; `attack-plan-mobile` 4). */
+export const PHONE_SECTION_SHOWN = 5;
+
+/**
+ * **The shelf on a phone** (UI V1, UI-107; `attack-plan-mobile` 4; Mobile only): each category its heading with its
+ * count, then one white card of compact rows — the product's name, a *Syariah* tag where it is one, two lines of its
+ * description, and › — the whole row the target that opens the drawer, as a card does wider. Five rows, then
+ * *Tampilkan n lagi*, which unfolds the rest in place. A product in run-off is faded, its tag saying so.
+ */
+function PhoneShelf({ sections, onOpen }: {
+  sections: readonly { value: string; label: string; items: readonly CatalogCard[] }[];
+  onOpen: (code: string) => void;
+}) {
+  return (
+    <>
+      {sections.map((section) => <PhoneSection key={section.value} section={section} onOpen={onOpen} />)}
+    </>
+  );
+}
+
+function PhoneSection({ section, onOpen }: {
+  section: { value: string; label: string; items: readonly CatalogCard[] };
+  onOpen: (code: string) => void;
+}) {
+  const t = useMessages(productCatalogMessages);
+  const language = useLanguage();
+  const [open, setOpen] = useState(false);
+  const listId = useId();
+  const more = section.items.length - PHONE_SECTION_SHOWN;
+  const rows = open || more <= 0 ? section.items : section.items.slice(0, PHONE_SECTION_SHOWN);
+  return (
+    <section className="mb-1" aria-labelledby={`cat-${section.value}`} data-phone-section={section.value}>
+      <div className="mx-0.5 mb-1.5 mt-3.5 flex items-baseline gap-1.5">
+        <h2 id={`cat-${section.value}`} className="m-0 text-lg font-bold text-navy">{section.label}</h2>
+        <span className="text-sm font-semibold text-muted">{productCount(section.items.length, language)}</span>
+      </div>
+      <div className="overflow-hidden rounded-lg bg-card">
+        <ul id={listId} className="m-0 list-none p-0">
+          {rows.map((p) => {
+            const runOff = p.lifecycle === 'closed_to_new_business';
+            return (
+              <li key={p.code} className="border-t border-divider first:border-t-0">
+                <button
+                  type="button"
+                  data-product-card={p.code}
+                  onClick={() => onOpen(p.code)}
+                  className={cn('flex min-h-14 w-full items-center gap-2.5 px-3 py-1.5 text-left', runOff && 'opacity-60')}
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="flex flex-wrap items-center gap-1.5 text-md font-bold text-ink">
+                      {p.name}
+                      {p.channel === 'syariah' && (
+                        <span className="rounded-pill bg-teal/[0.12] px-[7px] py-px text-sm font-bold text-teal-ink">{t.channel.syariah}</span>
+                      )}
+                      {runOff && <span className="rounded-pill bg-pill-grey px-[7px] py-px text-sm font-bold text-pill-grey-ink">{t.runOff}</span>}
+                    </span>
+                    <span className="mt-0.5 line-clamp-2 text-sm leading-snug text-muted">{p.tagline}</span>
+                  </span>
+                  <PlanIcon name="chevronRight" className="h-[1.125rem] w-[1.125rem] text-line" />
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+        {more > 0 && (
+          <button
+            type="button"
+            aria-expanded={open}
+            aria-controls={listId}
+            onClick={() => setOpen((now) => !now)}
+            className="flex min-h-11 w-full items-center justify-center gap-1 border-t border-divider text-base font-bold text-navy"
+          >
+            {open ? t.showFewer : t.showMore({ n: more })}
+            <PlanIcon name={open ? 'chevronUp' : 'chevronDown'} className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+    </section>
+  );
+}
+
 /**
  * **The empty shelf** (a Fill; P14-T7 AC-10, P14-T8 AC-10): an office whose company has no catalog — a
  * company created blank (ADR-0115) — or which keeps nothing on. A state, not an error. The plan page draws
@@ -280,7 +377,7 @@ function Shelf({ products, filters, term, onOpen }: {
 export function EmptyShelf() {
   const t = useMessages(productCatalogMessages);
   return (
-    <div className="rounded-lg border border-hairline bg-card px-6 py-[22px]" data-state="empty-shelf">
+    <div className="rounded-lg border border-card-edge bg-card px-6 py-[22px]" data-state="empty-shelf">
       <p className="m-0 text-md font-semibold text-navy">{t.emptyShelf}</p>
       <p className="m-0 mt-1 text-base text-muted">{t.emptyShelfHint}</p>
     </div>
@@ -297,7 +394,7 @@ export function CatalogSkeleton() {
           <SkeletonBar className="mb-3.5 h-5 w-32" />
           <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,260px),1fr))] gap-3.5">
             {[0, 1, 2].map((i) => (
-              <div key={i} className="rounded-lg border border-hairline bg-card px-[18px] py-4">
+              <div key={i} className="rounded-lg border border-card-edge bg-card px-[18px] py-4">
                 <SkeletonBar className="w-20" />
                 <SkeletonBar className="mt-3 h-4 w-2/3" />
                 <SkeletonBar className="mt-2 w-full" />

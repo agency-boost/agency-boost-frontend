@@ -1,10 +1,13 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { Dialog } from '@/components/ui/dialog';
 import { Modal } from '@/components/ui/modal';
-import { Button, ErrorBanner } from '@/components/ui/field';
+import { Button, ButtonLink, ErrorBanner } from '@/components/ui/field';
+import { LineIcon } from '@/components/ui/line-icon';
 import { TippedGlyph } from '@/components/ui/tipped-glyph';
 import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
 import { calendarMessages } from '@/i18n/messages/calendar';
@@ -14,9 +17,13 @@ import {
   type Answer, type CalendarEntry, type CalendarInvitee,
 } from '@/lib/calendar';
 import { coachingSessionHref } from '@/lib/coaching';
-import { formatTripWhen, formatWhen } from '@/lib/format';
+import { formatDayClock, formatTripWhen, formatWhen } from '@/lib/format';
 import { cn } from '@/lib/cn';
+import { useCan } from '@/lib/session';
 import { TEXT_TAP } from '@/components/ui/phone';
+
+/** *Pick who to coach*'s search (UI-012), loaded when it is asked for: most details never draw it. */
+const AgentSearch = dynamic(() => import('@/components/agent-search').then((m) => m.AgentSearch), { ssr: false });
 import { Avatar, BADGE_TONE, CHIP, DETAIL_LABEL } from './calendar-parts';
 
 /** An invitee's answer, as the organiser's chip shows it (ADR-0097, form 2): its glyph, and its name's message. */
@@ -87,9 +94,13 @@ export function DetailDialog({
   const [busy, setBusy] = useState(false);
 
   const title = titleOf(entry, words);
+  // A trip with times over several days (UI-104 point 8): each end its date and time.
+  const overDays = !entry.allDay && entry.startsOn && entry.endsOn && entry.startsOn !== entry.endsOn;
   const when = entry.allDay
     ? formatTripWhen(entry.startsOn ?? '', entry.endsOn ?? '', language)
-    : formatWhen(entry.date ?? '', entry.start ?? '', entry.end ?? '', language);
+    : overDays
+      ? `${formatDayClock(entry.startsOn ?? '', entry.start ?? '', language)} – ${formatDayClock(entry.endsOn ?? '', entry.end ?? '', language)}`
+      : formatWhen(entry.date ?? '', entry.start ?? '', entry.end ?? '', language);
 
   async function remove() {
     setAsking(false);
@@ -169,6 +180,8 @@ export function DetailDialog({
           </div>
         </dl>
 
+        <CoachButtons entry={entry} />
+
         {notice && <p role="status" className="mt-3 text-md font-semibold text-navy">{notice}</p>}
         {banner && <div className="mt-3"><ErrorBanner {...banner} /></div>}
 
@@ -239,6 +252,63 @@ function NotesText({ notes }: { notes: string }) {
         <span key={i}>{part.text}</span>
       )))}
     </>
+  );
+}
+
+/**
+ * ***Start coaching session*** **from a 1:1** (UI V1, 2026-10-30, UI-104 point 6; mockup 4). On a *1:1 coaching* entry
+ * **its organiser** opens — never an invitee, an ancestor or the member a block was placed on:
+ *
+ * - one person on it whom they coach: a primary *Start coaching session* → that person's *Coaching Session* tab;
+ * - several: one *Coach {name}* each;
+ * - nobody invited: *Pick who to coach* → the agent search (UI-012), and the person picked → their session.
+ *
+ * **Who they may coach is the server's**: `readerCoaches`, worked out when the entry is read (`COACH`, ADR-0099); the
+ * agent search lists only people the reader reaches, and the session refuses anybody they do not coach. Held to
+ * `coaching_session:create` as well, so a role that coaches nobody sees none of it.
+ */
+function CoachButtons({ entry }: { entry: CalendarEntry }) {
+  const t = useMessages(calendarMessages);
+  const router = useRouter();
+  const mayCoach = useCan('coaching_session:create');
+  const [picking, setPicking] = useState(false);
+  if (entry.type !== 'coaching' || entry.readerIs !== 'organiser' || !mayCoach) return null;
+  const coachable = entry.invitees.filter((person) => person.readerCoaches);
+  const start = <LineIcon name="play" className="h-4 w-4" />;
+  if (coachable.length === 1) {
+    return (
+      <div className="mt-5">
+        <ButtonLink href={coachingSessionHref(coachable[0].membershipId)} className="h-[52px] w-full gap-1.5 rounded-pill text-base">
+          {start}
+          {t.startCoaching}
+        </ButtonLink>
+      </div>
+    );
+  }
+  if (coachable.length > 1) {
+    return (
+      <div className="mt-5 flex flex-col gap-2">
+        {coachable.map((person) => (
+          <ButtonLink key={person.membershipId} href={coachingSessionHref(person.membershipId)} className="h-[52px] w-full gap-1.5 rounded-pill text-base">
+            {start}
+            {t.coachPerson({ name: person.name.split(/\s+/)[0] ?? person.name })}
+          </ButtonLink>
+        ))}
+      </div>
+    );
+  }
+  if (entry.invitees.length > 0) return null;
+  return (
+    <div className="mt-5">
+      {picking ? (
+        <AgentSearch autoFocus onPick={(hit) => router.push(coachingSessionHref(hit.membershipId))} />
+      ) : (
+        <Button onClick={() => setPicking(true)} className="h-[52px] w-full gap-1.5 rounded-pill text-base">
+          {start}
+          {t.pickWhoToCoach}
+        </Button>
+      )}
+    </div>
   );
 }
 

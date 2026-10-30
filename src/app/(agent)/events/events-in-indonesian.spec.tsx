@@ -3,7 +3,9 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import AgentLayout from '@/app/(agent)/layout';
 import { englishOnly, englishShown } from '@test/english-left';
-import { InLanguage, renderInLayout, renderWithSession, routeParams, stubFetch, type StubReply } from '@test/harness';
+import {
+  atWidth, InLanguage, renderInLayout, renderWithSession, routeParams, stubFetch, type StubReply,
+} from '@test/harness';
 import {
   BOOTCAMP, conflict, eventList, KICKOFF, NPS, PRODUCT_REFRESH, PRULINK, RINA_ME, SHELL_STUBS, TOWN_HALL,
 } from '@test/events-fixtures';
@@ -67,7 +69,7 @@ describe('P18.98-T4 the Event List in Indonesian', () => {
     list();
     await screen.findByRole('heading', { level: 3, name: 'Kickoff 2026' });
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Event List$/);
-    expect(screen.getByText('Lihat event yang akan datang dan yang sudah lewat dari KPM Anda — ikut, dan berikan masukan setelah event selesai.'))
+    expect(screen.getByText('Lihat event yang akan datang dan yang sudah lewat dari KPM Anda — ikut, dan berikan feedback setelah event selesai.'))
       .toBeInTheDocument();
     const filter = screen.getByRole('group', { name: 'Tampilkan event' });
     expect(within(filter).getAllByRole('button').map((b) => b.textContent)).toEqual(['Semua', 'Akan datang', 'Sudah lewat']);
@@ -84,7 +86,7 @@ describe('P18.98-T4 the Event List in Indonesian', () => {
     expect(within(kickoff).getByRole('button', { name: 'Lihat event' })).toBeInTheDocument();
     // Typed content as typed: the title, the line, the place.
     expect(within(kickoff).getByText("ev-kickoff's line.")).toBeInTheDocument();
-    for (const pill of ['Masukan belum dikirim', 'Tidak ikut', 'Masukan terkirim']) expect(screen.getByText(pill)).toBeInTheDocument();
+    for (const pill of ['Feedback belum dikirim', 'Tidak ikut', 'Feedback terkirim']) expect(screen.getByText(pill)).toBeInTheDocument();
     noEnglishLeft();
   });
 
@@ -141,7 +143,7 @@ describe('P18.98-T4 an event’s modal in Indonesian', () => {
     expect(within(box).getByText('10 — Sangat mungkin')).toBeInTheDocument();
     expect(within(box).getByLabelText(/^Mengapa\?/)).toHaveAttribute('placeholder', 'Apa yang paling berkesan, baik atau buruk?');
     expect(within(box).getByLabelText(/^Apa yang bisa kami perbaiki\?/)).toHaveAttribute('placeholder', 'Ada saran untuk lain kali?');
-    await userEvent.click(within(box).getByRole('button', { name: 'Kirim masukan' }));
+    await userEvent.click(within(box).getByRole('button', { name: 'Kirim feedback' }));
     expect(await screen.findByText('Pilih skor dari 0–10 terlebih dahulu')).toBeInTheDocument();
     noEnglishLeft();
   });
@@ -157,7 +159,7 @@ describe('P18.98-T4 an event’s modal in Indonesian', () => {
   it('P18.98-T4 AC-4 the thanks: the score and the member’s why, as typed', async () => {
     modal(BOOTCAMP);
     const box = await screen.findByRole('dialog', { name: 'New Agent Bootcamp' });
-    expect(within(box).getByText('Terima kasih atas masukan Anda')).toBeInTheDocument();
+    expect(within(box).getByText('Terima kasih atas feedback Anda')).toBeInTheDocument();
     expect(within(box).getByText('Anda memberi skor 9/10 untuk event ini — "Clear and practical."')).toBeInTheDocument();
     noEnglishLeft();
   });
@@ -182,5 +184,21 @@ describe('P18.98-T4 lib/events.ts in each language', () => {
     expect(audienceLine({ issuer: 'group', scope: 'select_agents' }, 'Prudential', 'id')).toBe('Event grup | Agent terpilih');
     const refused = refusalOf(new ApiRequestError(409, { code: 'EVENT_NOT_ENDED', message: 'x', requestId: 'r' }), 'id');
     expect(refused.message).toBe('Event ini belum berakhir.');
+  });
+});
+
+/** **UI V1 on a phone, in Indonesian** (UI-108): *Ikut* and *Tidak ikut*, *Feedback* not *Masukan*, the office's clock. */
+describe('UI-108 the Event List on a phone, in Indonesian', () => {
+  it('UI-108 Ikut / Tidak ikut on an upcoming card, Feedback belum dikirim on a past one, 14.00 – 16.00, no English left', async () => {
+    atWidth(375);
+    list({ 'GET /events': { body: eventList([PRODUCT_REFRESH, KICKOFF, PRULINK, TOWN_HALL, BOOTCAMP]) } });
+    await screen.findByRole('heading', { level: 3, name: 'Kickoff 2026' });
+    const kickoff = await screen.findByRole('group', { name: 'Jawaban Anda untuk Kickoff 2026' });
+    expect(within(kickoff).getAllByRole('button').map((b) => b.textContent)).toEqual(['Ikut', 'Tidak ikut']);
+    expect(screen.getByRole('region', { name: 'Akan datang' })).toHaveTextContent('14.00 – 16.00');
+    expect(screen.getByText('Feedback belum dikirim')).toBeInTheDocument();
+    expect(screen.getByText('Feedback terkirim')).toBeInTheDocument();
+    expect(screen.queryByText(/[Mm]asukan/)).not.toBeInTheDocument();
+    noEnglishLeft();
   });
 });

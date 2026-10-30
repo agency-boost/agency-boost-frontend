@@ -875,8 +875,8 @@ describe('P18.97-T6 AC-3 below 1024px a section’s actions sit behind one ⋮',
    * the live section's three links, and the archived one's with *Restore the section*.
    */
   const BEFORE_T6 = {
-    c1: '72e4199fc88769cde57eb6b63dbbf33d2c3400a34f803df65934a9be6e649f20',
-    c2: '140887d62384d30f766891d1fae5de72ff26809957da5c33fe751d90c4497936',
+    c1: '4f2558e21f97740a712bc84e63d413da11d2d481873100d4b02e2bf5e3a83262',
+    c2: 'db114bdd86a88295a7f67d0dfb403e23b23e5f6a7a658147207a99ba4fdb8ba9',
   };
   async function choose(section: string, item: string) {
     await userEvent.click(await screen.findByRole('button', { name: `Actions for ${section}` }));

@@ -66,21 +66,59 @@ describe('the person shell (P11-T7)', () => {
   });
   afterEach(() => vi.unstubAllGlobals());
 
-  it('P11-T7 AC-1, P18.95-T7 AC-2 heads the page with the way back, the initials, the name as its title, and the rung and unit', async () => {
+  it('P11-T7 AC-1, P18.95-T7 AC-2, UI-031 heads the page with the way back, the avatar, the name as its title, and the rung and unit under it', async () => {
     const { calls } = show(RINA);
 
     // P18.95-T7 AC-2 (UI-021): the person's name is the page's one title; *Coaching Session* is the tab and the way back.
     const heading = await screen.findByRole('heading', { level: 1, name: 'Rina Wijaya' });
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
     expect(screen.queryByRole('heading', { name: 'Coaching Session' })).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: '← Back to Coaching Session' })).toHaveAttribute('href', '/coaching');
-    // P18.95-T1 AC-10: 44px tall on a phone (UI-029), and the same line at 768px and wider.
-    expect(screen.getByRole('link', { name: '← Back to Coaching Session' })).toHaveClass('inline-flex', 'items-center', 'max-md:min-h-11');
+    const back = screen.getByRole('link', { name: '← Back to Coaching Session' });
+    expect(back).toHaveAttribute('href', '/coaching');
+    // UI-031: below 1024px a 44px ‹ with its words for a screen reader; from 1024px the words on their own line.
+    expect(back).toHaveClass('h-11', 'w-11', 'lg:basis-full');
+    expect(within(back).getByText('← Back to Coaching Session')).toHaveClass('max-lg:sr-only');
+    // UI-031: the line on its own line directly under the name, never beside it — 12px below 1024px.
     expect(heading.nextElementSibling).toHaveTextContent(/^Agent · Direct unit$/);
-    expect(screen.getByText('RW')).toBeInTheDocument();
+    expect(heading.nextElementSibling?.tagName).toBe('P');
+    expect(heading.nextElementSibling).toHaveClass('text-xs', 'lg:text-base');
+    // The 36px avatar below 1024px, the 52px initials from 1024px: both pictures, neither read out.
+    expect(screen.getAllByText('RW')).toHaveLength(2);
+    for (const avatar of screen.getAllByText('RW')) expect(avatar).toHaveAttribute('aria-hidden', 'true');
     // One read of the person, by their membership.
     expect(calls.filter((c) => c.url.includes('/coaching/coachees/')).map((c) => c.url))
       .toEqual(['http://api.test/api/v1/coaching/coachees/mem-rina']);
+  });
+
+  it('UI-111 the header’s avatar shows the coachee’s saved photo; a coachee without one shows their initials', async () => {
+    const photo = 'https://cdn.test/user/u-rina/avatar/a.jpg?sig=abc';
+    const { container } = show({ ...RINA, photoUrl: photo });
+    await screen.findByRole('heading', { level: 1, name: 'Rina Wijaya' });
+    const img = container.querySelector('[data-coachee-header] img');
+    expect(img).toHaveAttribute('src', photo);
+    expect(img).toHaveAttribute('aria-hidden', 'true');
+    // The photo takes the 36px avatar's place; the initials stay only where no photo is drawn.
+    expect(screen.getAllByText('RW')).toHaveLength(1);
+  });
+
+  it('UI-111 a coachee without a saved photo shows their initials, never an empty picture', async () => {
+    const { container } = show({ ...RINA, photoUrl: null });
+    await screen.findByRole('heading', { level: 1, name: 'Rina Wijaya' });
+    expect(container.querySelector('[data-coachee-header] img')).toBeNull();
+    expect(screen.getAllByText('RW')).toHaveLength(2);
+  });
+
+  it('UI-029 the way back goes to where the leader came from: an in-app `?from=`, never another site', async () => {
+    window.history.replaceState(null, '', '/coaching/mem-rina/session?from=%2Fnew-hires');
+    show(RINA);
+    expect(await screen.findByRole('link', { name: '← Back' })).toHaveAttribute('href', '/new-hires');
+    window.history.replaceState(null, '', '/');
+
+    const { backFrom } = await import('@/components/coaching-person');
+    expect(backFrom('?from=%2Fnew-hires')).toBe('/new-hires');
+    expect(backFrom('?from=%2F%2Fevil.test')).toBeNull();
+    expect(backFrom('?from=https%3A%2F%2Fevil.test')).toBeNull();
+    expect(backFrom('')).toBeNull();
   });
 
   it('P11-T7 AC-1 names whose unit somebody further down is in, without ADR-0084’s six words', async () => {
@@ -89,31 +127,49 @@ describe('the person shell (P11-T7)', () => {
 
     const heading = await screen.findByRole('heading', { level: 1, name: 'Novi Lestari' });
     expect(heading.nextElementSibling).toHaveTextContent(/^Agent · Arief Nugroho’s unit$/);
-    expect(screen.getByText('NL')).toBeInTheDocument();
+    expect(screen.getAllByText('NL').length).toBeGreaterThan(0);
     expect(document.body.textContent).not.toMatch(SIX_WORDS);
   });
 
-  it('P11-T7 AC-2, P13.1-T9 AC-3 lists the prototype’s six tabs in its order and words, Activity after Goal Setting, the current one marked', async () => {
+  it('UI-029 lists the eight tabs in the owner’s order, Leads new, Capability mapping renamed, a line lock and no emoji', async () => {
     show(RINA);
-    const tabs = within(await screen.findByRole('navigation', { name: 'Coaching' }));
+    const nav0 = await screen.findByRole('navigation', { name: 'Coaching' });
+    const tabs = within(nav0);
 
     expect(tabs.getAllByRole('link').map((t) => t.textContent)).toEqual([
-      'Personal Summary', 'Goal Setting', 'Activity', 'Training', 'Activation', 'Coaching Session', '🔒Leader Notes',
+      'Coaching Session', 'Activity', 'Leads', 'Goal Setting', 'Personal Summary', 'Activation', 'Training', 'Capability mapping',
     ]);
-    expect(tabs.getByRole('link', { name: 'Personal Summary' })).toHaveAttribute('href', '/coaching/mem-rina/summary');
+    const hrefs = tabs.getAllByRole('link').map((t) => t.getAttribute('href'));
+    expect(hrefs).toEqual([
+      '/coaching/mem-rina/session', '/coaching/mem-rina/activity', '/coaching/mem-rina/leads', '/coaching/mem-rina/goal-setting',
+      '/coaching/mem-rina/summary', '/coaching/mem-rina/activation', '/coaching/mem-rina/training', '/coaching/mem-rina/leader-notes',
+    ]);
     expect(tabs.getByRole('link', { name: 'Personal Summary' })).toHaveAttribute('aria-current', 'page');
-    expect(tabs.getByRole('link', { name: 'Goal Setting' })).toHaveAttribute('href', '/coaching/mem-rina/goal-setting');
     expect(tabs.getByRole('link', { name: 'Goal Setting' })).not.toHaveAttribute('aria-current');
-    expect(tabs.getByRole('link', { name: 'Activity' })).toHaveAttribute('href', '/coaching/mem-rina/activity');
-    expect(tabs.getByRole('link', { name: 'Activity' })).not.toHaveAttribute('aria-current');
-    expect(tabs.getByRole('link', { name: 'Coaching Session' })).toHaveAttribute('href', '/coaching/mem-rina/session');
-    // The lock is the prototype's, drawn and not read out.
-    const notes = tabs.getByRole('link', { name: 'Leader Notes' });
-    expect(notes).toHaveAttribute('href', '/coaching/mem-rina/leader-notes');
-    expect(within(notes).getByText('🔒')).toHaveAttribute('aria-hidden', 'true');
+    // UI-029: 🔒 → a line lock, drawn and not read out; no emoji anywhere in the row.
+    const notes = tabs.getByRole('link', { name: 'Capability mapping' });
+    expect(notes.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
+    expect(nav0.textContent).not.toMatch(/\p{Extended_Pictographic}/u);
   });
 
-  it('P18.5-T4 AC-2 makes Training a live tab, in Leader view and Agent view alike', async () => {
+  it('UI-030 one row that never wraps and scrolls sideways with no scrollbar, a fade while more follow, tabs 44px below 1024px', async () => {
+    show(RINA);
+    const row = await screen.findByRole('navigation', { name: 'Coaching' });
+    expect(row).toHaveClass('flex-nowrap', 'overflow-x-auto', '[scrollbar-width:none]');
+    expect(row).not.toHaveClass('flex-wrap');
+    expect(row.className).toMatch(/md:data-\[fade=end\]:\[mask-image/);
+    expect(row.style.getPropertyValue('--tab-fade')).toBe('2rem');
+    for (const tab of within(row).getAllByRole('link')) expect(tab).toHaveClass('max-lg:min-h-11', 'shrink-0', 'whitespace-nowrap');
+  });
+
+  it('UI-029 Coaching Session is the first tab and the default: /coaching/{id} opens it', async () => {
+    show(RINA);
+    const first = within(await screen.findByRole('navigation', { name: 'Coaching' })).getAllByRole('link')[0];
+    expect(first).toHaveTextContent('Coaching Session');
+    expect(first).toHaveAttribute('href', '/coaching/mem-rina/session');
+  });
+
+  it('P18.5-T4 AC-2 makes Training a live tab', async () => {
     show(RINA);
     const tabs = within(await screen.findByRole('navigation', { name: 'Coaching' }));
 
@@ -121,9 +177,6 @@ describe('the person shell (P11-T7)', () => {
     expect(tab).toHaveAttribute('href', '/coaching/mem-rina/training');
     expect(tab).not.toHaveAttribute('aria-disabled');
     expect(tab).not.toHaveAttribute('aria-current');
-    await userEvent.click(screen.getByRole('button', { name: 'Agent view' }));
-    expect(within(screen.getByRole('navigation', { name: 'Coaching' })).getByRole('link', { name: 'Training' }))
-      .toHaveAttribute('href', '/coaching/mem-rina/training');
   });
 
   it('P13.1-T9 AC-3 makes Activity a live tab, current on its own address', async () => {
@@ -150,40 +203,20 @@ describe('the person shell (P11-T7)', () => {
     expect(tabs.queryByRole('link', { name: 'Activation, upcoming' })).not.toBeInTheDocument();
   });
 
-  it('P11-T7 AC-3 Agent view takes Leader Notes out of the bar, and Leader view brings it back', async () => {
-    show(RINA);
-    await screen.findByRole('heading', { level: 1, name: 'Rina Wijaya' });
-    const leaderView = screen.getByRole('button', { name: 'Leader view' });
-    const agentView = screen.getByRole('button', { name: 'Agent view' });
-    expect(within(screen.getByRole('group', { name: 'View' })).getAllByRole('button')).toEqual([leaderView, agentView]);
-    expect(leaderView).toHaveAttribute('aria-pressed', 'true');
-
-    await userEvent.click(agentView);
-    expect(agentView).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.queryByRole('link', { name: 'Leader Notes' })).not.toBeInTheDocument();
-    // Nothing else changes, as in the prototype: the other five are still there, *Activity* with them
-    // (P13.1-T9), and so is the tab.
-    expect(within(screen.getByRole('navigation', { name: 'Coaching' })).getAllByRole('link')).toHaveLength(6);
-    expect(screen.getByText('Tab for Rina Wijaya')).toBeInTheDocument();
-    expect(nav.replace).not.toHaveBeenCalled();
-
-    await userEvent.click(leaderView);
-    expect(screen.getByRole('link', { name: 'Leader Notes' })).toBeInTheDocument();
+  it('UI-041 draws no Leader view / Agent view toggle on any tab', async () => {
+    for (const tab of ['session', 'activity', 'leads', 'goal-setting', 'summary', 'activation', 'training', 'leader-notes']) {
+      nav.pathname = `/coaching/mem-rina/${tab}`;
+      const view = show(RINA);
+      await screen.findByRole('heading', { level: 1, name: 'Rina Wijaya' });
+      expect(screen.queryByRole('group', { name: 'View' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /Leader view|Agent view/ })).not.toBeInTheDocument();
+      expect(screen.getByText('Tab for Rina Wijaya')).toBeInTheDocument();
+      view.unmount();
+      vi.unstubAllGlobals();
+    }
   });
 
-  it('P11-T7 AC-3 moves a reader standing on Leader Notes to Personal Summary, and drops the tab at once', async () => {
-    nav.pathname = '/coaching/mem-rina/leader-notes';
-    show(RINA);
-    expect(await screen.findByText('Tab for Rina Wijaya')).toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole('button', { name: 'Agent view' }));
-
-    expect(nav.replace).toHaveBeenCalledWith('/coaching/mem-rina/summary');
-    // The notes tab is unmounted before the address changes, so nothing it fetched stays on screen.
-    expect(screen.queryByText('Tab for Rina Wijaya')).not.toBeInTheDocument();
-  });
-
-  it('P11-T7 AC-3 keeps the view across a change of tab: the shell is mounted once, in the layout', async () => {
+  it('P11-T7 AC-3 keeps the shell across a change of tab: it is mounted once, in the layout', async () => {
     const params = routeParams({ membershipId: 'mem-rina' });
     // What the App Router does on a change of tab: the same layout, re-rendered at a new address.
     function Router() {
@@ -199,12 +232,13 @@ describe('the person shell (P11-T7)', () => {
     }
     const { calls } = stubFetch({ ...SHELL, '/coaching/coachees/': { body: RINA } });
     renderInLayout(AgentLayout, <Router />, { me: LEADER });
-    await userEvent.click(await screen.findByRole('button', { name: 'Agent view' }));
+    await screen.findByRole('heading', { level: 1, name: 'Rina Wijaya' });
 
     await userEvent.click(screen.getByRole('button', { name: 'Go to Goal Setting' }));
 
-    expect(screen.getByRole('button', { name: 'Agent view' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('link', { name: 'Goal Setting' })).toHaveAttribute('aria-current', 'page');
+    // The person's own tab — the field sidebar has a *Goal Setting* of its own since UI V1 (UI-004).
+    expect(within(screen.getByRole('navigation', { name: 'Coaching' })).getByRole('link', { name: 'Goal Setting' }))
+      .toHaveAttribute('aria-current', 'page');
     // And the person was read once, not once per tab.
     expect(calls.filter((c) => c.url.includes('/coaching/coachees/'))).toHaveLength(1);
   });
@@ -220,7 +254,8 @@ describe('the person shell (P11-T7)', () => {
     await screen.findByRole('heading', { level: 1, name: 'Novi Lestari' });
     expect(calls.some((c) => c.url.endsWith('/coaching/coachees/mem-novi'))).toBe(true);
     expect(screen.getByRole('navigation', { name: 'Coaching' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Personal Summary' })).toHaveAttribute('href', '/coaching/mem-novi/summary');
+    expect(within(screen.getByRole('navigation', { name: 'Coaching' })).getByRole('link', { name: 'Personal Summary' }))
+      .toHaveAttribute('href', '/coaching/mem-novi/summary');
   });
 
   it('P11-T7 AC-8 answers somebody outside the reader’s reach with the not-found state, inside the shell', async () => {

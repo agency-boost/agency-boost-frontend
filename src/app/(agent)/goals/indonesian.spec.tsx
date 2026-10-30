@@ -11,7 +11,8 @@ import GoalSettingsPage from './page';
 
 /**
  * **P18.98-T4, Goal Settings in ID mode** (field selling): `/goals` and the calculator a coachee's *Goal Setting* tab
- * mounts — the five steps, *Simpan goal* and its status, the cascade, the commitment and every state a plan can be in —
+ * mounts — since UI V1 (P18.99-T5) the result card, four steps, *Simpan goal* and its status, the commitment in the
+ * report's sentence (UI-017) and every state a plan can be in —
  * read in Bahasa Indonesia: our words the approved glossary's, §A.4's KPI labels, the cascade's stages and the jargon
  * kept English, the office's activity names as typed, every figure Indonesian, and no English message of the module's
  * own left on the screen. English is `page.spec.tsx`'s, unchanged.
@@ -71,101 +72,99 @@ const met = projection({
   targetMet: true, remainingApeMinor: 0, monthlyApeTargetMinor: 0, policiesPerMonth: 0, appointmentsPerMonth: 0, leadsPerMonth: 0,
 });
 
+/** `POST /goals/:period/preview` (P18.99-T5): the plan the inputs on screen would make. */
+const PREVIEW = { [`POST /goals/${PERIOD}/preview`]: { body: {
+  period: PERIOD, monthsLeft: 5, monthsLeftIsOverride: false, achieved: { minor: 0, provenance: 'self_reported', month: null },
+  projected: projection(),
+} } };
+
 const show = (goals: unknown) => {
-  const stub = stubFetch({ ...BASE, '/goals': goals } as Parameters<typeof stubFetch>[0]);
+  const stub = stubFetch({ ...BASE, ...PREVIEW, '/goals': goals } as Parameters<typeof stubFetch>[0]);
   renderInIndonesian(<AgentLayout><GoalSettingsPage /></AgentLayout>, { me: AGENT });
   return stub;
 };
 const coachee = (body: unknown, pronoun: 'she' | 'he' | 'they' = 'she') => {
-  stubFetch({ ...BASE, '/goals': { body } } as Parameters<typeof stubFetch>[0]);
+  stubFetch({ ...BASE, ...PREVIEW, '/goals': { body } } as Parameters<typeof stubFetch>[0]);
   renderInIndonesian(<GoalCalculator period={PERIOD} subject={{ membershipId: 'mem-rina', pronoun }} />, { me: AGENT });
 };
-const commitment = async () => (await screen.findByText(/^Untuk mencapai/)).closest('p')!;
+const commitment = async () => (await screen.findByText(/^Bulan ini/)).closest('p')!;
+/** The orange result card (UI-014). */
+const resultCard = () => screen.findByRole('region', { name: 'Target aktivitas bulanan' });
+/** The desktop's save status, at the foot of the right column (UI-022). */
+const status = () => within(document.querySelector('[data-goal-aside]') as HTMLElement).getByRole('status');
 
 describe('P18.98-T4 Goal Settings in Indonesian', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('AC-2 asks the five steps in Indonesian, §A.4’s labels and the cascade’s stages kept English', async () => {
+  it('AC-2 UI-006 asks the four steps in Indonesian, the kept terms English, every figure Indonesian', async () => {
     show({ body: goal() });
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Goal Settings' })).toBeInTheDocument();
     expect(screen.getByText('Ubah target tahunan Anda menjadi angka aktivitas bulan ini.')).toBeInTheDocument();
     for (const name of [
-      'Berapa target APE Anda tahun ini?', 'Progres Anda saat ini', 'Dari APE ke jumlah polis', 'Conversion assumptions',
-      'Monthly activity target', 'Komitmen saya (per 13 Sep 2026)',
+      'Target aktivitas bulanan', '1Berapa target APE Anda tahun ini?', '2Progres Anda saat ini', '3Dari APE ke jumlah polis',
+      '4Asumsi konversi', 'Komitmen saya (per 13 Sep 2026)',
     ]) {
-      expect(await screen.findByRole('heading', { name })).toBeInTheDocument();
+      expect(await screen.findByRole('heading', { name: name.replace(/^\d/, '') })).toBeInTheDocument();
     }
     const modes = screen.getByRole('tablist', { name: 'Cara Anda ingin mengaturnya' });
     expect(within(modes).getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Atur target APE langsung', 'Hitung dari target tabungan']);
-    // The save and its status, beside it.
-    const save = screen.getByRole('button', { name: 'Simpan goal' });
-    expect(within(save.parentElement!).getByRole('status')).toHaveTextContent('Tersimpan');
-    // §A.4's KPI labels, kept; every figure the reader's: *500.000.000*, *Rp 500 jt*, *≈ 1,4*.
-    expect(screen.getByLabelText('Annual APE target')).toHaveValue('500.000.000');
-    expect(screen.getByRole('textbox', { name: 'APE already produced this year' })).toBeInTheDocument();
-    expect(screen.getByLabelText('Appointment to Sales meeting')).toHaveValue('30');
-    expect(screen.getByLabelText('Closing rate')).toBeInTheDocument();
+    // The save and the shared save state (UI-019).
+    expect(screen.getByRole('button', { name: 'Simpan goal' })).toBeInTheDocument();
+    expect(status()).toHaveTextContent('Tersimpan ✓');
+    // UI-016: the sliders' values compact, the rates whole; *Appointment to meeting* kept (UI-006).
+    expect(screen.getByRole('slider', { name: 'Target APE tahunan' })).toHaveAttribute('aria-valuetext', 'Rp 500 jt');
+    expect(screen.getByRole('button', { name: 'Ketik jumlah tepat untuk Target APE tahunan' })).toHaveTextContent('Rp 500 jt');
+    expect(screen.getByRole('slider', { name: /^Rata-rata case size \(APE per polis\)/ })).toHaveAttribute('aria-valuetext', 'Rp 18 jt');
+    expect(within(screen.getByRole('group', { name: 'Appointment to meeting' })).getByText('30%')).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Tingkat closing' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Tambah Tingkat closing' })).toBeInTheDocument();
+    // UI-020: the two prefilled figures, the months the office's with its ⚡.
+    expect(screen.getByRole('textbox', { name: 'Sisa bulan tahun ini' })).toHaveValue('5');
+    expect(screen.getByRole('textbox', { name: 'Sisa bulan tahun ini' }).parentElement).toHaveTextContent('bulan');
+    expect(screen.getByText('Otomatis')).toHaveClass('sr-only');
+    expect(screen.getByRole('textbox', { name: 'APE yang sudah dicapai tahun ini' })).toHaveValue('Rp 0');
     expect(screen.getByText('Sisa yang dibutuhkan').closest('[data-variant]')).toHaveTextContent('Rp 500 jt');
-    expect(screen.getByText("This month's APE target").closest('[data-variant]')).toHaveTextContent('Rp 100 jt');
-    expect(screen.getByText('Policies per month').closest('[data-variant]')).toHaveTextContent('6polis');
-    expect(screen.getByText('Policies per week').closest('[data-variant]')).toHaveTextContent('≈ 1,4');
-    // The months: the label, its *auto* badge, the box's unit and the office's figure as its placeholder.
-    const months = screen.getByLabelText(/^Sisa bulan tahun ini/);
-    expect(months).toHaveAttribute('placeholder', '5');
-    expect(screen.getByText('otomatis')).toBeInTheDocument();
-    expect(screen.getByText('bulan')).toHaveAttribute('aria-hidden', 'true');
-    expect(screen.getByLabelText('Rata-rata case size (APE per polis)')).toHaveValue('18.000.000');
+    expect(screen.getByText('Target APE bulan ini').closest('[data-variant]')).toHaveTextContent('Rp 100 jt');
+    expect(screen.getByText('Polis per bulan').closest('[data-variant]')).toHaveTextContent('6polis');
+    expect(screen.getByText('Polis per minggu').closest('[data-variant]')).toHaveTextContent('≈ 1,4');
     expect(screen.getByRole('button', {
       name: 'APE per closing. Naikkan jika satu janji temu sering menghasilkan lebih dari satu polis.',
     })).toBeInTheDocument();
     noEnglishLeft();
   });
 
-  it('AC-3 writes the cascade and the commitment as whole Indonesian sentences, figures and kept terms in place', async () => {
+  it('AC-3 UI-014 UI-017 the result card and the commitment in the report’s Indonesian sentence', async () => {
     show({ body: goal() });
 
-    const panels = [...(await screen.findAllByText(/\/bulan$/))].map((p) => p.closest('[class*="text-center"]')!.textContent);
-    expect(panels).toEqual([
-      expect.stringMatching(/^Set appointment.*67\/bulan≈ 16\/minggu$/),
-      expect.stringMatching(/^Sales meeting.*20\/bulan≈ 5\/minggu$/),
-      expect.stringMatching(/^Submission polis.*6\/bulan≈ 1,4\/minggu$/),
+    const card = await resultCard();
+    const tiles = [...card.querySelectorAll('[data-result-tile]')].map((t) => t.textContent);
+    expect(tiles).toEqual([
+      '67Set appointment≈ 16/minggu',
+      expect.stringMatching(/^20Sales meeting.*≈ 5\/minggu$/),
+      '6Submission polis≈ 1,4/minggu',
     ]);
-    // AC-4: the activity a stage counts is the office's, as typed.
-    expect(screen.getByText('Melakukan presentasi penjualan untuk calon atau existing nasabah')).toBeInTheDocument();
+    expect(card).toHaveTextContent('Rp 100 jt');
+    // UI-021: the activity a stage counts is the office's, as typed, behind the ⓘ.
+    expect(within(card).getByRole('button', { name: 'Melakukan presentasi penjualan untuk calon atau existing nasabah' })).toBeInTheDocument();
     expect(screen.getByText('Terhubung ke aktivitas #3, #4, #6 di Activity Management.')).toBeInTheDocument();
     const sentence = await commitment();
     expect(sentence).toHaveTextContent(
-      'Untuk mencapai APE Rp 500 jt tahun ini (sekitar 5 bulan lagi), target bulan ini adalah APE Rp 100 jt — saya akan '
-      + 'menghubungi 67 leads, mendapatkan 20 janji temu, dan closing 6 polis bulan ini.',
+      'Bulan ini APE Rp 100 jt (menuju Rp 500 jt tahun ini): 67 Set appointment, 20 Sales meeting, 6 Submission polis.',
     );
-    // Every figure bold and amber, as in English.
     expect([...sentence.querySelectorAll('strong')].map((b) => b.textContent))
-      .toEqual(['Rp 500 jt', 'Rp 100 jt', '67 leads', '20 janji temu', '6 polis']);
+      .toEqual(['Rp 100 jt', 'Rp 500 jt', '67 Set appointment', '20 Sales meeting', '6 Submission polis']);
     expect(screen.getByText('Perkiraan untuk perencanaan pribadi — asumsi berbeda untuk setiap orang.')).toBeInTheDocument();
     noEnglishLeft();
   });
 
-  it('AC-3 counts one lead in the singular, a kept noun’s English plural otherwise (§B.0 rule 8)', async () => {
-    show({ body: goal({ projected: projection({ leadsPerMonth: 1 }) }) });
-    expect(await commitment()).toHaveTextContent('saya akan menghubungi 1 lead, mendapatkan');
-  });
-
-  it.each([
-    [0.3, '(kurang dari sebulan lagi)'],
-    [1.2, '(sekitar 1 bulan lagi)'],
-    [11.9, '(sekitar 12 bulan lagi)'],
-  ])('P18.95-T5 AC-5 in Indonesian: %s months left reads %s', async (monthsLeft, words) => {
-    show({ body: goal({ monthsLeft }) });
-    expect(await commitment()).toHaveTextContent(words);
-  });
-
-  it('AC-1 offers the savings pair in Indonesian, its two labels kept', async () => {
+  it('AC-1 UI-016 offers the savings pair in Indonesian: a slider and − / +, the hint under it', async () => {
     show({ body: goal() });
     await userEvent.click(await screen.findByRole('tab', { name: 'Hitung dari target tabungan' }));
 
-    expect(screen.getByLabelText('Annual savings target')).toHaveValue('50.000.000');
-    expect(screen.getByLabelText('Commission rate')).toHaveAccessibleDescription('% dari APE yang menjadi penghasilan / tabungan');
+    expect(screen.getByRole('slider', { name: 'Target tabungan tahunan' })).toHaveAttribute('aria-valuetext', 'Rp 50 jt');
+    expect(within(screen.getByRole('group', { name: 'Persentase komisi' })).getByText('10%')).toBeInTheDocument();
+    expect(screen.getAllByText('% dari APE yang menjadi penghasilan / tabungan').some((el) => el.tagName === 'P')).toBe(true);
     expect(screen.getByText('Setara dengan target APE sebesar').closest('[data-variant]')).toHaveTextContent('Rp 500 jt');
     noEnglishLeft();
   });
@@ -185,7 +184,7 @@ describe('P18.98-T4 Goal Settings in Indonesian', () => {
     expect(await screen.findByText('Anda sudah melampaui target tahunan Anda.')).toBeInTheDocument();
     expect(screen.getByText(/Atur yang baru di atas, atau terus melaju — tidak ada lagi yang diminta rencana ini dari Anda\./))
       .toBeInTheDocument();
-    expect(screen.queryByText('Set appointment')).not.toBeInTheDocument();
+    expect((await resultCard()).querySelectorAll('[data-result-tile]')).toHaveLength(0);
     noEnglishLeft();
   });
 
@@ -199,33 +198,40 @@ describe('P18.98-T4 Goal Settings in Indonesian', () => {
     noEnglishLeft();
   });
 
-  it('AC-1 marks the office’s figure, its correction and who made it, the month Indonesian (ADR-0063 §5)', async () => {
+  it('AC-1 UI-020 marks the office’s figure ⚡, its ⓘ saying whose, the month Indonesian (ADR-0063 §5)', async () => {
     show({ body: goal({ achieved: { minor: 120_000_000_00, provenance: 'imported', month: '2026-08' } }) });
-    const field = (await screen.findByRole('button', { name: 'Per Agu 2026' })).closest('dl')!;
-    expect(field).toHaveTextContent(/^APE already produced this year.*Rp 120\.000\.000$/);
+    const why = await screen.findByRole('button', { name: 'Kenapa APE yang sudah dicapai tahun ini otomatis' });
+    const field = why.closest('dl')!;
+    expect(field.querySelector('dd')).toHaveTextContent(/^Rp 120 jt$/);
+    expect(why).toHaveAccessibleDescription('Per Agu 2026');
     noEnglishLeft();
     vi.unstubAllGlobals();
     document.body.innerHTML = '';
 
     show({ body: goal({ achieved: { minor: 120_000_000_00, provenance: 'corrected', month: '2026-08' } }) });
-    expect(await screen.findByRole('button', { name: 'Dikoreksi manual, sejak awal tahun per Agu 2026' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Kenapa APE yang sudah dicapai tahun ini otomatis' }))
+      .toHaveAccessibleDescription('Dikoreksi manual, sejak awal tahun per Agu 2026');
     vi.unstubAllGlobals();
     document.body.innerHTML = '';
 
     show({ body: goal({ achieved: { minor: 120_000_000_00, provenance: 'corrected', month: '2026-08', correctedBy: { name: 'Sari Puspita' } } }) });
-    expect(await screen.findByRole('button', { name: 'Dikoreksi oleh Sari Puspita, sejak awal tahun per Agu 2026' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Kenapa APE yang sudah dicapai tahun ini otomatis' }))
+      .toHaveAccessibleDescription('Dikoreksi oleh Sari Puspita, sejak awal tahun per Agu 2026');
   });
 
-  it('AC-1 says an edit is not yet saved, and saved once it is', async () => {
+  it('AC-1 UI-019 says an edit is not yet saved, saved again once undone, and saved once it is', async () => {
     const { calls } = show([{ body: goal() }, { body: goal() }]);
-    await userEvent.type(await screen.findByLabelText('Annual APE target'), '1');
-    const status = () => within(screen.getByRole('button', { name: 'Simpan goal' }).parentElement!).getByRole('status');
+    await resultCard();
+    await userEvent.click(screen.getByRole('button', { name: 'Tambah Tingkat closing' }));
     expect(status()).toHaveTextContent('Belum disimpan');
+    await userEvent.click(screen.getByRole('button', { name: 'Kurangi Tingkat closing' }));
+    expect(status()).toHaveTextContent('Tersimpan ✓');
+    await userEvent.click(screen.getByRole('button', { name: 'Tambah Tingkat closing' }));
 
     await userEvent.click(screen.getByRole('button', { name: 'Simpan goal' }));
     await waitFor(() => expect(calls.some((c) => c.init.method === 'PUT')).toBe(true));
-    await waitFor(() => expect(status()).toHaveTextContent('Tersimpan'));
-    expect(status()).not.toHaveTextContent('Belum');
+    await waitFor(() => expect(status()).toHaveTextContent('Tersimpan ✓'));
+    expect(await screen.findByText('Goal tersimpan ✓')).toBeInTheDocument();
   });
 
   it('AC-1 waits in the reader’s words', () => {
@@ -249,8 +255,11 @@ describe('P18.98-T4 a coachee’s Goal Setting in Indonesian', () => {
     expect(screen.getByRole('heading', { name: 'Progres saat ini' })).toBeInTheDocument();
     expect(screen.getByRole('tablist', { name: 'Cara mengaturnya' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Komitmen (per 13 Sep 2026)' })).toBeInTheDocument();
-    expect(await commitment()).toHaveTextContent('— dia akan menghubungi 67 leads');
+    // UI-017: the report's sentence needs no pronoun.
+    expect(await commitment()).toHaveTextContent('Bulan ini APE Rp 100 jt (menuju Rp 500 jt tahun ini): 67 Set appointment');
+    // Her own figure, read-only to her leader (ADR-0075): the same pill, its ⓘ saying whose.
     expect(screen.getByRole('button', { name: 'Angkanya sendiri, diisi di Goal Settings' })).toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: 'APE yang sudah dicapai tahun ini' })).not.toBeInTheDocument();
     expect(screen.getByText(
       'Perubahan di sini langsung diperbarui di Personal Summary dan Coaching Session — ketiganya tetap selaras.',
     )).toBeInTheDocument();
@@ -263,8 +272,8 @@ describe('P18.98-T4 a coachee’s Goal Setting in Indonesian', () => {
 
     expect(await screen.findByText('Dia sudah melampaui target tahunannya.')).toBeInTheDocument();
     expect(screen.getByText(/tidak ada lagi yang diminta rencana ini darinya\./)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Dikoreksi setelah unggahan produksi, sejak awal tahun per Agu 2026' }))
-      .toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Kenapa APE yang sudah dicapai tahun ini otomatis' }))
+      .toHaveAccessibleDescription('Dikoreksi setelah unggahan produksi, sejak awal tahun per Agu 2026');
     expect(document.body.textContent).not.toMatch(/\bKPM\b/);
     noEnglishLeft();
   });

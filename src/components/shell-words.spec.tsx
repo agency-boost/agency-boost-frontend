@@ -2,7 +2,9 @@ import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { atWidth, InLanguage, makeMe, renderInIndonesian, renderWithSession, stubFetch } from '@test/harness';
+import { messagesIn } from '@/i18n/catalogue';
 import { KEPT_ENGLISH } from '@/i18n/glossary';
+import { shellMessages } from '@/i18n/messages/shell';
 import type { Me } from '@/lib/session';
 import { viewSwitchFor } from '@/lib/landing';
 import { AdminShell } from './admin-shell';
@@ -50,16 +52,17 @@ describe('P18.98-T1 the shells in Indonesian', () => {
     route.path = '/coaching';
   });
 
-  it('AC-7 keeps the field nav English, word for word, and translates its pill', () => {
+  it('AC-7, UI-004 keeps the field nav’s items English, word for word, writes its group headings in Indonesian, and translates its pill', () => {
     renderInIndonesian(<AgentShell title="Coaching Session">body</AgentShell>, {
       me: member({ directCount: 2, isCoreLeader: true }),
     });
     const nav = screen.getByRole('navigation', { name: 'Utama' });
 
-    for (const item of ['Activity management', 'Leads management', 'Unit dashboard', 'Strategic Leader Forum']) {
+    for (const item of ['Activity', 'Leads', 'Unit Dashboard', 'Strategic Leader Forum', 'Goal Setting', 'User Management']) {
       expect(within(nav).getByRole('link', { name: item })).toBeInTheDocument();
     }
-    for (const heading of ['Personal tools', 'Unit tools', 'Core leader', 'Admin']) {
+    // UI-004's groups are Indonesian words (D-20), as the *Lainnya* sheet writes them; *KPM* is kept.
+    for (const heading of ['Saya', 'Aktivitas', 'Tim saya', 'Program', 'KPM']) {
       expect(within(nav).getByRole('button', { name: heading })).toBeInTheDocument();
     }
     // *Soon* is a status word (§B.3): *Segera hadir*, beside the kept item's own name.
@@ -144,10 +147,12 @@ describe('P18.98-T1 the shells in Indonesian', () => {
   });
 
   it('AC-1 names the phone’s avatar in Indonesian, with its count: Akun dan notifikasi, 3 belum dibaca', async () => {
+    // The office console's bar: the field shell has no bar on a phone since UI V1 (UI-004).
     atWidth(375);
+    route.path = '/people/members';
     stubFetch({ '/notifications': { body: { items: [], unread: 3, total: 3, page: 1, pageSize: 1 } } });
-    renderInIndonesian(<AgentShell title="Coaching Session">body</AgentShell>, {
-      me: member({}, { permissions: ['notification:read_inbox'] }),
+    renderInIndonesian(<TenantShell title="All Members">body</TenantShell>, {
+      me: member({ isKpmOwner: true }, { permissions: ['member:read_profile', 'notification:read_inbox'] }),
     });
 
     const avatar = await screen.findByRole('button', { name: 'Akun dan notifikasi, 3 belum dibaca' });
@@ -163,6 +168,8 @@ describe('P18.98-T1 the shells in Indonesian', () => {
  */
 describe('P18.98-T1 AC-7 every heading and item of the three shells is a kept term', () => {
   const NAVIGATION: ReadonlySet<string> = new Set(KEPT_ENGLISH.navigation);
+  /** UI-004's group headings in English: *Me*, *Activities*, *My team*, *Programs* (*KPM* is kept). */
+  const FIELD_HEADINGS: ReadonlySet<string> = new Set(Object.values(messagesIn(shellMessages, 'en').fieldGroups));
 
   /** The nav's own words: each group's heading, and each item's name before any pill or count. */
   function navWords(): string[] {
@@ -186,7 +193,16 @@ describe('P18.98-T1 AC-7 every heading and item of the three shells is a kept te
     const words = navWords();
 
     expect(words.length).toBeGreaterThan(8);
-    expect(words.filter((w) => !NAVIGATION.has(w))).toEqual([]);
+    // The field shell's group headings are Indonesian words since UI V1 (UI-004, D-20) — translated, not kept.
+    expect(words.filter((w) => !NAVIGATION.has(w) && !FIELD_HEADINGS.has(w))).toEqual([]);
+  });
+
+  it('UI-004 the field shell’s group headings, and only those, are the catalogue’s words, translated', () => {
+    renderInIndonesian(<AgentShell title="x">x</AgentShell>, { me: member({ directCount: 2, isCoreLeader: true }) });
+    const nav = screen.getByRole('navigation', { name: 'Utama' });
+    const headings = Array.from(nav.querySelectorAll('[aria-controls^="nav-group"]'))
+      .map((b) => (b.textContent ?? '').trim()).filter(Boolean);
+    expect(headings).toEqual(['Saya', 'Aktivitas', 'Tim saya', 'Program', 'KPM']);
   });
 });
 
@@ -229,7 +245,7 @@ describe('P18.98-T1 the shells’ words outside React, in a language', () => {
 
   it('AC-1 viewSwitchFor says the view switch in the reader’s language, the roles kept', () => {
     const owner = member({ isKpmOwner: true, directCount: 2 });
-    expect(viewSwitchFor(owner, 'office', 'id')).toEqual({ href: '/unit/dashboard', label: 'Buka tampilan Agent' });
+    expect(viewSwitchFor(owner, 'office', 'id')).toEqual({ href: '/home', label: 'Buka tampilan Agent' });
     expect(viewSwitchFor(owner, 'field', 'id')).toEqual({ href: '/kpm/overview', label: 'Buka tampilan Owner' });
     expect(viewSwitchFor(member({ isKpmAdmin: true }), 'field', 'id')?.label).toBe('Buka tampilan Admin');
   });

@@ -180,7 +180,7 @@ export default function AdminsPage() {
         : <SkeletonTable caption={t.caption} columns={COLUMNS} rows={3} />)}
 
       {admins?.length === 0 && !error && (
-        <div className="rounded-lg border border-hairline bg-card">
+        <div className="rounded-lg border border-card-edge bg-card">
           <EmptyState title={t.empty} />
         </div>
       )}

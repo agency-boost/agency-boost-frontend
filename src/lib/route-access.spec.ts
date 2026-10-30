@@ -180,7 +180,9 @@ describe('canOpen — by family and role (2026-10-11)', () => {
 
   it('the screens for somebody not signed in are nowhere to return to', () => {
     for (const me of [SUPER_ADMIN, OWNER, AGENT, NOBODY_S]) {
-      expect(opens(me, ['/login', '/register', '/forgot-password', '/reset-password/t', '/verify-email/t'])).toEqual([]);
+      expect(opens(me, [
+        '/login', '/register', '/forgot-password', '/reset-password/t', '/verify-email/t', '/verify-email-change/t',
+      ])).toEqual([]);
     }
   });
 });

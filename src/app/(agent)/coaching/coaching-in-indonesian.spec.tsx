@@ -2,14 +2,15 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AgentLayout from '@/app/(agent)/layout';
-import { SessionPrintView } from '@/components/coaching-print';
+import { SessionPrintView } from '@/components/coaching-print-view';
 import { activationMessages } from '@/i18n/messages/activation';
 import { coachingMessages } from '@/i18n/messages/coaching';
 import { coachingLeaderNotesMessages } from '@/i18n/messages/coaching-leader-notes';
 import { coachingRecordMessages } from '@/i18n/messages/coaching-record';
 import { coachingSessionMessages } from '@/i18n/messages/coaching-session';
+import { newHiresMessages } from '@/i18n/messages/new-hires';
+import { uiV1Messages } from '@/i18n/messages/ui-v1';
 import type { Me } from '@/lib/session';
-import { PHONE_QUERY } from '@/lib/use-phone';
 import { leaderView, notFound } from '@test/activation-fixtures';
 import { englishOnly, englishShown } from '@test/english-left';
 import {
@@ -117,48 +118,35 @@ describe('P18.98-T4 the coaching roster in Indonesian', () => {
     expect(COACHING_ENGLISH.length).toBeGreaterThan(100);
     stubFetch({ ...SHELL, '/coaching/coachees': { body: ROSTER } });
     renderInLayout(AgentLayout, <CoachingRosterPage />, { me: LEADER });
-    await screen.findByRole('table', { name: 'Everyone you coach' });
+    await screen.findByRole('link', { name: 'Rina Wijaya' });
     expect(englishShown(document.body, COACHING_ENGLISH)).toEqual(
       expect.arrayContaining(['Everyone you coach', 'Your direct agents', 'Watch closely', 'My Coaching Notes']),
     );
   });
 
-  it('P18.98-T4 AC-1, AC-2 the table: its title kept, its caption, columns, groups, pills and lines Indonesian', async () => {
+  it('P18.98-T4 AC-1, AC-2, UI-033 the rows: the title kept, the columns, groups, pills and lines Indonesian; No 1:1 yet grey', async () => {
     stubFetch({ ...SHELL, '/coaching/coachees': { body: ROSTER } });
     inIndonesian(<CoachingRosterPage />);
-    const table = await screen.findByRole('table', { name: 'Semua orang yang Anda coaching' });
+    await screen.findByRole('link', { name: 'Rina Wijaya' });
     expect(screen.getByRole('heading', { level: 1, name: 'Coaching Session' })).toBeInTheDocument();
-    expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(
-      ['Nama', '1:1 terakhir', 'Terakhir di-coaching oleh', 'Status', 'Aksi'],
-    );
-    expect(within(table).getByRole('rowheader', { name: /Agen langsung Anda/ })).toHaveTextContent('Agen langsung Anda · 2');
-    expect(within(table).getByRole('rowheader', { name: 'AAB units' })).toBeInTheDocument();
-    const rina = within(table).getByRole('row', { name: /Rina Wijaya/ });
-    expect(rina).toHaveTextContent('9 hari lalu · terlambat');
-    expect(within(rina).getByText('Perlu dipantau')).toBeInTheDocument();
-    // *Coaching →*: the kept term, its arrow drawn apart.
-    expect(within(rina).getByRole('link', { name: 'Coaching' })).toHaveAttribute('href', '/coaching/mem-rina/session');
-    expect(within(table).getByRole('row', { name: /Melati Putri/ })).toHaveTextContent('Belum ada 1:1');
-    expect(within(table).getByRole('row', { name: /Melati Putri/ })).toHaveTextContent('Goal belum diatur');
-    expect(within(table).getByRole('row', { name: /Dimas Aditya/ })).toHaveTextContent('Sesuai target');
-    const tono = within(table).getByRole('row', { name: /Tono Saputra/ });
-    expect(tono).toHaveTextContent('Hari ini');
-    expect(tono).toHaveTextContent('Perlu perhatian');
-    expect(screen.getByText('Coaching Anda sendiri')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Catatan coaching saya' })).toHaveAttribute('href', '/coaching/me');
-    noEnglishLeft();
-  });
-
-  it('P18.98-T4 AC-1 a phone’s cards: the groups, each unit named for its head, by whom', async () => {
-    vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
-      media: query, matches: query === PHONE_QUERY, addEventListener: vi.fn(), removeEventListener: vi.fn(),
-    })));
-    stubFetch({ ...SHELL, '/coaching/coachees': { body: ROSTER } });
-    inIndonesian(<CoachingRosterPage />);
-    const direct = await screen.findByRole('list', { name: 'Agen langsung Anda' });
-    expect(within(direct).getAllByRole('listitem')[0]).toHaveTextContent('oleh Agus Santoso');
-    expect(within(direct).getAllByText('1:1 terakhir')).toHaveLength(2);
+    expect(screen.getByRole('heading', { level: 2, name: 'Semua orang yang Anda coaching' })).toBeInTheDocument();
+    expect(screen.getByText('Terakhir di-coaching oleh').parentElement).toHaveTextContent('Nama1:1 terakhirTerakhir di-coaching olehStatus');
+    expect(screen.getByRole('heading', { level: 3, name: /Agen langsung Anda/ })).toHaveTextContent('Agen langsung Anda· 2');
+    expect(screen.getByRole('heading', { level: 3, name: 'Unit AAB' })).toBeInTheDocument();
+    const row = (name: string) => screen.getByRole('link', { name }).closest('[data-person-row]') as HTMLElement;
+    expect(row('Rina Wijaya')).toHaveTextContent('9 hari lalu · terlambat');
+    expect(within(row('Rina Wijaya')).getByText('Perlu dipantau')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Rina Wijaya' })).toHaveAttribute('href', '/coaching/mem-rina/session');
+    const melati = row('Melati Putri').querySelector('[data-roster-line]') as HTMLElement;
+    expect(melati).toHaveTextContent('Belum ada 1:1');
+    expect(melati).toHaveClass('text-signal-grey');
+    expect(row('Melati Putri')).toHaveTextContent('Goal belum diatur');
+    expect(row('Dimas Aditya')).toHaveTextContent('Sesuai target');
+    expect(row('Tono Saputra')).toHaveTextContent('Hari ini');
+    expect(row('Tono Saputra')).toHaveTextContent('Perlu perhatian');
     expect(screen.getByRole('list', { name: 'Unit Dimas Aditya' })).toBeInTheDocument();
+    expect(screen.queryByText('Coaching Anda sendiri')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Catatan coaching saya' })).toHaveAttribute('href', '/coaching/me');
     noEnglishLeft();
   });
 
@@ -256,9 +244,7 @@ const sessionRoutes = (current: unknown, read: unknown = session(), over: Record
   '/summary?for=mem-rina': { body: SUMMARY },
   '/activity/ratios?for=mem-rina': { body: RATIOS },
   '/activity/summary?': { body: WEEK },
-  'outcome=open': leadRows,
-  'outcome=won': leadRows,
-  'outcome=lost': leadRows,
+  'GET /leads?owner=mem-rina': leadRows,
   ...over,
 });
 
@@ -269,63 +255,58 @@ const openSession = () => {
 const card = (name: string | RegExp) => screen.findByRole('region', { name });
 
 describe('P18.98-T4 a person and their session in Indonesian', () => {
-  it('P18.98-T4 AC-1, AC-2 the person shell: the line under the name, the view switch, the tabs kept, the way back', async () => {
+  it('P18.98-T4 AC-1, AC-2, UI-029, UI-041 the person shell: the line under the name, no view switch, the tabs kept, the way back', async () => {
     stubFetch(sessionRoutes(null));
     openSession();
     expect(await screen.findByRole('heading', { level: 1, name: 'Rina Wijaya' })).toBeInTheDocument();
     expect(screen.getByText('Agent · Unit langsung')).toBeInTheDocument();
-    const views = screen.getByRole('group', { name: 'Tampilan' });
-    expect(within(views).getAllByRole('button').map((b) => b.textContent)).toEqual(['Tampilan leader', 'Tampilan Agent']);
+    expect(screen.queryByRole('group', { name: 'Tampilan' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Tampilan leader|Tampilan Agent/)).not.toBeInTheDocument();
     const tabs = screen.getByRole('navigation', { name: 'Coaching' });
-    expect(within(tabs).getAllByRole('link').map((l) => l.textContent?.replace('🔒', ''))).toEqual([
-      'Personal Summary', 'Goal Setting', 'Activity', 'Training', 'Activation', 'Coaching Session', 'Leader Notes',
+    expect(within(tabs).getAllByRole('link').map((l) => l.textContent)).toEqual([
+      'Coaching Session', 'Activity', 'Leads', 'Goal Setting', 'Personal Summary', 'Activation', 'Training', 'Capability mapping',
     ]);
     expect(screen.getByRole('link', { name: '← Kembali ke Coaching Session' })).toHaveAttribute('href', '/coaching');
   });
 
-  it('P18.98-T4 AC-1 before it starts: the header, its tag, the past sessions and ▶ Start coaching session', async () => {
+  it('P18.98-T4 AC-1, UI-032 before it starts: the card, its tag, the past sessions as rows and Mulai sesi coaching', async () => {
     stubFetch(sessionRoutes(null));
     openSession();
-    await userEvent.click(await screen.findByRole('button', { name: 'Lihat sesi sebelumnya' }));
-    expect(screen.getByRole('button', { name: 'Sembunyikan sesi sebelumnya' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /24 Sep 2026 — 3 tindakan · 1 selesai/ })).toHaveTextContent('Lihat →');
-    expect(screen.getByText('Belum dimulai')).toBeInTheDocument();
-    expect(screen.getByText((_, el) => el?.tagName === 'P' && el.textContent?.startsWith('Sesi hari ini — Jumat, 2 Okt 2026') === true))
-      .toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Mulai sesi coaching' })).toBeInTheDocument();
-    expect(screen.getByText('Membuka item minggu lalu, goals, leads, dan semua hal lain untuk 1-on-1 hari ini.')).toBeInTheDocument();
+    const start = await screen.findByRole('button', { name: 'Mulai sesi coaching' });
+    const card0 = document.querySelector('[data-session-card="session"]') as HTMLElement;
+    expect(card0).toContainElement(start);
+    expect(within(card0).getByRole('heading', { level: 2 })).toHaveTextContent(/^Sesi hari ini ?Jumat, 2 Okt 2026$/);
+    expect(within(card0).getByText('Belum dimulai')).toBeInTheDocument();
+    expect(within(card0).getByRole('link', { name: '24 Sep 2026 · 3 tindakan · 1 selesai' })).toHaveAttribute('href', '/coaching/mem-rina/archive/s-0924');
+    expect(screen.queryByText(/Membuka item minggu lalu/)).not.toBeInTheDocument();
     noEnglishLeft();
   });
 
-  it('P18.98-T4 AC-1 to AC-4 a draft: every card’s words Indonesian, the kept terms English, what was typed as typed', async () => {
+  it('P18.98-T4 AC-1 to AC-4, UI-061, UI-062 a draft: every card’s words Indonesian, the kept terms English, what was typed as typed', async () => {
     stubFetch(sessionRoutes({ sessionId: 's-1', status: 'draft' }));
     openSession();
     const lastWeek = await card('Tindakan minggu lalu');
     expect(lastWeek).toHaveTextContent('Dari sesi 24 Sep');
-    expect(within(lastWeek).getByText('Leads · Alvin Sanjaya')).toBeInTheDocument();
+    expect(within(lastWeek).getByText('Alvin Sanjaya')).toBeInTheDocument();
     expect(within(lastWeek).getByText('Confirm submission paperwork with Bp. Andi')).toBeInTheDocument();
-    expect(within(lastWeek).getAllByLabelText(/^Tanggal, /)).toHaveLength(2);
+    expect(within(lastWeek).getAllByLabelText(/^Ubah tanggal: /)).toHaveLength(2);
     expect(screen.getByText('Draf')).toBeInTheDocument();
 
     const goal = await card('Goal');
     await within(goal).findByText(/Rp 65,6 jt/);
-    expect(goal).toHaveTextContent('Sisa Rp 14,4 jt untuk bulan ini.');
-    expect(goal).toHaveTextContent('Sisa Rp 340 jt untuk tahun ini.');
+    expect(goal).toHaveTextContent('Bulan ini');
+    expect(goal).toHaveTextContent('Tahun ini');
     expect(within(goal).getByText('Ketuk target tahun ini untuk mengubah')).toBeInTheDocument();
     expect(within(goal).getByRole('progressbar', { name: 'Target bulan ini' })).toBeInTheDocument();
 
-    const ratios = await card(/^Ratios/);
-    expect(ratios).toHaveTextContent('30 hari terakhir');
-    expect(await within(ratios).findByText('Benchmark: 15%')).toBeInTheDocument();
-    expect(within(ratios).getByText('Benchmark: 35%–65% untuk tiap sisi')).toBeInTheDocument();
-    // A section's name is the office's, as typed.
-    expect(within(ratios).getByText('70,0% Selling · 30,0% Recruitment')).toBeInTheDocument();
+    const ratios = await card('Ratio · 30 hari terakhir');
+    expect(await within(ratios).findByText('Target 15%')).toBeInTheDocument();
 
-    const activity = await card(/^Aktivitas/);
-    expect(within(activity).getByRole('button', { name: '→ lihat dashboard lengkap' })).toBeInTheDocument();
-    expect(activity).toHaveTextContent('7 hari terakhir');
+    const activity = await card('Aktivitas');
+    expect(within(activity).getByRole('button', { name: '7 hari terakhir' })).toBeInTheDocument();
     await within(activity).findByText('Set appointment');
-    expect(activity).toHaveTextContent('14 / 16 prorata');
+    expect(activity).toHaveTextContent('14 / 16');
+    expect(activity).toHaveTextContent('16 prorata');
     expect(within(activity).getByText('Belum ada target')).toBeInTheDocument();
     expect(within(activity).getByRole('progressbar', { name: 'Set appointment terhadap target prorata' }))
       .toHaveAttribute('aria-valuetext', '14 dari 16');
@@ -336,25 +317,24 @@ describe('P18.98-T4 a person and their session in Indonesian', () => {
     expect(within(tips).getByRole('button', { name: 'Hapus tips 1' })).toBeInTheDocument();
 
     const next = await card('Tindakan berikutnya');
-    expect(within(next).getByText('Dari leads (otomatis)')).toBeInTheDocument();
+    expect(within(next).getByRole('heading', { name: /Dari leads$/ })).toBeInTheDocument();
+    expect(next).not.toHaveTextContent('(otomatis)');
     expect(within(next).getByText('Collect the signed SPAJ')).toBeInTheDocument();
     expect(within(next).getByText('Lakukan follow up dengan Hana Permata')).toBeInTheDocument();
-    expect(within(next).getByText('Tindakan lainnya')).toBeInTheDocument();
+    expect(within(next).getByRole('heading', { name: 'Lainnya' })).toBeInTheDocument();
     expect(within(next).getByLabelText('Tindakan 1')).toHaveAttribute('placeholder', 'Apa yang perlu dilakukan…');
-    expect(within(next).getByLabelText('Tanggal, tindakan 1')).toBeInTheDocument();
     expect(within(next).getByRole('button', { name: 'Tambah tindakan' })).toBeInTheDocument();
 
     expect(screen.getByRole('button', { name: 'Finalkan sesi ini' })).toBeInTheDocument();
-    expect(screen.getByText('Coaching baru dihitung selesai setelah difinalkan. Sampai saat itu, Anda masih bisa mengubah semuanya.'))
-      .toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'Leads' })).toBeInTheDocument();
+    expect(document.querySelector('[data-finalize-bar="draft"]')).toHaveTextContent(/^Draf · \d+ tindakan/);
+    expect(screen.getByRole('region', { name: /^Leads/ })).toBeInTheDocument();
     noEnglishLeft();
   });
 
   it('P18.98-T4 AC-1 the Activity drill: its dialog and its table', async () => {
     stubFetch(sessionRoutes({ sessionId: 's-1', status: 'draft' }));
     openSession();
-    const drill = await screen.findByRole('button', { name: '→ lihat dashboard lengkap' });
+    const drill = await screen.findByRole('button', { name: '7 hari terakhir' });
     await waitFor(() => expect(drill).toBeEnabled());
     await userEvent.click(drill);
     const dialog = await screen.findByRole('dialog', { name: 'Rina Wijaya — Activity Dashboard' });
@@ -376,12 +356,33 @@ describe('P18.98-T4 a person and their session in Indonesian', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Setiap tindakan perlu tanggal sebelum memfinalkan.');
   });
 
+  it('UI-060, UI-062 the new words in Indonesian: the count above Finalkan, Tampilkan semua, Ditutup, the action row’s Pilih tanggal', async () => {
+    const many = Array.from({ length: 6 }, (_, i) => ({
+      id: `l-${i}`, ownerMembershipId: 'mem-rina', type: 'sales', name: `Lead ${i}`, contact: { phone: null, email: null },
+      statusCode: null, thisMonth: false, remarks: null, nextActionDate: `2026-10-1${i}`, nextActionNote: 'Telepon',
+      outcome: null, source: null, dateRegistered: null, version: 1, flags: [], overdueDays: null, committedMonths: [], lastEditedBy: null,
+    }));
+    stubFetch(sessionRoutes({ sessionId: 's-1', status: 'draft' }, session({ actionItems: [{ itemId: 'a-1', text: 'Tanpa tanggal', dueDate: null }] }), {
+      'GET /leads?owner=mem-rina': { body: { rows: many, total: 6, page: 1, pageSize: 200 } },
+      'POST /coaching/sessions/s-1/finalize': {
+        status: 422,
+        body: { error: { code: 'COACHING_SESSION_INCOMPLETE', message: 'Incomplete.', requestId: 'r-1', details: { rule: 'UNDATED_ACTION_ITEM', count: 1, itemIds: ['a-1'] } } },
+      },
+    }));
+    openSession();
+    expect(await screen.findByRole('button', { name: 'Tampilkan semua (6)' })).toBeInTheDocument();
+    expect(document.querySelector('[data-closed-line]')).toHaveTextContent('Ditutup: Berhasil 0 · Tidak berhasil 0');
+    await userEvent.click(screen.getByRole('button', { name: 'Finalkan sesi ini' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Setiap tindakan perlu tanggal sebelum memfinalkan. (1)');
+    expect(document.querySelector('[data-action-row][data-invalid]')).toHaveTextContent('Pilih tanggal');
+  });
+
   it('P18.98-T4 AC-1 finalized: the badge, Edit again and its question, Download as PDF', async () => {
     stubFetch(sessionRoutes({ sessionId: 's-1', status: 'finalized' }, finalized()));
     openSession();
-    expect(await screen.findByText('✓ Difinalkan Jumat, 2 Okt 2026')).toBeInTheDocument();
+    expect(await screen.findByText('Difinalkan 2 Okt')).toBeInTheDocument();
     expect(screen.getByText('Final')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Unduh sebagai PDF' })).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Unduh sebagai PDF' }).length).toBeGreaterThan(0);
     await userEvent.click(screen.getByRole('button', { name: 'Ubah lagi' }));
     const dialog = await screen.findByRole('dialog', { name: 'Ubah sesi ini lagi?' });
     expect(dialog).toHaveTextContent(
@@ -495,7 +496,7 @@ describe('P18.98-T4 the record in Indonesian', () => {
     expect(within(earlier).getByRole('button', { name: 'Sembunyikan yang disepakati' })).toBeInTheDocument();
     expect(within(earlier).getAllByText('Tidak ada tips yang ditambahkan di sesi ini.')).toHaveLength(1);
     expect(screen.getByRole('region', { name: 'Goal' })).toHaveTextContent('Sisa Rp 14,4 jt untuk bulan ini.');
-    expect(screen.getByRole('region', { name: /^Ratios/ })).toHaveTextContent('Belum ada ratio untuk perannya.');
+    expect(screen.getByRole('region', { name: /^Rasio/ })).toHaveTextContent('Belum ada ratio untuk perannya.');
     noEnglishLeft();
   });
 
@@ -532,7 +533,7 @@ describe('P18.98-T4 the record in Indonesian', () => {
     expect(screen.getByRole('link', { name: /2 tindakan · 1 selesai Di-coaching oleh Wilson Tanoto/ })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 3, name: 'Sesi yang Anda pimpin' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Bayu Pratama · 1 tindakan · 1 selesai Lihat →/ })).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: /^Ratios/ })).toHaveTextContent('Belum ada ratio untuk peran Anda.');
+    expect(screen.getByRole('region', { name: /^Rasio/ })).toHaveTextContent('Belum ada ratio untuk peran Anda.');
     noEnglishLeft();
   });
 
@@ -584,15 +585,20 @@ describe('P18.98-T4 Leader Notes in Indonesian', () => {
     });
     inIndonesian(<CoachingPersonLayout params={routeParams({ membershipId: 'mem-rina' })}><CoacheeLeaderNotesTab /></CoachingPersonLayout>);
 
+    // UI V1 (UI-035, UI-038): the tile shows the current stage only — the office's label, as typed — with the pill and
+    // the tile's button in Indonesian, *Capability mapping* kept, no *Saat ini:* pill; the privacy line is the ⓘ.
     const mapping = await card('Capability mapping');
-    // The stage is the office's label, as typed; the words around it Indonesian.
-    expect(mapping).toHaveTextContent('Saat ini: Independent Producer');
+    expect(within(mapping).getByText('Independent Producer')).toBeInTheDocument();
     expect(within(mapping).getByText('Tahap saat ini')).toBeInTheDocument();
-    expect(within(mapping).getByText('Diarsipkan')).toBeInTheDocument();
-    const tracker = await card('Pelacak skill');
+    expect(mapping.textContent).not.toMatch(/Saat ini:/);
+    const ladder = within(mapping).getByRole('button', { name: 'Capability mapping: Independent Producer. Tampilkan semua tahap.' });
+    expect(within(mapping).getByRole('button', { name: 'Khusus leader, tidak pernah ditampilkan kepada Rina Wijaya' })).toBeInTheDocument();
+    // *Skill tracker* kept English (UI-006, UI-036); its reason Indonesian.
+    const tracker = await card('Skill tracker');
     expect(tracker).toHaveTextContent('Tidak berlaku — dia belum punya agen di bawahnya.');
+    expect(screen.queryByText('Pelacak skill')).not.toBeInTheDocument();
     const notes = await card(/^Catatan pribadi$/);
-    expect(notes).toHaveTextContent('Khusus leader, tidak pernah ditampilkan kepada Rina Wijaya');
+    expect(notes.textContent).not.toMatch(/Khusus leader/);
     expect(within(notes).getByRole('textbox')).toHaveValue('Strong closer.');
     const other = await card('Catatan pribadi dari Sari Wulandari');
     expect(other).toHaveTextContent('Dari Sari Wulandari');
@@ -602,6 +608,13 @@ describe('P18.98-T4 Leader Notes in Indonesian', () => {
     await userEvent.click(within(notes).getByRole('button', { name: 'Simpan catatan' }));
     expect(await screen.findByText('Catatan pribadi tersimpan.')).toBeInTheDocument();
     expect(calls.some((c) => c.init.method === 'PUT')).toBe(true);
+
+    // The ladder the tile opens (UI-035): the current stage's pill, and a ticked milestone the office archived, marked.
+    await userEvent.click(ladder);
+    const sheet = await screen.findByRole('dialog', { name: 'Capability mapping' });
+    expect(within(sheet).getByText('Tahap saat ini')).toBeInTheDocument();
+    expect(within(sheet).getByRole('checkbox', { name: 'Sells outside direct network Diarsipkan' })).toBeChecked();
+    noEnglishLeft();
   });
 });
 
@@ -610,20 +623,31 @@ describe('P18.98-T4 Leader Notes in Indonesian', () => {
  */
 
 describe('P18.98-T4 the coaching Activation tab in Indonesian', () => {
-  const ACTIVATION_ENGLISH = englishOnly(activationMessages);
+  // UI V1 (UI-029): the tab is the coachee's own new-hire detail, so its words are the activation's, New Hires' and the
+  // shared ⚡'s.
+  const ACTIVATION_ENGLISH = englishOnly(activationMessages, newHiresMessages, uiV1Messages);
   const noActivationEnglishLeft = () => expect(englishShown(document.body, ACTIVATION_ENGLISH)).toEqual([]);
-  const row = (code: string) => document.querySelector(`li[data-code="${code}"]`) as HTMLElement;
+  const row = (code: string) => document.querySelector(`[data-code="${code}"]`) as HTMLElement;
 
-  it('P18.98-T4 AC-1 to AC-4 a coachee’s: the card kept, its percentage, each item’s state, the items as typed', async () => {
+  it('P18.98-T4 AC-1 to AC-4, UI-029 a coachee’s: their new-hire detail, *activation* kept, its percentage, each item’s state, the items as typed', async () => {
     nav.pathname = '/coaching/mem-rina/activation';
     stubFetch({ ...SHELL, '/coaching/coachees/': { body: RINA }, 'GET /new-hires/mem-rina': { body: leaderView() } });
     inIndonesian(<CoachingPersonLayout params={routeParams({ membershipId: 'mem-rina' })}><CoacheeActivationTab /></CoachingPersonLayout>);
-    const record = await card('90-Day Activation');
-    expect(within(record).getByText('31% selesai')).toBeInTheDocument();
-    expect(within(record).getByRole('progressbar')).toHaveAttribute('aria-valuetext', '31% selesai');
-    expect(row('FIRST_CASE_CLOSED')).toHaveTextContent(/^Close first case independently✓ Selesai · New Active Agent$/);
-    expect(row('INSURANCE_BASICS')).toHaveTextContent(/^Learn insurance basics✓ Selesai$/);
-    expect(row('CRM_SETUP')).toHaveTextContent(/^Set up company CRM systemBelum selesai$/);
+    expect(await screen.findByRole('heading', { level: 2, name: 'Progres activation' })).toBeInTheDocument();
+    expect(screen.getByText('31% selesai')).toBeInTheDocument();
+    expect(screen.getByRole('progressbar', { name: 'Progres activation' })).toHaveAttribute('aria-valuetext', '31% selesai');
+    // Ticked by hand: its box, and who ticked it when, in Indonesian; the office's label as typed.
+    expect(within(row('INSURANCE_BASICS')).getByRole('checkbox', { name: 'Learn insurance basics' })).toBeChecked();
+    expect(within(row('INSURANCE_BASICS')).getByRole('button', { name: 'Dicentang oleh Rina Wijaya · 10 Agu 2026' })).toBeInTheDocument();
+    // Not done: an empty box and nothing else.
+    expect(within(row('CRM_SETUP')).getByRole('checkbox', { name: 'Set up company CRM system' })).not.toBeChecked();
+    expect(row('CRM_SETUP')).toHaveTextContent(/^Set up company CRM system$/);
+    // Completed by the sales data: ✓, the ⚡ named *Otomatis*, and its rule and source behind the ⓘ, in Indonesian.
+    const firstSale = row('FIRST_CASE_CLOSED');
+    expect(firstSale).toHaveTextContent(/^✓Close first case independently/);
+    expect(within(firstSale).getByText('Otomatis')).toBeInTheDocument();
+    expect(within(firstSale).getByRole('button', { name: 'Kenapa Close first case independently otomatis' }))
+      .toHaveAccessibleDescription(/^Selesai saat .+\. Diselesaikan dari Sales data · 20 Sep 2026$/);
     noActivationEnglishLeft();
     noEnglishLeft();
   });

@@ -69,22 +69,24 @@ describe('/coaching/[membershipId]/training, a coachee’s Training tab (P18.5-T
     expect(screen.getByText('(4/10)').className).toContain('text-muted');
   });
 
-  it('P18.5-T4 AC-2 draws the skill cards numbered from 1 again in each category, with the five columns', async () => {
+  it('P18.5-T4 AC-2, UI-066 draws the skills numbered from 1 again in each category, with done/total and Module · Format · Status', async () => {
     const product = category('PRODUCT', 'Product', [skill('PRODUCT_KNOWLEDGE', 'Product Knowledge', [row('WHOLE_LIFE', 'Whole Life vs Term Life')])]);
     show({ 'GET /training/progress': { body: progressView([SALES, product]) } });
     await sales();
     const product3 = screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent);
-    expect(product3).toEqual(['1Prospecting', '2Needs Analysis', '3Objection Handling', '4Closing', '5Cross-sell', '6Retention', '1Product Knowledge']);
-    const table = screen.getByRole('table', { name: 'Product Knowledge modules' });
-    expect(within(table).getAllByRole('columnheader').map((c) => c.textContent)).toEqual(['No.', 'Skill', 'Module', 'Format', 'Status']);
+    expect(product3).toEqual([
+      '1Prospecting3/3', '2Needs Analysis1/2', '3Objection Handling0/2', '4Closing0/1', '5Cross-sell0/1', '6Retention0/1', '1Product Knowledge0/1',
+    ]);
+    const card = screen.getByRole('list', { name: 'Product Knowledge modules' }).closest('[data-skill]')!;
+    expect(card.querySelector('div[aria-hidden="true"]')!.textContent).toBe('ModuleFormatStatus');
   });
 
   it('P18.5-T4 AC-2 is read-only: no link in any row and no status control (contradiction 13)', async () => {
     show();
     await sales();
-    for (const table of screen.getAllByRole('table')) expect(within(table).queryAllByRole('link')).toEqual([]);
+    for (const list of screen.getAllByRole('list', { name: / modules$/ })) expect(within(list).queryAllByRole('link')).toEqual([]);
     expect(screen.queryByRole('group', { name: 'Status' })).not.toBeInTheDocument();
-    expect(screen.getByRole('rowheader', { name: 'Asking the Right Discovery Questions' })).toBeInTheDocument();
+    expect(screen.getByText('Asking the Right Discovery Questions')).toBeInTheDocument();
   });
 
   it('P18.5-T4 AC-2, D-history keeps a module done and since withdrawn under its skill: Done, then Archived, outside the count', async () => {
@@ -95,12 +97,12 @@ describe('/coaching/[membershipId]/training, a coachee’s Training tab (P18.5-T
     const sales9 = category('SALES', 'Sales', [skill('CLOSING', 'Closing', [row('CLOSING_TECHNIQUES', 'Closing Techniques That Work')]), retention]);
     show({ 'GET /training/progress': { body: progressView([sales9]) } });
     expect(await screen.findByRole('heading', { level: 2, name: 'Sales (0/1)' })).toBeInTheDocument();
-    const archived = within(screen.getByRole('table', { name: 'Retention modules' })).getAllByRole('row')[1];
-    expect(within(archived).getByRole('rowheader')).toHaveTextContent('Client Retention Best Practices');
-    expect(within(archived).getAllByRole('cell')[3]).toHaveTextContent(/^DoneArchived$/);
+    const archived = within(screen.getByRole('list', { name: 'Retention modules' })).getByRole('listitem');
+    // The module, its Format, its pill and *Archived* after it — no › and no link (UI-066).
+    expect(archived).toHaveTextContent(/^Client Retention Best PracticesFileDoneArchived$/);
     // A withdrawn module's Format is its own kinds of material, served on the history row — never “No material yet”.
-    expect(within(archived).getAllByRole('cell')[2]).toHaveTextContent('File');
-    expect(within(archived).getAllByRole('cell')[2]).not.toHaveTextContent(/No material yet/);
+    expect(archived).not.toHaveTextContent(/No material yet/);
+    expect(within(archived).queryByRole('link')).not.toBeInTheDocument();
   });
 
   it('P18.5-T4 AC-2 draws the empty state for an office with no category', async () => {

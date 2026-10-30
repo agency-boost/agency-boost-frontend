@@ -317,9 +317,12 @@ function PageHeaderInShell() {
   );
 }
 
-/** The three shells, each as its reader meets it: the field's, the office's and the platform's. */
+/**
+ * The two consoles, each as its reader meets it: the office's and the platform's. *Changed 2026-10-30 (UI V1, ADR-0180):*
+ * the field shell has no bar on a phone or a tablet; its switch is the *Lainnya* sheet's there (the next case) and the
+ * page header's from 1024px.
+ */
 const SHELLS: [string, () => React.ReactElement, Partial<Me>][] = [
-  ['the field shell', () => <AgentShell title="Log Activity">body</AgentShell>, {}],
   ['the office console', () => <TenantShell title="Overview">body</TenantShell>, {
     membership: {
       membershipId: 'mem-1', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab', status: 'active',
@@ -331,6 +334,28 @@ const SHELLS: [string, () => React.ReactElement, Partial<Me>][] = [
     user: { ...makeMe().user, platformRole: 'super_admin' }, membership: null, permissions: ['kpm:list_all'],
   }],
 ];
+
+describe('ADR-0180 the field shell’s switch: in the Lainnya sheet below 1024px, in the page header from 1024px', () => {
+  it.each([375, 768])('UI-004 at %ipx is in no page header and no bar, and in the sheet the bar’s Lainnya opens', async (px) => {
+    stubFetch({});
+    atWidth(px);
+    renderLive(<AgentShell title="Log Activity">body</AgentShell>, { me: makeMe() });
+    expect(switchesIn(main())).toHaveLength(0);
+    expect(document.querySelector('aside')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Lainnya' }));
+    const sheet = await screen.findByRole('dialog', { name: 'Lainnya' });
+    expect(switchesIn(sheet)).toHaveLength(1);
+  });
+
+  it('ADR-0180 at 1280px is the page header’s top-right corner, as before', () => {
+    stubFetch({});
+    atWidth(1280);
+    renderLive(<AgentShell title="Log Activity">body</AgentShell>, { me: makeMe() });
+    const [inHeader] = switchesIn(main());
+    expect(inHeader).toBeDefined();
+    expect(inHeader.parentElement!.lastElementChild).toBe(inHeader);
+  });
+});
 
 describe('P18.98-T2 the switch, live, in each of the three shells', () => {
   it.each(SHELLS)('AC-3 is in %s’s phone bar at 375px, and its page header at 1280px', (_, page, who) => {

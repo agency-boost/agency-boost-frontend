@@ -1055,7 +1055,8 @@ describe('a company’s Company template (P4-T8)', () => {
     };
     const openImport = async () => {
       await userEvent.click(await screen.findByRole('button', { name: 'Import from another company' }));
-      return screen.getByRole('dialog', { name: 'Import from another company' });
+      // Its module is fetched on the first opening (P18.99-T16).
+      return screen.findByRole('dialog', { name: 'Import from another company' });
     };
 
     it('AC-1: New template copies the template shown, as Copy of {name}', async () => {

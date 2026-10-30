@@ -3,13 +3,12 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AgentLayout from '@/app/(agent)/layout';
 import MyCoachingTrainingPage from '@/app/(agent)/coaching/me/training/page';
-import { InLanguage, renderWithSession, routeParams, stubFetch, type StubReply } from '@test/harness';
+import { atWidth, InLanguage, renderWithSession, routeParams, stubFetch, type StubReply } from '@test/harness';
 import { englishOnly, englishShown } from '@test/english-left';
 import {
   category, LEARNER, modulePage, NOT_FOUND, progressView, SALES, SHELL_STUBS, skill, SUPPORT,
 } from '@test/training-fixtures';
 import { trainingMessages } from '@/i18n/messages/training';
-import { PHONE_QUERY } from '@/lib/use-phone';
 import type { Me } from '@/lib/session';
 import TrainingLayout from './layout';
 import TrainingPage from './page';
@@ -67,22 +66,21 @@ describe('P18.98-T4 Training in Indonesian', () => {
     vi.restoreAllMocks();
   });
 
-  it('AC-2 the list: Daftar skill, the columns, the pills and the chips in Indonesian, the title kept English', async () => {
+  it('AC-2, UI-006, UI-066 the list: the columns, the pills and the formats in Indonesian, the title and Module kept English', async () => {
     list();
     await title();
     expect(screen.getByRole('navigation', { name: 'Training' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { level: 2, name: 'Daftar skill' })).toBeInTheDocument();
-    const prospecting = screen.getByRole('table', { name: 'Modul Prospecting' });
-    expect(within(prospecting).getAllByRole('columnheader').map((c) => c.textContent))
-      .toEqual(['No.', 'Skill', 'Module', 'Format', 'Status']);
-    const needs = screen.getByRole('table', { name: 'Modul Needs Analysis' });
+    expect(screen.queryByRole('heading', { name: 'Daftar skill' })).not.toBeInTheDocument();
+    const prospecting = screen.getByRole('list', { name: 'Modul Prospecting' });
+    expect(prospecting.closest('[data-skill]')!.querySelector('div[aria-hidden="true"]')!.textContent).toBe('ModuleFormatStatus');
+    const needs = screen.getByRole('list', { name: 'Modul Needs Analysis' });
     expect(within(needs).getByText('Selesai')).toBeInTheDocument();
     expect(within(needs).getByText('Berjalan')).toBeInTheDocument();
-    expect(within(screen.getByRole('table', { name: 'Modul Closing' })).getByText('Belum dimulai')).toBeInTheDocument();
-    const closing = within(screen.getByRole('table', { name: 'Modul Closing' })).getAllByRole('row')[1];
-    expect(within(closing).getAllByRole('cell')[2].textContent).toBe('FileTautan');
-    const retention = within(screen.getByRole('table', { name: 'Modul Retention' })).getAllByRole('row')[1];
-    expect(within(within(retention).getAllByRole('cell')[2]).getByText('Belum ada materi')).toHaveClass('sr-only');
+    const closing = screen.getByRole('list', { name: 'Modul Closing' });
+    expect(within(closing).getByText('Belum dimulai')).toBeInTheDocument();
+    expect(within(closing).getByRole('link').textContent).toContain('FileTautan');
+    const retention = screen.getByRole('list', { name: 'Modul Retention' });
+    expect(within(retention).getByText('Belum ada materi')).toHaveClass('sr-only');
     noEnglishLeft();
   });
 
@@ -92,7 +90,7 @@ describe('P18.98-T4 Training in Indonesian', () => {
     expect(screen.getByText('Structured modules — tracked here.')).toBeInTheDocument();
     expect(within(screen.getByRole('navigation', { name: 'Training' })).getAllByRole('link').map((a) => a.textContent))
       .toEqual(['Sales', 'Product']);
-    expect(screen.getByRole('link', { name: 'Building Your Prospect List' })).toHaveAttribute('href', '/training/SALES/PROSPECT_LIST');
+    expect(screen.getByRole('link', { name: /^Building Your Prospect List/ })).toHaveAttribute('href', '/training/SALES/PROSPECT_LIST');
   });
 
   it('AC-1 a category with nothing offered: its card titled Training {label}, and the line in Indonesian', async () => {
@@ -120,33 +118,38 @@ describe('P18.98-T4 Training in Indonesian', () => {
     noEnglishLeft();
   });
 
-  it('AC-1 on a phone, a row per module, its name as typed and its status in Indonesian', async () => {
-    vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
-      media: query, matches: query === PHONE_QUERY, addEventListener: () => {}, removeEventListener: () => {},
-    })));
+  it('AC-1, UI-065 on a phone, one card of rows, each module’s name as typed and its status in Indonesian', async () => {
+    atWidth(375);
     list();
     await title();
-    const rows = within(screen.getByRole('list', { name: 'Modul Needs Analysis' })).getAllByRole('listitem');
-    expect(rows.map((r) => r.lastElementChild!.textContent)).toEqual(['Selesai', 'Berjalan']);
+    const rows = within(screen.getByRole('list', { name: 'Modul Needs Analysis' })).getAllByRole('link');
+    expect(rows.map((r) => r.textContent)).toEqual(['Conducting a Financial Needs AnalysisSelesai', 'Asking the Right Discovery QuestionsBerjalan']);
     noEnglishLeft();
   });
 
-  it('AC-2 a module’s page: its line, the way back, the tiles and the toggle in Indonesian, its title and items as typed', async () => {
+  it('AC-2, UI-067 to UI-069 a module’s page: the way back, the lesson card and the status in Indonesian, its title and items as typed', async () => {
     modulePageAt();
     await screen.findByRole('heading', { level: 1, name: 'Closing Techniques That Work' });
-    expect(screen.getByText('Modul pelatihan terstruktur.')).toBeInTheDocument();
+    expect(screen.queryByText(/Modul pelatihan terstruktur|Diunggah oleh admin|Sumber eksternal/)).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Kembali ke Training Modules' })).toHaveAttribute('href', '/training/SALES');
     expect(screen.getByText('Skill: Closing')).toBeInTheDocument();
+    expect(screen.getByText('Modul 1 dari 1')).toHaveClass('sr-only');
     const file = screen.getByText('closing-techniques.pdf').closest('li')!;
-    expect(within(file).getByText('Diunggah oleh admin')).toBeInTheDocument();
     expect(within(file).getByRole('button', { name: 'Buka file: closing-techniques.pdf (terbuka di tab baru)' }))
       .toHaveTextContent(/^Buka file$/);
-    expect(within(file).getByRole('img', { name: 'Sudah dibuka' })).toBeInTheDocument();
+    expect(within(file).getByText('Sudah dibuka')).toBeInTheDocument();
     const link = screen.getByText('Closing in practice').closest('li')!;
-    expect(within(link).getByText('Sumber eksternal')).toBeInTheDocument();
     expect(within(link).getByRole('link', { name: 'Buka tautan: Closing in practice (terbuka di tab baru)' })).toBeInTheDocument();
     const group = screen.getByRole('group', { name: 'Status Closing Techniques That Work' });
     expect(within(group).getAllByRole('button').map((b) => b.textContent)).toEqual(['Belum dimulai', 'Berjalan', 'Selesai']);
+    noEnglishLeft();
+  });
+
+  it('UI-067 a video’s play button in Indonesian: Putar video, the app’s own words (O-7)', async () => {
+    modulePageAt({ [PAGE]: { body: modulePage({ items: [{ id: 'it-v', kind: 'video', label: 'closing.mp4', mimeType: 'video/mp4', bytes: 9, url: null }] }) } });
+    await screen.findByRole('heading', { level: 1, name: 'Closing Techniques That Work' });
+    expect(screen.getByRole('button', { name: 'Putar video: closing.mp4' })).toBeInTheDocument();
+    expect(screen.getByText('Video')).toBeInTheDocument();
     noEnglishLeft();
   });
 
@@ -206,7 +209,7 @@ describe('P18.98-T4 Training in Indonesian', () => {
       'GET /training/progress': { body: progressView([sales]) },
     });
     await screen.findByRole('heading', { level: 2, name: 'Sales (3/3)' });
-    const old = screen.getByRole('rowheader', { name: 'The old retention talk' }).closest('tr')!;
+    const old = screen.getByText('The old retention talk').closest('li')!;
     expect(within(old).getByText('Selesai')).toBeInTheDocument();
     expect(within(old).getByText('Diarsipkan')).toBeInTheDocument();
     expect(within(old).getByText('Video')).toBeInTheDocument();
@@ -228,6 +231,6 @@ describe('P18.98-T4 Training in Indonesian', () => {
       { me: LEARNER },
     );
     await title();
-    expect(englishShown(document.body, TRAINING_ENGLISH)).toEqual(expect.arrayContaining(['Skills List', 'In progress', 'Done']));
+    expect(englishShown(document.body, TRAINING_ENGLISH)).toEqual(expect.arrayContaining(['In progress', 'Done']));
   });
 });

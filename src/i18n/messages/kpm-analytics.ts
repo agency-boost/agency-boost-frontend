@@ -34,7 +34,8 @@ const en = {
   title: kept('KPM Analytics'),
   subtitle: 'Unit comparisons, club qualification, and trends',
   tabOverview: kept('Overview'),
-  tabCompliance: kept('Compliance, Events, and Campaigns'),
+  /** UI V1 (UI-109): the second tab is *Compliance*, in both languages (its content keeps Events and Campaigns). */
+  tabCompliance: kept('Compliance'),
   /** *Unit comparison*'s head (`:1246-1251`), its sub-line counting the ABs (contradiction 11). */
   unitComparison: kept('Unit comparison'),
   unitComparisonSub: ({ n }: { n: number }) =>
@@ -107,13 +108,26 @@ const en = {
   /** Under an agency's manpower (`:3240`), and an AAB's own row's agents (`:3357`). */
   manpowerSub: ({ aab, agents }: { aab: number; agents: number }) => `${aab} AAB · ${agents} Agents`,
   agentsSub: ({ agents }: { agents: number }) => `${agents} Agents`,
+  /** UI V1 (UI-109; `kpm-mobile` 2): the phone's Overview in the field shell. */
+  v1: {
+    perAb: `By ${kept('AB')}`,
+    abCount: ({ n }: { n: number }) => `${n} ${kept('AB')}`,
+    months: ({ n }: { n: number }) => `${n} months`,
+    you: 'You',
+    people: ({ n }: { n: number }) => `${n} ${n === 1 ? 'person' : 'people'}`,
+    /** *45% of Rp 1,3 M*: both figures written by the caller. */
+    pctOf: ({ pct, target }: { pct: string; target: string }) => `${pct} of ${target}`,
+    /** A month with no upload: its bar hatched, its value *–*, and this for a screen reader. */
+    noData: 'not uploaded',
+    opens: ({ name }: { name: string }) => `${name}: open their figures`,
+  },
 };
 
 const id: MessagesOf<typeof en> = {
   title: kept('KPM Analytics'),
   subtitle: `Perbandingan ${kept('unit')}, kualifikasi klub, dan tren`,
   tabOverview: kept('Overview'),
-  tabCompliance: kept('Compliance, Events, and Campaigns'),
+  tabCompliance: kept('Compliance'),
   unitComparison: kept('Unit comparison'),
   unitComparisonSub: ({ n }) =>
     `Semua ${n} ${kept('AB')}, tahun ini — ${kept('benchmark')} antarrekan, selalu ditampilkan di tingkat grup`,
@@ -168,6 +182,16 @@ const id: MessagesOf<typeof en> = {
   // A kept noun keeps its English plural (§B.0 rule 8): *1 Agent*, *29 Agents*.
   manpowerSub: ({ aab, agents }) => `${aab} ${kept('AAB')} · ${agents} ${agents === 1 ? kept('Agent') : kept('Agents')}`,
   agentsSub: ({ agents }) => `${agents} ${agents === 1 ? kept('Agent') : kept('Agents')}`,
+  v1: {
+    perAb: `Per ${kept('AB')}`,
+    abCount: ({ n }) => `${n} ${kept('AB')}`,
+    months: ({ n }) => `${n} bulan`,
+    you: 'Anda',
+    people: ({ n }) => `${n} orang`,
+    pctOf: ({ pct, target }) => `${pct} dari ${target}`,
+    noData: 'belum diunggah',
+    opens: ({ name }) => `${name}: buka angkanya`,
+  },
 };
 
 export const kpmAnalyticsMessages = defineMessages({ en, id });

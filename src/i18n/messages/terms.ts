@@ -44,9 +44,10 @@ const en = {
     question: 'What is JFW?',
     definition: 'Joint field work: a visit to a prospect that an agent makes with their leader there too.',
   },
+  // UI V1, UI-106: a logged activity is an *activity* — *aktivitas* — never a *touch* / *sentuhan* (the owner).
   TOUCHES: {
-    question: 'What is a touch?',
-    definition: 'A touch is one logged activity: each one you add on Log Activity counts once.',
+    question: 'What is an activity?',
+    definition: 'One activity is one count you log: each one you add on Log Activity counts once.',
   },
   CI_PREMIUM_WAIVER: {
     question: 'What is a CI premium waiver?',
@@ -108,8 +109,8 @@ const id: MessagesOf<typeof en> = {
     definition: `Joint field work: kunjungan ke prospek yang dilakukan agen bersama ${kept('leader')}-nya.`,
   },
   TOUCHES: {
-    question: 'Apa itu sentuhan?',
-    definition: `Sentuhan adalah satu aktivitas yang tercatat: setiap aktivitas yang Anda tambahkan di ${kept('Log Activity')} dihitung satu kali.`,
+    question: 'Apa itu aktivitas?',
+    definition: `Satu aktivitas adalah satu hitungan yang Anda catat: setiap aktivitas yang Anda tambahkan di ${kept('Log Activity')} dihitung satu kali.`,
   },
   CI_PREMIUM_WAIVER: {
     question: 'Apa itu CI premium waiver?',
@@ -120,8 +121,8 @@ const id: MessagesOf<typeof en> = {
     definition: 'Biaya rumah sakit dibayar sesuai tagihan, hingga batas manfaat polis, bukan dengan jumlah tetap per hari.',
   },
   POTENTIAL_MAA: {
-    question: `Apa itu ${kept('Potential Monthly Active Agent')}?`,
-    definition: `${kept('Potential Monthly Active Agent')} (✓): dari aktivitas bulan ini, berada di jalur untuk mengajukan setidaknya 1 polis bulan ini. Sebuah proyeksi, bukan penjualan.`,
+    question: `Apa itu ${kept('Monthly Active Agent')} potensial?`,
+    definition: `${kept('Monthly Active Agent')} potensial (✓): dari aktivitas bulan ini, berada di jalur untuk mengajukan setidaknya 1 polis bulan ini. Sebuah proyeksi, bukan penjualan.`,
   },
   MOC: {
     question: `Apa itu ${kept('MOC')}?`,

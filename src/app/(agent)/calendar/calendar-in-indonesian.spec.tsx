@@ -3,7 +3,9 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { englishOnly, englishShown } from '@test/english-left';
 import { atWidth, renderInIndonesian, stubFetch, type StubReply } from '@test/harness';
-import { AGUS, DOWNLINE, entry, monthRead, peoplePage, weekRead } from '@test/calendar-fixtures';
+import {
+  agendaRead, AGUS, coachingTask, DOWNLINE, entry, leadTask, monthRead, peoplePage, weekRead,
+} from '@test/calendar-fixtures';
 import { calendarMessages } from '@/i18n/messages/calendar';
 import { limitWords, notesParts, personTag } from '@/lib/calendar';
 import { blankForm, formWords, validateForm, violationsToErrors } from '@/lib/calendar-form';
@@ -25,13 +27,16 @@ vi.mock('next/navigation', () => ({
 
 const WEEK_READ = '/calendar/entries?view=week';
 const MONTH_READ = '/calendar/entries?view=month';
+const AGENDA_READ = '/calendar/entries?view=agenda';
 const SETTINGS = '/calendar/settings';
 const RANGE = '28 Sep – 4 Okt 2026';
 const ENGLISH = englishOnly(calendarMessages);
 const noEnglishLeft = () => expect(englishShown(document.body, ENGLISH)).toEqual([]);
 
 function show(routes: Record<string, StubReply | StubReply[]> = {}) {
-  const stub = stubFetch({ [WEEK_READ]: { body: weekRead() }, [SETTINGS]: { body: { hideDetails: false } }, ...routes });
+  const stub = stubFetch({
+    [WEEK_READ]: { body: weekRead() }, [AGENDA_READ]: { body: agendaRead() }, [SETTINGS]: { body: { hideDetails: false } }, ...routes,
+  });
   renderInIndonesian(<CalendarPage />, { me: AGUS });
   return stub;
 }
@@ -48,7 +53,7 @@ describe('P18.98-T4 the calendar in Indonesian', () => {
     expect(screen.getByRole('button', { name: 'Minggu sebelumnya' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Minggu berikutnya' })).toBeInTheDocument();
     const views = screen.getByRole('group', { name: 'Tampilan' });
-    expect(within(views).getAllByRole('button').map((b) => b.textContent)).toEqual(['Week', 'Month']);
+    expect(within(views).getAllByRole('button').map((b) => b.textContent)).toEqual(['Agenda', '3 Hari', 'Week', 'Month']);
     expect(screen.getByRole('button', { name: '+ Event baru' })).toBeInTheDocument();
     for (const type of ['Rapat internal', 'Coaching 1:1', 'Pertemuan nasabah', 'Tugas', 'Perjalanan']) {
       expect(screen.getAllByText(type).length).toBeGreaterThan(0);
@@ -57,8 +62,12 @@ describe('P18.98-T4 the calendar in Indonesian', () => {
     expect(screen.getByRole('button', { name: 'Perjalanan: Client trip — Surabaya' })).toBeInTheDocument();
     expect(screen.getByText('Melihat:')).toBeInTheDocument();
     expect(screen.getByText('Kalender saya')).toBeInTheDocument();
-    expect(screen.getByRole('switch', { name: 'Sembunyikan aktivitas pribadi saya' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /^Leader yang melihat kalender Anda hanya melihat "Sibuk"/ })).toBeInTheDocument();
+    // UI-104: the *Jenis* chips in place of the legend, and no switch — it lives on Profil saya now.
+    const chips = screen.getByRole('group', { name: 'Jenis' });
+    expect(within(chips).getAllByRole('button').map((b) => b.textContent))
+      .toEqual(['Rapat internal', 'Coaching 1:1', 'Pertemuan nasabah', 'Tugas', 'Perjalanan', 'Event']);
+    expect(screen.queryByRole('switch')).not.toBeInTheDocument();
+    expect(document.querySelector('[data-task-row]')).toHaveTextContent('Tugas');
     noEnglishLeft();
   });
 
@@ -88,10 +97,23 @@ describe('P18.98-T4 the calendar in Indonesian', () => {
     show();
     const region = await screen.findByRole('region', { name: `Kalender, ${RANGE}` });
     expect(within(screen.getByRole('combobox', { name: 'Tampilan' })).getAllByRole('option').map((o) => o.textContent))
-      .toEqual(['Agenda', 'Week', 'Month']);
+      .toEqual(['Agenda', '3 Hari', 'Week', 'Month']);
     expect(screen.getByRole('button', { name: 'Filter' })).toHaveAttribute('aria-expanded', 'false');
-    expect(within(region).getByRole('heading', { level: 2, name: 'Senin, 28 Sep 2026' })).toBeInTheDocument();
+    expect(within(region).getByRole('heading', { level: 2, name: 'Senin, 28 Sep 2026 · Hari ini' })).toBeInTheDocument();
     expect(within(region).getAllByText('Tidak ada event').length).toBeGreaterThan(0);
+    noEnglishLeft();
+  });
+
+  it('UI-104 the Agenda’s Tugas in Indonesian: Tugas · n, Dari: NAME, Selesai and the trip’s Hari x/y', async () => {
+    atWidth(375);
+    show({ [AGENDA_READ]: { body: agendaRead({ tasks: [coachingTask(), leadTask()] }) } });
+    const region = await screen.findByRole('region', { name: `Kalender, ${RANGE}` });
+    const list = within(region).getByRole('region', { name: 'Tugas' });
+    expect(within(list).getByText('Tugas · 2')).toBeInTheDocument();
+    expect(within(list).getByText('Dari: WILSON TANOTO')).toBeInTheDocument();
+    expect(within(list).getByRole('checkbox', { name: 'Selesai: Dari: Wilson Tanoto' })).toBeInTheDocument();
+    expect(within(list).getByRole('button', { name: 'Buka Ibu Wiwik Setyaningsih' })).toBeInTheDocument();
+    expect(within(region).getAllByText('Hari 1/2').length).toBeGreaterThan(0);
     noEnglishLeft();
   });
 

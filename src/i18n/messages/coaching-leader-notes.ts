@@ -8,8 +8,9 @@ import { kept } from '@/i18n/kept';
  *
  * **English is the source**: the prototype's words (`Overall.html:4344-4382`, `:11189-11282`) and ours (L-01). The
  * Indonesian is the approved glossary's (OD-237; §B.0), with the settings' own words for the same things —
- * *tahap* for a stage, *grid skill*, *Diarsipkan* (§B.3) — and *Pelacak skill* and *Catatan pribadi* for approval in
- * §B.10. **Kept** (§A): *Capability mapping*, the module's name as §A.1's *Capability Mapping* (its sentence-case card
+ * *tahap* for a stage, *grid skill*, *Diarsipkan* (§B.3) — and *Catatan pribadi* for approval in §B.10. **UI V1
+ * (Phase 18.99 T10):** *Skill tracker* kept English at every size (UI-006, UI-036; was *Pelacak skill*), *Tidak berlaku*
+ * the report's (UI-036), and the tile's button name proposed in §B.10 (*UI V1, Phase 18.99 T10*). **Kept** (§A): *Capability mapping*, the module's name as §A.1's *Capability Mapping* (its sentence-case card
  * title, for approval), *leader*, *skill*; *office* is *KPM* (§B.9) in the one sentence that says it. **Content stays as
  * typed** (ADR-0179 §5): a stage's, a milestone's, a grid's and an item's label, a note, an author's name.
  *
@@ -23,8 +24,12 @@ const en = {
   noStages: 'Your office has not set up its capability stages yet.',
   currentStage: 'Current stage',
   loading: 'Loading the capability mapping…',
-  /** *Skill tracker* (`Overall.html:4362-4376`). */
-  tracker: 'Skill tracker',
+  /** The tile's button (UI-035), named by the stage it shows: the whole tile opens the ladder. */
+  openLadder: ({ stage }: { stage: string }) => `Capability mapping: ${stage}. Show every stage.`,
+  /** *Skill tracker* (`Overall.html:4362-4376`): kept English in both languages since UI V1 (UI-006, UI-036). */
+  tracker: kept('Skill tracker'),
+  /** A section that does not apply to this coachee, as its grey pill says (UI-036). */
+  notApplicable: 'Not applicable',
   noGrids: 'Your office has not set up its skill grids yet.',
   /** A row the office stopped offering, still drawn where it was ticked (P11-T9 AC-3). */
   archived: 'Archived',
@@ -47,7 +52,9 @@ const id: MessagesOf<typeof en> = {
   noStages: `${kept('KPM')} Anda belum menyiapkan tahap kapabilitasnya.`,
   currentStage: 'Tahap saat ini',
   loading: `Memuat ${kept('Capability mapping')}…`,
-  tracker: `Pelacak ${kept('skill')}`,
+  openLadder: ({ stage }) => `${kept('Capability mapping')}: ${stage}. Tampilkan semua tahap.`,
+  tracker: kept('Skill tracker'),
+  notApplicable: 'Tidak berlaku',
   noGrids: `${kept('KPM')} Anda belum menyiapkan grid ${kept('skill')}-nya.`,
   archived: 'Diarsipkan',
   notes: 'Catatan pribadi',

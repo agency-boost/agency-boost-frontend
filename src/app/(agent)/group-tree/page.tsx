@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { OrgTree } from '@/components/org-tree/org-tree';
+import { GroupTree, TreeSearch, useTreeSummary } from '@/components/org-tree/group-tree';
 import { Page } from '@/components/page';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Card, ErrorBanner } from '@/components/ui/field';
@@ -11,7 +11,6 @@ import { groupTreeMessages } from '@/i18n/messages/group-tree';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { readOrgTree, type OrgTree as OrgTreeData } from '@/lib/org';
 import { useSession } from '@/lib/session';
-import { usePhone } from '@/lib/use-phone';
 
 /**
  * Group tree (`Overall.html:3639-3660`) — your own downline.
@@ -34,17 +33,18 @@ import { usePhone } from '@/lib/use-phone';
  * tree (the server's answer to a tenant admin): their own leader is then an ordinary node, and still
  * inert. Each target keeps its own guard; a link decides what is offered, never what is allowed.
  *
- * **On a phone the tree is an indented list that opens and closes** (`asList`; P18.95-T8 AC-3, the
- * client's UI review, UI-025), opened on the reader's own line one level down; the same links, the same
- * people. At 768px and wider it is the canvas it always was. The width is read here, when the page mounts
- * and before the tree has answered, so a phone never draws the canvas first.
+ * **UI V1 (2026-10-30, Phase 18.99 T9; UI-058, UI-059, UI-072 to UI-075): rows at every size, no canvas** —
+ * `GroupTree`: the indented list of the shared person rows below 1024px, one card with columns from 1024px; today's
+ * activity pill on every row but the upline's; the whole row opens the person, with no ›; *Cari agen* on the title row
+ * below 1024px and over the card from 1024px, filtering this tree. **The reader's own row opens their Unit Dashboard**
+ * (UI-072) when they lead somebody; their leader stays inert. The office's *Org Tree* keeps the canvas.
  */
 export default function GroupTreePage() {
   const [tree, setTree] = useState<OrgTreeData | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const { me } = useSession();
   const t = useMessages(groupTreeMessages);
-  const phone = usePhone();
+  const [query, setQuery] = useState('');
   const membership = me?.membership ?? null;
   // A member on the agent rung who leads somebody reads their unit (ADR-0087) but coaches nobody: their
   // coaching tabs and subject reads are `own` only, so a summary link would answer *not found*. The
@@ -60,30 +60,60 @@ export default function GroupTreePage() {
 
   // The title is the nav item's words (P18.95-T9 AC-2, UI-027): the prototype's *Group Overview* sat under a nav item
   // reading *Group tree*. *Tap*, not *Click* (AC-5).
+  const populated = tree !== null && tree.nodes.length > 1;
+  // UI-087's rule for this page too (UI-004): the sub-line from 1024px only, unchanged there (O-9).
   return (
-    <Page title={t.title} subtitle={t.subtitle} permission="org_tree:read">
+    <Page
+      title={t.title}
+      subtitle={t.subtitle}
+      subtitleOnPhone={false}
+      subtitleOnTablet={false}
+      control={populated ? <TreeSearch value={query} onChange={setQuery} className="w-[140px] md:max-lg:w-[300px]" /> : null}
+      permission="org_tree:read"
+    >
       {error && <ErrorBanner {...error} />}
 
-      <Card>
-        {tree === null && !error && (
+      {tree === null && !error && (
+        <Card>
           <SkeletonTree label={t.loading} />
-        )}
+        </Card>
+      )}
 
-        {tree && tree.nodes.length <= 1 && (
+      {tree && tree.nodes.length <= 1 && (
+        <Card>
           <EmptyState title={t.empty} />
-        )}
+        </Card>
+      )}
 
-        {tree && tree.nodes.length > 1 && <OrgTree tree={tree} personHref={personHref} asList={phone} />}
-      </Card>
+      {populated && (
+        <>
+          <Summary tree={tree} search={<TreeSearch value={query} onChange={setQuery} className="w-[320px] shrink-0" />} />
+          <GroupTree tree={tree} personHref={personHref} query={query} />
+        </>
+      )}
     </Page>
+  );
+}
+
+/** *11 di bawah Anda · 3 AAB · 8 Agent* (UI-074): under the title row below 1024px, beside *Cari agen* from 1024px. */
+function Summary({ tree, search }: { tree: OrgTreeData; search: React.ReactNode }) {
+  const summary = useTreeSummary(tree);
+  return (
+    <>
+      <p className="mb-2.5 text-base font-medium text-muted md:max-lg:mb-3 md:max-lg:text-md lg:hidden">{summary}</p>
+      <div className="mb-3 flex items-center gap-4 max-lg:hidden">
+        {search}
+        <span className="text-md font-medium text-muted">{summary}</span>
+      </div>
+    </>
   );
 }
 
 /**
  * Where each card of this tree goes, or `undefined` for one that is inert (D-drill).
  *
- * Inert: the reader, and the reader's own leader, whether the server sent that leader beside the
- * tree (a leader's view) or as a node in it (a tenant admin's). Everybody else: their Unit Dashboard
+ * Inert: the reader's own leader, whether the server sent that leader beside the tree (a leader's view) or as a
+ * node in it (a tenant admin's). The reader opens their own Unit Dashboard (UI-072, UI V1), when they lead. Everybody else: their Unit Dashboard
  * when they lead somebody, their *Personal Summary* when they lead nobody.
  *
  * **A Personal Summary only for somebody the reader coaches**, which is somebody below them in this tree
@@ -114,6 +144,8 @@ function drillFor(tree: OrgTreeData, opensCoaching: boolean): (membershipId: str
   }
   return (membershipId) => {
     const node = byId.get(membershipId);
+    // The reader's own row opens their own Unit Dashboard (UI-072), when they lead somebody.
+    if (node && membershipId === selfId) return node.isLeader ? '/unit/dashboard' : undefined;
     if (!node || inert.has(membershipId)) return undefined;
     const id = encodeURIComponent(membershipId);
     if (node.isLeader) return `/unit/dashboard/${id}`;

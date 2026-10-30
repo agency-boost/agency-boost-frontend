@@ -175,6 +175,13 @@ export interface OrgTreeNode {
   subtreeCount: number;
   isLeader: boolean;
   isSelf: boolean;
+  /**
+   * **Today's activity count** (UI V1, UI-059; O-5): the office's day, the total Activity Management saved — the Group
+   * Tree's *n aktivitas* / *Belum lapor* pill. Optional for a fixture written before it; absent reads as nothing logged.
+   */
+  todayActivityCount?: number;
+  /** Their profile photo, when they have one (UI-059). */
+  photoUrl?: string | null;
 }
 
 /**

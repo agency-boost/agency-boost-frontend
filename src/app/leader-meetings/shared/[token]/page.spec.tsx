@@ -60,7 +60,7 @@ describe('/leader-meetings/shared/[token] — a meeting by its link (P18.1-T3)',
     renderWithSession(page('expired'), { me: CORE_LEADER_ME });
     expect(await screen.findByRole('heading', { name: "This link doesn't open anything." })).toBeInTheDocument();
     expect(screen.getByText('It may have expired or been stopped. Ask whoever shared it for a new one.')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Go to your home page' })).toHaveAttribute('href', '/unit/dashboard');
+    expect(screen.getByRole('link', { name: 'Go to your home page' })).toHaveAttribute('href', '/home');
   });
 
   it('the token is sent as one path segment, whatever it holds', async () => {

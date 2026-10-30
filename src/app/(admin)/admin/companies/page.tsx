@@ -133,7 +133,7 @@ export default function CompaniesPage() {
             <SkeletonTable caption={t.caption} columns={columns} rows={4} />
           )}
           {companies?.length === 0 && (
-            <div className="rounded-lg border border-hairline bg-card">
+            <div className="rounded-lg border border-card-edge bg-card">
               <EmptyState title={t.empty} />
             </div>
           )}

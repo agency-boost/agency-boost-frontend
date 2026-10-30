@@ -30,7 +30,7 @@ export function SectionCard({
   className?: string;
 }) {
   return (
-    <section className={cn('overflow-hidden rounded-lg border border-hairline bg-card', className)}>
+    <section className={cn('overflow-hidden rounded-lg border border-card-edge bg-card', className)}>
       <header className="flex items-center justify-between gap-3 border-b border-hairline px-4 py-3">
         <h2 className="font-display text-md font-bold text-navy">{title}</h2>
         {meta}

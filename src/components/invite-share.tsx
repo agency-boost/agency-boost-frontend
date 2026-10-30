@@ -19,7 +19,12 @@ import { inviteWhatsAppLink, type SharedInvite } from '@/lib/invites';
  * the figures' language. **The WhatsApp message is the invitee's**, in Bahasa Indonesia whatever the reader's screen
  * (`inviteMessage`).
  */
-export function InviteShare({ invite, link }: SharedInvite) {
+export function InviteShare({
+  invite, link, onShared,
+}: SharedInvite & {
+  /** UI-024: the leader sent it on WhatsApp — *+ Tambah agent*'s modal closes and the page says *Undangan terkirim*. */
+  onShared?: () => void;
+}) {
   const t = useMessages(addAgentMessages).share;
   const confirmed = useMessages(confirmationMessages);
   const figures = useFigureLanguage();
@@ -31,7 +36,7 @@ export function InviteShare({ invite, link }: SharedInvite) {
       </p>
       {invite.existingAccount && <p className="text-md text-muted">{t.signIn({ name: invite.fullName })}</p>}
       {whatsApp ? (
-        <a href={whatsApp} target="_blank" rel="noopener noreferrer" className={buttonClass('primary', 'self-start')}>
+        <a href={whatsApp} target="_blank" rel="noopener noreferrer" onClick={onShared} className={buttonClass('primary', 'self-start')}>
           {t.shareOnWhatsApp}
         </a>
       ) : (

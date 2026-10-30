@@ -39,6 +39,13 @@ function boundTo(over: Partial<ActivationItemProgress> = {}) {
 
 const row = () => document.querySelector('[data-code="MANDATORY_TRAINING"]') as HTMLElement;
 
+/**
+ * The leader's detail marks an item its link completes with the shared ⚡ and ⓘ (UI V1, UI-027, D-25; `AutoMarker`),
+ * not the *Auto* chip the hire's own page keeps: the ⓘ is named for the item, and its rule is the ⓘ's description.
+ */
+const LEADER_AUTO = 'Why Mandatory training: selling skill & product knowledge is automatic';
+const LEADER_AUTO_RULE = 'Completes when the hire has completed that training module.';
+
 describe('the activation screens’ training link (P18.5-T3)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
@@ -99,7 +106,8 @@ describe('the activation screens’ training link (P18.5-T3)', () => {
 
     expect(within(row()).getByRole('checkbox')).toBeEnabled();
     expect(within(row()).getByRole('button', { name: /^Ticked by hand/ })).toBeInTheDocument();
-    expect(within(row()).queryByRole('button', { name: /^Auto/ })).not.toBeInTheDocument();
+    expect(within(row()).queryByRole('button', { name: LEADER_AUTO })).not.toBeInTheDocument();
+    expect(row().querySelector('[data-auto-marker]')).toBeNull();
   });
 
   it('P18.5-T3 AC-4, D-orphan: the leader cannot tick an item its link already completed', async () => {
@@ -110,7 +118,9 @@ describe('the activation screens’ training link (P18.5-T3)', () => {
     await screen.findByRole('heading', { level: 2, name: 'Activation progress' });
 
     expect(within(row()).getByRole('checkbox')).toBeDisabled();
-    expect(within(row()).getByRole('button', { name: /^Auto — completes when/ })).toBeInTheDocument();
+    expect(within(row()).getByText('Automatic')).toBeInTheDocument();
+    expect(within(row()).getByRole('button', { name: LEADER_AUTO }))
+      .toHaveAccessibleDescription(`${LEADER_AUTO_RULE} Completed from Closing Techniques That Work by Rina Wijaya · 5 Sep 2026`);
     expect(within(row()).queryByRole('button', { name: /^Ticked by hand/ })).not.toBeInTheDocument();
   });
 
@@ -121,6 +131,8 @@ describe('the activation screens’ training link (P18.5-T3)', () => {
     await screen.findByRole('heading', { level: 2, name: 'Activation progress' });
 
     expect(within(row()).getByRole('checkbox')).toBeDisabled();
-    expect(within(row()).getByRole('button', { name: /^Auto — completes when the hire has completed that training module/ })).toBeInTheDocument();
+    expect(within(row()).getByText('Automatic')).toBeInTheDocument();
+    expect(within(row()).getByRole('button', { name: LEADER_AUTO })).toHaveAccessibleDescription(LEADER_AUTO_RULE);
+    expect(within(row()).queryByRole('button', { name: /^Ticked by hand/ })).not.toBeInTheDocument();
   });
 });

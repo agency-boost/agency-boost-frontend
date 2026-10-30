@@ -424,7 +424,7 @@ function NoteFromLeader({ view, reader }: { view: ActivationView; reader: string
   const note = view.note!;
   const who = note.by.membershipId === reader ? t.you : note.by.name;
   return (
-    <section aria-labelledby="activation-note" className="rounded-lg border border-hairline bg-card p-[18px]">
+    <section aria-labelledby="activation-note" className="rounded-lg border border-card-edge bg-card p-[18px]">
       <h2 id="activation-note" className="font-display text-md font-bold text-navy">{t.noteHeading}</h2>
       <p className="mt-2 whitespace-pre-line text-md text-navy">{note.text}</p>
       <p className="mt-2 text-sm text-muted">{t.noteFrom({ who, when: formatOfficeDay(note.at, OFFICE_TIME_ZONE, figures) })}</p>

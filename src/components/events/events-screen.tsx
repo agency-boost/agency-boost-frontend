@@ -10,10 +10,13 @@ import { eventsMessages } from '@/i18n/messages/events';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import {
-  canJoin, EVENT_FILTERS, goingToast, readEvents, refusalOf, rsvpEvent, sections,
-  type EventFilter, type EventsMeta, type GuestEvent, type GuestEventCan,
+  cancelRsvp, canJoin, EVENT_FILTERS, goingToast, phoneGroups, readEvents, refusalOf, rsvpCall, rsvpEvent, sections,
+  withdrawRsvp, type EventFilter, type EventsMeta, type GuestEvent, type GuestEventCan,
 } from '@/lib/events';
+import { OFFICE_TIME_ZONE } from '@/lib/format';
+import { usePhone } from '@/lib/use-phone';
 import { EventCard } from './event-card';
+import { PhoneEventCard } from './event-phone';
 
 /** What the modal beneath the list needs from it: how to close, how to say something, how to update a card. */
 interface EventsHost {
@@ -59,6 +62,12 @@ export function useEventsHost(): EventsHost {
  *
  * Its own states are Fills (L-01): a skeleton shaped like the cards, an error with a retry, and the
  * prototype's three empty rows for a section with nothing in it.
+ *
+ * **UI V1 on a phone** (UI-108; `campaign-event-mobile` 2; Mobile only): *Semua | Akan datang | Sudah lewat* as one
+ * full-width segmented control; two groups, *Akan datang* and *Sudah lewat*, each with its count and hidden when empty
+ * (D-08); compact cards (`PhoneEventCard`) with **Ikut and Tidak ikut both on an upcoming card** — tap the other to change,
+ * the chosen one again to undo (`rsvpCall`: `POST …/rsvp`, `…/rsvp/cancel`, `…/rsvp/withdraw`), each answer the event
+ * as it now is, a toast saying what changed. From 768px the list is as before.
  */
 export function EventsScreen({ children }: { children?: ReactNode }) {
   const t = useMessages(eventsMessages);
@@ -71,6 +80,8 @@ export function EventsScreen({ children }: { children?: ReactNode }) {
   const [error, setError] = useState<ApiError | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [filter, setFilter] = useState<EventFilter>('all');
+  const [timezone, setTimezone] = useState(OFFICE_TIME_ZONE);
+  const phone = usePhone();
   /** Whether this list pushed the modal's address — so closing it can go back rather than forward. */
   const openedHere = useRef(false);
   /** The card whose *Join* is in flight, its refusal, and the card the focus follows once it has moved. */
@@ -86,6 +97,7 @@ export function EventsScreen({ children }: { children?: ReactNode }) {
         if (!live) return;
         setEvents(answer.events);
         setMeta({ companyName: answer.companyName, limits: answer.limits, can: answer.can });
+        if (answer.timezone) setTimezone(answer.timezone);
       })
       .catch((err) => { if (live) setError(toDisplayError(err)); });
     return () => { live = false; };
@@ -128,6 +140,24 @@ export function EventsScreen({ children }: { children?: ReactNode }) {
     }
   };
 
+  /** A phone's *Ikut* or *Tidak ikut* (UI-108): give the answer, change it, or take it back. */
+  const answer = async (event: GuestEvent, tapped: 'going' | 'notGoing') => {
+    if (joining) return;
+    setJoining(event.id);
+    setJoinError(null);
+    const call = rsvpCall(event, tapped);
+    try {
+      const next = await (call === 'rsvp' ? rsvpEvent : call === 'cancel' ? cancelRsvp : withdrawRsvp)(event.id);
+      replace(next);
+      show(call === 'rsvp' ? goingToast(next.title, language) : call === 'cancel' ? t.declined({ title: next.title }) : t.withdrawn({ title: next.title }));
+    } catch (err) {
+      setJoinError({ id: event.id, error: refusalOf(err, language) });
+      if (err instanceof ApiRequestError && err.status === 409) reload();
+    } finally {
+      setJoining(null);
+    }
+  };
+
   // The joined card has moved to *Going* and its *Join* is gone: the focus goes to its *View event*.
   useEffect(() => {
     if (!refocus) return;
@@ -152,7 +182,19 @@ export function EventsScreen({ children }: { children?: ReactNode }) {
           </div>
         )}
         {!events && !error && <EventsSkeleton />}
-        {events && meta && (
+        {events && meta && phone && (
+          <PhoneGroups
+            events={events}
+            filter={filter}
+            timezone={timezone}
+            can={meta.can}
+            busy={joining}
+            error={joinError}
+            onOpen={open}
+            onAnswer={(event, tapped) => void answer(event, tapped)}
+          />
+        )}
+        {events && meta && !phone && (
           <Sections
             events={events}
             companyName={meta.companyName}
@@ -180,7 +222,12 @@ export function EventsScreen({ children }: { children?: ReactNode }) {
 function FilterBar({ filter, onChange }: { filter: EventFilter; onChange: (f: EventFilter) => void }) {
   const t = useMessages(eventsMessages);
   return (
-    <div role="group" aria-label={t.filterLabel} className="mb-[22px] inline-flex rounded-[9px] border border-hairline bg-card p-[3px]">
+    // On a phone (UI-108): one full-width segmented control on a white pill track, the chosen third navy, each 44px.
+    <div
+      role="group"
+      aria-label={t.filterLabel}
+      className="mb-[22px] inline-flex rounded-[9px] border border-hairline bg-card p-[3px] max-md:mb-0 max-md:mt-3 max-md:flex max-md:w-full max-md:rounded-pill max-md:border-transparent max-md:p-0"
+    >
       {EVENT_FILTERS.map((f) => (
         <button
           key={f}
@@ -189,13 +236,74 @@ function FilterBar({ filter, onChange }: { filter: EventFilter; onChange: (f: Ev
           onClick={() => onChange(f)}
           className={cn(
             'rounded-md px-4 py-[7px] text-md font-semibold',
-            filter === f ? 'bg-navy text-white' : 'text-muted hover:text-navy',
+            filter === f ? 'bg-navy text-white max-md:bg-transparent max-md:text-white' : 'text-muted hover:text-navy',
+            'max-md:flex max-md:min-h-11 max-md:flex-1 max-md:rounded-pill max-md:p-[3px] max-md:text-base',
           )}
         >
-          {t.filters[f]}
+          <span
+            className={cn(
+              'max-md:flex max-md:w-full max-md:items-center max-md:justify-center max-md:whitespace-nowrap max-md:rounded-pill',
+              filter === f && 'max-md:bg-navy',
+            )}
+          >
+            {t.filters[f]}
+          </span>
         </button>
       ))}
     </div>
+  );
+}
+
+/**
+ * **A phone's two groups** (UI-108): *Akan datang* — the events still open, joined or not, soonest first — and *Sudah
+ * lewat*, latest first, each with its count; the filter shows one or both, and a group with nothing in it is not drawn
+ * (D-08). With nothing to show at all, the prototype's empty line for what the filter asked.
+ */
+function PhoneGroups({ events, filter, timezone, can, busy, error, onOpen, onAnswer }: {
+  events: readonly GuestEvent[];
+  filter: EventFilter;
+  timezone: string;
+  can: GuestEventCan;
+  busy: string | null;
+  error: { id: string; error: ApiError } | null;
+  onOpen: (id: string) => void;
+  onAnswer: (event: GuestEvent, tapped: 'going' | 'notGoing') => void;
+}) {
+  const t = useMessages(eventsMessages);
+  const { upcoming, past } = phoneGroups(events);
+  const groups = [
+    { id: 'upcoming', label: t.sections.upcoming, items: filter === 'past' ? [] : upcoming },
+    { id: 'past', label: t.sections.past, items: filter === 'upcoming' ? [] : past },
+  ].filter((g) => g.items.length > 0);
+  if (groups.length === 0) {
+    return <p className="px-[18px] py-10 text-center text-md text-muted">{filter === 'past' ? t.emptyPast : t.emptyUpcoming}</p>;
+  }
+  return (
+    <>
+      {groups.map((group) => (
+        <section key={group.id} aria-labelledby={`events-phone-${group.id}`} data-group={group.id}>
+          <h2 className="mx-0.5 mb-1.5 mt-3.5 flex items-baseline gap-1.5 text-lg font-bold text-navy">
+            <span id={`events-phone-${group.id}`}>{group.label}</span>
+            <span className="text-sm font-semibold text-muted">{group.items.length}</span>
+          </h2>
+          <ul className="m-0 flex list-none flex-col gap-2 p-0">
+            {group.items.map((event) => (
+              <li key={event.id} className="min-w-0">
+                <PhoneEventCard
+                  event={event}
+                  timezone={timezone}
+                  can={can}
+                  busy={busy === event.id}
+                  error={error?.id === event.id ? error.error : null}
+                  onOpen={onOpen}
+                  onAnswer={onAnswer}
+                />
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
+    </>
   );
 }
 
@@ -273,7 +381,7 @@ export function EventsSkeleton() {
           <SkeletonBar className="mb-3 h-3 w-20" />
           <div className="grid grid-cols-1 gap-4 md:grid-cols-[repeat(auto-fill,minmax(280px,1fr))]">
             {[0, 1, 2].map((i) => (
-              <div key={i} className="overflow-hidden rounded-lg border border-hairline bg-card px-4 pb-4 pt-3.5">
+              <div key={i} className="overflow-hidden rounded-lg border border-card-edge bg-card px-4 pb-4 pt-3.5">
                 <div className="flex items-start gap-2.5">
                   {/* The type's icon, 32px, where the card's poster was (P18.95-T10 AC-1). */}
                   <SkeletonBar className="h-8 w-8 shrink-0 rounded-md" />

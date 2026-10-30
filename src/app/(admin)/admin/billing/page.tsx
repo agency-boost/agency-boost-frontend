@@ -91,14 +91,14 @@ function Billing() {
         <Skeleton label={OWN.loading}>
           <div className="mb-8 grid grid-cols-[repeat(auto-fit,minmax(170px,1fr))] gap-3">
             {Array.from({ length: 5 }, (_, i) => (
-              <div key={i} className="flex flex-col gap-2 rounded-lg border border-hairline bg-card p-4">
+              <div key={i} className="flex flex-col gap-2 rounded-lg border border-card-edge bg-card p-4">
                 <SkeletonBar className="w-2/3" />
                 <SkeletonBar className="w-1/2" />
                 <SkeletonBar className="h-5 w-4/5" />
               </div>
             ))}
           </div>
-          <div className="space-y-3 rounded-lg border border-hairline bg-card p-5 md:p-7">
+          <div className="space-y-3 rounded-lg border border-card-edge bg-card p-5 md:p-7">
             <SkeletonBar className="h-4 w-1/3" />
             <SkeletonBar className="h-10 w-full max-w-[220px]" />
             {Array.from({ length: 5 }, (_, i) => <SkeletonBar key={i} className="w-full" />)}

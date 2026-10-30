@@ -9,7 +9,7 @@ import { Skeleton, SkeletonBar, SkeletonText } from '@/components/ui/skeleton';
 import { useMessages } from '@/i18n/language-provider';
 import { trainingMessages } from '@/i18n/messages/training';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
-import { usePhone } from '@/lib/use-phone';
+import { useMediaQuery } from '@/lib/use-media-query';
 import {
   readCoacheeTraining, readTrainingProgress, type TrainingProgressView,
 } from '@/lib/training';
@@ -19,8 +19,9 @@ import {
  * `:4331-4335`, and the reader's own `:4400`, `:4569-4572`; P18.5-T4).
  *
  * Every category in the office's order, each under *"{Label} ({done}/{total})"* with the counts muted
- * (`:7749`), then its skill cards, numbered from 1 again, with the learner's five columns — **read-only**:
- * no link, no pointer, no hover (contradiction 13). A category with nothing offered is its heading at
+ * (`:7749`), then its skills, numbered from 1 again, **by the learner's list rules** (Phase 18.99 T10; UI-065, UI-066):
+ * one card of rows below 1024px, two columns of cards with *Module · Format · Status* from 1024px — **read-only**: no
+ * link, no ›, no hover (contradiction 13). A category with nothing offered is its heading at
  * *(0/0)* and nothing under it, which is what the prototype's renderer draws over an empty list. A module
  * done and since withdrawn stays under its skill with *Archived* after its pill, outside the counts
  * (D-history).
@@ -30,10 +31,13 @@ import {
  * the learner and `/coaching/me/training` cannot disagree. The prototype's tab drew a 24-module constant
  * over two hand-made maps (F-12).
  */
-export function PersonTraining({ view, phone }: {
+export function PersonTraining({ view, compact }: {
   view: TrainingProgressView;
-  /** Below 768px, a row per module (P18.95-T3 AC-5): asked by the tab before its read answers, so no table draws first. */
-  phone?: boolean;
+  /**
+   * Below 1024px, the one-card list the learner's list draws (UI-065, UI-066 — the same list rules): asked by the tab
+   * before its read answers, so the desktop's cards never draw first.
+   */
+  compact?: boolean;
 }) {
   const t = useMessages(trainingMessages);
   if (view.categories.length === 0) return <EmptyCard title={t.noTraining} />;
@@ -45,7 +49,7 @@ export function PersonTraining({ view, phone }: {
             {category.label}{' '}
             <span className="text-sm font-medium text-muted">({category.done}/{category.total})</span>
           </h2>
-          <SkillCards skills={category.skills} phone={phone} />
+          <SkillCards skills={category.skills} compact={compact} />
         </section>
       ))}
     </div>
@@ -93,7 +97,7 @@ function useTrainingRead(read: () => Promise<TrainingProgressView>, key: string,
 
 function ReadState({ read }: { read: ReturnType<typeof useTrainingRead> }) {
   const t = useMessages(trainingMessages);
-  const phone = usePhone();
+  const compact = useMediaQuery(['phone', 'tablet']);
   if (read.error) {
     return (
       <div>
@@ -106,12 +110,12 @@ function ReadState({ read }: { read: ReturnType<typeof useTrainingRead> }) {
     return (
       <Skeleton label={t.loadingCatalog}>
         <SkeletonBar className="h-5 w-32" />
-        <div className="mt-3 rounded-lg border border-hairline bg-card p-6">
+        <div className="mt-3 rounded-lg border border-card-edge bg-card px-5 py-4">
           <SkeletonBar className="h-5 w-40" />
           <SkeletonText lines={4} className="mt-4" />
         </div>
       </Skeleton>
     );
   }
-  return <PersonTraining view={read.view} phone={phone} />;
+  return <PersonTraining view={read.view} compact={compact} />;
 }

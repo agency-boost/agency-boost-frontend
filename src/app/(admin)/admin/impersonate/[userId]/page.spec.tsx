@@ -116,7 +116,7 @@ describe('start impersonation', () => {
     await userEvent.type(screen.getByLabelText('Reason'), 'support ticket 42');
     await userEvent.click(screen.getByRole('button', { name: 'Start session' }));
 
-    await waitFor(() => expect(replace).toHaveBeenCalledWith('/activity/log'));
+    await waitFor(() => expect(replace).toHaveBeenCalledWith('/home'));
     expect(push).toHaveBeenCalledWith('/');
     expect(screen.queryByText('SUPERADMIN')).not.toBeInTheDocument();
     expect(screen.queryByRole('navigation', { name: 'Main' })).not.toBeInTheDocument();

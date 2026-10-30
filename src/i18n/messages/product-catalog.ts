@@ -13,8 +13,8 @@ import { kept } from '@/i18n/kept';
  * and the module's own Fills; the Indonesian is the approved glossary's (OD-237; §B.0's voice), with what it lacked in
  * the glossary for approval's §B.10 — *etalase* for the shelf, *nasabah* for the customer, *Tidak dijual lagi* for a
  * product in run-off. **Kept English** (§A): the titles, the tabs (*Sales Attack Plan*, *Product Catalog*, *Details*,
- * *Attack Plan*, *Documents*), the categories (*All products*, *Life*, *Health* …), *Commission rate* (§A.4), *Script*
- * (§A.6), *KPM*. *Syariah* is Indonesian already (`SAME_IN_INDONESIAN`). **Content stays as typed** (ADR-0179 §5; §C3):
+ * *Attack Plan*, *Documents*), *Script* (§A.6), *KPM*. *Changed 2026-10-30 (UI V1, UI-107):* the categories are
+ * Indonesian in ID mode, in the report's words. *Syariah* is Indonesian already (`SAME_IN_INDONESIAN`). **Content stays as typed** (ADR-0179 §5; §C3):
  * a product's name (*PRUMapan*), its tagline, benefits, what stands out and its best fit, its script. The server's own
  * words — a product's run-off note, a document slot's label — are shown as served (P18.98-T5's). **A message never writes
  * a figure** (P18.98-T3): a commission rate is written by the caller in the figures' language (`formatRate(rate, figures)`).
@@ -42,9 +42,24 @@ const en = {
   searchPlaceholder: 'Search products…',
   /** `term` as typed, trimmed. */
   noSearchMatch: ({ term }: { term: string }) => `No products match “${term}”.`,
-  /** The category pills' group, for a screen reader; the first pill (§A.3). */
+  /** The category pills' group, for a screen reader; the first pill. */
   categories: 'Category',
-  allProducts: kept('All products'),
+  /**
+   * **The categories in the reader's language** (UI V1, UI-107: *"All products", "Life", "Health", "Critical illness",
+   * "Education", "Investment-linked" → "Semua produk", "Jiwa", "Kesehatan", "Penyakit kritis", "Pendidikan", "Unit
+   * link"*), where §A.3 kept them English until 2026-10-30. The pills and the sections' headings.
+   */
+  allProducts: 'All products',
+  category: {
+    life: 'Life',
+    health: 'Health',
+    ci: 'Critical illness',
+    education: 'Education',
+    investment: 'Investment-linked',
+  },
+  /** A section folded on a phone, past its first five products (UI-107; `attack-plan-mobile` 4). */
+  showMore: ({ n }: { n: number }) => `Show ${n} more`,
+  showFewer: 'Show fewer',
   /** The channel toggle's group, for a screen reader, and its three options (`:10123`). */
   channels: 'Channel',
   all: 'All',
@@ -78,7 +93,7 @@ const en = {
     plan: kept('Attack Plan'),
     documents: kept('Documents'),
     /** *Details* (`:10238-10280`): the commission table — its name the KPI's (§A.4) — and the three blocks. */
-    commissionRate: kept('Commission rate'),
+    commissionRate: 'Commission rate',
     year: 'Year',
     rate: 'Rate',
     /** A row's year: *Y1*. */
@@ -105,6 +120,8 @@ const en = {
   /** The words a product's script is framed with, beside the blocks both plans share (`plan.ts`; D-noscript). */
   script: {
     fullScript: 'Full script — how to narrate it',
+    /** Its heading on a phone (UI-107; `attack-plan-mobile` 3). */
+    fullScriptShort: 'Full script',
     /** In the drawer, where no script is authored (`:10332-10348`). */
     drawerNoScript: 'No authored script yet for this product.',
     /** On the plan page, as *Next action*, where no script is authored (`:9768-9790`). */
@@ -126,7 +143,17 @@ const id: MessagesOf<typeof en> = {
   searchPlaceholder: 'Cari produk…',
   noSearchMatch: ({ term }) => `Tidak ada produk yang cocok dengan “${term}”.`,
   categories: 'Kategori',
-  allProducts: kept('All products'),
+  allProducts: 'Semua produk',
+  category: {
+    life: 'Jiwa',
+    health: 'Kesehatan',
+    ci: 'Penyakit kritis',
+    education: 'Pendidikan',
+    // *Unit link*: the agents' own word, written as Indonesian writes it (UI-107).
+    investment: 'Unit link',
+  },
+  showMore: ({ n }) => `Tampilkan ${n} lagi`,
+  showFewer: 'Tampilkan lebih sedikit',
   channels: 'Kanal',
   all: 'Semua',
   channel: {
@@ -154,7 +181,7 @@ const id: MessagesOf<typeof en> = {
     details: kept('Details'),
     plan: kept('Attack Plan'),
     documents: kept('Documents'),
-    commissionRate: kept('Commission rate'),
+    commissionRate: 'Persentase komisi',
     year: 'Tahun',
     rate: 'Persentase',
     yearRow: ({ year }) => `Tahun ${year}`,
@@ -176,6 +203,7 @@ const id: MessagesOf<typeof en> = {
 
   script: {
     fullScript: `${kept('Script')} lengkap — cara menyampaikannya`,
+    fullScriptShort: `${kept('Script')} lengkap`,
     drawerNoScript: `Belum ada ${kept('script')} yang disusun untuk produk ini.`,
     pageNoScriptNext: `Belum ada ${kept('script')} yang disusun untuk produk ini — konfirmasi detailnya secara manual `
       + 'sebelum membuat penawaran.',

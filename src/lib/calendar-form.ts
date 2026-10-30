@@ -17,6 +17,8 @@ export interface EntryForm {
   type: EntryType;
   title: string;
   notes: string;
+  /** Travel's *Sepanjang hari* (UI V1, UI-104 point 8): on by default; off, the trip takes a time on each date. */
+  allDay: boolean;
   date: string;
   start: string;
   end: string;
@@ -41,6 +43,7 @@ export function blankForm(slot: Slot, type: EntryType = 'meeting', title = ''): 
     type,
     title,
     notes: '',
+    allDay: true,
     date: slot.date,
     start: slot.start,
     end: slot.end,
@@ -60,6 +63,8 @@ export function formFromEntry(entry: CalendarEntry): EntryForm {
     type: entry.type,
     title: entry.title,
     notes: entry.notes,
+    // A trip says whether it is all-day (UI-104 point 8); any other type opens as a trip all-day, should it change.
+    allDay: entry.type === 'travel' ? entry.allDay : true,
     date: entry.date ?? first,
     start: entry.start ?? DEFAULT_START,
     end: entry.end ?? DEFAULT_END,
@@ -84,6 +89,7 @@ export function formWords(language: Language = SOURCE_LANGUAGE, figures: Languag
     chooseDate: t.chooseDate,
     endAfterStart: t.endAfterStart,
     returnAfterDeparture: t.returnAfterDeparture,
+    tripEndAfterStart: t.tripEndAfterStart,
     ...limitWords(language, figures),
   };
 }
@@ -100,6 +106,11 @@ export function validateForm(form: EntryForm, inviteeCount: number, words: FormW
       errors.endsOn = words.returnAfterDeparture;
     } else if (readableDate(form.startsOn) && daysInclusive(form.startsOn, form.endsOn) > TRIP_DAYS_MAX) {
       errors.endsOn = words.tripTooLong;
+    } else if (!form.allDay) {
+      // A trip with times (UI-104 point 8): its end, on the return date, after its start on the departure date.
+      const start = clockMinutes(form.start);
+      const end = clockMinutes(form.end);
+      if (start === null || end === null || (form.endsOn === form.startsOn && end <= start)) errors.end = words.tripEndAfterStart;
     }
   } else {
     if (!readableDate(form.date)) errors.date = words.chooseDate;
@@ -117,9 +128,10 @@ export function validateForm(form: EntryForm, inviteeCount: number, words: FormW
 /** What a save sends: the timing its type needs, and nothing of the other's. */
 export function toInput(form: EntryForm, inviteeIds: string[]): EntryInput {
   const common = { type: form.type, title: form.title, notes: form.notes, inviteeIds };
-  return form.type === 'travel'
-    ? { ...common, startsOn: form.startsOn, endsOn: form.endsOn }
-    : { ...common, date: form.date, start: form.start, end: form.end };
+  if (form.type !== 'travel') return { ...common, date: form.date, start: form.start, end: form.end };
+  return form.allDay
+    ? { ...common, allDay: true, startsOn: form.startsOn, endsOn: form.endsOn }
+    : { ...common, allDay: false, startsOn: form.startsOn, start: form.start, endsOn: form.endsOn, end: form.end };
 }
 
 /**
@@ -139,6 +151,8 @@ export function violationsToErrors(
     [new RegExp(`^inviteeIds\\b.*(more than|at most|\\b${INVITEES_MAX}\\b)`, 'i'), 'invitees', words.tooManyInvitees],
     [/^(startsOn|departure)\b/i, 'startsOn', words.chooseDate],
     // The API's sentence in the reader's language (P18.98-T5): *"endsOn paling lambat 31 hari …"* in Indonesian.
+    // A trip with times (UI-104 point 8): *"endsOn and end must come after startsOn and start."*
+    [/^endsOn (?:and|dan) end\b/i, 'end', words.tripEndAfterStart],
     [/^endsOn (?:must be at most|paling lambat)\b/i, 'endsOn', words.tripTooLong],
     [/^endsOn\b/i, 'endsOn', words.returnAfterDeparture],
     [/^date\b/i, 'date', words.chooseDate],

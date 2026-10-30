@@ -2,6 +2,7 @@ import React from 'react';
 import Link from 'next/link';
 import { cn } from '@/lib/cn';
 import { REMOVED_ON_PHONE, SWITCH_LINE_PHONE, SWITCH_TAP_PHONE, TAP_TARGET } from '@/components/ui/phone';
+import { BUTTON_TOUCH, FIELD_TOUCH, TAP_TARGET_TABLET } from '@/components/ui/touch';
 import { ConsoleCode } from '@/components/ui/console-code';
 import { CodeWord, ErrorWords } from '@/components/ui/ui-words';
 import { errorReference } from '@/lib/browser-errors';
@@ -229,7 +230,8 @@ export function ReadOnlyField({
  * cell is hovered — a transparent border that becomes visible costs no layout, one that appears does.
  */
 const DENSITY = {
-  default: 'h-10 rounded-md border bg-card px-3 text-base',
+  // 48px below 1024px (UI V1, UI-010: *fields 48px*).
+  default: `h-10 ${FIELD_TOUCH} rounded-md border bg-card px-3 text-base`,
   cell:
     'w-full rounded-sm border bg-transparent px-1.5 py-[3px] text-base leading-tight '
     + 'hover:border-hairline focus:border-amber focus:bg-card focus:ring-1 focus:ring-amber',
@@ -312,6 +314,7 @@ export function TextInput({
     <span
       className={cn(
         'inline-flex h-10 items-center overflow-hidden rounded-md border-[1.5px] bg-card',
+        FIELD_TOUCH,
         invalid ? 'border-alert' : 'border-hairline',
         // The same weight the global rule gives a bare input — 2px amber, offset by one — so nothing
         // is lost by moving the indicator out here.
@@ -548,7 +551,7 @@ export function Textarea({
 
 /** A button shaped like a button. Not for the two inline variants, which are text. */
 const BUTTON_BASE =
-  'inline-flex h-10 items-center justify-center rounded-md px-4 text-md font-semibold';
+  `inline-flex h-10 ${BUTTON_TOUCH} items-center justify-center rounded-md px-4 text-md font-semibold`;
 /**
  * A row's own action: text, not a box (`KPM_Owner.html:289-292`).
  *
@@ -564,6 +567,8 @@ const INLINE_BASE = cn(
    */
   TAP_TARGET,
   'max-md:justify-center',
+  // And on a tablet (UI V1, UI-010).
+  TAP_TARGET_TABLET,
 );
 const BUTTON_VARIANT = {
   /*
@@ -641,6 +646,8 @@ export function buttonClass(
 const ICON_BASE = cn(
   'inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-sm text-sm leading-none',
   TAP_TARGET,
+  // And on a tablet (UI V1, UI-010).
+  TAP_TARGET_TABLET,
 );
 
 /**
@@ -742,7 +749,7 @@ export function Card({
   return (
     <div
       {...props}
-      className={cn('rounded-lg border border-hairline bg-card', CARD_PADDING[density], className)}
+      className={cn('rounded-lg border border-card-edge bg-card', CARD_PADDING[density], className)}
     >
       {children}
     </div>

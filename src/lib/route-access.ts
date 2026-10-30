@@ -57,15 +57,18 @@ const PAGES: Readonly<Record<RouteFamily, readonly string[]>> = {
     '/coaching', '/coaching/me', '/coaching/me/activation', '/coaching/me/training',
     '/coaching/[membershipId]', '/coaching/[membershipId]/activation', '/coaching/[membershipId]/activity',
     '/coaching/[membershipId]/archive/[sessionId]', '/coaching/[membershipId]/goal-setting',
-    '/coaching/[membershipId]/leader-notes', '/coaching/[membershipId]/session',
+    '/coaching/[membershipId]/leader-notes', '/coaching/[membershipId]/leads', '/coaching/[membershipId]/session',
     '/coaching/[membershipId]/summary', '/coaching/[membershipId]/training',
-    '/events', '/events/[eventId]', '/goals', '/group-tree', '/leads', '/new-hires', '/new-hires/[membershipId]',
+    '/events', '/events/[eventId]', '/goals', '/group-tree', '/home', '/leads', '/new-hires', '/new-hires/[membershipId]',
     '/product-catalog', '/product-catalog/[productCode]', '/recruitment', '/recruitment/attack-plan',
     '/recruitment/pitch-materials', '/summary', '/training', '/training/[categoryCode]',
     '/training/[categoryCode]/[moduleCode]', '/unit/dashboard', '/unit/dashboard/[membershipId]',
     '/user-management/add', '/user-management/kpm', '/user-management/leader', '/user-management/pending',
   ],
-  auth: ['/forgot-password', '/login', '/register', '/reset-password/[token]', '/verify-email/[token]'],
+  auth: [
+    '/forgot-password', '/login', '/register', '/reset-password/[token]', '/verify-email-change/[token]',
+    '/verify-email/[token]',
+  ],
   shared: [
     // `/kpm/analytics` since P18.8-T5 (ADR-0159 §3): the Owner's, an Admin's and a Core Leader's, each in their own shell.
     '/', '/choose-a-password', '/join', '/kpm/analytics', '/kpm/analytics/compliance', '/leader-meetings',
@@ -130,6 +133,8 @@ export const GATES: readonly RouteGate[] = [
   { route: '/coaching/[membershipId]/activity', on: 'page', permission: 'activity_log:read_raw' },
   { route: '/coaching/[membershipId]/goal-setting', on: 'page', permission: 'goal:read' },
   { route: '/coaching/[membershipId]/leader-notes', on: 'page', permission: 'coaching_profile:read' },
+  // UI V1, UI-029 (Phase 18.99 T8): the coachee's leads, read-only, through `GET /leads?owner=`.
+  { route: '/coaching/[membershipId]/leads', on: 'page', permission: 'lead:read' },
   { route: '/coaching/[membershipId]/summary', on: 'page', permission: 'personal_summary:read' },
   { route: '/events', on: 'layout', permission: 'event:read_list' },
   { route: '/goals', on: 'page', permission: 'goal:read' },

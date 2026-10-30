@@ -31,10 +31,10 @@ const en = {
   titleFor: ({ leader }: { leader: string }) => `Add agent to ${leader}’s unit`,
   /** The four fields (ADR-0170 §1). */
   agentCode: 'Agent code',
-  agentCodeHint: 'Issued by the company, on their contract.',
+  agentCodeHint: 'On their agent contract.',
   name: 'Name',
   whatsApp: 'WhatsApp number',
-  whatsAppHint: 'The invite link is sent here.',
+  whatsAppHint: 'The invite link is sent to this number.',
   joinDate: 'Join date',
   submit: 'Add agent',
   adding: 'Adding…',
@@ -48,6 +48,16 @@ const en = {
   fix: 'Fix the field marked above.',
   /** The share step's title. */
   inviteTitle: ({ name }: { name: string }) => `Invite ${name}`,
+
+  /**
+   * **UI V1 (UI-024)**, *+ Tambah agent*'s centred modal: the leader code's share block first, then the invite by hand —
+   * the report's words, and the mockup's examples in the fields.
+   */
+  orInvite: 'or send an invite directly',
+  submitInvite: 'Add & send invite',
+  codePlaceholder: 'e.g. 70012345',
+  namePlaceholder: 'Full name',
+  phonePlaceholder: 'e.g. 812 3456 7890',
 
   /** An invite's three ways out (P18.96-T3 AC-2): ours, no prototype draws an invite to one person. */
   share: {
@@ -71,10 +81,10 @@ const id: MessagesOf<typeof en> = {
   title: 'Tambah agent',
   titleFor: ({ leader }) => `Tambah agent ke ${kept('unit')} ${leader}`,
   agentCode: 'Kode agen',
-  agentCodeHint: 'Diterbitkan oleh perusahaan, tertera di kontraknya.',
+  agentCodeHint: 'Ada di kontrak agen.',
   name: 'Nama',
   whatsApp: 'Nomor WhatsApp',
-  whatsAppHint: 'Tautan undangan dikirim ke nomor ini.',
+  whatsAppHint: 'Link undangan dikirim ke nomor ini.',
   joinDate: 'Tanggal bergabung',
   submit: 'Tambah agent',
   adding: 'Menambahkan…',
@@ -85,6 +95,12 @@ const id: MessagesOf<typeof en> = {
   lateDate: ({ today }) => `Tanggal bergabung tidak boleh setelah hari ini, ${today}.`,
   fix: 'Perbaiki kolom yang ditandai di atas.',
   inviteTitle: ({ name }) => `Undang ${name}`,
+
+  orInvite: 'atau kirim undangan langsung',
+  submitInvite: 'Tambah & kirim undangan',
+  codePlaceholder: 'cth. 70012345',
+  namePlaceholder: 'Nama lengkap',
+  phonePlaceholder: 'cth. 812 3456 7890',
 
   share: {
     shareOnWhatsApp: 'Bagikan di WhatsApp',

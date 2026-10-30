@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { makeMe, renderWithSession, stubFetch, type StubReply } from '@test/harness';
+import { atWidth, makeMe, renderWithSession, stubFetch, type StubReply } from '@test/harness';
 import type { PitchMaterialsView, PitchSlot } from '@/lib/recruitment-pitch';
 import PitchMaterialsPage from './page';
 
@@ -311,5 +311,39 @@ describe('Recruitment › Pitch Materials (P17-T6)', () => {
       await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
       expect(await screen.findByRole('article', { name: 'FAQ' })).toBeInTheDocument();
     });
+  });
+});
+
+/**
+ * **UI V1 on a phone** (UI-107; `attack-plan-mobile` 6): a ring counting the required documents with a file and one line
+ * — *2 missing* — then *Required* and *Optional*, one row per document with its English name, the file's name and day
+ * and *View*, or *Not uploaded yet*; **no state pill**, no file size. 375px.
+ */
+describe('UI-107 Pitch Materials on a phone', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('UI-107 the ring and its line, the two groups, a row per document — no pills, no size', async () => {
+    atWidth(375);
+    render();
+    const layout = await waitFor(() => {
+      const found = document.querySelector('[data-layout="phone-pitch"]');
+      expect(found).not.toBeNull();
+      return found as HTMLElement;
+    });
+    // Two of the four required have a file — the partly confirmed one counts as uploaded here.
+    expect(within(layout).getByRole('img', { name: '2 of 4 required documents uploaded' })).toHaveTextContent('2/4');
+    expect(layout).toHaveTextContent('Recruitment Pitch is incomplete2 missing');
+    const required = within(layout).getByRole('region', { name: 'Required' });
+    expect(within(required).getAllByRole('listitem').map((li) => li.querySelector('p')!.textContent))
+      .toEqual(['Opportunity Overview', 'Proof & Credibility', 'FAQ', 'How to Join']);
+    const first = within(required).getAllByRole('listitem')[0];
+    expect(first).toHaveTextContent('Opportunity_Overview_v3.pdf · 12 Sep 2026');
+    expect(within(first).getByRole('button', { name: 'View PDF, Opportunity Overview — opens in a new tab' })).toHaveTextContent('View');
+    expect(within(required).getAllByRole('listitem')[2]).toHaveTextContent('FAQNot uploaded yet');
+    const optional = within(layout).getByRole('region', { name: 'Optional' });
+    expect(within(optional).getAllByRole('listitem')).toHaveLength(2);
+    // No state pill, no size (the owner: there is no *Uploaded* or *Needs confirmation* to an agent).
+    expect(layout.querySelector('[data-badge]')).toBeNull();
+    expect(layout).not.toHaveTextContent(/needs confirmation|MB|KB/);
   });
 });

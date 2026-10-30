@@ -82,7 +82,7 @@ describe('Open Owner view and Open Admin view, in the field view’s identity me
     expect(within(panel()).getByRole('link', { name: 'Open Owner view' })).toHaveAttribute('href', '/kpm/overview');
   });
 
-  it('P13.2-T5 AC-3, P18.95-T2 AC-4 on a phone opens the avatar’s menu with the switch, Your account and Sign out — no nav', async () => {
+  it('P13.2-T5 AC-3, UI-004 on a phone the Lainnya sheet holds the switch, above Keluar — no dark bar, no drawer', async () => {
     vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
       media: query,
       matches: query === PHONE_QUERY,
@@ -92,45 +92,18 @@ describe('Open Owner view and Open Admin view, in the field view’s identity me
     renderWithSession(<AgentShell title="Coaching Session">body</AgentShell>, {
       me: reader({ isKpmAdmin: true, directCount: 1 }),
     });
-    // The bar's chip is the avatar alone since P18.95-T12, named for the account and the notices.
-    await userEvent.click(screen.getByRole('button', { name: /^Account and notifications/ }));
-
-    // The nav is the drawer ☰ opens (P18.95-T2); the menu keeps the account's items, after the notices (P18.95-T12).
-    expect(within(panel()).queryByRole('navigation')).not.toBeInTheDocument();
-    expect(links()).toEqual(['Notifications', 'Open Admin view', 'Your account']);
-    expect(within(panel()).getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
-  });
-
-  it('P18.95-T2 AC-2 on a phone keeps the switch out of the drawer: it is the name menu’s, at the drawer’s foot too', async () => {
-    vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
-      media: query,
-      matches: query === PHONE_QUERY,
-      addEventListener: () => undefined,
-      removeEventListener: () => undefined,
-    })));
-    renderWithSession(<AgentShell title="Coaching Session">body</AgentShell>, {
-      me: reader({ isKpmAdmin: true, directCount: 1 }),
-    });
-    await userEvent.click(screen.getByRole('button', { name: 'Open menu' }));
-    const drawer = screen.getByRole('dialog', { name: 'Menu' });
-    const nav = within(drawer).getByRole('navigation', { name: 'Main' });
-    expect(within(nav).queryByRole('link', { name: 'Open Admin view' })).not.toBeInTheDocument();
-
-    await userEvent.click(within(drawer).getByRole('button', { name: /Rina/ }));
-    const foot = document.getElementById('phone-menu-account')!;
-    expect(within(foot).getAllByRole('link').map((a) => a.textContent)).toEqual(['Open Admin view', 'Your account']);
+    // No ☰ and no drawer since UI V1 (UI-004): the tab bar's *More* opens the sheet.
+    expect(screen.queryByRole('button', { name: 'Open menu' })).not.toBeInTheDocument();
+    await userEvent.click(await screen.findByRole('button', { name: 'More' }));
+    const sheet = await screen.findByRole('dialog', { name: 'More' });
+    const switchLink = within(sheet).getByRole('link', { name: 'Open Admin view' });
+    expect(switchLink).toHaveAttribute('href', '/kpm/overview');
+    const signOut = within(sheet).getByRole('button', { name: 'Sign out' });
+    // The switch, then *Keluar*, last.
+    expect(switchLink.compareDocumentPosition(signOut) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });
 
-/**
- * **The *Recruitment tools* group** (P17-T3 AC-1): *Recruitment*, the section file's one addition to the
- * shell (`Recruitment_Section.html:251-254`), after *Sales tools* and before the line above *KPM*, for
- * every field role and in the Owner's and the Admin's field view.
- */
-/**
- * **One *Sales tools* entry** (P18.8-T12 AC-1, ADR-0161 §5): *Sales Attack Plan*, current on the plan and on the
- * catalog — its drawer included — whose tabs reach each other; *Product Catalog* is no longer an entry of its own.
- */
 describe('the profile line under the name (P18.8-T6 AC-2, ADR-0159 §5)', () => {
   afterEach(() => vi.unstubAllGlobals());
   const OFFICE = { code: '0417', branch: 'Cempaka Putih' };
@@ -159,37 +132,18 @@ describe('the profile line under the name (P18.8-T6 AC-2, ADR-0159 §5)', () => 
   });
 });
 
-describe('Sales tools, one entry (P18.8-T12 AC-1)', () => {
+/**
+ * **Sales and Recruitment, under *Aktivitas*** (UI V1, UI-004; D-20): one entry each, as before — *Sales* opens the plan
+ * and stays current on the catalog (P18.8-T12 AC-1, ADR-0161 §5), *Recruitment* opens its first tab (P17-T3 AC-1) — now
+ * the two items of the sidebar's *Aktivitas* group, for every field role.
+ */
+describe('UI-004 Sales and Recruitment under Aktivitas (P18.8-T12 AC-1, P17-T3 AC-1)', () => {
   afterEach(() => { route.path = '/coaching'; });
   const sidebar = () => within(screen.getByRole('navigation', { name: 'Main' }));
-
-  it('P18.8-T12 AC-1 holds Sales Attack Plan alone, opening the plan', () => {
-    renderWithSession(<AgentShell title="x">body</AgentShell>, { me: reader() });
-    const entry = sidebar().getByRole('link', { name: 'Sales Attack Plan' });
-    expect(entry).toHaveAttribute('href', '/attack-plan');
-    expect(sidebar().queryByRole('link', { name: 'Product Catalog' })).not.toBeInTheDocument();
-  });
-
-  it.each(['/attack-plan', '/product-catalog', '/product-catalog/PRUMAPAN'])('P18.8-T12 AC-1 is current on %s', (path) => {
-    route.path = path;
-    renderWithSession(<AgentShell title="x">body</AgentShell>, { me: reader() });
-    expect(sidebar().getByRole('link', { name: 'Sales Attack Plan' })).toHaveAttribute('aria-current', 'page');
-  });
-
-  it.each(['/product-catalogs', '/recruitment/attack-plan', '/kpm/settings/products'])('P18.8-T12 AC-1 is not current on %s', (path) => {
-    route.path = path;
-    renderWithSession(<AgentShell title="x">body</AgentShell>, { me: reader() });
-    expect(sidebar().getByRole('link', { name: 'Sales Attack Plan' })).not.toHaveAttribute('aria-current');
-  });
-});
-
-describe('Recruitment tools, after Sales tools (P17-T3 AC-1)', () => {
-  afterEach(() => { route.path = '/coaching'; });
-
   /** The nav's group headings and items, in order, by their text. */
   const navOrder = () => Array.from(screen.getByRole('navigation', { name: 'Main' })
-    .querySelectorAll('[aria-controls^="nav-group"], a'))
-    .map((el) => (el.textContent ?? '').replace('\u25b8', '').trim());
+    .querySelectorAll('[aria-controls^="nav-group"], a, button[data-nav-control]'))
+    .map((el) => (el.textContent ?? '').trim());
 
   it.each([
     ['an Agent', reader({ orgLevelCode: 'AGENT', hierarchyRole: 'agent', directCount: 0 })],
@@ -197,55 +151,38 @@ describe('Recruitment tools, after Sales tools (P17-T3 AC-1)', () => {
     ['an AB', reader({ orgLevelCode: 'AB', hierarchyRole: 'ab', directCount: 4 })],
     ['an Owner in their field view', reader({ isKpmOwner: true, directCount: 3 })],
     ['an Admin in their field view', reader({ isKpmAdmin: true })],
-  ])('P17-T3 AC-1 offers %s Recruitment, a live link to the first tab, in its own group after Sales tools', (_who, me) => {
+  ])('UI-004 offers %s Sales and Recruitment, live, under Activities', (_who, me) => {
     renderWithSession(<AgentShell title="x">body</AgentShell>, { me });
     const order = navOrder();
-    const at = order.indexOf('Recruitment tools');
-    // *Sales tools* is one entry since P18.8-T12 (ADR-0161 §5): the catalog is a tab under it.
-    expect(order.slice(at - 2, at + 3)).toEqual([
-      'Sales tools', 'Sales Attack Plan', 'Recruitment tools', 'Recruitment', 'KPM',
-    ]);
-    const item = screen.getByRole('link', { name: 'Recruitment' });
-    expect(item).toHaveAttribute('href', '/recruitment/attack-plan');
-    expect(item).not.toHaveAttribute('aria-disabled');
-    expect(within(item).queryByText('Upcoming')).not.toBeInTheDocument();
+    const at = order.indexOf('Activities');
+    expect(order.slice(at, at + 3)).toEqual(['Activities', 'Sales', 'Recruitment']);
+    expect(sidebar().getByRole('link', { name: 'Sales' })).toHaveAttribute('href', '/attack-plan');
+    expect(sidebar().getByRole('link', { name: 'Recruitment' })).toHaveAttribute('href', '/recruitment/attack-plan');
+    expect(sidebar().queryByRole('link', { name: 'Product Catalog' })).not.toBeInTheDocument();
   });
 
-  it('P17-T3 AC-1 ends its group with the line every group but the last has (parity I-144)', () => {
+  it.each(['/attack-plan', '/product-catalog', '/product-catalog/PRUMAPAN'])('P18.8-T12 AC-1 Sales is current on %s', (path) => {
+    route.path = path;
     renderWithSession(<AgentShell title="x">body</AgentShell>, { me: reader() });
-    const group = screen.getByRole('link', { name: 'Recruitment' }).closest('nav > *')!;
-    expect(group.lastElementChild).toHaveAttribute('role', 'separator');
+    expect(sidebar().getByRole('link', { name: 'Sales' })).toHaveAttribute('aria-current', 'page');
+    expect(sidebar().getByRole('link', { name: 'Recruitment' })).not.toHaveAttribute('aria-current');
   });
 
   it.each(['/recruitment', '/recruitment/attack-plan', '/recruitment/pitch-materials'])(
-    'P17-T3 AC-1 is the current item on %s, and Sales Attack Plan is not',
+    'P17-T3 AC-1 Recruitment is current on %s, and Sales is not',
     (path) => {
       route.path = path;
       renderWithSession(<AgentShell title="x">body</AgentShell>, { me: reader() });
-      expect(screen.getByRole('link', { name: 'Recruitment' })).toHaveAttribute('aria-current', 'page');
-      expect(screen.getByRole('link', { name: 'Sales Attack Plan' })).not.toHaveAttribute('aria-current');
+      expect(sidebar().getByRole('link', { name: 'Recruitment' })).toHaveAttribute('aria-current', 'page');
+      expect(sidebar().getByRole('link', { name: 'Sales' })).not.toHaveAttribute('aria-current');
     },
   );
 
-  it.each(['/attack-plan', '/recruitments', '/kpm/settings/recruitment-pitch'])('P17-T3 AC-1 is not current on %s', (path) => {
-    // A prefix is not a parent: `/recruitments` is not beneath `/recruitment`, and the Sales Attack Plan's
-    // `/attack-plan` is its own.
+  it.each(['/product-catalogs', '/recruitments', '/kpm/settings/products'])('a prefix is not a parent: neither is current on %s', (path) => {
     route.path = path;
     renderWithSession(<AgentShell title="x">body</AgentShell>, { me: reader() });
-    expect(screen.getByRole('link', { name: 'Recruitment' })).not.toHaveAttribute('aria-current');
-  });
-
-  it('P17-T3 AC-1 wears a glyph no other item in the sidebar uses', () => {
-    renderWithSession(<AgentShell title="x">body</AgentShell>, {
-      me: { ...reader({ directCount: 2, isKpmOwner: true }), activation: { open: true, complete: false }, newHires: true },
-    });
-    const items = Array.from(screen.getByRole('navigation', { name: 'Main' }).querySelectorAll('a'));
-    const glyph = (a: Element) => a.querySelector('svg')?.innerHTML ?? '';
-    const recruitment = items.find((a) => a.textContent?.trim() === 'Recruitment')!;
-    expect(glyph(recruitment)).not.toBe('');
-    const others = items.filter((a) => a !== recruitment).map(glyph);
-    expect(others.length).toBeGreaterThan(10);
-    expect(others).not.toContain(glyph(recruitment));
+    expect(sidebar().getByRole('link', { name: 'Sales' })).not.toHaveAttribute('aria-current');
+    expect(sidebar().getByRole('link', { name: 'Recruitment' })).not.toHaveAttribute('aria-current');
   });
 });
 

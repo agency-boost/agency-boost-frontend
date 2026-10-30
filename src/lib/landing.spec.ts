@@ -76,48 +76,27 @@ describe('where signing in takes you', () => {
     expect(landingFor(makeMe({ membership: adminLeader }))).toBe('/kpm/overview');
   });
 
-  it('P15-T4 AC-4 sends somebody who leads people to their Unit Dashboard (D-landing)', () => {
-    /*
-     * A leader landed on the coaching roster (P11-T6 AC-8) while the Unit Dashboard was a sign: landing
-     * on work beats landing on a page that says come back later. The dashboard is built now, the roster
-     * of the leader's whole unit, so that is where a leader lands. Never `/coaching` again.
-     */
-    expect(landingFor(makeMe({ membership: member({ orgLevelCode: 'AAB', hierarchyRole: 'aab', directCount: 2 }) }))).toBe(
-      '/unit/dashboard',
-    );
-    expect(landingFor(makeMe({ membership: member({ orgLevelCode: 'AB', hierarchyRole: 'ab', directCount: 1 }) }))).toBe(
-      '/unit/dashboard',
-    );
+  it('UI-100 (ADR-0180 §10) sends somebody who leads people to Home, no longer the Unit Dashboard', () => {
+    // Home carries a leader's Active Agent, Coaching 7 hari and the team's report list: a leader loses nothing there.
+    expect(landingFor(makeMe({ membership: member({ orgLevelCode: 'AAB', hierarchyRole: 'aab', directCount: 2 }) }))).toBe('/home');
+    expect(landingFor(makeMe({ membership: member({ orgLevelCode: 'AB', hierarchyRole: 'ab', directCount: 1 }) }))).toBe('/home');
+    // An Agent with a report, and an AB with nobody: the same Home — the graph no longer splits the landing.
+    expect(landingFor(makeMe({ membership: member({ directCount: 1 }) }))).toBe('/home');
+    expect(landingFor(makeMe({ membership: member({ orgLevelCode: 'AB', hierarchyRole: 'ab', directCount: 0 }) }))).toBe('/home');
   });
 
-  it('P15-T4 AC-4 leads by the graph, not the rung: an Agent with a report is a leader too (OD-23)', () => {
-    // Whatever the rung says, a direct report is what makes a leader. A rule keyed on the role label
-    // would send this member to their log and an AB with nobody to the dashboard.
-    expect(landingFor(makeMe({ membership: member({ directCount: 1 }) }))).toBe('/unit/dashboard');
-    expect(landingFor(makeMe({ membership: member({ orgLevelCode: 'AB', hierarchyRole: 'ab', directCount: 0 }) }))).toBe(
-      '/activity/log',
-    );
+  it('UI-100 sends an AAB who leads nobody, and an agent, to Home rather than their log', () => {
+    expect(landingFor(makeMe({ membership: member({ orgLevelCode: 'AAB', hierarchyRole: 'aab', directCount: 0 }) }))).toBe('/home');
+    expect(landingFor(makeMe({ membership: member() }))).toBe('/home');
   });
 
-  it('P15-T4 AC-4 sends an AAB who leads nobody to their own day, not to an empty unit (OD-23)', () => {
-    // Leading is the graph, not the role. A childless AAB has no unit to look at.
-    expect(landingFor(makeMe({ membership: member({ orgLevelCode: 'AAB', hierarchyRole: 'aab', directCount: 0 }) }))).toBe(
-      '/activity/log',
-    );
-  });
-
-  it('P15-T4 AC-4 sends an agent to their own day', () => {
-    expect(landingFor(makeMe({ membership: member() }))).toBe('/activity/log');
-  });
-
-  it('P18.96-T3 AC-4 sends a new hire in their 90 days, leading nobody, to their activation — once over, their own day', () => {
+  it('UI-100 sends a new hire in their 90 days to Home too — reversing P18.96-T3 AC-4 (ADR-0180 §10)', () => {
     const hire = member({ directCount: 0 });
-    expect(landingFor(makeMe({ membership: hire, activation: { open: true, complete: false } }))).toBe('/activation');
-    // All done, it waits only for Mark activation complete, and graduating lands them on their own day.
-    expect(landingFor(makeMe({ membership: hire, activation: { open: true, complete: true } }))).toBe('/activity/log');
-    expect(landingFor(makeMe({ membership: hire, activation: { open: false, complete: true } }))).toBe('/activity/log');
-    // A new hire who already leads somebody keeps the Unit Dashboard; the office's people keep the console.
-    expect(landingFor(makeMe({ membership: member({ directCount: 2 }), activation: { open: true, complete: false } }))).toBe('/unit/dashboard');
+    for (const activation of [{ open: true, complete: false }, { open: true, complete: true }, { open: false, complete: true }]) {
+      expect(landingFor(makeMe({ membership: hire, activation }))).toBe('/home');
+    }
+    expect(landingFor(makeMe({ membership: member({ directCount: 2 }), activation: { open: true, complete: false } }))).toBe('/home');
+    // The office's people keep the console at sign-in.
     expect(landingFor(makeMe({ membership: member({ isKpmAdmin: true }), activation: { open: true, complete: false } }))).toBe(OFFICE_LANDING);
   });
 
@@ -130,10 +109,10 @@ describe('where signing in takes you', () => {
 });
 
 describe('the field landing, one function for sign-in and the view switch (P13.2-T5 AC-1, ADR-0114)', () => {
-  it('P15-T4 AC-4 is the Unit Dashboard with a direct report, and the reader’s own day without', () => {
-    expect(fieldLandingFor({ directCount: 3 })).toBe('/unit/dashboard');
-    expect(fieldLandingFor({ directCount: 1 })).toBe('/unit/dashboard');
-    expect(fieldLandingFor({ directCount: 0 })).toBe('/activity/log');
+  it('UI-100 is Home, with a direct report or without (ADR-0180 §10)', () => {
+    expect(fieldLandingFor({ directCount: 3 })).toBe('/home');
+    expect(fieldLandingFor({ directCount: 1 })).toBe('/home');
+    expect(fieldLandingFor({ directCount: 0 })).toBe('/home');
   });
 
   it('P13.2-T5 AC-1 is exactly where landingFor sends every active member who does not run the office', () => {
@@ -146,18 +125,18 @@ describe('the field landing, one function for sign-in and the view switch (P13.2
     }
   });
 
-  it('P15-T4 AC-4 exit criterion 3: where each reader signs in, and where Open agent view goes', () => {
-    // One table for the exit review (D-landing): the field landing follows the graph for everybody, and
-    // only the sign-in of the Owner and the Admin stays on the console.
+  it('UI-100 (P18.99-T11 AC-4) where each reader signs in, and where Open agent view goes', () => {
+    // One table for the exit review: every field member signs in to Home, and *Open agent view* goes there too; only
+    // the sign-in of the Owner and the Admin stays on the console.
     const cases = [
-      ['an AB who leads people', member({ orgLevelCode: 'AB', hierarchyRole: 'ab', directCount: 4 }), '/unit/dashboard', null],
-      ['an AAB who leads people', member({ orgLevelCode: 'AAB', hierarchyRole: 'aab', directCount: 2 }), '/unit/dashboard', null],
-      ['an AAB who leads nobody', member({ orgLevelCode: 'AAB', hierarchyRole: 'aab', directCount: 0 }), '/activity/log', null],
-      ['an Agent', member(), '/activity/log', null],
-      ['the Owner, leading people', member({ isKpmOwner: true, orgLevelCode: 'AB', hierarchyRole: 'ab', directCount: 5 }), OFFICE_LANDING, '/unit/dashboard'],
-      ['the Owner, leading nobody', member({ isKpmOwner: true, orgLevelCode: 'AB', hierarchyRole: 'ab', directCount: 0 }), OFFICE_LANDING, '/activity/log'],
-      ['the Admin, leading people', member({ isKpmAdmin: true, orgLevelCode: 'AAB', hierarchyRole: 'aab', directCount: 1 }), OFFICE_LANDING, '/unit/dashboard'],
-      ['the Admin, leading nobody', member({ isKpmAdmin: true, directCount: 0 }), OFFICE_LANDING, '/activity/log'],
+      ['an AB who leads people', member({ orgLevelCode: 'AB', hierarchyRole: 'ab', directCount: 4 }), '/home', null],
+      ['an AAB who leads people', member({ orgLevelCode: 'AAB', hierarchyRole: 'aab', directCount: 2 }), '/home', null],
+      ['an AAB who leads nobody', member({ orgLevelCode: 'AAB', hierarchyRole: 'aab', directCount: 0 }), '/home', null],
+      ['an Agent', member(), '/home', null],
+      ['the Owner, leading people', member({ isKpmOwner: true, orgLevelCode: 'AB', hierarchyRole: 'ab', directCount: 5 }), OFFICE_LANDING, '/home'],
+      ['the Owner, leading nobody', member({ isKpmOwner: true, orgLevelCode: 'AB', hierarchyRole: 'ab', directCount: 0 }), OFFICE_LANDING, '/home'],
+      ['the Admin, leading people', member({ isKpmAdmin: true, orgLevelCode: 'AAB', hierarchyRole: 'aab', directCount: 1 }), OFFICE_LANDING, '/home'],
+      ['the Admin, leading nobody', member({ isKpmAdmin: true, directCount: 0 }), OFFICE_LANDING, '/home'],
     ] as const;
     for (const [who, m, signIn, agentView] of cases) {
       const me = makeMe({ membership: m });
@@ -184,15 +163,15 @@ describe('the view switch (P13.2-T5 AC-1, AC-2, AC-5; ADR-0114)', () => {
     membership: member({ isKpmAdmin: true, orgLevelCode: 'AB', hierarchyRole: 'ab', directCount }),
   });
 
-  it('P15-T4 AC-4 offers an Owner, in the console, Open agent view to their field landing', () => {
-    // One function with the sign-in (ADR-0114, D-landing): the link moved to the Unit Dashboard with it.
-    expect(viewSwitchFor(owner(3), 'office')).toEqual({ label: 'Open agent view', href: '/unit/dashboard' });
-    expect(viewSwitchFor(owner(0), 'office')).toEqual({ label: 'Open agent view', href: '/activity/log' });
+  it('UI-100 offers an Owner, in the console, Open agent view to Home (ADR-0114, ADR-0180 §10)', () => {
+    // One function with the sign-in: the link moved to Home with it.
+    expect(viewSwitchFor(owner(3), 'office')).toEqual({ label: 'Open agent view', href: '/home' });
+    expect(viewSwitchFor(owner(0), 'office')).toEqual({ label: 'Open agent view', href: '/home' });
   });
 
-  it('P15-T4 AC-4 offers an Admin the same, to their own field landing', () => {
-    expect(viewSwitchFor(admin(0), 'office')).toEqual({ label: 'Open agent view', href: '/activity/log' });
-    expect(viewSwitchFor(admin(2), 'office')).toEqual({ label: 'Open agent view', href: '/unit/dashboard' });
+  it('UI-100 offers an Admin the same, to Home', () => {
+    expect(viewSwitchFor(admin(0), 'office')).toEqual({ label: 'Open agent view', href: '/home' });
+    expect(viewSwitchFor(admin(2), 'office')).toEqual({ label: 'Open agent view', href: '/home' });
   });
 
   it('P13.2-T5 AC-2 offers an Owner, in the field view, Open Owner view to the console', () => {
@@ -238,7 +217,7 @@ describe('the view switch (P13.2-T5 AC-1, AC-2, AC-5; ADR-0114)', () => {
     // grant nothing: every field route keeps its guard, and a read-only session still writes nothing.
     for (const impersonationReadOnly of [true, false]) {
       const supporting = { ...owner(3), isImpersonating: true, impersonationReadOnly, impersonatedBy: 'u-support' };
-      expect(viewSwitchFor(supporting, 'office')).toEqual({ label: 'Open agent view', href: '/unit/dashboard' });
+      expect(viewSwitchFor(supporting, 'office')).toEqual({ label: 'Open agent view', href: '/home' });
       expect(viewSwitchFor(supporting, 'field')).toEqual({ label: 'Open Owner view', href: '/kpm/overview' });
     }
   });

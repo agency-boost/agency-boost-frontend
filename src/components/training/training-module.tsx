@@ -2,14 +2,14 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
+import { PageLanguageSwitch } from '@/components/app-shell';
 import { Page } from '@/components/page';
-import {
-  CatalogSkeleton, NotFoundCard, ReadFailed, TrainingSubtabs, useTrainingCatalog,
-} from '@/components/training/training-catalog';
+import { NotFoundCard, ReadFailed, useTrainingCatalog } from '@/components/training/training-catalog';
 import { FormatIcon, SkillTag, TrainingStatusPill } from '@/components/training/training-parts';
-import { Card, ErrorBanner } from '@/components/ui/field';
-import { TAP_HEIGHT } from '@/components/ui/phone';
+import { ErrorBanner } from '@/components/ui/field';
+import { LineIcon } from '@/components/ui/line-icon';
+import { Skeleton, SkeletonBar } from '@/components/ui/skeleton';
 import { Toast, useToast } from '@/components/ui/toast';
 import { useMessages } from '@/i18n/language-provider';
 import { trainingMessages } from '@/i18n/messages/training';
@@ -17,28 +17,30 @@ import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client
 import { cn } from '@/lib/cn';
 import { useSession } from '@/lib/session';
 import {
-  TRAINING_STATUSES, openTrainingItem, readTrainingModule,
-  setTrainingStatus, trainingCategoryHref, trainingModuleHref,
+  TRAINING_STATUSES, linkDomain, openTrainingItem, readTrainingModule,
+  setTrainingStatus, trainingCategoryHref, trainingModuleHref, trainingModulePosition,
   type TrainingItemView, type TrainingModulePage, type TrainingStatus,
 } from '@/lib/training';
 
 /**
- * **A module's page** (`/training/[categoryCode]/[moduleCode]`; `Overall.html:3733-3766`, logic
- * `:7812-7856`, `:7899-7914`; P18.5-T1 AC-5 to AC-7).
+ * **A module's page** (`/training/[categoryCode]/[moduleCode]`; `Overall.html:3733-3766`, logic `:7812-7856`,
+ * `:7899-7914`; P18.5-T1 AC-5 to AC-7; redrawn by Phase 18.99 T10 after the UI V1 report, UI-067 to UI-069, UI-071).
  *
- * - **The head**: the module's title over *"Structured training module."*, the subtabs with its category
- *   current, *Back to {category title}*, and the card with the title and *"Skill: {label}"*.
- * - **One tile per content item** (contradiction 5, ADR-0032), files then videos then links, each with
- *   the item's own label (contradiction 6), *Uploaded by admin* or *External resource*, and *Open File*,
- *   *Play Video* or *Open Link*. **The *Opened* ✓ is the record's** (D-opened): it survives a reload and
- *   a second device, where the prototype's lived for one page view (`:7817`). A module holding nothing:
- *   *"Nothing to open in this module yet."* (a Fill).
- * - **Opening never meets a popup blocker** (AC-6): a link opens as the click lands and is recorded after;
- *   a file's tab is opened as the click lands, before its signed address is asked for.
- * - **The status**: three buttons, the chosen one navy with `aria-pressed` (ADR-0137 §2; contradiction
- *   10), each **setting** the status, never toggling it, and the prototype's toast. **Not drawn** where
- *   the server says the reader may not set it (`can.update`): in any support session (D-support, F-123).
- * - **No footer** (OD-150): the prototype's promised the reader's *Skill Tracker*, which no agent has.
+ * - **No subtitle, no category row, no repeated title, no *Diunggah oleh admin*** (UI-067). Below 1024px a 48px back
+ *   row, *‹ Training Modules*, then the **navy lesson card**: *Skill: {label}* and the module's place in its skill
+ *   (*1/3*), the module's title — **the page's one heading** — and its content, one block per item in today's order
+ *   (files, videos, links): a file's row and a full-width *Buka file ↗*; a link's row with its site and *Buka tautan ↗*;
+ *   a video's player, which plays **in place**. Under it the status card. From 1024px, *‹ Kembali ke Training Modules*
+ *   with *ID | EN* on the right, then two columns — the lesson card, and the status card beside it.
+ * - **"✓ Sudah dibuka"** as words under an opened item's name, readable without hover (UI-069). **The record's**
+ *   (D-opened): it survives a reload and a second device.
+ * - **Opening never meets a popup blocker** (AC-6): a link opens as the click lands and is recorded after; a file's tab
+ *   is opened as the click lands, before its signed address is asked for. A video asks for its address and plays it
+ *   here.
+ * - **The status: three big buttons the reader sets by hand** (UI-068; OD-149), one row of three below 1024px and a
+ *   stack on a desktop, the chosen one in the accent (`aria-pressed`) — at once, and put back if the server refuses.
+ *   Each **sets** the status, never toggles it, and says so in the toast. **Not drawn** where the server says the reader
+ *   may not set it (`can.update`): in any support session the status is its pill, in the card (D-support, F-123).
  */
 export function TrainingModule({ categoryCode, moduleCode }: { categoryCode: string; moduleCode: string }) {
   const catalog = useTrainingCatalog();
@@ -51,7 +53,10 @@ export function TrainingModule({ categoryCode, moduleCode }: { categoryCode: str
   const [error, setError] = useState<ApiError | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [saving, setSaving] = useState(false);
+  /** The status the reader just chose, shown at once while it is saved (UI-068: selected within ~0.2s). */
+  const [chosen, setChosen] = useState<TrainingStatus | null>(null);
   const [saveError, setSaveError] = useState<ApiError | null>(null);
+  const titleId = useId();
 
   useEffect(() => {
     let live = true;
@@ -68,7 +73,7 @@ export function TrainingModule({ categoryCode, moduleCode }: { categoryCode: str
     return () => { live = false; };
   }, [moduleCode, attempt]);
 
-  // The address names the module's own category, so the subtab and the way back agree with it.
+  // The address names the module's own category, so the way back agrees with it.
   const canonical = page ? trainingModuleHref(page.category.code, page.code) : null;
   const named = trainingModuleHref(categoryCode, moduleCode);
   useEffect(() => {
@@ -77,14 +82,15 @@ export function TrainingModule({ categoryCode, moduleCode }: { categoryCode: str
 
   if (missing) return <ModuleNotFound />;
   if (error) return <ReadFailed error={error} onRetry={() => setAttempt((n) => n + 1)} />;
-  if (!page) return <CatalogSkeleton label={t.loadingModule} />;
+  if (!page) return <ModuleSkeleton />;
 
-  const offered = catalog.view?.categories.filter((c) => c.offered) ?? [];
+  const position = trainingModulePosition(catalog.view, page.skill.code, page.code);
 
   const choose = async (status: TrainingStatus) => {
     // Ignored while one is out, rather than disabled: a disabled button drops the focus.
     if (saving) return;
     setSaving(true);
+    setChosen(status);
     setSaveError(null);
     try {
       const next = await setTrainingStatus(page.code, status);
@@ -97,6 +103,7 @@ export function TrainingModule({ categoryCode, moduleCode }: { categoryCode: str
       if (err instanceof ApiRequestError && err.status === 404) setMissing(true);
       else setSaveError(toDisplayError(err));
     } finally {
+      setChosen(null);
       setSaving(false);
     }
   };
@@ -108,73 +115,107 @@ export function TrainingModule({ categoryCode, moduleCode }: { categoryCode: str
     if (page.can.update && openedItemIds.includes(itemId)) show(t.markedOpened);
   };
 
+  const status = chosen ?? page.status;
+
   return (
-    <Page title={page.title} subtitle={t.moduleSubtitle}>
-      {offered.length > 0 && <TrainingSubtabs categories={offered} current={page.category.code} currentAs="location" />}
-      <div className="mx-auto max-w-[820px]">
-        {/* Back to the list it came from, by that page's title (P18.95-T9 AC-2): *Back to Training Modules*. */}
-        <BackLink href={trainingCategoryHref(page.category.code)} title={t.title} />
-        <Card density="compact">
-          <div className="mb-[13px] flex flex-wrap items-center justify-between gap-2.5">
-            <h2 className="font-display text-md font-bold text-navy">{page.title}</h2>
-            <SkillTag>{t.skillTag({ label: page.skill.label })}</SkillTag>
-          </div>
+    <Page>
+      <div className="max-w-[1000px]" data-module-page="">
+        <div className="flex items-center">
+          <BackLink href={trainingCategoryHref(page.category.code)} />
+          <PageLanguageSwitch className="ml-auto" />
+        </div>
+        <div className="mt-2 flex flex-col gap-3 lg:mt-[18px] lg:grid lg:grid-cols-[minmax(0,1fr)_300px] lg:items-start lg:gap-5">
+          <section aria-labelledby={titleId} className="min-w-0 rounded-[20px] bg-navy p-[18px] text-white lg:px-7 lg:py-[26px]" data-lesson-card="">
+            <div className="flex items-center gap-2">
+              <SkillTag>{t.skillTag({ label: page.skill.label })}</SkillTag>
+              {position && (
+                <span className="ml-auto shrink-0 text-xs text-on-navy-muted lg:text-base">
+                  <span aria-hidden="true">{position.n}/{position.of}</span>
+                  <span className="sr-only">{t.position(position)}</span>
+                </span>
+              )}
+            </div>
+            <h1 id={titleId} className="mt-3 break-words text-[22px] font-bold leading-tight lg:mt-3.5 lg:text-[30px]">{page.title}</h1>
+            {page.items.length === 0 ? (
+              <p className="mt-4 text-md text-on-navy-muted">{t.nothingToOpen}</p>
+            ) : (
+              <ul className="mt-4 flex flex-col gap-4 lg:mt-[22px]">
+                {page.items.map((item) => (
+                  <Resource
+                    key={item.id}
+                    moduleCode={page.code}
+                    item={item}
+                    isOpened={page.openedItemIds.includes(item.id)}
+                    onOpened={opened}
+                  />
+                ))}
+              </ul>
+            )}
+          </section>
 
-          {page.items.length === 0 ? (
-            <p className="mt-4 text-md text-muted">{t.nothingToOpen}</p>
-          ) : (
-            <ul className="flex flex-col">
-              {page.items.map((item) => (
-                <ResourceTile
-                  key={item.id}
-                  moduleCode={page.code}
-                  item={item}
-                  isOpened={page.openedItemIds.includes(item.id)}
-                  onOpened={opened}
-                />
-              ))}
-            </ul>
-          )}
-
-          {page.can.update ? (
-            <StatusToggle status={page.status} title={page.title} onChoose={(s) => void choose(s)} />
-          ) : (
-            // Any support session (D-support, F-123): no control, the status as its pill in the toggle's place.
-            <p className="mt-[18px]"><TrainingStatusPill status={page.status} /></p>
-          )}
-          {saveError && (
-            <p role="alert" className="mt-2 text-sm font-semibold text-alert">{t.notSaved({ why: saveError.message })}</p>
-          )}
-        </Card>
+          <StatusCard
+            title={page.title}
+            status={status}
+            canUpdate={page.can.update}
+            onChoose={(s) => void choose(s)}
+            error={saveError}
+          />
+        </div>
       </div>
       <Toast toast={toast} />
     </Page>
   );
 }
 
-/** *Back to Training Modules* (`:3734-3737`'s *Back to {category title}* until P18.95-T9 AC-2, `.training-back-btn` `:1811-1816`): the chevron and the words, as the link it is. */
-function BackLink({ href, title }: { href: string; title: string }) {
+/**
+ * The way back to the list (P18.95-T9 AC-2; UI-067): *‹ Training Modules* in a 48px row below 1024px, *‹ Kembali ke
+ * Training Modules* from 1024px. Named the long way at every width, which holds the short words (WCAG 2.5.3).
+ */
+function BackLink({ href }: { href: string }) {
   const t = useMessages(trainingMessages);
   return (
     <Link
       href={href}
-      className={cn('mb-3.5 inline-flex items-center gap-1.5 py-1.5 text-base font-semibold text-navy-soft hover:text-navy', TAP_HEIGHT)}
+      aria-label={t.back({ title: t.title })}
+      className="-ml-1 inline-flex min-h-12 items-center gap-1 pr-2 text-md font-semibold text-navy hover:text-navy-soft lg:min-h-11"
     >
-      <svg aria-hidden="true" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0">
-        <path d="M15 18l-6-6 6-6" />
-      </svg>
-      {t.back({ title })}
+      <LineIcon name="chevronLeft" className="h-[22px] w-[22px] lg:h-[18px] lg:w-[18px]" />
+      <span className="lg:hidden">{t.title}</span>
+      <span className="max-lg:hidden">{t.back({ title: t.title })}</span>
     </Link>
   );
 }
 
+/** ↗ after *Buka file* and *Buka tautan*: it leaves the page. */
+function ExternalIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+      <path d="M14 4h6v6" />
+      <path d="M20 4l-9 9" />
+      <path d="M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4" />
+    </svg>
+  );
+}
+
+/** *✓ Sudah dibuka* under an opened item's name (UI-069): words, in the on-navy green, never a lone tick. */
+function OpenedLine() {
+  const t = useMessages(trainingMessages);
+  return (
+    <p className="mt-0.5 flex items-center gap-1 text-xs font-semibold text-on-navy-green" data-opened="">
+      <LineIcon name="check" className="h-3.5 w-3.5" />
+      {t.opened}
+    </p>
+  );
+}
+
 /**
- * `.resource-tile` (`:3743-3755`, `:1817-1837`): the kind's glyph, the item's label and caption, the ✓
- * once opened, and the button. A link is an anchor to its own address, so the browser opens it as the
- * click lands; a file or a video is a button that opens the tab first and points it at the signed
- * address once the server answers (AC-6, as the product drawer's documents do).
+ * **One item of the module, as its kind is drawn** (UI-067). A file and a link: a row on the card's lighter navy — the
+ * kind's icon on a white tile, the item's own label (contradiction 6), a link's site under it, *Sudah dibuka* once
+ * opened — and the accent's button: full width under the row below 1024px, at the row's end from 1024px. A link is an
+ * anchor to its own address, so the browser opens it as the click lands; a file is a button that opens the tab first
+ * and points it at the signed address once the server answers (AC-6). A video is `VideoItem`.
  */
-function ResourceTile({
+function Resource({
   moduleCode, item, isOpened, onOpened,
 }: {
   moduleCode: string;
@@ -186,10 +227,19 @@ function ResourceTile({
   const [error, setError] = useState<ApiError | null>(null);
   const t = useMessages(trainingMessages);
   const words = t.tile[item.kind];
-  const BUTTON = 'shrink-0 rounded-md border border-hairline bg-card px-3.5 py-2 text-sm font-semibold text-navy hover:border-navy-soft hover:text-navy-soft aria-disabled:opacity-60';
+
+  if (item.kind === 'video') {
+    return <VideoItem moduleCode={moduleCode} item={item} isOpened={isOpened} onOpened={onOpened} />;
+  }
 
   // A link the browser opened from its own anchor, before the server was asked anything.
   const opensItself = item.kind === 'link' && !!item.url;
+  const domain = item.kind === 'link' ? linkDomain(item.url) : null;
+  // Navy words on the accent (parity I-542): white on `#E8954A` is 2.38:1.
+  const BUTTON = cn(
+    'mt-3.5 flex h-[52px] w-full shrink-0 items-center justify-center gap-2 rounded-pill bg-amber px-6 text-lg font-bold text-navy',
+    'hover:bg-amber-dark aria-disabled:opacity-60 lg:mt-0 lg:h-12 lg:w-auto lg:px-[26px] lg:text-[15px]',
+  );
 
   const record = async (tab: Window | null) => {
     setBusy(true);
@@ -201,7 +251,7 @@ function ResourceTile({
       onOpened(answer.openedItemIds, item.id);
     } catch (err) {
       tab?.close();
-      // The link is open already; only its record failed, so nothing claims it did not open, and no ✓ is drawn.
+      // The link is open already; only its record failed, so nothing claims it did not open, and nothing is marked.
       if (!opensItself) setError(toDisplayError(err));
     } finally {
       setBusy(false);
@@ -216,30 +266,21 @@ function ResourceTile({
   };
 
   return (
-    <li className="mt-4" data-item={item.id}>
-      <div className="flex items-center gap-3.5 rounded-lg border border-hairline bg-base px-[18px] py-4">
-        <span aria-hidden="true" className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-[10px] border border-hairline bg-card text-navy-soft">
-          <FormatIcon kind={item.kind} size={18} />
-        </span>
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-base font-semibold text-navy" title={item.label}>{item.label}</p>
-          <p className="mt-0.5 text-xs text-muted">{words.caption}</p>
-        </div>
-        {isOpened && (
-          <span
-            role="img"
-            aria-label={t.opened}
-            title={t.opened}
-            className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-success/[0.12] text-success"
-          >
-            <svg aria-hidden="true" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.6">
-              <path d="M5 13l4 4L19 7" />
-            </svg>
+    <li data-item={item.id}>
+      <div className="lg:flex lg:items-center lg:gap-3.5 lg:rounded-row lg:bg-white/[0.08] lg:px-4 lg:py-3.5">
+        <div className="flex min-w-0 items-center gap-3 rounded-row bg-white/[0.08] p-3 lg:flex-1 lg:gap-3.5 lg:bg-transparent lg:p-0">
+          <span aria-hidden="true" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-card text-navy lg:h-12 lg:w-12">
+            <FormatIcon kind={item.kind} size={22} />
           </span>
-        )}
-        {item.kind === 'link' && item.url ? (
+          <div className="min-w-0">
+            <p className="break-words text-md font-semibold leading-snug lg:text-[15px]">{item.label}</p>
+            {domain && <p className="mt-0.5 text-xs text-on-navy-muted">{domain}</p>}
+            {isOpened && <OpenedLine />}
+          </div>
+        </div>
+        {opensItself ? (
           <a
-            href={item.url}
+            href={item.url!}
             target="_blank"
             rel="noopener noreferrer"
             aria-label={t.openName({ button: words.button, label: item.label })}
@@ -247,6 +288,7 @@ function ResourceTile({
             className={BUTTON}
           >
             {words.button}
+            <ExternalIcon />
           </a>
         ) : (
           <button
@@ -257,12 +299,13 @@ function ResourceTile({
             className={BUTTON}
           >
             {words.button}
+            <ExternalIcon />
           </button>
         )}
       </div>
       {error && (
         <div className="mt-2">
-          <p className="mb-1.5 text-base text-alert">{t.openFailed({ label: item.label })}</p>
+          <p className="mb-1.5 text-base text-on-navy-red">{t.openFailed({ label: item.label })}</p>
           <ErrorBanner {...error} />
         </div>
       )}
@@ -271,35 +314,165 @@ function ResourceTile({
 }
 
 /**
- * `.status-toggle-group` (`:3757-3761`, `:1838-1846`): *Not started · In progress · Done*. **The chosen
- * one is navy** (ADR-0137 §2: a toggle's chosen option is a selection), where the prototype tinted it
- * red, amber or green and said which by colour alone; `aria-pressed` says it to a screen reader.
+ * **A video, played in place** (UI-067): a 150px player card on a phone and a tablet, 16:9 from 1024px, with the
+ * accent's 56px play button — *Putar video*, the app's own words (O-7). Pressing it asks for the signed address (which
+ * records the open, AC-6) and plays the video here, with the browser's own controls; nothing leaves the page.
  */
-function StatusToggle({
-  status, title, onChoose,
+function VideoItem({
+  moduleCode, item, isOpened, onOpened,
 }: {
-  status: TrainingStatus;
-  title: string;
-  onChoose: (status: TrainingStatus) => void;
+  moduleCode: string;
+  item: TrainingItemView;
+  isOpened: boolean;
+  onOpened: (openedItemIds: string[], itemId: string) => void;
 }) {
   const t = useMessages(trainingMessages);
+  const [src, setSrc] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
+  const BOX = 'h-[150px] w-full rounded-row lg:aspect-video lg:h-auto';
+
+  const play = async () => {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const answer = await openTrainingItem(moduleCode, item.id);
+      setSrc(answer.url);
+      onOpened(answer.openedItemIds, item.id);
+    } catch (err) {
+      setError(toDisplayError(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
-    <div role="group" aria-label={t.statusGroup({ title })} className="mt-[18px] flex flex-wrap gap-2">
-      {TRAINING_STATUSES.map((s) => (
+    <li data-item={item.id}>
+      {src ? (
+        // The item's own label names the player; the browser's controls are its own.
+        <video src={src} controls autoPlay playsInline aria-label={item.label} className={cn(BOX, 'bg-ink object-contain')} />
+      ) : (
         <button
-          key={s}
           type="button"
-          aria-pressed={status === s}
-          onClick={() => onChoose(s)}
-          className={cn(
-            'min-w-[120px] flex-1 rounded-md border px-3.5 py-[9px] text-base font-semibold',
-            status === s ? 'border-navy bg-navy text-white' : 'border-hairline bg-card text-muted hover:border-navy hover:text-navy',
-          )}
+          onClick={() => void play()}
+          aria-disabled={busy || undefined}
+          aria-label={t.playName({ label: item.label })}
+          className={cn(BOX, 'relative flex items-center justify-center bg-navy-soft aria-disabled:opacity-60')}
         >
-          {t.status[s]}
+          <span aria-hidden="true" className="flex h-14 w-14 items-center justify-center rounded-full bg-amber text-navy">
+            <svg viewBox="0 0 24 24" width="26" height="26" fill="currentColor"><path d="M8 5.5v13l10.5-6.5z" /></svg>
+          </span>
+          <span aria-hidden="true" className="absolute bottom-2 right-2.5 rounded-pill bg-ink/40 px-2 py-0.5 text-xs text-white">
+            {t.format.video}
+          </span>
         </button>
-      ))}
-    </div>
+      )}
+      <p className="mt-2 break-words text-md font-semibold leading-snug">{item.label}</p>
+      {isOpened && <OpenedLine />}
+      {error && (
+        <div className="mt-2">
+          <p className="mb-1.5 text-base text-on-navy-red">{t.openFailed({ label: item.label })}</p>
+          <ErrorBanner {...error} />
+        </div>
+      )}
+    </li>
+  );
+}
+
+/** The three statuses' line icons (UI-068): a dashed circle, a play mark, a circle with a check. */
+function StatusIcon({ status, className }: { status: TrainingStatus; className?: string }) {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={cn('shrink-0', className)}>
+      {status === 'not_started' && <circle cx="12" cy="12" r="8.5" strokeDasharray="3 3" />}
+      {status === 'in_progress' && <path d="M8 5.5v13l10.5-6.5z" />}
+      {status === 'done' && (
+        <>
+          <circle cx="12" cy="12" r="8.5" />
+          <path d="m8.5 12.2 2.4 2.4 4.6-4.9" />
+        </>
+      )}
+    </svg>
+  );
+}
+
+/**
+ * **The status card** (UI-068): *Status*, then the three buttons — one row of three, 64px, icon above the word, below
+ * 1024px; stacked, 60px, icon before the word, from 1024px. **The chosen one in the accent with navy words** (the
+ * report's orange; navy, not white, on it — I-542), `aria-pressed` saying it to a screen reader. In a support session
+ * the status is its pill here and nothing can be pressed.
+ */
+function StatusCard({
+  title, status, canUpdate, onChoose, error,
+}: {
+  title: string;
+  status: TrainingStatus;
+  canUpdate: boolean;
+  onChoose: (status: TrainingStatus) => void;
+  error: ApiError | null;
+}) {
+  const t = useMessages(trainingMessages);
+  const labelId = useId();
+  return (
+    <section aria-labelledby={labelId} className="rounded-[20px] bg-card px-3 py-3.5 lg:p-5" data-status-card="">
+      <h2 id={labelId} className="px-1 pb-2.5 text-xs font-semibold text-signal-grey lg:px-0 lg:pb-0 lg:text-base">{t.columns.status}</h2>
+      {canUpdate ? (
+        <div role="group" aria-label={t.statusGroup({ title })} className="flex gap-2 lg:mt-2.5 lg:flex-col lg:gap-2.5">
+          {TRAINING_STATUSES.map((s) => {
+            const on = status === s;
+            return (
+              <button
+                key={s}
+                type="button"
+                aria-pressed={on}
+                onClick={() => onChoose(s)}
+                className={cn(
+                  'flex h-16 min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-row border-[1.5px] px-1 text-xs font-semibold',
+                  'lg:h-[60px] lg:flex-none lg:flex-row lg:justify-start lg:gap-3 lg:px-4 lg:text-md',
+                  on ? 'border-amber bg-amber text-navy' : 'border-line bg-card text-pill-grey-ink hover:border-muted',
+                )}
+              >
+                <StatusIcon status={s} className={cn('h-5 w-5 lg:h-[22px] lg:w-[22px]', on ? 'text-navy' : 'text-signal-grey')} />
+                {t.status[s]}
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        // Any support session (D-support, F-123): no control, the status as its pill.
+        <p className="px-1 lg:mt-2.5 lg:px-0"><TrainingStatusPill status={status} /></p>
+      )}
+      {error && (
+        <p role="alert" className="mt-2 px-1 text-sm font-semibold text-alert lg:px-0">{t.notSaved({ why: error.message })}</p>
+      )}
+    </section>
+  );
+}
+
+/**
+ * **The module on its way, shaped like it** (UI-071: *Memuat…* for two seconds before): the back row, the navy lesson
+ * card with its pill, title and an item, and the status card — one column below 1024px, two from 1024px.
+ */
+function ModuleSkeleton() {
+  const t = useMessages(trainingMessages);
+  return (
+    <Skeleton label={t.loadingModule} className="max-w-[1000px]">
+      <div className="flex min-h-12 items-center lg:min-h-11"><SkeletonBar className="h-4 w-40" /></div>
+      <div className="mt-2 flex flex-col gap-3 lg:mt-[18px] lg:grid lg:grid-cols-[minmax(0,1fr)_300px] lg:items-start lg:gap-5">
+        <div className="rounded-[20px] bg-navy p-[18px] lg:px-7 lg:py-[26px]">
+          <SkeletonBar className="h-6 w-36 rounded-pill bg-white/15" />
+          <SkeletonBar className="mt-4 h-6 w-3/4 bg-white/15" />
+          <div className="mt-4 h-[68px] rounded-row bg-white/[0.08] lg:h-[76px]" />
+          <SkeletonBar className="mt-3.5 h-[52px] w-full rounded-pill bg-white/15 lg:hidden" />
+        </div>
+        <div className="rounded-[20px] bg-card px-3 py-3.5 lg:p-5">
+          <SkeletonBar className="h-3 w-12" />
+          <div className="mt-2.5 flex gap-2 lg:flex-col lg:gap-2.5">
+            {[0, 1, 2].map((i) => <SkeletonBar key={i} className="h-16 flex-1 rounded-row lg:h-[60px] lg:flex-none" />)}
+          </div>
+        </div>
+      </div>
+    </Skeleton>
   );
 }
 
@@ -308,7 +481,7 @@ function ModuleNotFound() {
   const t = useMessages(trainingMessages);
   return (
     <Page title={t.title}>
-      <div className="mx-auto max-w-[820px]">
+      <div className="max-w-[820px]">
         <NotFoundCard title={t.moduleNotFound} />
       </div>
     </Page>

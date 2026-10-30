@@ -105,7 +105,8 @@ describe('the Tailwind theme', () => {
 
     it('globals.css defines both ambers and navy at the values the contrast test measures', () => {
       const globals = readFileSync(join(__dirname, '../../styles/globals.css'), 'utf8');
-      expect(globals).toMatch(/--color-amber:\s*#f2994a;/i);
+      // UI V1 (UI-008): the token table's accent, `#E8954A`, in place of the prototype's `#F2994A`.
+      expect(globals).toMatch(/--color-amber:\s*#e8954a;/i);
       expect(globals).toMatch(/--color-amber-dark:\s*#d97f30;/i);
       expect(globals).toMatch(/--color-navy:\s*#1b2b4b;/i);
     });
@@ -186,22 +187,96 @@ describe('on a phone', () => {
     expect(css).toMatch(/font-size: [\d.]+rem/);
   });
 
-  it('keeps every size at 768px and wider exactly as it was', () => {
-    // The values the scale held as literals before (`tokens.md`, Size scale): a tablet and a desktop the
-    // client has not reviewed do not move (ADR-0167 §12, OD-207).
+  it('UI-008 reads nothing under 12px at any width: the two steps that were 10px and 11px are 12px everywhere', () => {
+    // UI V1 (UI-008, *12px minimum: All sizes*): what a phone alone had since UI-029 (P18.95-T1 AC-10), now every width's.
     expect(decls(topRoot)).toMatchObject({
-      '--text-2xs': '0.625rem',
-      '--text-xs': '0.6875rem',
+      '--text-2xs': '0.75rem',
+      '--text-xs': '0.75rem',
       '--text-sm': '0.75rem',
       '--text-base': '0.8125rem',
       '--text-md': '0.875rem',
     });
   });
 
-  it('AC-10 raises the two steps under 12px to 12px below 768px, and nothing else on the page', async () => {
+  it('UI-008 makes every shell a V1 surface below 768px: the warm grey ground, borderless cards, 16px and 14px corners', async () => {
     const block = await phoneBlock();
     const root = rulesIn(block).find((r) => r.selector === ':root')!;
-    expect(decls(root)).toEqual({ '--text-2xs': '0.75rem', '--text-xs': '0.75rem' });
+    expect(decls(root)).toEqual({
+      '--color-base': '#ededea',
+      '--color-card-edge': 'transparent',
+      '--radius-card': '16px',
+      '--radius-row': '14px',
+    });
+    // Wider, the hairline card and the 12px corner, as before — but in the field shell (the next case).
+    expect(decls(topRoot)).toMatchObject({
+      '--color-base': '#faf9f7', '--color-card-edge': 'var(--color-hairline)', '--radius-card': '12px',
+    });
+  });
+
+  it('UI-008 makes the field shell a V1 surface at every width, the document with it', () => {
+    const rule = sheet.nodes.find((n): n is Rule => n.type === 'rule' && n.selector === ":root:has([data-surface='v1'])")!;
+    expect(decls(rule)).toEqual({
+      '--color-base': '#ededea',
+      '--color-card-edge': 'transparent',
+      '--radius-card': '16px',
+      '--radius-row': '14px',
+    });
+  });
+
+  it('UI-008 writes one family, Inter: the display face is the body face', () => {
+    expect(decls(topRoot)['--font-body']).toMatch(/^'Inter'/);
+    expect(decls(topRoot)['--font-display']).toBe('var(--font-body)');
+    expect(sheet.toString()).not.toMatch(/Manrope/);
+  });
+
+  it('UI-008 serves Inter itself: one latin variable file in public/fonts, with its licence and a metric fallback', () => {
+    const faces = sheet.nodes.filter((n): n is AtRule => n.type === 'atrule' && n.name === 'font-face');
+    const inter = faces.map((face) => decls(face as unknown as Rule)).find((d) => d['font-family'] === "'Inter'")!;
+    expect(inter['font-display']).toBe('swap');
+    expect(inter['font-weight']).toBe('100 900');
+    expect(inter.src).toContain("url('/fonts/inter-latin-wght-normal.woff2')");
+    const file = join(__dirname, '../../../public/fonts/inter-latin-wght-normal.woff2');
+    expect(readFileSync(file).subarray(0, 4).toString()).toBe('wOF2');
+    expect(readFileSync(join(__dirname, '../../../public/fonts/OFL.txt'), 'utf8')).toMatch(/SIL Open Font License/);
+    expect(faces.some((face) => decls(face as unknown as Rule)['font-family'] === "'Inter Fallback'")).toBe(true);
+    expect(decls(topRoot)['--font-body']).toMatch(/^'Inter', 'Inter Fallback',/);
+  });
+
+  it('UI-004 sizes a title 20px, 22px from 768px and 24px from 1024px, through one class', async () => {
+    expect(decls(topRoot)['--text-title']).toBe('1.25rem');
+    const at = (query: string) => sheet.nodes.find(
+      (n): n is AtRule => n.type === 'atrule' && n.name === 'media' && n.params === query,
+    )!;
+    expect(decls(rulesIn(at('(min-width: 768px)'))[0])).toEqual({ '--text-title': '1.375rem' });
+    expect(decls(rulesIn(at('(min-width: 1024px)'))[0])).toEqual({ '--text-title': '1.5rem' });
+    expect(await compile('text-title')).toContain('font-size: var(--text-title)');
+  });
+
+  it('UI-004 leaves room for the tab bar below 1024px, only where the field shell draws it', () => {
+    expect(decls(topRoot)['--tab-bar-space']).toBe('0px');
+    const block = sheet.nodes.find(
+      (n): n is AtRule => n.type === 'atrule' && n.name === 'media' && n.params === '(max-width: 1023.98px)',
+    )!;
+    const [rule] = rulesIn(block);
+    expect(rule.selector).toBe(':root:has([data-tab-bar])');
+    expect(decls(rule)['--tab-bar-space']).toContain('env(safe-area-inset-bottom)');
+  });
+
+  it.each([
+    ['border-card-edge', 'var(--color-card-edge)'],
+    ['bg-pill-red', 'var(--color-pill-red)'],
+    ['text-pill-amber-ink', 'var(--color-pill-amber-ink)'],
+    ['text-signal-red', 'var(--color-signal-red)'],
+    ['text-on-navy-green', 'var(--color-on-navy-green)'],
+    ['bg-ink', 'var(--color-ink)'],
+    ['bg-hover-row', 'var(--color-hover-row)'],
+    ['border-divider', 'var(--color-divider)'],
+    ['border-line', 'var(--color-line)'],
+    ['bg-lavender', 'var(--color-lavender)'],
+    ['rounded-lg', 'var(--radius-card)'],
+    ['rounded-row', 'var(--radius-row)'],
+  ])('UI-008 %s compiles from its token', async (cls, value) => {
+    expect(await compile(cls)).toContain(value);
   });
 
   it('AC-9 makes a field’s text 16px below 768px, whatever small step its class names', async () => {
@@ -277,9 +352,8 @@ describe('on a phone', () => {
   it('AC-10 leaves no arbitrary text size under 12px in the source, but for a glyph that is not text', () => {
     // The scale's steps are raised in one place; an arbitrary `text-[10px]` would escape it. A glyph may
     // stay smaller (AC-10) — each such one is named here, with what it is.
-    const GLYPHS: Record<string, string> = {
-      'components/unit/unit-roster.tsx text-[0.5625rem]': 'the roster’s ▸ disclosure, aria-hidden',
-    };
+    // *Changed 2026-10-30 (UI V1, Phase 18.99 T4):* the roster's ▸ disclosure went with its ⌄ (UI-011); none is left.
+    const GLYPHS: Record<string, string> = {};
     const src = join(__dirname, '../..');
     const found: string[] = [];
     const seen = new Set<string>();

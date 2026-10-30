@@ -6,6 +6,7 @@ import { axe } from 'vitest-axe';
 import { makeMe, renderInLayout, stubFetch } from '@test/harness';
 import { PHONE_QUERY } from '@/lib/use-phone';
 import LeadsPage from './page';
+import { LeadsTable } from '@/components/leads-table';
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
@@ -2687,7 +2688,17 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       });
     });
 
+    /*
+     * **The table's own phone layout**, which the coaching session's *Leads* card still draws: since UI V1 `/leads`
+     * draws the compact list below 1024px (UI-105, `leads-list.tsx`), so these render the table itself.
+     */
     describe('AC-1 — a read-only card per lead below 768px, and a sheet to edit it', () => {
+      const render = (routes: Record<string, unknown>, me = AGENT) => {
+        const stub = stubFetch({ ...BASE, ...routes } as Parameters<typeof stubFetch>[0]);
+        renderInLayout(AgentLayout, <LeadsTable />, { me });
+        return stub;
+      };
+
       const LONG = 'Hobi golf setiap Minggu pagi di Pondok Indah, anak sulungnya masuk kuliah tahun depan '
         + 'dan dia sedang membandingkan dua polis pendidikan dari agen lain.';
 

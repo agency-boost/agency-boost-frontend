@@ -204,7 +204,7 @@ function CodeJoin() {
         )}
 
         {alreadyIn && (
-          <div className="mb-4 rounded-md border border-hairline bg-base p-3">
+          <div className="rounded-md border border-hairline bg-base p-3">
             <p className="text-md text-navy">{t.alreadyIn}</p>
             <p className="mt-1 text-sm text-muted">{t.alreadyInLine}</p>
             {/* The way out. Somebody who opened a colleague's invite by mistake was told
@@ -216,7 +216,9 @@ function CodeJoin() {
           </div>
         )}
 
-        {!preview && (
+        {/* UI-086 (Phase 18.99 T9): somebody already in an office is told so and given the way back — no field, no
+            button they cannot use; the server refuses them a code whatever they type (`POST /join/redeem`). */}
+        {!alreadyIn && !preview && (
           <form onSubmit={check} className="flex flex-col gap-4" noValidate>
             <Field
               label={t.label}
@@ -239,7 +241,7 @@ function CodeJoin() {
           </form>
         )}
 
-        {preview && (
+        {!alreadyIn && preview && (
           <div>
             <p className="text-sm font-semibold uppercase tracking-wide text-muted">
               {t.inviteFor}

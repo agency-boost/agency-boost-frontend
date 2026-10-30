@@ -43,10 +43,12 @@ const policies = (n: number) => `${n} ${n === 1 ? 'policy' : 'policies'}`;
 const days = (n: number) => `${n} ${n === 1 ? 'day' : 'days'}`;
 
 const en = {
-  /** The page (`Overall.html:3080-3086`): its title, kept (§A.2), and the prototype's line. */
+  /**
+   * The page (`Overall.html:3080-3086`): its title, kept (§A.2). The prototype's line went at every size in UI V1
+   * (Appendix A: *Remove* on a phone, a tablet and a desktop).
+   */
   title: kept('Personal Summary'),
-  subtitle: 'Your goals, activity and leads — on one page.',
-  /** *⬇ Download* (ADR-0068): the word is the button's name, the glyph the page's. */
+  /** *Unduh* (ADR-0068; UI-051, UI-057): the button's name, beside a line download icon — the 44px icon button's too. */
   download: 'Download',
   /** The period switch (P18.8-T11): its name, its two views, the selects' names, and the wait. */
   period: 'Period',
@@ -63,6 +65,19 @@ const en = {
     tag: { month: 'This month', year: 'This year' },
     inline: { month: 'this month', year: 'this year' },
     inNamed: ({ named }: { named: string }) => `in ${named}`,
+  },
+
+  /**
+   * **The date header** above the goal card (UI-054): on its right, the days left after today in the current month or
+   * year — *sisa 1 hari bulan ini* on 30 October — and on its last day that it is the last; nothing for a closed period.
+   * The date on its left is the caller's, in the figures' language.
+   */
+  dateHeader: {
+    daysLeft: {
+      month: ({ n }: { n: number }) => `${n} ${n === 1 ? 'day' : 'days'} left this month`,
+      year: ({ n }: { n: number }) => `${n} ${n === 1 ? 'day' : 'days'} left this year`,
+    },
+    lastDay: { month: 'last day of the month', year: 'last day of the year' },
   },
 
   /** No goal saved for the year. */
@@ -87,7 +102,7 @@ const en = {
 
   /** *Goal vs. actual (APE)* (`:3094-3115`): `sum` written by the caller. */
   goal: {
-    title: kept('Goal vs. actual (APE)'),
+    title: 'Goal vs. actual (APE)',
     notUploaded: 'Not uploaded yet',
     ofTarget: ({ sum }: { sum: string }) => `of ${sum} target`,
     /** The bar's end, and its name: the current period's, or a closed one's by its name. */
@@ -106,9 +121,11 @@ const en = {
     remaining: ({ when }: { when: string }) => `Remaining ${when}`,
     reachedOver: ({ sum }: { sum: string }) => `Reached — ${sum} over`,
     reached: 'Reached',
-    policiesNeeded: kept('Policies still needed'),
+    policiesNeeded: 'Policies needed',
     none: 'None',
     policies: ({ n }: { n: number }) => policies(n),
+    /** *± 4 polis* (UI-006, UI-054): the goal card's foot — about, since a policy's APE is the case size's estimate. */
+    about: ({ n }: { n: number }) => `± ${policies(n)}`,
   },
   /**
    * **The pace sentence**, the prototype's verbatim (ADR-0109; `:3132-3135`, `:6340-6347`), and its coaching form
@@ -139,6 +156,16 @@ const en = {
         targets.
       </>
     ),
+    /** `from` as plain words, for the heading's ⓘ on a tablet (UI V1, Appendix A: *ⓘ* there, a line on a desktop). */
+    fromTip: ({ who }: { who: Voice }) =>
+      `From Goal Settings — appointments and closings are ${who.possessive} ${who.self ? 'Sales' : 'sales'} pipeline targets.`,
+    /**
+     * **Where the policies come from** (UI-052: *the UI says which*), behind the heading's ⓘ at every size: *Submission
+     * polis* is what the member logged, APE the production upload — two sources, each named. No word naming the office,
+     * so a coachee's page can say it too (ADR-0084).
+     */
+    source: ({ who }: { who: Voice }) =>
+      `Submission polis counts the policies ${who.subject} log${who.s} in Log Activity; APE comes from the production upload.`,
     /** *5 activities this month* (grey text row 22): `count` written by the caller, `n` for the plural. */
     total: ({ strong, count, n, when }: { strong: Strong; count: string; n: number; when: string }) => (
       <>{strong(count)} {n === 1 ? 'activity' : 'activities'} {when}</>
@@ -154,7 +181,7 @@ const en = {
 
   /** *Activity pulse* (`:3184-3208`), and its sign where no read serves it. */
   pulse: {
-    title: kept('Activity pulse'),
+    title: 'Activity ratios',
     tag: 'Last 30 days',
     sign: ({ who }: { who: Voice }) =>
       `${cap(who.possessive)} selling and recruitment ratios over the last 30 days, each against its benchmark.`,
@@ -269,7 +296,6 @@ const subject = (who: Voice, first = false) => (who.self ? 'Anda' : first ? 'Dia
 
 const id: MessagesOf<typeof en> = {
   title: kept('Personal Summary'),
-  subtitle: `${kept('Goal')}, aktivitas, dan ${kept('leads')} Anda — dalam satu halaman.`,
   download: 'Unduh',
   period: 'Periode',
   views: { month: 'Bulanan', year: 'Tahunan' },
@@ -281,6 +307,15 @@ const id: MessagesOf<typeof en> = {
     tag: { month: 'Bulan ini', year: 'Tahun ini' },
     inline: { month: 'bulan ini', year: 'tahun ini' },
     inNamed: ({ named }) => `pada ${named}`,
+  },
+
+  // UI-054's own words (*sisa 1 hari bulan ini*); *hari terakhir* is new, proposed in §B.10 (P18.99).
+  dateHeader: {
+    daysLeft: {
+      month: ({ n }) => `sisa ${n} hari bulan ini`,
+      year: ({ n }) => `sisa ${n} hari tahun ini`,
+    },
+    lastDay: { month: 'hari terakhir bulan ini', year: 'hari terakhir tahun ini' },
   },
 
   noGoal: {
@@ -299,7 +334,7 @@ const id: MessagesOf<typeof en> = {
   },
 
   goal: {
-    title: kept('Goal vs. actual (APE)'),
+    title: `${kept('Target')} vs. realisasi (${kept('APE')})`,
     notUploaded: 'Belum diunggah',
     ofTarget: ({ sum }) => `dari ${kept('target')} ${sum}`,
     target: { month: `${kept('Target')} bulan ini`, year: `${kept('Target')} tahun ini` },
@@ -310,16 +345,18 @@ const id: MessagesOf<typeof en> = {
       `${kept('Target')} ${own(who, 'tahunan')} sudah tercapai sebelum ${named} dimulai — bulan itu tidak memerlukan apa-apa lagi.`,
   },
 
-  // *Gap* is kept, as the Unit Dashboard's is (§A.4); for approval in §B.10.
+  // *Gap* is translated since UI V1 (UI-006): *Selisih*, the alternative §B.10 named; proposed in §B.10, P18.99.
   gap: {
-    title: kept('Gap'),
+    title: 'Selisih',
     remaining: ({ when }) => `Sisa ${when}`,
     reachedOver: ({ sum }) => `Tercapai — lebih ${sum}`,
     reached: 'Tercapai',
-    policiesNeeded: kept('Policies still needed'),
+    policiesNeeded: 'Polis yang dibutuhkan',
     none: 'Tidak ada',
     // One form for one and many (§B.0 rule 8): *1 polis*, *3 polis*.
     policies: ({ n }) => `${n} polis`,
+    // UI-006's value, verbatim: *± 4 polis*.
+    about: ({ n }) => `± ${n} polis`,
   },
   pace: {
     met: ({ who }) =>
@@ -341,6 +378,13 @@ const id: MessagesOf<typeof en> = {
         {own(who, 'penjualan')}.
       </>
     ),
+    fromTip: ({ who }) =>
+      `Dari ${kept('Goal Settings')} — janji temu dan ${kept('closings')} adalah ${kept('target')} ${kept('pipeline')} `
+      + `${own(who, 'penjualan')}.`,
+    // Proposed in §B.10 (P18.99, UI-052).
+    source: ({ who }) =>
+      `${kept('Submission polis')} adalah polis yang ${subject(who)} catat di ${kept('Log Activity')}; ${kept('APE')} berasal `
+      + 'dari unggahan produksi.',
     total: ({ strong, count, when }) => <>{strong(count)} aktivitas {when}</>,
     noTarget: `Belum ada ${kept('target')}`,
     nothingMore: ({ when }) => `Tidak perlu apa-apa lagi ${when}`,
@@ -350,7 +394,7 @@ const id: MessagesOf<typeof en> = {
   },
 
   pulse: {
-    title: kept('Activity pulse'),
+    title: 'Rasio aktivitas',
     tag: '30 hari terakhir',
     sign: ({ who }) =>
       `${kept('Ratio')} penjualan dan ${own(who, kept('recruitment'), true)} dalam 30 hari terakhir, masing-masing `
@@ -360,7 +404,8 @@ const id: MessagesOf<typeof en> = {
     noneTheirs: ({ who }) => `Belum ada ${kept('ratio')} untuk ${own(who, 'peran')}.`,
   },
 
-  campaigns: ({ who }) => `${kept('Campaigns')} yang ${subject(who)} kejar`,
+  // UI-006 (owner): *Campaign yang Anda kejar* — the kept word, singular.
+  campaigns: ({ who }) => `${kept('Campaign')} yang ${subject(who)} kejar`,
 
   leads: {
     title: ({ who }) => `${kept('Leads')} yang perlu ${own(who, 'perhatian')}`,

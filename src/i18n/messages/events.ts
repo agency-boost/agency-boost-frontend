@@ -9,7 +9,7 @@ import { kept } from '@/i18n/kept';
  *
  * **English is the source**: the prototype's words where it draws them (`Overall.html:3423-3448`, `:8425-8771`), ours
  * where it does not. The Indonesian is the approved glossary's — *Ikut · Belum ikut · Akan datang · Sudah lewat* (§B.3),
- * *Ikut* for *Join* and *Kirim masukan* (§B.1) — with what it lacked proposed in the glossary for approval's §B.10.
+ * *Ikut* for *Join* and *Kirim feedback* (§B.1; *Feedback*, not *Masukan*, since UI V1, UI-108) — with what it lacked proposed in the glossary for approval's §B.10.
  * **Kept** (§A): the title, *event* (§A.6, *Event created ✓ → Event dibuat ✓*), *KPM*, *leader*, and the issuer's
  * *{company} Event* (§C5); *RSVP* is written as it is, a loanword. **Typed content stays as typed**: an event's title,
  * blurb, description and place, a type's emoji, the company's name and a member's own answer. **A figure is never a
@@ -45,6 +45,14 @@ const en = {
     going: 'Going', notJoined: 'Not joined', didntJoin: "Didn't join", feedbackSent: 'Feedback sent', feedbackPending: 'Feedback pending',
   },
   viewEvent: 'View event',
+  /**
+   * **A phone's card** (UI V1, UI-108; `campaign-event-mobile` 2): *Ikut* and *Tidak ikut* both, the group naming its
+   * event, and what each tap says.
+   */
+  notGoing: 'Not going',
+  answerName: ({ title }: { title: string }) => `Your answer for ${title}`,
+  declined: ({ title }: { title: string }) => `You're not going to ${title}`,
+  withdrawn: ({ title }: { title: string }) => `Your answer for ${title} is withdrawn`,
   /** The card's *Join* (P18.95-T10 AC-1), and its name with its event's title. */
   join: 'Join',
   joinName: ({ title }: { title: string }) => `Join ${title}`,
@@ -105,7 +113,7 @@ const en = {
 
 const id: MessagesOf<typeof en> = {
   title: kept('Event List'),
-  sub: `Lihat ${kept('event')} yang akan datang dan yang sudah lewat dari ${kept('KPM')} Anda — ikut, dan berikan masukan setelah ${kept('event')} selesai.`,
+  sub: `Lihat ${kept('event')} yang akan datang dan yang sudah lewat dari ${kept('KPM')} Anda — ikut, dan berikan ${kept('feedback')} setelah ${kept('event')} selesai.`,
   filterLabel: `Tampilkan ${kept('event')}`,
   filters: { all: 'Semua', upcoming: 'Akan datang', past: 'Sudah lewat' },
   sections: { going: 'Ikut', upcoming: 'Akan datang', past: 'Sudah lewat' },
@@ -114,9 +122,13 @@ const id: MessagesOf<typeof en> = {
   emptyPast: `Belum ada ${kept('event')} yang sudah lewat.`,
   tags: { going: 'Ikut', notJoined: 'Belum ikut', past: 'Sudah lewat' },
   pills: {
-    going: 'Ikut', notJoined: 'Belum ikut', didntJoin: 'Tidak ikut', feedbackSent: 'Masukan terkirim', feedbackPending: 'Masukan belum dikirim',
+    going: 'Ikut', notJoined: 'Belum ikut', didntJoin: 'Tidak ikut', feedbackSent: `${kept('Feedback')} terkirim`, feedbackPending: `${kept('Feedback')} belum dikirim`,
   },
   viewEvent: `Lihat ${kept('event')}`,
+  notGoing: 'Tidak ikut',
+  answerName: ({ title }) => `Jawaban Anda untuk ${title}`,
+  declined: ({ title }) => `Anda tidak ikut ${title}`,
+  withdrawn: ({ title }) => `Jawaban Anda untuk ${title} dibatalkan`,
   join: 'Ikut',
   joinName: ({ title }) => `Ikut ${title}`,
   companyEvent: ({ company }) => `${company} ${kept('Event')}`,
@@ -132,7 +144,7 @@ const id: MessagesOf<typeof en> = {
   cancelRsvp: 'Batalkan RSVP',
   joinEvent: `Ikut ${kept('event')}`,
   formQuestion: `Seberapa besar kemungkinan Anda merekomendasikan ${kept('event')} ini kepada rekan kerja Anda?`,
-  formHint: `Ini langkah terakhir untuk ${kept('event')} ini — masukan Anda membantu membentuk ${kept('event')} berikutnya.`,
+  formHint: `Ini langkah terakhir untuk ${kept('event')} ini — ${kept('feedback')} Anda membantu membentuk ${kept('event')} berikutnya.`,
   scaleLow: ({ min }) => `${min} — Sama sekali tidak mungkin`,
   scaleHigh: ({ max }) => `${max} — Sangat mungkin`,
   why: 'Mengapa?',
@@ -140,18 +152,18 @@ const id: MessagesOf<typeof en> = {
   whyPlaceholder: 'Apa yang paling berkesan, baik atau buruk?',
   improve: 'Apa yang bisa kami perbaiki?',
   improvePlaceholder: 'Ada saran untuk lain kali?',
-  submitFeedback: 'Kirim masukan',
+  submitFeedback: `Kirim ${kept('feedback')}`,
   didntJoinTitle: `Anda tidak ikut ${kept('event')} ini`,
-  didntJoinSub: 'Masukan hanya dikumpulkan dari agent yang hadir, jadi tidak ada yang perlu diisi di sini.',
+  didntJoinSub: `${kept('Feedback')} hanya dikumpulkan dari agent yang hadir, jadi tidak ada yang perlu diisi di sini.`,
   claim: `Saya sebenarnya hadir di ${kept('event')} ini`,
-  thanksTitle: 'Terima kasih atas masukan Anda',
+  thanksTitle: `Terima kasih atas ${kept('feedback')} Anda`,
   scored: ({ score, max, why }) => `Anda memberi skor ${score}/${max} untuk ${kept('event')} ini${why ? ` — "${why}"` : ''}`,
   goingDetail: ({ title }) => `Anda ikut ${title}`,
   cancelled: ({ title }) => `RSVP untuk ${title} dibatalkan`,
   pickScore: ({ min, max }) => `Pilih skor dari ${min}–${max} terlebih dahulu`,
   // No exclamation mark (§B.0 rule 7).
-  feedbackSubmitted: 'Masukan terkirim — terima kasih.',
-  claimed: 'Ditandai hadir — sekarang Anda dapat memberikan masukan',
+  feedbackSubmitted: `${kept('Feedback')} terkirim — terima kasih.`,
+  claimed: `Ditandai hadir — sekarang Anda dapat memberikan ${kept('feedback')}`,
   closeModal: 'Tutup',
   loadingList: `Memuat ${kept('event')}…`,
   loadingEvent: `Memuat detail ${kept('event')}…`,

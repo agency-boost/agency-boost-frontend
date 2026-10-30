@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef } from 'react';
+import type { Language } from '@/i18n/language';
 import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
 import { uiMessages } from '@/i18n/messages/ui';
 import { cn } from '@/lib/cn';
@@ -23,7 +24,7 @@ export const DATE_FIELD_EMPTY = uiMessages.en.chooseDate;
  * (`Overall.html:3284-3286`). `cell` is a table cell you can change: transparent until it is hovered or focused, as
  * `TextInput`'s `cell` is (`components-and-patterns.md`, the data table).
  */
-export type DateFieldDensity = 'default' | 'compact' | 'cell';
+export type DateFieldDensity = 'default' | 'compact' | 'cell' | 'text';
 
 /*
  * A minimum, not a height: the face stretches to the wrapper, so a caller's taller box — the leads sheet's 44px on a
@@ -34,6 +35,8 @@ const FACE: Record<DateFieldDensity, string> = {
   compact: 'min-h-[34px] gap-2 rounded-md border-[1.5px] px-3',
   // A table column is narrow: the glyph and the edges sit closer, so *17 Okt 2026* fits the leads table's 105px whole.
   cell: 'w-full gap-1 rounded-sm border px-1 py-[3px] leading-tight',
+  // A date in a line of words (UI V1, UI-061's action row): no box, a dotted underline says it can be changed.
+  text: 'gap-1 border-0 underline decoration-dotted underline-offset-4',
 };
 
 /** At rest, and while the field underneath it has the focus — the native ring is drawn on the face, not the field. */
@@ -41,6 +44,7 @@ const REST: Record<DateFieldDensity, string> = {
   default: 'border-hairline bg-card',
   compact: 'border-hairline bg-card',
   cell: 'border-transparent bg-transparent peer-hover:border-hairline peer-focus:border-amber peer-focus:bg-card peer-focus:ring-1 peer-focus:ring-amber',
+  text: 'bg-transparent',
 };
 
 export interface DateFieldProps
@@ -51,8 +55,15 @@ export interface DateFieldProps
   onChange: (next: string) => void;
   invalid?: boolean;
   density?: DateFieldDensity;
-  /** Where the calendar glyph sits: after the date, as a browser draws it, or before it (the leads table's). */
-  glyph?: 'end' | 'start';
+  /** Where the calendar glyph sits: after the date, as a browser draws it, or before it (the leads table's); `none`. */
+  glyph?: 'end' | 'start' | 'none';
+  /**
+   * The face's words for a date, where a screen writes dates its own way — the action row's *30 Okt* (UI-061). Absent,
+   * `formatCalendarDay`. The value is ISO either way.
+   */
+  format?: (day: string, language: Language) => string;
+  /** The face's own type, where it is not a form's: the action row's 13px/600 (UI-061). */
+  faceClassName?: string;
   /** What an empty field shows. A form's says *Choose a date*; a table cell's, by default, nothing. */
   emptyText?: string;
   /** On the wrapper, which the field and its face fill: a width, a margin, a taller box on a phone. */
@@ -86,6 +97,8 @@ export function DateField({
   density = 'default',
   glyph = 'end',
   emptyText,
+  format,
+  faceClassName,
   className,
   disabled,
   readOnly,
@@ -99,7 +112,7 @@ export function DateField({
   const language = useFigureLanguage();
   const t = useMessages(uiMessages);
   // A year still being typed digit by digit (`0002-08-01`) is not a date yet: the face waits for a whole one.
-  const shown = value && WHOLE_DATE.test(value) ? formatCalendarDay(value, language) : '';
+  const shown = value && WHOLE_DATE.test(value) ? (format ?? formatCalendarDay)(value, language) : '';
   const empty = emptyText ?? (density === 'cell' ? '' : t.chooseDate);
   const inert = Boolean(disabled || readOnly);
 
@@ -157,6 +170,7 @@ export function DateField({
           invalid && 'border-alert',
           (disabled || (readOnly && density !== 'cell')) && 'bg-base text-muted',
           'peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-1 peer-focus-visible:outline-amber',
+          faceClassName,
         )}
       >
         {glyph === 'start' && icon}

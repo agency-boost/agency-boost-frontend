@@ -43,10 +43,47 @@ const en = {
     none: 'No past sessions yet.',
     view: 'View →',
   },
-  /** The pre-start state (`Overall.html:4176-4184`): the ▶ is drawn apart. */
+  /** The pre-start state (`Overall.html:4176-4184`): the ▶ is drawn apart. Its line went at every size (UI-032). */
   start: {
     button: 'Start coaching session',
-    line: "Opens last week's items, goals, leads, and everything else for today's 1-on-1.",
+  },
+
+  /**
+   * **The session card** (UI V1, UI-032): one card — *Sesi hari ini*, the day, the tag and *Mulai sesi coaching* — with
+   * the past sessions as rows under it, three and then *Semua*.
+   */
+  sessionCard: {
+    label: 'Today’s session',
+    past: 'Past sessions',
+    /** A past session's row: `day` and `summary` written by the caller. */
+    row: ({ day, summary }: { day: string; summary: string }) => `${day} · ${summary}`,
+    all: ({ n }: { n: number }) => `All (${n})`,
+    fewer: 'Show fewer',
+  },
+
+  /**
+   * **The session's Leads card** (UI V1, UI-062, UI-081): compact rows, five and then *Tampilkan semua (n)*, the closed
+   * leads in one line. The search, *+ Tambah lead*, *Isi tindakan* and *Isi tanggal* are the leads module's words.
+   */
+  leadsCard: {
+    showAll: ({ n }: { n: number }) => `Show all (${n})`,
+    showFewer: 'Show fewer',
+    closed: ({ won, lost }: { won: number; lost: number }) => `Closed: Won ${won} · Lost ${lost}`,
+    none: `No ${kept('leads')} yet.`,
+    noMatch: `No ${kept('lead')} matches.`,
+    /** *Isi tanggal*'s picker, named for the lead. */
+    pickDate: ({ name }: { name: string }) => `Next action date for ${name}`,
+    reading: `Reading the ${kept('leads')}…`,
+  },
+
+  /** **The pinned *Finalkan* bar and the sticky column's foot** (UI V1, UI-060, UI-062). */
+  bar: {
+    /** Left of *Finalkan* on a phone: *Draf · 6 tindakan*. */
+    draft: ({ n }: { n: number }) => `Draft · ${n} ${n === 1 ? 'action' : 'actions'}`,
+    /** The refusal above the button, with how many rows lack a date: *(1)*. */
+    count: ({ sentence, n }: { sentence: string; n: number }) => `${sentence} (${n})`,
+    /** After finalize: the green strip (`day` written by the caller, *30 Okt*). */
+    finalized: ({ day }: { day: string }) => `Finalized ${day}`,
   },
   opening: 'Opening the session…',
   /** The one line a version conflict leaves. */
@@ -54,7 +91,8 @@ const en = {
   /** What follows *Session started ✓* when last week's were carried (`Overall.html:10699`). */
   carried: 'unfinished items and tips from last week carried forward.',
   goalUpdated: 'Goal updated — reflected across both tabs.',
-  finalizedToast: 'Session finalized — this coaching is now marked done, and locked to view-only.',
+  /** UI-060: *toast "Tersimpan"*, then the green strip says the rest. */
+  finalizedToast: 'Saved',
   reopenedToast: 'Reopened for editing — finalize again when you’re done.',
   /** The Leads card (ADR-0076) and its table's caption, in the coachee's pronoun. */
   leads: kept('Leads'),
@@ -74,6 +112,11 @@ const en = {
     noTips: 'No tips were added this session.',
     next: 'Next action items',
     fromLeads: 'From leads (automatic)',
+    /** The workspace's sub-labels, sentence case (UI-061): *Dari leads* with the ⚡, and *Lainnya*. */
+    fromLeadsShort: `From ${kept('leads')}`,
+    otherShort: 'Other',
+    /** Behind the ⚡'s ⓘ (D-25). */
+    autoWhy: `Taken from each ${kept('lead')}’s next action. Change it in the ${kept('lead')}.`,
     noLeadDates: 'No leads have a next action date set yet.',
     other: 'Other action items',
     noOther: 'No other action items were added this session.',
@@ -84,7 +127,7 @@ const en = {
   /** *Goal* (`Overall.html:4192-4214`; ADR-0075). */
   goal: {
     title: kept('Goal'),
-    annualTarget: kept('Annual APE target'),
+    annualTarget: 'Annual APE target',
     save: 'Save',
     cancel: 'Cancel',
     tapToEdit: 'Tap this year’s target to edit',
@@ -96,13 +139,16 @@ const en = {
     month: 'This month’s target',
     year: 'This year’s target',
     notUploaded: 'Not uploaded yet',
+    /** The two tiles' labels on the session (UI-062). */
+    monthTile: 'This month',
+    yearTile: 'This year',
     /** `sum` written by the caller. */
     remaining: ({ sum, period }: { sum: string; period: 'month' | 'year' }) => `${sum} remaining this ${period}.`,
   },
 
   /** *Ratios*, *Last 30 days* (`Overall.html:4215-4218`). */
   ratios: {
-    title: kept('Ratios'),
+    title: 'Ratios',
     tag: 'Last 30 days',
     working: 'Working out the ratios…',
     none: ({ pronoun }: { pronoun: Pronoun }) => `There are no ratios for ${f(pronoun).possessive} role yet.`,
@@ -196,13 +242,33 @@ const id: MessagesOf<typeof en> = {
   },
   start: {
     button: `Mulai sesi ${kept('coaching')}`,
-    line: `Membuka item minggu lalu, ${kept('goals')}, ${kept('leads')}, dan semua hal lain untuk ${kept('1-on-1')} hari ini.`,
+  },
+  sessionCard: {
+    label: 'Sesi hari ini',
+    past: 'Sesi sebelumnya',
+    row: ({ day, summary }) => `${day} · ${summary}`,
+    all: ({ n }) => `Semua (${n})`,
+    fewer: 'Tampilkan lebih sedikit',
+  },
+  leadsCard: {
+    showAll: ({ n }) => `Tampilkan semua (${n})`,
+    showFewer: 'Tampilkan lebih sedikit',
+    closed: ({ won, lost }) => `Ditutup: Berhasil ${won} · Tidak berhasil ${lost}`,
+    none: `Belum ada ${kept('lead')}.`,
+    noMatch: `Tidak ada ${kept('lead')} yang cocok.`,
+    pickDate: ({ name }) => `Tanggal tindakan berikutnya untuk ${name}`,
+    reading: `Memuat ${kept('leads')}…`,
+  },
+  bar: {
+    draft: ({ n }) => `Draf · ${n} tindakan`,
+    count: ({ sentence, n }) => `${sentence} (${n})`,
+    finalized: ({ day }) => `Difinalkan ${day}`,
   },
   opening: 'Membuka sesi…',
   reloaded: 'Sesi ini diubah di tempat lain, jadi sudah dimuat ulang.',
   carried: 'item yang belum selesai dan tips dari minggu lalu dibawa ke sesi ini.',
   goalUpdated: `${kept('Goal')} diperbarui — kedua tab sudah menampilkannya.`,
-  finalizedToast: `Sesi difinalkan — ${kept('coaching')} ini kini tercatat selesai, dan terkunci hanya untuk dilihat.`,
+  finalizedToast: 'Tersimpan',
   reopenedToast: 'Dibuka kembali untuk diubah — finalkan lagi setelah selesai.',
   leads: kept('Leads'),
   // *Dia* whatever the pronoun (§B.0 rule 8): *his* and *her* are both *-nya*.
@@ -218,6 +284,9 @@ const id: MessagesOf<typeof en> = {
     noTips: 'Tidak ada tips yang ditambahkan di sesi ini.',
     next: 'Tindakan berikutnya',
     fromLeads: `Dari ${kept('leads')} (otomatis)`,
+    fromLeadsShort: `Dari ${kept('leads')}`,
+    otherShort: 'Lainnya',
+    autoWhy: `Diambil dari tindakan berikutnya setiap ${kept('lead')}. Ubah di ${kept('lead')}-nya.`,
     noLeadDates: `Belum ada ${kept('lead')} yang punya tanggal tindakan berikutnya.`,
     other: 'Tindakan lainnya',
     noOther: 'Tidak ada tindakan lain yang ditambahkan di sesi ini.',
@@ -226,7 +295,7 @@ const id: MessagesOf<typeof en> = {
 
   goal: {
     title: kept('Goal'),
-    annualTarget: kept('Annual APE target'),
+    annualTarget: 'Target APE tahunan',
     save: 'Simpan',
     cancel: 'Batal',
     tapToEdit: `Ketuk ${kept('target')} tahun ini untuk mengubah`,
@@ -237,11 +306,13 @@ const id: MessagesOf<typeof en> = {
     month: `${kept('Target')} bulan ini`,
     year: `${kept('Target')} tahun ini`,
     notUploaded: 'Belum diunggah',
+    monthTile: 'Bulan ini',
+    yearTile: 'Tahun ini',
     remaining: ({ sum, period }) => `Sisa ${sum} untuk ${period === 'month' ? 'bulan' : 'tahun'} ini.`,
   },
 
   ratios: {
-    title: kept('Ratios'),
+    title: 'Rasio',
     tag: '30 hari terakhir',
     working: `Menghitung ${kept('ratio')}…`,
     none: () => `Belum ada ${kept('ratio')} untuk perannya.`,

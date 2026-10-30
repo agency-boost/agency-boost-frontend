@@ -15,8 +15,9 @@ import { kept } from '@/i18n/kept';
  * mode (§B.9); a person is *dia* / *-nya*, the reader *Anda*. **Content is shown as typed** (ADR-0179 §5): a section's,
  * an activity type's and a ratio's names and descriptions, a ratio's purpose, and the server's refusal of a range.
  * **A message never writes a figure**: a day, a count and a percentage are written by the caller in the figures'
- * language and handed in; a count of days is the server's, the same digits in both languages. *Touch* (`glossary.md`)
- * is *sentuhan* (for approval, §B.10).
+ * language and handed in; a count of days is the server's, the same digits in both languages. **A logged activity is
+ * an *activity* — *aktivitas* — wherever a count of them is said** (UI V1, UI-106, the owner: *"aktivitas", not
+ * "sentuhan"*); it was *touch* / *sentuhan* (`glossary.md` *Touch*) until 2026-10-30.
  *
  * @moved components/activity-tabs.tsx
  * @moved components/activity-dashboard.tsx
@@ -34,14 +35,20 @@ const en = {
     subtitle: "Enter today's activities in 1 minute.",
     loading: 'Loading your day…',
     /** The save status under the date (`refreshSaveStatus`, `:4937-4958`): the saved day's own total. */
-    saved: ({ n }: { n: number }) => `Saved · ${n} touches`,
+    saved: ({ n }: { n: number }) => `Saved · ${n} ${n === 1 ? 'activity' : 'activities'}`,
     notSaved: 'Not yet saved',
     date: 'Date',
-    totalToday: 'Total touches today',
-    /** A phone's one line (P18.95-T5 AC-1): *Today: 3 touches*, the count written by the caller in bold. */
+    totalToday: 'Total activities today',
+    /** A phone's one line (P18.95-T5 AC-1): *Today: 3 activities*, the count written by the caller in bold. */
     today: 'Today',
     dayLine: ({ day, count, n }: { day: string; count: ReactNode; n: number }) =>
-      <>{day}: {count} {n === 1 ? 'touch' : 'touches'}</>,
+      <>{day}: {count} {n === 1 ? 'activity' : 'activities'}</>,
+    /** UI-106's save bar on a phone: what the unsaved counts add to the saved day. */
+    newCount: ({ n }: { n: number }) => `${n} new ${n === 1 ? 'activity' : 'activities'}`,
+    /** UI-106's date pill: the two arrows and the day between them, which opens the device's picker. */
+    previousDay: 'Previous day',
+    nextDay: 'Next day',
+    chooseDay: 'Choose the day',
     notSetUp: 'Your office has not set up its activity types yet. Ask your KPM Owner — the list on this screen is '
       + 'theirs to define.',
     /** A section's count of items, its badge. */
@@ -71,6 +78,16 @@ const en = {
       CUSTOM: 'Custom',
     },
     range: 'Range',
+    /** UI-106's chips on a phone: *7 hari · 30 hari · Kustom*. */
+    phoneRanges: {
+      ROLLING_7D: '7 days',
+      ROLLING_30D: '30 days',
+      CUSTOM: 'Custom',
+    },
+    /** UI-106's line under the chips: the days only, *24 – 30 Okt 2026*, each written by the caller. */
+    span: ({ from, to }: { from: string; to: string }) => `${from} – ${to}`,
+    /** UI-106's group totals, as a screen reader hears the strip. */
+    groupTotals: 'Totals by group',
     /** Why a custom range cannot be asked for: only what needs no server number. */
     chooseBoth: 'Choose both dates.',
     startsAfterEnd: 'The range starts after it ends.',
@@ -101,7 +118,7 @@ const en = {
     notYours: 'No longer in your sections',
     notTheirs: ({ possessive }: { possessive: string }) => `No longer in ${possessive} sections`,
     /** The strip's total (ADR-0064), with its ⓘ. */
-    totalTouches: 'Total touches',
+    totalTouches: 'Total activities',
     nothingLogged: 'Nothing logged in this range yet.',
     logActivity: kept('Log Activity'),
     /** The 30-day mode's first row (`renderDashboard`, `:5101-5116`). */
@@ -144,12 +161,16 @@ const id: MessagesOf<typeof en> = {
   log: {
     subtitle: 'Catat aktivitas hari ini dalam 1 menit.',
     loading: 'Memuat catatan hari Anda…',
-    saved: ({ n }) => `Tersimpan · ${n} sentuhan`,
+    saved: ({ n }) => `Tersimpan · ${n} aktivitas`,
     notSaved: 'Belum disimpan',
     date: 'Tanggal',
-    totalToday: 'Total sentuhan hari ini',
+    totalToday: 'Total aktivitas hari ini',
     today: 'Hari ini',
-    dayLine: ({ day, count }) => <>{day}: {count} sentuhan</>,
+    dayLine: ({ day, count }) => <>{day}: {count} aktivitas</>,
+    newCount: ({ n }) => `${n} aktivitas baru`,
+    previousDay: 'Hari sebelumnya',
+    nextDay: 'Hari berikutnya',
+    chooseDay: 'Pilih hari',
     notSetUp: `${kept('KPM')} Anda belum mengatur jenis aktivitasnya. Tanyakan kepada ${kept('KPM Owner')} Anda — `
       + 'daftar di layar ini mereka yang menentukan.',
     items: ({ n }) => `${n} item`,
@@ -173,6 +194,13 @@ const id: MessagesOf<typeof en> = {
       CUSTOM: 'Kustom',
     },
     range: 'Rentang',
+    phoneRanges: {
+      ROLLING_7D: '7 hari',
+      ROLLING_30D: '30 hari',
+      CUSTOM: 'Kustom',
+    },
+    span: ({ from, to }) => `${from} – ${to}`,
+    groupTotals: 'Total per kelompok',
     chooseBoth: 'Pilih kedua tanggal.',
     startsAfterEnd: 'Rentang dimulai setelah tanggal akhirnya.',
     endsAfterToday: ({ day }) => `Rentang berakhir setelah hari ini, ${day}.`,
@@ -194,7 +222,7 @@ const id: MessagesOf<typeof en> = {
     notYours: 'Tidak lagi ada di bagian Anda',
     // A person is *dia* / *-nya* whatever their pronoun (§B.0 rule 8).
     notTheirs: () => 'Tidak lagi ada di bagiannya',
-    totalTouches: 'Total sentuhan',
+    totalTouches: 'Total aktivitas',
     nothingLogged: 'Belum ada yang tercatat dalam rentang ini.',
     logActivity: kept('Log Activity'),
     totalAll: 'Total — semua kategori',

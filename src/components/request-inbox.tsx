@@ -42,7 +42,12 @@ function unitsUnder(choices: RoutingChoice[], request: PendingRequest): RoutingC
  * Declining leaves them in the office, free to ask somebody else — a refusal, not a removal. An approval the leader
  * limit refused may be asked of AgencyBoost (ADR-0157). `onCount` hears how many are waiting, each time it changes.
  */
-export function RequestInbox({ today, onCount }: { today?: string; onCount?: (n: number) => void }) {
+export function RequestInbox({ today, onCount, empty }: {
+  today?: string;
+  onCount?: (n: number) => void;
+  /** What an empty inbox shows in place of the shared line — User Management's Boost (UI-089, Phase 18.99 T9). */
+  empty?: React.ReactNode;
+}) {
   // The inbox's words (`i18n/messages/requests.ts`): the prototype's list, and the join date approving asks for.
   const words = useMessages(requestsMessages);
   const copy = words.inbox;
@@ -156,7 +161,7 @@ export function RequestInbox({ today, onCount }: { today?: string; onCount?: (n:
         : <ErrorBanner {...error} />)}
 
       {requests === null && <SkeletonCards count={2} label={copy.loading} className="mt-4" />}
-      {requests?.length === 0 && <EmptyState title={copy.empty} />}
+      {requests?.length === 0 && (empty ?? <EmptyState title={copy.empty} />)}
 
       <ul className="mt-4 flex flex-col gap-3">
         {requests?.map((request) => (

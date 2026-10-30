@@ -139,7 +139,7 @@ export function SkeletonCards({
     <Skeleton label={label} className={className}>
       <div className="space-y-3">
         {Array.from({ length: count }, (_, i) => (
-          <div key={i} className="rounded-lg border border-hairline bg-card p-4">
+          <div key={i} className="rounded-lg border border-card-edge bg-card p-4">
             <SkeletonBar className="h-4 w-1/3" />
             <SkeletonBar className="mt-3 w-2/3" />
           </div>
@@ -224,7 +224,7 @@ export function PageSkeleton({ label, sessionWait = false }: { label?: string; s
     <Skeleton label={label} className="px-5 py-6" sessionWait={sessionWait}>
       <SkeletonBar className="h-6 w-56" />
       <SkeletonBar className="mt-2 h-3 w-80" />
-      <div className="mt-8 rounded-lg border border-hairline bg-card p-4">
+      <div className="mt-8 rounded-lg border border-card-edge bg-card p-4">
         <SkeletonText lines={5} />
       </div>
     </Skeleton>

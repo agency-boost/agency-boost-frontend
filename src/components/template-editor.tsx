@@ -14,7 +14,7 @@ import { suggestCode } from '@/lib/config-code';
 import { formatNumber, formatPercent, formatRupiah, formatRupiahCompact, parseDecimal } from '@/lib/format';
 import { planSummaryTile, summaryGroups, summaryTileName } from '@/lib/summary-tiles';
 import { TippedGlyph } from '@/components/ui/tipped-glyph';
-import { autoBadge, byHandBadge } from '@/lib/activation';
+import { autoBadge, byHandBadge } from '@/lib/activation-badges';
 import type { TemplateLinkKind, TemplateLinkKinds } from '@/lib/admin';
 import { ActivityBindingFields } from '@/components/activity-binding-fields';
 import { BINDING_ROLE_LABEL, BINDING_ROLES, type ActivityBinding } from '@/lib/activity-binding';

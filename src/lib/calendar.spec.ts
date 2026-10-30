@@ -8,7 +8,7 @@ import {
   hhmm, initialsOf, INVITEES_MAX, isBusy, NOTES_MAX, OWN_COPY, PEOPLE_GROUP_LABEL, peopleOn, personTag, placeBlock,
   PROTOTYPE_COPY, readableDate, readCalendar, readCalendarSettings, readDownline, readEntry, saveCalendarSettings,
   searchPeople, TITLE_MAX, titleOf, TRIP_DAYS_MAX, TYPE_LABEL, updateEntry,
-  isZoomHost, meetingUrl, notesParts, viewOf,
+  isZoomHost, meetingUrl, notesParts, viewOf, DISPLAYS, agendaHref, setLeadActionDone, setCoachingItemDone,
 } from './calendar';
 import * as calendarModule from './calendar';
 
@@ -45,6 +45,17 @@ describe('the calendar’s calls (functional/calendar.md, Data contract)', () =>
     expect(JSON.parse(String(calls[2].init.body))).toEqual({ ...input, version: 3 });
     expect(calls[3].init.method).toBe('DELETE');
     expect(calls[3].url).toMatch(/\/calendar\/entries\/e-1\?version=4$/);
+  });
+
+  it('UI-104 ticks a lead’s next action pinned to its version, and a coaching item, each at its source — and takes either back', async () => {
+    const { calls } = stubFetch({ '/leads/': { body: { id: 'l 1', version: 4, nextActionDate: null, nextActionNote: null } }, '/coaching/sessions/': ok });
+    await setLeadActionDone('l 1', true, 3);
+    await setCoachingItemDone('s-1', 'item 1', false);
+    expect(calls[0].url).toMatch(/\/leads\/l%201\/next-action\/done$/);
+    expect(calls[0].init.method).toBe('PUT');
+    expect(JSON.parse(String(calls[0].init.body))).toEqual({ done: true, version: 3 });
+    expect(calls[1].url).toMatch(/\/coaching\/sessions\/s-1\/action-items\/item%201\/done$/);
+    expect(JSON.parse(String(calls[1].init.body))).toEqual({ done: false });
   });
 
   it('answers for the reader alone, and nothing else (ADR-0097)', async () => {
@@ -291,8 +302,11 @@ describe('P18.95-T8 AC-2 meeting links in Location / notes', () => {
 });
 
 describe('P18.95-T8 AC-1 the agenda reads the week', () => {
-  it('P18.95-T8 AC-1 asks the server for a week for the Agenda and the Week, and a month for the Month', () => {
-    expect([viewOf('agenda'), viewOf('week'), viewOf('month')]).toEqual(['week', 'week', 'month']);
+  it('UI-104 each view asks for its own read: the Agenda seven days from today, 3 Hari three, the Week, the Month', () => {
+    expect(DISPLAYS).toEqual(['agenda', 'three_days', 'week', 'month']);
+    expect(DISPLAYS.map(viewOf)).toEqual(['agenda', 'three_days', 'week', 'month']);
+    expect(agendaHref()).toBe('/calendar?view=agenda');
+    expect(agendaHref('2026-10-30')).toBe('/calendar?view=agenda&date=2026-10-30');
   });
 
   it('P18.95-T8 AC-1 counts a phone cell’s entries in words, and names its new strings with none of the six words', () => {

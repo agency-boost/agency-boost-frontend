@@ -55,6 +55,7 @@ import CoacheeSummaryTab from './(agent)/coaching/[membershipId]/summary/page';
 import CoacheeGoalSettingTab from './(agent)/coaching/[membershipId]/goal-setting/page';
 import CoacheeTrainingTab from './(agent)/coaching/[membershipId]/training/page';
 import CoacheeActivityTab from './(agent)/coaching/[membershipId]/activity/page';
+import CoacheeLeadsTabPage from './(agent)/coaching/[membershipId]/leads/page';
 import CoachingPersonIndex from './(agent)/coaching/[membershipId]/page';
 import Home from './page';
 import CoachingSessionTabPage from './(agent)/coaching/[membershipId]/session/page';
@@ -109,10 +110,12 @@ import {
   PGB, plan as salesPlan, product as salesProduct, RINA_ME as SALES_ME, SHELF,
 } from '@test/sales-tools-fixtures';
 import {
-  AGUS, busy, DOWNLINE, entry, monthRead, peoplePage, RINA, SHELL_STUBS, weekRead,
+  agendaRead, AGUS, busy, coachingTask, DOWNLINE, entry, joinedEvent, leadTask, monthRead, peoplePage, RINA, SHELL_STUBS,
+  threeDayRead, weekRead,
 } from '@test/calendar-fixtures';
 import {
-  AGUS_ME as UNIT_READER, dashboard as unitDashboard, EMPTY as UNIT_EMPTY, NEW_HIRE_VIEW as UNIT_NEW_HIRE, RATIOS as UNIT_RATIOS,
+  activities as unitActivities, AGUS_ME as UNIT_READER, dashboard as unitDashboard, EMPTY as UNIT_EMPTY, NEW_HIRE_VIEW as UNIT_NEW_HIRE,
+  RATIOS as UNIT_RATIOS,
   SARI_UNIT,
 } from '@test/unit-dashboard-fixtures';
 import RecruitmentLayout from './(agent)/recruitment/layout';
@@ -147,6 +150,21 @@ import {
   KICKOFF as EVENT_KICKOFF, PRULINK as EVENT_PRULINK, RINA_ME as EVENTS_ME, rollCall as eventRollCall,
   SHELL_STUBS as EVENTS_SHELL, TOWN_HALL as EVENT_TOWN_HALL,
 } from '@test/events-fixtures';
+// UI V1 (Phase 18.99 T2): the shared components, before the pages adopt them.
+import { AgentSearch } from '@/components/agent-search';
+import { ContactButtons } from '@/components/contact-buttons';
+import { GoalHeroCard } from '@/components/goal-hero-card';
+import { RatioCard } from '@/components/ratio-card';
+import { ActionRow } from '@/components/ui/action-row';
+import { ActivityPill } from '@/components/ui/activity-pill';
+import { AutoMarker } from '@/components/ui/auto-marker';
+import { EmptyState } from '@/components/ui/empty-state';
+import { PersonRow, TreeIndent, TreeNode, TreeToggle } from '@/components/ui/person-row';
+import { SaveStateLabel } from '@/components/ui/save-state';
+import { SliderWithValue } from '@/components/ui/slider-with-value';
+import { StatTile } from '@/components/ui/stat-tile';
+import { StepperRow } from '@/components/ui/stepper-row';
+import { TonePill } from '@/components/ui/tone-pill';
 
 /**
  * Where the screen is, for the one shell that reads it: the coaching person shell's archive (P11-T10),
@@ -837,28 +855,27 @@ describe('screens have no axe violations', () => {
       await expectClean('unit/dashboard with a new hire');
     });
 
-    it('expanded: two rows’ details open, with their ratios', async () => {
-      stubFetch({ ...shell, 'GET /unit/dashboard': { body: unitDashboard() }, '/activity/ratios': { body: UNIT_RATIOS } });
-      renderInLayout(AgentLayout, page(), { me: UNIT_READER });
-      await screen.findByRole('table', { name: 'Your team’s roster' });
-      await userEvent.click(screen.getByRole('button', { name: 'View details for Dimas Pratama' }));
-      await userEvent.click(screen.getByRole('button', { name: 'View details for Indah Lestari' }));
-      await screen.findAllByText('Selling success rate');
-      await expectClean('unit/dashboard expanded');
+    it('UI V1 (Phase 18.99 T4): the Activities tab — its controls, the table, a section opened, the ratio card on Group', async () => {
+      stubFetch({ ...shell, 'GET /unit/dashboard/activities': { body: unitActivities() } });
+      renderInLayout(AgentLayout, <UnitDashboardPage />, { me: UNIT_READER });
+      await userEvent.click(await screen.findByRole('tab', { name: 'Activities' }));
+      await screen.findByRole('table', { name: 'Activities · Unit' });
+      await userEvent.click(screen.getByRole('button', { name: 'Show Recruitment' }));
+      await userEvent.click(within(screen.getByRole('region', { name: 'Ratio · last 30 days' })).getByRole('button', { name: 'Group' }));
+      await expectClean('unit/dashboard activities');
     });
 
-    it('on a phone: a card per person, every group and total, two cards opened (P18.95-T3 AC-1)', async () => {
+    it('UI V1 (Phase 18.99 T4, UI-002): on a phone, the accordion — Your Unit open, a unit opened, the chips filtering', async () => {
       vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
         media: query, matches: query === PHONE_QUERY, addEventListener: vi.fn(), removeEventListener: vi.fn(),
       })));
-      stubFetch({ ...shell, 'GET /unit/dashboard': { body: unitDashboard() }, '/activity/ratios': { body: UNIT_RATIOS } });
+      stubFetch({ ...shell, 'GET /unit/dashboard': { body: unitDashboard() } });
       renderInLayout(AgentLayout, page(), { me: UNIT_READER });
-      await screen.findByRole('list', { name: 'Your Unit' });
+      await screen.findByRole('button', { name: /^Your Unit · 4/ });
       await expectClean('unit/dashboard (phone)');
-      await userEvent.click(screen.getByRole('button', { name: 'View details for Dimas Pratama' }));
-      await userEvent.click(screen.getByRole('button', { name: 'View details for you' }));
-      await screen.findAllByText('Selling success rate');
-      await expectClean('unit/dashboard (phone, opened)');
+      await userEvent.click(screen.getByRole('button', { name: /^Sari Wulandari’s Unit/ }));
+      await userEvent.click(screen.getByRole('button', { name: 'Needs attention 4' }));
+      await expectClean('unit/dashboard (phone, opened and filtered)');
     });
 
     it('with Update production open', async () => {
@@ -959,23 +976,14 @@ describe('screens have no axe violations', () => {
       ],
     };
 
-    it('the roster, populated: the groups, a unit, a unit nested in it, and every status', async () => {
-      // Row groups headed by a full-width `rowgroup` header, a unit head naming the rest of its
-      // `<tbody>`, row headers for the people, and a screen-reader-only name on the actions column.
+    it('UI-033, UI-034 the roster, populated: the groups, the rows, a unit as a tree with one nested in it, and every status', async () => {
+      // One row per person at every size (UI V1): the name the row's link, the groups as headed sections, the tree
+      // as nested named lists.
       stubFetch({ ...shell, '/coaching/coachees': { body: roster } });
       renderInLayout(AgentLayout, <CoachingRosterPage />, { me: leader });
-      await screen.findByRole('table', { name: 'Everyone you coach' });
-      await expectClean('coaching');
-    });
-
-    it('the roster on a phone: a card per person, the groups, a unit and a unit nested in it (P18.95-T3 AC-3)', async () => {
-      vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
-        media: query, matches: query === PHONE_QUERY, addEventListener: vi.fn(), removeEventListener: vi.fn(),
-      })));
-      stubFetch({ ...shell, '/coaching/coachees': { body: roster } });
-      renderInLayout(AgentLayout, <CoachingRosterPage />, { me: leader });
-      await screen.findByRole('list', { name: 'Your direct agents' });
-      await expectClean('coaching (phone)');
+      await screen.findByRole('heading', { level: 2, name: 'Everyone you coach' });
+      await screen.findAllByRole('link', { name: /.+/ });
+      await expectClean('coaching (UI V1)');
     });
 
     it('the roster with nobody to coach', async () => {
@@ -1333,9 +1341,12 @@ describe('screens have no axe violations', () => {
             sections: [{ code: 'DEVELOPMENT', label: 'Development', total: 2, rows: [{ code: 'DEV_TRAINING', label: 'Training attended', count: 2 }] }],
           },
         },
-        'outcome=open': { body: { rows: [sessionLead], total: 1, page: 1, pageSize: 200 } },
-        'outcome=won': { body: { rows: [], total: 0, page: 1, pageSize: 200 } },
-        'outcome=lost': { body: { rows: [], total: 0, page: 1, pageSize: 200 } },
+        'GET /leads?owner=mem-rina': {
+          body: {
+            rows: [sessionLead, { ...sessionLead, id: 'l-shinta', name: 'Ibu Shinta Maharani', nextActionDate: null, nextActionNote: null }],
+            total: 2, page: 1, pageSize: 200,
+          },
+        },
       });
       const inSession = () => renderInLayout(
         AgentLayout,
@@ -1343,10 +1354,9 @@ describe('screens have no axe violations', () => {
         { me: sessionLeader },
       );
 
-      it('before it starts: the header, the past sessions open, and ▶ Start coaching session', async () => {
+      it('UI-032 before it starts: the session card, the past sessions as rows, and Start coaching session', async () => {
         stubFetch(routes(draft, null));
         inSession();
-        await userEvent.click(await screen.findByRole('button', { name: 'View past sessions' }));
         await screen.findByRole('button', { name: 'Start coaching session' });
         await expectClean('coaching/[membershipId]/session (before it starts)');
       });
@@ -1354,10 +1364,11 @@ describe('screens have no axe violations', () => {
       it('a draft, populated, with the Activity drill open', async () => {
         stubFetch(routes(draft));
         inSession();
-        await screen.findByDisplayValue('Desi Pratama');
-        await screen.findByText('IDR 340M remaining this year.');
-        await screen.findByText('18.0%');
-        const drill = await screen.findByRole('button', { name: '→ view full dashboard' });
+        // UI-061, UI-062: the compact rows, a lead with Isi tindakan, the ratio card as rows, the pinned Finalkan.
+        await screen.findByRole('button', { name: 'Desi Pratama' });
+        await screen.findByRole('button', { name: 'Add an action' });
+        await screen.findByText('18%');
+        const drill = await screen.findByRole('button', { name: 'Last 7 days' });
         await waitFor(() => expect(drill).toBeEnabled());
         await expectClean('coaching/[membershipId]/session (a draft)');
         await userEvent.click(drill);
@@ -1371,8 +1382,8 @@ describe('screens have no axe violations', () => {
           { sessionId: 's-1', status: 'finalized' },
         ));
         inSession();
-        await screen.findByDisplayValue('Desi Pratama');
-        await screen.findByText('✓ Finalized Friday, 2 Oct 2026');
+        await screen.findByRole('button', { name: 'Desi Pratama' });
+        await screen.findByText('Finalized 2 Oct');
         await expectClean('coaching/[membershipId]/session (finalized)');
         await userEvent.click(screen.getByRole('button', { name: 'Edit again' }));
         await screen.findByRole('dialog', { name: 'Edit this session again?' });
@@ -1394,6 +1405,7 @@ describe('screens have no axe violations', () => {
     });
 
     it('a person’s Leader Notes tab, populated: the ladder, the tracker with an archived tick and its sections off, and both kinds of note (P11-T9)', async () => {
+      const width = atWidth(1280);
       const notesLeader = makeMe({
         ...coachLeader,
         permissions: ['coaching_session:read', 'coaching_profile:read', 'coaching_profile:update', 'leader_notes:read', 'leader_notes:write'],
@@ -1446,6 +1458,15 @@ describe('screens have no axe violations', () => {
       await screen.findByRole('region', { name: 'Personal notes from Wilson Tanoto' });
       await screen.findByRole('checkbox', { name: 'Cold calling Archived' });
       await expectClean('coaching/[membershipId]/leader-notes');
+      // UI-035 (UI V1, Phase 18.99 T10): the ladder's sheet, opened from the tile.
+      await userEvent.click(await screen.findByRole('button', { name: /^Capability mapping: / }));
+      await screen.findByRole('dialog', { name: 'Capability mapping' });
+      await expectClean('coaching/[membershipId]/leader-notes (ladder sheet, UI V1)');
+      // UI-036: below 1024px the Skill tracker is an accordion, a section that does not apply a grey row.
+      await userEvent.keyboard('{Escape}');
+      width.resize(375);
+      await screen.findByRole('button', { name: /^Developing downline agent/ });
+      await expectClean('coaching/[membershipId]/leader-notes (phone, UI V1)');
     });
 
     it('a person outside the reader’s reach: the not-found state inside the shell (P11-T7 AC-8)', async () => {
@@ -1455,7 +1476,8 @@ describe('screens have no axe violations', () => {
       await expectClean('coaching/[membershipId] (not found)');
     });
 
-    it('the phone’s menu, open (P18.95-T2 AC-3; ADR-0085, P11-T6 AC-11; P18.95-T12 AC-4)', async () => {
+    it('UI-004 the field shell on a phone: the title row, the tab bar, and the Lainnya sheet open', async () => {
+      // *Changed 2026-10-30 (UI V1, UI-004; ADR-0180):* no dark bar, no ☰ and no drawer; the tab bar and its sheet.
       vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
         media: query, matches: query === PHONE_QUERY, addEventListener: vi.fn(), removeEventListener: vi.fn(),
       })));
@@ -1463,17 +1485,13 @@ describe('screens have no axe violations', () => {
       renderInLayout(AgentLayout, <CoachingRosterPage />, { me: leader });
       // A phone draws the roster as cards (P18.95-T3 AC-3), headed by the table's caption.
       await screen.findByRole('heading', { name: 'Everyone you coach' });
-      await userEvent.click(screen.getByRole('button', { name: 'Open menu' }));
-      expect(within(screen.getByRole('dialog', { name: 'Menu' })).getByRole('navigation', { name: 'Main' }))
-        .toBeInTheDocument();
-      await expectClean('coaching (the phone’s drawer open)');
-      // And the avatar's menu on the bar: who is signed in, the notices, the account's items (P18.95-T12).
-      await userEvent.keyboard('{Escape}');
-      const bar = document.querySelector('aside')!;
-      await userEvent.click(within(bar as HTMLElement).getByRole('button', { name: /^Account and notifications/ }));
-      const menu = document.getElementById('sidebar-user-actions')!;
-      expect(within(menu).getByRole('link', { name: /^Notifications/ })).toHaveAttribute('href', '/notifications');
-      await expectClean('coaching (the phone’s avatar menu open)');
+      expect(document.querySelector('[data-tab-bar]')).not.toBeNull();
+      expect(screen.getByRole('link', { name: 'Your profile' })).toHaveAttribute('href', '/profile');
+      await expectClean('coaching (the field shell on a phone)');
+      await userEvent.click(screen.getByRole('button', { name: 'More' }));
+      const sheet = await screen.findByRole('dialog', { name: 'More' });
+      expect(within(sheet).getByRole('link', { name: 'Coaching' })).toHaveAttribute('href', '/coaching');
+      await expectClean('coaching (the Lainnya sheet open)');
     });
   });
 
@@ -1512,7 +1530,8 @@ describe('screens have no axe violations', () => {
     });
     renderInLayout(AgentLayout, <ActivityDashboardPage />, {});
     await screen.findByText('Submission polis');
-    await screen.findByText('Total touches');
+    // UI V1 (UI-106): *activities*, never *touches*, wherever the app counts what was logged.
+    await screen.findByText('Total activities');
     await expectClean('activity/dashboard');
 
     // On a phone: each item's total, and two of them opened on their days (P18.95-T3 AC-6).
@@ -1521,7 +1540,8 @@ describe('screens have no axe violations', () => {
       media: query, matches: query === PHONE_QUERY, addEventListener: vi.fn(), removeEventListener: vi.fn(),
     })));
     renderInLayout(AgentLayout, <ActivityDashboardPage />, {});
-    await screen.findByRole('list', { name: 'Your activity' });
+    // UI-106: the log's group cards, in a region, after the navy total and the strip.
+    await screen.findByRole('region', { name: 'Your activity' });
     await expectClean('activity/dashboard (phone)');
     await userEvent.click(screen.getByRole('button', { name: /^Submission polis/ }));
     await userEvent.click(screen.getByRole('button', { name: /^An archived item/ }));
@@ -1599,11 +1619,21 @@ describe('screens have no axe violations', () => {
       },
     });
     renderInLayout(AgentLayout, <PersonalSummaryPage />, {});
-    await screen.findByRole('region', { name: 'The gap' });
+    // UI V1 (P18.99-T7): the date header and the goal card with its gap inside it, the one Target aktivitas card, the
+    // shared ratio card, the sections' headings outside their cards.
+    await screen.findByRole('region', { name: 'Goal vs. actual (APE)' });
     await screen.findByText('SSR');
     // Card 6, *Campaigns you're chasing*, with its rows (P18.5-T7 AC-6).
     await within(await screen.findByRole('region', { name: "Campaigns you're chasing" })).findByText('Q4 APE Sprint');
     await expectClean('summary');
+    // UI-051: the month pill's sheet, and UI-050: a tile's activities behind a tap on a phone.
+    await userEvent.click(screen.getByRole('button', { name: 'Month: Sep 2026' }));
+    await screen.findByRole('dialog', { name: 'Month' });
+    await expectClean('summary (the month sheet)');
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Sep 2026' }));
+    await userEvent.click(document.querySelector('[data-breakdown="phone"] button') as HTMLElement);
+    await screen.findByRole('dialog', { name: 'Recruitment activities' });
+    await expectClean('summary (a tile’s activities)');
   });
 
   it('Activity Ratios, populated: a rate, one with not enough data, and the balance, explained (P10-T2)', async () => {
@@ -1634,8 +1664,11 @@ describe('screens have no axe violations', () => {
       },
     });
     renderInLayout(AgentLayout, <ActivityRatioPage />, {});
-    const card = await screen.findByRole('article', { name: 'Selling success rate' });
-    await userEvent.click(within(card).getByText('What is this ratio?'));
+    // UI V1 (UI-106): the shared ratio card, a row tapped open for what the ratio is.
+    await screen.findByRole('region', { name: 'Ratio · last 30 days' });
+    const row = document.querySelector('[data-ratio="SELLING_SUCCESS_RATE"]') as HTMLElement;
+    await userEvent.click(within(row).getByRole('button'));
+    expect(row).toHaveTextContent('What is this ratio?');
     await expectClean('activity/ratio');
   });
 
@@ -1678,11 +1711,11 @@ describe('screens have no axe violations', () => {
 
     await screen.findByLabelText('Why is this being corrected?');
     // A tile per section since P18.95-T5 AC-2: the section's own name, not its summary tile's.
-    expect(screen.getByText('Total touches today').closest('[data-total]')!.parentElement).toHaveTextContent('Leads');
+    expect(screen.getByText('Total activities today').closest('[data-total]')!.parentElement).toHaveTextContent('Leads');
     await expectClean('activity/log');
   });
 
-  it('Log activity on a phone: the one-line total and the save bar with its status (P18.95-T5 AC-1)', async () => {
+  it('UI-106 Log activity on a phone: the segmented views, the date pill, the rows and the save bar above the tab bar', async () => {
     vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
       media: query, matches: query === PHONE_QUERY, addEventListener: vi.fn(), removeEventListener: vi.fn(),
     })));
@@ -1713,7 +1746,8 @@ describe('screens have no axe violations', () => {
 
     const save = await screen.findByRole('button', { name: 'Save activity' });
     expect(save.parentElement).toHaveAttribute('data-action-bar');
-    expect(screen.getByText(/^Today:/)).toHaveTextContent('Today: 2 touches');
+    expect(screen.getByText(/^Today:/)).toHaveTextContent('Today: 2 activities');
+    await userEvent.click(screen.getByRole('button', { name: 'Increase Set Appointment' }));
     await expectClean('activity/log (phone)');
   });
 
@@ -1890,7 +1924,7 @@ describe('screens have no axe violations', () => {
     await expectClean('goals');
   });
 
-  it('goal settings on a phone: the save bar under the commitment, the chips by name, both options in sight (P18.95-T5)', async () => {
+  it('goal settings on a phone: the result card first, the floating save pill, both options in sight (P18.95-T5, P18.99-T5)', async () => {
     vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
       media: query, matches: query === PHONE_QUERY, addEventListener: vi.fn(), removeEventListener: vi.fn(),
     })));
@@ -1922,10 +1956,44 @@ describe('screens have no axe violations', () => {
       me: makeMe({ permissions: ['goal:read', 'goal:update'] }),
     });
 
+    // UI V1 (P18.99-T5): the result card first, the floating save pill above the tab bar, the report's sentence.
     const save = await screen.findByRole('button', { name: 'Save goal' });
-    expect(save.parentElement).toHaveAttribute('data-action-bar');
-    expect(screen.getByText(/To reach APE/).closest('p')).toHaveTextContent('(about 2 months left)');
+    expect(save.closest('[data-floating-save]')).not.toBeNull();
+    expect(screen.getByRole('region', { name: 'Monthly activity target' })).toBeInTheDocument();
+    expect(screen.getByText(/^This month, APE/).closest('p')).toHaveTextContent('Set appointment');
     await expectClean('goals (phone)');
+  });
+
+  it('P18.99-T5 goal settings on a tablet: the phone’s layout, the floating save, the disclaimer behind an ⓘ (UI-015, UI-018)', async () => {
+    atWidth(768);
+    const period = String(new Date().getFullYear());
+    stubFetch({
+      '/kpm/config': { body: { activity: GOAL_CASCADE_CONFIG, ratios: [], leadPipelines: [], version: 1 } },
+      '/kpm/org-levels': { body: [] },
+      '/goals': {
+        body: {
+          period, mode: 'direct', annualApeTargetMinor: 500_000_000_00, savingsTargetMinor: 50_000_000_00,
+          commissionRatePct: 10, monthsLeft: 2.1, monthsLeftIsOverride: false, apeAchievedMinor: 0,
+          achieved: { minor: 290_000_000_00, provenance: 'imported', month: '2026-09' },
+          caseSizeMinor: 18_000_000_00, leadsToApptPct: 50, closingRatePct: 30,
+          snapshot: { monthlyApeTargetMinor: 100_000_000_00, policiesPerMonth: 6, appointmentsPerMonth: 20, leadsPerMonth: 40 },
+          projected: {
+            annualApeTargetMinor: 500_000_000_00, apeAchievedMinor: 290_000_000_00, remainingApeMinor: 210_000_000_00,
+            monthlyApeTargetMinor: 100_000_000_00, policiesPerMonth: 6, policiesPerWeek: 1.4, appointmentsPerMonth: 20,
+            appointmentsPerWeek: 5, leadsPerMonth: 40, leadsPerWeek: 10, targetMet: false,
+          },
+          cascadeMapping: { leadsCode: 'LEADS_CONTACTED', appointmentsCode: 'SELL_PRESENTATION', closingsCode: 'SELL_SUBMISSION' },
+          cascadeBinding: { leads: ['LEADS_CONTACTED'], appointments: ['SELL_PRESENTATION'], closings: ['SELL_SUBMISSION'] },
+          measured: null, savedAt: '2026-10-29T04:00:00.000Z', savedByMembershipId: 'mem-1',
+        },
+      },
+    });
+    renderInLayout(AgentLayout, <GoalSettingsPage />, { me: makeMe({ permissions: ['goal:read', 'goal:update'] }) });
+
+    const save = await screen.findByRole('button', { name: 'Save goal' });
+    expect(save.closest('[data-floating-save]')).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'Estimates for personal planning — assumptions vary per individual.' })).toBeInTheDocument();
+    await expectClean('goals (tablet)');
   });
 
   it('the invite screen, with a code to share and a team below it', async () => {
@@ -1961,8 +2029,8 @@ describe('screens have no axe violations', () => {
     renderInLayout(AgentLayout, <AddAgentsPage />, { me: leader });
     // The code, not a table: the list of issued invites went with the lifecycle
     // (P3.6-T1), and axe must scan the panel in its loaded state rather than its skeleton.
-    await screen.findByText('JOR417');
-    await screen.findByText('Rina Wijaya');
+    await screen.findAllByText('JOR417');
+    await screen.findAllByText('Rina Wijaya');
     await expectClean('user-management/add');
   });
 
@@ -1993,7 +2061,9 @@ describe('screens have no axe violations', () => {
       },
     });
     renderInLayout(AgentLayout, <AddAgentsPage />, { me: leader });
-    await userEvent.selectOptions(await screen.findByLabelText('Role'), 'aab');
+    // UI-083: the role sheet, a rung picked, the reason asked.
+    await userEvent.click((await screen.findAllByRole('button', { name: 'Change Rina Wijaya’s role, now Agent' }))[0]);
+    await userEvent.click(screen.getByRole('radio', { name: 'AAB' }));
     await screen.findByLabelText('Why?');
     await expectClean('user-management/add (role change)');
   });
@@ -2025,7 +2095,9 @@ describe('screens have no axe violations', () => {
       },
     });
     renderInLayout(AgentLayout, <AddAgentsPage />, { me: leader });
-    await userEvent.click(await screen.findByRole('button', { name: 'Remove Rina Wijaya' }));
+    // UI-083: *Remove* last in the role sheet; it opens its confirmation.
+    await userEvent.click((await screen.findAllByRole('button', { name: 'Change Rina Wijaya’s role, now AAB' }))[0]);
+    await userEvent.click(screen.getByRole('button', { name: 'Remove' }));
     await screen.findByLabelText('Type REMOVE to confirm');
     await expectClean('user-management/add (removal)');
   });
@@ -2197,7 +2269,8 @@ describe('screens have no axe violations', () => {
       },
     });
     renderInLayout(AgentLayout, <GroupTreePage />, { me: leader });
-    await screen.findByText('Layer 1');
+    // UI V1 (UI-058): the rows, both layouts in the document.
+    await screen.findByTestId('group-tree-list');
     await expectClean('group-tree');
   });
 
@@ -2704,7 +2777,8 @@ describe('screens have no axe violations', () => {
     it('the entry dialog with the people list open and a chip chosen', async () => {
       await open();
       await userEvent.click(screen.getByRole('button', { name: '+ New event' }));
-      const dialog = screen.getByRole('dialog', { name: 'New event' });
+      // The form's module is fetched on its first opening (P18.99-T16).
+      const dialog = await screen.findByRole('dialog', { name: 'New event' });
       await userEvent.click(within(dialog).getByLabelText('Invite (optional) — anyone in your KPM'));
       await userEvent.click(await within(dialog).findByRole('option', { name: /^Indah Permata/ }));
       await within(dialog).findByText('KPM leadership');
@@ -2721,7 +2795,8 @@ describe('screens have no axe violations', () => {
       renderInLayout(AgentLayout, <CalendarPage />, { me: AGUS });
       await screen.findByRole('region', { name: 'Calendar, 28 Sep – 4 Oct 2026' });
       await userEvent.click(screen.getByRole('button', { name: '+ New event' }));
-      const dialog = screen.getByRole('dialog', { name: 'New event' });
+      // The dialog's module is fetched on its first opening (P18.99-T16).
+      const dialog = await screen.findByRole('dialog', { name: 'New event' });
       const field = within(dialog).getByRole('combobox', { name: 'Invite (optional) — anyone in your KPM' });
       await expectClean('calendar (people combobox, collapsed)');
       await userEvent.click(field);
@@ -2737,7 +2812,8 @@ describe('screens have no axe violations', () => {
     it('the entry dialog with every rule broken, and Travel chosen', async () => {
       await open();
       await userEvent.click(screen.getByRole('button', { name: '+ New event' }));
-      await userEvent.click(screen.getByRole('button', { name: 'Travel' }));
+      // The dialog's module is fetched on its first opening (P18.99-T16).
+      await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Travel' }));
       await userEvent.clear(screen.getByLabelText('Departure date'));
       await userEvent.click(screen.getByRole('button', { name: 'Save event' }));
       await screen.findByText('Choose a date.');
@@ -2850,38 +2926,72 @@ describe('screens have no axe violations', () => {
       await expectClean('activation (none)');
     });
 
-    it('the roster, populated: the 3M activation % and its filter, three sections, an overdue checklist, a Left row (P18.96-T6)', async () => {
+    it('UI-024 the roster on a phone: the two tiles, the filter, the leader tree with its people (UI V1)', async () => {
       nav.pathname = '/new-hires';
-      stubFetch({ ...SHELL, '/new-hires': { body: ROSTER } });
-      // With *Schedule 1:1* and *Mark left* on the rows that need them.
-      renderInLayout(AgentLayout, <NewHiresPage />, {
-        me: { ...SARI_ME, permissions: [...SARI_ME.permissions, 'new_hire:mark_left', 'calendar_entry:create'] },
-      });
-      await screen.findByRole('region', { name: 'Not activated' });
-      await screen.findByRole('button', { name: 'Mark left — Lukman Hakim' });
-      await expectClean('new-hires');
-    });
-
-    it('the roster’s Mark left confirmation open (P18.96-T6 AC-4)', async () => {
-      nav.pathname = '/new-hires';
-      stubFetch({ ...SHELL, '/new-hires': { body: ROSTER } });
-      renderInLayout(AgentLayout, <NewHiresPage />, {
-        me: { ...SARI_ME, permissions: [...SARI_ME.permissions, 'new_hire:mark_left', 'calendar_entry:create'] },
-      });
-      await userEvent.click(await screen.findByRole('button', { name: 'Mark left — Lukman Hakim' }));
-      await screen.findByRole('dialog');
-      await expectClean('new-hires (mark left)');
-    });
-
-    it('the roster on a phone: a card per hire, an overdue day (P18.95-T3 AC-4)', async () => {
-      nav.pathname = '/new-hires';
-      vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
-        media: query, matches: query === PHONE_QUERY, addEventListener: vi.fn(), removeEventListener: vi.fn(),
-      })));
+      atWidth(375);
       stubFetch({ ...SHELL, '/new-hires': { body: ROSTER } });
       renderInLayout(AgentLayout, <NewHiresPage />, { me: SARI_ME });
-      await screen.findByRole('list', { name: 'Not activated' });
-      await expectClean('new-hires (phone)');
+      await screen.findByRole('group', { name: 'Show' });
+      await expectClean('new-hires (phone, UI V1)');
+    });
+
+    it('UI-024 the roster from 768px: the table and the right column (UI V1)', async () => {
+      nav.pathname = '/new-hires';
+      atWidth(1280);
+      stubFetch({
+        ...SHELL,
+        '/new-hires': { body: ROSTER },
+        '/new-hires/invites': { body: { today: JOINING_TODAY, invites: [invite()] } },
+        '/new-hires/transfers': { body: [requestedTransfer()] },
+      });
+      renderInLayout(AgentLayout, <NewHiresPage />, { me: { ...SARI_ME, permissions: [...SARI_ME.permissions, 'member:invite'] } });
+      await screen.findByRole('table', { name: 'New Hires' });
+      await screen.findByRole('button', { name: 'Actions for Yusuf Hidayat' });
+      await expectClean('new-hires (wide, UI V1)');
+    });
+
+    it('UI-024 the invitations’ sheet on a phone, its ⋯ open (UI V1)', async () => {
+      nav.pathname = '/new-hires';
+      atWidth(375);
+      stubFetch({
+        ...SHELL,
+        '/new-hires': { body: ROSTER },
+        '/new-hires/invites': { body: { today: JOINING_TODAY, invites: [invite()] } },
+        '/new-hires/transfers': { body: [requestedTransfer()] },
+      });
+      renderInLayout(AgentLayout, <NewHiresPage />, { me: { ...SARI_ME, permissions: [...SARI_ME.permissions, 'member:invite'] } });
+      await userEvent.click(await screen.findByRole('button', { name: 'Waiting to join: 2. Show them' }));
+      const sheet = await screen.findByRole('dialog', { name: 'Waiting to join' });
+      await userEvent.click(within(sheet).getByRole('button', { name: 'Actions for Yusuf Hidayat' }));
+      await expectClean('new-hires (waiting sheet)');
+    });
+
+    it('UI-027 a hire’s detail on a phone: the strip, tiles, buttons and sections; then Kapan pecah telor? open (UI V1, D-26)', async () => {
+      nav.pathname = '/new-hires/mem-rina';
+      atWidth(375);
+      const items = leaderView().aspects.map((a) => a.items.map((it) => (it.code === 'FIRST_CASE_CLOSED'
+        ? { ...it, done: false, doneAt: null, source: null, doneBy: null, record: null } : it)));
+      stubFetch({
+        ...SHELL,
+        '/new-hires/mem-rina': {
+          body: {
+            ...activationView({}, items),
+            newHire: {
+              status: 'not_yet', activation3M: 'in_progress', joinDate: '2026-08-06', day: 59, firstSaleDate: null,
+              firstSaleDay: null, firstSaleSource: null, leader: { ...SARI, role: 'aab' }, phone: null,
+            },
+          },
+        },
+      });
+      renderInLayout(AgentLayout, <NewHireDetailPage params={routeParams({ membershipId: 'mem-rina' })} />, {
+        me: { ...SARI_ME, permissions: [...SARI_ME.permissions, 'calendar_entry:create', 'member:update_phone'] },
+      });
+      await screen.findByTestId('hire-header-phone');
+      await expectClean('new-hire detail (phone, UI V1)');
+      await userEvent.click(screen.getByRole('button', { name: /First Sale/ }));
+      await userEvent.click(screen.getByRole('button', { name: 'Close first case independently: Add date' }));
+      await screen.findByRole('dialog', { name: 'When was the first sale?' });
+      await expectClean('new-hire detail (pecah telor sheet)');
     });
 
     it('the roster’s header and Waiting to join: + Add agent, Review requests, an invite and a transfer (P18.96-T3)', async () => {
@@ -2896,7 +3006,7 @@ describe('screens have no axe violations', () => {
       });
       renderInLayout(AgentLayout, <NewHiresPage />, { me: { ...SARI_ME, permissions: [...SARI_ME.permissions, ...JOINING_PERMISSIONS] } });
       await screen.findByRole('region', { name: 'Waiting to join' });
-      await screen.findByRole('button', { name: 'Review requests (1)' });
+      await screen.findAllByRole('button', { name: 'Review requests (1)' });
       await expectClean('new-hires (waiting to join)');
     });
 
@@ -2907,16 +3017,19 @@ describe('screens have no axe violations', () => {
         '/new-hires': { body: ROSTER },
         '/new-hires/invites': { body: { today: JOINING_TODAY, invites: [] } },
         '/new-hires/transfers': { body: [] },
+        '/join/my-code': { body: { code: 'SARI01', url: 'https://app.test/join?code=SARI01' } },
         'POST /new-hires/agents': { body: { outcome: 'invited', ...shared() } },
       });
       renderInLayout(AgentLayout, <NewHiresPage />, { me: { ...SARI_ME, permissions: [...SARI_ME.permissions, 'member:invite'] } });
-      await userEvent.click(await screen.findByRole('button', { name: '+ Add agent' }));
+      await userEvent.click((await screen.findAllByRole('button', { name: '+ Add agent' }))[0]);
       await screen.findByRole('dialog', { name: 'Add agent' });
+      // UI-024: the leader code's share block at the top of the modal.
+      await screen.findByText('SARI01');
       await expectClean('new-hires (add agent)');
       await userEvent.type(screen.getByLabelText('Agent code'), '80777');
       await userEvent.type(screen.getByLabelText('Name'), 'Yusuf Hidayat');
-      await userEvent.type(screen.getByLabelText('WhatsApp number'), '0812-8077-7001');
-      await userEvent.click(screen.getByRole('button', { name: 'Add agent' }));
+      await userEvent.type(screen.getByLabelText('WhatsApp number'), '812 8077 7001');
+      await userEvent.click(screen.getByRole('button', { name: 'Add & send invite' }));
       await screen.findByRole('dialog', { name: 'Invite Yusuf Hidayat' });
       await expectClean('new-hires (invite share)');
     });
@@ -2945,7 +3058,7 @@ describe('screens have no axe violations', () => {
       leader: { membershipId: 'mem-sari', name: 'Sari Puspita' }, direct: true, downline: { members: 0, leaders: 0 },
     };
 
-    it('a person’s Activation tab, populated (P13-T9)', async () => {
+    it('a person’s Activation tab, populated: their new-hire detail (P13-T9; UI-029, T6)', async () => {
       nav.pathname = '/coaching/mem-rina/activation';
       stubFetch({ ...SHELL, '/coaching/coachees/': { body: coachee }, '/new-hires/mem-rina': { body: leaderView() } });
       renderInLayout(
@@ -2953,7 +3066,7 @@ describe('screens have no axe violations', () => {
         <CoachingPersonLayout params={routeParams({ membershipId: 'mem-rina' })}><CoacheeActivationTab /></CoachingPersonLayout>,
         { me: SARI_ME },
       );
-      await screen.findByRole('region', { name: '90-Day Activation' });
+      await screen.findByRole('heading', { level: 2, name: 'Activation progress' });
       await expectClean('coaching/[membershipId]/activation');
     });
 
@@ -3014,19 +3127,17 @@ describe('screens have no axe violations', () => {
       </LearnerTrainingLayout>
     );
 
-    it('a category’s Skills List, filled (P18.5-T1 AC-4)', async () => {
+    it('a category’s list on a desktop: two columns of skill cards, Module · Format · Status · › (UI-064, UI-066)', async () => {
       nav.pathname = '/training/SALES';
       stubFetch(SHELL);
       renderInLayout(AgentLayout, list('SALES'), { me: TRAINING_LEARNER });
-      await screen.findByRole('heading', { level: 2, name: 'Skills List' });
+      await screen.findByRole('list', { name: 'Prospecting modules' });
       await expectClean('training/[categoryCode]');
     });
 
-    it('a category’s Skills List on a phone: a row per module (P18.95-T3 AC-5)', async () => {
+    it('a category’s list on a phone and a tablet: one card of rows, the category row as pills (UI-063, UI-065)', async () => {
       nav.pathname = '/training/SALES';
-      vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
-        media: query, matches: query === PHONE_QUERY, addEventListener: vi.fn(), removeEventListener: vi.fn(),
-      })));
+      atWidth(375);
       stubFetch(SHELL);
       renderInLayout(AgentLayout, list('SALES'), { me: TRAINING_LEARNER });
       await screen.findByRole('list', { name: 'Prospecting modules' });
@@ -3061,8 +3172,27 @@ describe('screens have no axe violations', () => {
         'GET /training/modules/CLOSING_TECHNIQUES': { body: trainingModulePage({ can: { update: false } }) },
       });
       renderInLayout(AgentLayout, page, { me: TRAINING_SUPPORT });
-      await screen.findByRole('heading', { level: 2, name: 'Closing Techniques That Work' });
+      await screen.findByRole('heading', { level: 1, name: 'Closing Techniques That Work' });
       await expectClean('training/[categoryCode]/[moduleCode] (support session)');
+    });
+
+    it('a module’s page with a video, its file opened, on a phone (UI-067 to UI-069)', async () => {
+      nav.pathname = '/training/SALES/CLOSING_TECHNIQUES';
+      atWidth(375);
+      stubFetch({
+        ...SHELL,
+        'GET /training/modules/CLOSING_TECHNIQUES': {
+          body: trainingModulePage({
+            items: [
+              ...trainingModulePage().items,
+              { id: 'it-v', kind: 'video', label: 'closing.mp4', mimeType: 'video/mp4', bytes: 9, url: null },
+            ],
+          }),
+        },
+      });
+      renderInLayout(AgentLayout, page, { me: TRAINING_LEARNER });
+      await screen.findByRole('button', { name: /^Play Video/ });
+      await expectClean('training/[categoryCode]/[moduleCode] (phone, UI V1)');
     });
 
     it('a module holding nothing yet (P18.5-T1 AC-5)', async () => {
@@ -4604,7 +4734,8 @@ describe('screens have no axe violations', () => {
       stubFetch({ ...FORUM_SHELL, 'GET /leader-meetings': { body: forumList() } });
       renderWithSession(<LeaderMeetingsPage />, { me: FORUM_OWNER });
       await userEvent.click(await screen.findByRole('button', { name: '+ New meeting' }));
-      await userEvent.click(screen.getByRole('button', { name: 'Create meeting' }));
+      // The dialog's module is fetched on its first opening (P18.99-T16).
+      await userEvent.click(await screen.findByRole('button', { name: 'Create meeting' }));
       await screen.findByText('Pick a date.');
       await expectClean('leader-meetings (New meeting)');
     });
@@ -5191,22 +5322,31 @@ describe('P18.98-T4 the field’s selling screens in Indonesian', () => {
     await expectClean('leads (id)');
   });
 
-  it('leads on a phone: the read-only cards, and a lead’s edit sheet', async () => {
+  // UI V1 (UI-105): the compact list — chips, the pipeline strip, the cards, the + — and the lead sheet.
+  it('UI-105 leads on a phone: the compact list with its strip, and the lead sheet', async () => {
     phone();
+    const ladder = [
+      { id: 's1', pipeline: 'sales', code: 'NOT_YET_APPROACHED', label: 'Belum didekati', rank: 1, isTerminal: false, isLateStage: false, version: 1, status: 'active' },
+      { id: 's2', pipeline: 'sales', code: 'PAID_AND_ISSUED', label: 'Dibayar dan diterbitkan', rank: 2, isTerminal: true, isLateStage: false, version: 1, status: 'active' },
+    ];
+    const budi = lead({ type: 'sales', statusCode: 'NOT_YET_APPROACHED' });
     stubFetch({
-      '/kpm/config': { body: { activity: [], ratios: [], leadPipelines: [], version: 1 } },
+      '/kpm/config': { body: { activity: [], ratios: [], leadPipelines: [{ pipeline: 'sales', statuses: ladder }], version: 1 } },
       '/kpm/org-levels': { body: [] },
-      '/leads': leadsPage([lead({ type: null, statusCode: null })]),
+      '/leads': leadsPage([budi]),
+      [`/leads/${budi.id}`]: { body: { ...budi, history: [{ at: '2026-10-27T03:00:00.000Z', fromStatusCode: null, toStatusCode: 'NOT_YET_APPROACHED' }] } },
       'outcome=won': leadsPage([]),
       'outcome=lost': leadsPage([]),
     });
-    inIndonesian('/leads', <LeadsPage />, makeMe({ permissions: ['lead:read', 'lead:create', 'lead:update'] }));
+    inIndonesian('/leads', <LeadsPage />, makeMe({ permissions: ['lead:read', 'lead:create', 'lead:update', 'lead:delete', 'lead:mark_outcome'] }));
 
-    await screen.findByRole('list', { name: 'Leads Anda' });
+    const list = await screen.findByRole('list', { name: 'Leads Anda' });
+    expect(screen.getByRole('group', { name: 'Pipeline Sales' })).toBeInTheDocument();
     await expectClean('leads (id, phone)');
-    await userEvent.click(screen.getByRole('button', { name: 'Ubah Pak Budi' }));
-    await screen.findByRole('dialog', { name: 'Ubah Pak Budi' });
-    await expectClean('leads (id, phone, the edit sheet)');
+    await userEvent.click(within(list).getByRole('button', { name: 'Pak Budi' }));
+    const sheet = await screen.findByRole('dialog', { name: 'Pak Budi' });
+    await within(sheet).findByText(/Status → Belum didekati/);
+    await expectClean('leads (id, phone, the lead sheet)');
   });
 
   it('log activity: a closed, corrected day, its reason asked', async () => {
@@ -5223,11 +5363,11 @@ describe('P18.98-T4 the field’s selling screens in Indonesian', () => {
     inIndonesian('/activity/log', <LogActivityPage />);
 
     await screen.findByLabelText('Mengapa catatan ini dikoreksi?');
-    expect(screen.getByText(/^Total sentuhan hari ini/)).toBeInTheDocument();
+    expect(screen.getByText(/^Total aktivitas hari ini/)).toBeInTheDocument();
     await expectClean('activity/log (id)');
   });
 
-  it('log activity on a phone: the one-line total and the save bar', async () => {
+  it('UI-106 log activity on a phone: the views, the date pill, the rows and the save bar', async () => {
     phone();
     stubFetch({
       '/kpm/config': { body: { activity: taxonomy, ratios: [], leadPipelines: [], version: 1 } },
@@ -5243,7 +5383,8 @@ describe('P18.98-T4 the field’s selling screens in Indonesian', () => {
     inIndonesian('/activity/log', <LogActivityPage />);
 
     await screen.findByRole('button', { name: 'Simpan aktivitas' });
-    expect(screen.getByText(/^Hari ini:/)).toHaveTextContent('Hari ini: 2 sentuhan');
+    expect(screen.getByText(/^Hari ini:/)).toHaveTextContent('Hari ini: 2 aktivitas');
+    await userEvent.click(screen.getByRole('button', { name: 'Tambah Set Appointment' }));
     await expectClean('activity/log (id, phone)');
   });
 
@@ -5279,14 +5420,14 @@ describe('P18.98-T4 the field’s selling screens in Indonesian', () => {
     stubFetch(routes);
     inIndonesian('/activity/dashboard', <ActivityDashboardPage />);
     await screen.findByText('Submission polis');
-    await screen.findByText('Total sentuhan');
+    await screen.findByText('Total aktivitas');
     await expectClean('activity/dashboard (id)');
 
     cleanup();
     phone();
     stubFetch(routes);
     inIndonesian('/activity/dashboard', <ActivityDashboardPage />);
-    await screen.findByRole('list', { name: 'Aktivitas Anda' });
+    await screen.findByRole('region', { name: 'Aktivitas Anda' });
     await userEvent.click(screen.getByRole('button', { name: /^Submission polis/ }));
     await userEvent.click(screen.getByRole('button', { name: /^Item lama/ }));
     await expectClean('activity/dashboard (id, phone, opened)');
@@ -5315,8 +5456,11 @@ describe('P18.98-T4 the field’s selling screens in Indonesian', () => {
       },
     });
     inIndonesian('/activity/ratio', <ActivityRatioPage />);
-    const card = await screen.findByRole('article', { name: 'Selling success rate' });
-    await userEvent.click(within(card).getByText('Apa itu ratio ini?'));
+    // UI V1 (UI-106): the shared card, a row tapped open.
+    await screen.findByRole('region', { name: 'Ratio · 30 hari terakhir' });
+    const row = document.querySelector('[data-ratio="SELLING_SUCCESS_RATE"]') as HTMLElement;
+    await userEvent.click(within(row).getByRole('button'));
+    expect(row).toHaveTextContent('Apa itu ratio ini?');
     await expectClean('activity/ratio (id)');
   });
 
@@ -5330,7 +5474,8 @@ describe('P18.98-T4 the field’s selling screens in Indonesian', () => {
   it('the product catalog, filled, and a search that finds nothing', async () => {
     stubFetch({ ...SALES_SHELL, 'GET /product-catalog': { body: { products: SHELF } } });
     inIndonesian('/product-catalog', <ProductCatalogLayout><ProductCatalogPage /></ProductCatalogLayout>, SALES_ME);
-    await screen.findByRole('heading', { level: 2, name: 'Life' });
+    // UI V1 (UI-107): the categories in Indonesian — *Life* is *Jiwa*.
+    await screen.findByRole('heading', { level: 2, name: 'Jiwa' });
     await expectClean('product-catalog (id)');
     await userEvent.type(screen.getByRole('searchbox', { name: 'Cari produk berdasarkan nama' }), 'zzz');
     await screen.findByText('Tidak ada produk yang cocok dengan “zzz”.');
@@ -5459,7 +5604,7 @@ describe('P18.98-T4 the field’s selling screens in Indonesian', () => {
     await expectClean('goals (id)');
   });
 
-  it('goal settings on a phone: the save bar under the commitment, the months left in one sentence', async () => {
+  it('goal settings on a phone: the floating save pill, the commitment in the report’s sentence (P18.99-T5)', async () => {
     vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
       media: query, matches: query === PHONE_QUERY, addEventListener: vi.fn(), removeEventListener: vi.fn(),
     })));
@@ -5489,9 +5634,10 @@ describe('P18.98-T4 the field’s selling screens in Indonesian', () => {
     });
     inIndonesian('/goals', <GoalSettingsPage />, makeMe({ permissions: ['goal:read', 'goal:update'] }));
 
+    // UI V1 (P18.99-T5): the floating save pill, and the report's sentence (UI-017).
     const save = await screen.findByRole('button', { name: 'Simpan goal' });
-    expect(save.parentElement).toHaveAttribute('data-action-bar');
-    expect(screen.getByText(/Untuk mencapai APE/).closest('p')).toHaveTextContent('(sekitar 2 bulan lagi)');
+    expect(save.closest('[data-floating-save]')).not.toBeNull();
+    expect(screen.getByText(/^Bulan ini/).closest('p')).toHaveTextContent('36 Set appointment, 18 Sales meeting, 6 Submission polis.');
     await expectClean('goals (id, phone)');
   });
 
@@ -5566,12 +5712,12 @@ describe('P18.98-T4 the field’s selling screens in Indonesian', () => {
       },
     });
     inIndonesian('/summary', <PersonalSummaryPage />);
-    await screen.findByRole('region', { name: 'Gap' });
+    await screen.findByRole('region', { name: 'Target vs. realisasi (APE)' });
     await screen.findByText('SSR');
-    await within(await screen.findByRole('region', { name: 'Campaigns yang Anda kejar' })).findByText('Q4 APE Sprint');
+    await within(await screen.findByRole('region', { name: 'Campaign yang Anda kejar' })).findByText('Q4 APE Sprint');
     await expectClean('summary (id)');
-    await userEvent.click(screen.getByRole('tab', { name: 'Tahunan' }));
-    await screen.findByRole('region', { name: 'Gap' });
+    await userEvent.click(screen.getByRole('button', { name: 'Tahunan' }));
+    await screen.findByRole('button', { name: 'Tahun: 2026' });
     await expectClean('summary (id, the year)');
   });
 });
@@ -5595,7 +5741,7 @@ describe('P18.98-T4 new hires, activation and User Management in Indonesian', ()
     nav.pathname = path;
     return renderWithSession(<InLanguage language="id"><AgentLayout>{page}</AgentLayout></InLanguage>, { me });
   };
-  const ADDING = { ...SARI_ME, permissions: [...SARI_ME.permissions, ...JOINING_PERMISSIONS, 'new_hire:mark_left', 'calendar_entry:create'] };
+  const ADDING = { ...SARI_ME, permissions: [...SARI_ME.permissions, ...JOINING_PERMISSIONS, 'calendar_entry:create'] };
 
   it('the hire’s page: a row’s note and date open, an Otomatis chip’s words shown, and Which case? open', async () => {
     stubFetch({
@@ -5628,7 +5774,8 @@ describe('P18.98-T4 new hires, activation and User Management in Indonesian', ()
     await expectClean('activation (id, none)');
   });
 
-  it('the roster: its sections, Tandai keluar asked, Menunggu bergabung, + Tambah agent and its share step', async () => {
+  it('UI-024 the roster from 768px: the table, Menunggu bergabung, + Tambah agent and its modal, and the share step', async () => {
+    atWidth(1280);
     stubFetch({
       ...SHELL,
       '/new-hires': { body: ROSTER },
@@ -5636,35 +5783,31 @@ describe('P18.98-T4 new hires, activation and User Management in Indonesian', ()
       '/new-hires/transfers': { body: [requestedTransfer()] },
       '/join/requests': { body: [joinRequest()] },
       '/join/requests/routing': { body: [] },
+      '/join/my-code': { body: { code: 'SARI01', url: 'https://app.test/join?code=SARI01' } },
       'POST /new-hires/agents': { body: { outcome: 'invited', ...shared() } },
     });
     inIndonesian('/new-hires', <NewHiresPage />, ADDING);
-    await screen.findByRole('region', { name: 'Tidak teraktivasi' });
+    await screen.findByRole('table', { name: 'New Hires' });
     await screen.findByRole('region', { name: 'Menunggu bergabung' });
-    await screen.findByRole('button', { name: 'Tinjau permintaan (1)' });
+    await screen.findAllByRole('button', { name: 'Tinjau permintaan (1)' });
     await expectClean('new-hires (id)');
-    await userEvent.click(screen.getByRole('button', { name: 'Tandai keluar — Lukman Hakim' }));
-    await screen.findByRole('dialog');
-    await expectClean('new-hires (id, mark left)');
-    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Batal' }));
-    await userEvent.click(screen.getByRole('button', { name: '+ Tambah agent' }));
+    await userEvent.click(screen.getAllByRole('button', { name: '+ Tambah agent' })[0]);
     const form = within(await screen.findByRole('dialog', { name: 'Tambah agent' }));
+    await form.findByText('SARI01');
     await expectClean('new-hires (id, add agent)');
     await userEvent.type(form.getByLabelText('Kode agen'), '80777');
     await userEvent.type(form.getByLabelText('Nama'), 'Yusuf Hidayat');
-    await userEvent.type(form.getByLabelText('Nomor WhatsApp'), '0812-8077-7001');
-    await userEvent.click(form.getByRole('button', { name: 'Tambah agent' }));
+    await userEvent.type(form.getByLabelText('Nomor WhatsApp'), '812 8077 7001');
+    await userEvent.click(screen.getByRole('button', { name: 'Tambah & kirim undangan' }));
     await screen.findByRole('dialog', { name: 'Undang Yusuf Hidayat' });
     await expectClean('new-hires (id, invite share)');
   });
 
-  it('the roster on a phone, a card per hire', async () => {
-    vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
-      media: query, matches: query === PHONE_QUERY, addEventListener: vi.fn(), removeEventListener: vi.fn(),
-    })));
+  it('UI-024 the roster on a phone: Aktivasi 3M, the filter, the leader tree', async () => {
+    atWidth(375);
     stubFetch({ ...SHELL, '/new-hires': { body: ROSTER } });
     inIndonesian('/new-hires', <NewHiresPage />, SARI_ME);
-    await screen.findByRole('list', { name: 'Tidak teraktivasi' });
+    await screen.findByRole('group', { name: 'Tampilkan' });
     await expectClean('new-hires (id, phone)');
   });
 
@@ -5729,8 +5872,10 @@ describe('P18.98-T4 new hires, activation and User Management in Indonesian', ()
       '/join/untagged': { body: [{ membershipId: 'mem-b', fullName: 'Budi Santoso', initials: 'BS', agentCode: '80002' }] },
     });
     const add = inIndonesian('/user-management/add', <AddAgentsPage />, leader);
-    await screen.findByText('Budi Santoso');
-    await userEvent.click(await screen.findByRole('button', { name: 'Keluarkan Rina Wijaya' }));
+    await screen.findAllByText('Budi Santoso');
+    // UI-083: *Keluarkan* last in the role sheet, then its confirmation.
+    await userEvent.click((await screen.findAllByRole('button', { name: 'Ubah peran Rina Wijaya, sekarang Agent' }))[0]);
+    await userEvent.click(screen.getByRole('button', { name: 'Keluarkan' }));
     await expectClean('user-management/add (id, a removal asked)');
     add.unmount();
 
@@ -5851,9 +5996,7 @@ describe('P18.98-T4 coaching and the Unit Dashboard in Indonesian', () => {
         sections: [{ code: 'DEVELOPMENT', label: 'Development', total: 2, rows: [{ code: 'DEV_TRAINING', label: 'Training attended', count: 2 }] }],
       },
     },
-    'outcome=open': { body: { rows: [], total: 0, page: 1, pageSize: 200 } },
-    'outcome=won': { body: { rows: [], total: 0, page: 1, pageSize: 200 } },
-    'outcome=lost': { body: { rows: [], total: 0, page: 1, pageSize: 200 } },
+    'GET /leads?owner=mem-rina': { body: { rows: [], total: 0, page: 1, pageSize: 200 } },
   });
   const record = (over: Record<string, unknown> = {}) => ({
     ...draft, sessionId: 's-0924', status: 'finalized', version: 4, date: '2026-09-24', finalizedAt: '2026-09-25T03:00:00.000Z',
@@ -5876,24 +6019,19 @@ describe('P18.98-T4 coaching and the Unit Dashboard in Indonesian', () => {
     ...over,
   });
 
-  it('coaching: the roster as a table, and as a phone’s cards', async () => {
-    stubFetch({ ...shell, '/coaching/coachees': { body: roster } });
-    const { unmount } = inIndonesian('/coaching', <CoachingRosterPage />);
-    await screen.findByRole('table', { name: 'Semua orang yang Anda coaching' });
-    await expectClean('coaching (id)');
-    unmount();
-    onPhone();
+  it('coaching: the roster, one row per person and the tree (UI-033)', async () => {
     stubFetch({ ...shell, '/coaching/coachees': { body: roster } });
     inIndonesian('/coaching', <CoachingRosterPage />);
-    await screen.findByRole('list', { name: 'Agen langsung Anda' });
-    await expectClean('coaching (id, phone)');
+    await screen.findByRole('heading', { level: 2, name: 'Semua orang yang Anda coaching' });
+    await screen.findAllByRole('link', { name: /.+/ });
+    await expectClean('coaching (id, UI V1)');
   });
 
   it('coaching/[membershipId]/session: a draft with the Activity drill open', async () => {
     stubFetch(sessionRoutes({ sessionId: 's-1', status: 'draft' }));
     inPerson('/coaching/mem-rina/session', <CoachingSessionTabPage />);
-    await screen.findByText('Sisa Rp 340 jt untuk tahun ini.');
-    const drill = await screen.findByRole('button', { name: '→ lihat dashboard lengkap' });
+    await screen.findByText(/Rp 620 jt/);
+    const drill = await screen.findByRole('button', { name: '7 hari terakhir' });
     await waitFor(() => expect(drill).toBeEnabled());
     await expectClean('coaching/[membershipId]/session (id, a draft)');
     await userEvent.click(drill);
@@ -5907,7 +6045,7 @@ describe('P18.98-T4 coaching and the Unit Dashboard in Indonesian', () => {
       { ...draft, status: 'finalized', version: 3, date: '2026-10-02', finalizedAt: '2026-10-02T03:00:00.000Z', finalizedBy: agus, reopenableUntil: '2026-10-09' },
     ));
     inPerson('/coaching/mem-rina/session', <CoachingSessionTabPage />);
-    await screen.findByText('✓ Difinalkan Jumat, 2 Okt 2026');
+    await screen.findByText('Difinalkan 2 Okt');
     await userEvent.click(screen.getByRole('button', { name: 'Ubah lagi' }));
     await screen.findByRole('dialog', { name: 'Ubah sesi ini lagi?' });
     await expectClean('coaching/[membershipId]/session (id, Edit again)');
@@ -5975,25 +6113,23 @@ describe('P18.98-T4 coaching and the Unit Dashboard in Indonesian', () => {
     return inIndonesian('/unit/dashboard', <UnitDashboardPage />, UNIT_READER);
   };
 
-  it('unit/dashboard: filled, two rows opened, and Update production open', async () => {
+  it('unit/dashboard: filled, a unit closed, the chips filtering, and Update production open (UI V1)', async () => {
     unitShow();
     await screen.findByRole('table', { name: 'Roster tim Anda' });
     await expectClean('unit/dashboard (id)');
-    await userEvent.click(screen.getByRole('button', { name: 'Lihat detail Dimas Pratama' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Lihat detail Anda' }));
-    await screen.findAllByText('Selling success rate');
-    await expectClean('unit/dashboard (id, expanded)');
+    await userEvent.click(screen.getByRole('button', { name: 'Unit Anda · 4' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Perlu perhatian 4' }));
+    await expectClean('unit/dashboard (id, closed and filtered)');
     await userEvent.click(screen.getByRole('button', { name: 'Perbarui produksi' }));
     await screen.findByRole('dialog', { name: 'Perbarui produksi' });
     await expectClean('unit/dashboard (id, Update production)');
   });
 
-  it('unit/dashboard: on a phone, a card opened', async () => {
+  it('unit/dashboard: on a phone, the accordion with a unit opened (UI V1, UI-002)', async () => {
     onPhone();
     unitShow();
-    await screen.findByRole('list', { name: 'Unit Anda' });
-    await userEvent.click(screen.getByRole('button', { name: 'Lihat detail Dimas Pratama' }));
-    await screen.findAllByText('Selling success rate');
+    await screen.findByRole('button', { name: /^Unit Anda · 4/ });
+    await userEvent.click(screen.getByRole('button', { name: /^Unit Sari Wulandari/ }));
     await expectClean('unit/dashboard (id, phone)');
   });
 
@@ -6187,8 +6323,12 @@ describe('P18.98-T4 the public and account pages in Indonesian', () => {
         ],
       },
       '/notifications': { body: { items: [], unread: 0 } },
+      // UI V1 (UI-111): Profil saya's read-only facts.
+      '/auth/me/profile': { body: { companyName: null, agentCode: null, leader: null, group: null } },
     });
     inIndonesian(<ProfilePage />, makeMe({ permissions: ['profile:read_self'] }));
+    // Since UI V1 the devices are behind *Perangkat tempat Anda masuk* ›, in a sheet.
+    await userEvent.click(await screen.findByRole('button', { name: /Perangkat tempat Anda masuk/ }));
     await screen.findByText('Perangkat ini');
     await expectClean('profile (id)');
   });
@@ -6227,15 +6367,13 @@ describe('P18.98-T4 training and the office’s products in Indonesian', () => {
     </LearnerTrainingLayout>
   );
 
-  it('training/[categoryCode]: the Skills List, and on a phone', async () => {
+  it('training/[categoryCode]: the list, and on a phone', async () => {
     stubFetch(fieldShell);
     const { unmount } = inField('/training/SALES', learnerList);
-    await screen.findByRole('heading', { level: 2, name: 'Daftar skill' });
+    await screen.findByRole('list', { name: 'Modul Prospecting' });
     await expectClean('training/[categoryCode] (id)');
     unmount();
-    vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
-      media: query, matches: query === PHONE_QUERY, addEventListener: vi.fn(), removeEventListener: vi.fn(),
-    })));
+    atWidth(375);
     stubFetch(fieldShell);
     inField('/training/SALES', learnerList);
     await screen.findByRole('list', { name: 'Modul Prospecting' });
@@ -6250,7 +6388,7 @@ describe('P18.98-T4 training and the office’s products in Indonesian', () => {
     unmount();
     stubFetch({ ...fieldShell, 'GET /training/modules/CLOSING_TECHNIQUES': { body: trainingModulePage({ can: { update: false } }) } });
     inField('/training/SALES/CLOSING_TECHNIQUES', learnerModule, TRAINING_SUPPORT);
-    await screen.findByText('Modul pelatihan terstruktur.');
+    await screen.findByRole('heading', { level: 1, name: 'Closing Techniques That Work' });
     await expectClean('training/[categoryCode]/[moduleCode] (id, support session)');
   });
 
@@ -6657,6 +6795,8 @@ describe('P18.98-T4 events, campaigns and the calendar in Indonesian', () => {
     const routes = {
       ...SHELL_STUBS,
       '/calendar/entries?view=week': { body: weekRead() },
+      // UI V1 (UI-104): the phone's Agenda reads its own seven days.
+      '/calendar/entries?view=agenda': { body: { ...weekRead(), view: 'agenda' } },
       '/calendar/entries?view=month': { body: monthRead() },
       '/calendar/settings': { body: { hideDetails: false } },
       '/calendar/downline': { body: DOWNLINE },
@@ -6681,7 +6821,7 @@ describe('P18.98-T4 events, campaigns and the calendar in Indonesian', () => {
     atWidth(375);
     stubFetch(routes);
     agent(<CalendarPage />, AGUS);
-    await screen.findByRole('heading', { level: 2, name: 'Senin, 28 Sep 2026' });
+    await screen.findByRole('heading', { level: 2, name: 'Senin, 28 Sep 2026 · Hari ini' });
     await userEvent.click(screen.getByRole('button', { name: /^Rapat internal: Weekly unit standup/ }));
     await screen.findByRole('dialog', { name: 'Weekly unit standup' });
     await expectClean('calendar (phone agenda, detail, id)');
@@ -6787,7 +6927,8 @@ describe('P18.98-T6 the company templates in Indonesian', () => {
     await expectClean('admin/companies/[companyId]/template (id, New template)');
     await userEvent.click(screen.getByRole('button', { name: 'Batal' }));
     await userEvent.click(screen.getByRole('button', { name: 'Impor dari perusahaan lain' }));
-    const dialog = within(screen.getByRole('dialog', { name: 'Impor dari perusahaan lain' }));
+    // The dialog's module is fetched on its first opening (P18.99-T16).
+    const dialog = within(await screen.findByRole('dialog', { name: 'Impor dari perusahaan lain' }));
     await userEvent.selectOptions(await dialog.findByLabelText('Perusahaan'), 'c2');
     await dialog.findByLabelText('Templat');
     await expectClean('admin/companies/[companyId]/template (id, Import)');
@@ -6865,7 +7006,7 @@ describe('P18.98-T6 the company templates in Indonesian', () => {
       },
     }, '#products');
     await userEvent.click(await screen.findByRole('button', { name: 'Ubah' }));
-    await screen.findByRole('table', { name: 'Commission rate' });
+    await screen.findByRole('table', { name: 'Persentase komisi' });
     await expectClean('admin/companies/[companyId]/template#products (id, a product open)');
     products.unmount();
     vi.unstubAllGlobals();
@@ -6940,5 +7081,640 @@ describe('P18.98-T7 the pages that only send the reader on, in Indonesian', () =
       { me: makeMe() },
     );
     await expectClean('coaching/[membershipId] (id, the wait)');
+  });
+});
+
+/**
+ * **UI V1's shared components** (Phase 18.99 T2; the report's *Shared components*), through axe in both languages
+ * before the pages adopt them: one panel holding each, populated — the ratio card, the person rows and the tree, the
+ * pills, the tiles, the action rows, the slider and the stepper, the save state, the ⚡, WhatsApp and Call, the agent
+ * picker open, Boost's empty state — then the number sheet open over it.
+ */
+describe('UI V1 the shared components (Phase 18.99 T2)', () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  const ratio = (code: string, label: string, over: Record<string, unknown> = {}) => ({
+    code, label, comparison: 'gte', displayUnit: 'percent', benchmark: 0.3, tag: null, sides: null, numerator: [],
+    denominator: [], purpose: null, divergesFromStandard: false, value: 0.27, share: null, numeratorCount: 3,
+    denominatorCount: 11, status: 'alert', ...over,
+  });
+  const RATIOS = [
+    ratio('SELLING_VS_RECRUITMENT', 'Selling vs Recruitment balance', {
+      comparison: 'band', displayUnit: 'points', benchmark: 30, sides: { numerator: 'Selling', denominator: 'Recruitment' },
+      value: 16, share: 58, status: 'success',
+    }),
+    ratio('SELLING_SUCCESS_RATE', 'Selling success rate'),
+    ratio('LEADS_PER_ACTIVITY', 'Leads per activity', { displayUnit: 'decimal', benchmark: 1, value: 0.23 }),
+    ratio('MEETING_PER_APPROACH', 'Set appointment to meeting', { benchmark: 0.5, value: null, status: 'neutral' }),
+  ] as Parameters<typeof RatioCard>[0]['ratios'];
+
+  function Panel() {
+    return (
+      <main>
+        <h1>UI V1</h1>
+        <RatioCard ratios={RATIOS} />
+        <ul aria-label="Tim">
+          <li>
+            <PersonRow
+              name="Agus Prasetyo"
+              tone="self"
+              href="/unit/dashboard"
+              meta={<TonePill tone="blue">Anda</TonePill>}
+              trailing={<TreeToggle name="Agus Prasetyo" open onToggle={() => {}} controls="tim-agus" />}
+            />
+            <TreeIndent id="tim-agus" label="Tim Agus Prasetyo">
+              <TreeNode><PersonRow name="Indah Permatasari" href="/coaching/m-1/summary" meta={<ActivityPill count={3} />} /></TreeNode>
+              <TreeNode><PersonRow name="Sari Puspita" tone="tinted" href="/unit/dashboard/m-2" meta={<ActivityPill count={0} onTint />} /></TreeNode>
+            </TreeIndent>
+          </li>
+          <li><PersonRow name="Wilson Tanoto" tone="muted" meta="AB" /></li>
+        </ul>
+        <TonePill tone="amber">Perlu dipantau</TonePill>
+        <StatTile label="Tim Anda" value="12" unit="agent" chips={[{ key: 'u', label: <><b>4</b> langsung</> }]} href="/unit/dashboard" />
+        <StatTile label="Active Agent Oktober" value="4" unit="dari 12" ring={{ percent: 33 }} />
+        <GoalHeroCard
+          title="Target vs. realisasi (APE)"
+          percent={31}
+          achieved="Rp 29 jt"
+          target="dari target Rp 94,7 jt"
+          facts={[{ label: 'Sisa bulan ini', value: 'Rp 65,7 jt' }, { label: 'Polis yang dibutuhkan', value: '± 4 polis' }]}
+        />
+        <div className="divide-y divide-divider">
+          <ActionRow date="2026-10-30" text="Ambil SPAJ yang sudah ditandatangani." person="Ibu Melati" control={{ kind: 'check', checked: false, onChange: () => {} }} />
+          <ActionRow date="2026-11-02" onDateChange={() => {}} text="Telepon ulang" control={{ kind: 'remove', onRemove: () => {} }} />
+          <ActionRow
+            date="2026-11-03"
+            text="Kirim brosur"
+            auto={<AutoMarker name="Kirim brosur" explanation="Dari tindakan berikutnya di lead." />}
+            control={{ kind: 'lead', name: 'Ibu Shinta', href: '/leads' }}
+          />
+        </div>
+        <SliderWithValue label="Target APE tahunan" value={500} onChange={() => {}} min={0} max={2000} format={(v) => `Rp ${v} jt`} />
+        <StepperRow label="Rasio penutupan" value={30} onChange={() => {}} />
+        <SaveStateLabel state="unsaved" />
+        <ContactButtons name="Ibu Melati" phone="0812-1100-2200" onSave={async (p) => p} />
+        <ContactButtons name="Ibu Shinta" phone={null} onSave={async (p) => p} />
+        <AgentSearch />
+        <EmptyState title="Belum ada permintaan." boost="thinking" />
+      </main>
+    );
+  }
+
+  it.each(['en', 'id'] as const)('the panel, the agent picker open (%s)', async (language) => {
+    stubFetch({ '/members/search': { body: { members: [
+      { membershipId: 'm-1', fullName: 'Indah Permatasari', preferredName: null, agentCode: '80003', role: 'agent', orgLevelCode: 'AGENT' },
+    ] } } });
+    renderWithSession(<InLanguage language={language}><Panel /></InLanguage>, { me: makeMe() });
+    await userEvent.click(screen.getByRole('combobox'));
+    await screen.findByRole('option');
+    await expectClean(language === 'id' ? 'UI V1 shared components (id)' : 'UI V1 shared components');
+  });
+
+  it.each(['en', 'id'] as const)('the number sheet open over it (%s)', async (language) => {
+    renderWithSession(<InLanguage language={language}><Panel /></InLanguage>, { me: makeMe() });
+    const ask = screen.getAllByRole('button', { name: language === 'id' ? /Kirim pesan WhatsApp ke Ibu Shinta/ : /WhatsApp message to Ibu Shinta/ })[0];
+    await userEvent.click(ask);
+    await screen.findByRole('dialog');
+    await expectClean(language === 'id' ? 'UI V1 Isi nomor WhatsApp (id)' : 'UI V1 Isi nomor WhatsApp');
+  });
+});
+
+/**
+ * **UI V1's Group Tree and User Management** (Phase 18.99 T9): the states the rows, the sheets and the share block add,
+ * through axe in both languages — the tree searched and a unit opened (UI-058, UI-059, UI-073), the role sheet with
+ * *Keluarkan* (UI-083), the invite's QR sheet (UI-084), the empty Pending Requests with Boost (UI-089), and `/join` for
+ * somebody already in an office (UI-086).
+ */
+describe('UI V1 Group Tree and User Management (Phase 18.99 T9)', () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  const LEADER = makeMe({
+    membership: {
+      membershipId: 'mem-ab', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab', status: 'active',
+      isKpmOwner: false, isKpmAdmin: false, directCount: 2,
+    },
+    permissions: [
+      'org_tree:read', 'member:read_profile', 'member:invite', 'member:search_untagged_pool', 'member:change_role',
+      'member:remove_from_team', 'leader_request:read_inbox', 'leader_request:approve',
+    ],
+  });
+  // The shell in the reader's language too, as `inIndonesian` above draws it.
+  const render = (language: 'en' | 'id', ui: React.ReactElement) => (language === 'id'
+    ? renderWithSession(<InLanguage language="id"><AgentLayout>{ui}</AgentLayout></InLanguage>, { me: LEADER })
+    : renderInLayout(AgentLayout, ui, { me: LEADER }));
+  const suffix = (language: 'en' | 'id', what: string) => (language === 'id' ? `${what} (id)` : what);
+
+  it.each(['en', 'id'] as const)('UI-058, UI-059 the group tree as rows, searched, a unit opened (%s)', async (language) => {
+    stubFetch({
+      '/members/tree': {
+        body: {
+          nodes: [
+            treeNode({ membershipId: 'mem-ab', fullName: 'Agus Prasetyo', initials: 'AP', role: 'ab', layer: 1, isLeader: true,
+                       directCount: 2, isSelf: true, todayActivityCount: 5 }),
+            treeNode({ membershipId: 'mem-indah', fullName: 'Indah Permatasari', initials: 'IP', layer: 2, leaderId: 'mem-ab',
+                       todayActivityCount: 3 }),
+            treeNode({ membershipId: 'mem-sari', fullName: 'Sari Puspita', initials: 'SP', role: 'aab', layer: 2,
+                       leaderId: 'mem-ab', isLeader: true, directCount: 1 }),
+            treeNode({ membershipId: 'mem-rina', fullName: 'Rina Wijaya', initials: 'RW', layer: 3, leaderId: 'mem-sari' }),
+          ],
+          leader: { membershipId: 'mem-owner', fullName: 'Wilson Tanoto', initials: 'WT', role: 'ab' },
+          rootIds: ['mem-ab'], selfId: 'mem-ab', counts: { ab: 0, aab: 1, agent: 2, total: 3 },
+        },
+      },
+    });
+    render(language, <GroupTreePage />);
+    await screen.findByTestId('group-tree-list');
+    await userEvent.type(screen.getAllByRole('searchbox')[0], 'rina');
+    await expectClean(suffix(language, 'group-tree (UI V1, searched)'));
+  });
+
+  const ADD_STUBS = {
+    '/join/my-code': { body: { code: 'JOR417', url: 'https://agencyboost.app/join?code=JOR417' } },
+    '/join/untagged': { body: [{ membershipId: 'mem-b', fullName: 'Budi Santoso', initials: 'BS', agentCode: '80002' }] },
+    '/members/my-team': {
+      body: [{ membershipId: 'mem-r', fullName: 'Rina Wijaya', initials: 'RW', agentCode: '80001', role: 'agent', orgLevelCode: 'AGENT', directCount: 0, canChangeRole: true }],
+    },
+    '/join/requests/count': { body: { count: 2 } },
+  };
+
+  it.each(['en', 'id'] as const)('UI-083 the role sheet, Keluarkan last (%s)', async (language) => {
+    stubFetch(ADD_STUBS);
+    render(language, <AddAgentsPage />);
+    const name = language === 'id' ? 'Ubah peran Rina Wijaya, sekarang Agent' : 'Change Rina Wijaya’s role, now Agent';
+    await userEvent.click((await screen.findAllByRole('button', { name }))[0]);
+    await screen.findByRole('dialog', { name: 'Rina Wijaya' });
+    await expectClean(suffix(language, 'user-management/add (UI V1, role sheet)'));
+  });
+
+  it.each(['en', 'id'] as const)('UI-084 the invite’s QR sheet (%s)', async (language) => {
+    stubFetch(ADD_STUBS);
+    render(language, <AddAgentsPage />);
+    await userEvent.click(await screen.findByRole('button', { name: language === 'id' ? 'Tampilkan kode QR' : 'Show the QR code' }));
+    await screen.findByRole('dialog');
+    await expectClean(suffix(language, 'user-management/add (UI V1, QR sheet)'));
+  });
+
+  it.each(['en', 'id'] as const)('UI-089 Pending Requests with nothing waiting, Boost thinking (%s)', async (language) => {
+    stubFetch({ '/join/requests/routing': { body: [] }, '/join/requests': { body: [] } });
+    render(language, <PendingPage />);
+    await screen.findByTestId('pending-empty');
+    await expectClean(suffix(language, 'user-management/pending (UI V1, empty)'));
+  });
+
+  it.each(['en', 'id'] as const)('UI-086 /join for somebody already in an office: the message and the way back (%s)', async (language) => {
+    nav.search = 'code=JOR417';
+    stubFetch({
+      '/join/invite': { body: { code: 'JOR417', kpmLabel: 'Prudential — KPM 0417 · BSD City Branch', leaderName: 'Wilson Tanoto' } },
+      '/notifications': { body: { items: [], unread: 0 } },
+    });
+    renderWithSession(language === 'id' ? <InLanguage language="id"><JoinPage /></InLanguage> : <JoinPage />, { me: LEADER });
+    await screen.findByRole('link', { name: language === 'id' ? 'Kembali ke halaman kerja Anda' : 'Back to your work' });
+    await expectClean(suffix(language, 'join (UI V1, already in an office)'));
+    nav.search = '';
+  });
+});
+
+/*
+ * ── UI V1, Phase 18.99 T8: coaching ─────────────────────────────────────────────────────────────────────────────────
+ * The coachee's new *Leads* tab, the *Activity* tab's Log, and the session's refused *Finalkan* with its outlined rows
+ * and the *Isi nomor WhatsApp* sheet — in English and in Indonesian.
+ */
+describe('P18.99-T8 coaching (UI V1) has no axe violations', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const t8Leader = makeMe({
+    membership: {
+      membershipId: 'mem-agus', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab', status: 'active',
+      isKpmOwner: false, isKpmAdmin: false, directCount: 4,
+    },
+    permissions: [
+      'coaching_session:read', 'coaching_session:create', 'coaching_session:edit', 'coaching_session:finalize',
+      'lead:read', 'lead:update', 'lead:create', 'activity_log:read_raw', 'activity_ratios:read', 'personal_summary:read',
+      'goal:read',
+    ],
+  });
+  const t8Rina = {
+    membershipId: 'mem-rina', name: 'Rina Wijaya', pronoun: 'she', rung: { code: 'AGENT', label: 'Agent' },
+    leader: { membershipId: 'mem-agus', name: 'Agus Santoso' }, direct: true, downline: { members: 0, leaders: 0 }, today: '2026-10-02',
+  };
+  const t8Lead = (over: Record<string, unknown> = {}) => ({
+    id: 'l-1', ownerMembershipId: 'mem-rina', type: 'sales', name: 'Desi Pratama', contact: { phone: null, email: null },
+    statusCode: null, thisMonth: false, remarks: null, nextActionDate: '2026-10-05', nextActionNote: 'Confirm the SPAJ',
+    outcome: null, source: null, dateRegistered: null, version: 1, flags: [], overdueDays: null, committedMonths: [], lastEditedBy: null,
+    ...over,
+  });
+  const t8Leads = {
+    body: {
+      rows: [
+        t8Lead(), t8Lead({ id: 'l-2', name: 'Ibu Shinta Maharani', nextActionDate: null, nextActionNote: null }),
+        t8Lead({ id: 'l-3', name: 'Pak Gilang', type: 'recruitment', nextActionDate: null, nextActionNote: 'Second meeting' }),
+      ],
+      total: 3, page: 1, pageSize: 200,
+    },
+  };
+  const t8Shell = {
+    '/kpm/config': { body: { activity: [], ratios: [], leadPipelines: [], version: 1 } },
+    '/kpm/org-levels': { body: [] },
+    '/notifications': { body: { items: [], unread: 0 } },
+    'GET /coaching/coachees/mem-rina': { body: t8Rina },
+  };
+  const t8Render = (language: 'en' | 'id', tab: React.ReactElement) => {
+    const page = <CoachingPersonLayout params={routeParams({ membershipId: 'mem-rina' })}>{tab}</CoachingPersonLayout>;
+    return language === 'id'
+      ? renderWithSession(<InLanguage language="id"><AgentLayout>{page}</AgentLayout></InLanguage>, { me: t8Leader })
+      : renderInLayout(AgentLayout, page, { me: t8Leader });
+  };
+  const named = (language: 'en' | 'id', what: string) => (language === 'id' ? `${what} (id)` : what);
+
+  it.each(['en', 'id'] as const)('UI-029 the coachee’s Leads tab, read-only (%s)', async (language) => {
+    stubFetch({ ...t8Shell, 'GET /leads?owner=mem-rina': t8Leads });
+    t8Render(language, <CoacheeLeadsTabPage />);
+    await screen.findByRole('button', { name: 'Desi Pratama' });
+    await expectClean(named(language, 'coaching/[membershipId]/leads (UI V1)'));
+  });
+
+  it.each(['en', 'id'] as const)('UI-029 the Activity tab’s Log, the coachee’s day (%s)', async (language) => {
+    stubFetch({
+      ...t8Shell,
+      '/activity/dashboard': { body: { range: 'ROLLING_7D', from: '2026-09-26', to: '2026-10-02', days: 7, today: '2026-10-02', buckets: [], sections: [], counts: [], total: 0, daysLogged: 0, correctedDays: 0 } },
+      '/activity/log': {
+        body: {
+          membershipId: 'mem-rina', localDate: '2026-10-02', totalCount: 3, version: 1, frozenAt: null, editable: false, correctionCount: 0,
+          entries: [{ activityTypeId: 't1', activityTypeCode: 'LEADS_CONTACTED', label: 'Set appointment', count: 3 }],
+        },
+      },
+    });
+    t8Render(language, <CoacheeActivityTab />);
+    await userEvent.click(await screen.findByRole('tab', { name: 'Log Activity' }));
+    await screen.findByText('Set appointment');
+    await expectClean(named(language, 'coaching/[membershipId]/activity (UI V1, Log)'));
+  });
+
+  it.each(['en', 'id'] as const)('UI-060 a refused Finalkan: the count above the button, the rows outlined; UI-081 the number sheet (%s)', async (language) => {
+    Element.prototype.scrollIntoView = vi.fn();
+    const draftSession = {
+      sessionId: 's-1', coachee: { membershipId: 'mem-rina', name: 'Rina Wijaya' }, coach: { membershipId: 'mem-agus', name: 'Agus Santoso' },
+      status: 'draft', version: 1, date: null, startedAt: '2026-10-02T02:00:00.000Z', finalizedAt: null, finalizedBy: null,
+      reopenableUntil: null, defaultDueDate: '2026-10-09', lastWeek: null, lastWeekItems: [], tips: [],
+      leadActions: [{ leadId: 'l-1', leadName: 'Desi Pratama', dueDate: '2026-10-05', text: 'Confirm the SPAJ' }],
+      actionItems: [{ itemId: 'a-1', text: 'Run the comparison', dueDate: null }],
+      snapshot: null, earlier: [],
+    };
+    stubFetch({
+      ...t8Shell,
+      'GET /coaching/coachees/mem-rina/sessions': { body: { today: '2026-10-02', current: { sessionId: 's-1', status: 'draft' }, sessions: [] } },
+      'GET /coaching/sessions/s-1': { body: draftSession },
+      '/summary?for=mem-rina': { status: 404, body: { error: { code: 'NOT_FOUND', message: 'Not found', requestId: 'r' } } },
+      '/activity/ratios?for=mem-rina': { body: { membershipId: 'mem-rina', from: '2026-09-03', to: '2026-10-02', days: 30, ratios: [] } },
+      '/activity/summary?': { body: { from: '2026-09-26', to: '2026-10-02', totals: [], daysLogged: 0, totalCount: 0, targets: [], sections: [] } },
+      'GET /leads?owner=mem-rina': t8Leads,
+      'POST /coaching/sessions/s-1/finalize': {
+        status: 422,
+        body: { error: { code: 'COACHING_SESSION_INCOMPLETE', message: 'x', requestId: 'r', details: { rule: 'UNDATED_ACTION_ITEM', count: 1, itemIds: ['a-1'] } } },
+      },
+    });
+    t8Render(language, <CoachingSessionTabPage />);
+    const finalize = await screen.findByRole('button', { name: language === 'id' ? 'Finalkan sesi ini' : 'Finalize this session' });
+    await screen.findByRole('button', { name: 'Desi Pratama' });
+    await userEvent.click(finalize);
+    await waitFor(() => expect(document.querySelector('[data-finalize-refusal]')).not.toBeNull());
+    await expectClean(named(language, 'coaching/[membershipId]/session (UI V1, a refused Finalkan)'));
+    await userEvent.click(screen.getByRole('button', { name: language === 'id' ? 'Kirim pesan WhatsApp ke Desi Pratama' : 'Send a WhatsApp message to Desi Pratama' }));
+    await screen.findByRole('dialog');
+    await expectClean(named(language, 'coaching/[membershipId]/session (UI V1, Isi nomor WhatsApp)'));
+  });
+});
+
+/*
+ * ── UI V1, Phase 18.99 T13: Sales, Recruitment, Campaign and Event on a phone ─────────────────────────────────────────
+ */
+
+/**
+ * **UI V1's selling and programme pages on a phone** (Phase 18.99 T13; UI-107, UI-108), through axe in both languages at
+ * 375px: the Sales Attack Plan's brief and plan, the Product Catalog's rows, the Recruitment plan, Pitch Materials'
+ * rows, the campaign cards and the event cards with *Ikut* / *Tidak ikut*. From 768px each page is the one the blocks
+ * above already run.
+ */
+describe('P18.99-T13 selling and programmes on a phone (UI V1) have no axe violations', () => {
+  const SHELL = {
+    '/kpm/config': { body: { activity: [], ratios: [], leadPipelines: [], version: 1 } },
+    '/kpm/org-levels': { body: [] },
+  };
+  const named = (language: 'en' | 'id', name: string) => (language === 'id' ? `${name} (id)` : name);
+  const page = (language: 'en' | 'id', ui: React.ReactElement, me: ReturnType<typeof makeMe>) =>
+    renderWithSession(
+      language === 'id' ? <InLanguage language="id"><AgentLayout>{ui}</AgentLayout></InLanguage> : <AgentLayout>{ui}</AgentLayout>,
+      { me },
+    );
+  const pdf = (name: string) => ({ name, bytes: 2048, uploadedOn: '2026-10-01' });
+  const slot = (code: string, title: string, required: boolean, file: string | null) => ({
+    slot: code, title, line: `${title}'s line`, required, state: file ? 'uploaded' : 'missing',
+    file: file ? pdf(file) : null, checklist: [], version: file ? 1 : 0,
+  });
+  const PITCH_VIEW = {
+    slots: [
+      slot('opportunity', 'Opportunity Overview', true, 'Opportunity_Overview_v3.pdf'),
+      slot('proof', 'Proof & Credibility', true, 'Proof_and_Credibility_2026.pdf'),
+      slot('faq', 'FAQ', true, null), slot('howtojoin', 'How to Join', true, null),
+      slot('company', 'Company Profile', false, 'Company_Profile_2026.pdf'), slot('agency', 'Agency Profile', false, null),
+    ],
+    summary: { done: 2, total: 4, missing: 2, unconfirmed: 0 },
+  };
+
+  beforeEach(() => atWidth(375));
+  afterEach(() => vi.unstubAllGlobals());
+
+  it.each(['en', 'id'] as const)('the Sales Attack Plan on a phone: the brief, then the plan (%s)', async (language) => {
+    nav.pathname = '/attack-plan';
+    nav.search = '';
+    stubFetch({ ...SHELL, 'GET /product-catalog': { body: { products: SHELF } }, 'GET /attack-plan': { body: salesPlan() } });
+    const brief = page(language, <AttackPlanPage />, SALES_ME);
+    await screen.findByRole('group', { name: language === 'id' ? 'Kebutuhan utama' : 'Primary need' });
+    await expectClean(named(language, 'attack-plan (UI V1, phone brief)'));
+    brief.unmount();
+    nav.search = 'need=retirement&age=2&budget=2';
+    page(language, <AttackPlanPage />, SALES_ME);
+    await screen.findByRole('heading', { level: 2, name: 'PRUMapan' });
+    await waitFor(() => expect(document.querySelector('[data-layout="phone-plan"]')).not.toBeNull());
+    await expectClean(named(language, 'attack-plan (UI V1, phone plan)'));
+    nav.search = '';
+  });
+
+  it.each(['en', 'id'] as const)('the Product Catalog on a phone: compact rows (%s)', async (language) => {
+    nav.pathname = '/product-catalog';
+    stubFetch({ ...SHELL, 'GET /product-catalog': { body: { products: SHELF } } });
+    page(language, <ProductCatalogLayout><ProductCatalogPage /></ProductCatalogLayout>, SALES_ME);
+    await waitFor(() => expect(document.querySelector('[data-phone-section]')).not.toBeNull());
+    await expectClean(named(language, 'product-catalog (UI V1, phone)'));
+  });
+
+  it.each(['en', 'id'] as const)('the Recruitment plan and Pitch Materials on a phone (%s)', async (language) => {
+    nav.pathname = '/recruitment/attack-plan';
+    nav.search = new URLSearchParams(RECRUITMENT_BRIEF).toString();
+    stubFetch({ ...SHELL, 'GET /recruitment/attack-plan': { body: recruitmentView(recruitmentPlan()) } });
+    const plan = page(language, <RecruitmentLayout><RecruitmentAttackPlanPage /></RecruitmentLayout>, RECRUITMENT_ME);
+    await waitFor(() => expect(document.querySelector('[data-layout="phone-plan"]')).not.toBeNull());
+    await expectClean(named(language, 'recruitment/attack-plan (UI V1, phone plan)'));
+    plan.unmount();
+    nav.search = '';
+    nav.pathname = '/recruitment/pitch-materials';
+    stubFetch({ ...SHELL, 'GET /recruitment/pitch-materials': { body: PITCH_VIEW } });
+    page(language, <RecruitmentLayout><PitchMaterialsPage /></RecruitmentLayout>, RECRUITMENT_ME);
+    await waitFor(() => expect(document.querySelector('[data-layout="phone-pitch"]')).not.toBeNull());
+    await expectClean(named(language, 'recruitment/pitch-materials (UI V1, phone)'));
+  });
+
+  it.each(['en', 'id'] as const)('the campaigns and the events on a phone (%s)', async (language) => {
+    nav.pathname = '/campaigns';
+    stubFetch({ ...SHELL, 'GET /campaigns': { body: CAMPAIGN_LIST } });
+    const campaigns = page(language, <CampaignsLayout><CampaignsPage /></CampaignsLayout>, CAMPAIGNS_RINA);
+    await waitFor(() => expect(document.querySelector('[data-campaign-card] [data-chase]')).not.toBeNull());
+    await expectClean(named(language, 'campaigns (UI V1, phone)'));
+    campaigns.unmount();
+    vi.unstubAllGlobals();
+    atWidth(375);
+    nav.pathname = '/events';
+    stubFetch({ ...EVENTS_SHELL, 'GET /events': { body: eventsList() } });
+    page(language, <EventsLayout><EventsPage /></EventsLayout>, EVENTS_ME);
+    await waitFor(() => expect(document.querySelector('[data-group="upcoming"]')).not.toBeNull());
+    await expectClean(named(language, 'events (UI V1, phone)'));
+  });
+});
+
+/*
+ * UI V1, Phase 18.99 T14 (UI-109, UI-110, UI-111): Profil saya with its sheets, KPM Analytics' Overview and Compliance
+ * and the Strategic Leader Forum's list and meeting on a phone in the field shell, in both languages. The screens and
+ * their fixtures are imported here, inside the block, so the file's head stays as it is for the tasks beside this one.
+ */
+describe('UI V1 T14 KPM Analytics, the Leader Forum and Profil saya through axe', () => {
+  const named = (language: 'en' | 'id', what: string) => (language === 'id' ? `${what} (id)` : what);
+  const render = (language: 'en' | 'id', ui: React.ReactElement, me: ReturnType<typeof makeMe>) =>
+    renderWithSession(language === 'id' ? <InLanguage language="id">{ui}</InLanguage> : ui, { me });
+
+  it.each(['en', 'id'] as const)('UI-111 Profil saya, its photo sheet and its language sheet (%s)', async (language) => {
+    const { default: Profile } = await import('./profile/page');
+    nav.pathname = '/profile';
+    atWidth(375);
+    stubFetch({
+      '/auth/me/profile': { body: { companyName: 'Prudential Indonesia', agentCode: '70012345', leader: { name: 'Wilson Tanoto', orgLevelCode: 'AB' }, group: { people: 11, ab: 0, aab: 3, agents: 8 } } },
+      '/join/my-code': { body: { code: 'AGUS01', url: 'https://app.test/join?code=AGUS01' } },
+      '/auth/sessions': { body: [] },
+      '/calendar/settings': { body: { hideDetails: false } },
+      '/notifications': { body: { items: [], unread: 0 } },
+    });
+    render(language, <Profile />, makeMe({
+      user: { ...makeMe().user, fullName: 'Agus Prasetyo', dateOfBirth: '1995-03-18', gender: 'male', companyJoinMonth: '2020-09', workStatus: 'full_time' },
+      membership: {
+        membershipId: 'mem-1', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab', isKpmOwner: false, isKpmAdmin: false,
+        status: 'active', directCount: 4, isCoreLeader: true, groups: ['Marvelous'], office: { code: '0417', branch: 'BSD City Branch' },
+      },
+      permissions: ['profile:read_self', 'calendar_entry:read', 'calendar_entry:update'],
+    }));
+    await screen.findByText(language === 'id' ? '11 orang · 3 AAB · 8 Agent' : '11 people · 3 AAB · 8 Agents');
+    await expectClean(named(language, 'profile (UI V1)'));
+    await userEvent.click(screen.getByRole('button', { name: language === 'id' ? 'Ubah foto profil Anda' : 'Change your profile photo' }));
+    await screen.findByRole('dialog');
+    await expectClean(named(language, 'profile (UI V1, Foto profil)'));
+  });
+
+  it.each(['en', 'id'] as const)('UI-109 KPM Analytics Overview and Compliance on a phone (%s)', async (language) => {
+    const { default: Layout } = await import('./kpm/analytics/layout');
+    const { default: Overview } = await import('./kpm/analytics/page');
+    const { default: Compliance } = await import('./kpm/analytics/compliance/page');
+    const analytics = await import('@test/kpm-analytics-fixtures');
+    const compliance = await import('@test/kpm-compliance-fixtures');
+    atWidth(375);
+    nav.pathname = '/kpm/analytics';
+    nav.search = '';
+    stubFetch({ ...analytics.SHELL_STUBS, 'GET /kpm/analytics/compliance': { body: compliance.complianceView('training') }, 'GET /kpm/analytics': { body: analytics.analyticsView() } });
+    const { unmount } = render(language, <Layout><Overview /></Layout>, analytics.CORE_LEADER_ME);
+    await waitFor(() => expect(document.querySelector('[data-v1-overview]')).not.toBeNull());
+    await expectClean(named(language, 'kpm/analytics (UI V1, phone)'));
+    unmount();
+    nav.pathname = '/kpm/analytics/compliance';
+    render(language, <Layout><Compliance /></Layout>, analytics.CORE_LEADER_ME);
+    await waitFor(() => expect(document.querySelector('[data-v1-section]')).not.toBeNull());
+    await expectClean(named(language, 'kpm/analytics/compliance (UI V1, phone)'));
+  });
+
+  it.each(['en', 'id'] as const)('UI-110 the forum’s list and a meeting’s three tabs on a phone (%s)', async (language) => {
+    const { default: List } = await import('./leader-meetings/page');
+    const { default: Meeting } = await import('./leader-meetings/[meetingId]/page');
+    const forum = await import('./leader-meetings/forum-fixtures');
+    atWidth(375);
+    nav.pathname = '/leader-meetings';
+    const meeting = forum.meetingView({ can: forum.CORE_LEADER_CAN });
+    stubFetch({ ...forum.SHELL_STUBS, 'GET /leader-meetings/m-14': { body: meeting }, 'GET /leader-meetings': { body: forum.listView() } });
+    const { unmount } = render(language, <List />, forum.CORE_LEADER_ME);
+    await waitFor(() => expect(document.querySelector('[data-v1-forum-list]')).not.toBeNull());
+    await expectClean(named(language, 'leader-meetings (UI V1, phone)'));
+    unmount();
+    nav.pathname = '/leader-meetings/m-14';
+    render(language, <Meeting params={routeParams({ meetingId: 'm-14' })} />, forum.CORE_LEADER_ME);
+    await waitFor(() => expect(document.querySelector('[data-v1-overview-meeting]')).not.toBeNull());
+    await expectClean(named(language, 'leader-meetings/[meetingId] (UI V1, Overview)'));
+    await userEvent.click(screen.getByRole('tab', { name: 'Agenda' }));
+    await expectClean(named(language, 'leader-meetings/[meetingId] (UI V1, Agenda)'));
+    await userEvent.click(screen.getByRole('tab', { name: 'Action Items' }));
+    await expectClean(named(language, 'leader-meetings/[meetingId] (UI V1, Action Items)'));
+  });
+});
+
+/**
+ * **Home and the sign-in through axe** (Phase 18.99 T11; UI-100, UI-101, UI-102): a leader's Home in the field shell on a
+ * phone (the title row's bell, the tiles, *Aksi hari ini*, *Laporan tim* opened to *Group*, the chart) and on a desktop,
+ * the *Isi nomor WhatsApp* sheet from the team list, an agent's Home with nothing in seven days (Boost sleeping), in
+ * both languages; the sign-in's welcome is the `login` case above.
+ */
+describe('UI V1 T11 Home through axe', () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+  const named = (language: 'en' | 'id', what: string) => (language === 'id' ? `${what} (id)` : what);
+
+  it.each(['en', 'id'] as const)('UI-100, UI-101 a leader’s Home on a phone and a desktop, and the number sheet (%s)', async (language) => {
+    const { default: HomePage } = await import('./(agent)/home/page');
+    const home = await import('@test/home-fixtures');
+    nav.pathname = '/home';
+    for (const width of [375, 1280]) {
+      atWidth(width);
+      stubFetch({ '/home': { body: home.LEADER }, '/notifications': { body: { items: [], unread: 0 } } });
+      const ui = <AgentLayout><HomePage /></AgentLayout>;
+      const { unmount } = renderWithSession(language === 'id' ? <InLanguage language="id">{ui}</InLanguage> : ui, { me: home.AGUS });
+      await waitFor(() => expect(document.querySelector('[data-home-team]')).not.toBeNull());
+      await userEvent.click(screen.getByRole('button', { name: 'Group' }));
+      await expectClean(named(language, `home (UI V1, leader, ${width})`));
+      if (width === 375) {
+        const lukman = [...document.querySelectorAll('[data-home-team] [data-person-row]')]
+          .find((row) => row.textContent!.includes('Lukman Hakim')) as HTMLElement;
+        await userEvent.click(within(lukman).getByRole('button', { name: /WhatsApp/ }));
+        await screen.findByRole('dialog');
+        await expectClean(named(language, 'home (UI V1, Isi nomor WhatsApp)'));
+      }
+      unmount();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it.each(['en', 'id'] as const)('UI-100, UI-102 an agent’s Home with nothing in seven days (%s)', async (language) => {
+    const { default: HomePage } = await import('./(agent)/home/page');
+    const home = await import('@test/home-fixtures');
+    nav.pathname = '/home';
+    atWidth(375);
+    stubFetch({
+      '/home': { body: { ...home.AGENT_VIEW, activity: { today: 0, yesterday: 0, total: 0, days: home.LEADER.activity.days.map((d) => ({ ...d, count: 0 })) } } },
+      '/notifications': { body: { items: [], unread: 0 } },
+    });
+    const ui = <AgentLayout><HomePage /></AgentLayout>;
+    renderWithSession(language === 'id' ? <InLanguage language="id">{ui}</InLanguage> : ui, { me: home.AGUS });
+    await waitFor(() => expect(document.querySelector('[data-home-chart] [data-boost]')).not.toBeNull());
+    await expectClean(named(language, 'home (UI V1, agent, nothing logged)'));
+  });
+
+  it.each(['en', 'id'] as const)('UI-104 the Calendar: the Agenda’s Tugas and the popup, 3 Hari, the Week’s Tugas row and the 1:1’s coaching button (%s)', async (language) => {
+    const tasks = [coachingTask(), leadTask()];
+    const oneToOne = entry({
+      entryId: 'e-11', type: 'coaching', title: '1:1 coaching — Indah',
+      invitees: [{ membershipId: 'mem-indah', name: 'Indah Permata', placed: false, answer: 'accepted', readerCoaches: true }],
+    });
+    const coach = { ...AGUS, permissions: [...AGUS.permissions, 'coaching_session:create'] };
+    nav.pathname = '/calendar';
+    for (const width of [375, 1280]) {
+      atWidth(width);
+      stubFetch({
+        ...SHELL_STUBS,
+        '/calendar/entries?view=agenda': { body: agendaRead({ tasks, events: [joinedEvent()] }) },
+        '/calendar/entries?view=week': { body: weekRead({ tasks, entries: [...weekRead().entries, oneToOne], events: [joinedEvent()] }) },
+        '/calendar/entries?view=three_days': { body: threeDayRead({ tasks, events: [joinedEvent()] }) },
+      });
+      const ui = <AgentLayout><CalendarPage /></AgentLayout>;
+      const { unmount } = renderWithSession(language === 'id' ? <InLanguage language="id">{ui}</InLanguage> : ui, { me: coach });
+      const range = language === 'id' ? 'Kalender, 28 Sep – 4 Okt 2026' : 'Calendar, 28 Sep – 4 Oct 2026';
+      await screen.findAllByRole('region', { name: range });
+      await expectClean(named(language, `calendar (UI V1, ${width === 375 ? 'Agenda with Tugas' : 'Week with the Tugas row'})`));
+      const pill = language === 'id' ? 'Tugas pada Sen, 28 Sep: 2' : 'Tasks on Mon, 28 Sep: 2';
+      if (width === 1280) {
+        await userEvent.click(screen.getByRole('button', { name: pill }));
+        await screen.findByRole('dialog');
+        await expectClean(named(language, 'calendar (UI V1, Tugas popup)'));
+        await userEvent.keyboard('{Escape}');
+        await userEvent.click(screen.getByRole('button', { name: /^(1:1 coaching|Coaching 1:1): 1:1 coaching — Indah/ }));
+        await screen.findByRole('link', { name: language === 'id' ? 'Mulai sesi coaching' : 'Start coaching session' });
+        await expectClean(named(language, 'calendar (UI V1, 1:1 with Start coaching session)'));
+        await userEvent.keyboard('{Escape}');
+      } else {
+        await userEvent.selectOptions(screen.getByRole('combobox', { name: language === 'id' ? 'Tampilan' : 'View' }), 'three_days');
+        await waitFor(() => expect(document.querySelector('[data-three-days]')).not.toBeNull());
+        await expectClean(named(language, 'calendar (UI V1, 3 Hari)'));
+      }
+      unmount();
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
+/*
+ * UI V1, Phase 18.99 T16 (UI-111, ADR-0181): Profil saya's email as a field — its hint, the password sheet a changed
+ * email opens and the line once the link is sent — and `/verify-email-change/[token]`, the page that link opens, in both
+ * languages. Imported inside the block, as T14's are, so the file's head stays as it is.
+ */
+describe('UI V1 T16 the email change through axe', () => {
+  const named = (language: 'en' | 'id', what: string) => (language === 'id' ? `${what} (id)` : what);
+  const render = (language: 'en' | 'id', ui: React.ReactElement, me: ReturnType<typeof makeMe> | null) =>
+    renderWithSession(language === 'id' ? <InLanguage language="id">{ui}</InLanguage> : ui, { me });
+
+  it.each(['en', 'id'] as const)('UI-111 the email field, its password sheet and the line once the link is sent (%s)', async (language) => {
+    const { default: Profile } = await import('./profile/page');
+    nav.pathname = '/profile';
+    atWidth(375);
+    stubFetch({
+      '/auth/me/profile': { body: { companyName: 'Prudential Indonesia', agentCode: '70012345', leader: null, group: null } },
+      '/auth/sessions': { body: [] },
+      '/notifications': { body: { items: [], unread: 0 } },
+      'POST /auth/me/email': { status: 202, body: { status: 'accepted' } },
+    });
+    render(language, <Profile />, makeMe({
+      user: { ...makeMe().user, fullName: 'Indah Permatasari', email: 'indah@kpm0417.test', workStatus: 'full_time', gender: 'female' },
+      permissions: ['profile:read_self'],
+    }));
+    const field = screen.getByLabelText('Email');
+    await userEvent.clear(field);
+    await userEvent.type(field, 'indah.baru@kpm0417.test');
+    await userEvent.click(within(document.querySelector('[data-floating-save]') as HTMLElement)
+      .getByRole('button', { name: language === 'id' ? 'Simpan' : 'Save' }));
+    const sheet = await screen.findByRole('dialog', { name: language === 'id' ? 'Ubah email' : 'Change email' });
+    await expectClean(named(language, 'profile (UI V1, Ubah email)'));
+    await userEvent.type(within(sheet).getByLabelText(language === 'id' ? 'Kata sandi saat ini' : 'Current password'), 'pw-1');
+    await userEvent.click(within(sheet).getByRole('button', { name: language === 'id' ? 'Kirim tautan' : 'Send link' }));
+    await screen.findByText(/indah\.baru@kpm0417\.test\./);
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await expectClean(named(language, 'profile (UI V1, the link sent)'));
+  });
+
+  it.each(['en', 'id'] as const)('UI-111 /verify-email-change/[token], changed and refused (%s)', async (language) => {
+    const { default: VerifyEmailChange } = await import('./(auth)/verify-email-change/[token]/page');
+    nav.pathname = '/verify-email-change/t';
+    stubFetch({ '/auth/verify-email-change': { body: { status: 'changed', email: 'indah.baru@kpm0417.test' } } });
+    const { unmount } = render(language, <VerifyEmailChange params={routeParams({ token: 't' })} />, null);
+    await screen.findByText(/indah\.baru@kpm0417\.test\./);
+    await expectClean(named(language, 'verify-email-change'));
+    unmount();
+    vi.unstubAllGlobals();
+
+    stubFetch({
+      '/auth/verify-email-change': {
+        status: 400, body: { error: { code: 'AUTH_TOKEN_INVALID', message: 'That link is no longer valid. Request a new one.', requestId: 'r' } },
+      },
+    });
+    render(language, <VerifyEmailChange params={routeParams({ token: 'old' })} />, null);
+    await screen.findByRole('alert');
+    await expectClean(named(language, 'verify-email-change (refused)'));
   });
 });

@@ -11,16 +11,17 @@ import {
   InLanguage, makeMe, renderInLayout, renderWithSession, routeParams, stubFetch, type StubReply,
 } from '@test/harness';
 import {
-  AGUS_ME, dashboard, EMPTY, NEW_HIRE_VIEW, RATIOS, SARI_UNIT,
+  activities, AGUS_ME, dashboard, EMPTY, NEW_HIRE_VIEW, RATIOS, SARI_UNIT,
 } from '@test/unit-dashboard-fixtures';
 import type { UnitDashboardView } from '@/lib/unit-dashboard';
 import UnitBelowPage from './dashboard/[membershipId]/page';
 import UnitDashboardPage from './dashboard/page';
 
 /**
- * **The Unit Dashboard and the Group tree in Indonesian** (P18.98-T4 AC-1 to AC-4, coaching and unit): the period
- * switch, the four tiles, *Your team's roster* as a table and as a phone's cards with its groups, totals, marks and
- * pills, a row's detail, *Update production*, the empty unit, a unit below the reader and one they cannot open; the
+ * **The Unit Dashboard and the Group tree in Indonesian** (P18.98-T4 AC-1 to AC-4, coaching and unit; UI V1, Phase 18.99
+ * T4, UI-006 on this page): the tabs, the period pill, the four tiles, *Roster tim Anda* as a table and as a phone's
+ * accordion with its chips, groups and pills, the Activities tab, *Update production*, the empty unit, a unit below the
+ * reader and one they cannot open; the
  * Group tree's line, wait and empty state. Their words the approved glossary's, each kept term English (§A), names and
  * the server's sentences as sent, the figures in the reader's language — Indonesian here — and no English message of the
  * module's own left on the screen (`englishShown`). English is every other spec's, unchanged.
@@ -55,7 +56,7 @@ const show = (view: UnitDashboardView | StubReply = dashboard(), routes: Record<
 };
 const roster = () => screen.findByRole('table', { name: 'Roster tim Anda' });
 const rowOf = (name: string) => screen.getByRole('link', { name }).closest('tr')!;
-const tileOf = (label: string) => screen.getByText(label).parentElement!;
+const tileOf = (label: string) => screen.getByText(label).closest<HTMLElement>('[data-stat-tile]')!;
 
 describe('P18.98-T4 the Unit Dashboard in Indonesian', () => {
   it('reads the English it is looking for, so a silent zero cannot pass: the same dashboard in English shows it', async () => {
@@ -68,104 +69,74 @@ describe('P18.98-T4 the Unit Dashboard in Indonesian', () => {
     );
   });
 
-  it('P18.98-T4 AC-1, AC-2 the title, the period switch and the four tiles: names kept, their lines Indonesian', async () => {
+  it('UI-001, UI-003, UI-006 the title, the tabs, the period pill and the four tiles: the report’s words, kept terms English', async () => {
     show();
     await roster();
     expect(screen.getByRole('heading', { level: 1, name: 'Unit Dashboard' })).toBeInTheDocument();
-    const periods = screen.getByRole('group', { name: 'Periode' });
-    expect(within(periods).getAllByRole('button').map((b) => b.textContent)).toEqual(['7 hari terakhir', 'Bulan ini', 'Tahun ini']);
-    expect(within(periods).getByRole('button', { name: 'Bulan ini' })).toHaveAttribute('aria-pressed', 'true');
-    expect(tileOf('Your team')).toHaveTextContent('16 agent');
-    expect(tileOf('Your team')).toHaveTextContent('4 langsung · 12 di bawah AAB');
-    // A reader who chose Indonesian reads its figures in it (P18.98-T3).
-    expect(tileOf('Direct Group production')).toHaveTextContent('Rp 1 M / 1,3 M');
-    expect(tileOf('On pace to be active (Group)')).toHaveTextContent('12 / 16 agent');
-    const recruits = tileOf('Potential Recruits (Group)');
-    expect(recruits).toHaveTextContent('Unit Anda1 kandidat');
-    expect(recruits).toHaveTextContent('AAB Anda1 kandidat');
+    expect(within(screen.getByRole('tablist')).getAllByRole('tab').map((t) => t.textContent)).toEqual(['Overview', 'Aktivitas']);
+    const period = screen.getByRole('combobox', { name: 'Periode' });
+    expect(within(period).getAllByRole('option').map((o) => o.textContent)).toEqual(['7 hari terakhir', 'Bulan ini', 'Tahun ini']);
+    expect(period).toHaveValue('month');
+    // UI-003's labels, the month in full in the reader's figures; *4 dari 12* as the report writes it.
+    expect(tileOf('Tim Anda')).toHaveTextContent('16agent4 langsung12 AAB');
+    expect(tileOf('Produksi Group')).toHaveTextContent('78%Rp 1Mdari Rp 1,3 M');
+    expect(tileOf('Active Agent Oktober')).toHaveTextContent('12dari 16');
+    expect(tileOf('Active Agent Oktober')).toHaveTextContent('Unit 3/4AAB 9/12');
+    expect(tileOf('Recruitment Oktober')).toHaveTextContent('2kandidatUnit 1AAB 1');
     noEnglishLeft();
   });
 
-  it('P18.98-T4 AC-1 to AC-4 the roster: its headings, groups, totals, rows, pills and marks', async () => {
+  it('UI-002, UI-005, UI-009, UI-028 the roster: its heading, Last updated, chips, columns, groups and pills in Indonesian', async () => {
     show();
     const table = await roster();
-    // Each heading's own words first; an ⓘ's name and tip follow some of them.
-    expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual([
-      'Nama', 'Progres goal', 'Mengejar MDRT', 'Leads', 'Aktivitas', '1:1 terakhir', 'Status', 'Detail',
-    ].map((words) => expect.stringMatching(new RegExp(`^${words}`))));
-    expect(within(table).getByRole('rowheader', { name: /^Unit Anda · 4/ })).toBeInTheDocument();
-    expect(within(table).getByRole('rowheader', { name: 'AAB units' })).toBeInTheDocument();
-    expect(within(table).getByRole('rowheader', { name: 'Unit Sari Wulandari — Total' })).toBeInTheDocument();
-
-    const agus = rowOf('Anda (Agus)');
-    expect(agus).toHaveTextContent('135% · lebih Rp 28 jtRp 108 jt dari 80 jt');
-    expect(within(agus).getByRole('button', { name: 'Sesuai target' })).toHaveAccessibleDescription(
-      'Berada di jalur untuk memenuhi syarat sebagai Monthly Active Agent, pada atau di atas 90% dari laju goal yang diharapkan.',
-    );
-    expect(agus).toHaveTextContent('Penjualan: 9 · 4 closing');
-    expect(agus).toHaveTextContent('Rekrut: —');
-    expect(agus).toHaveTextContent('85 / 95 aktivitas goal');
-    expect(within(agus).getByText('Potential Monthly Active Agent')).toHaveClass('sr-only');
-    expect(within(agus).getByRole('button', { name: 'Lihat detail Anda' })).toBeInTheDocument();
-
-    const dimas = rowOf('Dimas Pratama');
-    expect(dimas).toHaveTextContent('82% · kurang Rp 14,4 jtRp 65,6 jt dari 80 jt');
-    expect(dimas).toHaveTextContent('12 hari lalu · terlambatoleh Agus Santoso');
-    expect(within(dimas).getByRole('button', { name: 'Perlu dipantau' })).toBeInTheDocument();
-    expect(within(rowOf('Siti Rahma')).getAllByRole('cell')[0]).toHaveTextContent(/^Belum diunggahdari target Rp 80 jt$/);
-    expect(rowOf('Siti Rahma')).toHaveTextContent('Belum ada 1:1');
-    expect(within(rowOf('Sari Wulandari')).getAllByRole('cell')[0]).toHaveTextContent(/^Goal belum diaturproduksi Rp 65,6 jt$/);
-    expect(within(rowOf('Arief Wibowo')).getByText('Pribadi')).toBeInTheDocument();
-    // A correction's marker: who and when, the month and the day in the figures' language.
-    expect(within(rowOf('Indah Lestari')).getByRole('button', {
-      name: 'Dikoreksi setelah unggahan produksi, Okt 2026, oleh Ibu Ratna pada 6 Okt 2026',
-    })).toBeInTheDocument();
-    // The Status rules and what counts as a goal activity.
+    expect(screen.getByText('Last updated 7 Okt 26')).toBeInTheDocument();
+    expect(within(screen.getByRole('group', { name: 'Filter menurut status' })).getAllByRole('button').map((b) => b.textContent))
+      .toEqual(['Semua 14', 'Perlu perhatian 4', 'Perlu dipantau 6']);
+    expect(within(table).getAllByRole('columnheader').map((h) => (h.textContent ?? '').split('ⓘ')[0])).toEqual([
+      'Nama', 'Progres goal', 'Leads penjualan', 'Closing', 'Leads rekrut', 'Potensi rekrut', 'Aktivitas', '1:1 terakhir', 'Status', 'Detail',
+    ]);
+    expect(within(table).getByRole('button', { name: 'Unit Anda · 4' }).closest('tr')).toHaveTextContent('Aktif 3/4');
+    expect(within(table).getByRole('button', { name: 'Unit Sari Wulandari · 6' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Anda (Agus)' })).toHaveAttribute('href', '/summary');
+    expect(within(rowOf('Siti Rahma')).getByText('Perlu perhatian')).toHaveAttribute('data-tone', 'red');
+    expect(within(rowOf('Siti Rahma')).getByText('Belum diunggah')).toBeInTheDocument();
+    expect(within(rowOf('Sari Wulandari')).getAllByText('Goal belum diatur').length).toBeGreaterThan(0);
+    expect(within(rowOf('Dimas Pratama')).getByText('Rp 65,6 jt / 80 jt')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Bagaimana status ditentukan?' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Apa yang dihitung sebagai aktivitas goal?' })).toHaveAccessibleDescription(
-      'Aktivitas yang menjadi dasar goal: Set appointment, Sales meeting, Submission polis. Bukan setiap aktivitas yang dicatat.',
-    );
-    // The totals.
-    const total = within(table).getByRole('rowheader', { name: 'Unit Anda — Total' }).closest('tr')!;
-    expect(total).toHaveTextContent('82% · kurang Rp 57,6 jt');
-    expect(total).toHaveTextContent('Rekrut: 1 rekrut potensial');
-    expect(total).toHaveTextContent('On pace to be active: 3/4');
     noEnglishLeft();
   });
 
-  it('P18.98-T4 AC-1 a new hire before a first sale: her tag, and the totals and tiles that leave her out', async () => {
+  it('UI-001 the Activities tab: its controls, the table and the ratio card in Indonesian', async () => {
+    nav.search = 'tab=activities';
+    stubFetch({ ...SHELL, 'GET /unit/dashboard/activities': { body: activities() } });
+    renderWithSession(<InLanguage language="id"><AgentLayout><UnitDashboardPage /></AgentLayout></InLanguage>, { me: AGUS_ME });
+    const grid = await screen.findByRole('table', { name: 'Aktivitas · Unit' });
+    expect(screen.getByRole('button', { name: 'Periode sebelumnya' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Periode berikutnya' })).toBeDisabled();
+    expect(screen.getByLabelText('Pilih tanggal: 26 Okt – 1 Nov 2026')).toBeInTheDocument();
+    expect(within(screen.getByRole('group', { name: 'Periode' })).getAllByRole('button').map((b) => b.textContent)).toEqual(['Minggu', 'Bulan']);
+    expect(within(screen.getAllByRole('group', { name: 'Unit atau Group' })[0]).getAllByRole('button').map((b) => b.textContent))
+      .toEqual(['Unit', 'Group']);
+    expect(within(grid).getByRole('columnheader', { name: 'Aktivitas' })).toBeInTheDocument();
+    expect(within(grid).getByRole('button', { name: 'Tampilkan Recruitment' })).toBeInTheDocument();
+    // The office's own names, as typed (content: never translated).
+    expect(within(grid).getByRole('rowheader', { name: 'Mendapatkan calon prospek baru' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Ratio · 30 hari terakhir' })).toBeInTheDocument();
+    noEnglishLeft();
+  });
+
+  it('P18.98-T4 AC-1 a new hire before a first sale: her tag, and the production tile’s ⓘ that leaves her out', async () => {
     show(NEW_HIRE_VIEW);
     await roster();
     const yanti = rowOf('Yanti Puspita');
-    expect(within(yanti).getByText('New hire')).toBeInTheDocument();
+    expect(within(yanti).getByText(/^New hire/)).toBeInTheDocument();
     expect(within(yanti).getByText(', belum ada penjualan pertama')).toHaveClass('sr-only');
-    expect(screen.getAllByRole('button', {
-      name: 'Belum ada penjualan pertama untuk Yanti Puspita, new hire, jadi tidak dihitung dalam total ini.',
-    }).length).toBeGreaterThan(0);
-    expect(within(tileOf('Direct Group production')).getByRole('button', {
+    expect(within(tileOf('Produksi Group')).getByRole('button', {
       name: 'Belum diunggah untuk Siti Rahma, jadi tidak dihitung dalam total ini. Belum ada penjualan pertama untuk Yanti Puspita, new hire, jadi tidak dihitung dalam total ini.',
     })).toBeInTheDocument();
     noEnglishLeft();
   });
 
-  it('P18.98-T4 AC-1 a row’s detail: Gap, the breakdown and the ratios kept, their lines Indonesian, the follow-up as typed', async () => {
-    nav.search = 'period=7d';
-    show();
-    await roster();
-    await userEvent.click(screen.getByRole('button', { name: 'Lihat detail Dimas Pratama' }));
-    const detail = rowOf('Dimas Pratama').nextElementSibling as HTMLElement;
-    expect(within(detail).getByText('Gap')).toBeInTheDocument();
-    expect(detail).toHaveTextContent('Sisa Rp 14,4 jt');
-    expect(detail).toHaveTextContent('≈ perlu 1 polis lagi, dengan rata-rata ukuran case-nya Rp 18 jt.');
-    expect(within(detail).getByText('Activity breakdown')).toBeInTheDocument();
-    expect(detail).toHaveTextContent('Set appointment63/70 prorata');
-    expect(await within(detail).findByText('Selling success rate')).toBeInTheDocument();
-    expect(detail).toHaveTextContent('Selling success rate18,0%');
-    expect(within(detail).getByText('Follow-up yang ditandai (terdeteksi sistem)')).toBeInTheDocument();
-    expect(detail).toHaveTextContent('Terlambat 3 hariRole-play objection handling before next presentation');
-    expect(within(rowOf('Dimas Pratama')).getAllByRole('cell')[0]).toHaveTextContent('Rp 65,6 jt dari 80 jt · bulan ini');
-    noEnglishLeft();
-  });
 
   it('P18.98-T4 AC-1 Update production: its dialog, the money’s mark in its headings, its groups and its toast', async () => {
     const { calls } = show(dashboard(), { 'PATCH /unit/dashboard/production': { body: { updated: 1, state: {} } } });
@@ -197,23 +168,18 @@ describe('P18.98-T4 the Unit Dashboard in Indonesian', () => {
     );
   });
 
-  it('P18.98-T4 AC-1 a phone’s cards: the groups, the labels above their values, by whom', async () => {
+  it('UI-002 a phone’s accordion: the groups, the rows and the pills in Indonesian', async () => {
     vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
       media: query, matches: query === PHONE_QUERY, addEventListener: vi.fn(), removeEventListener: vi.fn(),
     })));
     show();
-    const unit = await screen.findByRole('list', { name: 'Unit Anda' });
-    expect(screen.getByRole('list', { name: 'Unit Sari Wulandari' })).toBeInTheDocument();
-    const dimas = within(unit).getByRole('link', { name: 'Dimas Pratama' }).closest('li')!;
-    expect(within(dimas).getByText('Progres goal')).toBeInTheDocument();
-    expect(within(dimas).getByText('1:1 terakhir')).toBeInTheDocument();
-    expect(dimas).toHaveTextContent('oleh Agus Santoso');
-    await userEvent.click(within(dimas).getByRole('button', { name: 'Lihat detail Dimas Pratama' }));
-    expect(within(dimas).getByText('Aktivitas')).toBeInTheDocument();
-    expect(within(dimas).getByText('Leads')).toBeInTheDocument();
-    expect(await within(dimas).findByText('70,0% Selling · 30,0% Recruitment')).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /^Unit Anda · 4/ })).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('button', { name: /^Unit Arief Wibowo · 3/ })).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Anda (Agus)' })).toBeInTheDocument();
     noEnglishLeft();
   });
+
 
   it('P18.98-T4 AC-1 somebody who leads nobody: the empty unit, the two screens kept by their names', async () => {
     show(EMPTY);
@@ -234,8 +200,7 @@ describe('P18.98-T4 the Unit Dashboard in Indonesian', () => {
       { me: AGUS_ME },
     );
     expect(await screen.findByRole('heading', { level: 1, name: 'Unit Dashboard Sari Wulandari' })).toBeInTheDocument();
-    expect(tileOf('Potential Recruits (Group)')).toHaveTextContent('Unit Sari Wulandari1 kandidat');
-    expect(tileOf('Potential Recruits (Group)')).toHaveTextContent('AAB Sari Wulandari0 kandidat');
+    expect(tileOf('Recruitment Oktober')).toHaveTextContent('1kandidatUnit 1AAB 0');
     expect(screen.getByRole('table', { name: 'Roster tim Anda' })).toBeInTheDocument();
     noEnglishLeft();
     unmount();

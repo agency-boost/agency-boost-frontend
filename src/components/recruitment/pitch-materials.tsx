@@ -3,12 +3,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import { PitchBanner } from '@/components/recruitment/pitch-banner';
 import { PitchCard, type PitchAudience } from '@/components/recruitment/pitch-card';
+import { PhonePitch } from '@/components/recruitment/pitch-phone';
 import { Button, ErrorBanner } from '@/components/ui/field';
 import { Skeleton, SkeletonBar, SkeletonText } from '@/components/ui/skeleton';
 import { useMessages } from '@/i18n/language-provider';
 import { recruitmentPitchMessages } from '@/i18n/messages/recruitment-pitch';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { readPitchMaterials, type PitchMaterialsView, type PitchSlot } from '@/lib/recruitment-pitch';
+import { usePhone } from '@/lib/use-phone';
 
 /**
  * The prototype's `.card-grid` (`Recruitment_Section.html:180`): two columns of at least 430px where
@@ -22,13 +24,13 @@ function PitchSkeleton() {
   const t = useMessages(recruitmentPitchMessages);
   return (
     <Skeleton label={t.loading}>
-      <div className="mb-6 flex items-center gap-4 rounded-lg border border-hairline bg-card px-5 py-4">
+      <div className="mb-6 flex items-center gap-4 rounded-lg border border-card-edge bg-card px-5 py-4">
         <div className="h-11 w-11 shrink-0 rounded-full bg-hairline" />
         <SkeletonText lines={2} className="flex-1" />
       </div>
       <div className={GRID}>
         {[0, 1, 2, 3, 4, 5].map((i) => (
-          <div key={i} className="flex flex-col gap-3.5 rounded-lg border border-hairline bg-card px-5 py-5 sm:px-6">
+          <div key={i} className="flex flex-col gap-3.5 rounded-lg border border-card-edge bg-card px-5 py-5 sm:px-6">
             <SkeletonBar className="h-4 w-1/2" />
             <SkeletonText lines={2} />
           </div>
@@ -69,6 +71,7 @@ export function PitchMaterials({
 }) {
   const [view, setView] = useState<PitchMaterialsView | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
+  const phone = usePhone();
 
   const load = useCallback(async () => {
     try {
@@ -94,6 +97,16 @@ export function PitchMaterials({
       : now));
     void load();
   };
+
+  // The agents' tab on a phone (UI V1, UI-107): a ring, Wajib and Opsional, one row per document, no state pills.
+  if (phone && audience === 'agent') {
+    return (
+      <div>
+        {error && <ReadFailed error={error} onRetry={retry} />}
+        <PhonePitch view={view} />
+      </div>
+    );
+  }
 
   return (
     <div>

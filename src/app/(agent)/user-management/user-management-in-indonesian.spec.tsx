@@ -109,6 +109,13 @@ describe('P18.98-T4 User Management in Indonesian', () => {
     expect(screen.getByText('Tidak ada KPM yang tersedia untuk diikuti.')).toBeInTheDocument();
   });
 
+  it('UI-086 Find Your Leader with no office yet: the invite card, in Indonesian', async () => {
+    stubFetch({ '/join/me': { body: NO_OFFICE } });
+    inIndonesian(<FindLeaderPage />, NEWCOMER);
+    expect(await screen.findByRole('heading', { name: /^Punya kode, tautan, atau QR dari leader\?/ })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Gunakan undangan saja' })).toHaveAttribute('href', '/join');
+  });
+
   it('AC-1, AC-2 Find Your Leader: the leaders, a request sent, and one at a time, in Indonesian', async () => {
     stubFetch({
       '/join/me': { body: { ...REGISTERED, pendingRequestTo: 'mem-ab' } },
@@ -122,8 +129,8 @@ describe('P18.98-T4 User Management in Indonesian', () => {
     inIndonesian(<FindLeaderPage />, JOINER);
     expect(await screen.findByText('Wilson Tanoto')).toBeInTheDocument();
     expect(screen.getByText('Cari leader di KPM Anda dan minta untuk di-tag.')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Punya kode, tautan, atau QR dari leader?' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Gunakan undangan saja' })).toHaveAttribute('href', '/join');
+    // UI-086 (T16): no invite for somebody already in an office, with a leader or without — `/join` refuses them.
+    expect(screen.queryByText(/^Punya kode, tautan, atau QR/)).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 2, name: 'Cari leader' })).toBeInTheDocument();
     expect(screen.getByText('Dia perlu menyetujuinya.')).toBeInTheDocument();
     expect(screen.getByLabelText('Cari berdasarkan nama')).toHaveAttribute('placeholder', 'Nama');
@@ -145,8 +152,11 @@ describe('P18.98-T4 User Management in Indonesian', () => {
 
     stubFetch({ '/join/me': { body: { ...REGISTERED, status: 'active', leaderMembershipId: 'mem-ab', leaderName: 'Wilson Tanoto' } } });
     const second = inIndonesian(<FindLeaderPage />, JOINER);
-    expect(await screen.findByText('Penggantian leader dilakukan melalui Admin KPM Anda.')).toBeInTheDocument();
-    expect(screen.getByText('Saat ini melapor ke')).toBeInTheDocument();
+    const card = await screen.findByTestId('reporting-to');
+    expect(within(card).getAllByText('Penggantian leader dilakukan melalui Admin KPM Anda.').length).toBeGreaterThan(0);
+    expect(within(card).getByText('Saat ini melapor ke')).toBeInTheDocument();
+    // UI-086: no invite for somebody already under a leader.
+    expect(screen.queryByText(/^Punya kode, tautan, atau QR/)).not.toBeInTheDocument();
     second.unmount();
 
     stubFetch({ '/join/me': { body: REGISTERED }, '/join/leaders': { body: [] } });
@@ -163,25 +173,33 @@ describe('P18.98-T4 User Management in Indonesian', () => {
       '/join/untagged': { body: [{ membershipId: 'mem-b', fullName: 'Budi Santoso', initials: 'BS', agentCode: '80002' }] },
     });
     inIndonesian(<AddAgentsPage />, LEADER);
-    expect(await screen.findByText('Budi Santoso')).toBeInTheDocument();
-    expect(await screen.findByText('Rina Wijaya')).toBeInTheDocument();
+    expect((await screen.findAllByText('Budi Santoso')).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText('Rina Wijaya')).length).toBeGreaterThan(0);
     expect(screen.getByText('Undang orang baru atau tag agen yang sudah ada ke tim Anda.')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Undang seseorang' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Salin tautan' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Salin kode' })).toBeInTheDocument();
-    expect(screen.getByText('Kode leader')).toBeInTheDocument();
+    // UI-084: the share block's words, in both its layouts; *QR* and *WhatsApp* alike in both languages.
+    expect(screen.getAllByRole('button', { name: 'Salin tautan' })).toHaveLength(2);
+    expect(screen.getAllByRole('button', { name: 'Salin kode' })).toHaveLength(2);
+    expect(screen.getByRole('button', { name: 'Tampilkan kode QR' })).toHaveTextContent('QR');
+    expect(screen.getAllByRole('link', { name: 'Bagikan undangan lewat WhatsApp' })).toHaveLength(2);
+    expect(screen.getAllByText('Kode leader')).toHaveLength(2);
+    expect(screen.getByText('Tautan undangan')).toBeInTheDocument();
     // The leader code and its link as served.
-    expect(screen.getAllByText('JOR417')).toHaveLength(1);
+    expect(screen.getAllByText('JOR417')).toHaveLength(2);
     expect(screen.getByText('Agen tanpa leader. Ketuk Tambahkan untuk memasukkannya ke unit Anda.')).toBeInTheDocument();
-    expect(screen.getByText('80002 · tidak melapor ke siapa pun')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Tambahkan ke unit saya' }));
-    expect(screen.getByText('Tambahkan dia ke unit Anda?')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Konfirmasi' })).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Batal' }));
+    expect(screen.getAllByText('80002 · tidak melapor ke siapa pun').length).toBeGreaterThan(0);
+    // UI-082: the phone's + keeps the words as its name.
+    await userEvent.click(screen.getAllByRole('button', { name: 'Tambahkan ke unit saya' })[0]);
+    expect(screen.getAllByText('Tambahkan dia ke unit Anda?').length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('button', { name: 'Konfirmasi' }).length).toBeGreaterThan(0);
+    await userEvent.click(screen.getAllByRole('button', { name: 'Batal' })[0]);
 
-    expect(screen.getByRole('heading', { name: 'Tim Anda' })).toBeInTheDocument();
-    expect(screen.getByText('80001 · memimpin 2')).toBeInTheDocument();
-    expect(screen.getByLabelText('Peran')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /^Tim Anda/ })).toBeInTheDocument();
+    expect(screen.getAllByText('80001 · memimpin 2').length).toBeGreaterThan(0);
+    // UI-083: the role pill, and the desktop table's columns and ⋮.
+    expect(screen.getAllByRole('button', { name: 'Ubah peran Rina Wijaya, sekarang Agent' }).length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: 'Tindakan untuk Rina Wijaya' })).toBeInTheDocument();
+    expect(within(screen.getByTestId('team-table')).getByText('Kode')).toBeInTheDocument();
     noEnglishLeft();
   });
 
@@ -194,7 +212,9 @@ describe('P18.98-T4 User Management in Indonesian', () => {
       '/join/untagged': { body: [] },
     });
     inIndonesian(<AddAgentsPage />, LEADER);
-    await userEvent.click(await screen.findByRole('button', { name: 'Keluarkan Rina Wijaya' }));
+    await userEvent.click((await screen.findAllByRole('button', { name: 'Ubah peran Rina Wijaya, sekarang Agent' }))[0]);
+    // UI-083: *Keluarkan* last in the role sheet, red; it asks first.
+    await userEvent.click(within(screen.getByRole('dialog', { name: 'Rina Wijaya' })).getByRole('button', { name: 'Keluarkan' }));
     expect(screen.getByRole('heading', { name: 'Keluarkan Rina Wijaya?' })).toBeInTheDocument();
     expect(screen.getByText(/^Tidak ada yang dihapus\. .* di daftar Removed\.$/)).toBeInTheDocument();
     expect(screen.getByRole('group', { name: '2 orang melapor kepadanya' })).toBeInTheDocument();
@@ -218,8 +238,10 @@ describe('P18.98-T4 User Management in Indonesian', () => {
       '/join/untagged': { body: [] },
     });
     inIndonesian(<AddAgentsPage />, LEADER);
-    await userEvent.selectOptions(await screen.findByLabelText('Peran'), 'aab');
-    expect(screen.getByRole('heading', { name: 'Ubah peran Rina Wijaya?' })).toBeInTheDocument();
+    await userEvent.click((await screen.findAllByRole('button', { name: 'Ubah peran Rina Wijaya, sekarang Agent' }))[0]);
+    const sheet = screen.getByRole('dialog', { name: 'Rina Wijaya' });
+    expect(within(sheet).getByRole('group', { name: /^Peran/ })).toBeInTheDocument();
+    await userEvent.click(within(sheet).getByRole('radio', { name: 'AAB' }));
     // `roleChangeExplanation`'s sentence, handed the reader's language (`org.ts`).
     expect(screen.getByText(/^Rina Wijaya akan berubah dari Agent menjadi AAB\. Dia tetap melapor kepada Anda/)).toBeInTheDocument();
     expect(screen.getByLabelText('Alasan')).toHaveAccessibleDescription('Disimpan di Role change log, satu-satunya tempat ini dapat dibaca kembali.');

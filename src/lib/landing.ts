@@ -9,22 +9,25 @@ import type { Me } from './session';
  */
 export const OFFICE_LANDING = '/kpm/overview';
 
+/** Home (UI-100): the field's landing, and the centre tab of the bar (`field-nav.ts`). */
+export const HOME = '/home';
+
 /**
- * A member's **field landing**: their unit's dashboard when they lead somebody, their own day when they
- * lead nobody.
+ * A member's **field landing**: **Home** (`/home`), whoever they are in the field (UI V1, 2026-10-30, ADR-0180 §10).
  *
- * Leading is the graph, not the rung (OD-23, ADR-0087): a direct report is what makes a leader. A
- * leader lands on the Unit Dashboard (P15-T4 AC-4, D-landing), the roster of their whole unit, which is
- * built now; until it was, they landed on the coaching roster (P11-T6 AC-8). An AAB with no reports has
- * no unit to look at, and lands where their own work is instead.
+ * Until then it followed the graph — the Unit Dashboard for somebody with a direct report (P15-T4 AC-4, D-landing), the
+ * reader's own day for somebody without — and a new hire in their 90 days who led nobody started on their activation
+ * (P18.96-T3 AC-4, ADR-0170 §3). **Home answers all three now**: it is about the reader, and for somebody who leads it
+ * carries *Active Agent*, *Coaching 7 hari* and the team's report list (UI-100, UI-101), so a leader loses nothing by
+ * starting there and a new hire finds their 90 days one tile away in the *Lainnya* sheet.
  *
- * One function for two callers (ADR-0114): `landingFor`'s last branch, and the office console's *Open
- * agent view*, which takes an Owner or an Admin to the field screen a member of their rung would have
- * signed in to. So both moved to the Unit Dashboard together: two copies of the rule are how the link
- * and the sign-in would come to disagree. The Owner and the Admin still sign in to the console.
+ * One function for two callers (ADR-0114): `landingFor`'s last branch, and the office console's *Open agent view*,
+ * which takes an Owner or an Admin to the field screen a member of their rung would have signed in to. So both land on
+ * Home together: two copies of the rule are how the link and the sign-in would come to disagree. The Owner and the
+ * Admin still sign in to the console. The membership is still taken, so a later rule can read it again.
  */
-export function fieldLandingFor(membership: Pick<NonNullable<Me['membership']>, 'directCount'>): string {
-  return membership.directCount > 0 ? '/unit/dashboard' : '/activity/log';
+export function fieldLandingFor(_membership: Pick<NonNullable<Me['membership']>, 'directCount'>): string {
+  return HOME;
 }
 
 /** A link from one view of the app to the other (ADR-0114): where it goes, and what it says. */
@@ -110,15 +113,11 @@ export function landingFor(me: Me | null): string {
   if (membership.isKpmOwner || membership.isKpmAdmin) return OFFICE_LANDING;
 
   /*
-   * **A new hire in their 90 days, who leads nobody, starts on their activation** (P18.96-T3 AC-4, ADR-0170 §3): the
-   * checklist is what their first weeks are for, and somebody who joined on a leader's invite lands there after their
-   * first sign-in, as the client asked. Until it is all done: at 100% it waits only for *Mark activation complete*,
-   * which the nav's amber check points to, and graduating — which lands the reader where `/` would — must not send
-   * them back to it. A leader who is also a new hire keeps the Unit Dashboard.
+   * *A new hire in their 90 days, who led nobody, started on their activation* (P18.96-T3 AC-4, ADR-0170 §3) until UI V1:
+   * **they land on Home too** (ADR-0180 §10, the owner's UI-100), where the field begins for everybody; their checklist
+   * keeps its place in the *Lainnya* sheet and the sidebar (T1).
    */
-  if (me.activation?.open && !me.activation.complete && membership.directCount === 0) return '/activation';
-
-  // Everyone else: leading people, by the graph and not the role, lands on the Unit Dashboard;
-  // leading nobody, on their own day. The same function answers the console's *Open agent view*.
+  // Everyone else — leading people or nobody, a new hire or not — lands on Home. The same function answers the
+  // console's *Open agent view*.
   return fieldLandingFor(membership);
 }

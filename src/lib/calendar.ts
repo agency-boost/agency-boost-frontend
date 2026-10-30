@@ -36,18 +36,24 @@ export const ENTRY_TYPES: readonly EntryType[] = ['meeting', 'coaching', 'client
  */
 export const TYPE_LABEL: Record<EntryType, string> = calendarMessages.en.types;
 
-/** What a read asks the server for: a week or a month. */
-export type CalendarView = 'week' | 'month';
+/**
+ * What a read asks the server for: a week, a month, **the Agenda** — seven days from the day asked for, today when it
+ * opens — or ***3 Hari***, three days from it (UI V1, 2026-10-30, UI-104 points 5 and 10). The server answers each
+ * period's days and the dates ‹ and › ask for; nothing here counts them.
+ */
+export type CalendarView = 'week' | 'month' | 'agenda' | 'three_days';
 
 /**
- * **What the screen draws** (P18.95-T8 AC-1). *Agenda* is a phone's list of the week by day: it is
- * the week's read drawn as a list, so it asks for nothing the week does not, and at 768px and wider
- * it is drawn as the week, which is what the page opens on there.
+ * **What the screen draws** (UI-104 point 5): the switcher's four, *Agenda · 3 Hari · Week · Month*, at every width.
+ * Each is its own read since UI V1 — the Agenda no longer draws the week's.
  */
-export type CalendarDisplay = 'agenda' | 'week' | 'month';
+export type CalendarDisplay = CalendarView;
 
-/** The read a display asks for: the agenda reads the week. */
-export const viewOf = (display: CalendarDisplay): CalendarView => (display === 'month' ? 'month' : 'week');
+/** The switcher's order (UI-104 point 5). */
+export const DISPLAYS: readonly CalendarDisplay[] = ['agenda', 'three_days', 'week', 'month'];
+
+/** The read a display asks for: its own. */
+export const viewOf = (display: CalendarDisplay): CalendarView => display;
 
 /** An invitee's answer. A block's member gives none: they are placed (ADR-0098). */
 export type Answer = 'pending' | 'accepted' | 'declined';
@@ -66,6 +72,8 @@ export interface CalendarSubject {
   membershipId: string;
   name: string;
   rung: CalendarRung;
+  /** A compared person's WhatsApp number (UI-104 point 9); `null` on the reader's own read, and when none. */
+  phone: string | null;
 }
 
 /** One day of the period, in the office's calendar. Out of the period: an adjacent month's day. */
@@ -141,6 +149,77 @@ export interface CalendarBusy {
 
 export type CalendarItem = CalendarEntry | CalendarBusy;
 
+/** Where a task comes from (UI-104 point 1): a lead's next action, or a coaching action item. */
+export type TaskSource = 'lead' | 'coaching';
+
+/** A lead task's lead: its id, and the version a tick pins. */
+export interface CalendarTaskLead {
+  leadId: string;
+  version: number;
+}
+
+/** A coaching task's item: its session, its id, and who coached the person — *Dari: {NAME}*. */
+export interface CalendarTaskCoaching {
+  sessionId: string;
+  itemId: string;
+  coachMembershipId: string;
+}
+
+/**
+ * **One *Tugas*** (UI V1, UI-104 point 2): a date and no time — never on the grid, never *All day*. Read from its source
+ * on every read, so it follows a moved next action or a ticked item.
+ */
+export interface CalendarTask {
+  taskId: string;
+  source: TaskSource;
+  date: string;
+  ownerMembershipId: string;
+  /** The lead's name, or the coach's. */
+  name: string;
+  note: string;
+  /** The lead's number, or the coach's: the row's WhatsApp. */
+  phone: string | null;
+  lead: CalendarTaskLead | null;
+  coaching: CalendarTaskCoaching | null;
+}
+
+/** A compared member's task while they hide their details (ADR-0110): counted, never read. */
+export interface CalendarHiddenTask {
+  busy: true;
+  date: string;
+}
+
+export type CalendarTaskItem = CalendarTask | CalendarHiddenTask;
+
+/** An office event type, as the office typed it. */
+export interface CalendarEventType {
+  code: string;
+  label: string;
+}
+
+/**
+ * **An event the person said they are going to** (UI-104 point 1): on the grid at its time, read-only, opening
+ * `/events/{eventId}`; it leaves the calendar when they leave the event.
+ */
+export interface CalendarJoinedEvent {
+  eventId: string;
+  title: string;
+  type: CalendarEventType;
+  location: string;
+  allDay: boolean;
+  date: string | null;
+  start: string | null;
+  end: string | null;
+  startsOn: string | null;
+  endsOn: string | null;
+  startsAt: string;
+  endsAt: string;
+}
+
+export type CalendarJoinedItem = CalendarJoinedEvent | CalendarBusy;
+
+export const isHiddenTask = (task: CalendarTaskItem): task is CalendarHiddenTask => 'busy' in task && task.busy === true;
+
 /** `GET /calendar/entries`: one person's week or month, with the office's clock. */
 export interface CalendarRead {
   view: CalendarView;
@@ -159,6 +238,10 @@ export interface CalendarRead {
   subject: CalendarSubject;
   /** By `startsAt` then `entryId`. Busy blocks only in a `for` read. */
   entries: CalendarItem[];
+  /** *Tugas* in the period, coaching first, then by name (UI-104); a hidden person's as days alone. */
+  tasks: CalendarTaskItem[];
+  /** The events joined, overlapping the period; busy blocks for a hidden person. */
+  events: CalendarJoinedItem[];
 }
 
 /** `DELETE /calendar/entries/:entryId`. */
@@ -231,6 +314,8 @@ export interface EntryInput {
   type: EntryType;
   title: string;
   notes: string;
+  /** Travel only: *Sepanjang hari* (UI-104 point 8); `false` sends `startsOn`, `start`, `endsOn` and `end`. */
+  allDay?: boolean;
   date?: string;
   start?: string;
   end?: string;
@@ -263,12 +348,30 @@ const query = (params: Record<string, string | number | undefined>) => {
 export const readCalendar = (q: { view: CalendarView; date?: string; forId?: string }) =>
   api<CalendarRead>('/calendar/entries' + query({ view: q.view, date: q.date, for: q.forId }));
 
+/** **A 1:1 with somebody, on the calendar**: in `lib/hrefs.ts`, so New Hires links here without this module. */
+export { oneOnOneHref } from './hrefs';
+
 /**
- * **A 1:1 with somebody, on the calendar** (P18.96-T6 AC-4; ADR-0173 §3): the address `/new-hires`' *Schedule 1:1*
- * opens — the calendar's new-entry dialog as a *1:1 coaching* entry with them invited. By membership id alone, so no
- * name rides in the address: the calendar finds it in the reader's own downline (`GET /calendar/downline`).
+ * **The Agenda on a day** (UI-104; Home's *Jadwal hari ini* and *Aksi hari ini*, UI-100): the address that opens the
+ * calendar's Agenda — on the office's today without `date`, as Home opens it.
  */
-export const oneOnOneHref = (membershipId: string) => `/calendar?with=${encodeURIComponent(membershipId)}`;
+export const agendaHref = (date?: string) => `/calendar?view=agenda${date ? `&date=${encodeURIComponent(date)}` : ''}`;
+
+/**
+ * ***Selesai*** **on a lead's next action, or** ***Urungkan*** (UI-104 point 4): the owner's own, pinned to the version
+ * the task carried. The lead as it is now comes back — its next action cleared, or put back.
+ */
+export const setLeadActionDone = (leadId: string, done: boolean, version: number) =>
+  api<{ id: string; version: number; nextActionDate: string | null; nextActionNote: string | null }>(
+    `/leads/${encodeURIComponent(leadId)}/next-action/done`, { method: 'PUT', body: { done, version } },
+  );
+
+/** ***Selesai*** **on a coaching action item, or** ***Urungkan***: the coachee's own; nothing agreed moves. */
+export const setCoachingItemDone = (sessionId: string, itemId: string, done: boolean) =>
+  api<{ sessionId: string; itemId: string; done: boolean }>(
+    `/coaching/sessions/${encodeURIComponent(sessionId)}/action-items/${encodeURIComponent(itemId)}/done`,
+    { method: 'PUT', body: { done } },
+  );
 
 /** One entry the reader organises or is on, whatever their answer. 404 for anything else. */
 export const readEntry = (entryId: string) =>
@@ -493,7 +596,7 @@ export const OWN_COPY = {
  * ── Small readings of the shapes ─────────────────────────────────────────────────────────────────
  */
 
-export const isBusy = (item: CalendarItem): item is CalendarBusy => 'busy' in item && item.busy === true;
+export const isBusy = (item: CalendarItem | CalendarJoinedItem): item is CalendarBusy => 'busy' in item && item.busy === true;
 
 /** The title to draw, as typed: the prototype draws an empty one as `(untitled event)` (`:782`), in `language`. */
 export const titleOf = (entry: { title: string }, language: Language = SOURCE_LANGUAGE) =>
@@ -501,6 +604,9 @@ export const titleOf = (entry: { title: string }, language: Language = SOURCE_LA
 
 /** The office date an entry is on, or starts on: where the week holding it opens. */
 export const entryDate = (entry: CalendarItem): string => (entry.allDay ? entry.startsOn : entry.date) ?? '';
+
+/** **A trip all day** (UI-104 point 8): a line at the top of each day, a bar in the Trip row — never on the grid. */
+export const isAllDay = (item: { allDay: boolean }) => item.allDay;
 
 /** Two letters for an avatar: the first of the first and of the last name, as the prototype's are. */
 export function initialsOf(name: string): string {

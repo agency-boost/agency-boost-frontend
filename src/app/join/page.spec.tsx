@@ -79,7 +79,7 @@ describe('redeeming an invite (P3-T4)', () => {
     expect(replace).toHaveBeenCalledWith('/');
   });
 
-  it('refuses somebody who already has an office, and says what to do instead', async () => {
+  it('UI-086 refuses somebody who already has an office: the message and the way back only', async () => {
     query = new URLSearchParams('code=JOR417');
     stubFetch({ '/join/invite': { body: PREVIEW } });
     renderWithSession(<JoinPage />, {
@@ -92,7 +92,11 @@ describe('redeeming an invite (P3-T4)', () => {
     });
 
     expect(await screen.findByText(/already in an office/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Accept and join' })).toBeDisabled();
+    // UI-086: only the message and the way back — no field, no button they cannot use, no preview to accept.
+    expect(screen.getByRole('link', { name: 'Back to your work' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Accept and join' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Check/ })).not.toBeInTheDocument();
   });
 
   it('sends somebody signed out to sign in first, keeping the link usable', async () => {
@@ -161,7 +165,7 @@ describe('redeeming an invite (P3-T4)', () => {
 
     expect(await screen.findByText(/this invite is not for you/)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Back to your work' }))
-      .toHaveAttribute('href', '/activity/log');
+      .toHaveAttribute('href', '/home');
   });
 
   it('gives a stranger no chrome, because there is no role to pick one from', () => {

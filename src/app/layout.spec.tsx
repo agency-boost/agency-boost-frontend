@@ -42,6 +42,14 @@ describe('P18.98-T1 the root layout', () => {
     expect(script.props.dangerouslySetInnerHTML).toEqual({ __html: PRE_PAINT_SCRIPT });
   });
 
+  it('UI-008 preloads the self-hosted Inter, after the language script', () => {
+    const [, font] = childrenOf(head);
+    expect(font.type).toBe('link');
+    expect(font.props).toMatchObject({
+      rel: 'preload', href: '/fonts/inter-latin-wght-normal.woff2', as: 'font', type: 'font/woff2', crossOrigin: 'anonymous',
+    });
+  });
+
   it('AC-3 puts every word under the language, the session’s own page for an office that cannot be used included', () => {
     const [language] = childrenOf(body);
     expect(language.type).toBe(LanguageProvider);

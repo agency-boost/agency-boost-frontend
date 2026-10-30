@@ -66,7 +66,8 @@ describe('/product-catalog, the office’s shelf (P14-T7)', () => {
       grid();
       await shelfReady();
       const sidebar = within(screen.getByRole('navigation', { name: 'Main' }));
-      const entry = sidebar.getByRole('link', { name: 'Sales Attack Plan' });
+      // The field shell's sidebar since UI V1 (UI-004): *Sales*, under *Aktivitas*.
+      const entry = sidebar.getByRole('link', { name: 'Sales' });
       expect(entry).toHaveAttribute('href', '/attack-plan');
       expect(entry).toHaveAttribute('aria-current', 'page');
       expect(entry).not.toHaveAttribute('aria-disabled');
@@ -93,7 +94,7 @@ describe('/product-catalog, the office’s shelf (P14-T7)', () => {
       const tabs = screen.getByRole('navigation', { name: 'Sales tools', hidden: true });
       expect(within(tabs).getByRole('link', { name: 'Product Catalog', hidden: true })).toHaveAttribute('aria-current', 'page');
       expect(tabs.closest('[inert]')).not.toBeNull();
-      expect(within(screen.getByRole('navigation', { name: 'Main' })).getByRole('link', { name: 'Sales Attack Plan' }))
+      expect(within(screen.getByRole('navigation', { name: 'Main' })).getByRole('link', { name: 'Sales' }))
         .toHaveAttribute('aria-current', 'page');
     });
 
@@ -214,8 +215,8 @@ describe('/product-catalog, the office’s shelf (P14-T7)', () => {
       // Above the filters, and part of what a drawer makes inert.
       expect(search().compareDocumentPosition(screen.getByRole('group', { name: 'Category' })) & Node.DOCUMENT_POSITION_FOLLOWING)
         .toBeTruthy();
-      // No phone-only class: the search is the same at every size.
-      expect(search().className.split(/\s+/).filter((c) => c.startsWith('max-md:'))).toEqual([]);
+      // From 768px the box as before; on a phone a white pill, 44px, with the magnifier inside it (UI-107).
+      expect(search()).toHaveClass('max-w-sm', 'max-md:rounded-pill', 'max-md:h-11', 'max-md:pl-10');
       await userEvent.type(search(), 'mapan');
       expect(cards()).toEqual(['PRUMAPAN']);
       // A section the search empties is hidden, and a section's count is what it shows.

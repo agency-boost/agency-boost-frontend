@@ -55,7 +55,13 @@ function when(iso: string | null, unknown: string, figures: Language): string {
  * login screen and nothing said it would. *Sign out* in the header already does that, and
  * says so.
  */
-export function SessionList() {
+export function SessionList({ bare = false }: {
+  /**
+   * **In *Profil saya*'s sheet** (UI V1, UI-111): the sheet's title is the heading, so the list draws no card and no
+   * heading of its own — the line, the rows and *Keluar dari semua perangkat* as they are.
+   */
+  bare?: boolean;
+} = {}) {
   const { signOut } = useSignOut();
   const [sessions, setSessions] = useState<Session[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
@@ -74,10 +80,11 @@ export function SessionList() {
 
   useEffect(() => { void load(); }, [load]);
 
+  const Box = bare ? 'div' : Card;
   return (
-    <Card>
-      <h2 className="font-display text-lg font-bold text-navy">{t.heading}</h2>
-      <p className="mt-1 text-md text-muted">{t.line}</p>
+    <Box>
+      {!bare && <h2 className="font-display text-lg font-bold text-navy">{t.heading}</h2>}
+      <p className={bare ? 'text-md text-muted' : 'mt-1 text-md text-muted'}>{t.line}</p>
 
       {error && <ErrorBanner {...error} />}
 
@@ -154,6 +161,6 @@ export function SessionList() {
           {t.everywhereLine}
         </p>
       </div>
-    </Card>
+    </Box>
   );
 }

@@ -43,7 +43,7 @@ type LeadsWords = MessagesOf<typeof leadsMessages.en>;
  * The order the table can be in, as `GET /leads` names it: the three headings that sort
  * (`Overall.html:2805-2813`), and registration, which the closed cards are asked for in.
  */
-type SortKey = Extract<NonNullable<LeadQuery['sort']>, 'name' | 'type' | 'status' | 'dateRegistered'>;
+export type SortKey = Extract<NonNullable<LeadQuery['sort']>, 'name' | 'type' | 'status' | 'dateRegistered'>;
 
 /**
  * A column sort, **or `null`: the owner's own order** (P18.8-T7, ADR-0161 §1), which the table opens on.
@@ -54,7 +54,7 @@ type SortKey = Extract<NonNullable<LeadQuery['sort']>, 'name' | 'type' | 'status
  * **A heading's third press comes back here**, and the card layout's sort offers it by name — and a sort
  * is for the visit: it is component state, so leaving the screen and coming back shows the saved order.
  */
-type Sort = { key: SortKey; dir: 'asc' | 'desc' } | null;
+export type Sort = { key: SortKey; dir: 'asc' | 'desc' } | null;
 
 /**
  * The narrowest the table is drawn, in rem: below it, each lead is a card (P13.1-T4 AC-7, ADR-0108 §6).
@@ -109,7 +109,7 @@ const WIDTHS_WITH_HANDLES = ['2.75rem', ...WIDTHS.slice(1)] as const;
  * ascending is no type, then Sales, then Recruit, and descending the reverse; `status` ascending is the
  * first stage of a ladder first, a lead with no stage before it.
  */
-const SORT_CHOICES: readonly { sort: Sort; words: Exclude<keyof LeadsWords['sort'], 'label'> }[] = [
+export const SORT_CHOICES: readonly { sort: Sort; words: Exclude<keyof LeadsWords['sort'], 'label'> }[] = [
   { sort: null, words: 'saved' },
   { sort: { key: 'name', dir: 'asc' }, words: 'nameAsc' },
   { sort: { key: 'name', dir: 'desc' }, words: 'nameDesc' },
@@ -123,7 +123,7 @@ const sortValue = (sort: Sort) => (sort ? `${sort.key}:${sort.dir}` : 'saved');
 /** The table heading's look, on the card's two labels (`Overall.html:413-418`). */
 const CARD_LABEL = 'text-2xs font-semibold uppercase tracking-[0.03em] text-muted';
 
-interface List {
+export interface List {
   rows: Lead[];
   /** The server's count from the first page — right before the last page has arrived. */
   total: number;
@@ -1811,9 +1811,9 @@ export function LeadsTable({
 
         {cards ? (
           rows.length === 0 ? (
-            <div className="rounded-lg border border-hairline bg-card">{empty}</div>
+            <div className="rounded-lg border border-card-edge bg-card">{empty}</div>
           ) : (
-            <ul role="list" aria-label={caption} className="rounded-lg border border-hairline bg-card">
+            <ul role="list" aria-label={caption} className="rounded-lg border border-card-edge bg-card">
               {/* A phone's cards are read and tapped; a tablet's are edited where they stand (P18.95-T4 AC-1, AC-5). */}
               {rows.map(phone ? renderPhoneCard : renderCard)}
             </ul>
@@ -1986,8 +1986,8 @@ function useCardLayout(): [React.RefObject<HTMLDivElement | null>, boolean] {
   return [frame, cards];
 }
 
-/** Both closed lists, page after page, into state as each lands. */
-async function loadClosed(
+/** Both closed lists, page after page, into state as each lands. `/leads`' compact list reads them too (UI-105). */
+export async function loadClosed(
   outcome: LeadOutcome,
   set: React.Dispatch<React.SetStateAction<List | null>>,
   isCurrent: () => boolean,
@@ -2003,7 +2003,7 @@ async function loadClosed(
 }
 
 /** One closed card's state: what has arrived, and what stopped the rest. */
-interface ClosedCard {
+export interface ClosedCard {
   list: List | null;
   error: ApiError | null;
 }
@@ -2020,7 +2020,7 @@ interface ClosedCard {
  * later page does not arrive says how much of the list it is showing — a card short of its own
  * header total with nothing said would read as the whole record.
  */
-function ClosedLeads({
+export function ClosedLeads({
   won,
   lost,
   busy,
@@ -2051,7 +2051,7 @@ function ClosedLeads({
       <h2 className="mb-3 font-display text-md font-bold text-navy">{t.closed.title}</h2>
       <div className="grid gap-4 lg:grid-cols-2">
         {cards.map(({ outcome, title, card: { list, error }, empty, waiting }) => (
-          <div key={outcome} className="overflow-hidden rounded-lg border border-hairline bg-card">
+          <div key={outcome} className="overflow-hidden rounded-lg border border-card-edge bg-card">
             <header
               className={cn(
                 'flex items-center justify-between gap-3 border-b border-hairline px-4 py-3 text-md font-bold',

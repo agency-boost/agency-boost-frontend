@@ -181,7 +181,7 @@ describe('/leader-meetings — the list (P18.1-T2)', () => {
     renderWithSession(<LeaderMeetingsPage />, { me: FIELD_ME });
     expect(await screen.findByRole('heading', { name: "This meeting can't be found." })).toBeInTheDocument();
     expect(screen.getByText("It may have been deleted, or it isn't one you can open.")).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Go to your home page' })).toHaveAttribute('href', '/activity/log');
+    expect(screen.getByRole('link', { name: 'Go to your home page' })).toHaveAttribute('href', '/home');
     expect(screen.queryByRole('button', { name: 'All' })).not.toBeInTheDocument();
   });
 
@@ -251,7 +251,8 @@ describe('/leader-meetings — the list (P18.1-T2)', () => {
       renderWithSession(<LeaderMeetingsPage />, { me: OWNER_ME });
       await userEvent.click(await screen.findByRole('button', { name: '+ New meeting' }));
 
-      const dialog = within(screen.getByRole('dialog', { name: 'New meeting' }));
+      // The dialog's module is fetched on this first opening (P18.99-T16).
+      const dialog = within(await screen.findByRole('dialog', { name: 'New meeting' }));
       const title = dialog.getByRole('textbox', { name: 'Title' });
       expect(title).toHaveValue('Strategic Check-in — #15');
       expect(title).toHaveAttribute('maxLength', '120');
@@ -267,7 +268,7 @@ describe('/leader-meetings — the list (P18.1-T2)', () => {
       const { calls } = list();
       renderWithSession(<LeaderMeetingsPage />, { me: OWNER_ME });
       await userEvent.click(await screen.findByRole('button', { name: '+ New meeting' }));
-      const dialog = within(screen.getByRole('dialog', { name: 'New meeting' }));
+      const dialog = within(await screen.findByRole('dialog', { name: 'New meeting' }));
       await userEvent.clear(dialog.getByRole('textbox', { name: 'Title' }));
       await userEvent.type(dialog.getByRole('textbox', { name: 'Title' }), '   ');
       await userEvent.click(dialog.getByRole('button', { name: 'Create meeting' }));
@@ -289,7 +290,7 @@ describe('/leader-meetings — the list (P18.1-T2)', () => {
       });
       renderWithSession(<LeaderMeetingsPage />, { me: OWNER_ME });
       await userEvent.click(await screen.findByRole('button', { name: '+ New meeting' }));
-      const dialog = within(screen.getByRole('dialog', { name: 'New meeting' }));
+      const dialog = within(await screen.findByRole('dialog', { name: 'New meeting' }));
       await userEvent.type(dialog.getByLabelText('Date'), '2026-10-27');
       await userEvent.click(dialog.getByRole('button', { name: 'Create meeting' }));
       expect(await dialog.findByText('Pick a date.')).toBeInTheDocument();

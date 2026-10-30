@@ -46,7 +46,7 @@ export function FeedbackSummaryCard({ summary }: { summary: FeedbackSummary }) {
   const titleId = useId();
   const c = summary.constants;
   return (
-    <section aria-labelledby={titleId} className="overflow-hidden rounded-lg border border-hairline bg-card" data-part="feedback-summary">
+    <section aria-labelledby={titleId} className="overflow-hidden rounded-lg border border-card-edge bg-card" data-part="feedback-summary">
       <div className="flex flex-wrap items-center gap-2.5 border-b border-hairline bg-base px-[18px] py-3.5">
         <h3 id={titleId} className="min-w-0 break-words font-display text-md font-bold text-navy">{summaryTitle(summary.title, language)}</h3>
         <p className="ml-auto text-right text-base text-muted" data-part="nps">
@@ -119,7 +119,7 @@ export function FeedbackSummarySection({ eventId, version }: { eventId: string; 
   if (!summary) {
     return (
       <Skeleton label={t.loadingSummary}>
-        <div className="rounded-lg border border-hairline bg-card p-4">
+        <div className="rounded-lg border border-card-edge bg-card p-4">
           <SkeletonBar className="h-4 w-2/3" />
           <SkeletonBar className="mt-3 w-full" />
           <SkeletonBar className="mt-2 w-5/6" />

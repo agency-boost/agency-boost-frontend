@@ -10,6 +10,8 @@ import { Segmented } from './segmented';
 import { Button, buttonClass, Select, Textarea, TextInput } from './field';
 import { Stepper } from './stepper';
 import { TippedGlyph } from './tipped-glyph';
+import { wears as wearsAt } from '@test/harness';
+import { SEGMENT_TOUCH, TAB_TOUCH } from './touch';
 import { ActionMenu } from './action-menu';
 import { TrainingSubtabs } from '@/components/training/training-catalog';
 import { CoachingTabBar } from '@/components/coaching-person';
@@ -96,8 +98,9 @@ describe('AC-8 one tab row on a phone', () => {
     it('keeps each tab on one line, unsqueezed, its ring inside its edge — and the tab itself unchanged wider', () => {
       render(<RouteTabs label="User Management" tabs={UM} />);
       const [on, off] = screen.getAllByRole('link');
-      expect(wider(on)).toBe('-mb-px border-b-2 px-0.5 pb-3 text-md font-semibold border-amber text-navy');
-      expect(wider(off)).toBe('-mb-px border-b-2 px-0.5 pb-3 text-md font-semibold border-transparent text-muted');
+      // UI V1 (UI-010): 44px tall below 1024px in the field shell (`TAB_TOUCH`), and unchanged elsewhere.
+      expect(wider(on)).toBe(`-mb-px border-b-2 px-0.5 pb-3 text-md font-semibold ${TAB_TOUCH} border-amber text-navy`);
+      expect(wider(off)).toBe(`-mb-px border-b-2 px-0.5 pb-3 text-md font-semibold ${TAB_TOUCH} border-transparent text-muted`);
       for (const tab of [on, off]) expect(phone(tab)).toEqual(tokens(TAB_PHONE));
     });
 
@@ -166,7 +169,8 @@ describe('AC-8 one tab row on a phone', () => {
       expect(wider(list)).toBe('flex w-full rounded-lg border border-hairline bg-base p-[3px]');
       expect(phone(list)).toEqual(tokens(SEGMENTS_PHONE));
       const [on] = screen.getAllByRole('tab');
-      expect(wider(on)).toBe('flex-1 rounded-md px-2.5 py-2 text-base font-semibold transition-colors bg-navy text-card');
+      // UI V1 (UI-010): 44px tall below 1024px in the field shell (`SEGMENT_TOUCH`).
+      expect(wider(on)).toBe(`flex-1 rounded-md px-2.5 py-2 text-base font-semibold transition-colors ${SEGMENT_TOUCH} bg-navy text-card`);
       expect(phone(on)).toEqual(tokens(SEGMENT_PHONE));
     });
 
@@ -223,9 +227,14 @@ describe('AC-8 one tab row on a phone', () => {
         />,
       );
       const nav = screen.getByRole('navigation');
-      expect(wider(nav)).toBe('mb-6 flex flex-wrap gap-x-6 gap-y-2 border-b border-hairline');
-      expect(phone(nav)).toEqual(expect.arrayContaining(tokens(TAB_ROW_PHONE)));
-      for (const tab of screen.getAllByRole('link')) expect(phone(tab)).toEqual(tokens(TAB_PHONE));
+      // UI V1 (UI-063): one line at every width — pills on a phone, underline tabs from 768px — never wrapping.
+      for (const px of [375, 768, 1280]) {
+        expect(wearsAt(nav, px).split(' ')).toEqual(expect.arrayContaining(['flex', 'flex-nowrap', 'overflow-x-auto']));
+        expect(wearsAt(nav, px)).not.toContain('flex-wrap ');
+      }
+      for (const tab of screen.getAllByRole('link')) {
+        expect(tokens(tab.getAttribute('class') ?? '')).toEqual(expect.arrayContaining(['shrink-0', 'whitespace-nowrap']));
+      }
       expect(screen.getByRole('link', { name: 'Sales' })).toHaveAttribute('aria-current', 'page');
     });
 
@@ -258,8 +267,11 @@ describe('AC-8 one tab row on a phone', () => {
         />,
       );
       const nav = screen.getByRole('navigation', { name: 'Coaching' });
-      expect(wider(nav)).toBe('mb-6 flex flex-wrap gap-x-6 gap-y-2 border-b border-hairline');
-      expect(phone(nav)).toEqual(expect.arrayContaining([...tokens(TAB_ROW_PHONE), ...tokens(UNDERLINED_ROW_PHONE)]));
+      // UI V1 (UI-030): one row that never wraps at any width — it scrolls where the tabs do not fit, its line drawn
+      // inside it (a scrolling row clips what hangs below it), no scrollbar.
+      expect(nav).toHaveClass('flex', 'flex-nowrap', 'overflow-x-auto', 'overflow-y-hidden', '[scrollbar-width:none]');
+      expect(nav).not.toHaveClass('flex-wrap');
+      expect(nav.className).toContain('shadow-[inset_0_-1px_0_var(--color-hairline)]');
       expect(screen.getAllByRole('link')).toHaveLength(7);
       for (const tab of screen.getAllByRole('link')) expect(phone(tab)).toEqual(expect.arrayContaining(tokens(TAB_PHONE)));
       expect(screen.getByRole('link', { name: 'Training, upcoming' })).toHaveAttribute('aria-disabled', 'true');
@@ -429,5 +441,72 @@ describe('AC-9 a field’s text on a phone', () => {
       expect(wider(affix)).toContain('text-base');
       expect(phone(affix)).toEqual(['max-md:text-lg']);
     }
+  });
+});
+
+/**
+ * **UI V1, UI-010: the shared controls meet a finger on a tablet too.** jsdom lays nothing out, so what is pinned is what
+ * each primitive asks for at 375px and at 768px — 44px targets, 48px fields, the ⓘ's 44px area — and at 1280px, where
+ * a pointer's sizes stand.
+ */
+describe('UI-010 tap targets on a phone and a tablet, fixed in the primitives — in the field shell', () => {
+  const at = (el: Element, px: number) => wearsAt(el, px).split(' ');
+  /** The field shell's frame, which the classes are conditional on (`touch.ts`). */
+  const inField = (ui: React.ReactNode) => render(<div data-surface="v1">{ui}</div>);
+
+  it.each([375, 768])('UI-010 a box button is 44px tall at %ipx, and 40px from 1024px', (px) => {
+    inField(<Button>Simpan goal</Button>);
+    const button = screen.getByRole('button', { name: 'Simpan goal' });
+    expect(at(button, px)).toContain('h-11');
+    expect(at(button, 1280)).not.toContain('h-11');
+  });
+
+  it.each([375, 768])('UI-010 a field is 48px tall at %ipx — a text input, an affixed one and a select', (px) => {
+    inField(
+      <>
+        <TextInput aria-label="Plain" />
+        <TextInput aria-label="Affixed" suffix="%" />
+        <Select aria-label="Pick"><option>One</option></Select>
+      </>,
+    );
+    expect(at(screen.getByRole('textbox', { name: 'Plain' }), px)).toContain('h-12');
+    expect(at(screen.getByRole('textbox', { name: 'Affixed' }).parentElement!, px)).toContain('h-12');
+    expect(at(screen.getByRole('combobox', { name: 'Pick' }), px)).toContain('h-12');
+    expect(at(screen.getByRole('textbox', { name: 'Plain' }), 1280)).not.toContain('h-12');
+  });
+
+  it.each([375, 768])('UI-010 an icon button and an inline text button are 44 × 44px targets at %ipx', (px) => {
+    inField(<><Button variant="icon" aria-label="More">⋮</Button><Button variant="inline">Ubah</Button></>);
+    for (const name of ['More', 'Ubah']) {
+      const el = screen.getByRole('button', { name });
+      expect(at(el, px)).toEqual(expect.arrayContaining(['min-h-11', 'min-w-11']));
+      expect(at(el, 1280)).not.toContain('min-h-11');
+    }
+  });
+
+  it.each([375, 768])('UI-010 the ⓘ keeps its small box and takes the tap on a 44px area at %ipx', (px) => {
+    inField(<TippedGlyph name="How is status decided?" tip="Evaluated for the month." glyph="ⓘ" />);
+    const glyph = screen.getByRole('button', { name: 'How is status decided?' });
+    expect(at(glyph, px)).toEqual(expect.arrayContaining(['min-h-0', 'min-w-0', 'after:h-[max(100%,2.75rem)]']));
+    expect(at(glyph, 1280)).not.toContain('after:h-[max(100%,2.75rem)]');
+  });
+
+  it.each([375, 768])('UI-010 a segment and an underlined tab are 44px tall at %ipx', (px) => {
+    inField(
+      <>
+        <Segmented label="Mode" tabs={[{ id: 'a', label: 'Bulanan' }, { id: 'b', label: 'Tahunan' }]} active="a" onSelect={() => {}}>
+          {() => null}
+        </Segmented>
+        <RouteTabs label="Tabs" tabs={[{ href: '/user-management/leader', label: 'Find Your Leader' }]} />
+      </>,
+    );
+    expect(at(screen.getByRole('tab', { name: 'Bulanan' }), px)).toContain('min-h-11');
+    expect(at(screen.getByRole('link', { name: 'Find Your Leader' }), px)).toContain('pt-3');
+  });
+
+  it('UI-010 leaves the two consoles’ controls as they were: outside the field shell nothing here holds', () => {
+    render(<><Button>Save</Button><TextInput aria-label="Plain" /></>);
+    expect(at(screen.getByRole('button', { name: 'Save' }), 768)).not.toContain('h-11');
+    expect(at(screen.getByRole('textbox', { name: 'Plain' }), 768)).not.toContain('h-12');
   });
 });

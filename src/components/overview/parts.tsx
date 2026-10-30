@@ -124,5 +124,5 @@ export function Bar({
 
 /** `.engage-card`, `.coaching-card`, `.pipeline-card`, `.production-card`: a 12px card on the hairline. */
 export function OverviewCard({ className, children }: { className?: string; children: ReactNode }) {
-  return <div className={cn('min-w-0 rounded-lg border border-hairline bg-card', className)}>{children}</div>;
+  return <div className={cn('min-w-0 rounded-lg border border-card-edge bg-card', className)}>{children}</div>;
 }

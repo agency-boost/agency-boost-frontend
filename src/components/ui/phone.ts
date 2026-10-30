@@ -139,8 +139,11 @@ export const CHIP_PHONE = 'max-md:w-full max-md:min-h-11 max-md:px-2.5 max-md:le
  *
  * The page beneath gives it room: `ACTION_BAR_ROOM_PHONE` on the content above, so its last line is never
  * hidden behind the bar.
+ *
+ * **Above the field shell's tab bar** (UI V1, UI-004): it stands on `--tab-bar-space` — the floating bar's room where the
+ * field shell draws it, nothing elsewhere — so the bar never covers the save it holds.
  */
-export const ACTION_BAR_PHONE = 'max-md:fixed max-md:inset-x-0 max-md:bottom-0 max-md:z-[9] '
+export const ACTION_BAR_PHONE = 'max-md:fixed max-md:inset-x-0 max-md:bottom-[var(--tab-bar-space)] max-md:z-[9] '
   + 'max-md:border-t max-md:border-hairline max-md:bg-card max-md:px-5 max-md:pt-3 '
   + 'max-md:pb-[calc(0.75rem_+_env(safe-area-inset-bottom))]';
 

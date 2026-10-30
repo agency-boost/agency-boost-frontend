@@ -103,7 +103,7 @@ const dashboardCalls = (calls: { url: string }[]) => calls.filter((c) => c.url.i
 
 /** The strip's tiles, label and value each. */
 function strip() {
-  const row = screen.getByText('Total touches').closest('[data-total]')!.parentElement!;
+  const row = screen.getByText('Total activities').closest('[data-total]')!.parentElement!;
   // A tile's label without the ⓘ the total carries (P18.95-T9 AC-3).
   return [...row.children].map((tile) => [tile.children[0].textContent!.replace(/ ⓘ.*$/, ''), tile.children[1].textContent]);
 }
@@ -145,7 +145,7 @@ describe('a coachee’s Activity tab (P13.1-T9)', () => {
     // Agus is shown Team Development and Rina is not, so it has no tile here; its count stays in the
     // table and in the total, which is the server's and counts everything.
     await waitFor(() => expect(strip()).toEqual([
-      ['Leads Generation', '0'], ['Selling', '0'], ['Recruitment', '12'], ['Total touches', '13'],
+      ['Leads Generation', '0'], ['Selling', '0'], ['Recruitment', '12'], ['Total activities', '13'],
     ]));
   });
 
@@ -202,5 +202,66 @@ describe('a coachee’s Activity tab (P13.1-T9)', () => {
     expect(document.body.textContent).not.toMatch(SIX_WORDS);
     const results = await axe(document.body, { rules: { 'color-contrast': { enabled: false } } });
     expect((results.violations ?? []).map((v) => v.id)).toEqual([]);
+  });
+});
+
+/*
+ * **UI V1 (UI-029): every tab opens that agent's own page** — Activity is their Log, Dashboard and Ratio, under the one
+ * agent header, a segmented control between them. Read-only: nobody logs another person's day.
+ */
+describe('UI-029 — the coachee’s Log, Dashboard and Ratio', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const DAY = {
+    membershipId: 'mem-rina', localDate: '2026-09-28', totalCount: 7, version: 2, frozenAt: null, editable: false, correctionCount: 0,
+    entries: [
+      { activityTypeId: 't1', activityTypeCode: 'LEADS_CONTACTED', label: 'Set appointment', count: 5 },
+      { activityTypeId: 't2', activityTypeCode: 'SELL_PRESENTATION', label: 'Sales meeting', count: 2 },
+      { activityTypeId: 't3', activityTypeCode: 'SELL_SUBMISSION', label: 'Submission polis', count: 0 },
+    ],
+  };
+  const RATIOS = {
+    membershipId: 'mem-rina', from: '2026-08-30', to: '2026-09-28', days: 30,
+    ratios: [{
+      code: 'SELLING_SUCCESS_RATE', label: 'Selling success rate', comparison: 'gte', displayUnit: 'percent', benchmark: 0.15,
+      tag: null, sides: null, numerator: [], denominator: [], purpose: null, divergesFromStandard: false,
+      value: 0.18, share: null, numeratorCount: 9, denominatorCount: 50, status: 'success',
+    }],
+  };
+
+  it('UI-029 opens on the Dashboard under a Log Activity · Dashboard · Ratio control, the shell’s one header above', async () => {
+    show({ '/activity/dashboard': { body: WEEK }, '/activity/log': { body: DAY }, '/activity/ratios': { body: RATIOS } });
+    const views = await screen.findByRole('tablist', { name: 'Activity' });
+    expect(within(views).getAllByRole('tab').map((t) => t.textContent)).toEqual(['Log Activity', 'Dashboard', 'Ratio']);
+    expect(within(views).getByRole('tab', { name: 'Dashboard' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+  });
+
+  it('UI-029 Log: her day, read-only, a day at a time back from the office’s today, never forward past it', async () => {
+    const { calls } = show({ '/activity/dashboard': { body: WEEK }, '/activity/log': { body: DAY }, '/activity/ratios': { body: RATIOS } });
+    await userEvent.click(await screen.findByRole('tab', { name: 'Log Activity' }));
+    const day = await screen.findByRole('region', { name: 'Log Activity' });
+    expect(await within(day).findByText('Set appointment')).toBeInTheDocument();
+    expect(day).toHaveTextContent('Monday, 28 Sep 2026');
+    expect(day).toHaveTextContent('7 activities');
+    // Only what was logged; no box, no stepper, no save.
+    expect(within(day).queryByText('Submission polis')).not.toBeInTheDocument();
+    expect(within(day).queryByRole('spinbutton')).not.toBeInTheDocument();
+    expect(within(day).queryByRole('button', { name: /Save|Simpan/ })).not.toBeInTheDocument();
+    expect(within(day).getByRole('button', { name: 'Next day' })).toBeDisabled();
+    const reads = calls.filter((c) => c.url.includes('/activity/log'));
+    expect(new URL(reads[0].url).searchParams.get('membershipId')).toBe('mem-rina');
+    expect(new URL(reads[0].url).searchParams.get('date')).toBe('2026-09-28');
+
+    await userEvent.click(within(day).getByRole('button', { name: 'Previous day' }));
+    await waitFor(() => expect(calls.filter((c) => c.url.includes('/activity/log')).at(-1)!.url).toContain('date=2026-09-27'));
+  });
+
+  it('UI-029 Ratio: the shared ratio card, hers, as rows (O-3)', async () => {
+    const { calls } = show({ '/activity/dashboard': { body: WEEK }, '/activity/log': { body: DAY }, '/activity/ratios': { body: RATIOS } });
+    await userEvent.click(await screen.findByRole('tab', { name: 'Ratio' }));
+    const card = await screen.findByRole('region', { name: 'Ratio · last 30 days' });
+    expect(await within(card).findByText('18%')).toBeInTheDocument();
+    expect(calls.some((c) => c.url.endsWith('/activity/ratios?for=mem-rina'))).toBe(true);
   });
 });

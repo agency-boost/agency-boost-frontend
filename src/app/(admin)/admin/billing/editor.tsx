@@ -132,7 +132,7 @@ export function Estimate({
   );
 
   return (
-    <section aria-labelledby={ids.heading} className="mb-5 rounded-lg border border-hairline bg-card p-5 md:p-7">
+    <section aria-labelledby={ids.heading} className="mb-5 rounded-lg border border-card-edge bg-card p-5 md:p-7">
       <h2 id={ids.heading} className="mb-1 font-display text-lg font-bold text-navy">{COPY.estimate}</h2>
 
       <div className="mt-4 flex flex-wrap items-end gap-5">

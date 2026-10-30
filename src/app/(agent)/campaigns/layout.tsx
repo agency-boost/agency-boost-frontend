@@ -20,7 +20,8 @@ import { campaignsMessages } from '@/i18n/messages/campaigns';
 export default function CampaignsLayout({ children }: { children: ReactNode }) {
   const t = useMessages(campaignsMessages);
   return (
-    <Page title={t.title} subtitle={t.subtitle} permission="campaign:read_list">
+    // No sub-line on a phone (UI V1, UI-108: *grey intro paragraphs* gone; D-08); from 768px as before.
+    <Page title={t.title} subtitle={t.subtitle} subtitleOnPhone={false} permission="campaign:read_list">
       <CampaignList>{children}</CampaignList>
     </Page>
   );

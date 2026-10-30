@@ -255,14 +255,14 @@ describe('P18.97-T7 a ratio requirement in the office’s unit', () => {
     expect(requirementWords(requirement)).toBe('Recruitment success rate 0,30');
   });
 
-  it('P18.97-T7 writes a ratio’s progress in its unit: the target as typed, the figure to its tenth, a place more short of it', () => {
+  it('P18.97-T7 writes a ratio’s progress in its unit: the target as typed, the figure whole (UI-080), the state the server’s', () => {
     const row = (current: number | null, state: 'met' | 'not_met' | 'in_progress') => ({
       metricKey: 'RECRUIT_SUCCESS_RATE', current, target: 0.3, unit: 'ratio', state,
     });
-    expect(progressWords(row(0.2857, 'in_progress'), 'percent')?.text).toBe('28,6% of 30%');
-    // 29,96% would round to 30,0% beside a 30% it has not reached: one place more.
-    expect(progressWords(row(0.2996, 'not_met'), 'percent')?.text).toBe('29,96% of 30%');
-    expect(progressWords(row(0.3125, 'met'), 'percent')).toEqual({ text: '31,3% of 30%', met: true, figure: true });
+    expect(progressWords(row(0.2857, 'in_progress'), 'percent')?.text).toBe('29% of 30%');
+    // UI-080: 29,96% reads 30% and is still not met — the state is judged on the unrounded value.
+    expect(progressWords(row(0.2996, 'not_met'), 'percent')).toEqual({ text: '30% of 30%', met: false, figure: true });
+    expect(progressWords(row(0.3125, 'met'), 'percent')).toEqual({ text: '31% of 30%', met: true, figure: true });
     expect(progressWords(row(0.2857, 'in_progress'), 'decimal')?.text).toBe('0,29 of 0,30');
     expect(progressWords(row(0.2857, 'in_progress'))?.text).toBe('0,29 of 0,30');
   });

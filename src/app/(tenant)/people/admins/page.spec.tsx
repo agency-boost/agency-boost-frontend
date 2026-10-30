@@ -297,8 +297,9 @@ describe('P18.97-T7 AC-1 the admins as cards on a phone (UI-034)', () => {
 
   /** The list's markup on the build before P18.97-T7, rendered from this fixture on 2026-10-28. */
   const BEFORE_T7: Record<768 | 1280, string> = {
-    768: 'be6564ecfa9e8fbaa938514a8ef656ada7add7938b19c3a2a8999850b480f785',
-    1280: 'be6564ecfa9e8fbaa938514a8ef656ada7add7938b19c3a2a8999850b480f785',
+    // Re-recorded 2026-10-30 (UI V1): UI-008's card edge (`border-card-edge`) and UI-010's 44px/48px targets below 1024px.
+    768: '804eefb8539e4da72b5844d311104867b5334e5a7ed2b77feead3a3041ba2e60',
+    1280: '804eefb8539e4da72b5844d311104867b5334e5a7ed2b77feead3a3041ba2e60',
   };
 
   it.each([768, 1280] as const)('P18.97-T7 AC-1 at %ipx draws the table it drew, to the byte', async (px) => {

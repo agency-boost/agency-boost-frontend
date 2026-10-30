@@ -84,12 +84,17 @@ export function AspectStatusPill({ status }: { status: AspectStatus }) {
  * ends *", overdue"* for a screen reader (*The module's own strings*), and nothing visible is added.
  */
 export function ProgressSummary({
-  view, label, markOverdue = false,
+  view, label, markOverdue = false, table = true,
 }: {
   view: ActivationView;
   /** The card's heading, which names the bar and the table for a screen reader. */
   label: string;
   markOverdue?: boolean;
+  /**
+   * The *Aspect · Items · Status* table. **`false` on New hire detail** (UI V1, UI-027: *no ASPEK table at any size* —
+   * each aspect's count is in its own heading): the tiles and the bar alone.
+   */
+  table?: boolean;
 }) {
   const t = useMessages(activationMessages);
   const figures = useFigureLanguage();
@@ -98,8 +103,8 @@ export function ProgressSummary({
   const width = Math.min(100, Math.max(0, view.pct));
   const pctComplete = t.pctComplete({ pct: formatPercent(view.pct, {}, figures) });
   return (
-    <div className="grid gap-6 sm:grid-cols-[0.8fr_1.2fr]">
-      <div className="flex flex-col gap-3 sm:pt-7">
+    <div className={cn('grid gap-6', table && 'sm:grid-cols-[0.8fr_1.2fr]')}>
+      <div className={cn('flex flex-col gap-3', table && 'sm:pt-7')}>
         <KpiTile
           label={t.day}
           value={dayShown(view.day, view.window)}
@@ -130,9 +135,11 @@ export function ProgressSummary({
         </div>
       </div>
       {/* Scrolls inside the card on the narrowest phone, so the page never does (T4 AC-8). */}
-      <div className="min-w-0 overflow-x-auto">
-        <AspectTable aspects={view.aspects} caption={label} />
-      </div>
+      {table && (
+        <div className="min-w-0 overflow-x-auto">
+          <AspectTable aspects={view.aspects} caption={label} />
+        </div>
+      )}
     </div>
   );
 }
@@ -183,6 +190,12 @@ export const ITEM_ROW = 'border-b border-hairline py-[11px] last:border-b-0';
 
 /** The row's checkbox (`:1471`): 16px, ticked in the success green. */
 export const ITEM_CHECKBOX = 'h-4 w-4 shrink-0 cursor-pointer accent-success disabled:cursor-default';
+
+/** **UI V1 (UI-027, D-25)**, New hire detail's item rows: 44px tall, the name wrapping, never cut short. */
+export const V1_ITEM_ROW = 'flex min-h-11 flex-col justify-center py-1.5';
+
+/** **UI V1 (UI-027)**: the 22px box. */
+export const V1_ITEM_CHECKBOX = 'h-[22px] w-[22px] shrink-0 cursor-pointer accent-success disabled:cursor-default';
 
 /**
  * Who ticked a done item and when, or which link completed it (OD-121, T4 AC-5): an `ⓘ` whose words
@@ -352,7 +365,7 @@ export function ActivationSkeleton({ label }: { label: string }) {
   return (
     <Skeleton label={label}>
       <div className="flex flex-col gap-4">
-        <div className="rounded-lg border border-hairline bg-card px-5 py-4">
+        <div className="rounded-lg border border-card-edge bg-card px-5 py-4">
           <SkeletonBar className="h-5 w-56" />
           <div className="mt-4 grid gap-6 sm:grid-cols-[0.8fr_1.2fr]">
             <div className="flex flex-col gap-3">
@@ -364,7 +377,7 @@ export function ActivationSkeleton({ label }: { label: string }) {
           </div>
         </div>
         {[0, 1].map((i) => (
-          <div key={i} className="rounded-lg border border-hairline bg-card px-5 py-4">
+          <div key={i} className="rounded-lg border border-card-edge bg-card px-5 py-4">
             <SkeletonBar className="h-5 w-40" />
             <SkeletonText lines={3} className="mt-4" />
           </div>

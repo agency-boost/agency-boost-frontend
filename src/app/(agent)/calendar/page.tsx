@@ -19,7 +19,8 @@ const one = (value: string | string[] | undefined) => (typeof value === 'string'
  * and the gate below is `calendar_entry:read`. The API answers only what the reader may read, whatever
  * this decides.
  *
- * **The address** (`route-registry.md`, `/calendar`): `view` (`week` · `month`), `date` (an office date
+ * **The address** (`route-registry.md`, `/calendar`): `view` (`agenda` · `three_days` · `week` · `month`; UI V1, UI-104 —
+ * Home's *Jadwal hari ini* opens `?view=agenda`, `agendaHref`), `date` (an office date
  * inside the period) and `entry` (an entry whose detail opens, on the week holding it) — the last two
  * are what a notice's row opens (ADR-0095). Anything unreadable is ignored for the default, never an
  * error page. A new address is a new screen, so a notice opened from the calendar itself starts afresh.
@@ -40,7 +41,7 @@ export default function CalendarPage() {
 function Calendar() {
   const query = useQuery();
   const asked = one(query.view);
-  const view = asked === 'month' || asked === 'week' ? asked : undefined;
+  const view = asked === 'month' || asked === 'week' || asked === 'agenda' || asked === 'three_days' ? asked : undefined;
   const date = readableDate(one(query.date));
   const entry = one(query.entry);
   const withId = one(query.with);

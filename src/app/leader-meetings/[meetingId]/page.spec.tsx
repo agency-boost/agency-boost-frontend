@@ -160,7 +160,7 @@ describe('/leader-meetings/[meetingId] — a meeting (P18.1-T2, P18.1-T3)', () =
         'PATCH /leader-meetings/m-14': { body: { ...moved } },
       });
       await userEvent.click(await screen.findByRole('button', { name: /^Change the date of/ }));
-      const dialog = within(screen.getByRole('dialog', { name: 'Meeting details' }));
+      const dialog = within(await screen.findByRole('dialog', { name: 'Meeting details' }));
       expect(dialog.getByRole('textbox', { name: 'Title' })).toHaveValue('Strategic Check-in — #14');
       const date = dialog.getByLabelText('Date');
       expect(date).toHaveValue('2026-10-13');
@@ -179,7 +179,7 @@ describe('/leader-meetings/[meetingId] — a meeting (P18.1-T2, P18.1-T3)', () =
         'PATCH /leader-meetings/m-14': refusal(409, 'LEADER_MEETING_COMPLETED', 'This meeting is completed.'),
       });
       await userEvent.click(await screen.findByRole('button', { name: /^Change the date of/ }));
-      const dialog = within(screen.getByRole('dialog', { name: 'Meeting details' }));
+      const dialog = within(await screen.findByRole('dialog', { name: 'Meeting details' }));
       await userEvent.clear(dialog.getByLabelText('Date'));
       await userEvent.type(dialog.getByLabelText('Date'), '2026-10-20');
       await userEvent.click(dialog.getByRole('button', { name: 'Save changes' }));
@@ -194,7 +194,7 @@ describe('/leader-meetings/[meetingId] — a meeting (P18.1-T2, P18.1-T3)', () =
         'PATCH /leader-meetings/m-14': refusal(409, 'VERSION_CONFLICT', 'Changed since read.'),
       });
       await userEvent.click(await screen.findByRole('button', { name: /^Change the date of/ }));
-      const dialog = within(screen.getByRole('dialog', { name: 'Meeting details' }));
+      const dialog = within(await screen.findByRole('dialog', { name: 'Meeting details' }));
       await userEvent.type(dialog.getByRole('textbox', { name: 'Title' }), '!');
       await userEvent.click(dialog.getByRole('button', { name: 'Save changes' }));
       expect(await dialog.findByText('Someone else changed this while you were editing. It now shows what they saved.')).toBeInTheDocument();
@@ -206,7 +206,7 @@ describe('/leader-meetings/[meetingId] — a meeting (P18.1-T2, P18.1-T3)', () =
         'DELETE /leader-meetings/m-14': { status: 204 },
       });
       await userEvent.click(await screen.findByRole('button', { name: /^Change the date of/ }));
-      const dialog = within(screen.getByRole('dialog', { name: 'Meeting details' }));
+      const dialog = within(await screen.findByRole('dialog', { name: 'Meeting details' }));
       await userEvent.click(dialog.getByRole('button', { name: 'Delete meeting' }));
       expect(dialog.getByText("Delete “Strategic Check-in — #14”? Nothing has been written in it yet, and it can't be brought back."))
         .toBeInTheDocument();
@@ -226,7 +226,7 @@ describe('/leader-meetings/[meetingId] — a meeting (P18.1-T2, P18.1-T3)', () =
         'DELETE /leader-meetings/m-14': refusal(409, 'LEADER_MEETING_HAS_MINUTES', 'Has minutes.'),
       });
       await userEvent.click(await screen.findByRole('button', { name: /^Change the date of/ }));
-      const dialog = within(screen.getByRole('dialog', { name: 'Meeting details' }));
+      const dialog = within(await screen.findByRole('dialog', { name: 'Meeting details' }));
       await userEvent.click(dialog.getByRole('button', { name: 'Delete meeting' }));
       await userEvent.click(dialog.getByRole('button', { name: 'Delete' }));
       expect(await dialog.findByText("Something has been written in this meeting, so it can't be deleted.")).toBeInTheDocument();
@@ -236,7 +236,7 @@ describe('/leader-meetings/[meetingId] — a meeting (P18.1-T2, P18.1-T3)', () =
     it('a past meeting nobody wrote in: its date stays (read-only), and Delete meeting is still offered', async () => {
       open(meetingView({ state: 'completed', writtenIn: false, can: { ...meetingView().can, reschedule: false, delete: true } }));
       await userEvent.click(await screen.findByRole('button', { name: /^Change the date of/ }));
-      const dialog = within(screen.getByRole('dialog', { name: 'Meeting details' }));
+      const dialog = within(await screen.findByRole('dialog', { name: 'Meeting details' }));
       expect(dialog.getByLabelText('Date')).toHaveAttribute('readonly');
       expect(dialog.getByRole('textbox', { name: 'Title' })).toHaveAttribute('readonly');
       expect(dialog.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument();
@@ -246,7 +246,7 @@ describe('/leader-meetings/[meetingId] — a meeting (P18.1-T2, P18.1-T3)', () =
     it('a written meeting that is upcoming may be moved but offers no delete', async () => {
       open();
       await userEvent.click(await screen.findByRole('button', { name: /^Change the date of/ }));
-      const dialog = within(screen.getByRole('dialog', { name: 'Meeting details' }));
+      const dialog = within(await screen.findByRole('dialog', { name: 'Meeting details' }));
       expect(dialog.queryByRole('button', { name: 'Delete meeting' })).not.toBeInTheDocument();
       expect(dialog.getByRole('button', { name: 'Save changes' })).toBeInTheDocument();
     });
@@ -260,7 +260,7 @@ describe('/leader-meetings/[meetingId] — a meeting (P18.1-T2, P18.1-T3)', () =
         'POST /leader-meetings/m-14/share-links': [{ status: 201, body: link }, { status: 201, body: { ...link, token: 'tok_second' } }],
       });
       await userEvent.click(await screen.findByRole('button', { name: 'Share' }));
-      const dialog = within(screen.getByRole('dialog', { name: 'Share these minutes' }));
+      const dialog = within(await screen.findByRole('dialog', { name: 'Share these minutes' }));
       const field = await dialog.findByRole('textbox', { name: 'Share these minutes' });
       expect(field).toHaveValue(`${window.location.origin}/leader-meetings/shared/tok_abc-123`);
       expect(field).toHaveAttribute('readonly');
@@ -362,7 +362,7 @@ describe('/leader-meetings/[meetingId] — a meeting (P18.1-T2, P18.1-T3)', () =
     it('P18.1-T2 AC-1: not found — a field member is offered where they land', async () => {
       open(meetingView(), { 'GET /leader-meetings/m-14': notFound }, FIELD_ME);
       expect(await screen.findByRole('heading', { name: "This meeting can't be found." })).toBeInTheDocument();
-      expect(screen.getByRole('link', { name: 'Go to your home page' })).toHaveAttribute('href', '/activity/log');
+      expect(screen.getByRole('link', { name: 'Go to your home page' })).toHaveAttribute('href', '/home');
     });
 
     it('a reader not signed in is sent to sign in, and back to this meeting after', async () => {

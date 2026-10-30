@@ -38,16 +38,16 @@ describe('/new-hires/[membershipId], one hire as a leader reads it (P13-T5, P13-
     vi.useRealTimers();
   });
 
-  it('P13-T5 AC-5 is titled with the hire’s name, the subtitle and heading verbatim, and the way back', async () => {
+  it('P13-T5 AC-5, UI-027 is titled with the hire’s name and the heading, the way back — and no subtitle at any size', async () => {
     const { calls } = show();
     await ready();
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Rina Wijaya$/);
-    expect(screen.getByText('You can update their 90-Day Activation status, plus your coaching note.')).toBeInTheDocument();
+    expect(screen.queryByText('You can update their 90-Day Activation status, plus your coaching note.')).toBeNull();
     expect(screen.getByRole('link', { name: 'Back to New Hires' })).toHaveAttribute('href', '/new-hires');
     expect(calls.filter((c) => c.url.includes('/new-hires/')).map((c) => c.url)).toEqual(['http://api.test/api/v1/new-hires/mem-rina']);
   });
 
-  it('P13-T5 AC-5 the tiles, bar, table and five cards are the hire’s page’s, and the Day tile turns red when overdue', async () => {
+  it('P13-T5 AC-5, UI-027 the tiles, bar and five cards — no ASPEK table, each card its count — and the Day tile red when overdue', async () => {
     show({ 'GET /new-hires/mem-rina': { body: leaderView({ day: 95, overdue: true }) } });
     await ready();
     const day = screen.getByText('Day').parentElement!;
@@ -55,11 +55,11 @@ describe('/new-hires/[membershipId], one hire as a leader reads it (P13-T5, P13-
     expect(day).toHaveAttribute('data-variant', 'overdue');
     expect(screen.getByText('Completed').parentElement).toHaveTextContent('Completed5/16');
     expect(screen.getByText('31% complete')).toBeInTheDocument();
-    expect(screen.getByRole('table', { name: 'Activation progress' })).toBeInTheDocument();
+    expect(screen.queryByRole('table')).toBeNull();
     expect(screen.getByRole('progressbar', { name: 'Activation progress' })).toHaveAttribute('aria-valuenow', '31');
     expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
-      'Activation progress', '1Introduction', '2Initial Setup', '3Training & Certification', '4First Sale', '5Ongoing Habits',
-      'Coaching note',
+      'Activation progress', '1Introduction · 2/4', '2Initial Setup · 2/4', '3Training & Certification · 0/3', '4First Sale · 1/2',
+      '5Ongoing Habits · 0/3', 'Coaching note',
     ]);
   });
 
@@ -137,14 +137,16 @@ describe('/new-hires/[membershipId], one hire as a leader reads it (P13-T5, P13-
     await waitFor(() => expect(writes(calls)).toEqual([['PUT', '/new-hires/mem-rina/items/CAREER_MINDSET', { done: false }]]));
   });
 
-  it('P13-T5 AC-6 the linked items are disabled with Auto, as on the hire’s page (contradiction 1)', async () => {
+  it('P13-T5 AC-6, UI-027 the linked items are disabled with a small ⚡ and their rule behind ⓘ — no uppercase Auto text', async () => {
     show();
     await ready();
     for (const code of ['GOAL_SETTING', 'ADD_PROSPECTS', 'ACTIVITY_TRACKER_WEEKLY']) {
       const linked = within(row(code));
       expect(linked.getByRole('checkbox')).toBeDisabled();
-      expect(linked.getByRole('button', { name: /^Auto — completes when / })).toBeInTheDocument();
+      expect(row(code).querySelector('[data-auto-marker]')).not.toBeNull();
+      expect(linked.queryByRole('button', { name: /^Auto — completes when / })).toBeNull();
     }
+    expect(within(row('ADD_PROSPECTS')).getByRole('button', { name: 'Why Add prospects in Leads Management is automatic' })).toBeInTheDocument();
     // No *Go to* on a leader's detail: it would open the leader's own screens.
     expect(screen.queryByRole('link', { name: /^Go to / })).not.toBeInTheDocument();
   });
@@ -161,7 +163,8 @@ describe('/new-hires/[membershipId], one hire as a leader reads it (P13-T5, P13-
     await ready();
     expect(within(row('INSURANCE_BASICS')).getByRole('button', { name: 'Ticked by Rina Wijaya · 10 Aug 2026' })).toBeInTheDocument();
     expect(within(row('CAREER_MINDSET')).getByRole('button', { name: 'Ticked by you · 12 Aug 2026' })).toBeInTheDocument();
-    expect(within(row('ADD_PROSPECTS')).getByRole('button', { name: 'Completed from Leads Management by you · 16 Aug 2026' })).toBeInTheDocument();
+    // An automatic one says who or what completed it behind its ⓘ, after its rule (UI-027).
+    expect(row('ADD_PROSPECTS').querySelector('[data-auto-marker]')).not.toBeNull();
   });
 
   it('P13-T4 AC-7 a refused tick puts the box back and says why', async () => {

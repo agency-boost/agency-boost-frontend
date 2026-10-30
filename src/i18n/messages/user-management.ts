@@ -167,6 +167,16 @@ const en = {
     typeWord: ({ word }: { word: string }) => `Type ${word}`,
     removing: 'Removing…',
     removeFromTeam: 'Remove from team',
+    /*
+     * UI V1 (2026-10-30, Phase 18.99 T9; UI-082, UI-083): the rows. The role pill opens the role sheet; on a desktop
+     * *Keluarkan* sits in a row's ⋮ menu; the table's columns.
+     */
+    /** The role pill's name: what it does, the role it shows. */
+    changeRoleOf: ({ name, role }: { name: string; role: string }) => `Change ${name}’s role, now ${role}`,
+    /** A desktop row's ⋮ menu. */
+    actionsFor: ({ name }: { name: string }) => `Actions for ${name}`,
+    /** The desktop table's columns (the role's is `role`). */
+    columns: { name: 'Name', code: 'Code', status: 'Status' },
   },
 
   /** *Pending Requests* (`Overall.html:3625-3631`; the grey text's row 7). */
@@ -309,6 +319,9 @@ const id: MessagesOf<typeof en> = {
     typeWord: ({ word }) => `Ketik ${word}`,
     removing: 'Mengeluarkan…',
     removeFromTeam: 'Keluarkan dari tim',
+    changeRoleOf: ({ name, role }) => `Ubah peran ${name}, sekarang ${role}`,
+    actionsFor: ({ name }) => `Tindakan untuk ${name}`,
+    columns: { name: 'Nama', code: 'Kode', status: 'Status' },
   },
 
   pending: {

@@ -1335,8 +1335,9 @@ describe('P18.97-T7 AC-2 Data upload on a phone (UI-034, UI-040)', () => {
 
   /** The page's markup on the build before P18.97-T7, rendered from this fixture on 2026-10-28. */
   const BEFORE_T7: Record<768 | 1280, string> = {
-    768: '28a6dd8b74be26ceef6a2d2633e320d79f66195773066049291f0348e0655809',
-    1280: '28a6dd8b74be26ceef6a2d2633e320d79f66195773066049291f0348e0655809',
+    // Re-recorded 2026-10-30 (UI V1): UI-008's card edge (`border-card-edge`) and UI-010's 44px/48px targets below 1024px.
+    768: '2f3f34ef15d1e0277f648e0dcc9e74ddd93c0fd3cbef24f14b8cc49189dd6ba8',
+    1280: '2f3f34ef15d1e0277f648e0dcc9e74ddd93c0fd3cbef24f14b8cc49189dd6ba8',
   };
 
   it.each([768, 1280] as const)('P18.97-T7 AC-2 at %ipx draws the month table and its controls as they were, to the byte', async (px) => {

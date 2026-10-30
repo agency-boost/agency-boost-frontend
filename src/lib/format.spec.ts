@@ -5,9 +5,9 @@ import { DEFAULT_LANGUAGE, LANGUAGES, type Language } from '@/i18n/language';
 import {
   clockMinutes, endMinutes, formatCalendarDay, formatCalendarDayLong, formatClock, formatDateTime, formatDay, formatDayClock, formatDayHeader,
   formatDayLong, formatDecimalInput, formatHour, formatMoneyUnit, formatMonth, formatMonthName, formatMonthSpan, formatNoticeFull,
-  formatNoticeShort, formatNumber, formatOfficeDay, formatOfficeMonth, formatOfficeTime, formatPercent, formatRupiah, formatRupiahCompact,
+  formatNoticeShort, formatNumber, formatOfficeDay, formatOfficeMonth, formatOfficeTime, formatPercent, formatRupiah, formatRupiahCompact, wholePercent,
   formatRupiahCompactPair, formatShortDay, formatTimeSpan, formatTripWhen, formatWeekday, formatWeekdayDay, formatWeekRange, formatWhen,
-  MINOR_UNITS_PER_MAJOR, moneyPrefix, monthInZone, OFFICE_TIME_ZONE, parseDecimal, PERCENT_LOSSLESS_MAX_DECIMALS, percentOf,
+  MINOR_UNITS_PER_MAJOR, minuteInZone, moneyPrefix, monthInZone, OFFICE_TIME_ZONE, parseDecimal, PERCENT_LOSSLESS_MAX_DECIMALS, percentOf,
   RUPIAH_PER_UNIT, toMajor, toMinor, weekdayHeadings,
 } from './format';
 import { groupDigits, parseDigits } from './goals';
@@ -100,6 +100,16 @@ describe('monthInZone (invariant §9)', () => {
     const at = new Date('2026-09-30T18:00:00Z');
     expect(monthInZone('Asia/Jakarta', at)).toBe('2026-10');
     expect(monthInZone('UTC', at)).toBe('2026-09');
+  });
+});
+
+describe('minuteInZone (invariant §9; UI-100’s greeting before the read answers)', () => {
+  it('UI-100 is the minute of the office’s day, not the device’s or UTC’s', () => {
+    // 09:05 in Jakarta is 02:05 in UTC.
+    expect(minuteInZone('Asia/Jakarta', new Date('2026-10-30T02:05:00Z'))).toBe(9 * 60 + 5);
+    expect(minuteInZone('UTC', new Date('2026-10-30T02:05:00Z'))).toBe(2 * 60 + 5);
+    // Midnight in Jakarta is 0, never 24 × 60.
+    expect(minuteInZone('Asia/Jakarta', new Date('2026-10-30T17:00:00Z'))).toBe(0);
   });
 });
 
@@ -447,7 +457,7 @@ describe('formatPercent (P18.97-T3 AC-1, AC-2)', () => {
     expect(formatPercent(-12.5)).toBe('-13%');
     expect(formatPercent(-12.4)).toBe('-12%');
     expect(formatPercent(-0.4)).toBe('0%');
-    expect(formatPercent(-0.01, { decimals: 1 })).toBe('0,0%');
+    expect(formatPercent(-0.01)).toBe('0%');
   });
 
   it('P18.97-T3 AC-1 writes nothing for what is not a number — a missing rate is the caller’s —', () => {
@@ -456,25 +466,35 @@ describe('formatPercent (P18.97-T3 AC-1, AC-2)', () => {
   });
 
   it.each([
-    [0, '0,0%'],
-    [0.04, '0,0%'],
-    [0.05, '0,1%'],
-    [0.5, '0,5%'],
-    [9.14, '9,1%'],
-    [29.6, '29,6%'],
-    [30, '30,0%'],
-    [99.5, '99,5%'],
-    [99.96, '100,0%'],
-    [100, '100,0%'],
-  ])('P18.97-T3 AC-2 keeps a ratio’s tenth where it is asked for, `{ decimals: 1 }`: %d is %s', (value, text) => {
-    expect(formatPercent(value, { decimals: 1 })).toBe(text);
+    [12.5, '13%'],
+    [33.3, '33%'],
+    [0.4, '0%'],
+    [29.6, '30%'],
+    [0.5, '1%'],
+    [9.14, '9%'],
+    [99.5, '100%'],
+    [99.96, '100%'],
+    [65.04, '65%'],
+  ])('UI-080 writes every percentage whole, rounded half up — a ratio beside its benchmark too: %d is %s', (value, text) => {
+    expect(formatPercent(value)).toBe(text);
+    expect(formatPercent(value)).not.toContain(',');
   });
 
-  it('P18.97-T3 AC-2 keeps a second place only up to the most it is asked for, never fewer than the fixed ones', () => {
-    expect(formatPercent(65.04, { decimals: 1, maxDecimals: 2 })).toBe('65,04%');
-    expect(formatPercent(40, { decimals: 1, maxDecimals: 2 })).toBe('40,0%');
-    expect(formatPercent(29.63, { decimals: 2 })).toBe('29,63%');
-    expect(formatPercent(14.96, { decimals: 2 })).toBe('14,96%');
+  it('UI-080 rounds an exact half up although its binary product falls short of it: 0,575 × 100 is 58%', () => {
+    // `0.575 * 100` is 57.49999999999999; the half is the figure's, not the float's.
+    expect(formatPercent(0.575 * 100)).toBe('58%');
+    expect(wholePercent(0.575 * 100)).toBe(58);
+    expect(wholePercent(29.6)).toBe(30);
+    expect(wholePercent(-12.5)).toBe(-13);
+    expect(wholePercent(-0.4)).toBe(0);
+    expect(wholePercent(Number.NaN)).toBeNaN();
+  });
+
+  it('UI-080 judges a status on the unrounded value: 29,6% reads 30% and is still below a 30% target', () => {
+    const value = 29.6;
+    const target = 30;
+    expect(formatPercent(value)).toBe('30%');
+    expect(value < target).toBe(true);
   });
 
   it.each([
@@ -650,7 +670,7 @@ describe('P18.98-T3 AC-1 a caller that passes no language writes Indonesian', ()
     expect(formatDateTime('2026-10-26T06:05:00Z', OFFICE_TIME_ZONE, 'id')).toBe('26 Okt 2026, 13.05');
     expect(formatNumber(1_250, {}, 'id')).toBe('1.250');
     expect(formatNumber(17.6, { decimals: 1 }, 'id')).toBe('17,6');
-    expect(formatPercent(29.6, { decimals: 1 }, 'id')).toBe('29,6%');
+    expect(formatPercent(29.6, {}, 'id')).toBe('30%');
     expect(formatRupiah(rp(45_000_000), 'id')).toBe('Rp 45.000.000');
     expect(formatRupiahCompact(rp(5_800_000_000), {}, 'id')).toBe('Rp 5,8 M');
     expect(formatRupiahCompactPair(rp(357_500_000), rp(712_666_667), '/', 'id')).toBe('Rp 357,5 jt / 712,7 jt');
@@ -791,19 +811,17 @@ describe('P18.98-T3 AC-1 English numbers and percentages (§E, UI-012)', () => {
   });
 
   it.each([
-    [0, '0.0%'], [0.04, '0.0%'], [0.05, '0.1%'], [9.14, '9.1%'], [29.6, '29.6%'], [30, '30.0%'], [99.96, '100.0%'],
-  ])('P18.98-T3 AC-1 keeps a ratio’s tenth in English, `{ decimals: 1 }`: %d is %s', (value, text) => {
-    expect(formatPercent(value, { decimals: 1 }, 'en')).toBe(text);
+    [0.05, '0%'], [9.14, '9%'], [29.6, '30%'], [30, '30%'], [99.96, '100%'], [12.5, '13%'], [33.3, '33%'],
+  ])('UI-080 writes a ratio whole in English too: %d is %s', (value, text) => {
+    expect(formatPercent(value, {}, 'en')).toBe(text);
   });
 
-  it('P18.98-T3 AC-1 keeps a second place, and a rule’s or a record’s places, with a point', () => {
-    expect(formatPercent(65.04, { decimals: 1, maxDecimals: 2 }, 'en')).toBe('65.04%');
-    expect(formatPercent(40, { decimals: 1, maxDecimals: 2 }, 'en')).toBe('40.0%');
+  it('P18.98-T3 AC-1 keeps a rule’s or a record’s places, with a point', () => {
     expect(formatPercent(7.25, { lossless: true }, 'en')).toBe('7.25%');
     expect(formatPercent(87.35, { lossless: true }, 'en')).toBe('87.35%');
     expect(formatPercent(0.0725 * 100, { lossless: true }, 'en')).toBe('7.25%');
     expect(formatPercent(30, { lossless: true }, 'en')).toBe('30%');
-    expect(formatPercent(-0.01, { decimals: 1 }, 'en')).toBe('0.0%');
+    expect(formatPercent(-0.01, {}, 'en')).toBe('0%');
     expect(formatPercent(Number.NaN, {}, 'en')).toBe('');
   });
 });
@@ -914,8 +932,8 @@ describe('P18.98-T3 AC-2 one rounding: the language changes the characters, neve
     (value) => {
       for (const options of [{}, { decimals: 1 }, { decimals: 2 }, { maxDecimals: 1 }, { decimals: 1, maxDecimals: 2 }]) {
         expect(asIndonesian(formatNumber(value, options, 'en'))).toBe(formatNumber(value, options));
-        expect(asIndonesian(formatPercent(value, options, 'en'))).toBe(formatPercent(value, options));
       }
+      expect(asIndonesian(formatPercent(value, {}, 'en'))).toBe(formatPercent(value));
       expect(asIndonesian(formatPercent(value, { lossless: true }, 'en'))).toBe(formatPercent(value, { lossless: true }));
     },
   );

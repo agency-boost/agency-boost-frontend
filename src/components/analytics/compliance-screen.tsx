@@ -3,6 +3,7 @@
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useId, useState, type ReactNode } from 'react';
 import { FeedbackSummarySection } from '@/components/events/feedback-summary';
+import { useFieldChrome } from '@/components/field-nav';
 import { Button, ErrorBanner } from '@/components/ui/field';
 import { useMessages } from '@/i18n/language-provider';
 import { kpmComplianceMessages } from '@/i18n/messages/kpm-compliance';
@@ -15,6 +16,8 @@ import {
 import { CampaignPicker, EventPicker, TooltipNote, TrainingTabs } from './compliance-pickers';
 import { ComplianceSummary } from './compliance-summary';
 import { ComplianceTree, TreeSkeleton } from './compliance-tree';
+import { V1Compliance } from './v1-compliance';
+import { usePhone } from '@/lib/use-phone';
 
 /**
  * **Compliance, Events, and Campaigns** (`KPM_Owner.html:1262-1286`, `:3449-4118`; P18.6-T1, P18.6-T2): the
@@ -56,6 +59,9 @@ export function ComplianceScreen({ selection }: { selection: ComplianceSelection
   const [direction, setDirection] = useState<SortDirection>('worst');
   /** A training category with no module, pressed: shown on the screen, read from nowhere. */
   const [emptyCategory, setEmptyCategory] = useState<string | null>(null);
+  // UI V1 (UI-109): a phone in the field shell reads the compact Compliance; the console and wider screens as before.
+  const phone = usePhone();
+  const field = useFieldChrome() !== null;
 
   useEffect(() => {
     let live = true;
@@ -100,6 +106,33 @@ export function ComplianceScreen({ selection }: { selection: ComplianceSelection
   const retry = missing
     ? { label: t.backTo({ category: t.chips[category] }), run: () => choose({ category, item: null }) }
     : { label: t.tryAgain, run: () => setAttempt((n) => n + 1) };
+
+  if (phone && field) {
+    return (
+      <div className="min-w-0" data-part="compliance">
+        {!view && !error && <TreeSkeleton withChips />}
+        {error && <Failed error={error} onRetry={retry} />}
+        {view && (
+          <>
+            <V1Compliance
+              view={view}
+              fresh={fresh}
+              category={category}
+              selected={selected}
+              emptyCategory={emptyCategory}
+              direction={direction}
+              onCategory={chooseCategory}
+              onTraining={chooseTraining}
+              onItem={(next) => choose({ category, item: next })}
+              onToggle={() => setDirection((d) => (d === 'worst' ? 'best' : 'worst'))}
+            />
+            {fresh && <div className="mt-3"><PastEventCard view={view} /></div>}
+            {!fresh && !error && <TreeSkeleton />}
+          </>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="min-w-0" data-part="compliance">

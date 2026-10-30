@@ -2,8 +2,7 @@ import { useState } from 'react';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
-import { CHIP_GRID_PHONE, CHIP_PHONE } from '@/components/ui/phone';
-import { BriefCard, ChoiceGroup } from './brief-card';
+import { BriefCard, ChoiceGroup, PLAN_CHIP_PHONE, PLAN_CHIPS_PHONE, PLAN_QUESTION_PHONE } from './brief-card';
 
 const AGES = [{ value: 1, label: '< 25' }, { value: 2, label: '25–34' }, { value: 3, label: '35–49' }];
 
@@ -46,17 +45,23 @@ describe('BriefCard and ChoiceGroup', () => {
     expect(within(screen.getByRole('group', { name: 'Age band' })).getAllByRole('button')[0].parentElement).toHaveClass('flex-wrap');
   });
 
-  it('P18.95-T6 AC-1 grid/sticky classes scoped to max-md: two chips to a row below 768px, the wrapping row wider', () => {
+  it('UI-107 on a phone: wrapping pill chips 38px tall with a 44px reach, the label in sentence case; wider as before', () => {
     render(<Harness />);
-    const chips = within(screen.getByRole('group', { name: 'Age band' })).getAllByRole('button');
+    const group = screen.getByRole('group', { name: 'Age band' });
+    const chips = within(group).getAllByRole('button');
     const box = chips[0].parentElement!;
     const wider = (el: Element) => [...el.classList].filter((c) => !c.startsWith('max-md:'));
-    expect(box).toHaveClass(...CHIP_GRID_PHONE.split(' '));
+    expect(box).toHaveClass(...PLAN_CHIPS_PHONE.split(' '));
+    expect(box).not.toHaveClass('max-md:grid');
     expect(wider(box)).toEqual(['flex', 'flex-wrap', 'gap-2']);
     for (const chip of chips) {
-      expect(chip).toHaveClass(...CHIP_PHONE.split(' '));
+      expect(chip).toHaveClass(...PLAN_CHIP_PHONE.split(' '));
+      expect(chip).toHaveClass('max-md:h-[2.375rem]', 'max-md:rounded-pill', 'max-md:after:-inset-y-[3px]');
       // At 768px and wider the chip is drawn exactly as before.
-      expect(wider(chip)).not.toContain('w-full');
+      expect(wider(chip)).toEqual(expect.arrayContaining(['rounded-md', 'border', 'px-[15px]', 'py-[9px]']));
     }
+    expect(screen.getByText('Age band')).toHaveClass('uppercase', ...PLAN_QUESTION_PHONE.split(' '));
+    // The question says whether it is answered, for the plan's always-active button (UI-107).
+    expect(group).toHaveAttribute('data-answered', 'false');
   });
 });

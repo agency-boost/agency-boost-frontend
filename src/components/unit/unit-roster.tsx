@@ -1,258 +1,107 @@
 'use client';
 
 import Link from 'next/link';
-import { useId, type MouseEvent, type ReactNode } from 'react';
-import { TAP_AREA } from '@/components/ui/phone';
-import { CardField, CardGroup } from '@/components/ui/row-cards';
-import { TermTip } from '@/components/ui/term-tip';
+import { useId, useState, type MouseEvent, type ReactNode } from 'react';
+import { LineIcon } from '@/components/ui/line-icon';
+import { PersonRow } from '@/components/ui/person-row';
 import { TippedGlyph } from '@/components/ui/tipped-glyph';
-import type { Language } from '@/i18n/language';
+import { TonePill, type PillTone } from '@/components/ui/tone-pill';
 import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
 import { unitDashboardMessages } from '@/i18n/messages/unit-dashboard';
-import { campaignChasingMessages } from '@/i18n/messages/campaign-chasing';
 import { cn } from '@/lib/cn';
+import { lastOneOnOneLine, rosterStatusLabel, type RosterStatus } from '@/lib/coaching';
+import { formatNumber, formatPercent, formatRupiahCompactPair, formatShortDay } from '@/lib/format';
 import {
-  coachingTabHref, lastOneOnOneLine, lastOneOnOneOverdue, rosterStatusLabel, type RosterStatus,
-} from '@/lib/coaching';
-import {
-  firstName, goalBar, goalWords, missingWords, namesMissing, namesNewHires, newHireWords, onPaceWords,
-  provenanceWords, recruitLine, rowName, rowsOf, salesLine, totalNote, totalRecruitLine, touchesWords,
-  type GoalWords, type LeadsCounts, type UnitDashboardView, type UnitGroup, type UnitPeriod, type UnitRow,
-  type UnitTotal,
+  everyRow, goalMet, goalShare, matchesFilter, rowHref, rowName, rowsOf, statusTally,
+  type RosterFilter, type UnitDashboardView, type UnitGroup, type UnitPeriod, type UnitRow, type UnitTotal,
 } from '@/lib/unit-dashboard';
-import { DetailTiles, UnitDetail, type ReadRatios } from './unit-detail';
 
 /**
- * *Your team's roster* (`Overall.html:3903-3946`, rows `:7357-7423`, totals `:7426-7476`, CSS
- * `:1643-1736`).
+ * ***Roster tim Anda*** (UI V1, Phase 18.99 T4; UI-002, UI-005, UI-007, UI-009, UI-011, UI-028;
+ * `unit-dashboard-mobile` screens 1–2, `unit-dashboard-desktop` *Overview*). **Three drawings of one roster**, each for
+ * its range, never one restyled (the report's *Rules*):
  *
- * **The prototype's eight columns.** *Chasing MDRT* third (ADR-0122, P18.5-T7 AC-7): ✓ for a person chasing
- * the office's MDRT campaign, its header tooltip the server's words about that campaign (OD-152). *Remarks*
- * is the expander column, its heading blank on screen and named for a screen reader, each ⌄ named *View
- * details* for its person (OD-139).
+ * - **Below 768px, an accordion by leader** (UI-002): *Unit Anda · 4* first and open, each AAB unit closed, a unit nested
+ *   in one inside it; each header 48px with the unit's goal bar and percentage, in place of the old *— Total* card; each
+ *   person a 60px row — avatar, NAME, the goal's mini bar, percentage and *Rp 29 jt / 94,7 jt* — with the status pill on
+ *   the right. No ⓘ per row, no ⌄, no *Perbarui produksi*, no *+ Tambah agent* (the owner, 30 Oct).
+ * - **768–1023px, a table of four** (UI-009): *Nama · Progres goal · Aktivitas · Status*.
+ * - **From 1024px, a table of nine and a ›** (UI-009): *Nama · Progres goal · Leads penjualan · Closing · Leads rekrut ·
+ *   Potensi rekrut · Aktivitas · 1:1 terakhir · Status*; each unit's header row with its totals and *Active n/m*;
+ *   every unit open, its header able to close it; the header sticky; nothing scrolls sideways.
  *
- * **The prototype's own table**, not `DataTable`, as the coaching roster is: rows grouped under
- * full-width dividers and units nested beneath their heads have no place in a one-`<tbody>` table. Each
- * group is a `<tbody>`, headed by a `rowgroup` header; each person's name is their row's header. The
- * table scrolls inside its card on a phone (`.table-scroll`, `:3908`), so the page never does.
- *
- * **Groups, as the server sends them** (D-groups): *Your Unit · {n}* and its total, then *AAB units*,
- * each unit's total, its head's own row tagged *Personal* and their team indented, and any unit nested
- * inside it beneath, one step further in. A group with nobody in it is not drawn.
- *
- * **Below 768px, a card per person instead of the table** (P18.95-T3 AC-1, ADR-0167 §6; the client's UI review,
- * UI-010 and UI-030): `RosterCards`, the same groups, totals, figures, drills and ⌄, in the same order. Asked of
- * the window (`usePhone`, by the screen, before the roster answers, so a phone never draws the table first), so a
- * tablet and a desktop draw the table they drew, to the byte (§12).
- *
- * **Its words are the catalogue's** (`messages/unit-dashboard.ts`, P18.98-T4), in the reader's language; every figure
- * in `useFigureLanguage()`'s. *Chasing MDRT* and its sentences are the campaigns' (`lib/campaigns.ts`).
+ * **Every row is a link, whole** (UI-011): the reader's own to `/summary`, anybody else's to their agent page on the
+ * *Personal Summary* tab, `?from=` this page so its ‹ comes back; somebody whose pages the reader may not open is a
+ * row that goes nowhere. **The status pill shows on *Bulan ini* alone** (UI-005), and so do the chips that filter by it
+ * (*Semua 12 · Perlu perhatian 5 · Perlu dipantau 3*, UI-002); **one ⓘ** says how a status is decided (UI-007) — beside
+ * the title on a phone, on the *Status* heading in a table. *⟳ Last updated 28 Okt 26* is the office's latest production
+ * import (UI-028).
  */
-
-const CELL = 'px-3.5 py-3.5 align-middle';
-/** One step of nesting: `tr.person-row.nested .name-cell{padding-left:46px}` against 20px (`:1677-1679`). */
-const INDENT = 26;
-
 export interface RosterProps {
   view: UnitDashboardView;
   period: UnitPeriod;
-  expanded: ReadonlySet<string>;
-  onToggle: (membershipId: string) => void;
-  readRatios: ReadRatios;
+  /** The address a row's ‹ comes back to: this page, with its period. */
+  from: string;
+  /** Which range to draw — the screen asks the width before the roster answers. */
+  size: 'phone' | 'tablet' | 'desktop';
+  /** *+ Tambah agent* and *Perbarui produksi*, on a tablet and a desktop: the screen's. */
+  actions?: ReactNode;
+  /** A row was followed: the screen keeps the scroll, so ‹ comes back to it (UI-011). */
+  onLeave?: () => void;
 }
 
-export function UnitRoster({
-  view, period, expanded, onToggle, readRatios, action, phone = false,
-}: RosterProps & {
-  /** *Update production* (`:3906`), when the reader may use it: the screen's, beside the title. */
-  action?: ReactNode;
-  /** The window is narrower than 768px: a card per person (P18.95-T3 AC-1). */
-  phone?: boolean;
-}) {
+export function UnitRoster({ view, period, from, size, actions, onLeave }: RosterProps) {
   const headingId = useId();
-  const t = useMessages(unitDashboardMessages);
-  // *Chasing MDRT*: the campaigns' words (`campaign-chasing.ts`), in the reader's language.
-  const chasing = useMessages(campaignChasingMessages);
-  const own = view.head.isReader;
-  const unitName = own ? t.prototype.yourUnitGroup : t.unitOf({ name: view.head.name });
-  const unitTotal = own ? t.prototype.yourUnitTotal : t.unitTotalOf({ name: view.head.name });
-  const rowProps = { period, expanded, onToggle, readRatios };
-
-  return (
-    <div className="mt-[22px] overflow-hidden rounded-lg border border-hairline bg-card">
-      {/* `.table-card-header` (`:1624-1626`): the title, and the button beside it. */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-hairline px-5 py-4">
-        <span className="flex items-center gap-1">
-          <h2 id={headingId} className="font-display text-[0.9375rem] font-bold text-navy">{t.prototype.roster}</h2>
-          {/* A card has no *Name* heading to carry the ✓'s ⓘ, so on a phone it is beside the roster's own (AC-4). */}
-          {phone && <TermTip term="POTENTIAL_MAA" />}
-        </span>
-        {action}
-      </div>
-      {phone ? (
-        <RosterCards view={view} unitName={unitName} unitTotal={unitTotal} {...rowProps} />
-      ) : (
-        /* `relative`, so a screen-reader label's `position: absolute` is clipped by this box rather than
-           widening the page (the `.table-scroll` of `:3908` scrolls inside its card, never the body). */
-        <div className="relative overflow-x-auto">
-          {/* The prototype's widths (`:1644-1649`), *Chasing MDRT* back among them (P18.5-T7 AC-7; parity D-18). */}
-          <table aria-labelledby={headingId} className="w-full min-w-[1080px] table-fixed border-collapse text-left">
-            <colgroup>
-              <col className="w-[17%]" />
-              <col className="w-[13%]" />
-              <col className="w-[11%]" />
-              <col className="w-[15%]" />
-              <col className="w-[13%]" />
-              <col className="w-[10%]" />
-              <col className="w-[12%]" />
-              <col className="w-[9%]" />
-            </colgroup>
-            <thead>
-              <tr className="border-b border-hairline">
-                <th scope="col" className={HEAD}>
-                  {/* What a row's ✓ means, once (P18.95-T9 AC-4; UI-028): it was every ✓'s own tooltip. */}
-                  <span className="inline-flex items-center gap-1">
-                    {t.columns.name}
-                    <TermTip term="POTENTIAL_MAA" className={STATUS_TIP} />
-                  </span>
-                </th>
-                <th scope="col" className={HEAD}>{t.columns.goal}</th>
-                <th scope="col" className={cn(HEAD, 'text-center')}>
-                  {/* `.c-mdrt-h` (`:3917-3922`): the words are the tooltip's trigger, as drawn, and the tooltip is the
-                      server's sentence about the MDRT campaign (OD-152) — the heading's description, not its name. */}
-                  <TippedGlyph
-                    glyph={chasing.chasingMdrt}
-                    name={chasing.chasingMdrt}
-                    tip={view.mdrt.tooltip}
-                    align="fit"
-                    className={MDRT_TIP}
-                    face="h-auto w-auto px-0.5 text-xs font-semibold uppercase tracking-wide text-muted hover:bg-transparent hover:text-navy"
-                  />
-                </th>
-                <th scope="col" className={HEAD}>{t.columns.leads}</th>
-                <th scope="col" className={HEAD}>
-                  {/* ADR-0165 §2: the figure is *goal activities*, and the tooltip names the three types it counts. */}
-                  <span className="inline-flex items-center gap-1">
-                    {t.columns.activity}
-                    <TippedGlyph
-                      glyph="ⓘ"
-                      name={t.own.activityInfo}
-                      tip={t.own.activityRule}
-                      align="fit"
-                      className={STATUS_TIP}
-                    />
-                  </span>
-                </th>
-                <th scope="col" className={HEAD}>{t.columns.last}</th>
-                <th scope="col" className={HEAD}>
-                  <span className="inline-flex items-center gap-1">
-                    {t.columns.status}
-                    <TippedGlyph
-                      glyph="ⓘ"
-                      name={t.prototype.statusInfo}
-                      tip={t.prototype.statusRules}
-                      align="fit"
-                      // The rules, as the prototype's 250px bubble lists them, opening **below** the heading:
-                      // above it, the table's own scroll box would cut it off.
-                      className={STATUS_TIP}
-                    />
-                  </span>
-                </th>
-                <th scope="col" className={cn(HEAD, 'text-center')}>
-                  {/* The *Remarks* heading, blank on screen (OD-139): the column holds each row's ⌄. */}
-                  <span className="sr-only">{t.own.details}</span>
-                </th>
-              </tr>
-            </thead>
-
-            {view.yourUnit.rows.length > 0 && (
-              <tbody>
-                <GroupDivider label={unitName} count={view.yourUnit.rows.length} />
-                <TotalRow label={unitTotal} total={view.yourUnit.total} rows={view.yourUnit.rows} level={0} period={period} />
-                {view.yourUnit.rows.map((row) => (
-                  <PersonRow key={row.membershipId} row={row} level={0} {...rowProps} />
-                ))}
-              </tbody>
-            )}
-
-            {view.units.length > 0 && (
-              <tbody>
-                <GroupDivider label={t.prototype.aabUnits} />
-              </tbody>
-            )}
-            {view.units.map((unit) => <UnitBodies key={unit.head.membershipId} unit={unit} level={1} {...rowProps} />)}
-          </table>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/**
- * **A row's ✓, the prototype's green tick beside the name** (`:7382`): a member pacing to Monthly Active Agent this
- * month. Named for a screen reader and **explained once**, by the *Name* heading's ⓘ (on a phone, the roster's), since
- * P18.95-T9 AC-4 (UI-028): each ✓ was a button whose tooltip said the whole sentence again.
- */
-function MaaMark() {
-  const t = useMessages(unitDashboardMessages).own;
-  return (
-    <span className="shrink-0 font-bold text-success">
-      <span aria-hidden="true">✓</span>
-      <span className="sr-only">{t.maaMark}</span>
-    </span>
-  );
-}
-
-/** *Personal*'s chip (`:7384`): the one tag style the roster has, which *New hire* wears too (UI-003). */
-const TAG = 'shrink-0 rounded-pill border border-hairline bg-base px-[7px] py-0.5 text-2xs font-bold uppercase tracking-wide text-muted';
-
-/**
- * **A new hire before their first sale** (P18.96-T5 AC-3; ADR-0172 §3): *Personal*'s chip, saying *New hire*, and for a
- * screen reader that there is no first sale yet — which is why the totals above leave the person out. The server
- * decides who (`newHireBeforeFirstSale`), and the tag goes on the first sale's day.
- */
-function NewHireTag() {
-  const t = useMessages(unitDashboardMessages);
-  return (
-    <span className={TAG}>
-      {t.prototype.newHire}
-      <span className="sr-only">{t.own.newHireMark}</span>
-    </span>
-  );
-}
-
-/**
- * **The figure beside *On pace to be active* when the total leaves new hires out** (P18.96-T5 AC-4): the count and its
- * `of` no longer cover every row below, so the total says who it left out, in the ⓘ the goal's figure already uses.
- */
-function OnPace({ total, rows }: { total: UnitTotal; rows: readonly UnitRow[] }) {
   const language = useLanguage();
-  const note = newHireWords(total.newHires, namesNewHires(rows, language), language);
+  const figures = useFigureLanguage();
+  const t = useMessages(unitDashboardMessages);
+  const [filter, setFilter] = useState<RosterFilter>('all');
+  const month = period === 'month';
+  const shownFilter: RosterFilter = month ? filter : 'all';
+  const tally = statusTally(everyRow(view));
+
+  const statusInfo = month ? (
+    <TippedGlyph glyph="ⓘ" name={t.prototype.statusInfo} tip={t.prototype.statusRules} align="fit" className={STATUS_TIP} />
+  ) : null;
+  const chips = month ? <StatusChips tally={tally} filter={filter} onFilter={setFilter} language={language} /> : null;
+
+  /** A row's link followed (a click on an `<a>` inside the roster): tell the screen, which keeps the scroll. */
+  const leaving = (e: MouseEvent<HTMLElement>) => {
+    if ((e.target as HTMLElement).closest('a[href]')) onLeave?.();
+  };
+
   return (
-    <span className="flex items-start gap-1">
-      <span className="text-sm font-semibold text-amber-ink">{onPaceWords(total.potentialActive, language)}</span>
-      {note && <TippedGlyph glyph="ⓘ" name={note} tip={note} align="fit" className="-my-1" />}
-    </span>
+    <section aria-labelledby={headingId} data-roster={size} onClickCapture={leaving} className="mt-3 overflow-clip rounded-lg bg-card lg:mt-4">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-2 px-3 pb-2 pt-3 md:px-4">
+        <h2 id={headingId} className="font-body text-lg font-semibold text-ink">{t.prototype.roster}</h2>
+        {size === 'phone' && statusInfo}
+        {view.lastUpload && (
+          <span data-last-updated="" className="inline-flex items-center gap-1 text-sm text-signal-grey max-md:ml-auto">
+            <LineIcon name="refresh" className="h-3.5 w-3.5" />
+            {t.v1.lastUpdated({ day: shortDayWithYear(view.lastUpload, figures) })}
+          </span>
+        )}
+        {size !== 'phone' && (
+          <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+            {chips}
+            {actions}
+          </div>
+        )}
+      </div>
+      {size === 'phone' && chips && <div className="px-3 pb-2.5">{chips}</div>}
+
+      {size === 'phone'
+        ? <RosterAccordion view={view} period={period} filter={shownFilter} from={from} />
+        : <RosterTable view={view} period={period} filter={shownFilter} from={from} wide={size === 'desktop'} headingId={headingId} statusInfo={statusInfo} />}
+    </section>
   );
 }
 
-/** A total's goal mark: who holds no figure, and who has no first sale yet (ADR-0165 §1, ADR-0172 §2). */
-const goalNote = (total: UnitTotal, rows: readonly UnitRow[], language: Language) => totalNote(
-  missingWords(total.goal.missing, namesMissing(rows, language), language),
-  newHireWords(total.newHires, namesNewHires(rows, language), language),
-);
+/** *Last updated 28 Okt 26* (UI-028): the day and month as the product writes them, and the year's two digits. */
+export const shortDayWithYear = (day: string, figures: Parameters<typeof formatShortDay>[2]) =>
+  `${formatShortDay(day, {}, figures)} ${day.slice(2, 4)}`;
 
-/** `table.roster-table thead th` (`:1650`): small grey capitals. */
-const HEAD = 'bg-card px-3.5 py-[13px] text-xs font-semibold uppercase tracking-wide text-muted';
-
-/** *Chasing MDRT*'s bubble, below its glyph for the same reason, in sentence case. */
-const MDRT_TIP = cn(
-  'normal-case tracking-normal',
-  '[&>[role=tooltip]]:bottom-auto [&>[role=tooltip]]:top-full [&>[role=tooltip]]:mb-0 [&>[role=tooltip]]:mt-1',
-  '[&>[role=tooltip]]:w-[240px] [&>[role=tooltip]]:font-normal [&>[role=tooltip]]:leading-relaxed',
-);
-
-/** The status rules' bubble: the prototype's width, its lines kept, below its glyph. */
+/** The status rules' bubble, its lines kept, below its glyph. */
 const STATUS_TIP = cn(
   'normal-case tracking-normal',
   '[&>[role=tooltip]]:bottom-auto [&>[role=tooltip]]:top-full [&>[role=tooltip]]:mb-0 [&>[role=tooltip]]:mt-1',
@@ -260,645 +109,502 @@ const STATUS_TIP = cn(
   '[&>[role=tooltip]]:leading-relaxed',
 );
 
-function GroupDivider({ label, count }: { label: string; count?: number }) {
-  return (
-    <tr>
-      {/* `tr.group-divider td` (`:1658-1659`): a full-width band naming the group beneath it. */}
-      <th
-        scope="rowgroup"
-        colSpan={8}
-        className="border-y border-hairline bg-navy/[0.045] px-5 py-2.5 text-left font-display text-base font-bold text-navy"
-      >
-        {label}
-        {count !== undefined && (
-          <>
-            {' '}
-            <span className="ml-1.5 font-body font-semibold text-muted">· {count}</span>
-          </>
-        )}
-      </th>
-    </tr>
-  );
-}
-
-/** A unit and every unit nested in it, each its own row group: the total, the head, the team. */
-function UnitBodies({ unit, level, ...rowProps }: { unit: UnitGroup; level: number } & Omit<RosterProps, 'view'>) {
-  const t = useMessages(unitDashboardMessages);
-  return (
-    <>
-      <tbody>
-        <TotalRow
-          label={t.unitTotalOf({ name: unit.head.name })}
-          total={unit.total}
-          rows={rowsOf(unit)}
-          level={level - 1}
-          period={rowProps.period}
-          names
-        />
-        <PersonRow row={unit.head} level={level} {...rowProps} />
-        {unit.members.map((member) => <PersonRow key={member.membershipId} row={member} level={level} {...rowProps} />)}
-      </tbody>
-      {unit.units.map((inner) => <UnitBodies key={inner.head.membershipId} unit={inner} level={level + 1} {...rowProps} />)}
-    </>
-  );
-}
-
-/** The goal line's colour: green only over target, a muted red short (`:1692-1694`), muted with no figure. */
-const GOAL_TONE: Record<GoalWords['tone'], string> = {
-  over: 'text-success',
-  short: 'text-alert',
-  none: 'text-muted',
-  missing: 'text-muted',
+/** `GOAL_PACE_STATUS` as the shared pill's tone (UI-005): red, amber, green, grey — never a dot. */
+export const STATUS_TONE: Record<RosterStatus, PillTone> = {
+  needs_attention: 'red',
+  watch_closely: 'amber',
+  on_track: 'green',
+  no_goal_set: 'grey',
 };
 
-/** A name cell's indent, with `↳` in the step before it (`:1678-1679`). */
-function Indented({ steps, children }: { steps: number; children: ReactNode }) {
-  return (
-    <div className="relative flex min-w-0 items-center gap-2" style={steps ? { paddingLeft: steps * INDENT } : undefined}>
-      {steps > 0 && (
-        <span aria-hidden="true" className="absolute text-md font-bold leading-none text-hairline" style={{ left: (steps - 1) * INDENT + 6 }}>
-          ↳
-        </span>
+/** The pill a row carries on *Bulan ini*. */
+function StatusPill({ status }: { status: RosterStatus }) {
+  const language = useLanguage();
+  return <TonePill tone={STATUS_TONE[status]}>{rosterStatusLabel(status, language)}</TonePill>;
+}
+
+/**
+ * *Semua 12 · Perlu perhatian 5 · Perlu dipantau 3* (UI-002): toggle buttons, one pressed; *Semua* navy, each status on
+ * its own tint, its count beside its words. A status nobody holds has no chip.
+ */
+function StatusChips({
+  tally, filter, onFilter, language,
+}: { tally: Record<RosterFilter, number>; filter: RosterFilter; onFilter: (f: RosterFilter) => void; language: Parameters<typeof rosterStatusLabel>[1] }) {
+  const t = useMessages(unitDashboardMessages).v1;
+  const chip = (id: RosterFilter, label: string, tint: string) => (
+    <button
+      key={id}
+      type="button"
+      aria-pressed={filter === id}
+      onClick={() => onFilter(id)}
+      className={cn(
+        'inline-flex min-h-11 items-center whitespace-nowrap rounded-pill px-3 text-sm font-semibold lg:min-h-8',
+        tint,
+        filter === id && 'outline outline-2 outline-offset-1 outline-navy',
       )}
-      {children}
+    >
+      {label}
+    </button>
+  );
+  return (
+    <div role="group" aria-label={t.filterLabel} className="flex flex-wrap gap-1.5">
+      {chip('all', t.all({ n: tally.all }), filter === 'all' ? 'bg-navy text-white' : 'border border-line bg-card text-ink')}
+      {tally.needs_attention > 0 && chip(
+        'needs_attention', t.withCount({ status: rosterStatusLabel('needs_attention', language), n: tally.needs_attention }),
+        'bg-pill-red text-pill-red-ink',
+      )}
+      {tally.watch_closely > 0 && chip(
+        'watch_closely', t.withCount({ status: rosterStatusLabel('watch_closely', language), n: tally.watch_closely }),
+        'bg-pill-amber text-pill-amber-ink',
+      )}
     </div>
   );
 }
 
 /**
- * A unit's total (`:7426-7476`): its goal, leads and touches summed by the server's rollup rule, *—* for
- * *Last 1:1*, and *"{n}/{m} potential active"*. **A total of nobody's figures reads *Not uploaded yet***,
- * and one missing some names them in a mark (D-figures).
+ * **A goal's line** (UI-002, UI-005): the 44px mini bar, the percentage — red under 100%, green from it, judged on the
+ * server's unrounded figure — and *Rp 29 jt / 94,7 jt* in grey. No goal: *Goal belum diatur*; no upload: a dashed empty
+ * bar and *Belum diunggah*; a year made before the month: *Target tahun ini tercapai*. **No figure is shown as 0.**
  */
-function TotalRow({
-  label, total, rows, level, period, names = false,
-}: {
-  label: string;
-  total: UnitTotal;
-  rows: readonly UnitRow[];
-  level: number;
-  period: UnitPeriod;
-  /** A unit's total names its group for a screen reader, as the divider does *Your Unit*'s. */
-  names?: boolean;
+function GoalLine({ goal, pair = true }: {
+  goal: { set?: boolean; targetMinor: number | null; actualMinor: number | null; attainmentPct: number | null };
+  /** The *Rp x / y* beside it. */
+  pair?: boolean;
 }) {
-  const language = useLanguage();
   const figures = useFigureLanguage();
-  const goal = goalWords(total.goal, language, figures);
-  const missing = goalNote(total, rows, language);
+  const t = useMessages(unitDashboardMessages);
+  const { targetMinor: target, actualMinor: actual } = goal;
+  if (goal.set === false || target === null) return <span className="text-signal-grey">{t.own.noGoal}</span>;
+  if (target === 0) return <span className="font-semibold text-signal-green">{t.own.targetMade}</span>;
+  if (actual === null) {
+    return (
+      <span className="inline-flex min-w-0 items-center gap-1.5">
+        <span aria-hidden="true" data-goal-bar="none" className="h-[5px] w-11 shrink-0 rounded-sm border border-dashed border-line" />
+        <span className="text-signal-grey">{t.own.notUploaded}</span>
+      </span>
+    );
+  }
+  const pct = goal.attainmentPct ?? 0;
+  const met = goalMet(pct);
+  const bar = goalShare({ ...goal, set: true }) ?? 0;
   return (
-    <tr className="border-b border-hairline bg-navy/[0.045]">
-      <th
-        scope={names ? 'rowgroup' : 'row'}
-        className={cn(CELL, 'py-2 pl-5 text-left font-normal shadow-[inset_3px_0_0_var(--color-navy)]')}
-      >
-        <Indented steps={Math.max(0, level)}>
-          <strong className="text-base font-bold text-navy">{label}</strong>
-        </Indented>
-      </th>
-      <td className={cn(CELL, 'py-2')}>
-        <div className="flex items-start gap-1">
-          <GoalText goal={goal} period={period} />
-          {missing && <TippedGlyph glyph="ⓘ" name={missing} tip={missing} align="fit" className="-my-1" />}
-        </div>
-      </td>
-      {/* A total chases nothing (`:7458`). */}
-      <td className={cn(CELL, 'py-2 text-center')}><span className="text-sm text-muted">—</span></td>
-      <td className={cn(CELL, 'py-2')}>
-        <LeadsText counts={total.leadsCounts} recruit={totalRecruitLine(total.leadsCounts, language)} />
-      </td>
-      <td className={cn(CELL, 'py-2 pl-1.5')}><Touches touches={touchesWords(total.touches, period, language)} /></td>
-      <td className={cn(CELL, 'py-2')}><span className="text-sm text-muted">—</span></td>
-      <td className={cn(CELL, 'py-2')}>
-        <OnPace total={total} rows={rows} />
-      </td>
-      <td className={cn(CELL, 'py-2')} />
-    </tr>
+    <span className="inline-flex min-w-0 items-center gap-1.5">
+      <span aria-hidden="true" data-goal-bar={bar} className="h-[5px] w-11 shrink-0 overflow-hidden rounded-sm bg-base">
+        <span className={cn('block h-full', met ? 'bg-signal-green' : 'bg-signal-red')} style={{ width: `${bar}%` }} />
+      </span>
+      <span className={cn('font-semibold', met ? 'text-signal-green' : 'text-signal-red')}>{formatPercent(pct, {}, figures)}</span>
+      {pair && (
+        <span className="min-w-0 truncate text-signal-grey">{formatRupiahCompactPair(actual, target, '/', figures)}</span>
+      )}
+    </span>
   );
 }
 
-function GoalText({ goal, period }: { goal: GoalWords; period: UnitPeriod }) {
+/** A row's ✓ (`PACING_TO_MAA`), named for a screen reader. */
+function MaaMark() {
   const t = useMessages(unitDashboardMessages).own;
   return (
-    <span className="block min-w-0">
-      <span className={cn('block text-base font-bold', GOAL_TONE[goal.tone])}>{goal.line}</span>
-      {goal.sub && (
-        <span className="mt-0.5 block text-xs text-muted">
-          {goal.sub}
-          {/* Under *Last 7 days* the figures are this month's, and the line says so (D-period). */}
-          {period === '7d' && ` · ${t.thisMonth}`}
-        </span>
-      )}
+    <span className="shrink-0 font-bold text-signal-green">
+      <span aria-hidden="true">✓</span>
+      <span className="sr-only">{t.maaMark}</span>
     </span>
   );
 }
 
-function LeadsText({ counts, recruit }: { counts: LeadsCounts; recruit: { count: number; rest: string } | null }) {
-  const language = useLanguage();
-  const t = useMessages(unitDashboardMessages).leads;
-  const sales = salesLine(counts, language);
+/** *New hire* before a first sale (ADR-0172 §3): a grey pill, and for a screen reader why the totals leave them out. */
+function NewHireTag() {
+  const t = useMessages(unitDashboardMessages);
   return (
-    <span className="block text-sm leading-[1.7]">
-      <span className="block whitespace-nowrap">
-        <span className="text-muted">{t.sales}</span> <strong className="font-bold text-navy">{sales.count}</strong>{' '}
-        <span className="text-navy">{sales.rest}</span>
-      </span>
-      <span className="block whitespace-nowrap">
-        <span className="text-muted">{t.recruit}</span>{' '}
-        {recruit ? (
-          <>
-            <strong className="font-bold text-navy">{recruit.count}</strong> <span className="text-navy">{recruit.rest}</span>
-          </>
-        ) : (
-          <span className="text-muted">—</span>
-        )}
-      </span>
+    <TonePill tone="grey">
+      {t.prototype.newHire}
+      <span className="sr-only">{t.own.newHireMark}</span>
+    </TonePill>
+  );
+}
+
+/** The marks beside a name: the ✓ and *New hire*. `null` with neither. */
+function marksOf(row: UnitRow): ReactNode {
+  if (!row.pacingToMaa && !row.newHireBeforeFirstSale) return null;
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      {row.pacingToMaa && <MaaMark />}
+      {row.newHireBeforeFirstSale && <NewHireTag />}
     </span>
   );
 }
 
-function Touches({ touches }: { touches: { logged: number; rest: string; pct: number | null } }) {
+/** One unit of the roster, as both drawings walk it: its name, its people, its total, the units inside it. */
+interface Section {
+  key: string;
+  label: string;
+  /** Everybody its total covers: its own rows and every unit inside it. */
+  count: number;
+  rows: UnitRow[];
+  total: UnitTotal;
+  inner: Section[];
+}
+
+function sectionsOf(view: UnitDashboardView, own: string, unitOf: (name: string) => string): Section[] {
+  const unit = (group: UnitGroup): Section => ({
+    key: group.head.membershipId,
+    label: unitOf(group.head.name),
+    count: rowsOf(group).length,
+    rows: [group.head, ...group.members],
+    total: group.total,
+    inner: group.units.map(unit),
+  });
+  const first: Section[] = view.yourUnit.rows.length > 0
+    ? [{ key: 'own', label: own, count: view.yourUnit.rows.length, rows: view.yourUnit.rows, total: view.yourUnit.total, inner: [] }]
+    : [];
+  return [...first, ...view.units.map(unit)];
+}
+
+/** A section with somebody the filter keeps, in it or in a unit inside it. */
+const holds = (section: Section, filter: RosterFilter): boolean =>
+  section.rows.some((r) => matchesFilter(r, filter)) || section.inner.some((s) => holds(s, filter));
+
+/*
+ * ── Below 768px: the accordion (UI-002) ─────────────────────────────────────────────────────────
+ */
+
+function RosterAccordion({ view, period, filter, from }: { view: UnitDashboardView; period: UnitPeriod; filter: RosterFilter; from: string }) {
+  const t = useMessages(unitDashboardMessages);
+  const own = view.head.isReader ? t.prototype.yourUnitGroup : t.unitOf({ name: view.head.name });
+  const sections = sectionsOf(view, own, (name) => t.unitOf({ name }));
+  // Your own unit open, every AAB unit closed (UI-002); a filter opens every unit that holds a match.
+  const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set(sections[0] ? [sections[0].key] : []));
+  const toggle = (key: string) => setOpen((now) => {
+    const next = new Set(now);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    return next;
+  });
   return (
-    <div className="min-w-0">
-      <p className="mb-1 whitespace-nowrap text-base text-navy">
-        <strong className="font-bold">{touches.logged}</strong>{' '}
-        <span className="font-medium text-muted">{touches.rest}</span>
-      </p>
-      {touches.pct !== null && (
-        // The figures carry it; the bar is their picture (`.mini-progress`, `:1711-1712`).
-        <div aria-hidden="true" className="h-1.5 overflow-hidden rounded-[4px] bg-navy/[0.08]">
-          <div className="h-full rounded-[4px] bg-navy-soft" style={{ width: `${touches.pct}%` }} />
-        </div>
-      )}
+    <div data-roster-accordion="">
+      {sections.filter((s) => holds(s, filter)).map((s) => (
+        <AccordionSection key={s.key} section={s} depth={0} open={open} onToggle={toggle} period={period} filter={filter} from={from} />
+      ))}
     </div>
   );
 }
 
-/** `GOAL_PACE_STATUS` in the pill's tones (`:1721-1728`): *Watch closely* amber with navy words (I-116). */
-const PILL_TONE: Record<RosterStatus, string> = {
-  on_track: 'bg-success/10 text-success hover:bg-success/15 hover:text-success',
-  watch_closely: 'bg-amber/15 text-navy hover:bg-amber/20 hover:text-navy',
-  needs_attention: 'bg-alert/10 text-alert hover:bg-alert/15 hover:text-alert',
-  no_goal_set: 'bg-muted/10 text-muted hover:bg-muted/15 hover:text-muted',
-};
-
-/**
- * Where a row's three drills go (D-drill): the reader's own screens, or that person's coaching tabs —
- * or nowhere, for somebody the reader does not coach (an Owner's or an Admin's view of a unit outside
- * their own downline), whose tabs would only say so.
- */
-function drillsOf(row: UnitRow) {
-  if (row.isReader) return { name: '/summary', goal: '/goals', leads: '/leads' };
-  if (!row.coached) return null;
-  return {
-    name: coachingTabHref(row.membershipId, 'summary'),
-    goal: coachingTabHref(row.membershipId, 'goal-setting'),
-    // The person's *Coaching Session* tab, where their Leads card is. Opening it starts nothing: the tab
-    // reads the history and offers *Start*, and a session begins only when that is pressed.
-    leads: coachingTabHref(row.membershipId, 'session'),
-  };
-}
-
-/** A drill's hover (`.goal-click`, `.leads-click`, `:1696-1697`). */
-const DRILL = 'block rounded-md px-1 py-0.5 -mx-1 -my-0.5 text-navy transition-colors hover:bg-navy-soft/[0.06]';
-
-/** A cell's figures as a drill, or as plain text where the row has nowhere to go. */
-function Drill({ href, children }: { href: string | undefined; children: ReactNode }) {
-  return href
-    ? <Link href={href} className={DRILL}>{children}</Link>
-    : <div className="px-1 py-0.5 -mx-1 -my-0.5 text-navy">{children}</div>;
-}
-
-/**
- * *Chasing MDRT*'s cell (`:7393-7398`): ✓ in MDRT's gold, darkened to 4.03:1 (`gold-ink`, where the
- * prototype's `#C9A227` is 2.42:1, row 44), or —, each with the prototype's tooltip — the reader's own row
- * named by first name, as the prototype strips *You (…)*. Beyond the reader's reach, a plain — that claims
- * nothing.
- */
-function MdrtCell({ row }: { row: UnitRow }) {
-  // *Chasing MDRT*'s words are the campaigns' (`campaign-chasing.ts`), in the reader's language.
-  const chasing = useMessages(campaignChasingMessages);
-  if (row.chasingMdrt === null) return <span className="text-sm text-muted">—</span>;
-  const words = row.chasingMdrt
-    ? chasing.mdrtChasing({ name: row.isReader ? firstName(row.name) : row.name })
-    : chasing.mdrtNot;
-  return (
-    <TippedGlyph
-      glyph={row.chasingMdrt ? '✓' : '—'}
-      name={words}
-      tip={words}
-      align="fit"
-      className="-my-1.5"
-      face={row.chasingMdrt ? 'text-md font-bold text-gold-ink hover:text-gold-ink' : 'text-muted'}
-    />
-  );
-}
-
-function PersonRow({
-  row, level, period, expanded, onToggle, readRatios,
-}: { row: UnitRow; level: number } & Omit<RosterProps, 'view'>) {
+function AccordionSection({
+  section, depth, open, onToggle, period, filter, from,
+}: {
+  section: Section; depth: number; open: ReadonlySet<string>; onToggle: (key: string) => void;
+  period: UnitPeriod; filter: RosterFilter; from: string;
+}) {
+  const t = useMessages(unitDashboardMessages);
   const language = useLanguage();
   const figures = useFigureLanguage();
-  const t = useMessages(unitDashboardMessages);
-  const detailId = useId();
-  const open = expanded.has(row.membershipId);
-  const name = rowName(row, language);
-  const drills = drillsOf(row);
-  const goal = goalWords(row.goal, language, figures);
-  const marker = provenanceWords(row.goal.source, row.goal.period, row.isReader, language, figures);
-  const last = row.lastOneOnOne;
-  const overdue = lastOneOnOneOverdue(last);
-  // A unit's head on their own row, apart from the unit's total above it (`:7384`). The reader's own row
-  // is starred instead, as the prototype's *You* is.
-  const personal = row.leads && !row.isReader;
-
-  /** The row's own click is a convenience the ⌄ repeats; a click on a drill or a control is that control's. */
-  const toggleFromRow = (e: MouseEvent<HTMLTableRowElement>) => {
-    if ((e.target as HTMLElement).closest('a, button')) return;
-    onToggle(row.membershipId);
-  };
-
+  const bodyId = useId();
+  const expanded = filter !== 'all' || open.has(section.key);
+  const goal = section.total.goal;
+  const bar = goalShare(goal);
   return (
-    <>
-      <tr
-        onClick={toggleFromRow}
-        className={cn(
-          'cursor-pointer border-b border-hairline',
-          'hover:[background-image:linear-gradient(var(--row-hover),var(--row-hover))]',
-          row.isReader && 'bg-amber/5',
-        )}
-      >
-        <th
-          scope="row"
+    <div data-unit-section={section.key} style={depth ? { paddingLeft: depth * 12 } : undefined}>
+      <h3>
+        <button
+          type="button"
+          aria-expanded={expanded}
+          aria-controls={bodyId}
+          onClick={() => onToggle(section.key)}
           className={cn(
-            CELL,
-            'pl-5 text-left font-normal',
-            level > 0 && 'shadow-[inset_3px_0_0_color-mix(in_srgb,var(--color-navy-soft)_22%,transparent)]',
+            'flex min-h-12 w-full items-center gap-2 border-t border-divider px-3 text-left text-md font-semibold text-ink',
+            expanded && 'bg-amber/[0.06]',
           )}
         >
-          <Indented steps={level}>
-            <span aria-hidden="true" className={cn('w-2.5 shrink-0 text-[0.5625rem] text-muted transition-transform', open && 'rotate-90')}>
-              ▶
+          <LineIcon name={expanded ? 'chevronDown' : 'chevronRight'} className="h-4 w-4 shrink-0 text-signal-grey" />
+          <span className="min-w-0 flex-1 truncate">{t.v1.unitCount({ label: section.label, n: section.count })}</span>
+          {bar !== null && (
+            <span aria-hidden="true" className="h-1.5 w-[60px] shrink-0 overflow-hidden rounded-sm bg-base">
+              <span className="block h-full bg-navy" style={{ width: `${bar}%` }} />
             </span>
-            {row.isReader && <span aria-hidden="true" className="shrink-0 text-base text-amber-dark">★</span>}
-            {drills ? (
-              <Link
-                href={drills.name}
-                className="min-w-[5.5rem] truncate text-[0.84375rem] font-semibold text-navy hover:text-navy-soft hover:underline"
-              >
-                {name}
-              </Link>
-            ) : (
-              <span className="min-w-[5.5rem] truncate text-[0.84375rem] font-semibold text-navy">{name}</span>
-            )}
-            {row.pacingToMaa && <MaaMark />}
-            {personal && <span className={TAG}>{t.prototype.personal}</span>}
-            {row.newHireBeforeFirstSale && <NewHireTag />}
-          </Indented>
-        </th>
-        <td className={CELL}>
-          <div className="flex items-start gap-1">
-            <Drill href={drills?.goal}>
-              <GoalText goal={goal} period={period} />
-            </Drill>
-            {marker && <TippedGlyph glyph="ⓘ" name={marker} tip={marker} align="fit" className="-my-1" />}
-          </div>
-        </td>
-        <td className={cn(CELL, 'text-center')}><MdrtCell row={row} /></td>
-        <td className={CELL}>
-          <Drill href={drills?.leads}>
-            <LeadsText counts={row.leadsCounts} recruit={recruitLine(row.leadsCounts, language)} />
-          </Drill>
-        </td>
-        <td className={cn(CELL, 'pl-1.5')}><Touches touches={touchesWords(row.activity.touches, period, language)} /></td>
-        <td className={CELL}>
-          {row.isReader ? (
-            <span className="text-sm text-muted">—</span>
-          ) : (
-            <>
-              <span className={cn('text-sm font-semibold', overdue ? 'text-alert' : 'text-success')}>
-                {/* *Overdue* in words, not by colour alone (P18.8-T15 AC-7). */}
-                {last === null ? t.prototype.noOneOnOne : lastOneOnOneLine(last, language)}
-              </span>
-              {last?.coach && <span className="mt-0.5 block text-xs text-muted">{t.by({ name: last.coach.name })}</span>}
-            </>
           )}
-        </td>
-        <td className={CELL}>
-          <TippedGlyph
-            glyph={rosterStatusLabel(row.status, language)}
-            name={rosterStatusLabel(row.status, language)}
-            tip={t.statusTooltip[row.status]}
-            align="fit"
-            face={cn('h-auto w-[126px] rounded-pill px-2.5 py-1 text-xs font-semibold leading-normal', PILL_TONE[row.status])}
-          />
-        </td>
-        <td className={cn(CELL, 'text-center')}>
-          {/*
-            * `.edit-btn` (`:1734-1735`) as a button: open or closed, named for its person (OD-139). On a
-            * phone a 44px square centred on it takes the tap while the outlined 28px box stays as drawn
-            * (ADR-0167; UI-029). Alone in its cell, so the square reaches over no other control.
-            */}
-          <button
-            type="button"
-            aria-expanded={open}
-            aria-controls={open ? detailId : undefined}
-            aria-label={t.viewDetails({ name: row.isReader ? null : row.name })}
-            onClick={() => onToggle(row.membershipId)}
-            className={cn(
-              'mx-auto flex h-7 w-7 items-center justify-center rounded-[6px] border border-hairline bg-transparent text-sm text-muted hover:bg-navy/[0.05] hover:text-navy',
-              'max-md:relative',
-              TAP_AREA,
-            )}
-          >
-            <span aria-hidden="true" className={cn('leading-none transition-transform', open && 'rotate-180')}>⌄</span>
-          </button>
-        </td>
-      </tr>
-      {open && <UnitDetail id={detailId} row={row} period={period} readRatios={readRatios} />}
-    </>
-  );
-}
-
-/** A card's *Activity* label, with the heading's ⓘ: what counts as a goal activity (ADR-0165 §2). */
-function ActivityHeading() {
-  const t = useMessages(unitDashboardMessages);
-  return (
-    <span className="inline-flex items-center gap-1">
-      {t.columns.activity}
-      <TippedGlyph glyph="ⓘ" name={t.own.activityInfo} tip={t.own.activityRule} align="fit" className={STATUS_TIP} />
-    </span>
-  );
-}
-
-/** A card's *Chasing MDRT* label, its words the trigger of the server's sentence about the campaign (OD-152). */
-function MdrtHeading({ tip }: { tip: string }) {
-  const chasing = useMessages(campaignChasingMessages);
-  return (
-    <TippedGlyph
-      glyph={chasing.chasingMdrt}
-      name={chasing.chasingMdrt}
-      tip={tip}
-      align="fit"
-      className={MDRT_TIP}
-      face="h-auto w-auto px-0 text-xs font-semibold uppercase tracking-wide text-muted hover:bg-transparent hover:text-navy"
-    />
+          <span className="shrink-0 tabular-nums">
+            {goal.attainmentPct !== null && goal.actualMinor !== null && goal.targetMinor
+              ? formatPercent(goal.attainmentPct, {}, figures)
+              : '–'}
+          </span>
+        </button>
+      </h3>
+      {expanded && (
+        <div id={bodyId}>
+          <ul role="list">
+            {section.rows.filter((r) => matchesFilter(r, filter)).map((row) => (
+              <li key={row.membershipId} className="border-t border-divider">
+                <PersonRow
+                  name={rowName(row, language)}
+                  photoUrl={row.photoUrl ?? null}
+                  seed={row.membershipId}
+                  href={rowHref(row, from) ?? undefined}
+                  height={60}
+                  nameClassName="text-md md:max-lg:text-md"
+                  badge={marksOf(row)}
+                  meta={<GoalLine goal={row.goal} />}
+                  trailing={period === 'month' ? <StatusPill status={row.status} /> : undefined}
+                  className="rounded-none"
+                />
+              </li>
+            ))}
+          </ul>
+          {section.inner.filter((s) => holds(s, filter)).map((inner) => (
+            <AccordionSection key={inner.key} section={inner} depth={depth + 1} open={open} onToggle={onToggle} period={period} filter={filter} from={from} />
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
 /*
- * ── On a phone: a card per person (P18.95-T3 AC-1) ──────────────────────────────────────────────
- *
- * `CardGroup` and `CardField` are the shared card pieces (`components/ui/row-cards.tsx`) since P18.97-T7 AC-1, which
- * the Owner's wide tables draw their cards with too; moving them changed no markup here.
+ * ── From 768px: the table (UI-009) ──────────────────────────────────────────────────────────────
  */
 
-/** One step of nesting on a phone: half the table's, so a unit two deep still leaves its card the screen. */
-const PHONE_INDENT = 12;
-/** A card's 16px gutter, and each step of nesting added to its left. */
-const cardIndent = (steps: number) => (steps > 0 ? { paddingLeft: 16 + steps * PHONE_INDENT } : undefined);
-
-/** The goal bar's fill, in the goal line's own tone: green over target, the muted red short. */
-const BAR_TONE: Record<'over' | 'short', string> = { over: 'bg-success', short: 'bg-alert' };
-
-/** What every card is drawn with: the row's props, and *Chasing MDRT*'s heading tooltip, which a card carries. */
-type CardProps = Omit<RosterProps, 'view'> & { mdrtTip: string };
-
-/**
- * **The roster on a phone** (P18.95-T3 AC-1; the client's UI review, UI-010: only *Name* and *Goal progress* fitted,
- * *Status*, *Last 1:1* and the ⌄ some 760px to the right, the names scrolling away). The table's groups and totals,
- * in its order: *Your Unit · {n}* over its total and its people, then *AAB units*, each unit's total, its head and
- * their team, a unit inside a unit beneath it one step further in. Each group heading is a heading, each unit a list
- * named for it, each person a card.
- */
-function RosterCards({
-  view, unitName, unitTotal, ...rowProps
-}: Omit<RosterProps, 'view'> & { view: UnitDashboardView; unitName: string; unitTotal: string }) {
-  const aabUnits = useMessages(unitDashboardMessages).prototype.aabUnits;
-  const cardProps: CardProps = { ...rowProps, mdrtTip: view.mdrt.tooltip };
-  return (
-    <div>
-      {view.yourUnit.rows.length > 0 && (
-        <CardGroup label={unitName} count={view.yourUnit.rows.length}>
-          <ul role="list" aria-label={unitName}>
-            <TotalCard label={unitTotal} total={view.yourUnit.total} rows={view.yourUnit.rows} level={0} period={rowProps.period} />
-            {view.yourUnit.rows.map((row) => <PersonCard key={row.membershipId} row={row} level={0} {...cardProps} />)}
-          </ul>
-        </CardGroup>
-      )}
-      {view.units.length > 0 && (
-        <CardGroup label={aabUnits}>
-          {view.units.map((unit) => <UnitCards key={unit.head.membershipId} unit={unit} level={1} {...cardProps} />)}
-        </CardGroup>
-      )}
-    </div>
-  );
-}
-
-/** A unit and every unit nested in it, each its own list: the total, the head, the team (`UnitBodies`). */
-function UnitCards({ unit, level, ...rowProps }: { unit: UnitGroup; level: number } & CardProps) {
-  const t = useMessages(unitDashboardMessages);
-  return (
-    <>
-      <ul role="list" aria-label={t.unitOf({ name: unit.head.name })}>
-        <TotalCard
-          label={t.unitTotalOf({ name: unit.head.name })}
-          total={unit.total}
-          rows={rowsOf(unit)}
-          level={level - 1}
-          period={rowProps.period}
-        />
-        <PersonCard row={unit.head} level={level} {...rowProps} />
-        {unit.members.map((member) => <PersonCard key={member.membershipId} row={member} level={level} {...rowProps} />)}
-      </ul>
-      {unit.units.map((inner) => <UnitCards key={inner.head.membershipId} unit={inner} level={level + 1} {...rowProps} />)}
-    </>
-  );
-}
-
-/** The goal's figures, as the table's cell writes them, and on a card the bar under them. */
-function GoalWithBar({ goal, bar, period }: { goal: GoalWords; bar: number | null; period: UnitPeriod }) {
-  return (
-    <>
-      <GoalText goal={goal} period={period} />
-      {bar !== null && (goal.tone === 'over' || goal.tone === 'short') && (
-        // The figures carry it; the bar is their picture, as the activity's is (`.mini-progress`).
-        <span aria-hidden="true" data-goal-bar={bar} className="mt-1.5 block h-1.5 overflow-hidden rounded-[4px] bg-navy/[0.08]">
-          <span className={cn('block h-full rounded-[4px]', BAR_TONE[goal.tone])} style={{ width: `${bar}%` }} />
-        </span>
-      )}
-    </>
-  );
-}
-
-/**
- * A unit's total as a card (`TotalRow`): its name, its goal, leads and goal activities, and *"{n}/{m} potential
- * active"* — what the table's total row says, each under its column's name. *—* for *Last 1:1* and *Chasing MDRT*
- * is a line with nothing in it, and is not drawn.
- */
-function TotalCard({
-  label, total, rows, level, period,
-}: { label: string; total: UnitTotal; rows: readonly UnitRow[]; level: number; period: UnitPeriod }) {
-  const language = useLanguage();
+/** A count: right-aligned, a light *·* for zero (a screen reader hears 0), a tone when it is above zero. */
+function Count({ n, tone }: { n: number; tone?: string }) {
   const figures = useFigureLanguage();
-  const { columns } = useMessages(unitDashboardMessages);
-  const goal = goalWords(total.goal, language, figures);
-  const missing = goalNote(total, rows, language);
+  if (n === 0) {
+    return (
+      <>
+        <span aria-hidden="true" className="text-line">·</span>
+        <span className="sr-only">{formatNumber(0, {}, figures)}</span>
+      </>
+    );
+  }
+  return <span className={tone}>{formatNumber(n, {}, figures)}</span>;
+}
+
+/** *162 / 51* — the goal activities against their target, or the count alone without one. */
+function Touches({ touches }: { touches: { logged: number; target: number | null } }) {
+  const figures = useFigureLanguage();
+  const n = (v: number) => formatNumber(v, {}, figures);
   return (
-    <li
-      className="border-b border-hairline bg-navy/[0.045] px-4 py-3 shadow-[inset_3px_0_0_var(--color-navy)]"
-      style={cardIndent(Math.max(0, level))}
-    >
-      <p className="break-words text-base font-bold text-navy">{label}</p>
-      <dl className="mt-2 flex flex-col gap-2.5">
-        <CardField label={columns.goal}>
-          <div className="flex items-start gap-1">
-            <span className="block min-w-0 flex-1">
-              <GoalWithBar goal={goal} bar={goalBar(total.goal)} period={period} />
+    <span className="whitespace-nowrap tabular-nums">
+      {touches.target === null ? n(touches.logged) : `${n(touches.logged)} / ${n(touches.target)}`}
+    </span>
+  );
+}
+
+const HEAD = 'bg-hover-row px-2 py-2 text-xs font-semibold leading-tight text-muted [overflow-wrap:anywhere] lg:px-1.5 xl:px-2.5';
+const CELL = 'px-2 lg:px-1.5 xl:px-2.5';
+
+function RosterTable({
+  view, period, filter, from, wide, headingId, statusInfo,
+}: {
+  view: UnitDashboardView; period: UnitPeriod; filter: RosterFilter; from: string; wide: boolean; headingId: string;
+  statusInfo: ReactNode;
+}) {
+  const t = useMessages(unitDashboardMessages);
+  const own = view.head.isReader ? t.prototype.yourUnitGroup : t.unitOf({ name: view.head.name });
+  const flat: { section: Section; depth: number }[] = [];
+  const walk = (s: Section, depth: number) => { flat.push({ section: s, depth }); s.inner.forEach((i) => walk(i, depth + 1)); };
+  sectionsOf(view, own, (name) => t.unitOf({ name })).forEach((s) => walk(s, 0));
+  const [closed, setClosed] = useState<ReadonlySet<string>>(() => new Set());
+  const toggle = (key: string) => setClosed((now) => {
+    const next = new Set(now);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    return next;
+  });
+
+  return (
+    <table aria-labelledby={headingId} data-roster-table={wide ? 'desktop' : 'tablet'} className="relative w-full table-fixed border-collapse text-left text-base">
+      {wide ? (
+        <colgroup>
+          <col className="w-[16%] xl:w-[17%]" />
+          <col className="w-[12%] xl:w-[19%]" />
+          <col className="w-[9%] xl:w-[7%]" />
+          <col className="w-[8%] xl:w-[6.5%]" />
+          <col className="w-[9%] xl:w-[7%]" />
+          <col className="w-[9%] xl:w-[7%]" />
+          <col className="w-[9%] xl:w-[8%]" />
+          <col className="w-[10%] xl:w-[10%]" />
+          <col className="w-[16%] xl:w-[15.5%]" />
+          <col className="w-[2%] xl:w-[3%]" />
+        </colgroup>
+      ) : (
+        <colgroup>
+          <col className="w-[34%]" />
+          <col className="w-[32%]" />
+          <col className="w-[14%]" />
+          <col className="w-[16%]" />
+          <col className="w-[4%]" />
+        </colgroup>
+      )}
+      <thead className="[&_th]:sticky [&_th]:top-0 [&_th]:z-[1]">
+        <tr>
+          <th scope="col" className={HEAD}>{t.columns.name}</th>
+          <th scope="col" className={HEAD}>{t.columns.goal}</th>
+          {wide && (
+            <>
+              <th scope="col" className={cn(HEAD, 'text-right')}>{t.v1.columns.salesLeads}</th>
+              <th scope="col" className={cn(HEAD, 'text-right')}>{t.v1.columns.closing}</th>
+              <th scope="col" className={cn(HEAD, 'text-right')}>{t.v1.columns.recruitLeads}</th>
+              <th scope="col" className={cn(HEAD, 'text-right')}>{t.v1.columns.potentialRecruits}</th>
+            </>
+          )}
+          <th scope="col" className={cn(HEAD, 'text-right')}>
+            <span className="inline-flex items-center gap-1">
+              {t.columns.activity}
+              {/* ADR-0165 §2: the figure is *goal activities*; the heading's ⓘ names the three types it counts. */}
+              <TippedGlyph glyph="ⓘ" name={t.own.activityInfo} tip={t.own.activityRule} align="fit" className={STATUS_TIP} />
             </span>
-            {missing && <TippedGlyph glyph="ⓘ" name={missing} tip={missing} align="fit" className="-my-1" />}
-          </div>
-        </CardField>
-        <CardField label={columns.leads}>
-          <LeadsText counts={total.leadsCounts} recruit={totalRecruitLine(total.leadsCounts, language)} />
-        </CardField>
-        <CardField label={columns.activity}><Touches touches={touchesWords(total.touches, period, language)} /></CardField>
-        <CardField label={columns.status}>
-          <OnPace total={total} rows={rows} />
-        </CardField>
-      </dl>
-    </li>
+          </th>
+          {wide && <th scope="col" className={HEAD}>{t.columns.last}</th>}
+          <th scope="col" className={HEAD}>
+            <span className="inline-flex items-center gap-1">
+              {t.columns.status}
+              {statusInfo}
+            </span>
+          </th>
+          <th scope="col" className={HEAD}><span className="sr-only">{t.own.details}</span></th>
+        </tr>
+      </thead>
+      {flat.filter(({ section }) => section.rows.some((r) => matchesFilter(r, filter)) || filter === 'all').map(({ section, depth }) => (
+        <UnitRows
+          key={section.key}
+          section={section}
+          depth={depth}
+          open={!closed.has(section.key)}
+          onToggle={() => toggle(section.key)}
+          period={period}
+          filter={filter}
+          from={from}
+          wide={wide}
+        />
+      ))}
+    </table>
   );
 }
 
-/**
- * **A person as a card** (P18.95-T3 AC-1): the name **in full**, wrapping rather than cut (*Indah Permat…*, UI-030),
- * its ★, ✓, *Personal* and *New hire* tags after it on the same wrapping line — a tag never over the goal, which has a
- * line of its own (UI-030) — then the status pill, *Goal progress* with its bar, and *Last 1:1*, each under its column's name.
- *
- * **⌄ opens the rest**, the table's own button: *Leads*, *Activity* and *Chasing MDRT*, then the detail's tiles,
- * each label above its value (`DetailTiles` `stacked`), nothing cut — *"≈ 4 policies needed at their avg case size
- * of Rp 10 jt."* wraps in the card's width. A tap on the card does what the row's click does, and a tap on a drill
- * or a control is that control's. Every drill the row has, the card has.
- */
-function PersonCard({
-  row, level, period, expanded, onToggle, readRatios, mdrtTip,
-}: { row: UnitRow; level: number } & CardProps) {
-  const language = useLanguage();
-  const figures = useFigureLanguage();
+function UnitRows({
+  section, depth, open, onToggle, period, filter, from, wide,
+}: {
+  section: Section; depth: number; open: boolean; onToggle: () => void; period: UnitPeriod; filter: RosterFilter;
+  from: string; wide: boolean;
+}) {
   const t = useMessages(unitDashboardMessages);
-  const detailId = useId();
-  const open = expanded.has(row.membershipId);
-  const name = rowName(row, language);
-  const drills = drillsOf(row);
-  const goal = goalWords(row.goal, language, figures);
-  const marker = provenanceWords(row.goal.source, row.goal.period, row.isReader, language, figures);
-  const last = row.lastOneOnOne;
-  const overdue = lastOneOnOneOverdue(last);
-  const personal = row.leads && !row.isReader;
-
-  /** The card's own tap is the ⌄'s convenience, as the row's click is; a drill or a control keeps its own. */
-  const toggleFromCard = (e: MouseEvent<HTMLLIElement>) => {
-    if ((e.target as HTMLElement).closest('a, button')) return;
-    onToggle(row.membershipId);
-  };
-
+  const figures = useFigureLanguage();
+  const bodyId = useId();
+  const { total } = section;
+  const goal = total.goal;
+  const pct = goal.attainmentPct !== null && goal.actualMinor !== null && goal.targetMinor
+    ? formatPercent(goal.attainmentPct, {}, figures)
+    : null;
   return (
-    <li
-      onClick={toggleFromCard}
+    <tbody id={bodyId} data-unit-rows={section.key}>
+      <tr className="border-t border-divider bg-amber/[0.06] font-semibold text-ink">
+        <th scope="rowgroup" className={cn(CELL, 'h-11 text-left font-semibold')} colSpan={1}>
+          <button
+            type="button"
+            aria-expanded={open}
+            aria-controls={bodyId}
+            onClick={onToggle}
+            className="flex min-h-8 w-full min-w-0 items-center gap-1.5 text-left md:max-lg:min-h-11"
+            style={depth ? { paddingLeft: depth * 14 } : undefined}
+          >
+            <LineIcon name={open ? 'chevronDown' : 'chevronRight'} className="h-4 w-4 shrink-0 text-signal-grey" />
+            <span className="min-w-0 truncate">{t.v1.unitCount({ label: section.label, n: section.count })}</span>
+          </button>
+        </th>
+        <td className={cn(CELL, 'truncate')}>
+          {pct ?? '–'}
+          {goal.actualMinor !== null && goal.targetMinor ? (
+            <span className={cn('font-normal text-signal-grey', wide && 'max-xl:sr-only')}>
+              {' · '}{formatRupiahCompactPair(goal.actualMinor, goal.targetMinor, '/', figures)}
+            </span>
+          ) : null}
+        </td>
+        {wide && (
+          <>
+            <td className={cn(CELL, 'text-right')}><Count n={total.leadsCounts.salesOpen} /></td>
+            <td className={cn(CELL, 'text-right')}><Count n={total.closings} /></td>
+            <td className={cn(CELL, 'text-right')}><Count n={total.leadsCounts.recruitOpen} /></td>
+            <td className={cn(CELL, 'text-right')}><Count n={total.leadsCounts.recruitNominated} /></td>
+          </>
+        )}
+        <td className={cn(CELL, 'text-right')}><Touches touches={total.touches} /></td>
+        {wide && <td className={CELL} />}
+        <td className={cn(CELL, 'whitespace-nowrap')}>{t.v1.active({ count: total.potentialActive.count, of: total.potentialActive.of })}</td>
+        <td className={CELL} />
+      </tr>
+      {open && section.rows.filter((r) => matchesFilter(r, filter)).map((row) => (
+        <PersonTableRow key={row.membershipId} row={row} period={period} from={from} wide={wide} depth={depth} />
+      ))}
+    </tbody>
+  );
+}
+
+function PersonTableRow({ row, period, from, wide, depth }: { row: UnitRow; period: UnitPeriod; from: string; wide: boolean; depth: number }) {
+  const language = useLanguage();
+  const t = useMessages(unitDashboardMessages);
+  const href = rowHref(row, from);
+  const name = rowName(row, language);
+  const last = row.lastOneOnOne;
+  const marks = marksOf(row);
+  return (
+    <tr
       data-membership={row.membershipId}
-      className={cn(
-        'cursor-pointer border-b border-hairline px-4 py-3.5',
-        row.isReader && 'bg-amber/5',
-        level > 0 && 'shadow-[inset_3px_0_0_color-mix(in_srgb,var(--color-navy-soft)_22%,transparent)]',
-      )}
-      style={cardIndent(level)}
+      className={cn('relative h-11 border-t border-divider', href && 'cursor-pointer lg:hover:bg-hover-row', 'md:max-lg:h-12')}
     >
-      <div className="flex items-start gap-2">
-        <p className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1 py-0.5">
-          {row.isReader && <span aria-hidden="true" className="shrink-0 text-base text-amber-dark">★</span>}
-          {drills ? (
+      <th scope="row" className={cn(CELL, 'text-left font-normal')}>
+        <span className="flex min-w-0 items-center gap-1.5" style={depth ? { paddingLeft: depth * 14 } : undefined}>
+          {href ? (
             <Link
-              href={drills.name}
-              className="min-w-0 break-words text-md font-semibold text-navy hover:text-navy-soft hover:underline"
+              href={href}
+              className="min-w-0 truncate font-semibold uppercase text-ink after:absolute after:inset-0 after:content-[''] focus-visible:outline-none focus-visible:after:outline focus-visible:after:outline-2 focus-visible:after:outline-amber"
             >
               {name}
             </Link>
           ) : (
-            <span className="min-w-0 break-words text-md font-semibold text-navy">{name}</span>
+            <span className="min-w-0 truncate font-semibold uppercase text-ink">{name}</span>
           )}
-          {row.pacingToMaa && <MaaMark />}
-          {personal && <span className={TAG}>{t.prototype.personal}</span>}
-          {row.newHireBeforeFirstSale && <NewHireTag />}
-        </p>
-        {/* The table's ⌄, in the card's corner: the outlined 28px box, a 44px square taking the tap (UI-029). */}
-        <button
-          type="button"
-          aria-expanded={open}
-          aria-controls={open ? detailId : undefined}
-          aria-label={t.viewDetails({ name: row.isReader ? null : row.name })}
-          onClick={() => onToggle(row.membershipId)}
-          className={cn(
-            'relative flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] border border-hairline bg-transparent text-sm text-muted hover:bg-navy/[0.05] hover:text-navy',
-            TAP_AREA,
-          )}
-        >
-          <span aria-hidden="true" className={cn('leading-none transition-transform', open && 'rotate-180')}>⌄</span>
-        </button>
-      </div>
-
-      <div className="mt-2 flex items-center gap-1">
-        <TippedGlyph
-          glyph={rosterStatusLabel(row.status, language)}
-          name={rosterStatusLabel(row.status, language)}
-          tip={t.statusTooltip[row.status]}
-          align="fit"
-          face={cn('h-auto w-[126px] rounded-pill px-2.5 py-1 text-xs font-semibold leading-normal', PILL_TONE[row.status])}
-        />
-        {/* The *Status* heading's rules, beside the pill they decide, as there is no heading on a card. */}
-        <TippedGlyph glyph="ⓘ" name={t.prototype.statusInfo} tip={t.prototype.statusRules} align="fit" className={STATUS_TIP} />
-      </div>
-
-      <dl className="mt-3 flex flex-col gap-2.5">
-        <CardField label={t.columns.goal}>
-          <div className="flex items-start gap-1">
-            <span className="block min-w-0 flex-1">
-              <Drill href={drills?.goal}>
-                <GoalWithBar goal={goal} bar={goalBar(row.goal)} period={period} />
-              </Drill>
-            </span>
-            {marker && <TippedGlyph glyph="ⓘ" name={marker} tip={marker} align="fit" className="-my-1" />}
-          </div>
-        </CardField>
-        {/* The reader's own row has no *Last 1:1* (the table's —): a line with nothing in it is not drawn. */}
-        {!row.isReader && (
-          <CardField label={t.columns.last}>
-            <span className={cn('text-sm font-semibold', overdue ? 'text-alert' : 'text-success')}>
-              {/* *Overdue* in words, not by colour alone (P18.8-T15 AC-7). */}
-              {last === null ? t.prototype.noOneOnOne : lastOneOnOneLine(last, language)}
-            </span>
-            {last?.coach && <span className="mt-0.5 block text-xs text-muted">{t.by({ name: last.coach.name })}</span>}
-          </CardField>
-        )}
-      </dl>
-
-      {open && (
-        <div id={detailId} className="-mx-4 mt-3 border-t border-hairline bg-base px-4 pb-1 pt-3">
-          <dl className="flex flex-col gap-2.5">
-            <CardField label={t.columns.leads}>
-              <Drill href={drills?.leads}>
-                <LeadsText counts={row.leadsCounts} recruit={recruitLine(row.leadsCounts, language)} />
-              </Drill>
-            </CardField>
-            <CardField label={<ActivityHeading />}>
-              <Touches touches={touchesWords(row.activity.touches, period, language)} />
-            </CardField>
-            <CardField label={<MdrtHeading tip={mdrtTip} />}>
-              <MdrtCell row={row} />
-            </CardField>
-          </dl>
-          <DetailTiles row={row} period={period} readRatios={readRatios} stacked className="mt-3 flex flex-col gap-3" />
-        </div>
+          {marks}
+        </span>
+      </th>
+      <td className={CELL}>
+        <span className="flex min-w-0">
+          <GoalLine goal={row.goal} pair={!wide} />
+          {wide && <GoalPairWide goal={row.goal} />}
+        </span>
+      </td>
+      {wide && (
+        <>
+          <td className={cn(CELL, 'text-right tabular-nums')}><Count n={row.leadsCounts.salesOpen} /></td>
+          <td className={cn(CELL, 'text-right tabular-nums')}><Count n={row.closings} tone="font-semibold text-pill-amber-ink" /></td>
+          <td className={cn(CELL, 'text-right tabular-nums')}><Count n={row.leadsCounts.recruitOpen} /></td>
+          <td className={cn(CELL, 'text-right tabular-nums')}><Count n={row.leadsCounts.recruitNominated} tone="font-semibold text-lavender" /></td>
+        </>
       )}
-    </li>
+      <td className={cn(CELL, 'text-right')}><Touches touches={row.activity.touches} /></td>
+      {wide && (
+        <td className={cn(CELL, 'truncate')}>
+          {row.isReader
+            ? <span className="text-signal-grey">—</span>
+            : last === null
+              ? <span className="text-signal-grey">{t.prototype.noOneOnOne}</span>
+              : <span className={last.overdue ? 'font-semibold text-signal-red' : 'text-ink'}>{lastOneOnOneLine(last, language)}</span>}
+        </td>
+      )}
+      <td className={CELL}>{period === 'month' && <StatusPill status={row.status} />}</td>
+      <td className={cn(CELL, 'text-right')}>
+        {href && <LineIcon name="chevronRight" className="ml-auto h-4 w-4 text-signal-grey" />}
+      </td>
+    </tr>
+  );
+}
+
+/**
+ * On a desktop the *Rp x / y* beside the bar from 1280px; between 1024 and 1279px, where nine columns share ~690px, it
+ * is read by a screen reader and left off the line, so nothing scrolls sideways (UI-009).
+ */
+function GoalPairWide({ goal }: { goal: UnitRow['goal'] }) {
+  const figures = useFigureLanguage();
+  if (!goal.set || goal.targetMinor === null || goal.targetMinor === 0 || goal.actualMinor === null) return null;
+  return (
+    <span className="ml-1.5 min-w-0 truncate text-signal-grey max-xl:sr-only">
+      {formatRupiahCompactPair(goal.actualMinor, goal.targetMinor, '/', figures)}
+    </span>
   );
 }

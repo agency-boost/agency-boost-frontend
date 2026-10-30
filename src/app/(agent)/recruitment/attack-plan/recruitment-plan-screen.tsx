@@ -8,17 +8,22 @@ import { BriefSummary } from '@/components/plan/brief-summary';
 import { MultiChoiceGroup } from '@/components/plan/multi/multi-choice-group';
 import { OpeningLines } from '@/components/plan/multi/opening-lines';
 import { PushBackStack } from '@/components/plan/multi/push-back-stack';
+import {
+  NavyHead, NavyTag, NavyVerdict, PhoneAnswers, PhoneBenefits, PhoneBubbles, PhoneMore, PhoneQuote, PhoneSection,
+} from '@/components/plan/phone-plan';
+import { PlanButton, firstOpenQuestion } from '@/components/plan/plan-button';
 import { ResultHead } from '@/components/plan/result-head';
 import { BulletList, NextAction, ScriptBlock, ScriptText } from '@/components/plan/script-blocks';
 import { StepPills } from '@/components/plan/step-pills';
 import { Button, ErrorBanner } from '@/components/ui/field';
-import { ACTION_BAR_PHONE, ACTION_BAR_ROOM_PHONE, TAP_HEIGHT, TEXT_TAP } from '@/components/ui/phone';
+import { TAP_HEIGHT, TEXT_TAP } from '@/components/ui/phone';
 import { Skeleton, SkeletonBar, SkeletonText } from '@/components/ui/skeleton';
 import { useMessages } from '@/i18n/language-provider';
 import { planMessages } from '@/i18n/messages/plan';
 import { recruitmentPlanMessages } from '@/i18n/messages/recruitment-plan';
 import { cn } from '@/lib/cn';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
+import { usePhone } from '@/lib/use-phone';
 import {
   ATTACK_PLAN_HREF, briefQuery, codesOf, completeBrief, labels, PITCH_MATERIALS_HREF, planHref, readRecruitmentPlan,
   type BriefCodes, type Choice, type RecruitmentAttackPlanView, type RecruitmentPlan, type RecruitmentVocabulary,
@@ -68,6 +73,11 @@ const options = (choices: readonly Choice[]) => choices.map((c) => ({ value: c.c
  * in a bar fixed to the bottom of the screen, with room left under the brief for it; 768px and wider, as drawn.
  * The chips' words are the server's, the client's shorter ones since 2026-10-26 (AC-2).
  *
+ * **UI V1 on a phone** (UI-107; `attack-plan-mobile` 2, 5; Mobile only), as the Sales Attack Plan: sentence-case
+ * questions with wrapping pill chips, the step line on one line, *Susun rencana recruitment* right under the last
+ * question, **not pinned and always active** (`PlanButton`); the plan as the phone's layout — the answers with *Ubah*,
+ * the candidate in a navy card, four numbered sections and *Buka Pitch Materials ›* (`PhonePlan`). From 768px as before.
+ *
  * **Our words are the catalogue's** (P18.98-T4; ADR-0179 §4): `messages/recruitment-plan.ts` and the two plans'
  * `messages/plan.ts`, in the reader's language. **The playbook's are the company's**, shown as typed in both (ADR-0179
  * §5): the chips, the profile, the openings, the push-backs, the next action.
@@ -76,6 +86,7 @@ export function RecruitmentPlanScreen({ address }: { address: RecruitmentAddress
   const t = useMessages(recruitmentPlanMessages);
   const p = useMessages(planMessages);
   const router = useRouter();
+  const phone = usePhone();
   const planKey = address.kind === 'plan' ? briefQuery(address.brief) : null;
   const fromAddress = address.kind === 'plan' ? address.brief : null;
 
@@ -134,7 +145,11 @@ export function RecruitmentPlanScreen({ address }: { address: RecruitmentAddress
 
   const brief = completeBrief(known?.vocabulary ?? null, type, motivations, hesitations);
   const build = () => {
-    if (!brief) return;
+    if (!brief) {
+      // On a phone the button is always active (UI-107): it shows the first question still open, and focuses it.
+      firstOpenQuestion(briefRegion.current);
+      return;
+    }
     focusResult.current = true;
     openedHere.current = true;
     router.push(planHref(brief), { scroll: false });
@@ -166,7 +181,7 @@ export function RecruitmentPlanScreen({ address }: { address: RecruitmentAddress
         {briefError && <Retry error={briefError} onRetry={() => setBriefAttempt((n) => n + 1)} />}
         {known && !known.hasPlaybook && <NoPlaybook />}
         {known?.hasPlaybook && (
-          <div className={ACTION_BAR_ROOM_PHONE}>
+          <div>
             <div ref={briefRegion} tabIndex={-1}>
             <BriefCard title={p.briefTitle} hint={p.briefHint}>
               <ChoiceGroup label={t.candidateType} options={options(known.vocabulary.types)} value={type} onChange={setType} />
@@ -185,11 +200,11 @@ export function RecruitmentPlanScreen({ address }: { address: RecruitmentAddress
             </BriefCard>
             </div>
             {/* The primary, amber with navy text (an action, ADR-0137), full width (`.btn-block`, `:104`), disabled until the brief is complete. */}
-            {/* On a phone, in a bar fixed to the bottom of the screen, still the bar's full width. */}
-            <div className={ACTION_BAR_PHONE}>
-              <Button disabled={!brief} onClick={build} className="h-auto w-full px-[22px] py-3.5 text-lg">
+            {/* On a phone, right under the last question in the flow, and always active (UI-107). */}
+            <div className="max-md:mt-3">
+              <PlanButton phone={phone} complete={brief !== null} onClick={build} className="h-auto w-full px-[22px] py-3.5 text-lg">
                 {t.build}
-              </Button>
+              </PlanButton>
             </div>
           </div>
         )}
@@ -200,16 +215,21 @@ export function RecruitmentPlanScreen({ address }: { address: RecruitmentAddress
   return (
     <div>
       <StepPills label={p.steps} steps={steps} current={1} />
-      <button
-        type="button"
-        onClick={backToBrief}
-        className={cn('mb-4 inline-flex items-center gap-1 rounded-sm text-base font-semibold text-amber-ink hover:underline', TAP_HEIGHT)}
-      >
-        <span aria-hidden="true">←</span>
-        {p.back}
-      </button>
+      {/* Not on a phone: *Ubah*, beside the answers, goes back there (UI-107). */}
+      {!phone && (
+        <button
+          type="button"
+          onClick={backToBrief}
+          className={cn('mb-4 inline-flex items-center gap-1 rounded-sm text-base font-semibold text-amber-ink hover:underline', TAP_HEIGHT)}
+        >
+          <span aria-hidden="true">←</span>
+          {p.back}
+        </button>
+      )}
       <PlanResult
         brief={address.brief}
+        phone={phone}
+        onBack={backToBrief}
         planKey={planKey}
         focusResult={focusResult}
         onView={onView}
@@ -219,8 +239,12 @@ export function RecruitmentPlanScreen({ address }: { address: RecruitmentAddress
   );
 }
 
-function PlanResult({ brief, planKey, focusResult, onView, onRefused }: {
+function PlanResult({ brief, phone, onBack, planKey, focusResult, onView, onRefused }: {
   brief: BriefCodes;
+  /** Below 768px: the phone's plan (UI-107). */
+  phone: boolean;
+  /** Back to the brief: *Ubah* on a phone. */
+  onBack: () => void;
   /** The brief as the address spells it: a new one is a new read. */
   planKey: string | null;
   focusResult: MutableRefObject<boolean>;
@@ -277,7 +301,8 @@ function PlanResult({ brief, planKey, focusResult, onView, onRefused }: {
         </div>
       )}
       {view && !view.hasPlaybook && <div ref={landing} tabIndex={-1}><NoPlaybook /></div>}
-      {plan && <Plan plan={plan} headingRef={heading} />}
+      {plan && phone && <PhonePlan plan={plan} headingRef={heading} onBack={onBack} />}
+      {plan && !phone && <Plan plan={plan} headingRef={heading} />}
     </>
   );
 }
@@ -296,7 +321,7 @@ function Plan({ plan, headingRef }: { plan: RecruitmentPlan; headingRef: React.R
           { label: t.hesitationIs, value: labels(plan.brief.hesitations) },
         ]}
       />
-      <article className="mb-4 overflow-hidden rounded-lg border border-hairline bg-card">
+      <article className="mb-4 overflow-hidden rounded-lg border border-card-edge bg-card">
         <ResultHead
           tag={t.profileTag}
           title={plan.profile.label}
@@ -331,13 +356,74 @@ function Plan({ plan, headingRef }: { plan: RecruitmentPlan; headingRef: React.R
 }
 
 /**
+ * **The plan on a phone** (UI V1, UI-107; `attack-plan-mobile` 5; Mobile only): the brief's answers as chips with *Ubah*;
+ * the candidate's profile in a navy card — *Profil kandidat*, *Rencana siap*, its name, its line and *Cocok untuk*; then
+ * **four numbered sections**: the opening line (one per motivation, each tagged when there are several), the benefits
+ * (four, then *Lihat n manfaat lagi*), an answer to each hesitation as two bubbles, and the next action with *Buka Pitch
+ * Materials ›*. The fields `Plan` draws wider, in its order; every word as the read answered it.
+ */
+function PhonePlan({ plan, headingRef, onBack }: {
+  plan: RecruitmentPlan;
+  headingRef: React.Ref<HTMLHeadingElement>;
+  onBack: () => void;
+}) {
+  const t = useMessages(recruitmentPlanMessages);
+  const p = useMessages(planMessages);
+  const tagged = plan.openings.length > 1;
+  return (
+    <div data-layout="phone-plan">
+      <PhoneAnswers
+        label={t.stepBrief}
+        answers={[plan.brief.type.label, ...plan.brief.motivations.map((m) => m.label), ...plan.brief.hesitations.map((h) => h.label)]}
+        onChange={onBack}
+      />
+      <NavyHead
+        tags={<NavyTag>{t.profileTag}</NavyTag>}
+        verdict={<NavyVerdict tone="good">{t.planReady}</NavyVerdict>}
+        title={plan.profile.label}
+        headingRef={headingRef}
+        line={plan.profile.tagline}
+        fitLabel={p.goodFitFor}
+        fit={plan.profile.goodFitFor}
+      />
+      <PhoneSection n={1} label={tagged ? p.openingLines : p.openingLine}>
+        <div className="flex flex-col gap-2.5">
+          {plan.openings.map((o) => (
+            <div key={o.motivation.code} data-opening={o.motivation.code}>
+              {tagged && <p className="m-0 mb-1 text-sm font-bold text-amber-ink">{o.motivation.label}</p>}
+              <PhoneQuote text={o.text} />
+            </div>
+          ))}
+        </div>
+      </PhoneSection>
+      <PhoneSection n={2} label={p.leadWithBenefits}>
+        <PhoneBenefits items={plan.profile.benefits} />
+      </PhoneSection>
+      <PhoneSection n={3} label={p.pushBack}>
+        {plan.objections.map((o) => (
+          <div key={o.hesitation.code} data-push-back={o.hesitation.code}>
+            <PhoneBubbles theySay={o.theySay} youSay={o.youSay} />
+          </div>
+        ))}
+      </PhoneSection>
+      <PhoneSection n={4} label={p.nextAction}>
+        <p className="m-0 text-base leading-snug text-ink">{plan.nextAction}</p>
+        <Link href={PITCH_MATERIALS_HREF} className={cn('inline-flex rounded-sm', TEXT_TAP)}>
+          <PhoneMore>{t.toPitchMaterials}</PhoneMore>
+        </Link>
+      </PhoneSection>
+    </div>
+  );
+}
+
+/**
  * **The playbook-empty state** (AC-7, a Fill): the company has no playbook, so there are no words to build a
  * plan from. Said plainly, and pointing to *Pitch Materials*, which does not depend on the playbook.
  */
 function NoPlaybook() {
   const t = useMessages(recruitmentPlanMessages);
   return (
-    <div className="rounded-lg border border-hairline bg-card px-6 py-[22px]" data-state="no-playbook">
+    <div className="rounded-lg border border-card-edge bg-card px-6 py-[22px]" data-state="no-playbook">
       <p className="m-0 text-md font-semibold text-navy">{t.noPlaybook}</p>
       <p className="m-0 mt-1 text-base text-muted">{t.noPlaybookHint}</p>
       <Link href={PITCH_MATERIALS_HREF} className={cn('mt-2 inline-block rounded-sm text-base font-semibold text-amber-ink hover:underline', TEXT_TAP)}>
@@ -362,7 +448,7 @@ function BriefSkeleton() {
   const t = useMessages(recruitmentPlanMessages);
   return (
     <Skeleton label={t.loadingBrief}>
-      <div className="mb-5 rounded-lg border border-hairline bg-card px-6 py-[22px]">
+      <div className="mb-5 rounded-lg border border-card-edge bg-card px-6 py-[22px]">
         <SkeletonBar className="h-5 w-56" />
         <SkeletonBar className="mt-2 w-2/3" />
         {[0, 1, 2].map((q) => (
@@ -383,10 +469,10 @@ function PlanSkeleton() {
   const t = useMessages(recruitmentPlanMessages);
   return (
     <Skeleton label={t.loadingPlan}>
-      <div className="mb-5 rounded-lg border border-hairline bg-card px-5 py-3.5">
+      <div className="mb-5 rounded-lg border border-card-edge bg-card px-5 py-3.5">
         <SkeletonBar className="w-2/3" />
       </div>
-      <div className="mb-4 rounded-lg border border-hairline bg-card px-6 py-5">
+      <div className="mb-4 rounded-lg border border-card-edge bg-card px-6 py-5">
         <SkeletonBar className="w-32" />
         <SkeletonBar className="mt-3 h-6 w-1/2" />
         <SkeletonBar className="mt-2 w-2/3" />

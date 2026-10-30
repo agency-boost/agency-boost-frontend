@@ -87,6 +87,31 @@ const PATHS: Record<string, React.ReactNode> = {
   pin: <><path d="M12 21s7-6.4 7-11.5A7 7 0 0 0 5 9.5C5 14.6 12 21 12 21z" /><circle cx="12" cy="9.5" r="2.3" /></>,
   /** A torn-off slip with lines on it — *Billing & subscription*, the quote tool (ADR-0111). */
   receipt: <><path d="M6 3h12v18l-2-1.5-2 1.5-2-1.5-2 1.5-2-1.5-2 1.5z" /><path d="M9 8h6M9 12h6M9 16h3" /></>,
+  /*
+   * UI V1 (UI-004, D-13, D-20): the tab bar's and the *Lainnya* sheet's line icons, in this registry's stroke.
+   */
+  /** Home — the centre tab. */
+  home: <><path d="M4 11 12 4l8 7" /><path d="M6 9.5V20h12V9.5" /><path d="M10 20v-5h4v5" /></>,
+  /** Activity — a list with ticks. */
+  checklist: <><path d="m4 6 1.5 1.5L8 5" /><path d="m4 12 1.5 1.5L8 11" /><path d="m4 18 1.5 1.5L8 17" /><path d="M11 6h9M11 12h9M11 18h9" /></>,
+  /** Unit — a bar chart. */
+  barChart: <><path d="M4 20h16" /><rect x="5" y="11" width="3.5" height="7" rx="1" /><rect x="10.25" y="6" width="3.5" height="12" rx="1" /><rect x="15.5" y="9" width="3.5" height="9" rx="1" /></>,
+  /** Lainnya — a grid of four. */
+  grid: <><rect x="4" y="4" width="6.5" height="6.5" rx="1.5" /><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5" /><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5" /><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5" /></>,
+  /** Search agent — a magnifier. */
+  search: <><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4 4" /></>,
+  /** Personal Summary — a report with a line chart. */
+  report: <><rect x="4" y="3" width="16" height="18" rx="2" /><path d="m8 15 3-3 2 2 3-4" /><path d="M8 7h5" /></>,
+  /** User Management — a group of people. */
+  usersGroup: <><circle cx="12" cy="8" r="3" /><path d="M6.5 19a5.5 5.5 0 0 1 11 0" /><circle cx="5" cy="10" r="2" /><path d="M2 18a3.5 3.5 0 0 1 4-3.4" /><circle cx="19" cy="10" r="2" /><path d="M22 18a3.5 3.5 0 0 0-4-3.4" /></>,
+  /** Keluar — a door and an arrow out. */
+  logout: <><path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4" /><path d="M10 8l-4 4 4 4" /><path d="M6 12h10" /></>,
+  /** Ubah foto — a camera. */
+  camera: <><path d="M4 8h3l2-3h6l2 3h3v11H4z" /><circle cx="12" cy="13" r="3.5" /></>,
+  /** ✕ — close. */
+  close: <path d="M6 6l12 12M18 6 6 18" />,
+  /** The bell, on a page's title row (Home's). */
+  bell: <><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z" /><path d="M10 20a2 2 0 0 0 4 0" /></>,
 };
 
 export type NavIconName = keyof typeof PATHS;

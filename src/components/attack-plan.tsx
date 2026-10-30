@@ -6,12 +6,15 @@ import { useEffect, useRef, useState } from 'react';
 import { AlternativesRow } from '@/components/plan/alternatives-row';
 import { BriefCard, ChoiceGroup } from '@/components/plan/brief-card';
 import { BriefSummary } from '@/components/plan/brief-summary';
+import { PhoneAnswers } from '@/components/plan/phone-plan';
+import { PlanButton, firstOpenQuestion } from '@/components/plan/plan-button';
 import { ResultHead, type PillTone } from '@/components/plan/result-head';
 import { StepPills } from '@/components/plan/step-pills';
 import { EmptyShelf } from '@/components/product-catalog';
 import { ProductScript } from '@/components/product-script';
+import { PhoneSalesPlan } from '@/components/sales-plan-phone';
 import { Button, ErrorBanner } from '@/components/ui/field';
-import { ACTION_BAR_PHONE, ACTION_BAR_ROOM_PHONE, TAP_HEIGHT, TEXT_TAP } from '@/components/ui/phone';
+import { REMOVED_ON_PHONE, TAP_HEIGHT, TEXT_TAP } from '@/components/ui/phone';
 import { Skeleton, SkeletonBar, SkeletonText } from '@/components/ui/skeleton';
 import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
 import { planMessages } from '@/i18n/messages/plan';
@@ -19,6 +22,7 @@ import { productCatalogMessages } from '@/i18n/messages/product-catalog';
 import { salesAttackPlanMessages } from '@/i18n/messages/sales-attack-plan';
 import { cn } from '@/lib/cn';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
+import { usePhone } from '@/lib/use-phone';
 import {
   AGE_CHOICES, ageLabel, budgetChoices, budgetLabel, fitNote, LUMP_SUM_BUDGET, moreLine, needChoices, needLabel,
   planHref, readAttackPlan, readCatalog, readCatalogProduct, resultTag,
@@ -66,6 +70,14 @@ type Shown =
  * *Monthly premium budget*, not that question's seventh chip — one answer between the two groups, band 7 as
  * before (AC-3, UI-030).
  *
+ * **UI V1 on a phone** (UI-107; `attack-plan-mobile` 1, 3; Mobile only): the question in a white card with
+ * sentence-case labels and wrapping pill chips, no grey line, the step line on one line, and *Susun Attack Plan* right
+ * under the last question — **not pinned** (P18.95-T6's bar is gone below 768px: nothing floats over the question card)
+ * and **always active**: tapped with a question open, it brings that question into view and gives it the focus
+ * (`PlanButton`). The plan is the phone's own layout (`PhoneSalesPlan`): the answers as chips with *Ubah*, the product
+ * in a navy card, five numbered sections. From 768px every part is as before, the button disabled until the brief is
+ * whole.
+ *
  * **Its words are the catalogue's** (P18.98-T4; ADR-0179 §4): `messages/sales-attack-plan.tsx`, the two plans'
  * `messages/plan.ts` and the catalog's `messages/product-catalog.ts`, in the reader's language. A budget band's sums are
  * the reader's figures (`useFigureLanguage()`, P18.98-T3); the product, its script and an alternative's name are the
@@ -77,7 +89,10 @@ export function AttackPlanScreen({ address }: { address: PlanAddress }) {
   const language = useLanguage();
   const figures = useFigureLanguage();
   const router = useRouter();
+  const phone = usePhone();
   const briefInAddress = address.kind === 'plan' ? address.brief : null;
+  /** The brief's card: on a phone, *Susun Attack Plan* with a question open finds it there (UI-107). */
+  const briefCard = useRef<HTMLDivElement>(null);
 
   // The brief as chosen on step 1: what the address holds, kept as the reader leaves step 2.
   const [need, setNeed] = useState<string | null>(briefInAddress?.need ?? null);
@@ -115,7 +130,11 @@ export function AttackPlanScreen({ address }: { address: PlanAddress }) {
   }, [onBrief, shelfEmpty]);
 
   const build = () => {
-    if (!complete) return;
+    if (!complete) {
+      // On a phone the button is always active (UI-107): it shows the first question still open, and focuses it.
+      firstOpenQuestion(briefCard.current);
+      return;
+    }
     focusResult.current = true;
     openedHere.current = true;
     router.push(planHref({ need, age, budget }), { scroll: false });
@@ -138,10 +157,11 @@ export function AttackPlanScreen({ address }: { address: PlanAddress }) {
     // The bands in the reader's figures and words: six monthly, then *Lump-sum*, an option of its own.
     const bands = budgetChoices(figures, language);
     return (
-      <div className={cn('mx-auto max-w-[980px]', !shelfEmpty && ACTION_BAR_ROOM_PHONE)}>
+      <div className="mx-auto max-w-[980px]">
         <StepPills label={p.steps} steps={steps} current={0} />
         {shelfEmpty ? <EmptyShelf /> : (
           <>
+            <div ref={briefCard}>
             <BriefCard title={p.briefTitle} hint={p.briefHint}>
               <ChoiceGroup label={t.primaryNeed} options={needChoices(language)} value={need} onChange={setNeed} />
               <ChoiceGroup label={t.ageBand} options={AGE_CHOICES} value={age} onChange={setAge} />
@@ -159,11 +179,12 @@ export function AttackPlanScreen({ address }: { address: PlanAddress }) {
                 onChange={setBudget}
               />
             </BriefCard>
-            {/* On a phone, a bar fixed to the bottom of the screen: the note beside the action, on one line. */}
-            <div className={cn('flex flex-wrap items-center justify-end gap-3.5', ACTION_BAR_PHONE, 'max-md:flex-nowrap max-md:gap-3')}>
+            </div>
+            {/* On a phone, right under the last question, in the flow, the note not drawn (UI-107, D-08). */}
+            <div className="flex flex-wrap items-center justify-end gap-3.5 max-md:mt-3 max-md:block">
               {/* Emptied once the brief is complete (`:9557-9561`), and read out as it changes. */}
-              <p className="m-0 mr-auto text-sm text-muted max-md:min-w-0 max-md:flex-1" aria-live="polite">{complete ? '' : t.pickAll}</p>
-              <Button disabled={!complete} onClick={build} className="h-auto px-[22px] py-[11px] max-md:shrink-0">{t.build}</Button>
+              <p className={cn('m-0 mr-auto text-sm text-muted', REMOVED_ON_PHONE)} aria-live="polite">{complete ? '' : t.pickAll}</p>
+              <PlanButton phone={phone} complete={complete} onClick={build} className="h-auto px-[22px] py-[11px]">{t.build}</PlanButton>
             </div>
           </>
         )}
@@ -174,18 +195,23 @@ export function AttackPlanScreen({ address }: { address: PlanAddress }) {
   return (
     <div className="mx-auto max-w-[980px]">
       <StepPills label={p.steps} steps={steps} current={1} onStep={backToBrief} />
-      <button
-        type="button"
-        onClick={backToBrief}
-        className={cn('mb-3.5 inline-flex items-center gap-1.5 rounded-sm py-1.5 text-base font-semibold text-navy-soft hover:text-navy', TAP_HEIGHT)}
-      >
-        <svg aria-hidden="true" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0">
-          <path d="M15 18l-6-6 6-6" />
-        </svg>
-        {p.back}
-      </button>
+      {/* Not on a phone: *Ubah*, beside the answers, goes back there (UI-107). */}
+      {!phone && (
+        <button
+          type="button"
+          onClick={backToBrief}
+          className={cn('mb-3.5 inline-flex items-center gap-1.5 rounded-sm py-1.5 text-base font-semibold text-navy-soft hover:text-navy', TAP_HEIGHT)}
+        >
+          <svg aria-hidden="true" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0">
+            <path d="M15 18l-6-6 6-6" />
+          </svg>
+          {p.back}
+        </button>
+      )}
       <PlanResult
         address={address}
+        phone={phone}
+        onBack={backToBrief}
         focusResult={focusResult}
         onShelf={setShelfEmpty}
         onSwitch={(code) => {
@@ -200,8 +226,12 @@ export function AttackPlanScreen({ address }: { address: PlanAddress }) {
   );
 }
 
-function PlanResult({ address, focusResult, onShelf, onSwitch, onAddProfile }: {
+function PlanResult({ address, phone, onBack, focusResult, onShelf, onSwitch, onAddProfile }: {
   address: Exclude<PlanAddress, { kind: 'brief' }>;
+  /** Below 768px: the phone's plan (UI-107). */
+  phone: boolean;
+  /** Back to the brief: *Ubah* on a phone. */
+  onBack: () => void;
   focusResult: React.MutableRefObject<boolean>;
   /** What a plan says about the shelf, so the brief need not read the catalog to know it. */
   onShelf: (empty: boolean) => void;
@@ -270,7 +300,18 @@ function PlanResult({ address, focusResult, onShelf, onSwitch, onAddProfile }: {
           </button>
         </div>
       )}
-      {address.kind === 'plan' && (
+      {address.kind === 'plan' && phone && (
+        <PhoneAnswers
+          label={t.stepBrief}
+          answers={[
+            needLabel(address.brief.need, language) ?? '—',
+            ageLabel(address.brief.age) ?? '—',
+            budgetLabel(address.brief.budget, figures, language) ?? '—',
+          ]}
+          onChange={onBack}
+        />
+      )}
+      {address.kind === 'plan' && !phone && (
         <BriefSummary
           label={t.stepBrief}
           items={[
@@ -289,7 +330,7 @@ function PlanResult({ address, focusResult, onShelf, onSwitch, onAddProfile }: {
         </div>
       )}
       {missing && (
-        <div ref={landing} tabIndex={-1} className="rounded-lg border border-hairline bg-card px-6 py-[22px]" data-state="not-found">
+        <div ref={landing} tabIndex={-1} className="rounded-lg border border-card-edge bg-card px-6 py-[22px]" data-state="not-found">
           <p className="m-0 text-md font-semibold text-navy">{c.drawer.notFound}</p>
           <p className="m-0 mt-1 text-base text-muted">{c.drawer.notFoundHint}</p>
           <Link href="/product-catalog" className={cn('mt-2 inline-block rounded-sm text-base font-semibold text-amber-ink hover:underline', TEXT_TAP)}>
@@ -299,13 +340,21 @@ function PlanResult({ address, focusResult, onShelf, onSwitch, onAddProfile }: {
       )}
       {/* Nothing serves the need: the prototype's line (`:9652`) — or, with nothing on the shelf, the empty shelf. */}
       {shown && !product && (shelfEmpty ? <div ref={landing} tabIndex={-1}><EmptyShelf /></div> : (
-        <div ref={landing} tabIndex={-1} className="mb-5 rounded-lg border border-hairline bg-card px-6 py-[22px]" data-state="no-match">
+        <div ref={landing} tabIndex={-1} className="mb-5 rounded-lg border border-card-edge bg-card px-6 py-[22px]" data-state="no-match">
           <p className="m-0 text-base text-muted">{t.noMatch}</p>
         </div>
       ))}
-      {shown && product && (
+      {shown && product && phone && (
+        <PhoneSalesPlan
+          product={product}
+          plan={shown.kind === 'plan' ? shown.plan : null}
+          headingRef={heading}
+          onSwitch={onSwitch}
+        />
+      )}
+      {shown && product && !phone && (
         <>
-          <article className="mb-4 overflow-hidden rounded-lg border border-hairline bg-card">
+          <article className="mb-4 overflow-hidden rounded-lg border border-card-edge bg-card">
             <ResultHeadFor shown={shown} product={product} headingRef={heading} />
             {shown.kind === 'plan' && shown.plan.verdict === 'check_fit' && (
               <p className="m-0 border-b border-hairline bg-alert/5 px-5 py-3 text-base text-alert sm:px-6">{fitNote(shown.plan.outside, language)}</p>
@@ -360,7 +409,7 @@ function PlanSkeleton() {
   const t = useMessages(salesAttackPlanMessages);
   return (
     <Skeleton label={t.loading}>
-      <div className="mb-4 rounded-lg border border-hairline bg-card px-6 py-5">
+      <div className="mb-4 rounded-lg border border-card-edge bg-card px-6 py-5">
         <SkeletonBar className="w-32" />
         <SkeletonBar className="mt-3 h-6 w-1/2" />
         <SkeletonBar className="mt-2 w-2/3" />

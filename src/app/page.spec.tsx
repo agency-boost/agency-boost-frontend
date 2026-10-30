@@ -72,7 +72,7 @@ describe('landing', () => {
     expect(replace).toHaveBeenCalledWith('/kpm/overview');
   });
 
-  it('P15-T4 AC-4 sends a leader to their Unit Dashboard', () => {
+  it('UI-100 sends a leader to Home (their Unit Dashboard until ADR-0180 §10)', () => {
     renderWithSession(<Home />, {
       me: makeMe({
         membership: {
@@ -81,13 +81,13 @@ describe('landing', () => {
         },
       }),
     });
-    expect(replace).toHaveBeenCalledWith('/unit/dashboard');
+    expect(replace).toHaveBeenCalledWith('/home');
   });
 
-  it('sends an agent to their own day, not to their profile', () => {
+  it('UI-100 sends an agent to Home, not to their profile', () => {
     // Landing on a profile with a sign-out button and nothing else is what this
     // replaced: it read as though the product had nothing for them.
     renderWithSession(<Home />, { me: makeMe() });
-    expect(replace).toHaveBeenCalledWith('/activity/log');
+    expect(replace).toHaveBeenCalledWith('/home');
   });
 });

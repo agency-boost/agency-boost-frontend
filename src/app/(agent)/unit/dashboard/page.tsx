@@ -3,9 +3,7 @@
 import { Suspense } from 'react';
 import { Page } from '@/components/page';
 import { UnitDashboard } from '@/components/unit/unit-dashboard';
-import { useMessages } from '@/i18n/language-provider';
-import { unitDashboardMessages } from '@/i18n/messages/unit-dashboard';
-import { periodFrom } from '@/lib/unit-dashboard';
+import { periodFrom, tabFrom } from '@/lib/unit-dashboard';
 import { useQuery } from '@/lib/use-query';
 
 /**
@@ -15,7 +13,7 @@ import { useQuery } from '@/lib/use-query';
  *
  * Gated by `unit_dashboard:read`, which every field rung holds for their own unit: somebody who leads
  * nobody is answered an empty unit and meets the empty state, not a refusal (D-reach). The period is the
- * address's, `?period=7d|month|year`, *This month* when it names none.
+ * address's, `?period=7d|month|year`, *This month* when it names none; the tab too, `?tab=activities` (UI V1, UI-001).
  */
 export default function UnitDashboardPage() {
   return (
@@ -28,11 +26,10 @@ export default function UnitDashboardPage() {
 
 function Dashboard() {
   const query = useQuery();
-  const t = useMessages(unitDashboardMessages).prototype;
   return (
-    // The prototype's title, verbatim, and its empty sub-line (`Overall.html:10410`): kept in both languages (§A.2).
-    <Page title={t.title} permission="unit_dashboard:read">
-      <UnitDashboard period={periodFrom(query.period)} />
+    // UI V1 (UI-004, UI-012): the screen draws its own title row — the title, and below 1024px the *Search agent* pill.
+    <Page permission="unit_dashboard:read">
+      <UnitDashboard period={periodFrom(query.period)} tab={tabFrom(query.tab)} />
     </Page>
   );
 }

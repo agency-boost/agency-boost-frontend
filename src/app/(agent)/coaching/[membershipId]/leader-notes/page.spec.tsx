@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AgentLayout from '@/app/(agent)/layout';
 import type { Me } from '@/lib/session';
-import { makeMe, renderInLayout, routeParams, stubFetch, type StubReply } from '@test/harness';
+import { atWidth, makeMe, renderInLayout, routeParams, stubFetch, wears, type StubReply } from '@test/harness';
 import CoachingPersonLayout from '../layout';
 import CoacheeLeaderNotesTab from './page';
 
@@ -145,78 +145,113 @@ const tagOf = (region: HTMLElement) => region.querySelector('h2')?.nextElementSi
 /** The six words coaching's own strings never use (ADR-0084). */
 const SIX_WORDS = /\boffice\b|\bKPM\b|reports to|tagged to|untagged|unassigned/i;
 
-describe('the Leader Notes tab (P11-T9)', () => {
+/** The tile's button, which opens the ladder (UI-035). */
+const tileButton = () => screen.findByRole('button', { name: /^Capability mapping: / });
+/** Open the ladder's sheet from the tile and answer it (UI-035). */
+const openLadder = async () => {
+  await userEvent.click(await tileButton());
+  return screen.findByRole('dialog', { name: 'Capability mapping' });
+};
+const stagesIn = (sheet: HTMLElement) => within(sheet).getAllByRole('listitem');
+const stepsOf = (tile: HTMLElement) => Array.from(tile.querySelectorAll('[data-progress-line] [data-step]')).map((s) => s.getAttribute('data-step'));
+
+describe('the Capability mapping tab (P11-T9; UI V1, Phase 18.99 T10)', () => {
   beforeEach(() => {
     nav.pathname = '/coaching/mem-rina/leader-notes';
     nav.replace.mockReset();
   });
   afterEach(() => vi.unstubAllGlobals());
 
-  describe('Capability mapping', () => {
-    it('P11-T9 AC-1 draws the ladder in display order, numbered, each stage with its milestones, tagged with the server’s stage', async () => {
+  describe('Capability mapping: the tile and its ladder (UI-035)', () => {
+    it('UI-035 the tile shows only the current stage: the progress line, the stage, TAHAP SAAT INI — no criteria, no Current: pill', async () => {
       const { calls } = show();
-      const mapping = await card('Capability mapping');
+      const tile = await card('Capability mapping');
 
-      expect(tagOf(mapping)).toHaveTextContent(/^Current: Independent Producer$/);
-      const stages = within(mapping).getAllByRole('listitem');
-      expect(stages.map((s) => s.querySelector('[aria-hidden="true"]')?.textContent)).toEqual(['1', '2', '3', '4']);
-      expect(within(mapping).getAllByRole('group').map((g) => g.getAttribute('aria-labelledby') && g.previousElementSibling?.textContent))
-        .toEqual(['Competent Producer', 'Independent Producer', 'Productive Team Builder', 'Transformative Team Builder']);
-      // The highlighted stage is the server's, with the prototype's badge on it alone.
-      expect(within(mapping).getAllByText('Current stage')).toHaveLength(1);
-      expect(within(stages[1]).getByText('Current stage')).toBeInTheDocument();
-      expect(stages[1].className).toContain('border-amber');
-      expect(stages[0].className).not.toContain('border-amber');
-
-      // Ticked by code: a milestone is one tick, in every stage that lists it.
-      const independently = within(mapping).getAllByRole('checkbox', { name: 'Sells policies independently' });
-      expect(independently).toHaveLength(4);
-      independently.forEach((box) => expect(box).toBeChecked());
-      expect(within(mapping).getAllByRole('checkbox', { name: 'Sells outside direct network' })).toHaveLength(3);
-      const quality = within(mapping).getAllByRole('checkbox', { name: 'Recruits quality agents' });
-      expect(quality).toHaveLength(2);
-      quality.forEach((box) => expect(box).not.toBeChecked());
-      expect(within(stages[3]).getAllByRole('checkbox')).toHaveLength(5);
+      expect(stepsOf(tile)).toEqual(['done', 'current', 'next', 'next']);
+      expect(within(tile).getByText('Independent Producer')).toBeInTheDocument();
+      expect(within(tile).getByText('Current stage')).toHaveClass('uppercase');
+      expect(within(tile).queryByRole('checkbox')).not.toBeInTheDocument();
+      expect(tile.textContent).not.toMatch(/Current:/);
       expect(sent(calls, 'GET', '/coaching/coachees/mem-rina/profile')).toHaveLength(1);
     });
 
-    it('P11-T9 AC-1 ticks a milestone in every stage that lists it, saves the whole set pinned, and shows the stage the server answers', async () => {
+    it('UI-035 the whole tile is one button that opens the ladder in a sheet, and Escape closes it', async () => {
+      show();
+      const button = await tileButton();
+      expect(button).toHaveAccessibleName('Capability mapping: Independent Producer. Show every stage.');
+      expect(button).toHaveAttribute('aria-haspopup', 'dialog');
+      expect(button.className).toContain('absolute inset-0');
+
+      const sheet = await openLadder();
+      expect(within(sheet).getByRole('heading', { name: 'Capability mapping' })).toBeInTheDocument();
+      await userEvent.keyboard('{Escape}');
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Capability mapping' })).not.toBeInTheDocument());
+    });
+
+    it('UI-035 each criterion appears once, under the stage that adds it; the current stage tinted with its pill', async () => {
+      show();
+      const sheet = await openLadder();
+
+      const stages = stagesIn(sheet);
+      expect(stages.map((s) => s.querySelector('[id]')?.textContent))
+        .toEqual(['Competent Producer', 'Independent Producer', 'Productive Team Builder', 'Transformative Team Builder']);
+      expect(stages.map((s) => within(s).queryAllByRole('checkbox').map((b) => b.getAttribute('aria-checked') ?? (b as HTMLInputElement).checked)))
+        .toEqual([[true], [true], [false, false], [false]]);
+      expect(within(sheet).getAllByRole('checkbox').map((b) => (b.closest('label') as HTMLElement).textContent)).toEqual([
+        'Sells policies independently', 'Sells outside direct network', 'Recruits quality agents',
+        'Develops downline agent to Independent Producer', 'Develops downline leader to Productive Team Builder',
+      ]);
+      expect(within(sheet).getAllByText('Current stage')).toHaveLength(1);
+      expect(stages[1]).toHaveAttribute('data-current', 'true');
+      expect(stages[1].firstElementChild!.className).toContain('bg-amber/10');
+      expect(stages.map((s) => s.querySelector('[data-step]')?.getAttribute('data-step'))).toEqual(['done', 'current', 'next', 'next']);
+    });
+
+    it('UI-035 ticking a criterion in the sheet saves the whole set pinned, and the tile takes the stage the server answers', async () => {
       const { calls } = show({ 'PUT /coaching/coachees/mem-rina/profile': echoProfile('PRODUCTIVE_TEAM_BUILDER') });
-      const mapping = await card('Capability mapping');
+      const sheet = await openLadder();
 
-      await userEvent.click(within(mapping).getAllByRole('checkbox', { name: 'Recruits quality agents' })[0]);
+      await userEvent.click(within(sheet).getByRole('checkbox', { name: 'Recruits quality agents' }));
 
-      within(mapping).getAllByRole('checkbox', { name: 'Recruits quality agents' }).forEach((box) => expect(box).toBeChecked());
+      expect(within(sheet).getByRole('checkbox', { name: 'Recruits quality agents' })).toBeChecked();
       await toastSays('Capability mapping updated.');
       const [put] = sent(calls, 'PUT', '/coaching/coachees/mem-rina/profile');
       expect(bodyOf(put)).toEqual({ version: 3, milestoneCodes: [M1, M2, M3], skillCodes: SELLING });
       // Not worked out here: the server's answer, though one of the stage's milestones is still unticked.
-      expect(tagOf(mapping)).toHaveTextContent(/^Current: Productive Team Builder$/);
-      expect(within(within(mapping).getAllByRole('listitem')[2]).getByText('Current stage')).toBeInTheDocument();
+      expect(within(stagesIn(sheet)[2]).getByText('Current stage')).toBeInTheDocument();
+      const tile = await card('Capability mapping');
+      expect(within(tile).getByText('Productive Team Builder')).toBeInTheDocument();
+      expect(stepsOf(tile)).toEqual(['done', 'done', 'current', 'next']);
 
       // The next save carries the version this one answered.
-      await userEvent.click(within(mapping).getAllByRole('checkbox', { name: 'Recruits quality agents' })[1]);
+      await userEvent.click(within(sheet).getByRole('checkbox', { name: 'Recruits quality agents' }));
       await waitFor(() => expect(sent(calls, 'PUT', '/coaching/coachees/mem-rina/profile')).toHaveLength(2));
       expect(bodyOf(sent(calls, 'PUT', '/coaching/coachees/mem-rina/profile')[1])).toEqual({ version: 4, milestoneCodes: [M1, M2], skillCodes: SELLING });
     });
 
-    it('P11-T9 AC-1 tags Not yet at the most junior stage, by seniority not position, with no Current stage below the first', async () => {
+    it('P11-T9 AC-1 below the first stage the tile says Not yet at the most junior stage, by seniority not position, with no pill', async () => {
       // The office drew the ladder top rung first; the junior stage is still the one named.
       const reversed = STAGES.map((s) => ({ ...s, displayOrder: 5 - s.stageOrder }));
       show({ 'GET /coaching/coachees/mem-rina/profile': { body: profile({ catalog: { ...CATALOG, stages: reversed }, milestoneCodes: [], stageCode: null }) } });
-      const mapping = await card('Capability mapping');
+      const tile = await card('Capability mapping');
 
-      expect(tagOf(mapping)).toHaveTextContent(/^Not yet at Competent Producer$/);
-      expect(within(mapping).queryByText('Current stage')).not.toBeInTheDocument();
-      expect(within(mapping).getAllByRole('listitem')[0]).toHaveTextContent(/^1Transformative Team Builder/);
+      expect(within(tile).getByText('Not yet at Competent Producer')).toBeInTheDocument();
+      expect(within(tile).queryByText('Current stage')).not.toBeInTheDocument();
+      expect(stepsOf(tile)).toEqual(['next', 'next', 'next', 'next']);
+      const sheet = await openLadder();
+      const [first] = stagesIn(sheet);
+      // Drawn first and numbered 1, the senior stage still adds only its own criterion.
+      expect(first).toHaveTextContent(/^1Transformative Team Builder/);
+      expect(within(first).getAllByRole('checkbox').map((b) => b.closest('label')!.textContent))
+        .toEqual(['Develops downline leader to Productive Team Builder']);
     });
 
     it('P11-T9 AC-1 saves one at a time: a tick made while a save is out goes in the next, at the version that one answered', async () => {
       const { calls } = show();
-      const mapping = await card('Capability mapping');
+      const sheet = await openLadder();
 
-      fireEvent.click(within(mapping).getAllByRole('checkbox', { name: 'Recruits quality agents' })[0]);
-      fireEvent.click(within(mapping).getByRole('checkbox', { name: 'Develops downline leader to Productive Team Builder' }));
+      fireEvent.click(within(sheet).getByRole('checkbox', { name: 'Recruits quality agents' }));
+      fireEvent.click(within(sheet).getByRole('checkbox', { name: 'Develops downline leader to Productive Team Builder' }));
 
       await waitFor(() => expect(sent(calls, 'PUT', '/coaching/coachees/mem-rina/profile')).toHaveLength(2));
       const [first, second] = sent(calls, 'PUT', '/coaching/coachees/mem-rina/profile').map(bodyOf);
@@ -224,7 +259,7 @@ describe('the Leader Notes tab (P11-T9)', () => {
       expect(second).toEqual({ version: 4, milestoneCodes: [M1, M2, M3, M5], skillCodes: SELLING });
     });
 
-    it('P11-T9 AC-1 a save another coach moved past reads the profile again and says so in one line', async () => {
+    it('P11-T9 AC-1 a save another coach moved past reads the profile again and says so in one line, in the sheet', async () => {
       const { calls } = show({
         'PUT /coaching/coachees/mem-rina/profile': refused(409, 'VERSION_CONFLICT', 'Somebody saved first.'),
         'GET /coaching/coachees/mem-rina/profile': [
@@ -232,13 +267,12 @@ describe('the Leader Notes tab (P11-T9)', () => {
           { body: profile({ version: 7, milestoneCodes: [M1, M2, M3, M4, M5], stageCode: 'TRANSFORMATIVE_TEAM_BUILDER' }) },
         ],
       });
-      const mapping = await card('Capability mapping');
+      const sheet = await openLadder();
 
-      await userEvent.click(within(mapping).getAllByRole('checkbox', { name: 'Recruits quality agents' })[0]);
+      await userEvent.click(within(sheet).getByRole('checkbox', { name: 'Recruits quality agents' }));
 
-      expect(await screen.findByText('The capability mapping was changed somewhere else, so it has been read again.')).toHaveAttribute('role', 'status');
-      const fresh = await card('Capability mapping');
-      expect(tagOf(fresh)).toHaveTextContent(/^Current: Transformative Team Builder$/);
+      expect(await within(sheet).findByText('The capability mapping was changed somewhere else, so it has been read again.')).toHaveAttribute('role', 'status');
+      expect(within(await card('Capability mapping')).getByText('Transformative Team Builder')).toBeInTheDocument();
       expect(sent(calls, 'GET', '/coaching/coachees/mem-rina/profile')).toHaveLength(2);
       expect(screen.queryByText('Somebody saved first.')).not.toBeInTheDocument();
       expect(screen.queryByText('Capability mapping updated.')).not.toBeInTheDocument();
@@ -246,8 +280,8 @@ describe('the Leader Notes tab (P11-T9)', () => {
 
     it('P11-T9 AC-1 sends nothing more for a tick undone and done again while a save is out, and says it once', async () => {
       const { calls } = show();
-      const mapping = await card('Capability mapping');
-      const quality = () => within(mapping).getAllByRole('checkbox', { name: 'Recruits quality agents' })[0];
+      const sheet = await openLadder();
+      const quality = () => within(sheet).getByRole('checkbox', { name: 'Recruits quality agents' });
 
       fireEvent.click(quality());
       fireEvent.click(quality());
@@ -262,53 +296,48 @@ describe('the Leader Notes tab (P11-T9)', () => {
         'PUT /coaching/coachees/mem-rina/profile': refused(409, 'VERSION_CONFLICT', 'Somebody saved first.'),
         'GET /coaching/coachees/mem-rina/profile': [{ body: profile() }, refused(500, 'INTERNAL_ERROR', 'Something broke')],
       });
-      await userEvent.click(within(await card('Capability mapping')).getAllByRole('checkbox', { name: 'Recruits quality agents' })[0]);
+      const sheet = await openLadder();
+      await userEvent.click(within(sheet).getByRole('checkbox', { name: 'Recruits quality agents' }));
       expect(await screen.findByRole('alert')).toHaveTextContent('Something broke');
     });
 
-    it('draws no tag for a ladder with no stage to name', async () => {
-      show({ 'GET /coaching/coachees/mem-rina/profile': { body: profile({ catalog: { ...CATALOG, stages: [] }, stageCode: null }) } });
-      const mapping = await card('Capability mapping');
-      expect(tagOf(mapping)).toBeNull();
-      expect(within(mapping).queryAllByRole('listitem')).toHaveLength(0);
-    });
-
-    // An office started Empty had one until ADR-0116 (2026-10-08) gave it the platform ladder; kept for one made before.
-    it('P13.2-T6 AC-8: says an empty catalog is empty on both cards', async () => {
+    // An office started Empty had none until ADR-0116 (2026-10-08) gave it the platform ladder; kept for one made before.
+    it('P13.2-T6 AC-8: says an empty catalog is empty on both cards, and the tile opens nothing', async () => {
       show({
         'GET /coaching/coachees/mem-rina/profile': {
           body: profile({ catalog: { ...CATALOG, stages: [], milestones: [], grids: [] }, milestoneCodes: [], skillCodes: [], stageCode: null }),
         },
       });
-      expect(within(await card('Capability mapping')).getByText('Your office has not set up its capability stages yet.'))
-        .toBeInTheDocument();
+      const tile = await card('Capability mapping');
+      expect(within(tile).getByText('Your office has not set up its capability stages yet.')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^Capability mapping: / })).not.toBeInTheDocument();
       expect(within(await card('Skill tracker')).getByText('Your office has not set up its skill grids yet.'))
         .toBeInTheDocument();
     });
 
-    it('shows any other refused save above the cards, and puts the boxes back as the server holds them', async () => {
+    it('shows any other refused save in the sheet, and puts the boxes back as the server holds them', async () => {
       show({ 'PUT /coaching/coachees/mem-rina/profile': refused(400, 'VALIDATION_FAILED', 'A code the catalog does not hold.') });
-      const mapping = await card('Capability mapping');
+      const sheet = await openLadder();
 
-      await userEvent.click(within(mapping).getAllByRole('checkbox', { name: 'Recruits quality agents' })[0]);
+      await userEvent.click(within(sheet).getByRole('checkbox', { name: 'Recruits quality agents' }));
 
-      expect(await screen.findByRole('alert')).toHaveTextContent('A code the catalog does not hold.');
-      within(mapping).getAllByRole('checkbox', { name: 'Recruits quality agents' }).forEach((box) => expect(box).not.toBeChecked());
+      expect(await within(sheet).findByRole('alert')).toHaveTextContent('A code the catalog does not hold.');
+      expect(within(sheet).getByRole('checkbox', { name: 'Recruits quality agents' })).not.toBeChecked();
       expect(screen.queryByText('Capability mapping updated.')).not.toBeInTheDocument();
     });
 
-    it('P18.95-T1 AC-5: a tick says Saved ✓ under its own box, in the stage it was ticked in, and keeps its toast', async () => {
+    it('P18.95-T1 AC-5: a tick says Saved ✓ beside its own box, and keeps its toast', async () => {
       show();
-      const mapping = await card('Capability mapping');
-      const box = within(mapping).getAllByRole('checkbox', { name: 'Recruits quality agents' })[0];
+      const sheet = await openLadder();
+      const box = within(sheet).getByRole('checkbox', { name: 'Recruits quality agents' });
       await userEvent.click(box);
 
-      const said = await within(mapping).findByText('Saved ✓');
+      const said = await within(sheet).findByText('Saved ✓');
       expect(said).toHaveAttribute('role', 'status');
       expect(box.closest('label')!.nextElementSibling).toBe(said);
       // Not in the label: the box's name stays its words.
       expect(box).toHaveAccessibleName('Recruits quality agents');
-      expect(within(mapping).getAllByText('Saved ✓')).toHaveLength(1);
+      expect(within(sheet).getAllByText('Saved ✓')).toHaveLength(1);
       await toastSays('Capability mapping updated.');
     });
 
@@ -335,18 +364,18 @@ describe('the Leader Notes tab (P11-T9)', () => {
         'PUT /coaching/coachees/mem-rina/profile': refused(409, 'VERSION_CONFLICT', 'Somebody saved first.'),
         'GET /coaching/coachees/mem-rina/profile': [{ body: profile() }, { body: profile({ version: 4 }) }],
       });
-      const mapping = await card('Capability mapping');
-      await userEvent.click(within(mapping).getAllByRole('checkbox', { name: 'Recruits quality agents' })[0]);
+      const sheet = await openLadder();
+      await userEvent.click(within(sheet).getByRole('checkbox', { name: 'Recruits quality agents' }));
 
       expect(await screen.findByText('The capability mapping was changed somewhere else, so it has been read again.')).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: /^Couldn't save/ })).not.toBeInTheDocument();
     });
 
-    it('locks every box for a reader who may read the profile and not tick it', async () => {
+    it('locks every box for a reader who may read the profile and not tick it; the ladder still opens', async () => {
       show({}, withPermissions(PERMISSIONS.filter((p) => p !== 'coaching_profile:update')));
-      const mapping = await card('Capability mapping');
-      within(mapping).getAllByRole('checkbox').forEach((box) => expect(box).toBeDisabled());
       within(await card('Skill tracker')).getAllByRole('checkbox').forEach((box) => expect(box).toBeDisabled());
+      const sheet = await openLadder();
+      within(sheet).getAllByRole('checkbox').forEach((box) => expect(box).toBeDisabled());
     });
 
     it('shows a failed profile read in its place, and the notes still read', async () => {
@@ -356,7 +385,7 @@ describe('the Leader Notes tab (P11-T9)', () => {
       expect(screen.queryByRole('region', { name: 'Capability mapping' })).not.toBeInTheDocument();
     });
 
-    it('shows a skeleton while the profile and the notes are read', async () => {
+    it('UI-071 shows skeletons shaped like the tile, the tracker and the note while they are read', async () => {
       let release!: () => void;
       const held = new Promise<void>((resolve) => { release = resolve; });
       const { mock } = show();
@@ -375,21 +404,32 @@ describe('the Leader Notes tab (P11-T9)', () => {
     });
   });
 
-  describe('Skill tracker', () => {
-    it('P11-T9 AC-2 draws the four sections in the prototype’s words, its items by code, a ticked one bold', async () => {
+  describe('Skill tracker (UI-036, UI-037)', () => {
+    it('UI-036 is titled Skill tracker; from 1024px the sections that apply are open columns with their counts', async () => {
       show();
       const tracker = await card('Skill tracker');
+      expect(tracker).toHaveAttribute('data-layout', 'columns');
 
       const sections = within(tracker).getAllByRole('group');
-      expect(sections.map((s) => s.firstElementChild?.textContent))
-        .toEqual(['Personal selling', 'Recruitment', 'Developing downline agent', 'Developing downline leader']);
+      expect(sections.map((s) => s.querySelector('h3')?.textContent))
+        .toEqual(['Personal selling6/7', 'Recruitment0/6']);
       const leads = within(tracker).getByRole('checkbox', { name: 'Leads generation consistency' });
       expect(leads).toBeChecked();
-      expect(leads.closest('label')!.className).toContain('font-semibold');
-      const objection = within(tracker).getByRole('checkbox', { name: 'Objection handling & closing' });
-      expect(objection).not.toBeChecked();
-      expect(objection.closest('label')!.className).not.toContain('font-semibold');
+      expect(within(tracker).getByRole('checkbox', { name: 'Objection handling & closing' })).not.toBeChecked();
       expect(within(sections[1]).getAllByRole('checkbox')).toHaveLength(6);
+      expect(screen.queryByText('Pelacak skill')).not.toBeInTheDocument();
+    });
+
+    it('UI-036 from 1024px a section that does not apply is one row with its reason, in her pronoun', async () => {
+      show();
+      const tracker = await card('Skill tracker');
+      const rows = Array.from(tracker.querySelectorAll('p[data-section]'));
+      expect(rows.map((r) => r.textContent)).toEqual([
+        'Developing downline agentNot applicable — she has no agents under her yet.',
+        'Developing downline leaderNot applicable — she has no downline leaders yet.',
+      ]);
+      expect(rows[0].lastElementChild).toHaveClass('italic');
+      expect(within(tracker).queryByRole('checkbox', { name: "Visibility into each agent's progress & goals" })).not.toBeInTheDocument();
     });
 
     it('P11-T9 AC-2 ticks a skill by its code and saves the whole set, with no toast', async () => {
@@ -405,33 +445,91 @@ describe('the Leader Notes tab (P11-T9)', () => {
       expect(screen.queryByText('Capability mapping updated.')).not.toBeInTheDocument();
     });
 
-    it('P11-T9 AC-2 disables both downline sections for somebody with nobody below, in her pronoun', async () => {
-      show();
-      const tracker = await card('Skill tracker');
-      const [, , agents, leaders] = within(tracker).getAllByRole('group');
-
-      expect(agents).toHaveAccessibleDescription('Not applicable — she has no agents under her yet.');
-      expect(leaders).toHaveAccessibleDescription('Not applicable — she has no downline leaders yet.');
-      within(agents).getAllByRole('checkbox').forEach((box) => expect(box).toBeDisabled());
-      within(leaders).getAllByRole('checkbox').forEach((box) => expect(box).toBeDisabled());
-      expect(agents.firstElementChild!.className).toContain('text-muted/50');
-    });
-
     it('P11-T9 AC-2 opens the agent section once somebody is below, and says they have no downline leaders yet, in their pronoun', async () => {
       show({ 'GET /coaching/coachees/mem-rina': { body: { ...RINA, pronoun: 'they', downline: { members: 2, leaders: 0 } } } });
       const tracker = await card('Skill tracker');
-      const [, , agents, leaders] = within(tracker).getAllByRole('group');
-
-      expect(agents).not.toHaveAccessibleDescription();
+      const agents = within(tracker).getByRole('group', { name: 'Developing downline agent' });
       within(agents).getAllByRole('checkbox').forEach((box) => expect(box).toBeEnabled());
-      expect(leaders).toHaveAccessibleDescription('Not applicable — they have no downline leaders yet.');
+      expect(tracker.querySelector('p[data-section="DEVELOPING_DOWNLINE_LEADER"]'))
+        .toHaveTextContent('Not applicable — they have no downline leaders yet.');
     });
 
     it('P11-T9 AC-2 opens both for a leader of leaders, with no note', async () => {
       show({ 'GET /coaching/coachees/mem-rina': { body: { ...RINA, pronoun: 'he', downline: { members: 6, leaders: 1 } } } });
       const tracker = await card('Skill tracker');
       expect(within(tracker).queryByText(/Not applicable/)).not.toBeInTheDocument();
+      expect(within(tracker).getAllByRole('group')).toHaveLength(4);
       within(tracker).getAllByRole('checkbox').forEach((box) => expect(box).toBeEnabled());
+    });
+
+    describe('below 1024px: the accordion', () => {
+      it('UI-036 each section a 44px row with its count, only the first incomplete one open', async () => {
+        atWidth(375);
+        show();
+        const tracker = await card('Skill tracker');
+        expect(tracker).toHaveAttribute('data-layout', 'accordion');
+
+        const heads = within(tracker).getAllByRole('button', { expanded: undefined }).filter((b) => b.hasAttribute('aria-expanded'));
+        expect(heads.map((b) => [b.textContent, b.getAttribute('aria-expanded')])).toEqual([
+          ['Personal selling6/7', 'true'], ['Recruitment0/6', 'false'],
+          ['Developing downline agentNot applicable', 'false'], ['Developing downline leaderNot applicable', 'false'],
+        ]);
+        heads.forEach((b) => expect(b).toHaveClass('min-h-11'));
+        expect(within(tracker).getAllByRole('checkbox')).toHaveLength(7);
+
+        await userEvent.click(heads[1]);
+        expect(heads[1]).toHaveAttribute('aria-expanded', 'true');
+        expect(within(tracker).getAllByRole('checkbox')).toHaveLength(13);
+        await userEvent.click(heads[0]);
+        expect(within(tracker).getAllByRole('checkbox')).toHaveLength(6);
+      });
+
+      it('UI-036 opens the first section still incomplete — Recruitment once selling is done', async () => {
+        atWidth(768);
+        show({
+          'GET /coaching/coachees/mem-rina/profile': {
+            body: profile({ skillCodes: [...SELLING, 'OBJECTION_HANDLING'] }),
+          },
+        });
+        const tracker = await card('Skill tracker');
+        expect(within(tracker).getByRole('button', { name: /^Personal selling/ })).toHaveAttribute('aria-expanded', 'false');
+        expect(within(tracker).getByRole('button', { name: /^Recruitment/ })).toHaveAttribute('aria-expanded', 'true');
+      });
+
+      it('UI-036 a section that does not apply stays a grey row with Tidak berlaku, and opens onto its reason and the greyed list', async () => {
+        atWidth(375);
+        show();
+        const tracker = await card('Skill tracker');
+        const agentsRow = within(tracker).getByRole('button', { name: /^Developing downline agent/ });
+        expect(within(agentsRow).getByText('Not applicable')).toHaveAttribute('data-tone', 'grey');
+        expect(agentsRow).toHaveClass('text-signal-grey');
+
+        await userEvent.click(agentsRow);
+        const agents = within(tracker).getByRole('group', { name: 'Developing downline agent' });
+        expect(within(agents).getByText('Not applicable — she has no agents under her yet.')).toBeInTheDocument();
+        within(agents).getAllByRole('checkbox').forEach((box) => expect(box).toBeDisabled());
+        expect(within(agents).getAllByRole('checkbox')[0].closest('label')).toHaveClass('text-signal-grey');
+      });
+    });
+
+    it('UI-037 every tick row is at least 44px below 1024px with a 22px box, 32px and 18px from 1024px; the label toggles it', async () => {
+      atWidth(375);
+      const { calls } = show();
+      const tracker = await card('Skill tracker');
+      const box = within(tracker).getByRole('checkbox', { name: 'Objection handling & closing' });
+      const row = box.closest('[data-tick-row]')!;
+      const label = box.closest('label')!;
+      for (const px of [375, 768]) {
+        expect(wears(row, px)).toContain('min-h-11');
+        expect(wears(label, px)).toContain('min-h-11');
+        expect(wears(box, px)).toMatch(/h-\[22px\] w-\[22px\]/);
+      }
+      expect(wears(label, 1280)).toContain('min-h-8');
+      expect(wears(box, 1280)).toMatch(/h-\[18px\] w-\[18px\]/);
+
+      await userEvent.click(within(label).getByText('Objection handling & closing'));
+      expect(box).toBeChecked();
+      await waitFor(() => expect(sent(calls, 'PUT', '/coaching/coachees/mem-rina/profile')).toHaveLength(1));
     });
   });
 
@@ -456,9 +554,10 @@ describe('the Leader Notes tab (P11-T9)', () => {
       },
       skillCodes: [...SELLING, 'COLD_CALLING', 'LEADER_TIME'],
     });
+    const LEADER_OF_LEADERS = { 'GET /coaching/coachees/mem-rina': { body: { ...RINA, downline: { members: 6, leaders: 1 } } } };
 
     it('P11-T9 AC-3 still draws what a profile ticked and the office archived, marked and locked; what it never ticked is not drawn', async () => {
-      show({ 'GET /coaching/coachees/mem-rina/profile': { body: archived() } });
+      show({ ...LEADER_OF_LEADERS, 'GET /coaching/coachees/mem-rina/profile': { body: archived() } });
       const tracker = await card('Skill tracker');
 
       const cold = within(tracker).getByRole('checkbox', { name: 'Cold calling Archived' });
@@ -468,11 +567,14 @@ describe('the Leader Notes tab (P11-T9)', () => {
       // A section archived is drawn while it holds a tick, locked; one holding none is not.
       const leaders = within(tracker).getByRole('group', { name: 'Developing downline leader Archived' });
       expect(within(leaders).getByRole('checkbox', { name: 'Allocating time for team building' })).toBeChecked();
+      expect(within(leaders).getByRole('checkbox', { name: 'Allocating time for team building' })).toBeDisabled();
       expect(within(tracker).queryByText('Mentoring')).not.toBeInTheDocument();
-      // A milestone archived and ticked, in every stage that lists it.
-      const outside = within(await card('Capability mapping')).getAllByRole('checkbox', { name: 'Sells outside direct network Archived' });
-      expect(outside).toHaveLength(3);
-      outside.forEach((box) => { expect(box).toBeChecked(); expect(box).toBeDisabled(); });
+      // A milestone archived and ticked: once, in the stage that adds it, locked.
+      const sheet = await openLadder();
+      const outside = within(sheet).getAllByRole('checkbox', { name: 'Sells outside direct network Archived' });
+      expect(outside).toHaveLength(1);
+      expect(outside[0]).toBeChecked();
+      expect(outside[0]).toBeDisabled();
     });
 
     it('P11-T9 AC-3 keeps an archived tick in the save: nothing is dropped behind the reader’s back', async () => {
@@ -501,14 +603,70 @@ describe('the Leader Notes tab (P11-T9)', () => {
     });
   });
 
-  describe('Personal notes', () => {
-    it('P11-T9 AC-4 shows the reader’s own note in the prototype’s card, tagged Leader-only, never shown to {name}', async () => {
+  describe('Personal notes (UI-038, UI-039, UI-040)', () => {
+    it('UI-038 the privacy line is an ⓘ after the Capability mapping title, and no longer on the note’s card', async () => {
       show();
+      const tile = await card('Capability mapping');
+      const info = within(tile).getByRole('button', { name: 'Leader-only, never shown to Rina Wijaya' });
+      expect(info.closest('span')!.className).toContain('z-[1]');
       const notes = await card('Personal notes');
-
-      expect(tagOf(notes)).toHaveTextContent(/^Leader-only, never shown to Rina Wijaya$/);
+      expect(notes.textContent).not.toMatch(/Leader-only/);
       expect(within(notes).getByRole('textbox', { name: 'Personal notes' })).toHaveValue(NOTES.mine.text);
       expect(within(notes).getByRole('button', { name: 'Save notes' })).toBeEnabled();
+    });
+
+    it('UI-039 typing says Not saved yet; saving says Saved ✓; undoing the change says Saved ✓ again', async () => {
+      show();
+      const notes = await card('Personal notes');
+      const state = () => notes.querySelector('[data-state]')!;
+      expect(state()).toHaveTextContent('Saved ✓');
+
+      const box = within(notes).getByRole('textbox', { name: 'Personal notes' });
+      await userEvent.type(box, '!');
+      expect(state()).toHaveTextContent('Not saved yet');
+      expect(state()).toHaveAttribute('data-state', 'unsaved');
+      await userEvent.type(box, '{Backspace}');
+      expect(state()).toHaveAttribute('data-state', 'saved');
+
+      await userEvent.type(box, ' Watch for burnout.');
+      await userEvent.click(within(notes).getByRole('button', { name: 'Save notes' }));
+      await waitFor(() => expect(state()).toHaveAttribute('data-state', 'saved'));
+      expect(state()).toHaveTextContent('Saved ✓');
+    });
+
+    it('UI-039 leaving with unsaved words asks first; staying keeps them', async () => {
+      show();
+      const notes = await card('Personal notes');
+      await userEvent.type(within(notes).getByRole('textbox', { name: 'Personal notes' }), ' More.');
+      const away = within(screen.getByRole('navigation', { name: 'Coaching' })).getAllByRole('link')
+        .find((a) => !a.getAttribute('href')?.endsWith('/leader-notes'))!;
+      await userEvent.click(away);
+      const ask = await screen.findByRole('dialog');
+      expect(ask).toHaveTextContent('You have changes that are not saved yet. Leave anyway?');
+      await userEvent.click(within(ask).getByRole('button', { name: 'Stay' }));
+      expect(within(notes).getByRole('textbox', { name: 'Personal notes' })).toHaveValue(`${NOTES.mine.text} More.`);
+    });
+
+    it('UI-039 a reader with no note yet sees no Saved ✓ until they write one', async () => {
+      show({ 'GET /coaching/coachees/mem-rina/leader-notes': { body: { mine: null, others: [] } } });
+      const notes = await card('Personal notes');
+      expect(notes.querySelector('[data-state]')).toBeNull();
+      await userEvent.type(within(notes).getByRole('textbox', { name: 'Personal notes' }), 'First.');
+      expect(notes.querySelector('[data-state]')).toHaveTextContent('Not saved yet');
+    });
+
+    it('UI-040 from 1024px two columns: the tile and the tracker left, the note right, 360px and sticky; the note last below', async () => {
+      show();
+      const notes = await card('Personal notes');
+      const column = notes.closest('[data-note-column]')!;
+      const grid = column.parentElement!;
+      expect(wears(grid, 1280)).toContain('grid-cols-[minmax(0,1fr)_360px]');
+      expect(wears(grid, 1024).split(' ')).toContain('grid');
+      expect(wears(column, 1280).split(' ')).toContain('sticky');
+      expect(wears(grid, 768)).not.toContain('grid-cols');
+      expect(wears(within(notes).getByRole('textbox'), 1280)).toContain('min-h-[180px]');
+      // The note comes after the tracker in the page, so below 1024px it is last.
+      expect(column.previousElementSibling!.contains(screen.getByRole('region', { name: 'Skill tracker' }))).toBe(true);
     });
 
     it('P11-T9 AC-4 saves on Save notes and nothing else, pinned to the version it read, and toasts Personal notes saved.', async () => {
@@ -587,6 +745,7 @@ describe('the Leader Notes tab (P11-T9)', () => {
 
       expect(await within(notes).findByRole('alert')).toHaveTextContent('At most 4000 characters.');
       expect(within(notes).getByRole('textbox', { name: 'Personal notes' })).toHaveValue(`${NOTES.mine.text}!`);
+      expect(notes.querySelector('[data-state]')).toHaveAttribute('data-state', 'unsaved');
     });
 
     it('a reader who may read and not write sees the note, read-only, and no Save notes', async () => {
@@ -640,25 +799,19 @@ describe('the Leader Notes tab (P11-T9)', () => {
   });
 
   describe('who sees a note (P11-T9 AC-5)', () => {
-    it('P11-T9 AC-5 Agent view hides the tab, moves the reader to Personal Summary, and drops what the tab read: nothing is kept', async () => {
-      const { calls } = show();
+    it('P11-T9 AC-5 leaving the tab drops what it read: coming back reads both again, nothing was cached', async () => {
+      const { calls, unmount } = show();
       await card('Personal notes from Wilson Tanoto');
       expect(screen.getByDisplayValue(NOTES.mine.text)).toBeInTheDocument();
 
-      await userEvent.click(screen.getByRole('button', { name: 'Agent view' }));
+      unmount();
+      expect(document.body.textContent).not.toMatch(/Strong closer|Keep an eye|Independent Producer|Leader-only/);
+      expect(sent(calls, 'GET', '/coaching/coachees/mem-rina/profile')).toHaveLength(1);
 
-      expect(nav.replace).toHaveBeenCalledWith('/coaching/mem-rina/summary');
-      expect(screen.queryByRole('link', { name: 'Leader Notes' })).not.toBeInTheDocument();
-      // Unmounted: no note's words, no tick and no stage anywhere in the page, on screen or in a field.
-      expect(screen.queryByDisplayValue(NOTES.mine.text)).not.toBeInTheDocument();
-      expect(document.body.textContent).not.toMatch(/Strong closer|Keep an eye|Capability mapping|Independent Producer|Leader-only/);
-      expect(screen.queryAllByRole('checkbox')).toHaveLength(0);
-
-      // Back to Leader view on the same address: the tab reads both again — nothing was cached.
-      await userEvent.click(screen.getByRole('button', { name: 'Leader view' }));
+      const again = show();
       await card('Personal notes from Wilson Tanoto');
-      expect(sent(calls, 'GET', '/coaching/coachees/mem-rina/profile')).toHaveLength(2);
-      expect(sent(calls, 'GET', '/coaching/coachees/mem-rina/leader-notes')).toHaveLength(2);
+      expect(sent(again.calls, 'GET', '/coaching/coachees/mem-rina/profile')).toHaveLength(1);
+      expect(sent(again.calls, 'GET', '/coaching/coachees/mem-rina/leader-notes')).toHaveLength(1);
     });
 
     it('P11-T9 AC-5 and AC-9 asks for no note and offers no Save notes in a support session, where neither note permission is the reader’s', async () => {
@@ -669,6 +822,16 @@ describe('the Leader Notes tab (P11-T9)', () => {
       expect(screen.queryByRole('region', { name: /Personal notes/ })).not.toBeInTheDocument();
       expect(document.body.textContent).not.toMatch(/Strong closer|Keep an eye/);
     });
+  });
+
+  it('UI-038 no text below 12px on the tab: no 10px or 11px class anywhere in it', async () => {
+    show();
+    await card('Personal notes from Wilson Tanoto');
+    const sheet = await openLadder();
+    for (const root of [screen.getByRole('main'), sheet]) {
+      const classes = Array.from(root.querySelectorAll('[class]')).map((el) => el.getAttribute('class')).join(' ');
+      expect(classes).not.toMatch(/text-\[(10|11)px\]|text-\[0\.6/);
+    }
   });
 
   it('P11-T9 writes none of ADR-0084’s six words, no phase, and no code', async () => {

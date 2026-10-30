@@ -126,7 +126,7 @@ export function DataTable({
   widths?: readonly string[];
 }) {
   return (
-    <div className={cn('overflow-x-auto rounded-lg border border-hairline bg-card', className)}>
+    <div className={cn('overflow-x-auto rounded-lg border border-card-edge bg-card', className)}>
       {/*
         * **`relative`, so nothing inside escapes the scroll box.** A `sr-only` name is
         * `position: absolute`; with no positioned ancestor inside this wrapper it is placed against one

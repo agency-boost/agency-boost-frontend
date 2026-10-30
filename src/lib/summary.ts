@@ -148,6 +148,18 @@ export interface Summary {
   monthly: PeriodFigures & { source: FigureSource | null };
   yearly: PeriodFigures & { source: FigureSource };
   pace: Pace | null;
+  /**
+   * **Where the page's counts of policies come from** (UI-052): every one — the *Submission polis* chips and the pace
+   * sentence's *closing N* — is the activity log's, over `codes`; APE and *Polis yang dibutuhkan* are the upload's. The
+   * API always sends it; optional so a fixture about something else need not.
+   */
+  policies?: { source: 'activity_log'; codes: string[] };
+  /**
+   * **The day the page's APE is valid for** (UI-054, the date header): the office's day its latest production file for
+   * `month` — and for `year`, of any of its months up to `month` — was uploaded; `null` while there is none. The API
+   * always sends it; optional so a fixture about something else need not.
+   */
+  uploadedOn?: { month: string | null; year: string | null };
   activity: { monthly: SummaryActivity; yearly: SummaryActivity };
   /**
    * The nearest of the reader's own open leads, and how many there are; and `unitOpen`, the open leads Leads
@@ -209,6 +221,19 @@ export function yearsOf(period: Pick<SummaryPeriod, 'firstMonth' | 'thisMonth'>)
   const years: string[] = [];
   for (let y = Number(period.thisMonth.slice(0, 4)); y >= Number(period.firstMonth.slice(0, 4)); y -= 1) years.push(String(y));
   return years;
+}
+
+/**
+ * **The days left after today in the office's month, or its year** (UI-054: *sisa 1 hari bulan ini* on the 30th of
+ * October, *hari terakhir* — 0 — on the 31st): calendar arithmetic on the office's day the server sent (`today`,
+ * `YYYY-MM-DD`), so no clock and no zone is read here. Built from the date's numbers in UTC, where no day is 23 hours.
+ */
+export function daysLeftIn(today: string, period: 'month' | 'year'): number {
+  const [y, m, d] = today.split('-').map(Number);
+  const day = Date.UTC(y, m - 1, d);
+  // The month's last day is day 0 of the next; the year's is 31 December.
+  const last = period === 'month' ? Date.UTC(y, m, 0) : Date.UTC(y, 11, 31);
+  return Math.round((last - day) / 86_400_000);
 }
 
 /**

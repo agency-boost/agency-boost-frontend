@@ -2,8 +2,8 @@ import { useState } from 'react';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
-import { CHIP_GRID_PHONE, CHIP_PHONE } from '@/components/ui/phone';
 import { MultiChoiceGroup } from './multi-choice-group';
+import { PLAN_CHIP_PHONE, PLAN_CHIPS_PHONE } from '../brief-card';
 
 const DRIVERS = [
   { value: 'side-income', label: 'Extra income on the side' },
@@ -74,10 +74,11 @@ describe('MultiChoiceGroup', () => {
     expect(chip('Full career change').parentElement).toHaveClass('flex-wrap');
   });
 
-  it('P18.95-T6 AC-1 grid/sticky classes scoped to max-md: two chips to a row below 768px, as ChoiceGroup’s', () => {
+  it('UI-107 on a phone: wrapping pill chips as ChoiceGroup’s, and the question says whether it is answered', () => {
     render(<Harness />);
-    expect(chip('Full career change').parentElement).toHaveClass('flex', 'flex-wrap', ...CHIP_GRID_PHONE.split(' '));
-    for (const each of within(group()).getAllByRole('button')) expect(each).toHaveClass(...CHIP_PHONE.split(' '));
+    expect(chip('Full career change').parentElement).toHaveClass('flex', 'flex-wrap', ...PLAN_CHIPS_PHONE.split(' '));
+    for (const each of within(group()).getAllByRole('button')) expect(each).toHaveClass(...PLAN_CHIP_PHONE.split(' '));
+    expect(group()).toHaveAttribute('data-question');
   });
 
   it('renders a label as text', () => {

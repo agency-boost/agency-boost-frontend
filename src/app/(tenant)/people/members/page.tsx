@@ -500,7 +500,7 @@ export default function MembersPage() {
             <SkeletonTable caption={t.log.caption} columns={logColumns(t)} />
           )}
           {log?.length === 0 && !error && (
-            <div className="rounded-lg border border-hairline bg-card">
+            <div className="rounded-lg border border-card-edge bg-card">
               <EmptyState title={t.log.empty} />
             </div>
           )}
@@ -551,7 +551,7 @@ export default function MembersPage() {
           )}
 
           {page?.length === 0 && !error && (
-            <div className="rounded-lg border border-hairline bg-card">
+            <div className="rounded-lg border border-card-edge bg-card">
               <EmptyState title={t.pending.empty} />
             </div>
           )}
@@ -753,7 +753,7 @@ export default function MembersPage() {
           )}
 
           {groups?.length === 0 && !error && (
-            <div className="rounded-lg border border-hairline bg-card">
+            <div className="rounded-lg border border-card-edge bg-card">
               <EmptyState title={t.groups.empty} />
             </div>
           )}
@@ -822,7 +822,7 @@ export default function MembersPage() {
       ))}
 
       {tab !== 'rolelog' && tab !== 'groups' && tab !== 'pending' && page?.length === 0 && !error && (
-        <div className="rounded-lg border border-hairline bg-card">
+        <div className="rounded-lg border border-card-edge bg-card">
           <EmptyState
             variant={filtered ? 'filtered' : 'empty'}
             title={

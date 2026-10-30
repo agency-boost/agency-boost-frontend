@@ -72,7 +72,8 @@ export const TERMS = {
     pattern: /\bJFW\b/,
   },
   TOUCHES: {
-    name: 'a touch',
+    // UI-106 (the owner): a logged activity is an *activity* on screen, never a *touch* — the key stays.
+    name: 'an activity',
     glossary: 'Touch',
     definition: termMessages.en.TOUCHES.definition,
     pattern: /\btouch(?:es)?\b/i,

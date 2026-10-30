@@ -69,6 +69,16 @@ const en = {
     `“${name}” attached.${cleared ? ' Its ticks are cleared.' : ''}`,
 
   /** The upload's own (`pdf-upload.tsx`): refused before anything is sent, or the send failing. */
+  /**
+   * **Pitch Materials on a phone** (UI V1, UI-107; `attack-plan-mobile` 6): the groups, a row's *View*, the ring's name
+   * — what it counts is the required documents with a file — and the line when none is missing. No state pills there.
+   */
+  requiredGroup: 'Required',
+  optionalGroup: 'Optional',
+  view: 'View',
+  uploadedRing: ({ done, total }: { done: number; total: number }) => `${done} of ${total} required documents uploaded`,
+  allUploaded: 'Every required document is uploaded.',
+
   uploading: ({ name }: { name: string }) => `Uploading “${name}”…`,
   tooLarge: ({ name, size, max }: { name: string; size: string; max: string }) =>
     `“${name}” is ${size}. A PDF can be ${max} MB at most.`,
@@ -111,6 +121,12 @@ const id: MessagesOf<typeof en> = {
   replacedSince: 'PDF ini diganti saat halaman sedang terbuka, jadi centangnya dihapus. Periksa file baru, lalu centang '
     + 'lagi.',
   attached: ({ name, cleared }) => `“${name}” terlampir.${cleared ? ' Centangnya dihapus.' : ''}`,
+
+  requiredGroup: 'Wajib',
+  optionalGroup: 'Opsional',
+  view: 'Lihat',
+  uploadedRing: ({ done, total }) => `${done} dari ${total} dokumen wajib sudah diunggah`,
+  allUploaded: 'Semua dokumen wajib sudah diunggah.',
 
   uploading: ({ name }) => `Mengunggah “${name}”…`,
   tooLarge: ({ name, size, max }) => `“${name}” berukuran ${size}. Ukuran PDF maksimal ${max} MB.`,

@@ -4,7 +4,7 @@ import { eventsMessages } from '@/i18n/messages/events';
 import { api, toDisplayError, type ApiError } from './api-client';
 import { confirmationMessages } from '@/i18n/messages/confirmations';
 import { withDetail } from './confirmations';
-import { formatClock, formatDayClock, formatShortDay } from './format';
+import { dayInZone, formatClock, formatDayClock, formatOfficeTime, formatShortDay, OFFICE_TIME_ZONE } from './format';
 
 /**
  * **KPM Events, as a member reads them** (`docs/02-specs/functional/events.md`, P18.5-T5 and T6): the
@@ -140,8 +140,12 @@ export const readEvent = (id: string) => api<GuestEvent>(`/events/${encodeURICom
 export const rsvpEvent = (id: string) =>
   api<GuestEvent>(`/events/${encodeURIComponent(id)}/rsvp`, { method: 'POST', body: {} });
 
+/** *Tidak ikut*: from going, or from no answer at all (UI V1, UI-108). */
 export const cancelRsvp = (id: string) =>
   api<GuestEvent>(`/events/${encodeURIComponent(id)}/rsvp/cancel`, { method: 'POST', body: {} });
+/** The answer taken back: *Ikut* or *Tidak ikut* tapped again on a phone's card (UI V1, UI-108). */
+export const withdrawRsvp = (id: string) =>
+  api<GuestEvent>(`/events/${encodeURIComponent(id)}/rsvp/withdraw`, { method: 'POST', body: {} });
 
 /** *I actually attended this event*: the reader's claim. It never makes them *attended* (OD-31). */
 export const claimAttendance = (id: string) =>
@@ -193,6 +197,56 @@ export function sections(events: readonly GuestEvent[]) {
     upcoming: open.filter((e) => !isGoing(e)).sort(byStart),
     past: events.filter((e) => !isOpen(e)).sort((a, b) => byStart(b, a)),
   };
+}
+
+/*
+ * ── UI V1 on a phone (UI-108; `campaign-event-mobile` 2) ────────────────────────────────────────
+ */
+
+/** The reader's answer on a phone's card: *Ikut*, *Tidak ikut*, or none yet. */
+export type RsvpAnswer = 'going' | 'notGoing' | null;
+export const answerOf = (event: Pick<GuestEvent, 'me'>): RsvpAnswer =>
+  (event.me.rsvp === 'going' ? 'going' : event.me.rsvp === 'cancelled' ? 'notGoing' : null);
+
+/**
+ * **What a tap on *Ikut* or *Tidak ikut* does** (UI-108: *the choice is filled; tap the other to change, or tap the
+ * chosen one again to undo*): the chosen one again withdraws the answer; the other gives it.
+ */
+export function rsvpCall(event: Pick<GuestEvent, 'me'>, tapped: 'going' | 'notGoing'): 'rsvp' | 'cancel' | 'withdraw' {
+  if (answerOf(event) === tapped) return 'withdraw';
+  return tapped === 'going' ? 'rsvp' : 'cancel';
+}
+
+/**
+ * **Start – end, in the office's clock** (UI-108: *"14.00 – 15.00", spaces around the dash*): the start the server
+ * resolved, and the end instant in the office's zone; an end on another day carries its date — *09.00 – 12 Nov 17.00*.
+ */
+export function timeSpanOf(
+  event: Pick<GuestEvent, 'startsOn' | 'startTime' | 'endsAt'>,
+  timeZone: string = OFFICE_TIME_ZONE,
+  figures?: Language,
+): string {
+  const start = formatClock(event.startTime, figures);
+  const end = formatOfficeTime(event.endsAt, timeZone, figures);
+  if (!end) return start;
+  const endDay = dayInZone(timeZone, new Date(event.endsAt));
+  return endDay === event.startsOn ? `${start} – ${end}` : `${start} – ${formatShortDay(endDay, {}, figures)} ${end}`;
+}
+
+/** An online event: its link is a meeting's (Zoom, Meet, Teams), or its place says *online* — drawn with a video glyph. */
+export function isOnline(event: Pick<GuestEvent, 'location' | 'locationUrl'>): boolean {
+  return /\bonline\b|\bzoom\b|\bwebinar\b/i.test(event.location)
+    || /zoom\.us|meet\.google|teams\.microsoft|webex/i.test(event.locationUrl ?? '');
+}
+
+/** The audience, only where it limits who can come (UI-108: *"Khusus leader"*); `null` for every agent. */
+export const limitingScope = (audience: Pick<GuestEventAudience, 'scope'>): EventScope | null =>
+  (audience.scope === 'all_agents' ? null : audience.scope);
+
+/** A phone's two groups (UI-108): *Akan datang* — going or not, soonest first — and *Sudah lewat*, latest first. */
+export function phoneGroups(events: readonly GuestEvent[]) {
+  const { going, upcoming, past } = sections(events);
+  return { upcoming: [...going, ...upcoming].sort(byStart), past };
 }
 
 /** The poster's corner tag (`:8502-8510`) — the modal's too (`:8601-8610`). */

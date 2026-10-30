@@ -3,8 +3,9 @@
 import Link from 'next/link';
 import { useEffect, useId, useRef, useState } from 'react';
 import {
-  AttributionMark, AutoBadge, ITEM_CHECKBOX, ITEM_ROW, RowError,
+  AttributionMark, AutoBadge, ITEM_CHECKBOX, ITEM_ROW, RowError, V1_ITEM_CHECKBOX, V1_ITEM_ROW,
 } from '@/components/activation-parts';
+import { AutoMarker } from '@/components/ui/auto-marker';
 import { DateField } from '@/components/ui/date-field';
 import { Button, TextInput } from '@/components/ui/field';
 import { InlineSaveStatus, type InlineSaveStatusProps } from '@/components/ui/inline-save-status';
@@ -12,7 +13,7 @@ import { Skeleton, SkeletonText } from '@/components/ui/skeleton';
 import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
 import { activationMessages } from '@/i18n/messages/activation';
 import {
-  attributionOf, isWholeDate, recordHref, sourceLineOf, takesHandWrite,
+  attributionOf, autoBadge, isWholeDate, recordHref, sourceLineOf, takesHandWrite,
   type ActivationClosing, type ActivationItemProgress, type ActivationRecordInput,
 } from '@/lib/activation';
 import { toDisplayError } from '@/lib/api-client';
@@ -46,7 +47,7 @@ const RECORD_TEXT_MAX = 500;
  * language.
  */
 export function DataItemRow({
-  item, reader, writable, audience, hireId, today, startDate, loadClosings, onSave, status, error,
+  item, reader, writable, audience, hireId, today, startDate, loadClosings, onSave, status, error, marker = 'badge',
 }: {
   item: ActivationItemProgress;
   reader: string | null | undefined;
@@ -63,6 +64,11 @@ export function DataItemRow({
   onSave: (done: boolean, record?: ActivationRecordInput) => Promise<boolean>;
   status: InlineSaveStatusProps;
   error: string | undefined;
+  /**
+   * **UI V1 (UI-027, D-25) on New hire detail: `bolt`** — a small ⚡ beside the name and the rule, with the source line,
+   * behind ⓘ (`AutoMarker`); 44px rows with 22px boxes. `badge`, the hire's own page, keeps the *Auto* chip and the line.
+   */
+  marker?: 'badge' | 'bolt';
 }) {
   const [open, setOpen] = useState(false);
   const formId = useId();
@@ -78,6 +84,7 @@ export function DataItemRow({
   // The tick's own history, kept beside the box while it waits: *"Ticked by {name} · {date}"*.
   const history = item.done && item.waiting ? attributionOf(item, reader, language, figures) : null;
   const form = item.link?.form ?? null;
+  const bolt = marker === 'bolt';
 
   useEffect(() => {
     if (refocus === 0) return;
@@ -109,7 +116,7 @@ export function DataItemRow({
 
   return (
     // `tabIndex={-1}`: the focus's place when the form closes on a box the answer left inert — never in the Tab order.
-    <div ref={row} tabIndex={-1} className={ITEM_ROW} data-code={item.code}>
+    <div ref={row} tabIndex={-1} className={cn(ITEM_ROW, bolt && V1_ITEM_ROW)} data-code={item.code}>
       <div className="flex items-center gap-2.5">
         <label className={cn('flex min-w-0 items-center gap-2.5 text-md font-medium text-navy', editable && 'cursor-pointer')}>
           <input
@@ -118,15 +125,18 @@ export function DataItemRow({
             checked={item.done || open}
             disabled={!editable}
             onChange={(e) => onBox(e.target.checked)}
-            className={ITEM_CHECKBOX}
+            className={bolt ? V1_ITEM_CHECKBOX : ITEM_CHECKBOX}
           />
-          <span>{item.label}</span>
+          <span className="break-words">{item.label}</span>
         </label>
-        {item.link && <AutoBadge link={item.link} />}
+        {item.link && !bolt && <AutoBadge link={item.link} />}
+        {item.link && bolt && (
+          <AutoMarker name={item.label} explanation={[autoBadge(item.link.completesWhen, language).tip, line].filter(Boolean).join(' ')} />
+        )}
         <AttributionMark words={history} />
         <InlineSaveStatus {...status} label={item.label} />
       </div>
-      {line && (
+      {line && !bolt && (
         <p className="ml-[26px] mt-1 text-xs text-muted" data-testid="source-line">
           {href
             ? <Link href={href} className="font-semibold text-navy-soft underline hover:text-navy">{line}</Link>

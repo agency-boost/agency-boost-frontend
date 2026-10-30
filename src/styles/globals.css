@@ -2,6 +2,33 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * **Inter, served by the app itself** (UI V1, UI-008; O-2). Until now the family was named and never loaded, so only a
+ * device with Inter installed drew it. One variable file, latin only (Indonesian and English need nothing more), every
+ * weight in it; `swap` shows the fallback at once and Inter when it arrives. The fallback is Arial set to Inter's
+ * metrics, so the text does not jump when Inter replaces it. The file and its licence (SIL OFL 1.1) are in `public/fonts/`;
+ * `layout.tsx` preloads it.
+ */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('/fonts/inter-latin-wght-normal.woff2') format('woff2-variations'),
+    url('/fonts/inter-latin-wght-normal.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Inter Fallback';
+  src: local('Arial');
+  ascent-override: 90.44%;
+  descent-override: 22.52%;
+  line-gap-override: 0%;
+  size-adjust: 107.12%;
+}
+
 /**
  * Design tokens, defined once. Components reference the Tailwind theme, which maps to
  * these — never a raw hex value. See docs/02-specs/design-system/tokens.md.
@@ -13,7 +40,11 @@
   /* Brand and surface */
   --color-navy: #1b2b4b;
   --color-navy-soft: #2e4370;
-  --color-amber: #f2994a;
+  /*
+   * The accent (UI V1, UI-008, 2026-10-30: the token table's *Accent orange*): `#E8954A`, which replaces the
+   * prototype's `#F2994A` everywhere — primary pills, selected states, the Selling bar. Navy words on it read 5.9:1.
+   */
+  --color-amber: #e8954a;
   --color-amber-dark: #d97f30;
   /*
    * Amber numerals on an **amber tint**, where amber-dark is not dark enough.
@@ -40,11 +71,70 @@
    */
   --color-gold: #c9a227;
   --color-gold-ink: #9a7b12;
-  /* A warm off-white, not a neutral grey — substituting one loses the product's character. */
+  /*
+   * A warm off-white, not a neutral grey — substituting one loses the product's character. **On a V1 surface it is the
+   * warm grey `#EDEDEA`** (UI V1, UI-008): below 768px in every shell, and at every width in the field shell, which marks
+   * itself `data-surface='v1'` (*V1 surfaces*, below).
+   */
   --color-base: #faf9f7;
   --color-card: #ffffff;
   --color-muted: #5f5e5a;
   --color-hairline: rgba(27, 43, 75, 0.12);
+  /*
+   * **A card's own edge** (UI V1, UI-008): the hairline, as every card has always had — and **none on a V1 surface**,
+   * where a white card on the warm grey ground needs no border. A card is `rounded-lg border border-card-edge bg-card`;
+   * a divider inside it stays `border-hairline`.
+   */
+  --color-card-edge: var(--color-hairline);
+  /* A card's corners, and a row's or a tile's inside one (UI V1: 16px and 14px on a V1 surface; 12px elsewhere, as before). */
+  --radius-card: 12px;
+  --radius-row: 12px;
+
+  /*
+   * **UI V1's palette** (UI-008, the report's token table; D-27). Each a token so no component writes a hex.
+   * - The four status pills, tint and words: red, amber, green, grey. Never a dot (D-27).
+   * - Words on white: red, green, grey. Words on navy: red, green, lavender.
+   * - The ink every page writes in, which the toast's surface is too; the desktop's row under the pointer; the divider
+   *   between rows; the tree's lines and an outline; the Recruitment side of the ratio card's split bar.
+   */
+  --color-pill-red: #fcebeb;
+  --color-pill-red-ink: #a32d2d;
+  --color-pill-amber: #faeeda;
+  --color-pill-amber-ink: #854f0b;
+  --color-pill-green: #eaf3de;
+  --color-pill-green-ink: #3b6d11;
+  --color-pill-grey: #f1efe8;
+  --color-pill-grey-ink: #444441;
+  --color-signal-red: #c23b3b;
+  --color-signal-green: #3b6d11;
+  --color-signal-grey: #6e6e69;
+  --color-on-navy-red: #f27979;
+  --color-on-navy-green: #97c459;
+  --color-on-navy-lavender: #9aa6e0;
+  --color-ink: #1c1c1a;
+  --color-hover-row: #f6f5f2;
+  --color-divider: #eeece7;
+  --color-line: #d3d1c7;
+  --color-lavender: #6b6fa0;
+
+  /*
+   * **The shared components' few colours of their own** (UI V1, Phase 18.99 T2 — W1-B):
+   * - On navy, the ratio card's *Target X* (6.79:1 on navy) and the line between its rows (UI-053).
+   * - WhatsApp's button (UI-081): the mockups' green, under a white line icon at 3.25:1, over the 3:1 a graphic needs.
+   * - The Group Tree's *Anda* pill on the reader's own navy row (UI-059): 6.42:1.
+   */
+  --color-on-navy-muted: #aeb4c6;
+  --color-on-navy-line: #34406a;
+  --color-whatsapp: #25a35a;
+  --color-pill-blue: #b5d4f4;
+  --color-pill-blue-ink: #0c447c;
+
+  /*
+   * **The floating tab bar's room** (UI V1, UI-004): what a fixed bar at the foot of the screen (`ACTION_BAR_PHONE`) and the
+   * toast stand above, and what the page's content leaves under its last line. Nothing, but where the field shell draws
+   * its bar — below 1024px (*V1 surfaces*, below): the bar's 64px, its 12px from the bottom, and the home indicator.
+   */
+  --tab-bar-space: 0px;
   /* Sidebar body text: light grey on navy, from the prototype's --navy surface. */
   --color-sidebar-text: #edeff5;
   /* Warm wash on a focused numeric input, from the prototype's stepper. */
@@ -61,7 +151,7 @@
   --color-neutral: #5f5e5a;
 
   /* Role accents. Always paired with a text label — colour is never the only cue. */
-  --color-role-ab: #f2994a;
+  --color-role-ab: #e8954a;
   --color-role-aab: #2f80ed;
   /* The prototype's `--blue` (`Superadmin.html:17`), which it uses for both the AAB tile
      and the `approval` chip on the attention queue. Held as its own token because a role
@@ -83,26 +173,38 @@
    */
   --color-teal-ink: #24665f;
 
-  /* Typography */
-  --font-display: 'Manrope', system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --font-body: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  /*
+   * Typography. **One family, Inter** (UI V1, UI-008; O-2): the headings' second family is gone, and `font-display` names the
+   * body's family, so every `font-display` class reads Inter without a sweep.
+   */
+  --font-body: 'Inter', 'Inter Fallback', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: var(--font-body);
 
   /*
    * The type scale's five steps under 16px (`text-2xs` … `text-md`), as properties so that a phone
-   * can move them and nothing wider does — see *On a phone* below. These are the values every size
-   * at and above 768px has always had; `theme.spec.ts` pins them.
+   * can move a field's text and nothing wider does — see *On a phone* below. `theme.spec.ts` pins them.
+   *
+   * **Nothing under 12px, at any width** (UI V1, UI-008: *All sizes*). `2xs` and `xs` were 10px and 11px from 768px and
+   * read 12px on a phone alone (UI-029); now they read 12px everywhere, so every one of their 291 uses is 12px.
    */
-  --text-2xs: 0.625rem; /* 10px */
-  --text-xs: 0.6875rem; /* 11px */
+  --text-2xs: 0.75rem; /* 12px — was 10px from 768px */
+  --text-xs: 0.75rem; /* 12px — was 11px from 768px */
   --text-sm: 0.75rem; /* 12px */
   --text-base: 0.8125rem; /* 13px */
   --text-md: 0.875rem; /* 14px */
+  /*
+   * **A page's title** (UI V1, UI-004, UI-008): 20px on a phone, 22px on a tablet, 24px on a desktop — one class,
+   * `text-title`, whose width is the stylesheet's (*V1 surfaces*, below).
+   */
+  --text-title: 1.25rem;
 
   /* The width of a scrolling tab row's edge fade on a phone: the sub-tab gap, `--space-6`. */
   --tab-fade: 1.5rem;
 
   /* Elevation. Surfaces separate by hairline and contrast, not by depth. */
   --shadow-modal: 0 20px 50px rgba(27, 43, 75, 0.3);
+  /* The floating tab bar's lift off the page (UI V1, UI-004). */
+  --shadow-bar: 0 2px 14px rgba(28, 28, 26, 0.14);
 
   /* Layout */
   /* 228px in the prototype. Widened once the nav grew an icon column and a collapse
@@ -111,6 +213,43 @@
   --sidebar-width: 252px;
   /* Icon, centred, with the same 8px gutter either side. */
   --sidebar-rail-width: 56px;
+}
+
+/**
+ * **V1 surfaces in the field shell, at every width** (UI V1, UI-008; ADR-0180). The field shell — every page an AB, an
+ * AAB or an Agent works in, nearly all of which the revision draws — marks its frame `data-surface='v1'`, and the whole
+ * document takes the warm grey ground, borderless cards and the 16px / 14px corners: a dialog drawn at the end of
+ * `<body>` included. The office console and the platform console are V1 below 768px only (the phone block, below).
+ */
+:root:has([data-surface='v1']) {
+  --color-base: #ededea;
+  --color-card-edge: transparent;
+  --radius-card: 16px;
+  --radius-row: 14px;
+}
+
+/** The title's 22px on a tablet and 24px on a desktop (UI-004, UI-008; `--text-title`). */
+@media (min-width: 768px) {
+  :root {
+    --text-title: 1.375rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  :root {
+    --text-title: 1.5rem;
+  }
+}
+
+/**
+ * **Room for the floating tab bar** (UI V1, UI-004), below 1024px wherever the field shell draws it (`data-tab-bar`): its
+ * 64px, the 12px under it, and the home indicator's inset. A fixed bar at the foot of the screen stands on it, and the
+ * toast above that.
+ */
+@media (max-width: 1023.98px) {
+  :root:has([data-tab-bar]) {
+    --tab-bar-space: calc(4.75rem + env(safe-area-inset-bottom));
+  }
 }
 
 html,
@@ -184,13 +323,15 @@ h3 {
  */
 @media not all and (min-width: 768px) {
   /*
-   * **No text under 12px** (UI-029: the all-caps card headers, badges and helper text at 10–11px).
-   * The two steps under it read 12px, the scale's `sm`; nothing else moves. A glyph that is not text
-   * may stay smaller — the roster's ▸ is sized in its own unit.
+   * **A V1 surface, in every shell** (UI V1, UI-008: *Surfaces … Mobile everywhere*). The warm grey ground, white cards
+   * with no border, 16px corners and 14px for a row inside one. *No text under 12px* (UI-029) is no longer this block's:
+   * it holds at every width now (`:root`, above).
    */
   :root {
-    --text-2xs: 0.75rem;
-    --text-xs: 0.75rem;
+    --color-base: #ededea;
+    --color-card-edge: transparent;
+    --radius-card: 16px;
+    --radius-row: 14px;
   }
 
   /*

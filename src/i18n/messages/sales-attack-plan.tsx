@@ -86,6 +86,9 @@ const en = {
   alsoMatches: 'Also matches this need — tap to switch the plan above:',
   more: ({ n }: { n: number }) => `${n} more also match. Open the Product Catalog to browse the full shelf.`,
   noMatch: 'No active product matches this need. Try a different need in the brief.',
+  /** The alternatives on a phone (UI V1, UI-107; `attack-plan-mobile` 3): their heading, and the catalog's link. */
+  alsoFits: 'Also fits this need',
+  seeInCatalog: `See in ${kept('Product Catalog')}`,
 };
 
 const id: MessagesOf<typeof en> = {
@@ -133,6 +136,8 @@ const id: MessagesOf<typeof en> = {
   alsoMatches: 'Juga sesuai dengan kebutuhan ini — ketuk untuk mengganti rencana di atas:',
   more: ({ n }) => `${n} produk lain juga sesuai. Buka ${kept('Product Catalog')} untuk melihat seluruh etalase.`,
   noMatch: 'Tidak ada produk aktif yang sesuai dengan kebutuhan ini. Coba kebutuhan lain di gambaran nasabah.',
+  alsoFits: 'Juga sesuai kebutuhan ini',
+  seeInCatalog: `Lihat di ${kept('Product Catalog')}`,
 };
 
 export const salesAttackPlanMessages = defineMessages({ en, id });

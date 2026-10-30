@@ -35,14 +35,14 @@ const en = {
     title: kept('Unit Dashboard'),
     roster: 'Your team’s roster',
     updateProduction: 'Update production',
-    yourTeam: kept('Your team'),
-    directGroupProduction: kept('Direct Group production'),
+    yourTeam: 'Your team',
+    directGroupProduction: 'Direct Group production',
     /** The prototype's *Potential Monthly Active Agents (Group)*, in plain words since P18.95-T9 AC-4. */
-    potentialActiveTile: kept('On pace to be active (Group)'),
-    potentialRecruitsTile: kept('Potential Recruits (Group)'),
+    potentialActiveTile: 'On pace to be active (Group)',
+    potentialRecruitsTile: 'Potential Recruits (Group)',
     yourUnitRecruits: 'Your unit',
     yourAabs: 'Your AABs',
-    aabUnits: kept('AAB units'),
+    aabUnits: `${kept('AAB')} units`,
     yourUnitGroup: 'Your Unit',
     yourUnitTotal: 'Your Unit — Total',
     /** A unit head's own row, apart from the unit's total (`:7384`). */
@@ -58,9 +58,9 @@ const en = {
       '2. Will qualify. Projected pace ≥90% of target? → On track.',
       '3. Will qualify, but pace under 90%? → Watch closely.',
     ].join('\n'),
-    gap: kept('Gap'),
-    activityBreakdown: kept('Activity breakdown'),
-    ratios: kept('Ratios'),
+    gap: 'Gap',
+    activityBreakdown: 'Activity breakdown',
+    ratios: 'Ratios',
     salesOnly: kept('Sales-only'),
     followUp: 'Flagged follow-up (system-detected)',
     dialogHint: 'Enter the latest figures from the company report — month and year are updated independently.',
@@ -112,7 +112,7 @@ const en = {
     backToYours: 'Your Unit Dashboard',
     saving: 'Saving…',
     /** What each row's ✓ is called, for a screen reader (P18.95-T9 AC-4). */
-    maaMark: kept('Potential Monthly Active Agent'),
+    maaMark: `Potential ${kept('Monthly Active Agent')}`,
     /** What the *New hire* tag adds for a screen reader (P18.96-T5 AC-3). */
     newHireMark: ', no first sale yet',
   },
@@ -198,6 +198,52 @@ const en = {
   locked: ({ month }: { month: string }) => `Production for ${month} is locked. The Owner or Admin can reopen it.`,
   /** *Overdue {n}d* (`:7292`). */
   overdue: ({ n }: { n: number }) => `Overdue ${n}d`,
+  /**
+   * **UI V1** (Phase 18.99 T4; the owner's report of 2026-10-30, UI-001 to UI-012 and UI-028): the report's words where
+   * it gives them — *Tim Anda*, *Produksi Group*, *Active Agent {Bulan}*, *Recruitment {Bulan}*, *Last updated*, *Leads
+   * penjualan*, *Closing*, *Leads rekrut*, *Potensi rekrut*, *Minggu | Bulan*, *Unit | Group*, *Semua* — and the rest
+   * proposed in the glossary's §B.10 (Phase 18.99 T4). *Overview*, *Active Agent*, *Recruitment*, *Last updated*, *Unit*,
+   * *Group* and *Closing* are kept (§A; UI-006).
+   */
+  v1: {
+    tabs: { overview: kept('Overview'), activities: 'Activities' },
+    groupProduction: 'Group production',
+    /** UI-003's labels: `month` the month's name in full, written by the caller in the figures' language. */
+    activeAgent: ({ month }: { month: string }) => `${kept('Active Agent')} ${month}`,
+    recruitment: ({ month }: { month: string }) => `${kept('Recruitment')} ${month}`,
+    agentUnit: ({ n }: { n: number }): string => (n === 1 ? 'agent' : 'agents'),
+    candidateUnit: ({ n }: { n: number }): string => (n === 1 ? 'candidate' : 'candidates'),
+    direct: 'direct',
+    /** *dari Rp 612,3 jt*, *dari 12*: `of` the figure, written by the caller. */
+    of: ({ of }: { of: string }) => `of ${of}`,
+    /** UI-028: `day` written by the caller, *28 Okt 26*. */
+    lastUpdated: ({ day }: { day: string }) => `${kept('Last updated')} ${day}`,
+    filterLabel: 'Filter by status',
+    all: ({ n }: { n: number }) => `All ${n}`,
+    /** A chip's status and its count: `status` the pill's own words. */
+    withCount: ({ status, n }: { status: string; n: number }) => `${status} ${n}`,
+    /** An accordion's header: `label` the unit's name, `n` the people in it. */
+    unitCount: ({ label, n }: { label: string; n: number }) => `${label} · ${n}`,
+    /** A unit's header row on a desktop: *Active 1/4*. */
+    active: ({ count, of }: { count: number; of: number }) => `Active ${count}/${of}`,
+    columns: {
+      salesLeads: 'Sales leads',
+      closing: kept('Closing'),
+      recruitLeads: 'Recruitment leads',
+      potentialRecruits: 'Potential recruits',
+    },
+    /** *Minggu | Bulan*: in English by its rhythm — *Week* alone is the Calendar's kept tab (§A). */
+    span: { week: 'Weekly', month: 'Monthly' },
+    scope: { unit: kept('Unit'), group: kept('Group') },
+    scopeLabel: `${kept('Unit')} or ${kept('Group')}`,
+    previous: 'Previous period',
+    next: 'Next period',
+    pickDate: 'Pick a date',
+    total: 'Total',
+    showSection: ({ label }: { label: string }) => `Show ${label}`,
+    hideSection: ({ label }: { label: string }) => `Hide ${label}`,
+    loadingActivities: 'Loading the activities…',
+  },
 };
 
 const id: MessagesOf<typeof en> = {
@@ -207,13 +253,13 @@ const id: MessagesOf<typeof en> = {
     title: kept('Unit Dashboard'),
     roster: 'Roster tim Anda',
     updateProduction: 'Perbarui produksi',
-    yourTeam: kept('Your team'),
-    directGroupProduction: kept('Direct Group production'),
-    potentialActiveTile: kept('On pace to be active (Group)'),
-    potentialRecruitsTile: kept('Potential Recruits (Group)'),
+    yourTeam: 'Tim Anda',
+    directGroupProduction: 'Produksi Group',
+    potentialActiveTile: 'Berpotensi aktif (Group)',
+    potentialRecruitsTile: 'Potensi rekrut (Group)',
     yourUnitRecruits: `${kept('Unit')} Anda`,
     yourAabs: `${kept('AAB')} Anda`,
-    aabUnits: kept('AAB units'),
+    aabUnits: `${kept('Unit')} ${kept('AAB')}`,
     yourUnitGroup: `${kept('Unit')} Anda`,
     yourUnitTotal: `${kept('Unit')} Anda — Total`,
     personal: 'Pribadi',
@@ -226,9 +272,9 @@ const id: MessagesOf<typeof en> = {
       `2. Akan memenuhi syarat. Proyeksi laju ≥90% dari ${kept('target')}? → Sesuai ${kept('target')}.`,
       '3. Akan memenuhi syarat, tetapi laju di bawah 90%? → Perlu dipantau.',
     ].join('\n'),
-    gap: kept('Gap'),
-    activityBreakdown: kept('Activity breakdown'),
-    ratios: kept('Ratios'),
+    gap: 'Selisih',
+    activityBreakdown: 'Rincian aktivitas',
+    ratios: 'Rasio',
     salesOnly: kept('Sales-only'),
     followUp: `${kept('Follow-up')} yang ditandai (terdeteksi sistem)`,
     dialogHint: 'Masukkan angka terbaru dari laporan perusahaan — bulan dan tahun diperbarui secara terpisah.',
@@ -271,7 +317,7 @@ const id: MessagesOf<typeof en> = {
     notFoundLine: 'Mungkin dia belum memimpin siapa pun, berada di luar tim Anda, atau alamatnya salah ketik.',
     backToYours: `${kept('Unit Dashboard')} Anda`,
     saving: 'Menyimpan…',
-    maaMark: kept('Potential Monthly Active Agent'),
+    maaMark: `${kept('Monthly Active Agent')} potensial`,
     newHireMark: ', belum ada penjualan pertama',
   },
   titleOf: ({ name }) => `${kept('Unit Dashboard')} ${name}`,
@@ -291,7 +337,7 @@ const id: MessagesOf<typeof en> = {
   productionToast: ({ n }) => `Produksi diperbarui untuk ${n} agent.`,
   addedDetail: ({ name }) => `${name} sekarang ada di ${kept('unit')}.`,
   transferDetail: ({ name }) => `${name} pindah setelah ${kept('KPM')} menyetujuinya.`,
-  onPace: ({ count, of }) => `${kept('On pace to be active')}: ${count}/${of}`,
+  onPace: ({ count, of }) => `Berpotensi aktif: ${count}/${of}`,
   goal: {
     over: ({ pct, sum }) => `${pct} · lebih ${sum}`,
     short: ({ pct, sum }) => `${pct} · kurang ${sum}`,
@@ -326,6 +372,39 @@ const id: MessagesOf<typeof en> = {
   },
   locked: ({ month }) => `Produksi untuk ${month} dikunci. ${kept('Owner')} atau ${kept('Admin')} dapat membukanya kembali.`,
   overdue: ({ n }) => `Terlambat ${n} hari`,
+  v1: {
+    tabs: { overview: kept('Overview'), activities: 'Aktivitas' },
+    groupProduction: 'Produksi Group',
+    activeAgent: ({ month }) => `${kept('Active Agent')} ${month}`,
+    recruitment: ({ month }) => `${kept('Recruitment')} ${month}`,
+    // One form for one and many (§B.0 rule 8), as *12 agent* (§B.1 *+ Tambah agent*).
+    agentUnit: () => 'agent',
+    candidateUnit: () => 'kandidat',
+    direct: 'langsung',
+    of: ({ of }) => `dari ${of}`,
+    lastUpdated: ({ day }) => `${kept('Last updated')} ${day}`,
+    filterLabel: 'Filter menurut status',
+    all: ({ n }) => `Semua ${n}`,
+    withCount: ({ status, n }) => `${status} ${n}`,
+    unitCount: ({ label, n }) => `${label} · ${n}`,
+    active: ({ count, of }) => `Aktif ${count}/${of}`,
+    columns: {
+      salesLeads: `${kept('Leads')} penjualan`,
+      closing: kept('Closing'),
+      recruitLeads: `${kept('Leads')} rekrut`,
+      potentialRecruits: 'Potensi rekrut',
+    },
+    span: { week: 'Minggu', month: 'Bulan' },
+    scope: { unit: kept('Unit'), group: kept('Group') },
+    scopeLabel: `${kept('Unit')} atau ${kept('Group')}`,
+    previous: 'Periode sebelumnya',
+    next: 'Periode berikutnya',
+    pickDate: 'Pilih tanggal',
+    total: 'Total',
+    showSection: ({ label }) => `Tampilkan ${label}`,
+    hideSection: ({ label }) => `Sembunyikan ${label}`,
+    loadingActivities: 'Memuat aktivitas…',
+  },
 };
 
 export const unitDashboardMessages = defineMessages({ en, id });

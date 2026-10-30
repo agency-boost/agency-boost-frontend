@@ -1,9 +1,12 @@
 'use client';
 
+import { useEffect, useState } from 'react';
+import { readWaitingCount } from '@/lib/join';
 import { useSession } from '@/lib/session';
 import { RouteTabs, type RouteTab } from '@/components/ui/route-tabs';
 import { kept } from '@/i18n/kept';
-import { useMessages } from '@/i18n/language-provider';
+import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
+import { formatNumber } from '@/lib/format';
 import { userManagementMessages } from '@/i18n/messages/user-management';
 
 /**
@@ -34,9 +37,11 @@ interface SubTab {
  */
 export const USER_MANAGEMENT_TITLE = kept('User Management');
 
+/**
+ * **The order a leader comes for** (UI V1, UI-085): *Add New Agents · Pending Requests · Find Your Leader · Register
+ * KPM*, at every size — the menu opens the first (`lib/field-nav.ts`); the labels are unchanged.
+ */
 const SUBTABS: readonly SubTab[] = [
-  { href: '/user-management/kpm', tab: 'kpm' },
-  { href: '/user-management/leader', tab: 'leader' },
   // Hidden from an Agent, who holds neither permission this screen's two halves need.
   // `roles-and-permissions.md:372` calls it "the single largest leak in the prototype" —
   // an Agent issuing codes that tag joiners to themselves, and pulling untagged members
@@ -48,6 +53,8 @@ const SUBTABS: readonly SubTab[] = [
   // role (`User_Management_Section.html:996`); we hide it by the permission that decides
   // the same thing, so it survives P3.5-T8 replacing the role with a ladder reference.
   { href: '/user-management/pending', tab: 'pending', needs: 'leader_request:read_inbox' },
+  { href: '/user-management/leader', tab: 'leader' },
+  { href: '/user-management/kpm', tab: 'kpm' },
 ];
 
 export function UserManagementTabs({
@@ -56,11 +63,28 @@ export function UserManagementTabs({
 }: {
   /** Find Your Leader is locked until an office is registered. */
   leaderLocked?: boolean;
+  /**
+   * How many requests wait, when the screen already knows — the Pending Requests page, from its inbox, so the pill
+   * follows an approval at once. Absent, the tab row asks the server itself (`GET /join/requests/count`; UI-085).
+   */
   pendingCount?: number;
 }) {
   const t = useMessages(userManagementMessages);
+  const figures = useFigureLanguage();
   const { me } = useSession();
   const permissions = me?.permissions ?? [];
+  const mayRead = permissions.includes('leader_request:read_inbox');
+  const [asked, setAsked] = useState<number | null>(null);
+  // UI-085: the count on every User Management screen, for a reader with an inbox; a failed read shows none.
+  useEffect(() => {
+    if (!mayRead || pendingCount !== undefined) return;
+    let live = true;
+    readWaitingCount()
+      .then((answer) => { if (live) setAsked(answer.count); })
+      .catch(() => undefined);
+    return () => { live = false; };
+  }, [mayRead, pendingCount]);
+  const waiting = pendingCount ?? asked ?? 0;
 
   const tabs: RouteTab[] = SUBTABS.filter(
     (tab) => !tab.needs || permissions.includes(tab.needs),
@@ -69,10 +93,11 @@ export function UserManagementTabs({
     label: t.tabs[tab.tab],
     locked: tab.href.endsWith('/leader') && leaderLocked,
     hint: tab.href.endsWith('/leader') ? t.registerFirst : undefined,
+    // UI-085: an orange count when something waits, nothing at 0 — navy words on the accent (parity I-542).
     badge:
-      tab.href.endsWith('/pending') && pendingCount !== undefined && pendingCount > 0 ? (
-        <span className="inline-flex h-[17px] min-w-[17px] items-center justify-center rounded-pill bg-alert px-1.5 text-2xs font-bold text-card">
-          {pendingCount}
+      tab.href.endsWith('/pending') && waiting > 0 ? (
+        <span data-count="" className="inline-flex h-5 min-w-5 items-center justify-center rounded-pill bg-amber px-1.5 text-xs font-bold text-navy">
+          {formatNumber(waiting, {}, figures)}
         </span>
       ) : undefined,
   }));

@@ -197,6 +197,98 @@ const en = {
     missing: 'No phone number yet — add one in Lead details.',
     unusable: 'This number can’t be dialled — check it in Lead details.',
   },
+
+  /**
+   * **`/leads` below 1024px: the compact list** (UI V1, UI-105; D-10, D-18). The report's words in Indonesian; the
+   * English is the glossary for approval's §B.10 (*Phase 18.99 T12*).
+   */
+  list: {
+    /** The title row's title on a phone and a tablet (UI-004: *"Leads" + avatar*). */
+    title: kept('Leads'),
+    search: 'Search lead names',
+    filter: 'Filter and sort',
+    filterOn: 'Filter and sort, a filter is on',
+    chips: 'Lead type',
+    all: 'All',
+    /** A chip's name with its count, as a screen reader hears it: *Sales, 58 leads*. */
+    chipSaid: ({ label, n }: { label: string; n: number }) => `${label}, ${n} ${n === 1 ? kept('lead') : kept('leads')}`,
+    /** The strip's name, and each cell's: *Follow-up, 18 leads*. */
+    pipeline: ({ type }: { type: string }) => `${type} pipeline`,
+    stageSaid: ({ stage, n }: { stage: string; n: number }) => `${stage}, ${n} ${n === 1 ? kept('lead') : kept('leads')}`,
+    /** Under the strip: what the list holds, and its order. */
+    meta: ({ n, what }: { n: number; what: string }) => `${n} ${n === 1 ? kept('lead') : kept('leads')} · ${what}`,
+    allLeads: 'all',
+    nextActionToday: 'Today',
+    /** UI-062's words for a lead with no next action, in red. */
+    fillAction: 'Add an action',
+    fillDate: 'Add a date',
+    overdue: 'overdue',
+    add: 'Add lead',
+    open: ({ who }: { who: string }) => `Open ${who}`,
+    noneOfType: 'No leads here yet.',
+    filters: {
+      title: 'Filter and sort',
+      type: 'Type',
+      status: 'Status',
+      sort: 'Order',
+      allStatuses: 'All',
+      clear: 'Clear',
+      done: 'Show leads',
+    },
+  },
+
+  /**
+   * **The pipeline strip's short words, by the stage's code** (UI-105, D-18: *Belum · Follow-up · SPAJ · Belum bayar ·
+   * Closing*). Only the seeded ladders' codes: a stage an office added is shown in its own words. A code, never a
+   * position (invariant §4).
+   */
+  stageShort: {
+    NOT_YET_APPROACHED: 'Not yet',
+    FOLLOW_UP: kept('Follow-up'),
+    POLICY_SUBMITTED: kept('SPAJ'),
+    APPROVED_NOT_PAID: 'Unpaid',
+    PAID_AND_ISSUED: kept('Closing'),
+    NOT_APPROACHED: 'Not yet',
+    MEETING_SCHEDULED: 'Meeting',
+    RECRUITMENT_PRESENTATION: 'Presentation',
+    AGENT_CODE_CREATED: 'Agent code',
+    AAJI_LICENSED: kept('AAJI'),
+    JOINT_FIELD_WORK_PLANNED: kept('JFW'),
+    NEW_ACTIVE_AGENT: 'Active',
+  } as Record<string, string>,
+
+  /** **The lead sheet** (UI V1, UI-105; D-19, D-07): `components/lead-sheet.tsx`. */
+  sheet: {
+    newTitle: 'New lead',
+    /** Under the name: *Follow-up · Sales*. */
+    meta: ({ stage, type }: { stage: string; type: string }) => `${stage} · ${type}`,
+    noStage: 'No stage yet',
+    name: 'Name',
+    type: 'Type',
+    status: 'Status',
+    chooseTypeFirst: 'Choose Sales or Recruit to see its stages.',
+    nextAction: 'Next action',
+    nextActionDate: 'Next action date',
+    pickDate: 'Pick a date',
+    notePlaceholder: 'Write the action…',
+    remarks: 'Remarks',
+    details: 'Details',
+    phone: 'WhatsApp number',
+    email: 'Email',
+    source: 'Where they came from',
+    outcome: 'Outcome',
+    history: 'History',
+    historyLoading: 'Loading the history…',
+    added: 'Lead added',
+    moved: ({ stage }: { stage: string }) => `Status → ${stage}`,
+    save: 'Save',
+    delete: 'Delete',
+    deleteAsk: ({ who }: { who: string }) => `Delete ${who}? It leaves your leads.`,
+    deleted: 'Lead deleted',
+    saved: 'Saved',
+    discard: 'You have changes that are not saved yet. Close without saving?',
+    discardConfirm: 'Close without saving',
+  },
 };
 
 const id: MessagesOf<typeof en> = {
@@ -341,6 +433,82 @@ const id: MessagesOf<typeof en> = {
   phoneHeld: {
     missing: `Belum ada nomor telepon — tambahkan di Detail ${kept('lead')}.`,
     unusable: `Nomor ini tidak dapat dihubungi — periksa di Detail ${kept('lead')}.`,
+  },
+
+  list: {
+    title: kept('Leads'),
+    search: `Cari nama ${kept('lead')}`,
+    filter: 'Filter dan urutan',
+    filterOn: 'Filter dan urutan, ada filter aktif',
+    chips: `Jenis ${kept('lead')}`,
+    all: 'Semua',
+    chipSaid: ({ label, n }) => `${label}, ${n} ${n === 1 ? kept('lead') : kept('leads')}`,
+    pipeline: ({ type }) => `${kept('Pipeline')} ${type}`,
+    stageSaid: ({ stage, n }) => `${stage}, ${n} ${n === 1 ? kept('lead') : kept('leads')}`,
+    meta: ({ n, what }) => `${n} ${n === 1 ? kept('lead') : kept('leads')} · ${what}`,
+    allLeads: 'semua',
+    nextActionToday: 'Hari ini',
+    fillAction: 'Isi tindakan',
+    fillDate: 'Isi tanggal',
+    overdue: 'terlambat',
+    add: `Tambah ${kept('lead')}`,
+    open: ({ who }) => `Buka ${who}`,
+    noneOfType: `Belum ada ${kept('leads')} di sini.`,
+    filters: {
+      title: 'Filter dan urutan',
+      type: 'Jenis',
+      status: 'Status',
+      sort: 'Urutan',
+      allStatuses: 'Semua',
+      clear: 'Hapus filter',
+      done: `Tampilkan ${kept('leads')}`,
+    },
+  },
+
+  stageShort: {
+    NOT_YET_APPROACHED: 'Belum',
+    FOLLOW_UP: kept('Follow-up'),
+    POLICY_SUBMITTED: kept('SPAJ'),
+    APPROVED_NOT_PAID: 'Belum bayar',
+    PAID_AND_ISSUED: kept('Closing'),
+    NOT_APPROACHED: 'Belum',
+    MEETING_SCHEDULED: 'Pertemuan',
+    RECRUITMENT_PRESENTATION: 'Presentasi',
+    AGENT_CODE_CREATED: 'Kode agen',
+    AAJI_LICENSED: kept('AAJI'),
+    JOINT_FIELD_WORK_PLANNED: kept('JFW'),
+    NEW_ACTIVE_AGENT: 'Aktif',
+  },
+
+  sheet: {
+    newTitle: `${kept('Lead')} baru`,
+    meta: ({ stage, type }) => `${stage} · ${type}`,
+    noStage: 'Belum ada tahap',
+    name: 'Nama',
+    type: 'Jenis',
+    status: 'Status',
+    chooseTypeFirst: `Pilih ${kept('Sales')} atau ${kept('Recruit')} untuk melihat tahapnya.`,
+    nextAction: 'Tindakan berikutnya',
+    nextActionDate: 'Tanggal tindakan berikutnya',
+    pickDate: 'Pilih tanggal',
+    notePlaceholder: 'Tulis tindakan…',
+    remarks: 'Keterangan',
+    details: 'Detail',
+    phone: 'Nomor WhatsApp',
+    email: 'Email',
+    source: `Sumber ${kept('lead')}`,
+    outcome: 'Hasil',
+    history: 'Riwayat',
+    historyLoading: 'Memuat riwayat…',
+    added: `${kept('Lead')} ditambahkan`,
+    moved: ({ stage }) => `Status → ${stage}`,
+    save: 'Simpan',
+    delete: 'Hapus',
+    deleteAsk: ({ who }) => `Hapus ${who}? ${kept('Lead')} ini keluar dari daftar Anda.`,
+    deleted: `${kept('Lead')} dihapus`,
+    saved: 'Tersimpan',
+    discard: 'Ada perubahan yang belum disimpan. Tutup tanpa menyimpan?',
+    discardConfirm: 'Tutup tanpa menyimpan',
   },
 };
 

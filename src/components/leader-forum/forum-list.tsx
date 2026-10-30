@@ -1,20 +1,26 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { useFieldChrome } from '@/components/field-nav';
 import { Button } from '@/components/ui/field';
 import { useLanguage, useMessages } from '@/i18n/language-provider';
 import { forumMessages } from '@/i18n/messages/forum';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import {
-  defaultMeetingTitle, filterMeetings, readMeetings, type MeetingFilter, type MeetingListView,
+  defaultMeetingTitle, filterMeetings, readMeetings, signInAndReturn, type MeetingFilter, type MeetingListView,
 } from '@/lib/leader-meetings';
 import { useSession } from '@/lib/session';
+import { useOpenedOnce } from '@/lib/use-opened-once';
+import { usePhone } from '@/lib/use-phone';
 import { ListSkeleton, LoadError, NotFound } from './forum-states';
 import { MeetingCardRow } from './meeting-card';
-import { MeetingDialog } from './meeting-dialog';
-import { signInAndReturn } from './meeting-screen';
+import { V1ForumList } from './v1-list';
+
+/** *+ New meeting*'s dialog, downloaded when it is first opened and mounted from then on (`useOpenedOnce`; P18.99-T16). */
+const MeetingDialog = dynamic(() => import('./meeting-dialog').then((m) => m.MeetingDialog), { ssr: false });
 
 const FILTERS: readonly MeetingFilter[] = ['all', 'upcoming', 'past'];
 
@@ -39,6 +45,10 @@ export function ForumList() {
   const [attempt, setAttempt] = useState(0);
   const [filter, setFilter] = useState<MeetingFilter>('all');
   const [creating, setCreating] = useState(false);
+  const createOpened = useOpenedOnce(creating);
+  // UI V1 (UI-110): a phone in the field shell reads the Event-like cards; the console and wider screens as before.
+  const phone = usePhone();
+  const field = useFieldChrome() !== null;
 
   useEffect(() => {
     if (!loading && !me) router.replace(signInAndReturn(pathname, { signedOut, expired }));
@@ -64,6 +74,30 @@ export function ForumList() {
   if (!view) return <ListSkeleton />;
 
   const shown = filterMeetings(view.meetings, filter);
+
+  const dialog = view.can.create && createOpened && (
+    <MeetingDialog
+      open={creating}
+      onClose={() => setCreating(false)}
+      limits={view.limits}
+      defaultTitle={defaultMeetingTitle(view.meetings, language)}
+      onCreated={(card) => router.push(`/leader-meetings/${encodeURIComponent(card.id)}`)}
+    />
+  );
+
+  if (phone && field) {
+    return (
+      <>
+        <V1ForumList
+          meetings={view.meetings}
+          filter={filter}
+          onFilter={setFilter}
+          create={view.can.create ? <Button onClick={() => setCreating(true)}>{t.newMeeting}</Button> : null}
+        />
+        {dialog}
+      </>
+    );
+  }
 
   return (
     <>
@@ -91,7 +125,7 @@ export function ForumList() {
       </div>
 
       {view.meetings.length === 0 ? (
-        <p className="rounded-lg border border-hairline bg-card px-[18px] py-10 text-center text-base text-muted">
+        <p className="rounded-lg border border-card-edge bg-card px-[18px] py-10 text-center text-base text-muted">
           {t.noMeetings}
         </p>
       ) : shown.length === 0 ? (
@@ -102,15 +136,7 @@ export function ForumList() {
         </ul>
       )}
 
-      {view.can.create && (
-        <MeetingDialog
-          open={creating}
-          onClose={() => setCreating(false)}
-          limits={view.limits}
-          defaultTitle={defaultMeetingTitle(view.meetings, language)}
-          onCreated={(card) => router.push(`/leader-meetings/${encodeURIComponent(card.id)}`)}
-        />
-      )}
+      {dialog}
     </>
   );
 }

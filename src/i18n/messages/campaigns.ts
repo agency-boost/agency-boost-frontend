@@ -58,6 +58,8 @@ const en = {
   requirementsTitle: 'Requirements',
   prize: 'Prize',
   chase: 'Chase',
+  /** The round star on a phone's card, named with its campaign (UI V1, UI-108). */
+  chaseName: ({ title }: { title: string }) => `Chase ${title}`,
   chasing: 'Chasing',
   viewDetails: 'View details',
   /** The two toasts (`toggleChase`, `:8144`): the title as the office typed it. */
@@ -133,6 +135,7 @@ const id: MessagesOf<typeof en> = {
   requirementsTitle: 'Syarat',
   prize: 'Hadiah',
   chase: 'Kejar',
+  chaseName: ({ title }) => `Kejar ${title}`,
   chasing: 'Mengejar',
   viewDetails: 'Lihat detail',
   chased: ({ title }) => `Sekarang mengejar "${title}"`,

@@ -151,28 +151,28 @@ describe('Open agent view, in the identity menu (P13.2-T5, ADR-0114)', () => {
   /** The panel's links, in order, by their text. */
   const links = () => within(panel()).getAllByRole('link').map((a) => a.textContent);
 
-  it('P13.2-T5 AC-1, P15-T4 AC-4 takes an Owner who leads people to their Unit Dashboard, above Your account', async () => {
+  it('P13.2-T5 AC-1, UI-100 takes an Owner who leads people to Home, above Your account (ADR-0180 §10)', async () => {
     renderWithSession(<TenantShell title="All members">body</TenantShell>, { me: tenantAdmin(true, 3) });
     // Not a nav item: the console's nav is `KPM_Owner.html`'s, and has none of the field's.
     expect(screen.queryByRole('link', { name: 'Open agent view' })).not.toBeInTheDocument();
     await userEvent.click(chip());
 
-    // Their field landing, the one function the sign-in uses (ADR-0114, D-landing).
-    expect(within(panel()).getByRole('link', { name: 'Open agent view' })).toHaveAttribute('href', '/unit/dashboard');
+    // Their field landing, the one function the sign-in uses (ADR-0114): Home since UI V1 (ADR-0180 §10).
+    expect(within(panel()).getByRole('link', { name: 'Open agent view' })).toHaveAttribute('href', '/home');
     expect(links()).toEqual(['Open agent view', 'Your account']);
   });
 
-  it('P13.2-T5 AC-1 takes an Admin who leads nobody to their own day', async () => {
+  it('P13.2-T5 AC-1, UI-100 takes an Admin who leads nobody to Home too', async () => {
     renderWithSession(<TenantShell title="All members">body</TenantShell>, { me: tenantAdmin(false, 0) });
     await userEvent.click(chip());
-    expect(within(panel()).getByRole('link', { name: 'Open agent view' })).toHaveAttribute('href', '/activity/log');
+    expect(within(panel()).getByRole('link', { name: 'Open agent view' })).toHaveAttribute('href', '/home');
   });
 
   it('P13.2-T5 AC-5 offers a support session impersonating an Owner the same link', async () => {
     const me = { ...tenantAdmin(true, 3), isImpersonating: true, impersonationReadOnly: true, impersonatedBy: 'u-support' };
     renderWithSession(<TenantShell title="All members">body</TenantShell>, { me });
     await userEvent.click(chip());
-    expect(within(panel()).getByRole('link', { name: 'Open agent view' })).toHaveAttribute('href', '/unit/dashboard');
+    expect(within(panel()).getByRole('link', { name: 'Open agent view' })).toHaveAttribute('href', '/home');
   });
 
   it('P13.2-T5 AC-2 offers nothing to a reader who neither owns nor administers the office: they are never in the console', () => {
@@ -190,7 +190,8 @@ describe('Open agent view, in the identity menu (P13.2-T5, ADR-0114)', () => {
     });
     router.replace.mockClear();
     renderWithSession(<TenantShell title="All members">body</TenantShell>, { me: ab });
-    expect(router.replace.mock.calls).toEqual([['/unit/dashboard']]);
+    // Their own landing: Home (UI-100, ADR-0180 §10).
+    expect(router.replace.mock.calls).toEqual([['/home']]);
     expect(screen.queryByRole('navigation', { name: 'Main' })).not.toBeInTheDocument();
     expect(screen.queryByText('body')).not.toBeInTheDocument();
   });

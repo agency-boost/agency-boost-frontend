@@ -51,14 +51,16 @@ describe('the script blocks (D-components)', () => {
 
   it('D-components: no plan component imports anything about products, and each names P17-T3 as its second user', () => {
     const files = readdirSync(__dirname).filter((f) => f.endsWith('.tsx') && !f.includes('.spec.'));
+    // UI V1 (UI-107) added the phone's parts — both plans' too, so they name the ticket rather than P17-T3.
+    const UI_V1 = ['phone-plan.tsx', 'plan-button.tsx', 'plan-icons.tsx', 'plan-tabs.tsx'];
     expect(files.sort()).toEqual([
-      'alternatives-row.tsx', 'brief-card.tsx', 'brief-summary.tsx', 'push-back-box.tsx', 'result-head.tsx',
-      'script-blocks.tsx', 'step-pills.tsx',
+      'alternatives-row.tsx', 'brief-card.tsx', 'brief-summary.tsx', 'phone-plan.tsx', 'plan-button.tsx',
+      'plan-icons.tsx', 'plan-tabs.tsx', 'push-back-box.tsx', 'result-head.tsx', 'script-blocks.tsx', 'step-pills.tsx',
     ]);
     for (const file of files) {
       const src = readFileSync(join(__dirname, file), 'utf8');
       expect([file, /from '@\/lib\/product-catalog'|from '@\/lib\/api/.test(src)]).toEqual([file, false]);
-      expect([file, src.includes('P17-T3')]).toEqual([file, true]);
+      expect([file, src.includes(UI_V1.includes(file) ? 'UI-107' : 'P17-T3')]).toEqual([file, true]);
     }
   });
 });

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/cn';
 import { TAB_PHONE, TAB_ROW_PHONE, UNDERLINED_ROW_PHONE } from '@/components/ui/phone';
+import { TAB_TOUCH } from '@/components/ui/touch';
 import { useTabRow } from '@/components/ui/use-tab-row';
 
 export interface RouteTab {
@@ -53,7 +54,8 @@ export function RouteTabs({
 }) {
   const pathname = usePathname();
   const row = useTabRow<HTMLElement>(pathname);
-  const TAB = cn('-mb-px border-b-2 px-0.5 pb-3 text-md font-semibold', TAB_PHONE);
+  // 44px tall below 1024px, its words at the foot as before (UI V1, UI-010).
+  const TAB = cn('-mb-px border-b-2 px-0.5 pb-3 text-md font-semibold', TAB_TOUCH, TAB_PHONE);
   const current = (tab: RouteTab) => pathname === tab.href || (tab.nested === true && pathname.startsWith(`${tab.href}/`));
 
   return (

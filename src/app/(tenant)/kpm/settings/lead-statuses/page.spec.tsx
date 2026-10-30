@@ -385,12 +385,13 @@ describe('P18.97-T7 AC-3 a stage’s controls on a phone (UI-035)', () => {
   /** The ladder's markup on the build before P18.97-T7, archived stages hidden and shown, from this fixture on 2026-10-28. */
   const BEFORE_T7: Record<'active' | 'archived', Record<768 | 1280, string>> = {
     active: {
-      768: '5bc104c5d10240d1052ed4479586d62e6d0dd380893e6ded8051a3bbf85756f5',
-      1280: '5bc104c5d10240d1052ed4479586d62e6d0dd380893e6ded8051a3bbf85756f5',
+      // Re-recorded 2026-10-30 (UI V1): UI-008's card edge (`border-card-edge`) and UI-010's 44px/48px targets below 1024px.
+      768: '357eded24416d089de470529ea0ee3fbfb1117458d3bcc7cc1f50ad4374307b2',
+      1280: '357eded24416d089de470529ea0ee3fbfb1117458d3bcc7cc1f50ad4374307b2',
     },
     archived: {
-      768: 'aac62291c23921ddda07a603dcc1bc4f413b6f8ed7c24f8ff112b63f2ac66fc4',
-      1280: 'aac62291c23921ddda07a603dcc1bc4f413b6f8ed7c24f8ff112b63f2ac66fc4',
+      768: '321834a3ae96938b11f18ef3be826453cea26082eee752b2f41b430ad8a2e45e',
+      1280: '321834a3ae96938b11f18ef3be826453cea26082eee752b2f41b430ad8a2e45e',
     },
   };
 

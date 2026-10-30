@@ -66,7 +66,7 @@ export function FigureTable({
   const headersOf = (figure: Figure) => `${groupId(figure.cadence)} ${figureId(figure)}`;
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-hairline bg-card">
+    <div className="overflow-x-auto rounded-lg border border-card-edge bg-card">
       {/* `relative` for the reason `DataTable` gives: an `sr-only` name must not escape the scroll box. */}
       <table className={cn('relative w-full border-collapse text-left', COMPACT, tableClassName)}>
         <caption className="sr-only">{caption}</caption>

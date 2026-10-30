@@ -61,7 +61,7 @@ export function RowCards({
       role="list"
       aria-label={label}
       aria-labelledby={labelledBy}
-      className={cn('rounded-lg border border-hairline bg-card', className)}
+      className={cn('rounded-lg border border-card-edge bg-card', className)}
     >
       {children}
     </ul>

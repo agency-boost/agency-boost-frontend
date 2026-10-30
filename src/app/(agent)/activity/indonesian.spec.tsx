@@ -98,8 +98,9 @@ describe('P18.98-T4 Log Activity in Indonesian', () => {
     expect(within(tabs).getAllByRole('link').map((a) => a.textContent)).toEqual(['Log Activity', 'Dashboard', 'Ratio']);
     expect(screen.getByText('Catat aktivitas hari ini dalam 1 menit.')).toBeInTheDocument();
     expect(screen.getByLabelText('Tanggal')).toBeInTheDocument();
-    expect(screen.getByText('Tersimpan · 3 sentuhan')).toBeInTheDocument();
-    expect(screen.getByText(/^Total sentuhan hari ini/)).toBeInTheDocument();
+    expect(screen.getByText('Tersimpan · 3 aktivitas')).toBeInTheDocument();
+    expect(screen.getByText(/^Total aktivitas hari ini/)).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(/sentuhan/);
     expect(screen.getByText('2 item')).toBeInTheDocument();
     expect(screen.getByText('1 item')).toBeInTheDocument();
     for (const typed of ['Leads Generation', 'Selling', 'Set Appointment', 'Submission polis']) {
@@ -158,8 +159,31 @@ describe('P18.98-T4 Log Activity in Indonesian', () => {
     renderLog();
     await screen.findByText('Melakukan aktivitas leads generation');
 
-    const line = screen.getByText((_, el) => el?.tagName === 'P' && /^Hari ini: 3 sentuhan/.test(el.textContent ?? ''));
+    const line = screen.getByText((_, el) => el?.tagName === 'P' && /^Hari ini: 3 aktivitas/.test(el.textContent ?? ''));
     expect(within(line).getByText('3').tagName).toBe('STRONG');
+  });
+
+  it('UI-106 says a phone’s views, its date pill and its save bar in Indonesian — aktivitas, never sentuhan', async () => {
+    asPhone();
+    stubFetch(logRoutes());
+    renderLog();
+    await screen.findByText('Melakukan aktivitas leads generation');
+
+    expect(screen.getByRole('heading', { name: 'Activity', level: 1 })).toBeInTheDocument();
+    expect(within(screen.getByRole('navigation', { name: 'Activity management' })).getAllByRole('link').map((a) => a.textContent))
+      .toEqual(['Log Activity', 'Dashboard', 'Ratio']);
+    expect(screen.getByRole('button', { name: 'Hari sebelumnya' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Hari berikutnya' })).toBeDisabled();
+    expect(screen.getByLabelText('Pilih hari')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Apa itu aktivitas?' })).toBeInTheDocument();
+    await userEvent.click(screen.getByLabelText('Tambah Submission polis'));
+    const bar = document.querySelector('[data-action-bar]')!;
+    expect(bar).toHaveTextContent('Belum disimpan');
+    expect(bar).toHaveTextContent('1 aktivitas baru');
+    expect(within(bar as HTMLElement).getByRole('button', { name: 'Simpan aktivitas' })).toBeInTheDocument();
+    expect(within(bar as HTMLElement).getByRole('button', { name: 'Batal' })).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(/sentuhan/);
+    noEnglishLeft();
   });
 });
 
@@ -245,7 +269,7 @@ describe('P18.98-T4 the Activity Dashboard in Indonesian', () => {
     const table = screen.getByRole('table', { name: 'Aktivitas Anda' });
     expect(within(table).getAllByRole('columnheader').slice(0, 4).map((h) => h.textContent))
       .toEqual(['Aktivitas', 'Total', 'Sen28', 'Min27']);
-    expect(screen.getByText('Total sentuhan')).toBeInTheDocument();
+    expect(screen.getByText('Total aktivitas')).toBeInTheDocument();
     // Why a row is not one of today's sections, in the reader's words.
     expect(within(table).getByText('Diarsipkan')).toBeInTheDocument();
     expect(within(table).getByText('Tidak lagi ada di bagian Anda')).toBeInTheDocument();
@@ -304,14 +328,19 @@ describe('P18.98-T4 the Activity Dashboard in Indonesian', () => {
     expect(screen.queryByRole('link', { name: 'Log Activity' })).not.toBeInTheDocument();
   });
 
-  it('AC-1 draws a phone’s totals in Indonesian, each column’s days in Indonesian figures', async () => {
+  it('AC-1, UI-106 draws a phone’s chips, total and cards in Indonesian, each column’s days in Indonesian figures', async () => {
     asPhone();
     stubFetch({ ...dashboardConfig, '/activity/dashboard': { body: WEEK } });
     renderDashboard();
-    const list = await screen.findByRole('list', { name: 'Aktivitas Anda' });
+    const cards = await screen.findByRole('region', { name: 'Aktivitas Anda' });
 
-    const line = within(list).getAllByRole('button')[0];
-    expect(line).toHaveTextContent('Leads Generation, jumlah 12');
+    expect(within(screen.getByRole('group', { name: 'Rentang' })).getAllByRole('button').map((b) => b.textContent))
+      .toEqual(['7 hari', '30 hari', 'Kustom']);
+    expect(screen.getByText('Total aktivitas').parentElement).toHaveClass('bg-navy');
+    expect(screen.getByRole('group', { name: 'Total per kelompok' })).toBeInTheDocument();
+    const line = within(cards).getAllByRole('button')[0];
+    expect(line).toHaveTextContent('Menghubungi prospek12');
+    expect(document.body).not.toHaveTextContent(/sentuhan|jumlah/);
     await userEvent.click(line);
     const panel = document.getElementById(line.getAttribute('aria-controls')!)!;
     expect(within(panel).getAllByRole('term').map((t) => t.textContent).slice(0, 2)).toEqual(['Sen 28', 'Min 27']);
@@ -345,51 +374,37 @@ const renderRatio = (body: unknown) => {
   renderInIndonesian(<ActivityRatioPage />, { me: AGENT });
 };
 
-describe('P18.98-T4 the Ratio tab in Indonesian', () => {
+describe('P18.98-T4 the Ratio tab in Indonesian (UI V1, UI-106: the shared card)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('AC-2 says the window and a rate in Indonesian, its figure and benchmark in Indonesian figures, Benchmark kept', async () => {
-    renderRatio(view([rate({})]));
-    const card = await screen.findByRole('article', { name: 'Selling success rate' });
+  it('AC-2, UI-106 says the card and a rate in Indonesian, its figure and target in Indonesian figures, the office’s words as typed', async () => {
+    renderRatio(view([balance(), rate({})]));
+    const card = await screen.findByRole('region', { name: 'Ratio · 30 hari terakhir' });
 
     expect(screen.getByText('Seberapa baik aktivitas Anda menghasilkan konversi.')).toBeInTheDocument();
-    expect(screen.getByText(/^Dihitung dari aktivitas/))
-      .toHaveTextContent('Dihitung dari aktivitas 30 hari terakhir · 30 Agu – 28 Sep 2026.');
-    expect(within(screen.getByText(/^Dihitung dari aktivitas/)).getByText('30 hari terakhir').tagName).toBe('STRONG');
-    expect(card).toHaveTextContent('9,1%');
-    expect(card).toHaveTextContent('Benchmark: 30%');
-    expect(within(card).getByText('Apa itu ratio ini?')).toBeInTheDocument();
-    // The formula in words for a screen reader, the office's types as typed.
-    expect(within(card).getByText('Submission polis, dibagi Presentasi penjualan ditambah Follow up penjualan'))
-      .toHaveClass('sr-only');
-    expect(within(card).getByText('KPM Anda telah menetapkan rumusnya sendiri untuk ratio ini.')).toBeInTheDocument();
-    expect(within(card).getByText('Mengukur tingkat konversi aktivitas selling menjadi submission')).toBeInTheDocument();
+    expect(card.querySelector('[data-split-bar]')).toHaveAccessibleName('Selling 62% · Recruitment 38%');
+    const row = card.querySelector('[data-ratio="SELLING_SUCCESS_RATE"]') as HTMLElement;
+    expect(row).toHaveTextContent('Selling success rate');
+    expect(row).toHaveTextContent('Target 30%');
+    expect(row).toHaveTextContent('9%');
+    await userEvent.click(within(row).getByRole('button'));
+    expect(row).toHaveTextContent('Apa itu ratio ini?');
+    // The formula in words, the office's types as typed.
+    expect(row).toHaveTextContent('Submission polis, dibagi Presentasi penjualan ditambah Follow up penjualan');
+    expect(row).toHaveTextContent('KPM Anda telah menetapkan rumusnya sendiri untuk ratio ini.');
+    expect(row).toHaveTextContent('Mengukur tingkat konversi aktivitas selling menjadi submission');
     noEnglishLeft();
   });
 
-  it('AC-3 reads a balance in Indonesian: its ends, its band and its advice, the sections’ names as typed', async () => {
-    renderRatio(view([balance(), balance({ code: 'B2', label: 'Leaning', value: 34.8, share: 67.4, status: 'alert' })]));
-    const scale = await screen.findByRole('article', { name: 'Selling vs Recruitment' });
-
-    expect(scale).toHaveTextContent('Lebih banyak Selling');
-    expect(scale).toHaveTextContent('Lebih banyak Recruitment');
-    expect(scale).toHaveTextContent('62,2% Selling · 37,8% Recruitment');
-    expect(scale).toHaveTextContent('Sesuai target selama setiap sisi berada di antara 35% dan 65%.');
-    const leaning = screen.getByRole('article', { name: 'Leaning' });
-    expect(leaning).toHaveTextContent('Terlalu banyak Selling — jaga di 35%–65%');
-  });
-
-  it('AC-1 says an office with no ratios for the reader’s role, and a window too thin to read, in Indonesian', async () => {
+  it('AC-1, UI-106 says an office with no ratios for the reader, and a ratio with too little data, in Indonesian', async () => {
     renderRatio(view([]));
-    expect(await screen.findByText(
-      'KPM Anda belum memiliki ratio untuk peran Anda. Ratio diatur oleh KPM Owner Anda.',
-    )).toBeInTheDocument();
+    expect(await screen.findByText('Belum ada ratio yang berlaku di sini.')).toBeInTheDocument();
   });
 
-  it('AC-1 says a window with too little in it to read any ratio', async () => {
+  it('UI-106 shows a ratio with too little data as –, said Data belum cukup', async () => {
     renderRatio(view([rate({ value: null, status: 'neutral' })]));
-    expect(await screen.findByText('Aktivitas dalam 30 hari terakhir belum cukup untuk menghitung ratio Anda.'))
-      .toBeInTheDocument();
+    const card = await screen.findByRole('region', { name: 'Ratio · 30 hari terakhir' });
+    expect(card.querySelector('[data-status="none"]')).toHaveTextContent('–Data belum cukup');
   });
 });
 

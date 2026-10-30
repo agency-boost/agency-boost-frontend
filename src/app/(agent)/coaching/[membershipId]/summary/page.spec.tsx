@@ -138,25 +138,22 @@ describe('a coachee’s Personal Summary tab (P11-T7 AC-4)', () => {
       'From Goal Settings — appointments and closings are her sales pipeline targets.',
     );
     expect(await card('Leads that need her')).toHaveTextContent('All active leads, nearest date first');
-    expect(await card('The gap')).toHaveTextContent(
-      'At her current pace, she’s tracking to close 4 policies this month against a target of 5. With 3 weeks left, she’d need to close roughly 1 policy/week to catch up.',
-    );
+    // UI-054: her gap is inside her goal card, as on her own page, and the pace box is gone.
+    expect((await card('Goal vs. actual (APE)')).querySelector('dl')).toHaveTextContent('Remaining this month');
     expect(await card('How she can improve')).toBeInTheDocument();
     expect(screen.getByRole('main').textContent).not.toMatch(/\byou\b|\byour\b/i);
   });
 
-  it('P13.1-T5 AC-1 her gap is the same box as her own page: the danger box until her APE target is met, then green', async () => {
-    show(summary());
-    const behind = within(await card('The gap')).getByText(/tracking to close/).closest('p')!;
-    expect(behind.className).toContain('bg-alert/[0.06]');
-    expect(behind).toHaveTextContent('⚠️');
-    vi.unstubAllGlobals();
-    document.body.innerHTML = '';
-
-    show(summary({ pace: { closingTarget: 5, closingsLast30Days: 2, dayOfMonth: 20, daysInMonth: 30, weeksLeft: 2, policiesNeeded: 0, neededPerWeek: 0, targetMet: true } }));
-    const met = within(await card('The gap')).getByText(/already reached/).closest('p')!;
-    expect(met).toHaveTextContent('She’s already reached this month’s target — nice work. Keep the pace to stay ahead.');
-    expect(met.className).toContain('bg-success/[0.06]');
+  it('UI-054 her page is her own page’s: the gap inside the goal card, the behind-pace message the AI card’s alone', async () => {
+    show(summary({
+      insights: [{ rule: 'BEHIND_PACE', kind: 'action', facts: { closingsLast30Days: 2, closingTarget: 5, neededPerWeek: 1, weeksLeft: 3 } }],
+    }));
+    const goal = await card('Goal vs. actual (APE)');
+    expect(goal.querySelector('dl')).toHaveTextContent('Remaining this monthIDR 45MPolicies needed± 3 policies');
+    expect(screen.queryByRole('region', { name: 'The gap' })).not.toBeInTheDocument();
+    expect(await card('What to do next')).toHaveTextContent('She’s behind pace');
+    expect(screen.getAllByText(/behind pace|tracking to close|current pace/)).toHaveLength(1);
+    expect(document.body.textContent).not.toMatch(/⚠️|✅/u);
   });
 
   it('P11-T7 AC-4 says him and his for a man, and them and their for somebody who chose neither', async () => {
@@ -171,7 +168,7 @@ describe('a coachee’s Personal Summary tab (P11-T7 AC-4)', () => {
     expect(await card('Their sales activity targets')).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Leads that need them' })).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'How they can improve' })).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'The gap' })).toHaveTextContent('At their current pace, they’re tracking to close');
+    expect(screen.queryByRole('region', { name: 'The gap' })).not.toBeInTheDocument();
   });
 
   it('P11-T7 AC-4 shows the APE produced read-only, its source in her words', async () => {
@@ -212,13 +209,13 @@ describe('a coachee’s Personal Summary tab (P11-T7 AC-4)', () => {
     expect(within(improve).queryByRole('link')).not.toBeInTheDocument();
   });
 
-  it('P11-T8 draws her Activity pulse from her ratios on her rung', async () => {
+  it('P11-T8, UI-053 draws her ratios on the shared card, from her ratios on her rung', async () => {
     show(summary());
     await card('Goal vs. actual (APE)');
 
-    const pulse = await card('Activity pulse');
-    expect(pulse).toHaveTextContent('Last 30 days');
-    expect(await within(pulse).findByText('18.0%')).toBeInTheDocument();
+    const pulse = await card('Ratio · last 30 days');
+    expect(pulse).toHaveAttribute('data-ratio-card');
+    expect(await within(pulse).findByText('18%')).toBeInTheDocument();
     expect(within(pulse).getByText('Selling success rate')).toBeInTheDocument();
     expect(within(pulse).queryByText('Upcoming')).not.toBeInTheDocument();
   });
@@ -231,16 +228,15 @@ describe('a coachee’s Personal Summary tab (P11-T7 AC-4)', () => {
     ['she', "Campaigns she's chasing"],
     ['he', "Campaigns he's chasing"],
     ['they', "Campaigns they're chasing"],
-  ] as const)('P18.5-T9 AC-1 titles the card in %s’s pronoun, with the bolt and no tag, and draws 🚀 chips by title', async (pronoun, title) => {
+  ] as const)('P18.5-T9 AC-1 titles the card in %s’s pronoun, with the bolt and no tag, and draws chips by title, a line icon on each (UI-102)', async (pronoun, title) => {
     const { calls } = show(summary(), person(pronoun));
     const section = await card(title);
     const heading = within(section).getByRole('heading', { level: 2 });
     expect(heading).toHaveTextContent(new RegExp(`^${title}$`));
-    expect(heading.firstElementChild?.tagName.toLowerCase()).toBe('svg');
     expect(within(section).queryByText('From the Campaign list')).not.toBeInTheDocument();
     const chips = await within(section).findAllByRole('listitem');
     // Sorted by title, where the read answers D-lists' order (the sprint, then MDRT).
-    expect(chips.map((c) => c.textContent)).toEqual(['🚀 MDRT Qualification', '🚀 Q4 APE Sprint']);
+    expect(chips.map((c) => c.textContent)).toEqual(['MDRT Qualification', 'Q4 APE Sprint']);
     expect(within(section).queryByRole('link')).not.toBeInTheDocument();
     expect(within(section).queryByRole('button')).not.toBeInTheDocument();
     expect(section).not.toHaveClass('print:hidden');
@@ -267,15 +263,15 @@ describe('a coachee’s Personal Summary tab (P11-T7 AC-4)', () => {
 
   it('P11-T8 fails the pulse in its own card, and the Summary stands', async () => {
     show(summary(), person('she'), LEADER, { status: 404, body: { error: { code: 'NOT_FOUND', message: 'Not found', requestId: 'r-1' } } });
-    const pulse = await card('Activity pulse');
+    const pulse = await card('Ratio · last 30 days');
     expect(await within(pulse).findByRole('alert')).toHaveTextContent('Not found');
     expect(screen.getByRole('region', { name: 'Goal vs. actual (APE)' })).toBeInTheDocument();
   });
 
   it('P11-T8 says when her role has no ratios, without ADR-0084’s six words', async () => {
     show(summary(), person('she'), LEADER, { body: { ...RATIOS, ratios: [] } });
-    const pulse = await card('Activity pulse');
-    expect(await within(pulse).findByText('There are no ratios for her role yet.')).toBeInTheDocument();
+    const pulse = await card('Ratio · last 30 days');
+    expect(await within(pulse).findByText('No ratio applies here yet.')).toBeInTheDocument();
     expect(pulse.textContent).not.toMatch(SIX_WORDS);
   });
 
@@ -316,7 +312,7 @@ describe('a coachee’s Personal Summary tab (P11-T7 AC-4)', () => {
     await card('Goal vs. actual (APE)');
     expect(screen.getByRole('main').textContent).not.toMatch(SIX_WORDS);
 
-    await userEvent.click(screen.getByRole('tab', { name: 'Yearly' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Yearly' }));
     expect(screen.getByRole('main').textContent).not.toMatch(SIX_WORDS);
     expect(screen.getByRole('main')).toHaveTextContent(
       'She hasn’t logged any activity yet — a few minutes each day is what every number on this page is made of.',
@@ -402,18 +398,28 @@ describe('a coachee’s Personal Summary tab — an earlier month or year (P18.8
   };
   const reads = (calls: { url: string }[]) => calls.filter((c) => c.url.includes('/summary')).map((c) => new URL(c.url).search);
 
-  it('P18.8-T11 AC-2 offers the month select /summary has, her office’s months newest first', async () => {
+  /** The pill's sheet: its choices in order. */
+  const sheetOf = async (pill: string) => {
+    await userEvent.click(await screen.findByRole('button', { name: pill }));
+    const sheet = await screen.findByRole('dialog');
+    return { sheet, options: within(within(sheet).getByRole('list')).getAllByRole('button').map((b) => b.textContent) };
+  };
+
+  it('P18.8-T11 AC-2, UI-051 offers the month pill /summary has, her office’s months newest first, and no download', async () => {
     open();
-    const select = await screen.findByRole('combobox', { name: 'Month' });
-    expect(within(select).getAllByRole('option').map((o) => o.textContent))
-      .toEqual(['Sep 2026', 'Aug 2026', 'Jul 2026', 'Jun 2026']);
-    await userEvent.click(screen.getByRole('tab', { name: 'Yearly' }));
-    expect(within(screen.getByRole('combobox', { name: 'Year' })).getAllByRole('option').map((o) => o.textContent)).toEqual(['2026']);
+    const { options } = await sheetOf('Month: Sep 2026');
+    expect(options).toEqual(['Sep 2026', 'Aug 2026', 'Jul 2026', 'Jun 2026']);
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Sep 2026' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Yearly' }));
+    expect((await sheetOf('Year: 2026')).options).toEqual(['2026']);
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Download' })).not.toBeInTheDocument();
   });
 
   it('P18.8-T11 AC-2 reads her August with for and the month together, the month in this tab’s own address', async () => {
     const { calls } = open();
-    await userEvent.selectOptions(await screen.findByRole('combobox', { name: 'Month' }), 'Aug 2026');
+    const { sheet } = await sheetOf('Month: Sep 2026');
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Aug 2026' }));
 
     expect(nav.replace).toHaveBeenCalledWith('/coaching/mem-rina/summary?month=2026-08', { scroll: false });
     await waitFor(() => expect(reads(calls)).toEqual(['?for=mem-rina', '?for=mem-rina&month=2026-08']));
@@ -421,14 +427,14 @@ describe('a coachee’s Personal Summary tab — an earlier month or year (P18.8
     expect(calls.filter((c) => c.url.includes('/activity/ratios'))).toHaveLength(1);
   });
 
-  it('P18.8-T11 AC-3 her August from the address: final figures, no gap and no pace sentence', async () => {
+  it('P18.8-T11 AC-3, UI-054 her August from the address: final figures, no gap, no days left', async () => {
     const { calls } = open({ month: '2026-08' });
     const goal = await card('Goal vs. actual (APE)');
 
-    expect(within(goal).getByText('Aug 2026')).toBeInTheDocument();
-    expect(screen.queryByRole('region', { name: 'The gap' })).not.toBeInTheDocument();
+    expect(goal.querySelector('dl')).toBeNull();
+    expect(goal.querySelector('[data-date-header]')).not.toHaveTextContent(/left|last day/);
     expect(screen.queryByText(/current pace/)).not.toBeInTheDocument();
-    expect(screen.getByRole('combobox', { name: 'Month' })).toHaveDisplayValue('Aug 2026');
+    expect(screen.getByRole('button', { name: 'Month: Aug 2026' })).toBeInTheDocument();
     expect(reads(calls)).toEqual(['?for=mem-rina&month=2026-08']);
   });
 });

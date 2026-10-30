@@ -1,8 +1,8 @@
-import { screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import AgentLayout from '@/app/(agent)/layout';
-import { makeMe, renderInLayout, routeParams, stubFetch, type StubResponse } from '@test/harness';
+import { atWidth, makeMe, renderInLayout, routeParams, stubFetch, type StubResponse } from '@test/harness';
 import CoachingPersonLayout from '../layout';
 import CoacheeGoalSettingTab from './page';
 
@@ -62,8 +62,17 @@ const SHELL = {
   '/kpm/org-levels': { body: [] },
 };
 
+/** `POST /goals/:period/preview?for=` (P18.99-T5): the plan the tab's inputs would make, saved nowhere. */
+const PREVIEW = 'POST /goals/2026/preview';
+const previewed = (over: Record<string, unknown> = {}) => ({
+  body: {
+    period: '2026', monthsLeft: 3, monthsLeftIsOverride: false, achieved: { minor: 0, provenance: 'self_reported', month: null },
+    projected: projection(), ...over,
+  },
+});
+
 const show = (goals: StubResponse | StubResponse[] = { body: goal() }, me = LEADER, who: Record<string, unknown> = RINA) => {
-  const stub = stubFetch({ ...SHELL, '/coaching/coachees/': { body: who }, '/goals/': goals });
+  const stub = stubFetch({ ...SHELL, '/coaching/coachees/': { body: who }, '/goals/': goals, [PREVIEW]: previewed() });
   renderInLayout(
     AgentLayout,
     <CoachingPersonLayout params={routeParams({ membershipId: 'mem-rina' })}><CoacheeGoalSettingTab /></CoachingPersonLayout>,
@@ -105,8 +114,11 @@ describe('a coachee’s Goal Setting tab (P11-T7 AC-5)', () => {
     expect(screen.getByRole('heading', { name: /Conversion assumptions/ })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /Monthly activity target/ })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /^Commitment/ })).toBeInTheDocument();
-    expect(screen.getByText(/— she will contact/)).toBeInTheDocument();
-    expect(screen.queryByText(/My commitment|I will contact/)).not.toBeInTheDocument();
+    // UI-017: the report's sentence names no one, so a coachee's reads as the reader's own does.
+    expect(screen.getByText(/^This month, APE/).closest('p')).toHaveTextContent(
+      'This month, APE IDR 100M (on the way to IDR 500M this year): 67 Set appointment, 20 Sales meeting, 6 Submission polis.',
+    );
+    expect(screen.queryByText(/My commitment/)).not.toBeInTheDocument();
   });
 
   it('P11-T7 AC-5 carries the prototype’s footer, verbatim', async () => {
@@ -118,9 +130,10 @@ describe('a coachee’s Goal Setting tab (P11-T7 AC-5)', () => {
 
   it('P11-T7 AC-5 saves her plan through PUT /goals/:period?for=, once, when Save is pressed', async () => {
     const { calls } = show([{ body: goal() }, { body: goal({ annualApeTargetMinor: 900_000_000_00 }) }]);
-    const target = await screen.findByLabelText('Annual APE target');
-    await userEvent.clear(target);
-    await userEvent.type(target, '900000000');
+    fireEvent.change(await screen.findByRole('slider', { name: 'Annual APE target' }), { target: { value: '900000000' } });
+    // P18.99-T5 UI-014: the result moves through the preview, about her, and nothing is saved yet.
+    await waitFor(() => expect(calls.filter((c) => c.init.method === 'POST')).toHaveLength(1));
+    expect(calls.find((c) => c.init.method === 'POST')!.url).toBe('http://api.test/api/v1/goals/2026/preview?for=mem-rina');
     expect(calls.filter((c) => c.init.method === 'PUT')).toHaveLength(0);
 
     await userEvent.click(screen.getByRole('button', { name: 'Save goal' }));
@@ -129,7 +142,18 @@ describe('a coachee’s Goal Setting tab (P11-T7 AC-5)', () => {
     const put = calls.find((c) => c.init.method === 'PUT')!;
     expect(put.url).toBe('http://api.test/api/v1/goals/2026?for=mem-rina');
     expect(JSON.parse(String(put.init.body))).toMatchObject({ annualApeTargetMinor: 900_000_000_00 });
-    expect(await screen.findByText('Saved')).toBeInTheDocument();
+    await waitFor(() => expect(within(document.querySelector('[data-goal-aside]') as HTMLElement).getByRole('status'))
+      .toHaveTextContent('Saved ✓'));
+  });
+
+  it('P18.99-T5 UI-015 on a phone the tab’s save floats above the tab bar, as /goals’ does', async () => {
+    atWidth(375);
+    show();
+    await screen.findByRole('heading', { name: /What's their APE target this year\?/ });
+
+    const pill = document.querySelector('[data-floating-save]') as HTMLElement;
+    expect(pill).toContainElement(screen.getByRole('button', { name: 'Save goal' }));
+    expect(within(pill).getByRole('status')).toHaveTextContent('Saved ✓');
   });
 
   it('P11-T7 AC-5 works on a read with no measured rates, and draws none (D-rates)', async () => {
@@ -138,7 +162,7 @@ describe('a coachee’s Goal Setting tab (P11-T7 AC-5)', () => {
     expect(screen.queryByText(/logged rate|measured/i)).not.toBeInTheDocument();
     // The same calculator as `/goals`, so the same screen: no 💡 tip since ADR-0160 §4 (P18.8-T10 AC-4).
     expect(screen.queryByText('Use your real conversion ratios for accuracy.')).not.toBeInTheDocument();
-    expect(screen.getByLabelText('Appointment to Sales meeting')).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Appointment to meeting' })).toBeInTheDocument();
   });
 
   it('P11-T7 AC-5 never tells the leader a goal was set by somebody else: that banner is the coachee’s own', async () => {
@@ -158,8 +182,9 @@ describe('a coachee’s Goal Setting tab (P11-T7 AC-5)', () => {
     document.body.innerHTML = '';
 
     show({ body: goal({ achieved: { minor: 120_000_000_00, provenance: 'corrected', month: '2026-08' } }) });
-    expect(await screen.findByRole('button', { name: 'Corrected after the production upload, year to date as of Aug 2026' }))
-      .toBeInTheDocument();
+    // UI-020: the upload's figure is automatic, ⚡, and its ⓘ says whose.
+    expect(await screen.findByRole('button', { name: 'Why APE already produced this year is automatic' }))
+      .toHaveAccessibleDescription('Corrected after the production upload, year to date as of Aug 2026');
     expect(screen.getByRole('main').textContent).not.toMatch(SIX_WORDS);
   });
 
@@ -178,7 +203,8 @@ describe('a coachee’s Goal Setting tab (P11-T7 AC-5)', () => {
   it('P11-T7 AC-11 keeps step 1’s savings copy as /goals has it', async () => {
     show();
     await userEvent.click(await screen.findByRole('tab', { name: 'Calculate from savings target' }));
-    expect(screen.getByLabelText('Commission rate')).toHaveAccessibleDescription('% of APE that becomes income / savings');
+    expect(screen.getByRole('group', { name: 'Commission rate' })).toBeInTheDocument();
+    expect(screen.getAllByText('% of APE that becomes income / savings').some((el) => el.tagName === 'P')).toBe(true);
     expect(screen.getByText('That is an APE target of')).toBeInTheDocument();
   });
 

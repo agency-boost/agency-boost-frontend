@@ -87,7 +87,7 @@ const en = {
     ({ status: 'done overall', events: 'joined overall', campaigns: 'chasing overall' })[kind],
   /** The two-column trees' headings (`:3725-3730`, `:3906-3909`). */
   columns: {
-    events: { first: 'Joined', second: 'Feedback' },
+    events: { first: 'Joined', second: kept('Feedback') },
     campaigns: { first: 'Chasing', second: 'Achieved' },
   },
   /** The pickers' groups (`:3574-3577`, `:3594-3596`) and the picked one's tag (`:3586`, `:3600-3601`). */
@@ -143,6 +143,20 @@ const en = {
     saved: 'Result overridden',
     cleared: 'Override cleared',
   },
+  /** UI V1 (UI-109; `kpm-mobile` 3): the phone's Compliance in the field shell. */
+  v1: {
+    head: ({ people, units }: { people: number; units: number }) =>
+      `${people} ${people === 1 ? 'person' : 'people'} · ${units} ${kept('AB')} ${units === 1 ? kept('unit') : kept('units')}`,
+    modulePicker: `${kept('Training')} module`,
+    choose: 'Choose',
+    perAb: `By ${kept('AB')}`,
+    you: 'You',
+    /** *5 / 12 done*: `verb` is the category's (*done*, *joined*, *chasing*). */
+    doneOf: ({ done, of, verb }: { done: number; of: number; verb: string }) => `${done} / ${of} ${verb}`,
+    unitAab: ({ name }: { name: string }) => `${kept('Unit')} ${name} · ${kept('AAB')}`,
+    unit: ({ name }: { name: string }) => `${kept('Unit')} ${name}`,
+    expand: ({ name }: { name: string }) => `${name}: units and people`,
+  },
 };
 
 const id: MessagesOf<typeof en> = {
@@ -196,7 +210,8 @@ const id: MessagesOf<typeof en> = {
   verbOverall: ({ kind }) =>
     ({ status: 'selesai secara keseluruhan', events: 'ikut secara keseluruhan', campaigns: 'mengejar secara keseluruhan' })[kind],
   columns: {
-    events: { first: 'Ikut', second: 'Masukan' },
+    // *Feedback*, as the owner writes it (UI V1, UI-108: *Say "Feedback", not "Masukan"*).
+    events: { first: 'Ikut', second: kept('Feedback') },
     campaigns: { first: 'Mengejar', second: 'Tercapai' },
   },
   eventGroups: { upcoming: 'Akan datang', past: 'Sudah lewat' },
@@ -238,6 +253,17 @@ const id: MessagesOf<typeof en> = {
     close: 'Tutup',
     saved: 'Hasil diubah',
     cleared: 'Hasil dipulihkan',
+  },
+  v1: {
+    head: ({ people, units }) => `${people} orang · ${units} ${kept('unit')} ${kept('AB')}`,
+    modulePicker: `Modul ${kept('Training')}`,
+    choose: 'Pilih',
+    perAb: `Per ${kept('AB')}`,
+    you: 'Anda',
+    doneOf: ({ done, of, verb }) => `${done} / ${of} ${verb}`,
+    unitAab: ({ name }) => `${kept('Unit')} ${name} · ${kept('AAB')}`,
+    unit: ({ name }) => `${kept('Unit')} ${name}`,
+    expand: ({ name }) => `${name}: ${kept('unit')} dan orangnya`,
   },
 };
 

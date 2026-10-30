@@ -67,7 +67,7 @@ function Tile({
   children?: React.ReactNode;
 }) {
   return (
-    <div className="min-w-0 rounded-lg border border-hairline bg-card px-[18px] py-4">
+    <div className="min-w-0 rounded-lg border border-card-edge bg-card px-[18px] py-4">
       <p className="mb-1.5 text-sm text-muted">{label}</p>
       <p className={cn('font-body text-3xl font-bold', total ? 'text-amber-deep' : 'text-navy')}>{value}</p>
       {children}

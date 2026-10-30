@@ -246,15 +246,39 @@ describe('the approval inbox (P3-T5)', () => {
     expect(screen.getByRole('button', { name: 'Approve' })).toBeInTheDocument();
   });
 
-  it('P18.95-T7 AC-1 says what approving does, in the client’s words at every size (grey text row 7)', async () => {
+  it('UI-089 says what approving does, in the client’s words from 768px (was grey text row 7)', async () => {
     stubFetch({
       '/join/requests/routing': { body: [] },
       '/join/requests': { body: [] },
     });
     renderInLayout(AgentLayout, <PendingPage />, { me: AB });
     const line = await screen.findByText('Approve to add them to your unit.');
-    expect(line.className).not.toMatch(/hidden/);
+    // UI-089 (Appendix A): from 768px only.
+    expect(line.className.split(/\s+/).filter((c) => /hidden/.test(c))).toEqual(['max-md:hidden']);
     expect(screen.queryByText(/These are people who found you/)).not.toBeInTheDocument();
+  });
+
+  it('UI-089: nothing waiting is one small card with Boost thinking, the inbox’s line, and no second heading', async () => {
+    stubFetch({ '/join/requests/routing': { body: [] }, '/join/requests': { body: [] } });
+    renderInLayout(AgentLayout, <PendingPage />, { me: AB });
+
+    const empty = await screen.findByTestId('pending-empty');
+    expect(empty.querySelector('img[data-boost="thinking"]')).toHaveAttribute('width', '72');
+    expect(empty).toHaveTextContent('No pending requests right now.');
+    expect(screen.getAllByRole('heading', { level: 2, name: 'Incoming requests' })).toHaveLength(1);
+    // The card's padding is 16px, so Boost (75px tall) and the card come in under 120px.
+    expect(empty.closest('.rounded-lg')!.className).toContain('p-4');
+  });
+
+  it('UI-085: the tab shows the inbox’s count when something waits, and nothing at 0', async () => {
+    const { calls } = stubFetch({ '/join/requests/routing': { body: [] }, '/join/requests': { body: [request(), request({ requestId: 'req-2', membershipId: 'mem-p2' })] } });
+    renderInLayout(AgentLayout, <PendingPage />, { me: AB });
+
+    const tab = await screen.findByRole('link', { name: /Pending Requests/ });
+    await vi.waitFor(() => expect(tab.querySelector('[data-count]')).toHaveTextContent('2'));
+    expect(tab.querySelector('[data-count]')!.className).toContain('bg-amber');
+    // Here the inbox is read once, and the tab row asks nothing of its own.
+    expect(calls.filter((c) => c.url.endsWith('/join/requests/count'))).toHaveLength(0);
   });
 
   it('AC-4: reloads when somebody else decided first, rather than leaving a dead row', async () => {

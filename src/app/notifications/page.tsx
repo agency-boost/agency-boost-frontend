@@ -91,7 +91,7 @@ export default function NotificationsPage() {
 
         {inbox === null && !error && (
           <Skeleton label={t.loading}>
-            <div className="space-y-4 rounded-lg border border-hairline bg-card p-4">
+            <div className="space-y-4 rounded-lg border border-card-edge bg-card p-4">
               {Array.from({ length: 6 }, (_, i) => (
                 <div key={i}>
                   <SkeletonBar className="h-3.5 w-2/5" />

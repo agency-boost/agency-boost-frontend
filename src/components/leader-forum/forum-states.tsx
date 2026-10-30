@@ -25,7 +25,7 @@ export function ListSkeleton() {
       </div>
       <div className="flex flex-col gap-3">
         {[0, 1, 2].map((i) => (
-          <div key={i} className="flex items-center gap-[18px] rounded-lg border border-hairline bg-card px-[18px] py-4">
+          <div key={i} className="flex items-center gap-[18px] rounded-lg border border-card-edge bg-card px-[18px] py-4">
             <SkeletonBar className="h-[54px] w-[54px] rounded-[10px]" />
             <div className="min-w-0 flex-1">
               <SkeletonBar className="h-4 w-1/3" />
@@ -54,7 +54,7 @@ export function MeetingSkeleton() {
       <div className="mb-5 flex gap-6 border-b border-hairline pb-2.5">
         {[0, 1, 2].map((i) => <SkeletonBar key={i} className="h-4 w-24" />)}
       </div>
-      <div className="rounded-lg border border-hairline bg-card p-4">
+      <div className="rounded-lg border border-card-edge bg-card p-4">
         {[0, 1, 2, 3, 4].map((i) => <SkeletonBar key={i} className="mt-3 w-full first:mt-0" />)}
       </div>
     </Skeleton>

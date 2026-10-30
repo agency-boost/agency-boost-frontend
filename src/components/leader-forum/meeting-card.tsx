@@ -36,7 +36,7 @@ export function MeetingCardRow({ meeting }: { meeting: MeetingCard }) {
         aria-labelledby={titleId}
         aria-describedby={lineId}
         className={cn(
-          'group flex flex-wrap items-center gap-x-[18px] gap-y-3 rounded-lg border border-hairline bg-card px-[18px] py-4',
+          'group flex flex-wrap items-center gap-x-[18px] gap-y-3 rounded-lg border border-card-edge bg-card px-[18px] py-4',
           // Not dimmed once past, as `.is-past` dims it to 85% (`:623`): *All clear*'s green would fall to
           // 4.47:1, under 4.5:1, and the grey line to 4.57:1. The grey date block says it alone.
           'transition-shadow hover:shadow-modal motion-reduce:transition-none',

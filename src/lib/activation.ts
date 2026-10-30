@@ -176,23 +176,41 @@ export interface NewHireChecklist {
   overdue: boolean;
 }
 
-/** One new hire on `/new-hires` (ADR-0173 §2). */
+/**
+ * **A new hire's status** (UI V1, D-24, UI-023): *Teraktivasi* as soon as there is a first sale — `activated` by day 90,
+ * `activated_late` after it (amber, *lewat 3M*, outside the 3M share) — and `not_yet` without one. The server decides it.
+ */
+export type NewHireStatus = 'activated' | 'activated_late' | 'not_yet';
+
+/** Where a first sale came from (D-26): the data — a lead or the production file — or a closing logged by hand. */
+export type FirstSaleSource = 'sales' | 'manual';
+
+/** One new hire on `/new-hires` (ADR-0173 §2; UI V1, UI-023). */
 export interface NewHireRow {
   hire: ActivationPerson;
   unit: NewHireUnitRef;
   joinDate: string;
-  /** Which day of their first 90 today is. */
+  /** Which day since joining today is: *Hari ke-X*. */
   day: number;
   firstSaleDate: string | null;
+  /** The first sale's day since joining: *Pecah telor di hari ke-X*. `null` with none. */
+  firstSaleDay: number | null;
+  firstSaleSource: FirstSaleSource | null;
+  status: NewHireStatus;
   activation3M: Activation3MResult;
+  /** Kept as data only since UI V1: it decides nothing (D-24). */
   leftOn: string | null;
   checklist: NewHireChecklist | null;
 }
 
-/** `ACTIVATION_3M_PCT` over a set, as the server computes it: `pct` `null` while nobody is decided. */
+/**
+ * `ACTIVATION_3M_PCT` over a set, as the server computes it (rule A): `pct` `null` while nobody is decided. `late` — a
+ * first sale after day 90 — and `inProgress` are in neither part. The screen shows `pct` alone (D-24).
+ */
 export interface Activation3MShare {
   activated: number;
   notActivated: number;
+  late: number;
   inProgress: number;
   pct: number | null;
 }
@@ -202,6 +220,7 @@ export interface Activation3MMonth {
   month: string;
   activated: number;
   notActivated: number;
+  late: number;
   inProgress: number;
   pct: number | null;
 }
@@ -239,13 +258,33 @@ export interface NewHiresRoster {
   sections: NewHiresSections;
 }
 
-/** What *Mark left* answers. */
-export interface NewHireMarkedLeft {
-  membershipId: string;
-  leftAt: string;
-  leftOn: string;
-  activation3M: 'activated' | 'not_activated';
+/**
+ * **A new hire's 3M standing on their detail** (UI-023, D-25): what the strip says — the same status, day and first
+ * sale as their row on `/new-hires`. `null` for somebody who is not a new hire. The detail and its writes carry it.
+ */
+export interface NewHireStanding {
+  status: NewHireStatus;
+  activation3M: Activation3MResult;
+  joinDate: string;
+  day: number;
+  firstSaleDate: string | null;
+  firstSaleDay: number | null;
+  firstSaleSource: FirstSaleSource | null;
+  /** Who they report to (UI-027, D-25): the header's *AAB Arief · Bergabung 3 Agu 2026*. */
+  leader: NewHireLeader | null;
+  /** Their WhatsApp number as stored, `+62…`, or `null` (UI-027, UI-081): the detail's *WhatsApp* opens it. */
+  phone: string | null;
 }
+
+/** The hire's leader on their detail (UI-027): who, and on which rung. */
+export interface NewHireLeader {
+  membershipId: string;
+  name: string;
+  role: 'ab' | 'aab' | 'agent';
+}
+
+/** `GET /new-hires/:membershipId`: the activation as a leader reads it, and the hire's 3M standing. */
+export type NewHireDetail = ActivationView & { newHire?: NewHireStanding | null };
 
 /** What a saved note answers. */
 export interface ActivationNoteSaved {
@@ -284,12 +323,8 @@ export const graduateMyActivation = () =>
 /** The leader's roster. A 404 means the reader reaches no open activation. */
 export const readNewHires = () => api<NewHiresRoster>('/new-hires');
 
-/** *Mark left* (P18.96-T6 AC-4, ADR-0173 §3): the new hire has left, today. Not a removal. */
-export const markHireLeft = (membershipId: string) =>
-  api<NewHireMarkedLeft>(`/new-hires/${encodeURIComponent(membershipId)}/left`, { method: 'POST' });
-
 /** One hire's activation as a leader reads it — also what the coaching *Activation* tab reads. */
-export const readNewHire = (membershipId: string) => api<ActivationView>(`/new-hires/${encodeURIComponent(membershipId)}`);
+export const readNewHire = (membershipId: string) => api<NewHireDetail>(`/new-hires/${encodeURIComponent(membershipId)}`);
 
 /** A leader's tick on a hire's manual item — or a data-backed one's, with its record (P18.96-T4 AC-3). */
 export const saveHireItem = (membershipId: string, code: string, done: boolean, record?: ActivationRecordInput) =>
@@ -451,14 +486,8 @@ export const OWN_COPY = {
   firstSale: HIRES.columns.firstSale,
   result: HIRES.columns.result,
   actions: HIRES.columns.actions,
-  leftOn: (on: string) => HIRES.leftOn({ on }),
   scheduleOneOnOne: HIRES.scheduleOneOnOne,
   scheduleOneOnOneName: (name: string) => HIRES.scheduleOneOnOneName({ name }),
-  markLeft: HIRES.markLeft,
-  markLeftName: (name: string) => HIRES.markLeftName({ name }),
-  markLeftQuestion: (name: string) => HIRES.markLeftQuestion({ name }),
-  markedLeft: (name: string) => HIRES.markedLeft({ name }),
-  markLeftFailed: (why: string) => HIRES.markLeftFailed({ why }),
   hireNotFoundTitle: HIRES.detail.notFoundTitle,
   hireNotFoundLine: HIRES.detail.notFoundLine,
   closedGraduated: (by: string, on: string) => HIRES.detail.closedGraduated({ by, on }),
@@ -507,29 +536,8 @@ export const OWN_COPY = {
   recordIncomplete: EN.recordIncomplete,
 } as const;
 
-/** What a badge says: its face, its accessible name and its tooltip. */
-export interface BadgeWords {
-  glyph: string;
-  name: string;
-  tip: string;
-}
-
-/**
- * **The link badge's words, in `language`** (P18.98-T4): ***Auto*** for a link that completes its item (T4 AC-4), its
- * tooltip and the end of its name the registry's sentence as the server sends it — on the hire's rows, the leader's,
- * and the office's checklist settings (P13-T3 AC-1, parity I-80). Its caller passes `useLanguage()`; English when
- * given none.
- */
-export function autoBadge(completesWhen: string, language: Language = SOURCE_LANGUAGE): BadgeWords {
-  const t = wordsIn(language);
-  return { glyph: t.auto, name: t.autoName({ completesWhen }), tip: t.autoTip({ completesWhen }) };
-}
-
-/** ***Ticked by hand***: a link that does not complete its item — whether, never when (P13-T3 AC-1, parity I-80). */
-export function byHandBadge(language: Language = SOURCE_LANGUAGE): BadgeWords {
-  const t = wordsIn(language);
-  return { glyph: t.byHand, name: t.byHandName, tip: t.byHandTip };
-}
+/** The link badge's words, ***Auto*** and ***Ticked by hand***: `lib/activation-badges.ts`' (P18.99-T16), re-exported. */
+export { autoBadge, byHandBadge, type BadgeWords } from './activation-badges';
 
 /** *From {label}*: what a data-backed item completes from, in the office's settings (P18.96-T7 G2), in `language`. */
 export const fromDataWords = (label: string, language: Language = SOURCE_LANGUAGE) => wordsIn(language).fromData({ label });
@@ -557,8 +565,8 @@ export const dayShown = (day: number, window: number) => (day > window ? `${wind
 /** The way back to a hire's detail, and the detail's own address. */
 export const newHireHref = (membershipId: string) => `/new-hires/${encodeURIComponent(membershipId)}`;
 
-/** `/coaching/me`'s *Activation* tab (D-coaching-me). */
-export const MY_COACHING_ACTIVATION_HREF = '/coaching/me/activation';
+/** `/coaching/me`'s *Activation* tab: in `lib/hrefs.ts`, so the coaching record's tabs link here without this module. */
+export { MY_COACHING_ACTIVATION_HREF } from './hrefs';
 
 /**
  * A unit's name on `/new-hires` (D-group): *Direct Unit*, *AAB: {name}* or *AB: {name}* — in the reader's `language`
@@ -690,3 +698,56 @@ export function startDateAllowed(value: string, today: string): boolean {
 /** The bound's sentence, in the product's date: its words in `language`, its day in `figures`. */
 export const startDateRangeText = (today: string, language: Language = SOURCE_LANGUAGE, figures?: Language) =>
   hiresIn(language).detail.startDateRange({ from: formatShortDay(earliestStart(today), { year: true }, figures) });
+
+/*
+ * ── The roster as UI V1 draws it (UI-024; D-24) ──────────────────────────────────────────────────
+ */
+
+/** *Teraktivasi* as soon as there is a first sale, in amber after day 90 (UI-023): the server's status, read. */
+export const hasFirstSale = (row: Pick<NewHireRow, 'status'>) => row.status !== 'not_yet';
+
+/** The filter's three choices: *Semua*, *Teraktivasi*, *Belum* (UI-024). */
+export type NewHireFilter = 'all' | 'activated' | 'not_yet';
+
+export const NEW_HIRE_FILTERS: readonly NewHireFilter[] = ['all', 'activated', 'not_yet'];
+
+/** Whether a row shows under a filter: *Belum* is everybody without a first sale, whatever day they are on. */
+export const inFilter = (row: Pick<NewHireRow, 'status'>, filter: NewHireFilter) =>
+  filter === 'all' || (filter === 'activated' ? hasFirstSale(row) : !hasFirstSale(row));
+
+/** One leader's group on `/new-hires` (UI-024): their unit as the server served it, and its people, newest first. */
+export interface NewHireGroup {
+  key: string;
+  unit: NewHireUnit;
+  rows: NewHireRow[];
+}
+
+/** The unit a row is counted in, as a key: the leader's membership, or *direct* for the reader's own. */
+const unitKey = (unit: NewHireUnitRef) => (unit.kind === 'direct' || !unit.leader ? 'direct' : unit.leader.membershipId);
+
+/**
+ * **The roster as a tree of leaders** (UI-024, D-24): every row of every section under the unit it is counted in — the
+ * reader's *Direct Unit* first, then each unit below in the order the server lists them — **newest joiner on top**.
+ * Nothing is computed but the grouping: each unit's *Aktivasi 3M* is the one the server served (`unit.activation3M`).
+ */
+export function newHireGroups(roster: NewHiresRoster): NewHireGroup[] {
+  const rows = [...roster.sections.inProgress, ...roster.sections.activated, ...roster.sections.notActivated];
+  const newestFirst = (a: NewHireRow, b: NewHireRow) =>
+    (a.joinDate !== b.joinDate ? (a.joinDate < b.joinDate ? 1 : -1) : a.hire.name.localeCompare(b.hire.name));
+  const units = [...roster.units].sort((a, b) => Number(unitKey(a) !== 'direct') - Number(unitKey(b) !== 'direct'));
+  return units.map((unit) => ({
+    key: unitKey(unit),
+    unit,
+    rows: rows.filter((row) => unitKey(row.unit) === unitKey(unit)).sort(newestFirst),
+  }));
+}
+
+/** How many rows each filter shows (UI-024's *Semua 10 · Teraktivasi 8 · Belum 2*). */
+export function newHireCounts(roster: NewHiresRoster): Record<NewHireFilter, number> {
+  const rows = [...roster.sections.inProgress, ...roster.sections.activated, ...roster.sections.notActivated];
+  return {
+    all: rows.length,
+    activated: rows.filter(hasFirstSale).length,
+    not_yet: rows.filter((row) => !hasFirstSale(row)).length,
+  };
+}

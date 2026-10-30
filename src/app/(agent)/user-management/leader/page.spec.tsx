@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import AgentLayout from '@/app/(agent)/layout';
@@ -59,7 +59,7 @@ describe('find your leader (P3-T3)', () => {
    * P18.95-T7 AC-1 (ADR-0167 §7; the client's *Grey text* table, rows 1–3): the client's words at every size, and its
    * *Remove* below 768px only — the sentence keeps its words from 768px, where the client has not reviewed it yet.
    */
-  it('P18.95-T7 AC-1 heads the search Find a leader, says They’ll need to approve., and keeps the invite’s line off a phone', async () => {
+  it('P18.95-T7 AC-1 heads the search Find a leader, says They’ll need to approve.', async () => {
     stubFetch({ '/join/me': { body: REGISTERED }, '/join/leaders': { body: LEADERS } });
     renderInLayout(AgentLayout, <FindLeaderPage />, { me: JOINER });
 
@@ -67,12 +67,6 @@ describe('find your leader (P3-T3)', () => {
     expect(screen.queryByText(/Find a leader in/)).not.toBeInTheDocument();
     expect(screen.getByText("They'll need to approve.")).toBeInTheDocument();
     expect(screen.queryByText(/Sending a request notifies them/)).not.toBeInTheDocument();
-    const invite = screen.getByText(/^Any of the three does the same thing/);
-    expect(invite).toHaveClass('max-md:hidden');
-    expect(invite).toHaveTextContent(
-      'Any of the three does the same thing: it joins you and tags you to them in one step, with no approval. Opening their link or scanning their QR takes you to the same place.',
-    );
-    expect(invite.className.split(/\s+/).filter((c) => /hidden/.test(c))).toEqual(['max-md:hidden']);
   });
 
   it('says a leader with no unit can still take you on', async () => {
@@ -148,12 +142,49 @@ describe('find your leader (P3-T3)', () => {
     });
     renderInLayout(AgentLayout, <FindLeaderPage />, { me: JOINER });
 
-    expect(await screen.findByText('Changing leader goes through your office admin.')).toBeInTheDocument();
-    expect(screen.getByText('Currently reporting to')).toBeInTheDocument();
-    expect(screen.getByText('Wilson Tanoto')).toBeInTheDocument();
+    const card = await screen.findByTestId('reporting-to');
+    // UI-088: one card — whom they report to as its title, the note as 12px meta inside it, behind ⓘ on a phone.
+    expect(within(card).getByText('Currently reporting to').className).not.toContain('uppercase');
+    expect(within(card).getByText('Wilson Tanoto')).toBeInTheDocument();
+    const note = within(card).getAllByText('Changing leader goes through your office admin.').find((el) => el.tagName === 'P')!;
+    expect(note.className).toContain('text-sm');
+    expect(note.className).toContain('max-md:hidden');
+    expect(within(card).getByRole('button', { name: 'Changing leader goes through your office admin.' })).toBeInTheDocument();
+    expect(card.className).not.toMatch(/border-l-/);
     expect(screen.queryByLabelText('Search by name')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Send request' })).not.toBeInTheDocument();
     expect(calls.some((c) => c.url.includes('/join/leaders'))).toBe(false);
+  });
+
+  it('UI-086 offers no invite to somebody already in an office with a leader — it would lead to a refusal', async () => {
+    stubFetch({
+      '/join/me': { body: { ...REGISTERED, status: 'active', leaderMembershipId: 'mem-ab', leaderName: 'Wilson Tanoto' } },
+    });
+    renderInLayout(AgentLayout, <FindLeaderPage />, { me: JOINER });
+
+    await screen.findByTestId('reporting-to');
+    expect(screen.queryByText("Have a leader's code, link or QR?")).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Use an invite instead' })).not.toBeInTheDocument();
+  });
+
+  it('UI-086 offers no invite to somebody in an office with no leader either — /join refuses any member (T16)', async () => {
+    stubFetch({ '/join/me': { body: REGISTERED }, '/join/leaders': { body: LEADERS } });
+    renderInLayout(AgentLayout, <FindLeaderPage />, { me: JOINER });
+    await screen.findByRole('heading', { level: 2, name: 'Find a leader' });
+    expect(screen.queryByText("Have a leader's code, link or QR?")).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Use an invite instead' })).not.toBeInTheDocument();
+  });
+
+  it('UI-086 offers the invite to somebody with no office yet, its line behind ⓘ from 768px', async () => {
+    stubFetch({ '/join/me': { body: NO_OFFICE } });
+    renderInLayout(AgentLayout, <FindLeaderPage />, { me: makeMe({ membership: null }) });
+    expect(await screen.findByRole('link', { name: 'Use an invite instead' })).toHaveAttribute('href', '/join');
+    // Appendix A (UI-086): the invite's sentence behind ⓘ from 768px, and not on a phone at all.
+    const tip = screen.getByRole('button', {
+      name: 'Any of the three does the same thing: it joins you and tags you to them in one step, with no approval. Opening their link or scanning their QR takes you to the same place.',
+    });
+    expect(tip.closest('.max-md\\:hidden')).not.toBeNull();
+    expect(screen.queryAllByText(/^Any of the three does the same thing/).filter((el) => el.tagName === 'P')).toEqual([]);
   });
 
   it('P18.96-T3 AC-6 a reader with no leader still searches, and the list is the server’s — never the reader’s own unit', async () => {

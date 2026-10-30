@@ -25,7 +25,7 @@ export function MonthlyProductionChart({ monthly, labelledBy }: { monthly: reado
   const figures = useFigureLanguage();
   const bars = chartBars(monthly, language, figures);
   return (
-    <div className="rounded-lg border border-hairline bg-card">
+    <div className="rounded-lg border border-card-edge bg-card">
       <div className="relative overflow-x-auto p-5">
         <ul aria-labelledby={labelledBy} className="flex min-w-[620px] items-end gap-3.5">
           {bars.map((bar, i) => (

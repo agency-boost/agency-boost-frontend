@@ -1,11 +1,12 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { AddAgentDialog } from '@/components/add-agent-form';
-import { RequestInbox } from '@/components/request-inbox';
 import { WaitingToJoin } from '@/components/waiting-to-join';
 import { Button, ErrorBanner } from '@/components/ui/field';
 import { Modal } from '@/components/ui/modal';
+import { ResponsiveSheet } from '@/components/ui/responsive-sheet';
+import type { WaitingSummary } from '@/components/new-hires';
 import { Toast, useToast } from '@/components/ui/toast';
 import { useMessages } from '@/i18n/language-provider';
 import { addAgentMessages } from '@/i18n/messages/add-agent';
@@ -19,11 +20,25 @@ import {
 } from '@/lib/invites';
 import { readInbox } from '@/lib/join';
 import { useCan, useSession } from '@/lib/session';
+import { useOpenedOnce } from '@/lib/use-opened-once';
 import { usePhone } from '@/lib/use-phone';
+
+/*
+ * **The form and the inbox are fetched on the tap that opens them** (P18.99-T16, the bundle): *+ Tambah agent*'s dialog,
+ * its share step and QR, and the request inbox were a fifth of `/new-hires`' first load, for two things most visits never
+ * open. Once loaded they are what they were; the form stays mounted from its first opening (`useOpenedOnce`).
+ */
+const AddAgentDialog = dynamic(() => import('@/components/add-agent-form').then((m) => m.AddAgentDialog), { ssr: false });
+const RequestInbox = dynamic(() => import('@/components/request-inbox').then((m) => m.RequestInbox), { ssr: false });
 
 /** What `/new-hires`'s header and *Waiting to join* share: one read of each, the dialogs' state, the toast. */
 export interface NewHiresJoiningState {
   actions: ReactNode;
+  /** The title row's control below 1024px (UI-004, UI-024): *+ Tambah agent* — and *Tinjau permintaan (n)* while any wait. */
+  control: ReactNode;
+  /** *Menunggu bergabung*'s sheet (UI-024), below 768px. */
+  waitingOpen: boolean;
+  setWaitingOpen: (open: boolean) => void;
   mayAdd: boolean;
   invites: InviteView[];
   transfers: RequestedTransferView[];
@@ -67,6 +82,7 @@ export function useNewHiresJoining(): NewHiresJoiningState {
   const [requestCount, setRequestCount] = useState(0);
   const [adding, setAdding] = useState(false);
   const [reviewing, setReviewing] = useState(false);
+  const [waitingOpen, setWaitingOpen] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const [rosterKey, setRosterKey] = useState(0);
   const { toast, show } = useToast();
@@ -96,6 +112,7 @@ export function useNewHiresJoining(): NewHiresJoiningState {
   }, [mayReview]);
 
   const onAdded = useCallback((result: AddAgentResult) => {
+    // An invite is confirmed once the leader sends it from the share step (`AddAgentDialog`'s `onSent`, UI-024).
     if (result.outcome === 'linked') {
       show(withDetail(confirmed.agentAdded, t.linked({ name: result.member.fullName })));
       setRosterKey((n) => n + 1);
@@ -115,8 +132,18 @@ export function useNewHiresJoining(): NewHiresJoiningState {
     </div>
   ) : null;
 
+  const control = (mayAdd || (mayReview && requestCount > 0)) ? (
+    <div className="flex items-center gap-1.5">
+      {mayReview && requestCount > 0 && (
+        <Button variant="secondary" onClick={() => setReviewing(true)}>{t.review({ n: requestCount })}</Button>
+      )}
+      {mayAdd && <Button onClick={() => setAdding(true)} className="max-md:min-h-11">{add.open}</Button>}
+    </div>
+  ) : null;
+
   return {
-    actions, mayAdd, invites, transfers, today, adding, reviewing, error, setAdding, setReviewing,
+    actions, control, waitingOpen, setWaitingOpen,
+    mayAdd, invites, transfers, today, adding, reviewing, error, setAdding, setReviewing,
     setInvites: (update) => setInviteRows((list) => update(list)),
     setRequestCount, onAdded, toast, show, reader: me?.membership?.membershipId,
     rosterKey,
@@ -124,38 +151,63 @@ export function useNewHiresJoining(): NewHiresJoiningState {
   };
 }
 
-/** *Waiting to join*, the form, the inbox and the toast, under the header `useNewHiresJoining` drew. */
+/**
+ * **What `/new-hires` lends the roster** (UI-024): *Menunggu bergabung*'s count, the sheet it opens, and the list for the
+ * right column from 768px — `null` for a reader who adds nobody, who has no invitations to wait on.
+ */
+export function waitingSummary(state: NewHiresJoiningState): WaitingSummary | null {
+  if (!state.mayAdd) return null;
+  return {
+    count: state.invites.length + state.transfers.length,
+    open: () => state.setWaitingOpen(true),
+    list: <WaitingList {...state} />,
+  };
+}
+
+function WaitingList(state: NewHiresJoiningState) {
+  return (
+    <WaitingToJoin
+      invites={state.invites}
+      transfers={state.transfers}
+      reader={state.reader}
+      onInvites={state.setInvites}
+      onToast={state.show}
+    />
+  );
+}
+
+/** The form, *Menunggu bergabung*'s sheet, the inbox and the toast, under the header `useNewHiresJoining` drew. */
 export function NewHiresJoining(state: NewHiresJoiningState) {
-  const t = useMessages(newHiresMessages).joining;
+  const t = useMessages(newHiresMessages);
   const phone = usePhone();
+  const addOpened = useOpenedOnce(state.adding);
   return (
     <>
       {state.error && <div className="mb-4"><ErrorBanner {...state.error} /></div>}
-      {state.mayAdd && (
-        <WaitingToJoin
-          invites={state.invites}
-          transfers={state.transfers}
-          reader={state.reader}
-          onInvites={state.setInvites}
-          onToast={state.show}
-        />
-      )}
-      {state.mayAdd && (
+      {state.mayAdd && addOpened && (
         <AddAgentDialog
           open={state.adding}
           today={state.today}
           onClose={() => state.setAdding(false)}
           onAdded={state.onAdded}
+          onSent={(name) => state.show(t.invite.sent({ name }))}
         />
+      )}
+      {state.mayAdd && (
+        <ResponsiveSheet open={state.waitingOpen} title={t.list.waiting} onClose={() => state.setWaitingOpen(false)}>
+          {state.invites.length + state.transfers.length === 0
+            ? <p className="py-2 text-sm text-muted">{t.list.noWaiting}</p>
+            : <WaitingList {...state} />}
+        </ResponsiveSheet>
       )}
       <Modal
         open={state.reviewing}
-        title={t.inboxTitle}
-        description={t.inboxLine}
+        title={t.joining.inboxTitle}
+        description={t.joining.inboxLine}
         onClose={state.closeInbox}
         placement={phone ? 'sheet' : 'center'}
         className="max-w-[34rem]"
-        footer={<Button variant="secondary" onClick={state.closeInbox}>{t.close}</Button>}
+        footer={<Button variant="secondary" onClick={state.closeInbox}>{t.joining.close}</Button>}
       >
         <RequestInbox today={state.today} onCount={state.setRequestCount} />
       </Modal>

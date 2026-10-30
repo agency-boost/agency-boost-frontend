@@ -53,7 +53,6 @@ import KpmAnalyticsLayout from '@/app/kpm/analytics/layout';
 import KpmAnalyticsPage from '@/app/kpm/analytics/page';
 import LeaderMeetingsPage from '@/app/leader-meetings/page';
 import { AdminShell } from './admin-shell';
-import { AgentShell } from './agent-shell';
 import { TenantShell } from './tenant-shell';
 
 const nav = vi.hoisted(() => ({ pathname: '/' }));
@@ -179,8 +178,13 @@ function navItems(shell: ReactNode, me: typeof FIELD): { label: string; href: st
   return items;
 }
 
+/*
+ * *Changed 2026-10-30 (UI V1, UI-004; ADR-0180):* the field shell is not here. Its sidebar's labels are the owner's — the
+ * *Lainnya* sheet's, in full (D-20: *Home · Activity · Calendar · Unit Dashboard*, *Leads*, *Sales*, *Campaign* …) —
+ * which the revision chose over P18.95-T9's *label = title*; the pages it draws take their own titles from it. Each field
+ * item still opens a page that exists (`field-shell.spec.tsx`). The two consoles keep the rule.
+ */
 const SHELLS = [
-  ['the field shell', <AgentShell key="a">x</AgentShell>, FIELD],
   ['the office console', <TenantShell key="t">x</TenantShell>, OWNER],
   ['the platform console', <AdminShell key="p">x</AdminShell>, ADMIN],
 ] as const;

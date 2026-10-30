@@ -28,6 +28,8 @@ const en = {
   inviteResent: 'New link ready ✓',
   inviteCancelled: 'Invite cancelled ✓',
   requestApproved: 'Request approved ✓',
+  /** UI V1 (UI-090): the invite share block's copy, of the link or the code — the report's *Tersalin ✓*. */
+  copied: 'Copied ✓',
 };
 
 const id: MessagesOf<typeof en> = {
@@ -45,6 +47,7 @@ const id: MessagesOf<typeof en> = {
   inviteResent: 'Tautan baru siap ✓',
   inviteCancelled: 'Undangan dibatalkan ✓',
   requestApproved: 'Permintaan disetujui ✓',
+  copied: 'Tersalin ✓',
 };
 
 export const confirmationMessages = defineMessages({ en, id });

@@ -65,7 +65,8 @@ describe('KPM analytics (P18-T2)', () => {
       open();
       const tabs = within(await screen.findByRole('navigation', { name: 'KPM Analytics' }));
       expect(tabs.getByRole('link', { name: 'Overview' })).toHaveAttribute('aria-current', 'page');
-      const compliance = tabs.getByRole('link', { name: 'Compliance, Events, and Campaigns' });
+      // UI-109: renamed *Compliance*, in both languages.
+      const compliance = tabs.getByRole('link', { name: 'Compliance' });
       expect(compliance).toHaveAttribute('href', '/kpm/analytics/compliance');
       expect(compliance).not.toHaveAttribute('aria-current');
       expect(tabs.queryByRole('tab')).not.toBeInTheDocument();
@@ -532,7 +533,8 @@ describe('KPM analytics (P18-T2)', () => {
       expect(screen.queryByText('KPM OWNER')).not.toBeInTheDocument();
       // A leader holding the grant is refused inside their sidebar; an Agent without it, as on any page they lack.
       if (me.permissions.includes('kpm_analytics:read')) {
-        expect(screen.getByRole('link', { name: /Activity management/ })).toBeInTheDocument();
+        // The field shell's sidebar since UI V1 (UI-004): *Activity*, in its first section.
+        expect(screen.getByRole('link', { name: 'Activity' })).toBeInTheDocument();
       }
       expect(screen.queryByRole('table', { name: 'Unit comparison' })).not.toBeInTheDocument();
       expect(nav.replace).not.toHaveBeenCalledWith(landingFor(me));
@@ -544,8 +546,9 @@ describe('KPM analytics (P18-T2)', () => {
         const { calls } = open(undefined, { me: CORE_LEADER_ME });
         expect(await table()).toBeInTheDocument();
         expect(screen.queryByText('KPM OWNER')).not.toBeInTheDocument();
-        expect(screen.getByRole('link', { name: 'KPM analytics' })).toHaveAttribute('aria-current', 'page');
-        expect(screen.getByRole('button', { name: /Core leader/ })).toBeInTheDocument();
+        // UI V1 (UI-004): *KPM Analytics*, under the field sidebar's *KPM* group.
+        expect(screen.getByRole('link', { name: 'KPM Analytics' })).toHaveAttribute('aria-current', 'page');
+        expect(screen.getByRole('button', { name: 'KPM' })).toBeInTheDocument();
         expect(reads(calls)).toEqual(['http://api.test/api/v1/kpm/analytics?period=this_month']);
       });
 
@@ -591,8 +594,9 @@ describe('P18.97-T7 AC-1 the comparison as cards on a phone (UI-034)', () => {
 
   /** The comparison's markup on the build before P18.97-T7, rendered from this fixture on 2026-10-28. */
   const BEFORE_T7: Record<768 | 1280, string> = {
-    768: 'a5436f7afc8b6b5f23d9d9a41356394d39e5ec91049a0a07e2d83454ebf57b30',
-    1280: 'a5436f7afc8b6b5f23d9d9a41356394d39e5ec91049a0a07e2d83454ebf57b30',
+    // Re-recorded 2026-10-30 (UI V1): UI-008's card edge (`border-card-edge`) and UI-010's 44px/48px targets below 1024px.
+    768: '419c5bcabd58cab987b0e37af47885a93c00067ba44e3189cc3fd768fe6f68a5',
+    1280: '419c5bcabd58cab987b0e37af47885a93c00067ba44e3189cc3fd768fe6f68a5',
   };
 
   it.each([768, 1280] as const)('P18.97-T7 AC-1 at %ipx draws the table it drew, to the byte', async (px) => {
@@ -811,7 +815,7 @@ describe('P18.98-T4 KPM analytics in Indonesian', () => {
     expect(screen.getByText('Perbandingan unit, kualifikasi klub, dan tren')).toBeInTheDocument();
     const tabs = within(screen.getByRole('navigation', { name: 'KPM Analytics' }));
     expect(tabs.getByRole('link', { name: 'Overview' })).toBeInTheDocument();
-    expect(tabs.getByRole('link', { name: 'Compliance, Events, and Campaigns' })).toBeInTheDocument();
+    expect(tabs.getByRole('link', { name: 'Compliance' })).toBeInTheDocument();
     const period = screen.getByRole('combobox', { name: 'Periode' });
     expect([...period.querySelectorAll('option')].map((o) => o.textContent)).toEqual(['Bulan ini', 'Bulan lalu']);
     expect(screen.getByText('Semua 4 AB, tahun ini — benchmark antarrekan, selalu ditampilkan di tingkat grup')).toBeInTheDocument();

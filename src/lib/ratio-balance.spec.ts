@@ -6,41 +6,34 @@ import {
 /** A balance read as each side's share of the two (P13.1-T6). */
 describe('the balance as two shares (P13.1-T6)', () => {
   describe('AC-1: the split sums to 100', () => {
-    it('P18.97-T3 AC-2 writes two selling and three recruiting as 40,0% and 60,0% — a ratio beside its benchmark keeps its tenth', () => {
-      expect(formatBalanceSplit(40, 30, 'success')).toEqual({ first: '40,0%', second: '60,0%' });
+    it('UI-080 writes two selling and three recruiting as 40% and 60% — whole, as every percentage is', () => {
+      expect(formatBalanceSplit(40, 30, 'success')).toEqual({ first: '40%', second: '60%' });
     });
 
-    it('writes an even split as 50,0% and 50,0%, and a tipped one to its tenth', () => {
-      expect(formatBalanceSplit(50, 30, 'success')).toEqual({ first: '50,0%', second: '50,0%' });
-      expect(formatBalanceSplit(50.04, 30, 'success')).toEqual({ first: '50,0%', second: '50,0%' });
-      expect(formatBalanceSplit(50.25, 30, 'success')).toEqual({ first: '50,3%', second: '49,7%' });
+    it('UI-080 writes an even split as 50% and 50%, and a tipped one whole, half up', () => {
+      expect(formatBalanceSplit(50, 30, 'success')).toEqual({ first: '50%', second: '50%' });
+      expect(formatBalanceSplit(50.04, 30, 'success')).toEqual({ first: '50%', second: '50%' });
+      expect(formatBalanceSplit(50.5, 30, 'success')).toEqual({ first: '51%', second: '49%' });
     });
 
-    it('rounds the first side and writes the second as what is left, never 99,9 or 100,1 between them', () => {
-      // 33.35 and 66.65 would each round up, and read 33,4% · 66,7%.
-      expect(formatBalanceSplit(33.35, 40, 'success')).toEqual({ first: '33,4%', second: '66,6%' });
-      expect(formatBalanceSplit(100 / 3, 40, 'success')).toEqual({ first: '33,3%', second: '66,7%' });
+    it('rounds the first side and writes the second as what is left, never 99 or 101 between them', () => {
+      expect(formatBalanceSplit(100 / 3, 40, 'success')).toEqual({ first: '33%', second: '67%' });
+      expect(formatBalanceSplit(66.7, 40, 'success')).toEqual({ first: '67%', second: '33%' });
+      expect(formatBalanceSplit(12.5, 40, 'alert')).toEqual({ first: '13%', second: '87%' });
     });
   });
 
-  describe('AC-5: a split never reads as the other side of its status', () => {
-    it('writes a miss just past the band’s edge with the decimal that shows it is past', () => {
-      // 65.04% is outside 35–65%; `65,0% · 35,0%` would read as inside it.
-      expect(formatBalanceSplit(65.2, 30, 'alert')).toEqual({ first: '65,2%', second: '34,8%' });
-      expect(formatBalanceSplit(65.04, 30, 'alert')).toEqual({ first: '65,04%', second: '34,96%' });
-      expect(formatBalanceSplit(34.96, 30, 'alert')).toEqual({ first: '34,96%', second: '65,04%' });
+  describe('UI-080: the status is judged on the unrounded share, never on the figure written', () => {
+    it('writes a miss just past the band’s edge whole: 65,04% reads 65% beside the status the server judged', () => {
+      expect(formatBalanceSplit(65.2, 30, 'alert')).toEqual({ first: '65%', second: '35%' });
+      expect(formatBalanceSplit(65.04, 30, 'alert')).toEqual({ first: '65%', second: '35%' });
+      expect(formatBalanceSplit(34.96, 30, 'alert')).toEqual({ first: '35%', second: '65%' });
     });
 
-    it('keeps an on-track split inside an odd band’s half-percent edges', () => {
-      // ±25 points is 37.5%–62.5%; a 62.5% share is on track.
-      expect(formatBalanceSplit(62.5, 25, 'success')).toEqual({ first: '62,5%', second: '37,5%' });
-    });
-
-    it('never writes a side with activity on it as 0,0%, and keeps a real zero', () => {
-      expect(formatBalanceSplit(99.6, 30, 'alert')).toEqual({ first: '99,6%', second: '0,4%' });
-      expect(formatBalanceSplit(99.96, 30, 'alert')).toEqual({ first: '99,96%', second: '0,04%' });
-      expect(formatBalanceSplit(100, 30, 'alert')).toEqual({ first: '100,0%', second: '0,0%' });
-      expect(formatBalanceSplit(0, 30, 'alert')).toEqual({ first: '0,0%', second: '100,0%' });
+    it('writes 0,4% as 0%, as the owner asked, and keeps a real zero', () => {
+      expect(formatBalanceSplit(99.6, 30, 'alert')).toEqual({ first: '100%', second: '0%' });
+      expect(formatBalanceSplit(100, 30, 'alert')).toEqual({ first: '100%', second: '0%' });
+      expect(formatBalanceSplit(0, 30, 'alert')).toEqual({ first: '0%', second: '100%' });
     });
   });
 
@@ -118,16 +111,16 @@ describe('P18.95-T5 AC-6: the balance says what to do', () => {
  * same ones (AC-2); the sentence's words are the catalogue's, and move with the screen (P18.98-T4).
  */
 describe('P18.98-T3 a balance in each language', () => {
-  it('P18.98-T3 AC-1 writes the split 40.0% · 60.0% and the band 37.5%–62.5% in English', () => {
-    expect(formatBalanceSplit(40, 30, 'success', 'en')).toEqual({ first: '40.0%', second: '60.0%' });
+  it('P18.98-T3 AC-1 writes the split 40% · 60% (UI-080) and the band 37.5%–62.5% in English', () => {
+    expect(formatBalanceSplit(40, 30, 'success', 'en')).toEqual({ first: '40%', second: '60%' });
     expect(formatBalanceBand(25, 'en')).toEqual({ low: '37.5%', high: '62.5%' });
     expect(formatBalanceBand(30, 'en')).toEqual({ low: '35%', high: '65%' });
   });
 
-  it('P18.98-T3 AC-2 adds the same second place in both languages where a miss would read as inside the band', () => {
-    expect(formatBalanceSplit(65.04, 30, 'alert', 'id')).toEqual({ first: '65,04%', second: '34,96%' });
-    expect(formatBalanceSplit(65.04, 30, 'alert', 'en')).toEqual({ first: '65.04%', second: '34.96%' });
-    expect(formatBalanceSplit(99.96, 30, 'alert', 'en')).toEqual({ first: '99.96%', second: '0.04%' });
+  it('UI-080 writes the same whole split in both languages, whatever the status', () => {
+    expect(formatBalanceSplit(65.04, 30, 'alert', 'id')).toEqual({ first: '65%', second: '35%' });
+    expect(formatBalanceSplit(65.04, 30, 'alert', 'en')).toEqual({ first: '65%', second: '35%' });
+    expect(formatBalanceSplit(99.96, 30, 'alert', 'en')).toEqual({ first: '100%', second: '0%' });
   });
 
   it('P18.98-T3 AC-1 writes the advice’s band in the reader’s marks', () => {

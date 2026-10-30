@@ -45,7 +45,10 @@ const unhealed = () => leaderViewOf(changed(leaderItems(), { CRM_SETUP: CRM_BY_S
 /** The *Items* cell of the aspect table's row named `aspect`, or `null` while there is no table. */
 const itemsCell = (aspect: string) => {
   const header = Array.from(document.querySelectorAll('th[scope="row"]')).find((th) => th.textContent === aspect);
-  return header?.parentElement?.children[1]?.textContent ?? null;
+  if (header) return header.parentElement?.children[1]?.textContent ?? null;
+  // UI V1 (UI-027): the leader's detail has no table — each aspect card's heading carries its count, *Initial Setup · 3/4*.
+  const heading = Array.from(document.querySelectorAll('h2')).find((h) => (h.textContent ?? '').replace(/^\d+/, '').startsWith(`${aspect} · `));
+  return heading?.textContent?.split(' · ').pop() ?? null;
 };
 
 /** Every value the *Items* cell of `aspect` is painted with, from now on — one entry per change. */
@@ -242,7 +245,9 @@ describe('P18.96-T7 AC-2 (UI-008): a tick keeps the page where it is', () => {
     const form = within(checkIn.getByRole('group', { name: 'Log 1:1' }));
     await userEvent.type(form.getByLabelText('Note'), 'First presentations, together.');
     await userEvent.click(form.getByRole('button', { name: 'Save' }));
-    expect(await checkIn.findByText('Ticked by you, waiting for data')).toBeInTheDocument();
+    // UI-027: behind the ⓘ on the leader's detail.
+    await vi.waitFor(() => expect(Array.from(row('WEEKLY_CHECK_IN').querySelectorAll('[role="tooltip"]')).map((t) => t.textContent).join(' '))
+      .toContain('Ticked by you, waiting for data'));
     expect(calls.filter((c) => c.init.method === 'PUT')).toHaveLength(1);
 
     expect(checkIn.queryByRole('group', { name: 'Log 1:1' })).not.toBeInTheDocument();

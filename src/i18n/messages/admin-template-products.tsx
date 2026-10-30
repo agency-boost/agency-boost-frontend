@@ -109,7 +109,7 @@ const en = {
     notShown: 'You are not shown commission rates.',
     notSet: 'Not set. Nothing is shown to an agent until this company states its schedule — a figure somebody reads as '
       + 'their pay is never one this product invents.',
-    caption: kept('Commission rate'),
+    caption: 'Commission rate',
     year: 'Year',
     rate: 'Rate (%)',
     rateFor: ({ year }: { year: number }) => `Rate for year ${year}`,
@@ -216,7 +216,7 @@ const id: MessagesOf<typeof en> = {
     notShown: 'Persentase komisi tidak ditampilkan untuk Anda.',
     notSet: 'Belum diatur. Tidak ada yang ditampilkan kepada agent sampai perusahaan ini menetapkan jadwalnya — angka '
       + 'yang dibaca seseorang sebagai penghasilannya tidak pernah dikarang oleh aplikasi ini.',
-    caption: kept('Commission rate'),
+    caption: 'Persentase komisi',
     year: 'Tahun',
     rate: 'Persentase (%)',
     rateFor: ({ year }) => `Persentase untuk tahun ${year}`,

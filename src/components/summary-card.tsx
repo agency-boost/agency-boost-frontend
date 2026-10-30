@@ -42,7 +42,7 @@ export function SummaryCard({
     </h2>
   );
   return (
-    <section aria-labelledby={id} className={cn('rounded-lg border border-hairline bg-card px-[22px] py-[18px] print:break-inside-avoid', className)}>
+    <section aria-labelledby={id} className={cn('rounded-lg border border-card-edge bg-card px-[22px] py-[18px] print:break-inside-avoid', className)}>
       {/* Wraps rather than squeezes: on a phone a long tag drops under the title instead of folding it. */}
       <div className="mb-3.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
         {term ? (

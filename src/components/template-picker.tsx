@@ -1,18 +1,25 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import { useEffect, useId, useState } from 'react';
 import { ActionMenu } from '@/components/ui/action-menu';
 import { Dialog } from '@/components/ui/dialog';
 import { Modal } from '@/components/ui/modal';
 import { Button, ErrorBanner, Field, Select, TextInput } from '@/components/ui/field';
-import { ImportTemplateDialog } from '@/components/import-template-dialog';
 import {
   archiveTemplate, createTemplate, updateTemplate, type NamedTemplate,
 } from '@/lib/admin';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
 import { TEMPLATE_NAME_MAX } from '@/lib/templates';
+import { useOpenedOnce } from '@/lib/use-opened-once';
 import { useMessages } from '@/i18n/language-provider';
 import { adminTemplateMessages } from '@/i18n/messages/admin-template';
+
+/** *Import*'s dialog, downloaded when it is first opened and mounted from then on (`useOpenedOnce`; P18.99-T16). */
+const ImportTemplateDialog = dynamic(
+  () => import('@/components/import-template-dialog').then((m) => m.ImportTemplateDialog),
+  { ssr: false },
+);
 
 /** How a new template starts (ADR-0115 §5): empty, the AgencyBoost defaults, or a copy of the one shown. */
 type NewFrom = 'empty' | 'defaults' | 'copy';
@@ -58,6 +65,7 @@ export function TemplatePicker({
   const [dialog, setDialog] = useState<null | 'new' | 'import' | 'rename' | 'default' | 'archive'>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
+  const importOpened = useOpenedOnce(dialog === 'import');
 
   async function act(run: () => Promise<NamedTemplate>, select: boolean) {
     setBusy(true);
@@ -148,12 +156,14 @@ export function TemplatePicker({
         })}
         onSaved={(saved) => { setDialog(null); onChanged(saved, true); }}
       />
-      <ImportTemplateDialog
-        open={dialog === 'import'}
-        companyId={companyId}
-        onClose={() => setDialog(null)}
-        onImported={(saved) => { setDialog(null); onChanged(saved, true); }}
-      />
+      {importOpened && (
+        <ImportTemplateDialog
+          open={dialog === 'import'}
+          companyId={companyId}
+          onClose={() => setDialog(null)}
+          onImported={(saved) => { setDialog(null); onChanged(saved, true); }}
+        />
+      )}
       <NameDialog
         open={dialog === 'rename'}
         title={t.renameTitle}

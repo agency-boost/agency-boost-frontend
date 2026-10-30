@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import AgentLayout from '@/app/(agent)/layout';
@@ -102,7 +102,23 @@ describe('register KPM (P3-T3)', () => {
 
     await screen.findByText(/Registered office/);
     expect(screen.queryByRole('button', { name: /switch/i })).not.toBeInTheDocument();
-    expect(screen.getByText(/ask\s+whoever administers your office/)).toBeInTheDocument();
+    // UI-088: inside the one card, as 12px meta from 768px and behind ⓘ on a phone (Appendix A).
+    const card = screen.getByTestId('registered-office');
+    const meta = within(card).getAllByText(/ask\s+whoever administers your office/).find((el) => el.tagName === 'P')!;
+    expect(meta.className).toContain('text-sm');
+    expect(meta.className).toContain('max-md:hidden');
+    expect(within(card).getByRole('button', { name: /ask\s+whoever administers your office/ }).closest('.md\\:hidden')).not.toBeNull();
+  });
+
+  it('UI-088: one card for the office, its label in sentence case, no uppercase eyebrow and no orange left border', async () => {
+    stubFetch({ '/join/me': { body: REGISTERED }, '/join/kpm-request': { body: { request: null } }, '/join/kpms': { body: OFFICES } });
+    renderInLayout(AgentLayout, <RegisterKpmPage />, { me: NEWCOMER });
+
+    const label = await screen.findByText('Registered office');
+    expect(label.className).not.toContain('uppercase');
+    const card = screen.getByTestId('registered-office');
+    expect(card.className).not.toMatch(/border-l-/);
+    expect(document.querySelector('.border-l-amber')).toBeNull();
   });
 
   it('tells an empty directory apart from an empty search', async () => {

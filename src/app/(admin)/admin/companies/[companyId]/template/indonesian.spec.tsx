@@ -224,7 +224,8 @@ describe('P18.98-T6 the Company template in Indonesian', () => {
       },
     });
     await userEvent.click(await screen.findByRole('button', { name: 'Impor dari perusahaan lain' }));
-    const dialog = within(screen.getByRole('dialog', { name: 'Impor dari perusahaan lain' }));
+    // Its module is fetched on the first opening (P18.99-T16).
+    const dialog = within(await screen.findByRole('dialog', { name: 'Impor dari perusahaan lain' }));
     expect(dialog.getByText(/^Salinan salah satu templatnya menjadi templat baru perusahaan ini\./)).toBeInTheDocument();
     const company = await dialog.findByLabelText('Perusahaan');
     expect(within(company).getByRole('option', { name: 'Pilih perusahaan' })).toBeInTheDocument();
@@ -238,7 +239,8 @@ describe('P18.98-T6 the Company template in Indonesian', () => {
   it('AC-1 Import says, in Indonesian, that a company has no active template, by its name', async () => {
     mount({ '/admin/companies/c2/templates': { body: [] } });
     await userEvent.click(await screen.findByRole('button', { name: 'Impor dari perusahaan lain' }));
-    const dialog = within(screen.getByRole('dialog', { name: 'Impor dari perusahaan lain' }));
+    // Its module is fetched on the first opening (P18.99-T16).
+    const dialog = within(await screen.findByRole('dialog', { name: 'Impor dari perusahaan lain' }));
     await userEvent.selectOptions(await dialog.findByLabelText('Perusahaan'), 'c2');
     expect(await dialog.findByText('Allianz Life tidak memiliki templat aktif untuk diimpor.')).toBeInTheDocument();
   });

@@ -1,4 +1,4 @@
-import { RouteTabs } from '@/components/ui/route-tabs';
+import { PlanTabs } from '@/components/plan/plan-tabs';
 import { useMessages } from '@/i18n/language-provider';
 import { productCatalogMessages } from '@/i18n/messages/product-catalog';
 import { PRODUCT_CATALOG_HREF, SALES_ATTACK_PLAN_HREF } from '@/lib/product-catalog';
@@ -16,13 +16,15 @@ import { PRODUCT_CATALOG_HREF, SALES_ATTACK_PLAN_HREF } from '@/lib/product-cata
  *
  * Its words are §A's, kept English in both languages: the strip is named by the nav's group, *Sales tools*, and each
  * tab is its page's title (`messages/product-catalog.ts`, P18.98-T4).
+ *
+ * **On a phone, one segmented control** (UI V1, UI-107; `PlanTabs`): the same links, a white pill track with the current
+ * half navy; from 768px the underlined strip as before.
  */
-export function SalesToolsTabs({ className }: { className?: string }) {
+export function SalesToolsTabs() {
   const t = useMessages(productCatalogMessages);
   return (
-    <RouteTabs
+    <PlanTabs
       label={t.tabs.label}
-      className={className}
       tabs={[
         { href: SALES_ATTACK_PLAN_HREF, label: t.tabs.plan },
         { href: PRODUCT_CATALOG_HREF, label: t.tabs.catalog, nested: true },

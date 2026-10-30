@@ -23,7 +23,7 @@ describe('P18.98-T1 AC-7 the kept-English list', () => {
       join(__dirname, '..', '..', '..', 'backend', 'src', 'domain', 'constants', 'metrics.ts'), 'utf8',
     );
     const names = [...registry.matchAll(/\{ key: '[A-Z0-9_]+', name: '([^']+)'/g)].map((m) => m[1]);
-    expect(names).toHaveLength(78);
+    expect(names).toHaveLength(79);
     expect([...KEPT_ENGLISH.metrics].sort()).toEqual([...names].sort());
   });
 

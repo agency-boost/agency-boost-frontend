@@ -1,24 +1,34 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { PageHeader } from '@/components/app-shell';
+import { useFieldChrome } from '@/components/field-nav';
 import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
 import { forumMessages } from '@/i18n/messages/forum';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { joinInFlight } from '@/lib/in-flight';
-import { readMeeting, readSharedMeeting, type MeetingView } from '@/lib/leader-meetings';
+import { FORUM_TITLE, readMeeting, readSharedMeeting, signInAndReturn, type MeetingView } from '@/lib/leader-meetings';
+import { usePhone } from '@/lib/use-phone';
 import { printAs, restorePrintTitle } from '@/lib/print';
 import { formatShortDay } from '@/lib/format';
-import { signInPathFrom, type SessionEnd } from '@/lib/return-path';
 import { useSession } from '@/lib/session';
+import { useOpenedOnce } from '@/lib/use-opened-once';
 import { LoadError, MeetingSkeleton, NotFound } from './forum-states';
-import { MeetingDialog } from './meeting-dialog';
 import { MeetingHead } from './meeting-head';
 import { MeetingTabs, type MeetingTab } from './meeting-tabs';
 import { MeetingWriterProvider, useMeetingWriter } from './meeting-writer';
 import { PrintLayout } from './print-layout';
-import { ShareDialog } from './share-dialog';
+import { V1MeetingHead } from './v1-meeting';
+
+/**
+ * *Details* and *Share*'s dialogs, downloaded when each is first opened and mounted from then on (`useOpenedOnce`;
+ * P18.99-T16, the bundle).
+ */
+const MeetingDialog = dynamic(() => import('./meeting-dialog').then((m) => m.MeetingDialog), { ssr: false });
+const ShareDialog = dynamic(() => import('./share-dialog').then((m) => m.ShareDialog), { ssr: false });
 
 /** How the page was reached: the meeting's own address, or a shared link (ADR-0131). */
 export type MeetingSource = { via: 'address'; meetingId: string } | { via: 'link'; token: string };
@@ -26,14 +36,6 @@ export type MeetingSource = { via: 'address'; meetingId: string } | { via: 'link
 /** The prototype waits this long before the print dialog, so its line is on screen first (`:2752`). */
 const PRINT_DELAY_MS = 400;
 
-/**
- * Where a reader not signed in goes: sign in, and come back here (D-share — *"one not signed in signs in
- * first and returns to it"*). The address rides on `next` — except after the reader signed out themselves
- * (`signedOut`, 2026-10-11), when it is plain `/login`, and a session that ended under the reader adds
- * `reason=expired` (ADR-0168 §1), as `signInPathFrom` decides for every guard.
- */
-export const signInAndReturn = (pathname: string, end: SessionEnd) =>
-  signInPathFrom({ pathname, search: '' }, end);
 
 /**
  * **A meeting** (`/leader-meetings/[meetingId]`, and read-only by a link at `/leader-meetings/shared/[token]`):
@@ -41,7 +43,21 @@ export const signInAndReturn = (pathname: string, end: SessionEnd) =>
  * every tab writes through. What the reader may do is the server's `can`; a read by a link answers it all
  * false but *Save as PDF*, so the same screen draws no write control there.
  */
-export function MeetingScreen({ source }: { source: MeetingSource }) {
+export function MeetingScreen({ source, titled = false }: {
+  source: MeetingSource;
+  /**
+   * **The page's title is this screen's** (UI V1, UI-110): the shell draws none, and the screen draws *Strategic Leader
+   * Forum* with its sub-line — or, on a phone in the field shell, the meeting's own header (`V1MeetingHead`), which is
+   * the page's title row there. `/leader-meetings/[meetingId]` passes it; the shared link's page keeps its shell's.
+   */
+  titled?: boolean;
+}) {
+  const forum = useMessages(forumMessages);
+  const v1 = useV1();
+  // While the meeting is read, and when it is not there: the forum's own title row.
+  const forumHeader = titled
+    ? <PageHeader title={FORUM_TITLE} subtitle={forum.sub} subtitleOnPhone={!v1} />
+    : null;
   const { me, loading, signedOut, expired } = useSession();
   const router = useRouter();
   const pathname = usePathname();
@@ -83,23 +99,35 @@ export function MeetingScreen({ source }: { source: MeetingSource }) {
     setMeeting((now) => (now ? change(now) : now));
   }, []);
 
-  if (missing) return <NotFound via={source.via === 'link' ? 'link' : 'address'} />;
-  if (error && !meeting) return <LoadError error={error} onRetry={() => setAttempt((n) => n + 1)} />;
-  if (!meeting) return <MeetingSkeleton />;
+  if (missing) return <>{forumHeader}<NotFound via={source.via === 'link' ? 'link' : 'address'} /></>;
+  if (error && !meeting) return <>{forumHeader}<LoadError error={error} onRetry={() => setAttempt((n) => n + 1)} /></>;
+  if (!meeting) return <>{forumHeader}<MeetingSkeleton /></>;
 
   return (
     <MeetingWriterProvider meeting={meeting} setMeeting={update} reread={read}>
-      <MeetingBody meeting={meeting} reread={async () => setMeeting(await read())} onGone={() => setMissing(true)} />
+      {!v1 && forumHeader}
+      <MeetingBody meeting={meeting} v1={v1} titled={titled} reread={async () => setMeeting(await read())} onGone={() => setMissing(true)} />
     </MeetingWriterProvider>
   );
 }
 
+/** A phone in the field shell: the owner's meeting page (UI-110). The console and wider screens as before. */
+function useV1(): boolean {
+  const phone = usePhone();
+  const field = useFieldChrome() !== null;
+  return phone && field;
+}
+
 function MeetingBody({
   meeting,
+  v1,
+  titled,
   reread,
   onGone,
 }: {
   meeting: MeetingView;
+  v1: boolean;
+  titled: boolean;
   reread: () => Promise<void>;
   onGone: () => void;
 }) {
@@ -110,6 +138,8 @@ function MeetingBody({
   const [tab, setTab] = useState<MeetingTab>('overview');
   const [details, setDetails] = useState(false);
   const [sharing, setSharing] = useState(false);
+  const detailsOpened = useOpenedOnce(details);
+  const sharingOpened = useOpenedOnce(sharing);
   const printTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // A page that prints puts the document's title back as it goes (`print.ts`).
@@ -139,6 +169,29 @@ function MeetingBody({
     }
   }
 
+  if (v1) {
+    return (
+      <>
+        <V1MeetingHead meeting={meeting} titled={titled} onDetails={() => setDetails(true)} onShare={() => setSharing(true)} onPrint={print} />
+        <MeetingTabs meeting={meeting} active={tab} onSelect={setTab} v1 />
+        <PrintLayout meeting={meeting} />
+        <div className="print:hidden">
+          {(meeting.can.reschedule || meeting.can.delete) && detailsOpened && (
+            <MeetingDialog
+              open={details}
+              onClose={() => setDetails(false)}
+              limits={meeting.limits}
+              meeting={meeting}
+              onChanged={changed}
+              onDeleted={() => router.replace('/leader-meetings')}
+            />
+          )}
+          {meeting.can.share && sharingOpened && <ShareDialog open={sharing} onClose={() => setSharing(false)} meeting={meeting} />}
+        </div>
+      </>
+    );
+  }
+
   return (
     <>
       {meeting.via === 'address' && (
@@ -160,7 +213,7 @@ function MeetingBody({
 
       {/* The dialogs are chrome too, and leave the paper (`:757`). */}
       <div className="print:hidden">
-        {(meeting.can.reschedule || meeting.can.delete) && (
+        {(meeting.can.reschedule || meeting.can.delete) && detailsOpened && (
           <MeetingDialog
             open={details}
             onClose={() => setDetails(false)}
@@ -170,7 +223,7 @@ function MeetingBody({
             onDeleted={() => router.replace('/leader-meetings')}
           />
         )}
-        {meeting.can.share && (
+        {meeting.can.share && sharingOpened && (
           <ShareDialog open={sharing} onClose={() => setSharing(false)} meeting={meeting} />
         )}
       </div>

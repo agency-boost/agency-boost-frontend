@@ -91,20 +91,20 @@ export function formatBenchmark(
   return formatNumber(value, { decimals: 2 }, language);
 }
 
-/** The places a computed ratio keeps: a percentage its tenth (ADR-0174 §2), a number its two (`0,38`). */
-const RATIO_PLACES: Record<Exclude<RatioDisplayUnit, 'points'>, number> = { percent: 1, decimal: 2 };
+/** The places a computed number ratio keeps: two (`0,38`). A percentage is whole (UI-080), so it has none to keep. */
+const DECIMAL_PLACES = 2;
 
-/** A ratio's figure to `places`, in its unit: `29,6%`, `0,38` — `29.6%`, `0.38` in English. */
+/** A ratio's figure in its unit: `30%`, `0,38` — `30%`, `0.38` in English. A percentage is whole (UI-080). */
 const ratioText = (value: number, unit: Exclude<RatioDisplayUnit, 'points'>, places: number, language: Language) =>
   (unit === 'percent'
-    ? formatPercent(value * 100, { decimals: places }, language)
+    ? formatPercent(value * 100, {}, language)
     : formatNumber(value, { decimals: places }, language));
 
 /**
- * A computed ratio (P10-T2): **a percentage to its tenth** — `9,1%`, `29,6%`, `30,0%` — because it is read
- * against its benchmark and the tenth can change its status (ADR-0174 §2, the one percentage that keeps a
- * decimal); a number to two places, `0,38`; and the balance's lean as whole points — `24 points`, without a sign,
- * since the sentence around it says which way. `null` is *not enough data* and is written `–`, the prototype's own
+ * A computed ratio (P10-T2): **a percentage whole** — `9%`, `30%` for 29,6 (UI V1, UI-080, the owner: every percentage is
+ * a whole number, round half up; ADR-0180, which reverses ADR-0174 §2's tenth); a number to two places, `0,38` —
+ * *Leads per activity* keeps them; and the balance's lean as whole points — `24 points`, without a sign, since the
+ * sentence around it says which way. `null` is *not enough data* and is written `–`, the prototype's own
  * (`Overall.html:5330`): never `0`. *Points* is a word, in `words`' language (English when none is passed).
  */
 export function formatRatioValue(
@@ -115,25 +115,21 @@ export function formatRatioValue(
     const points = Math.round(Math.abs(value));
     return messagesIn(ratioWordMessages, words).lean({ value: String(points), one: points === 1 });
   }
-  return ratioText(value, unit, RATIO_PLACES[unit], language);
+  return ratioText(value, unit, DECIMAL_PLACES, language);
 }
 
 /**
- * A computed ratio written so that **the number never contradicts the status beside it**.
+ * A computed ratio written beside its status.
  *
- * The status is judged on the exact value, and the display rounds: `8 ÷ 27` is 0.296 — below a 0.30
- * benchmark — and `formatRatioValue` writes it `0,30`, beside *Benchmark: 0,30* and *Below benchmark*;
- * 0.2996 is `30,0%` beside a `30%` benchmark. A lean of 30.43 points is outside a ±30 band and writes `30 points`.
- * Where the rounded figure would reach the benchmark, or land inside its band, while the status says it
- * missed, one more decimal is written: `0,296`, `29,96%`, `30,4 points`.
+ * **A percentage is whole, whatever its status** (UI-080, the owner: *29,6% shows 30% but stays below a 30% target*).
+ * The status is judged on the unrounded value — the server's `status`, which this only reads — so a 29,6% miss reads
+ * `30%` beside *Below benchmark*, as the owner asked. Until UI V1 a place was added here (`29,6%`) wherever the rounding
+ * would reach the benchmark; for a percentage it no longer is.
  *
- * **Read back from what is written**, not from the value: the figure on the screen is what must not reach the
- * benchmark, so it is parsed as printed and compared with the benchmark as a number — `30,0%` against `30%` is a
- * tie, which a comparison of the two texts would miss (ADR-0174 writes them differently on purpose).
- *
- * **The same places in both languages** (P18.98-T3 AC-2): the figure is read back as Indonesian writes it, whatever the
- * reader's language, so an English reader never gets a place more or fewer than an Indonesian one — the language
- * changes the characters, never the figure. *Points* is a word, in `words`' language (English when none is passed).
+ * **A number and a lean keep that rule**, which UI-080 does not touch: the status is judged on the exact value and the
+ * display rounds, so `8 ÷ 27` is 0.296 — below a 0.30 benchmark — and would read `0,30`; one more decimal is written,
+ * `0,296`. A lean of 30.43 points outside a ±30 band reads `30,4 points`. **Read back from what is written**, in `id-ID`
+ * whatever the reader's language (P18.98-T3 AC-2), so both languages add the same place.
  */
 export function formatRatioForStatus(
   value: number | null,
@@ -144,7 +140,7 @@ export function formatRatioForStatus(
   words: Language = SOURCE_LANGUAGE,
 ): string {
   const text = formatRatioValue(value, unit, language, words);
-  if (value === null || status !== 'alert') return text;
+  if (value === null || status !== 'alert' || unit === 'percent') return text;
   if (unit === 'points') {
     const lean = Math.abs(value);
     return Math.round(lean) <= benchmark
@@ -152,11 +148,11 @@ export function formatRatioForStatus(
       : text;
   }
   // Read back in `id-ID`, where a comma is the decimal and a point groups: the same figure as `text`'s.
-  const shown = parseDecimal(formatRatioValue(value, unit, 'id').replace('%', ''));
-  // The benchmark in the figure's own unit, rid of a product's binary noise (`0.57 × 100` is `56.99999999999999`).
-  const mark = Number((unit === 'percent' ? benchmark * 100 : benchmark).toFixed(8));
+  const shown = parseDecimal(formatRatioValue(value, unit, 'id'));
+  // The benchmark rid of a product's binary noise.
+  const mark = Number(benchmark.toFixed(8));
   if (shown < mark) return text;
-  return ratioText(value, unit, RATIO_PLACES[unit] + 1, language);
+  return ratioText(value, unit, DECIMAL_PLACES + 1, language);
 }
 
 /**

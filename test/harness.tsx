@@ -67,16 +67,24 @@ const SCREENS: Record<string, number> = { sm: 640, md: 768, lg: 1024, xl: 1280, 
  * attribute's, and the stylesheet still decides between two that conflict. A state variant (`focus-visible:`) stays.
  */
 export function wears(el: Element, px: number): string {
+  /*
+   * **The field shell's condition** (UI V1, UI-010; `components/ui/touch.ts`): a class under
+   * `[:root:has([data-surface=v1])_&]` holds while the field shell's frame is in the document, as the browser reads it.
+   */
+  const inField = el.ownerDocument.querySelector('[data-surface="v1"]') !== null;
   return (el.getAttribute('class') ?? '').split(/\s+/).filter(Boolean).flatMap((token) => {
     const variants: string[] = [];
     let rest = token;
-    for (let m = /^([a-z0-9-]+):/.exec(rest); m; m = /^([a-z0-9-]+):/.exec(rest)) {
+    for (let m = /^([a-z0-9-]+|\[:root:has\(\[data-surface=v1\]\)_&\]):/.exec(rest); m;
+      m = /^([a-z0-9-]+|\[:root:has\(\[data-surface=v1\]\)_&\]):/.exec(rest)) {
       variants.push(m[1]);
       rest = rest.slice(m[0].length);
     }
+    const field = variants.filter((v) => v.startsWith('[:root:has('));
+    if (field.length > 0 && !inField) return [];
     const screens = variants.filter((v) => v.replace(/^max-/, '') in SCREENS);
     const holds = screens.every((v) => (v.startsWith('max-') ? px < SCREENS[v.slice(4)] : px >= SCREENS[v]));
-    return holds ? [[...variants.filter((v) => !screens.includes(v)), rest].join(':')] : [];
+    return holds ? [[...variants.filter((v) => !screens.includes(v) && !field.includes(v)), rest].join(':')] : [];
   }).join(' ');
 }
 

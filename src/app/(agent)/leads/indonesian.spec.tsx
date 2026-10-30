@@ -8,6 +8,7 @@ import { leadsMessages } from '@/i18n/messages/leads';
 import { flagLabel, phoneHeld } from '@/lib/leads';
 import { PHONE_QUERY } from '@/lib/use-phone';
 import LeadsPage from './page';
+import { LeadsTable } from '@/components/leads-table';
 
 /**
  * **Leads Management in ID mode** (P18.98-T4 AC-1 to AC-4, field selling): `/leads` — the table, its search and
@@ -198,11 +199,11 @@ describe('P18.98-T4 Leads Management in Indonesian', () => {
     }
   });
 
-  it('AC-1 draws a phone’s card and its edit sheet in Indonesian, the day in Indonesian figures', async () => {
+  // The table's own phone layout, which the coaching session's card still draws: `/leads` draws the compact list (UI-105).
+  it('AC-1 draws the table’s phone card and its edit sheet in Indonesian, the day in Indonesian figures', async () => {
     onPhone();
-    render({
-      '/leads': { body: page([lead(), lead({ id: 'l2', name: 'Ibu Wati', type: null, statusCode: null, remarks: null, nextActionDate: null, nextActionNote: null })]) },
-    });
+    stubFetch({ ...BASE, '/leads': { body: page([lead(), lead({ id: 'l2', name: 'Ibu Wati', type: null, statusCode: null, remarks: null, nextActionDate: null, nextActionNote: null })]) } } as Parameters<typeof stubFetch>[0]);
+    renderInIndonesian(<AgentLayout><LeadsTable /></AgentLayout>, { me: AGENT });
     const list = await screen.findByRole('list', { name: 'Leads Anda' });
     const [budi, wati] = within(list).getAllByRole('listitem');
 
@@ -226,6 +227,59 @@ describe('P18.98-T4 Leads Management in Indonesian', () => {
       expect(sheet.getByLabelText(label)).toBeInTheDocument();
     }
     expect(sheet.getByRole('button', { name: 'Tutup' })).toBeInTheDocument();
+    noEnglishLeft();
+  });
+
+  it('UI-105 says the compact list in Indonesian: the search, the chips, the strip, the cards and the + — the stages as typed', async () => {
+    onPhone();
+    render({
+      '/leads': { body: page([
+        lead(),
+        lead({ id: 'l2', name: 'Ibu Wati', statusCode: 'BELUM_DIDEKATI', nextActionDate: null, nextActionNote: null }),
+        lead({ id: 'l3', name: 'Mas Andi', type: 'recruitment', statusCode: 'AAJI' }),
+      ]) },
+    });
+    const list = await screen.findByRole('list', { name: 'Leads Anda' });
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Leads' })).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Cari nama lead')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Filter dan urutan' })).toBeInTheDocument();
+    const chips = screen.getByRole('group', { name: 'Jenis lead' });
+    expect(within(chips).getAllByRole('button').map((b) => b.textContent)).toEqual(['Semua3', 'Sales2', 'Recruit1']);
+    const strip = screen.getByRole('group', { name: 'Pipeline Sales' });
+    // A seeded stage's short word by its code (D-18's *Follow-up*); a stage the office added, in its own words.
+    expect(within(strip).getAllByRole('button').map((b) => b.textContent)).toEqual(['1Belum didekati', '1Follow-up', '0Polis terbit']);
+    expect(within(strip).getByRole('button', { name: 'Follow-up (Sudah di-follow up), 1 lead' })).toBeInTheDocument();
+    const [budi, wati] = within(list).getAllByRole('listitem');
+    expect(within(budi).getByText('Sudah di-follow up')).toBeInTheDocument();
+    expect(within(wati).getByText('Isi tindakan')).toBeInTheDocument();
+    expect(within(budi).getByRole('button', { name: 'Kirim pesan WhatsApp ke Pak Budi' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Tambah lead' })).toBeInTheDocument();
+    noEnglishLeft();
+  });
+
+  it('UI-105 says the lead sheet in Indonesian: Jenis, Status, Tindakan berikutnya, Keterangan, Riwayat, Hapus and Simpan', async () => {
+    onPhone();
+    render({
+      '/leads': { body: page([lead()]) },
+      '/leads/l1': { body: { ...lead(), history: [{ at: '2026-10-27T03:00:00.000Z', fromStatusCode: null, toStatusCode: 'FOLLOW_UP' }] } },
+    });
+    const list = await screen.findByRole('list', { name: 'Leads Anda' });
+    await userEvent.click(within(list).getByRole('button', { name: 'Pak Budi' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Pak Budi' });
+    const sheet = within(dialog);
+    expect(dialog).toHaveAccessibleDescription('Sudah di-follow up · Sales');
+    for (const label of ['Jenis', 'Status', 'Tindakan berikutnya', 'Detail']) expect(sheet.getByText(label)).toBeInTheDocument();
+    expect(sheet.getByLabelText('Keterangan')).toHaveValue('Hobi golf');
+    expect(await sheet.findByText('27 Okt')).toBeInTheDocument();
+    expect(sheet.getByText(/Status → Sudah di-follow up/)).toBeInTheDocument();
+    expect(sheet.getByText(/Lead ditambahkan/)).toBeInTheDocument();
+    expect(sheet.getByRole('button', { name: 'Hapus' })).toBeInTheDocument();
+    expect(sheet.getByRole('button', { name: 'Simpan' })).toBeInTheDocument();
+    expect(sheet.getByText('Tersimpan ✓')).toBeInTheDocument();
+    await userEvent.click(sheet.getByRole('radio', { name: 'Recruit' }));
+    expect(sheet.getByText('Belum disimpan')).toBeInTheDocument();
+    expect(sheet.getByRole('radio', { name: 'Lulus AAJI' })).toBeChecked();
     noEnglishLeft();
   });
 });

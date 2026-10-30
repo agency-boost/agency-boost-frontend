@@ -8,7 +8,9 @@ import {
   namesMissing, namesNewHires, newHireWords, onPaceWords, OWN_COPY, periodFrom, prefill, productionChanges, productionToast,
   PROTOTYPE_COPY, provenanceWords, readUnitDashboard, readerName, recruitLine, regroup, rowName, salesLine, STATUS_TOOLTIP,
   totalNote, totalRecruitLine, touchesWords, UNIT_PERIODS, unitPeriods, updateUnitProduction,
+  goalMet, heatStep, matchesFilter, readUnitActivities, rowHref, splitMoney, statusTally, tabFrom, type UnitRow,
 } from './unit-dashboard';
+import { formatMonthLong } from './format';
 
 describe('the Unit Dashboard’s client', () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -369,7 +371,8 @@ describe('P18.98-T4 the Unit Dashboard’s words in Indonesian', () => {
     expect(namesNewHires([{ ...AGUS_ROW, newHireBeforeFirstSale: true }], 'id')).toEqual(['Anda (Agus)']);
     expect(lockedWords('2026-10', 'id')).toBe('Produksi untuk Okt 2026 dikunci. Owner atau Admin dapat membukanya kembali.');
     expect(lockedWords('2026-10', 'en', 'en')).toBe('Production for Oct 2026 is locked. The Owner or Admin can reopen it.');
-    expect(onPaceWords({ count: 6, of: 12 }, 'id')).toBe('On pace to be active: 6/12');
+    // UI V1 (UI-006): translated, *Berpotensi aktif* (proposed in §B.10, P18.99).
+    expect(onPaceWords({ count: 6, of: 12 }, 'id')).toBe('Berpotensi aktif: 6/12');
   });
 
   it('names the dialog’s groups, a unit below the reader for its head', () => {
@@ -384,5 +387,65 @@ describe('P18.98-T4 the Unit Dashboard’s words in Indonesian', () => {
     expect(UNIT_PERIODS.map((p) => p.label)).toEqual(['Last 7 days', 'This month', 'This year']);
     expect(PROTOTYPE_COPY.title).toBe('Unit Dashboard');
     expect(STATUS_TOOLTIP.on_track).toBe('Pacing to qualify as a Monthly Active Agent, at or above 90% of expected goal pace.');
+  });
+});
+
+describe('UI V1 (Phase 18.99 T4): the page’s small rules', () => {
+  it('UI-001 the tab is the address’s, Overview when it names none or another', () => {
+    expect(tabFrom('activities')).toBe('activities');
+    expect(tabFrom(['activities', 'overview'])).toBe('activities');
+    for (const value of [undefined, null, '', 'overview', 'ACTIVITIES', 'ratios']) expect(tabFrom(value)).toBe('overview');
+  });
+
+  it('UI-001 the heat map’s steps: 0 for nothing, then a third, two thirds, more of the largest cell', () => {
+    expect([0, 1, 3, 4, 6, 7, 9].map((n) => heatStep(n, 9))).toEqual([0, 1, 1, 2, 2, 3, 3]);
+    expect(heatStep(1, 1)).toBe(3);
+    expect(heatStep(0, 0)).toBe(0);
+  });
+
+  it('UI-002 the chips’ counts are the rows’ statuses, and a chip keeps the rows it names', () => {
+    const rows = [
+      { status: 'needs_attention' }, { status: 'watch_closely' }, { status: 'needs_attention' }, { status: 'on_track' },
+    ] as UnitRow[];
+    expect(statusTally(rows)).toEqual({ all: 4, needs_attention: 2, watch_closely: 1 });
+    expect(rows.filter((r) => matchesFilter(r, 'needs_attention'))).toHaveLength(2);
+    expect(rows.filter((r) => matchesFilter(r, 'all'))).toHaveLength(4);
+  });
+
+  it('UI-011 a row opens the reader’s own Summary, a coachee’s Personal Summary tab with ‹ back here, or nothing', () => {
+    expect(rowHref({ membershipId: 'mem-agus', isReader: true, coached: true }, '/unit/dashboard')).toBe('/summary');
+    expect(rowHref({ membershipId: 'mem-indah', isReader: false, coached: true }, '/unit/dashboard?period=7d'))
+      .toBe('/coaching/mem-indah/summary?from=%2Funit%2Fdashboard%3Fperiod%3D7d');
+    expect(rowHref({ membershipId: 'mem-x', isReader: false, coached: false }, '/unit/dashboard')).toBeNull();
+  });
+
+  it('UI-003 a tile’s sum splits into its figure and its unit, in either language', () => {
+    expect(splitMoney('Rp 333,5 jt')).toEqual({ value: 'Rp 333,5', unit: 'jt' });
+    expect(splitMoney('IDR 333.5M')).toEqual({ value: 'IDR 333.5', unit: 'M' });
+    expect(splitMoney('Rp 750')).toEqual({ value: 'Rp 750', unit: null });
+  });
+
+  it('UI-005 a goal’s % is green from 100 and red under it, on the unrounded figure', () => {
+    expect([goalMet(99.6), goalMet(100), goalMet(135)]).toEqual([false, true, true]);
+  });
+
+  it('UI-003 the month in full for a label, in each language, from its number', () => {
+    expect(formatMonthLong('2026-10', 'id')).toBe('Oktober');
+    expect(formatMonthLong('2026-10', 'en')).toBe('October');
+    expect(formatMonthLong('2026-13', 'en')).toBe('');
+  });
+});
+
+describe('UI-001 the Activities read', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('UI-001 asks for the span, the day and the unit, each only when given', async () => {
+    const { calls } = stubFetch({ 'GET /unit/dashboard/activities': { body: {} } });
+    await readUnitActivities();
+    await readUnitActivities({ span: 'month', date: '2026-10-21', for: 'mem-sari' });
+    expect(calls.map((c) => c.url)).toEqual([
+      'http://api.test/api/v1/unit/dashboard/activities',
+      'http://api.test/api/v1/unit/dashboard/activities?span=month&date=2026-10-21&for=mem-sari',
+    ]);
   });
 });

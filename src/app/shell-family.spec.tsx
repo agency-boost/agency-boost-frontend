@@ -70,13 +70,13 @@ describe('a shell admits only its own family (2026-10-11)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   describe('the office console', () => {
-    it('an Agent who types /people/members lands on their own day, and the console never draws its nav', async () => {
+    it('an Agent who types /people/members lands on Home (UI-100), and the console never draws its nav', async () => {
       nav.pathname = '/people/members';
       const { calls } = stubShell();
       renderInLayout(TenantLayout, <MembersPage />, { me: AGENT });
 
-      await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('/activity/log'));
-      expect(nav.replace.mock.calls).toEqual([['/activity/log']]);
+      await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('/home'));
+      expect(nav.replace.mock.calls).toEqual([['/home']]);
       expect(sidebar()).not.toBeInTheDocument();
       expect(screen.queryByText('KPM OWNER')).not.toBeInTheDocument();
       expect(screen.getByText('Taking you to your work…')).toBeInTheDocument();
@@ -84,12 +84,12 @@ describe('a shell admits only its own family (2026-10-11)', () => {
       expect(calls.some((c) => c.url.includes('/members'))).toBe(false);
     });
 
-    it('an AB on /kpm/overview lands on their unit’s dashboard, not on a refusal in the Owner’s chrome', async () => {
+    it('an AB on /kpm/overview lands on Home (UI-100), not on a refusal in the Owner’s chrome', async () => {
       nav.pathname = '/kpm/overview';
       stubShell();
       renderInLayout(TenantLayout, <KpmOverviewPage />, { me: AB });
 
-      await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('/unit/dashboard'));
+      await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('/home'));
       expect(sidebar()).not.toBeInTheDocument();
       expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     });
@@ -114,7 +114,7 @@ describe('a shell admits only its own family (2026-10-11)', () => {
       nav.pathname = '/kpm/overview';
       stubShell();
       renderInLayout(TenantLayout, <KpmOverviewPage />, { me: AS_AGENT });
-      await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('/activity/log'));
+      await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('/home'));
       expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     });
 

@@ -3,7 +3,7 @@
 import { useId, useState, type FormEvent } from 'react';
 import { Modal } from '@/components/ui/modal';
 import { DateField } from '@/components/ui/date-field';
-import { Button, ErrorBanner, Field, Textarea, TextInput } from '@/components/ui/field';
+import { Button, ErrorBanner, Field, Switch, Textarea, TextInput } from '@/components/ui/field';
 import type { Language } from '@/i18n/language';
 import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
 import { calendarMessages } from '@/i18n/messages/calendar';
@@ -218,7 +218,11 @@ export function EntryDialog({
           }}
         />
 
-        {travel ? (
+        {travel && (
+          // *Sepanjang hari* (UI V1, UI-104 point 8): on by default — the two dates; off — a date and a time on each.
+          <Switch id={`${ids}-all-day`} label={t.allDay} checked={form.allDay} onChange={(on) => set('allDay', on)} phoneTarget />
+        )}
+        {travel && form.allDay ? (
           <div className="flex flex-wrap gap-2.5">
             <Field label={t.departure} htmlFor={`${ids}-starts`} error={errors.startsOn} className="min-w-[8rem] flex-1">
               <DateField id={`${ids}-starts`} value={form.startsOn} invalid={!!errors.startsOn} onChange={(v) => set('startsOn', v)} className="w-full" />
@@ -226,6 +230,25 @@ export function EntryDialog({
             <Field label={t.return} htmlFor={`${ids}-ends`} error={errors.endsOn} className="min-w-[8rem] flex-1">
               <DateField id={`${ids}-ends`} value={form.endsOn} invalid={!!errors.endsOn} onChange={(v) => set('endsOn', v)} className="w-full" />
             </Field>
+          </div>
+        ) : travel ? (
+          <div className="flex flex-col gap-2.5">
+            <div className="flex flex-wrap gap-2.5">
+              <Field label={t.startDate} htmlFor={`${ids}-starts`} error={errors.startsOn} className="min-w-[8rem] flex-[1.4]">
+                <DateField id={`${ids}-starts`} value={form.startsOn} invalid={!!errors.startsOn} onChange={(v) => set('startsOn', v)} className="w-full" />
+              </Field>
+              <Field label={t.start} htmlFor={`${ids}-start`} className="min-w-[6rem] flex-1">
+                <TextInput id={`${ids}-start`} type="time" value={form.start} onChange={(e) => set('start', e.target.value)} />
+              </Field>
+            </div>
+            <div className="flex flex-wrap gap-2.5">
+              <Field label={t.endDate} htmlFor={`${ids}-ends`} error={errors.endsOn} className="min-w-[8rem] flex-[1.4]">
+                <DateField id={`${ids}-ends`} value={form.endsOn} invalid={!!errors.endsOn} onChange={(v) => set('endsOn', v)} className="w-full" />
+              </Field>
+              <Field label={t.end} htmlFor={`${ids}-end`} error={errors.end} className="min-w-[6rem] flex-1">
+                <TextInput id={`${ids}-end`} type="time" value={form.end} invalid={!!errors.end} onChange={(e) => set('end', e.target.value)} />
+              </Field>
+            </div>
           </div>
         ) : (
           <div className="flex flex-wrap gap-2.5">

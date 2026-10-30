@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { Button } from '@/components/ui/field';
 import { TAP_AREA } from '@/components/ui/phone';
+import { GLYPH_BOX_TABLET, TAP_AREA_TABLET } from '@/components/ui/touch';
 import { cn } from '@/lib/cn';
 
 /** A glyph with nothing to act on: there, and plainly not live — at the prototype's 30% (`Overall.html:497`). */
@@ -129,7 +130,7 @@ export function TippedGlyph({
         variant="icon"
         aria-disabled={unavailable || undefined}
         aria-describedby={describes ? tipId : undefined}
-        className={cn('max-md:min-h-0 max-md:min-w-0', TAP_AREA, face, unavailable && INERT_GLYPH)}
+        className={cn('max-md:min-h-0 max-md:min-w-0', TAP_AREA, GLYPH_BOX_TABLET, TAP_AREA_TABLET, face, unavailable && INERT_GLYPH)}
         onFocus={show}
         onBlur={() => setShown(false)}
         onClick={show}

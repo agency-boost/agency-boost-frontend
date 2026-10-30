@@ -3,10 +3,9 @@
 import { Suspense, useEffect, useState } from 'react';
 import { useCoachee } from '@/components/coaching-person';
 import { Page } from '@/components/page';
-import { SummaryCards, useSummaryViews, type SummaryView } from '@/components/personal-summary';
-import { SummaryPeriodSelect, useSummaryPeriod } from '@/components/summary-period';
+import { SummaryCards, useSummaryViews } from '@/components/personal-summary';
+import { SummaryPeriodBar, useSummaryPeriod } from '@/components/summary-period';
 import { ErrorBanner } from '@/components/ui/field';
-import { Segmented } from '@/components/ui/segmented';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { useMessages } from '@/i18n/language-provider';
 import { coachingMessages } from '@/i18n/messages/coaching';
@@ -37,7 +36,7 @@ import { useQuery } from '@/lib/use-query';
  * No *Download* and no page title of its own: the prototype's person view has neither, and the shell
  * above names the person.
  *
- * **An earlier month or year** (P18.8-T11 AC-2): the same month and year selects as `/summary`, the choice in this
+ * **An earlier month or year** (P18.8-T11 AC-2; UI-051's pill and sheet since UI V1): the same month and year choice as `/summary`, the choice in this
  * tab's own address — `/coaching/{id}/summary?month=2026-08` — read with `?for=` and the period together, and
  * audited as every read of the coachee's Summary is.
  */
@@ -100,31 +99,30 @@ function CoacheeSummary({ coachee, address }: { coachee: Coachee; address: Summa
   const waiting = <SkeletonCards count={2} label={t.puttingTogether({ pronoun })} />;
 
   return (
-    <div className="mx-auto max-w-[860px]">
+    // Not centred: the cards' edge is the tab row's (UI-056). Two columns from 1024px, as `/summary`'s.
+    <div className="max-w-[1200px]">
       {error && <ErrorBanner {...error} />}
       {!frame && !error && waiting}
       {frame && (
-        <Segmented
-          label={t.period}
-          tabs={views}
-          active={view}
-          onSelect={(id) => chooseView(id as SummaryView)}
-          className="w-fit [&_button]:whitespace-nowrap [&_button]:px-3.5"
-        >
-          {() => (
-            <>
-              <SummaryPeriodSelect view={view} frame={frame} asked={asked} onChoose={(value) => choose(value, frame.period)} />
-              {summary ? (
-                <SummaryCards
-                  summary={summary}
-                  view={view}
-                  pulse={{ ratios, error: ratiosError }}
-                  subject={{ membershipId, pronoun }}
-                />
-              ) : !error && waiting}
-            </>
-          )}
-        </Segmented>
+        <>
+          {/* UI-051: the same control row as `/summary`'s — the switch and the month pill — with no download. */}
+          <SummaryPeriodBar
+            views={views}
+            view={view}
+            onView={chooseView}
+            frame={frame}
+            asked={asked}
+            onChoose={(value) => choose(value, frame.period)}
+          />
+          {summary ? (
+            <SummaryCards
+              summary={summary}
+              view={view}
+              pulse={{ ratios, error: ratiosError }}
+              subject={{ membershipId, pronoun }}
+            />
+          ) : !error && waiting}
+        </>
       )}
     </div>
   );

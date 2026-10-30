@@ -1,12 +1,14 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { createContext, Suspense, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { PageHeader, PageLanguageSwitch, usePageLanguageSwitch } from '@/components/app-shell';
 import { TitledPageContext } from '@/components/require-session';
 import { Card, ErrorBanner } from '@/components/ui/field';
-import { TAB_PHONE, TAB_ROW_PHONE, TAP_HEIGHT, UNDERLINED_ROW_PHONE } from '@/components/ui/phone';
+import { LineIcon } from '@/components/ui/line-icon';
+import { Avatar } from '@/components/ui/person-row';
+import { TAB_PHONE, TAP_HEIGHT } from '@/components/ui/phone';
 import { useTabRow } from '@/components/ui/use-tab-row';
 import { Skeleton, SkeletonBar } from '@/components/ui/skeleton';
 import { useLanguage, useMessages } from '@/i18n/language-provider';
@@ -20,12 +22,16 @@ import {
 import { useSession } from '@/lib/session';
 
 /**
- * The person shell (`Overall.html:3969-3995`, P11-T7): one coachee's page — *← Back to Coaching
- * Session*, who they are, *Leader view* / *Agent view*, and the tabs.
+ * The person shell (`Overall.html:3969-3995`, P11-T7): one coachee's page — the way back, who they are, and the tabs.
+ *
+ * **UI V1 (UI-029, UI-030, UI-031, UI-041)**: one header — below 1024px a 48px row, *‹*, the 36px avatar and the name
+ * with its line *directly under it*, never beside it; from 1024px the way back, the avatar, the name and *ID | EN* as
+ * before — and **no *Leader view* / *Agent view***: a leader always sees the leader's page. The tabs in the owner's
+ * order, *Coaching Session* first, on one row that scrolls sideways where they do not fit.
  *
  * **One component for every person** (contradiction #12, I-05): the prototype draws its shell twice,
  * once with `-j` ids. This is mounted once, by the route's layout, so it stays mounted while the
- * reader moves between tabs and the view toggle keeps its place.
+ * reader moves between tabs.
  *
  * **It reads the person once**, from `GET /coaching/coachees/:membershipId`, and hands them to the
  * tab beneath through `useCoachee()`. A tab is not drawn until the person is known: outside the
@@ -90,41 +96,39 @@ export function useCoacheeNotFound(): () => void {
   return gone;
 }
 
-type View = 'leader' | 'agent';
-
 interface ShellTab {
   tab: CoachingTab;
   /** Its name's key in the catalogue (`messages/coaching.ts`): the same words in both languages (§A.3). */
   name: keyof typeof coachingMessages.en.person.tabs;
-  /** In the bar, not followable: the tab's screen is not built yet (P11-T7 AC-7). */
-  upcoming?: boolean;
-  /** The leader's own tab, which *Agent view* takes away (`Overall.html:3994`, `:11298-11306`). */
+  /** The leader's own tab, the line lock before its name (UI-029: 🔒 → a line icon). */
   leaderOnly?: boolean;
 }
 
 /**
- * The prototype's tabs, in its order and words (`Overall.html:3988-3995`), and *Activity* between *Goal
- * Setting* and *Training*: the client's request of 2026-10-07 (P13.1-T9), a coachee's Activity Dashboard.
+ * **The owner's order** (UI V1, UI-029): *Coaching Session · Activity · Leads · Goal Setting · Personal Summary ·
+ * Activation · Training · Capability mapping* — the session first, where *Coaching* lands, and the leader's own
+ * *Capability mapping* (the address `leader-notes`, its old name *Leader Notes*) last.
  */
 const TABS: readonly ShellTab[] = [
-  { tab: 'summary', name: 'summary' },
-  { tab: 'goal-setting', name: 'goalSetting' },
-  { tab: 'activity', name: 'activity' },
-  // Live since P18.5-T4 (AC-2): the person's training, read-only, from the learner's own read.
-  { tab: 'training', name: 'training' },
-  { tab: 'activation', name: 'activation' },
   { tab: 'session', name: 'session' },
+  { tab: 'activity', name: 'activity' },
+  { tab: 'leads', name: 'leads' },
+  { tab: 'goal-setting', name: 'goalSetting' },
+  { tab: 'summary', name: 'summary' },
+  { tab: 'activation', name: 'activation' },
+  { tab: 'training', name: 'training' },
   { tab: 'leader-notes', name: 'leaderNotes', leaderOnly: true },
 ];
 
 export function PersonShell({ membershipId, children }: { membershipId: string; children: ReactNode }) {
   const t = useMessages(coachingMessages);
   const pathname = usePathname();
-  const router = useRouter();
   const [coachee, setCoachee] = useState<Coachee | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [missing, setMissing] = useState(false);
-  const [view, setView] = useState<View>('leader');
+  // Where the leader came from (UI-029): the entry point's `?from=`, read once — moving between tabs drops the query.
+  const [back, setBack] = useState<string | null>(null);
+  useEffect(() => { setBack(backFrom(window.location.search)); }, [membershipId]);
   const tab = coachingTabOf(pathname, membershipId);
   const gone = useCallback(() => setMissing(true), []);
   const archive = isArchivePath(pathname, membershipId);
@@ -168,17 +172,6 @@ export function PersonShell({ membershipId, children }: { membershipId: string; 
   }, [membershipId]);
 
   /*
-   * *Agent view* moves a reader standing on Leader Notes to Personal Summary (`Overall.html:11298-11306`),
-   * and that covers arriving there by Back as well as switching while on it. The notes tab is not drawn
-   * in the meantime (below), so what it fetched is dropped with it: the toggle is a preview, not a
-   * permission (roles §1.7), and the notes were never in any other tab's payload (ADR-0078).
-   */
-  const previewingNotes = view === 'agent' && current === 'leader-notes';
-  useEffect(() => {
-    if (previewingNotes) router.replace(coachingTabHref(membershipId, 'summary'));
-  }, [previewingNotes, membershipId, router]);
-
-  /*
    * **The page's title** (P18.95-T7 AC-2; UI-021): the person's name, as the header's heading, once they are read; the
    * prototype's *Coaching Session* while there is nobody to name — not found, a read that failed, a former coach's
    * archive. Whatever is drawn beneath is under that title (`TitledPageContext`), so a tab's refusal is a section.
@@ -210,18 +203,18 @@ export function PersonShell({ membershipId, children }: { membershipId: string; 
     <TitledPageContext.Provider value>
       <div>
         {error && !coachee && untitled}
-        <BackLink />
+        {!coachee && <BackLink />}
         {error && <ErrorBanner {...error} />}
         {!coachee && !error && <HeaderSkeleton />}
         {coachee && (
           <>
-            <PersonHeader coachee={coachee} view={view} onView={setView} />
-            <PersonTabs membershipId={membershipId} current={current} view={view} />
+            <PersonHeader coachee={coachee} back={back} />
+            <PersonTabs membershipId={membershipId} current={current} />
             <CoacheeContext.Provider value={coachee}>
               <CoacheeGoneContext.Provider value={gone}>
                 <HistoryPrefetchContext.Provider value={takeHistory}>
                   {/* The shell's own boundary: a tab that suspends waits here, under the header (above). */}
-                  <Suspense fallback={null}>{!previewingNotes && children}</Suspense>
+                  <Suspense fallback={null}>{children}</Suspense>
                 </HistoryPrefetchContext.Provider>
               </CoacheeGoneContext.Provider>
             </CoacheeContext.Provider>
@@ -273,21 +266,59 @@ function WayBack() {
 }
 
 /**
- * `.person-header` (`Overall.html:1083-1092`, `:3972-3985`): the avatar's initials, the name, the rung
- * and whose unit; the view toggle on the right.
+ * **The coachee's header, the page's one `<h1>`** (P18.95-T7 AC-2; UI V1, UI-031, D-23).
  *
- * **The name is the page's title, its one `<h1>`** (P18.95-T7 AC-2; the client's UI review, UI-021). It was the second
- * heading under *Coaching Session*, which was also a tab and the way back; the prototype's two `<h1>`s left a screen
- * reader two pages' worth of top-level headings, and one is all there is now. It looks as the prototype's
- * `.person-name` does.
+ * - **Below 1024px, one 48px row**: the way back as a *‹* (44px, its words for a screen reader), the 36px avatar, and
+ *   the name 20px/800 (22px on a tablet) with *Agent · Unit langsung* in 12px **on its own line directly under it** —
+ *   never beside it (the owner). No dark bar, no toggle: the content starts within ~180px of the top.
+ * - **From 1024px as it was**: the way back on its own line, the 52px avatar, the name, the line, and *ID | EN*.
+ *
+ * **The way back is to where the leader came from** (UI-029): `/coaching` by default, or the in-app address the entry
+ * point named in `?from=` (`coachingSessionHref(id, from)` — New Hires' rows), read once when the shell opens, since
+ * moving between tabs drops the query.
  */
-function PersonHeader({ coachee, view, onView }: { coachee: Coachee; view: View; onView: (view: View) => void }) {
+function PersonHeader({ coachee, back }: { coachee: Coachee; back: string | null }) {
   const language = useLanguage();
+  const t = useMessages(coachingMessages);
+  const withLanguage = usePageLanguageSwitch();
   return (
-    <PersonIdentity initials={coacheeInitials(coachee.name)} name={coachee.name} line={coacheeUnitLine(coachee, language)} title>
-      <ViewToggle view={view} onView={onView} />
-    </PersonIdentity>
+    <div data-coachee-header="" className="mb-1 flex flex-wrap items-center gap-x-2.5 lg:mb-[22px] lg:gap-x-3.5">
+      <Link
+        href={back ?? '/coaching'}
+        className={cn(
+          '-ml-2.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-pill text-navy hover:bg-hover-row',
+          'lg:mb-3.5 lg:ml-0 lg:h-auto lg:w-auto lg:basis-full lg:justify-start lg:rounded-sm lg:text-sm lg:font-semibold',
+          'lg:text-navy-soft lg:hover:bg-transparent lg:hover:underline',
+        )}
+      >
+        <LineIcon name="chevronLeft" className="h-[22px] w-[22px] lg:hidden" />
+        <span className="max-lg:sr-only">{back ? t.person.backOnly : t.person.back({ to: t.title })}</span>
+      </Link>
+      <Avatar name={coachee.name} photoUrl={coachee.photoUrl ?? null} seed={coachee.membershipId} size={36} className="lg:hidden" />
+      <span
+        aria-hidden="true"
+        className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full bg-amber text-[1.1875rem] font-bold text-navy max-lg:hidden"
+      >
+        {coacheeInitials(coachee.name)}
+      </span>
+      <div className="min-w-0 flex-1">
+        <h1 className="truncate font-display text-title font-extrabold leading-tight text-navy lg:text-[1.5rem] lg:font-bold">
+          {coachee.name}
+        </h1>
+        <p className="mt-px truncate text-xs text-muted lg:mt-0.5 lg:text-base">{coacheeUnitLine(coachee, language)}</p>
+      </div>
+      {withLanguage && <PageLanguageSwitch className="shrink-0" />}
+    </div>
   );
+}
+
+/**
+ * The way back an entry point named (`?from=`), **an address of this app only**: a path, never `//host` or a scheme, so
+ * the link cannot be pointed off the app. `null` for none.
+ */
+export function backFrom(search: string): string | null {
+  const from = new URLSearchParams(search).get('from');
+  return from && from.startsWith('/') && !from.startsWith('//') && !from.includes('\\') ? from : null;
 }
 
 /**
@@ -330,48 +361,17 @@ export function PersonIdentity({
 }
 
 /**
- * *Leader view* / *Agent view* (`Overall.html:3980-3985`, `.view-toggle` `:1086-1091`): a segmented pair.
- *
- * **Two toggle buttons, not tabs.** It controls no panel — it changes which tabs the bar offers — so
- * each is a button whose `aria-pressed` says which view is on. No hint sentence goes with it (ADR-0083):
- * the prototype styles one and never renders it.
+ * The person's tabs, **in the owner's order** (UI V1, UI-029), every one followable, the leader's own *Capability
+ * mapping* behind a line lock.
  */
-function ViewToggle({ view, onView }: { view: View; onView: (view: View) => void }) {
-  const t = useMessages(coachingMessages).person;
-  const option = (id: View, label: string) => (
-    <button
-      type="button"
-      aria-pressed={view === id}
-      onClick={() => onView(id)}
-      className={cn(
-        'rounded-md px-4 py-[7px] text-base font-semibold',
-        view === id ? 'bg-navy text-white' : 'text-muted hover:text-navy',
-      )}
-    >
-      {label}
-    </button>
-  );
-  return (
-    <div role="group" aria-label={t.view} className="inline-flex rounded-[9px] border border-hairline bg-card p-[3px]">
-      {option('leader', t.leaderView)}
-      {option('agent', t.agentView)}
-    </div>
-  );
-}
-
-/**
- * The person's tabs (`Overall.html:3988-3995`, and *Activity*, P13.1-T9). *Training* is live since
- * P18.5-T4 (AC-2), shown in *Leader view* and *Agent view* alike (`:4331`); *Activation* since P13-T9 (AC-3). *Agent view* takes *🔒 Leader Notes* out of the bar, as the
- * prototype's `display: none` does; *Activity* stays, the coachee's own screen as Personal Summary is.
- */
-function PersonTabs({ membershipId, current, view }: { membershipId: string; current: CoachingTab | null; view: View }) {
+function PersonTabs({ membershipId, current }: { membershipId: string; current: CoachingTab | null }) {
   const names = useMessages(coachingMessages).person.tabs;
   return (
     <CoachingTabBar
-      items={TABS.filter((t) => !(t.leaderOnly && view === 'agent')).map((t) => ({
+      items={TABS.map((t) => ({
         key: t.tab,
         label: names[t.name],
-        href: t.upcoming ? null : coachingTabHref(membershipId, t.tab),
+        href: coachingTabHref(membershipId, t.tab),
         current: current === t.tab,
         locked: t.leaderOnly,
       }))}
@@ -385,7 +385,7 @@ export interface CoachingTabItem {
   label: string;
   href: string | null;
   current?: boolean;
-  /** *🔒 Leader Notes*: the lock before its name. */
+  /** *Capability mapping*: the line lock before its name (UI-029). */
   locked?: boolean;
 }
 
@@ -394,24 +394,38 @@ export interface CoachingTabItem {
  * first two tabs open the reader's own screens (P11-T10). `RouteTabs`' underline idiom, because each tab
  * is an address — links in a `nav`, the current one carrying `aria-current`.
  *
- * **A tab with no address is in the bar and cannot be followed yet** (P11-T7 AC-7), in the prototype's
- * disabled idiom, `.nav a.disabled` (`:63`): muted text and a plain cursor, nothing else, its sidebar
- * tint carried to a light ground. Each is a `link` that is `aria-disabled`, so assistive technology hears
- * the tab by its name and that it is not available, and names no phase.
+ * **One row that never wraps, at every width** (UI V1, UI-030): where the tabs do not fit — a phone, a tablet, a 1024px
+ * desktop — it scrolls sideways by swipe, with no scrollbar and a 32px fade at the edge that has more; the current tab is
+ * scrolled into view on load (`useTabRow`), and *Coaching Session*, first, is at the left edge. Each tab 44px tall below
+ * 1024px. At 1280px all eight fit, and it reads as it did.
  *
- * **On a phone, one row that scrolls sideways**, as `RouteTabs` is (ADR-0167; UI-013: a session's seven
- * tabs took three lines), the current tab in view. Below 768px only.
+ * **A tab with no address is in the bar and cannot be followed yet** (P11-T7 AC-7), in the prototype's
+ * disabled idiom: muted text and a plain cursor, `aria-disabled`, named for what it is.
  */
 export function CoachingTabBar({ items }: { items: readonly CoachingTabItem[] }) {
   const t = useMessages(coachingMessages).person;
-  const TAB = cn('-mb-px border-b-2 px-0.5 pb-3 text-md font-semibold', TAB_PHONE);
+  // The underline sits inside the row: a row that scrolls clips anything hung below it (the `-mb-px` it had).
+  const TAB = cn(
+    'flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-0.5 pb-3 text-md font-semibold',
+    'max-lg:min-h-11 max-lg:pt-3 focus-visible:[outline-offset:-2px]',
+    TAB_PHONE,
+  );
   const row = useTabRow<HTMLElement>(items.find((tab) => tab.current)?.key);
   return (
     <nav
       ref={row.ref}
       aria-label={t.nav}
       data-fade={row.fade}
-      className={cn('mb-6 flex flex-wrap gap-x-6 gap-y-2 border-b border-hairline', TAB_ROW_PHONE, UNDERLINED_ROW_PHONE)}
+      data-coaching-tabs=""
+      style={{ '--tab-fade': '2rem' } as React.CSSProperties}
+      className={cn(
+        'mb-3 flex flex-nowrap gap-x-[22px] overflow-x-auto overflow-y-hidden shadow-[inset_0_-1px_0_var(--color-hairline)]',
+        '[scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:mb-6 lg:gap-x-6',
+        // The fade from 768px too — the phone's is `globals.css`' — while more tabs follow (UI-030).
+        'md:data-[fade=end]:[mask-image:linear-gradient(to_left,transparent,black_2rem)]',
+        'md:data-[fade=start]:[mask-image:linear-gradient(to_right,transparent,black_2rem)]',
+        'md:data-[fade=both]:[mask-image:linear-gradient(to_right,transparent,black_2rem,black_calc(100%-2rem),transparent)]',
+      )}
     >
       {items.map((tab) => {
         if (tab.href === null) {
@@ -435,9 +449,9 @@ export function CoachingTabBar({ items }: { items: readonly CoachingTabItem[] })
             key={tab.key}
             href={tab.href}
             aria-current={tab.current ? 'page' : undefined}
-            className={cn(TAB, 'flex items-center gap-1.5', tab.current ? 'border-amber text-navy' : 'border-transparent text-muted')}
+            className={cn(TAB, tab.current ? 'border-amber text-navy' : 'border-transparent text-muted')}
           >
-            {tab.locked && <span aria-hidden="true" className="text-xs text-navy-soft">🔒</span>}
+            {tab.locked && <LineIcon name="lock" className="h-3.5 w-3.5 text-navy-soft" />}
             {tab.label}
           </Link>
         );

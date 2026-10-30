@@ -2,7 +2,9 @@ import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AgentLayout from '@/app/(agent)/layout';
-import { InLanguage, renderInIndonesian, renderWithSession, routeParams, stubFetch, type StubReply } from '@test/harness';
+import {
+  atWidth, InLanguage, renderInIndonesian, renderWithSession, routeParams, stubFetch, type StubReply,
+} from '@test/harness';
 import { englishOnly, englishShown } from '@test/english-left';
 import { notFound, PGB, product, RINA_ME, SCRIPT, serverError, SHELF, SHELL_STUBS } from '@test/sales-tools-fixtures';
 import { isKept } from '@/i18n/kept';
@@ -54,7 +56,7 @@ function drawer(code: string, routes: Routes = {}) {
   return stub;
 }
 
-const shelfReady = () => screen.findByRole('heading', { level: 2, name: 'Life' });
+const shelfReady = () => screen.findByRole('heading', { level: 2, name: 'Jiwa' });
 const dialog = (name = 'PRUMapan') => screen.findByRole('dialog', { name });
 
 /**
@@ -71,7 +73,7 @@ describe('P18.98-T4 the Product Catalog in Indonesian', () => {
   });
   afterEach(() => vi.unstubAllGlobals());
 
-  it('AC-2 the page: its line, the search and the filters in Indonesian, the title, tabs and categories kept English', async () => {
+  it('AC-2, UI-107 the page: its line, the search, the filters and the categories in Indonesian, the title and tabs kept English', async () => {
     grid();
     await shelfReady();
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Product Catalog$/);
@@ -84,19 +86,20 @@ describe('P18.98-T4 the Product Catalog in Indonesian', () => {
     const search = screen.getByRole('searchbox', { name: 'Cari produk berdasarkan nama' });
     expect(search).toHaveAttribute('placeholder', 'Cari produk…');
     expect(within(screen.getByRole('group', { name: 'Kategori' })).getAllByRole('button').map((b) => b.textContent)).toEqual([
-      'All products', 'Life', 'Health', 'Critical illness', 'Education', 'Investment-linked',
+      // UI-107: the report's words, where §A.3 kept them English until 2026-10-30.
+      'Semua produk', 'Jiwa', 'Kesehatan', 'Penyakit kritis', 'Pendidikan', 'Unit link',
     ]);
     expect(within(screen.getByRole('group', { name: 'Kanal' })).getAllByRole('button').map((b) => b.textContent))
       .toEqual(['Semua', 'Konvensional', 'Syariah']);
     noEnglishLeft();
   });
 
-  it('AC-2, AC-4 a section per category, kept English, its count Indonesian; each card the company’s words as typed', async () => {
+  it('AC-2, AC-4, UI-107 a section per category in Indonesian, its count too; each card the company’s words as typed', async () => {
     grid();
     await shelfReady();
-    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['Life', 'Health', 'Investment-linked']);
-    expect(within(screen.getByRole('region', { name: 'Life' })).getByText('2 produk')).toBeInTheDocument();
-    expect(within(screen.getByRole('region', { name: 'Health' })).getByText('1 produk')).toBeInTheDocument();
+    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['Jiwa', 'Kesehatan', 'Unit link']);
+    expect(within(screen.getByRole('region', { name: 'Jiwa' })).getByText('2 produk')).toBeInTheDocument();
+    expect(within(screen.getByRole('region', { name: 'Kesehatan' })).getByText('1 produk')).toBeInTheDocument();
     const mapan = document.querySelector('[data-product-card="PRUMAPAN"]') as HTMLElement;
     expect(mapan.textContent).toBe('KonvensionalPRUMapanDana pensiun yang cair rutin dari usia 55.Lihat detail →');
     // The company's English tagline stays as it was typed.
@@ -112,7 +115,7 @@ describe('P18.98-T4 the Product Catalog in Indonesian', () => {
     nav.pathname = '/product-catalog';
     stubFetch({ ...SHELL_STUBS, 'GET /product-catalog': { body: { products: SHELF } } });
     renderWithSession(<AgentLayout><ProductCatalogLayout><ProductCatalogPage /></ProductCatalogLayout></AgentLayout>, { me: RINA_ME });
-    await shelfReady();
+    await screen.findByRole('heading', { level: 2, name: 'Life' });
     expect(englishShown(document.body, CATALOG_ENGLISH))
       .toEqual(expect.arrayContaining(['Search products by name', 'Search products…', 'Conventional', 'View detail →']));
   });
@@ -129,7 +132,7 @@ describe('P18.98-T4 the Product Catalog in Indonesian', () => {
     nav.search = 'category=education';
     grid();
     expect(await screen.findByText('Tidak ada produk yang cocok dengan filter ini.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Education' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Pendidikan' })).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('AC-2 the states the prototype lacks: loading, an error with its retry, the empty shelf', async () => {
@@ -152,16 +155,16 @@ describe('P18.98-T4 a product’s drawer in Indonesian', () => {
   });
   afterEach(() => vi.unstubAllGlobals());
 
-  it('AC-2 Details: the blocks in Indonesian, the tabs and Commission rate kept, the company’s words as typed', async () => {
+  it('AC-2 Details: the blocks in Indonesian, the tabs kept and Commission rate translated (UI-006), the company’s words as typed', async () => {
     drawer('PRUMAPAN');
     const box = await dialog();
     expect(within(box).getByRole('button', { name: 'Tutup' })).toBeInTheDocument();
     expect(within(box).getByRole('tablist', { name: 'Detail produk' })).toBeInTheDocument();
     expect(within(box).getAllByRole('tab').map((t) => t.textContent)).toEqual(['Details', 'Attack Plan', 'Documents']);
     expect(within(box).getAllByRole('heading', { level: 3 }).map((h) => h.textContent)).toEqual([
-      'Commission rate', 'Manfaat', 'Keunggulannya', 'Nasabah yang paling cocok',
+      'Persentase komisi', 'Manfaat', 'Keunggulannya', 'Nasabah yang paling cocok',
     ]);
-    const table = within(box).getByRole('table', { name: 'Commission rate' });
+    const table = within(box).getByRole('table', { name: 'Persentase komisi' });
     expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['Tahun', 'Persentase']);
     expect(within(table).getAllByRole('row').slice(1).map((r) => r.textContent)).toEqual(['Tahun 130%', 'Tahun 215%', 'Tahun 35%']);
     expect(within(box).getByText('The accessible retirement-income option.')).toBeInTheDocument();
@@ -173,7 +176,7 @@ describe('P18.98-T4 a product’s drawer in Indonesian', () => {
   it('P18.98-T3 figures: a commission rate in the reader’s figures — 7,25% in Indonesian, 7.25% in English', async () => {
     const rates = product({ commissionSchedule: [{ year: 1, rate: 0.0725 }, { year: 2, rate: 0.125 }] });
     drawer('PRUMAPAN', { 'GET /product-catalog/PRUMAPAN': { body: rates } });
-    const table = within(await dialog()).getByRole('table', { name: 'Commission rate' });
+    const table = within(await dialog()).getByRole('table', { name: 'Persentase komisi' });
     expect(within(table).getAllByRole('row').slice(1).map((r) => r.textContent)).toEqual(['Tahun 17,25%', 'Tahun 212,5%']);
   });
 
@@ -284,8 +287,45 @@ describe('P18.98-T4 a product’s drawer in Indonesian', () => {
   it('AC-7 the kept terms the screen writes are marked for lang="en" (P18.98-T7)', async () => {
     drawer('PRUMAPAN');
     await dialog();
-    for (const term of ['Product Catalog', 'Sales tools', 'Details', 'Attack Plan', 'Documents', 'Commission rate', 'Life']) {
+    // *Commission rate* is Indonesian in ID mode since UI V1 (UI-006: *Persentase komisi*), so no longer a kept term.
+    // The categories are Indonesian since UI V1 (UI-107), so *Life* is no longer one.
+    for (const term of ['Product Catalog', 'Sales tools', 'Details', 'Attack Plan', 'Documents']) {
       expect([term, isKept(term)]).toEqual([term, true]);
     }
+  });
+});
+
+/**
+ * **UI V1 on a phone** (UI-107; `attack-plan-mobile` 4): the catalog in Indonesian as compact rows — the name, a *Syariah*
+ * tag, two lines of the description, › — five to a section, then *Tampilkan n lagi*. 375px.
+ */
+describe('UI-107 the Product Catalog on a phone, in Indonesian', () => {
+  beforeEach(() => {
+    nav.push.mockReset();
+    nav.replace.mockReset();
+    nav.search = '';
+    atWidth(375);
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('UI-107 compact rows, five to a section, then Tampilkan n lagi; a row opens the drawer', async () => {
+    const life = Array.from({ length: 7 }, (_, i) => ({
+      ...SHELF[0], code: `LIFE_${i}`, name: `Life ${i}`, tagline: `Garis ${i}.`, channel: i === 6 ? 'syariah' as const : 'conventional' as const,
+    }));
+    grid({ 'GET /product-catalog': { body: { products: [...life, SHELF[2]] } } });
+    await shelfReady();
+    const section = await screen.findByRole('region', { name: 'Jiwa' });
+    expect(section).toHaveAttribute('data-phone-section', 'life');
+    expect(within(section).getByText('7 produk')).toBeInTheDocument();
+    expect(within(section).getAllByRole('listitem')).toHaveLength(5);
+    await userEvent.click(within(section).getByRole('button', { name: 'Tampilkan 2 lagi' }));
+    expect(within(section).getAllByRole('listitem')).toHaveLength(7);
+    expect(within(section).getByRole('button', { name: 'Tampilkan lebih sedikit' })).toHaveAttribute('aria-expanded', 'true');
+    // A Syariah product carries its tag in the row; the row is the target.
+    const row = document.querySelector('[data-product-card="LIFE_6"]') as HTMLElement;
+    expect(row.textContent).toBe('Life 6SyariahGaris 6.');
+    await userEvent.click(row);
+    expect(nav.push).toHaveBeenCalledWith('/product-catalog/LIFE_6', { scroll: false });
+    noEnglishLeft();
   });
 });

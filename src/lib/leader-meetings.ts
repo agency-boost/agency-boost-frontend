@@ -5,6 +5,7 @@ import { DEFAULT_LANGUAGE, SOURCE_LANGUAGE, type Language } from '@/i18n/languag
 import { forumMessages } from '@/i18n/messages/forum';
 import { api } from './api-client';
 import { formatMonthName } from './format';
+import { signInPathFrom, type SessionEnd } from './return-path';
 
 /**
  * **The Strategic Leader Forum's client** (Phase 18.1, `functional/leader-forum.md`): the office's biweekly
@@ -25,6 +26,8 @@ export type MeetingState = 'upcoming' | 'completed';
 export interface ForumPerson {
   membershipId: string;
   name: string;
+  /** Their profile photo as a signed link (UI V1, UI-111); `null` or absent for none: the avatar draws initials. */
+  photoUrl?: string | null;
   rung: { code: string; label: string };
   /** The reader themselves: *"(You)"* after the name. */
   isReader: boolean;
@@ -305,6 +308,17 @@ export interface MeetingWriter {
  * module's own uses the words that spec keeps out of the reader's sight (D-copy), in either language, and none names a
  * phase; `leader-meetings.spec.ts` scans them.
  */
+
+/**
+ * Where a reader not signed in goes: sign in, and come back here (D-share — *"one not signed in signs in
+ * first and returns to it"*). The address rides on `next` — except after the reader signed out themselves
+ * (`signedOut`, 2026-10-11), when it is plain `/login`, and a session that ended under the reader adds
+ * `reason=expired` (ADR-0168 §1), as `signInPathFrom` decides for every guard.
+ *
+ * Here, not in `meeting-screen.tsx`, so the list's guard does not load the meeting screen with it (P18.99-T16, the bundle).
+ */
+export const signInAndReturn = (pathname: string, end: SessionEnd) =>
+  signInPathFrom({ pathname, search: '' }, end);
 
 /** The forum's name, kept English in both languages (§A.1, §A.5): the page's title, the nav item's. */
 export const FORUM_TITLE = kept('Strategic Leader Forum');

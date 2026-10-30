@@ -15,12 +15,14 @@ import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client
 import { cn } from '@/lib/cn';
 import { CONTENT_TERM_KEYS, firstMentions, type TermKey } from '@/lib/terms';
 import {
-  campaignHref, chasedToast, chaseCampaign, ratioUnitsOf, readCampaigns, requirementsLine,
-  seasonalFilters, seasonalSections, showsChase, structuralSections, unchaseCampaign, unchasedToast,
+  campaignHref, chaseCampaign, chaseToast, ratioUnitsOf, readCampaigns, requirementsLine,
+  seasonalFilters, seasonalSections, showsChase, structuralSections, unchaseCampaign,
   type CampaignCard, type CampaignList as CampaignListView, type CampaignSection, type RatioUnits, type SeasonalFilter,
 } from '@/lib/campaigns';
 import { useTenantConfig } from '@/lib/tenant-config-cache';
+import { usePhone } from '@/lib/use-phone';
 import { ChaseButton, Poster, PromotionLabel } from './campaign-parts';
+import { PhoneCampaignCard, PhoneEndedRow } from './campaign-phone';
 
 /** What the dialog beneath the list needs from it: how to close, and how to tell it a chase changed. */
 export interface CampaignDialogHost {
@@ -42,9 +44,8 @@ export function useCampaignDialogHost(): CampaignDialogHost {
 export const toggleChase = (card: Pick<CampaignCard, 'code' | 'chasing'>) =>
   (card.chasing ? unchaseCampaign(card.code) : chaseCampaign(card.code));
 
-/** The toast a chase answer says (`:8144`), from what the server answered, not from what was asked — in `language`. */
-export const chaseToast = (card: Pick<CampaignCard, 'title' | 'chasing'>, language?: Language) =>
-  (card.chasing ? chasedToast(card.title, language) : unchasedToast(card.title, language));
+/** The toast a chase answer says (`:8144`): `lib/campaigns.ts`' (P18.99-T16), re-exported for the list's importers. */
+export { chaseToast } from '@/lib/campaigns';
 
 type CampaignType = 'seasonal' | 'structural';
 const TYPES: readonly CampaignType[] = ['seasonal', 'structural'];
@@ -90,6 +91,7 @@ export function CampaignList({ children }: { children?: ReactNode }) {
    */
   const { config } = useTenantConfig();
   const ratioUnits = useMemo(() => ratioUnitsOf(config?.ratios), [config]);
+  const phone = usePhone();
 
   const load = useCallback(() => {
     let live = true;
@@ -148,9 +150,11 @@ export function CampaignList({ children }: { children?: ReactNode }) {
   }), [close, replace, show, language]);
 
   const dialogOpen = pathname !== '/campaigns';
+  // On a phone there is no status row (UI-108: *no extra chip row*): every group, each with its count, the empty hidden.
   const sections = list
-    ? (type === 'seasonal' ? seasonalSections(list.campaigns, filter, language) : structuralSections(list.campaigns, language))
+    ? (type === 'seasonal' ? seasonalSections(list.campaigns, phone ? 'all' : filter, language) : structuralSections(list.campaigns, language))
     : [];
+  const phoneSections = sections.filter((section) => section.items.length > 0);
   const terms = cardTerms(sections, ratioUnits, language, figures);
 
   return (
@@ -165,8 +169,29 @@ export function CampaignList({ children }: { children?: ReactNode }) {
             </div>
           )}
           {!list && !error && <CampaignsSkeleton />}
-          {list && type === 'seasonal' && <StatusFilter active={filter} onSelect={setFilter} />}
-          {list && sections.map((section) => (
+          {list && type === 'seasonal' && !phone && <StatusFilter active={filter} onSelect={setFilter} />}
+          {list && phone && phoneSections.length === 0 && sections[0] && (
+            <p className="px-[18px] py-10 text-center text-md text-muted">{sections[0].empty}</p>
+          )}
+          {list && phone && phoneSections.map((section) => (
+            <PhoneSection key={section.id} section={section}>
+              {section.items.map((card) => (card.kind === 'seasonal' && card.phase === 'ended'
+                ? <PhoneEndedRow key={card.code} card={card} onOpen={() => open(card.code)} />
+                : (
+                  <PhoneCampaignCard
+                    key={card.code}
+                    card={card}
+                    canChase={showsChase(card, list.can)}
+                    busy={busy === card.code}
+                    error={chaseError?.code === card.code ? chaseError.error : null}
+                    onChase={() => void chase(card)}
+                    onOpen={() => open(card.code)}
+                    ratioUnits={ratioUnits}
+                  />
+                )))}
+            </PhoneSection>
+          ))}
+          {list && !phone && sections.map((section) => (
             <Section key={section.id} section={section}>
               {section.items.map((card) => (
                 <Card
@@ -208,8 +233,9 @@ function TypeTabs({
   };
   return (
     <>
-      <div className="mb-[18px] border-b-[1.5px] border-hairline">
-        <div role="tablist" aria-label={t.types} className="-mb-[1.5px] flex gap-[26px]">
+      {/* On a phone, one segmented control, *Musiman | Struktural* (UI-108): the same tabs on a white pill track. */}
+      <div className="mb-[18px] border-b-[1.5px] border-hairline max-md:mb-0 max-md:mt-3 max-md:border-b-0">
+        <div role="tablist" aria-label={t.types} className="-mb-[1.5px] flex gap-[26px] max-md:mb-0 max-md:gap-0 max-md:rounded-pill max-md:bg-card">
           {TYPES.map((tab, i) => {
             const on = tab === active;
             return (
@@ -234,9 +260,17 @@ function TypeTabs({
                 className={cn(
                   'border-b-[2.5px] px-1 py-2.5 font-display text-[0.9375rem] font-bold',
                   on ? 'border-amber text-navy' : 'border-transparent text-muted hover:text-navy',
+                  'max-md:flex max-md:min-h-11 max-md:flex-1 max-md:rounded-pill max-md:border-b-0 max-md:p-[3px] max-md:text-base max-md:font-semibold',
                 )}
               >
-                {t[tab]}
+                <span
+                  className={cn(
+                    'max-md:flex max-md:w-full max-md:items-center max-md:justify-center max-md:rounded-pill',
+                    on && 'max-md:bg-navy max-md:text-white',
+                  )}
+                >
+                  {t[tab]}
+                </span>
               </button>
             );
           })}
@@ -295,6 +329,23 @@ function Section({ section, children }: { section: CampaignSection; children: Re
  * card is grey (`.is-ended`, `:1884-1886`) and **draws no chase** (P18.95-T10 AC-2; UI-024), where D-lists drew
  * it disabled with its reason: the poster's *Ended* says why. Every authored word is text, never markup.
  */
+/**
+ * **A group on a phone** (UI V1, UI-108; `campaign-event-mobile` 1): its heading in sentence case with its count —
+ * *Berjalan 3* — not the small uppercase label, and its cards one under another.
+ */
+function PhoneSection({ section, children }: { section: CampaignSection; children: ReactNode }) {
+  const id = useId();
+  return (
+    <section aria-labelledby={id} data-section={section.id}>
+      <h2 className="mx-0.5 mb-1.5 mt-3.5 flex items-baseline gap-1.5 text-lg font-bold text-navy">
+        <span id={id}>{section.heading}</span>
+        <span className="text-sm font-semibold text-muted">{section.items.length}</span>
+      </h2>
+      <div className="flex flex-col gap-2">{children}</div>
+    </section>
+  );
+}
+
 function Card({
   card, canChase, busy, error, onChase, onOpen, terms = [], ratioUnits,
 }: {
@@ -321,7 +372,7 @@ function Card({
       aria-labelledby={titleId}
       data-campaign-card={card.code}
       className={cn(
-        'min-w-0 overflow-hidden rounded-lg border border-hairline bg-card transition-shadow hover:shadow-modal',
+        'min-w-0 overflow-hidden rounded-lg border border-card-edge bg-card transition-shadow hover:shadow-modal',
         ended && 'grayscale-[45%] hover:grayscale-[20%]',
       )}
     >
@@ -399,7 +450,7 @@ export function CampaignsSkeleton() {
           <SkeletonBar className="mb-3 h-3 w-20" />
           <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,290px),1fr))] gap-4">
             {[0, 1].map((i) => (
-              <div key={i} className="overflow-hidden rounded-lg border border-hairline bg-card">
+              <div key={i} className="overflow-hidden rounded-lg border border-card-edge bg-card">
                 <SkeletonBar className="h-[100px] w-full rounded-none" />
                 <div className="px-4 py-3.5">
                   <SkeletonBar className="h-4 w-2/3" />

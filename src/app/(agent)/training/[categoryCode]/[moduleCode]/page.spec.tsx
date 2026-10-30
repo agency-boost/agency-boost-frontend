@@ -2,7 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AgentLayout from '@/app/(agent)/layout';
-import { renderInLayout, routeParams, stubFetch, type StubReply } from '@test/harness';
+import { renderInLayout, routeParams, stubFetch, wears, type StubReply } from '@test/harness';
 import {
   LEARNER, modulePage, NOT_FOUND, progressView, SHELL_STUBS, SUPPORT,
 } from '@test/training-fixtures';
@@ -55,61 +55,81 @@ describe('/training/[categoryCode]/[moduleCode], a module’s page (P18.5-T1)', 
   });
 
   describe('the page, verbatim (AC-5)', () => {
-    it('P18.5-T1 AC-5 titles the page with the module over “Structured training module.”', async () => {
+    it('UI-067 says the title once, as the lesson card’s heading: no subtitle, no category row, no Uploaded by admin', async () => {
       show();
       await ready();
-      expect(screen.getByText('Structured training module.')).toBeInTheDocument();
+      expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+      expect(screen.getAllByText('Closing Techniques That Work')).toHaveLength(1);
+      expect(screen.getByRole('heading', { level: 1 }).closest('[data-lesson-card]')).not.toBeNull();
+      expect(screen.queryByText(/Structured training module|Uploaded by admin|External resource/)).not.toBeInTheDocument();
+      expect(screen.queryByRole('navigation', { name: 'Training' })).not.toBeInTheDocument();
     });
 
     it('P18.5-T1 AC-5, P18.95-T9 AC-2 links back to the category’s list by that page’s title, Back to Training Modules', async () => {
       show();
       await ready();
-      expect(screen.getByRole('link', { name: 'Back to Training Modules' })).toHaveAttribute('href', '/training/SALES');
+      const back = screen.getByRole('link', { name: 'Back to Training Modules' });
+      expect(back).toHaveAttribute('href', '/training/SALES');
+      // UI-067: *‹ Training Modules* in a 48px row below 1024px, the long words from 1024px.
+      expect(wears(back, 375)).toContain('min-h-12');
+      expect(within(back).getByText('Training Modules')).toHaveClass('lg:hidden');
+      expect(within(back).getByText('Back to Training Modules')).toHaveClass('max-lg:hidden');
     });
 
-    it('P18.5-T1 AC-5 keeps the subtabs above it, its category current', async () => {
+    it('UI-067 heads the navy lesson card with Skill: {label} and the module’s place in its skill', async () => {
       show();
       await ready();
-      const tabs = screen.getByRole('navigation', { name: 'Training' });
-      // The tab is where the reader is, not the page they are on (the list is): `location`, never `page`.
-      expect(within(tabs).getByRole('link', { name: 'Sales' })).toHaveAttribute('aria-current', 'location');
-      expect(within(tabs).getByRole('link', { name: 'Product' })).not.toHaveAttribute('aria-current');
+      const card = screen.getByRole('region', { name: 'Closing Techniques That Work' });
+      expect(card.className).toContain('bg-navy');
+      expect(within(card).getByText('Skill: Closing')).toBeInTheDocument();
+      // *Closing* holds one module in the catalog the layout read: *1/1*, said in words to a screen reader.
+      expect(within(card).getByText('1/1')).toHaveAttribute('aria-hidden', 'true');
+      expect(within(card).getByText('Module 1 of 1')).toHaveClass('sr-only');
     });
 
-    it('P18.5-T1 AC-5 heads the card with the title and “Skill: {label}”', async () => {
-      show();
-      await ready();
-      expect(screen.getByRole('heading', { level: 2, name: 'Closing Techniques That Work' })).toBeInTheDocument();
-      expect(screen.getByText('Skill: Closing')).toBeInTheDocument();
-    });
-
-    it('P18.5-T1 AC-5 draws a tile per item with its own label, caption and button (contradictions 5, 6)', async () => {
+    it('UI-067 draws a block per item by its kind: a file’s row and Open File, a link’s row with its site and Open Link', async () => {
       show();
       await ready();
       const file = tile('closing-techniques.pdf');
-      expect(within(file).getByText('Uploaded by admin')).toBeInTheDocument();
-      expect(within(file).getByRole('button', { name: /^Open File/ })).toBeInTheDocument();
+      expect(within(file).getByRole('button', { name: /^Open File/ })).toHaveTextContent(/^Open File$/);
       const link = tile('Closing in practice');
-      expect(within(link).getByText('External resource')).toBeInTheDocument();
+      expect(within(link).getByText('example.com')).toBeInTheDocument();
       expect(within(link).getByRole('link', { name: /^Open Link/ })).toHaveAttribute('href', 'https://example.com/closing');
       expect(screen.queryByText('Closing Techniques That Work.pdf')).not.toBeInTheDocument();
+      // The accent's button, full width below 1024px and at the row's end from 1024px; navy words on it (I-542).
+      const button = within(file).getByRole('button', { name: /^Open File/ });
+      expect(wears(button, 375).split(' ')).toEqual(expect.arrayContaining(['w-full', 'h-[52px]', 'bg-amber', 'text-navy']));
+      expect(wears(button, 1280).split(' ')).toEqual(expect.arrayContaining(['w-auto', 'h-12']));
     });
 
-    it('P18.5-T1 AC-5 draws Play Video for a video, captioned as uploaded', async () => {
-      show({
-        [PAGE]: { body: modulePage({ items: [{ id: 'it-v', kind: 'video', label: 'closing.mp4', mimeType: 'video/mp4', bytes: 9, url: null }] }) },
+    it('UI-067 a video plays in place: Play Video asks for its address and draws the player here, nothing opened elsewhere', async () => {
+      const open = vi.spyOn(window, 'open');
+      const { calls } = show({
+        [PAGE]: { body: modulePage({ items: [{ id: 'it-v', kind: 'video', label: 'closing.mp4', mimeType: 'video/mp4', bytes: 9, url: null }], openedItemIds: [] }) },
+        'POST /training/modules/CLOSING_TECHNIQUES/items/it-v/open': { body: { url: 'https://cdn.example/closing.mp4', openedItemIds: ['it-v'], recorded: true } },
       });
       await ready();
       const video = tile('closing.mp4');
-      expect(within(video).getByText('Uploaded by admin')).toBeInTheDocument();
-      expect(within(video).getByRole('button', { name: /^Play Video/ })).toBeInTheDocument();
+      const play = within(video).getByRole('button', { name: 'Play Video: closing.mp4' });
+      expect(play.className).toContain('h-[150px]');
+
+      await userEvent.click(play);
+
+      await waitFor(() => expect(video.querySelector('video')).toHaveAttribute('src', 'https://cdn.example/closing.mp4'));
+      expect(video.querySelector('video')).toHaveAttribute('controls');
+      expect(open).not.toHaveBeenCalled();
+      expect(sent(calls, '/items/it-v/open', 'POST')).toHaveLength(1);
+      expect(within(video).getByText('Opened')).toBeInTheDocument();
     });
 
-    it('P18.5-T1 AC-5 shows the Opened ✓ from the record, on the items opened before (D-opened)', async () => {
+    it('UI-069 says Opened in words under an opened item’s name, never a lone tick, from the record (D-opened)', async () => {
       show();
       await ready();
-      expect(within(tile('closing-techniques.pdf')).getByRole('img', { name: 'Opened' })).toBeInTheDocument();
-      expect(within(tile('Closing in practice')).queryByRole('img', { name: 'Opened' })).not.toBeInTheDocument();
+      const opened = within(tile('closing-techniques.pdf')).getByText('Opened');
+      expect(opened).toHaveAttribute('data-opened');
+      expect(opened.className).toContain('text-on-navy-green');
+      expect(screen.queryByRole('img', { name: 'Opened' })).not.toBeInTheDocument();
+      expect(within(tile('Closing in practice')).queryByText('Opened')).not.toBeInTheDocument();
     });
 
     it('P18.5-T1 AC-5 says “Nothing to open in this module yet.” for a module holding nothing', async () => {
@@ -158,7 +178,7 @@ describe('/training/[categoryCode]/[moduleCode], a module’s page (P18.5-T1)', 
       anchor.addEventListener('click', (e) => e.preventDefault());
       await userEvent.click(anchor);
 
-      expect(await within(tile('Closing in practice')).findByRole('img', { name: 'Opened' })).toBeInTheDocument();
+      expect(await within(tile('Closing in practice')).findByText('Opened')).toBeInTheDocument();
       expect(await screen.findByText('Marked as opened.')).toBeInTheDocument();
       expect(sent(calls, '/items/it-link/open', 'POST')).toHaveLength(1);
       expect(open).not.toHaveBeenCalled();
@@ -189,7 +209,7 @@ describe('/training/[categoryCode]/[moduleCode], a module’s page (P18.5-T1)', 
       await waitFor(() => expect(within(tile('Closing in practice')).getByRole('link', { name: /^Open Link/ })).not.toHaveAttribute('aria-disabled'));
       expect(within(tile('Closing in practice')).queryByRole('alert')).not.toBeInTheDocument();
       expect(screen.queryByText(/Couldn’t open/)).not.toBeInTheDocument();
-      expect(within(tile('Closing in practice')).queryByRole('img', { name: 'Opened' })).not.toBeInTheDocument();
+      expect(within(tile('Closing in practice')).queryByText('Opened')).not.toBeInTheDocument();
       expect(screen.queryByText('Marked as opened.')).not.toBeInTheDocument();
     });
 
@@ -205,7 +225,7 @@ describe('/training/[categoryCode]/[moduleCode], a module’s page (P18.5-T1)', 
       await userEvent.click(within(tile('closing-techniques.pdf')).getByRole('button', { name: /^Open File/ }));
       await waitFor(() => expect(tab.location.href).toBe('https://cdn.example/signed.pdf'));
       // The member's own ✓ stays, as the record has it; the session adds no toast.
-      expect(within(tile('closing-techniques.pdf')).getByRole('img', { name: 'Opened' })).toBeInTheDocument();
+      expect(within(tile('closing-techniques.pdf')).getByText('Opened')).toBeInTheDocument();
       expect(screen.queryByText('Marked as opened.')).not.toBeInTheDocument();
     });
 
@@ -230,7 +250,7 @@ describe('/training/[categoryCode]/[moduleCode], a module’s page (P18.5-T1)', 
 
       await userEvent.click(within(tile('closing-techniques.pdf')).getByRole('button', { name: /^Open File/ }));
       await waitFor(() => expect(tab.location.href).toBe('https://cdn.example/signed.pdf'));
-      expect(within(tile('closing-techniques.pdf')).queryByRole('img', { name: 'Opened' })).not.toBeInTheDocument();
+      expect(within(tile('closing-techniques.pdf')).queryByText('Opened')).not.toBeInTheDocument();
       expect(screen.queryByText('Marked as opened.')).not.toBeInTheDocument();
     });
 
@@ -245,18 +265,51 @@ describe('/training/[categoryCode]/[moduleCode], a module’s page (P18.5-T1)', 
   });
 
   describe('the status (AC-7)', () => {
-    it('P18.5-T1 AC-7 draws three buttons in the prototype’s order, the chosen one pressed and navy (ADR-0137 §2)', async () => {
+    it('UI-068 draws three big buttons in the prototype’s order under Status, the chosen one pressed and in the accent', async () => {
       show({ [PAGE]: { body: modulePage({ status: 'in_progress' }) } });
       await ready();
-      const group = screen.getByRole('group', { name: 'Status of Closing Techniques That Work' });
+      const card = screen.getByRole('region', { name: 'Status' });
+      const group = within(card).getByRole('group', { name: 'Status of Closing Techniques That Work' });
       const buttons = within(group).getAllByRole('button');
       expect(buttons.map((b) => [b.textContent, b.getAttribute('aria-pressed')])).toEqual([
         ['Not started', 'false'], ['In progress', 'true'], ['Done', 'false'],
       ]);
-      expect(buttons[1].className).toContain('bg-navy');
-      expect(buttons[1].className).toContain('text-white');
-      expect(buttons[0].className).not.toContain('bg-navy');
-      expect(buttons[1].className).not.toMatch(/bg-amber|bg-alert|bg-success/);
+      // The report's orange, with navy words on it (I-542); each with its line icon.
+      expect(buttons[1].className).toContain('bg-amber');
+      expect(buttons[1].className).toContain('text-navy');
+      expect(buttons[0].className).not.toContain('bg-amber');
+      buttons.forEach((b) => expect(b.querySelector('svg')).not.toBeNull());
+    });
+
+    it('UI-068 one row of three, 64px, below 1024px; a stack of 60px buttons from 1024px', async () => {
+      show();
+      await ready();
+      const group = screen.getByRole('group', { name: 'Status of Closing Techniques That Work' });
+      for (const px of [360, 375, 768]) {
+        expect(wears(group, px).split(' ')).not.toContain('flex-col');
+        within(group).getAllByRole('button').forEach((b) => {
+          expect(wears(b, px).split(' ')).toEqual(expect.arrayContaining(['h-16', 'flex-1', 'flex-col']));
+        });
+      }
+      expect(wears(group, 1280).split(' ')).toContain('flex-col');
+      within(group).getAllByRole('button').forEach((b) => expect(wears(b, 1280).split(' ')).toEqual(expect.arrayContaining(['h-[60px]', 'flex-row'])));
+    });
+
+    it('UI-068 shows the chosen status at once, before the server answers, and puts it back if it refuses', async () => {
+      let release!: () => void;
+      const held = new Promise<void>((resolve) => { release = resolve; });
+      const { mock } = show({ [PUT]: { status: 500, body: { error: { code: 'INTERNAL_ERROR', message: 'Something went wrong.', requestId: 'r-3' } } } });
+      const answer = mock.getMockImplementation()!;
+      mock.mockImplementation(async (url: string, init?: RequestInit) => {
+        if (init?.method === 'PUT') await held;
+        return answer(url, init);
+      });
+      await ready();
+      await userEvent.click(screen.getByRole('button', { name: 'Done' }));
+      expect(screen.getByRole('button', { name: 'Done' })).toHaveAttribute('aria-pressed', 'true');
+      release();
+      expect(await screen.findByRole('alert')).toHaveTextContent(/^Not saved\. Something went wrong\.$/);
+      expect(screen.getByRole('button', { name: 'Not started' })).toHaveAttribute('aria-pressed', 'true');
     });
 
     it('P18.5-T1 AC-7 sets the status it names, never toggles, toasts the prototype’s sentence, and re-reads the list', async () => {
@@ -351,9 +404,13 @@ describe('/training/[categoryCode]/[moduleCode], a module’s page (P18.5-T1)', 
       await ready();
     });
 
-    it('P18.5-T1 AC-5 waits under a skeleton', () => {
+    it('UI-071 waits under a skeleton shaped like the page: the back row, the navy lesson card, the status card', () => {
       show();
-      expect(screen.getByText('Loading this module…')).toBeInTheDocument();
+      const skeleton = screen.getByText('Loading this module…').parentElement!;
+      const shapes = Array.from(skeleton.querySelectorAll('div')).map((d) => d.getAttribute('class') ?? '');
+      expect(shapes.some((c) => c.includes('bg-navy') && c.includes('rounded-[20px]'))).toBe(true);
+      expect(shapes.some((c) => c.includes('bg-card') && c.includes('rounded-[20px]'))).toBe(true);
+      expect(shapes.some((c) => c.includes('grid-cols-[minmax(0,1fr)_300px]'))).toBe(true);
     });
   });
 });

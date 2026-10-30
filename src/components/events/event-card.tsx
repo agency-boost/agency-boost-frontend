@@ -137,7 +137,7 @@ export function EventCard({ event, companyName, canJoin, busy, error, onOpen, on
       data-event={event.id}
       onClick={() => onOpen(event.id)}
       className={cn(
-        'h-full cursor-pointer overflow-hidden rounded-lg border border-hairline bg-card transition-shadow hover:shadow-modal',
+        'h-full cursor-pointer overflow-hidden rounded-lg border border-card-edge bg-card transition-shadow hover:shadow-modal',
         past && 'grayscale-[45%] hover:grayscale-[20%]',
       )}
     >

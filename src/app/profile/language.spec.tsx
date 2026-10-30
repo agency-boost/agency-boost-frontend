@@ -9,140 +9,71 @@ vi.mock('next/navigation', () => ({
   usePathname: () => '/profile',
 }));
 
+/**
+ * ***Bahasa* on *Profil saya*** (UI V1, UI-111; ADR-0180 §3; P18.98-T2 AC-4 before it): a row showing the language the
+ * screen is in, opening a small sheet of the two; choosing one is **the same preference as the *ID | EN* switch** —
+ * the screen at once, the browser's cookie, the account (`useChooseLanguage`).
+ */
 const ME = makeMe({ permissions: ['profile:read_self'] });
 const SUPPORT = makeMe({
   permissions: ['profile:read_self'], isImpersonating: true, impersonationReadOnly: true, impersonatedBy: 'sa-1',
 });
 
-/** What `/profile` reads on its own besides the session: where the account is signed in, and the bell's count. */
 const READS = {
+  '/auth/me/profile': { body: { companyName: null, agentCode: null, leader: null, group: null } },
   '/auth/sessions': { body: [] },
   '/notifications/unread-count': { body: { unread: 0 } },
 };
-
-const field = () => screen.queryByRole('combobox', { name: /^(Language|Bahasa)$/ });
 
 afterEach(() => {
   vi.unstubAllGlobals();
   resetLanguage();
 });
 
-/**
- * **P18.98-T2 AC-4: *Language* on *Your account*** (ADR-0179 §2; UI-041) — *Bahasa Indonesia* or *English*, the same
- * preference as the switch, saving by itself with *Saving… → Saved ✓* (OD-200). Drawn while `LANGUAGE_LIVE` (live since 2026-10-29).
- */
-describe('P18.98-T2 Language on Your account', () => {
-  it('AC-4 is not drawn while the switch is not live', () => {
+describe('UI-111 Bahasa on Profil saya', () => {
+  it('UI-111 is not drawn while the switch is not live', () => {
     stubFetch(READS);
     renderWithSession(<ProfilePage />, { me: ME });
-
-    expect(screen.getByRole('heading', { name: 'Your details' })).toBeInTheDocument();
-    expect(field()).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^(Language|Bahasa)/ })).not.toBeInTheDocument();
   });
 
-  it('AC-4 offers the two languages, each by its own name in its own language, showing the one the screen is in', () => {
+  it('UI-111 offers the two languages, each by its own name in its own language, the one in force checked', async () => {
     stubFetch(READS);
     renderLive(<ProfilePage />, { me: ME });
-
-    const select = field()!;
-    // Live, somebody who has chosen nothing reads Bahasa Indonesia, and the field says it in Indonesian.
-    expect(select).toHaveAccessibleName('Bahasa');
-    expect(select).toHaveValue('id');
-    const options = within(select).getAllByRole('option');
-    expect(options.map((o) => [o.textContent, o.getAttribute('value'), o.getAttribute('lang')])).toEqual([
-      ['Bahasa Indonesia', 'id', 'id'],
-      ['English', 'en', 'en'],
-    ]);
+    await userEvent.click(screen.getByRole('button', { name: /^Bahasa/ }));
+    const sheet = await screen.findByRole('dialog', { name: 'Bahasa' });
+    const id = within(sheet).getByRole('radio', { name: 'Bahasa Indonesia' });
+    const en = within(sheet).getByRole('radio', { name: 'English' });
+    expect(id).toHaveAttribute('lang', 'id');
+    expect(en).toHaveAttribute('lang', 'en');
+    expect(id).toHaveAttribute('aria-checked', 'true');
   });
 
-  it('AC-4 saves by itself — Saving… then Saved ✓ — on the account, the cookie and the screen at once', async () => {
+  it('UI-111 choosing saves at once: the account, the cookie and the screen, and the sheet closes', async () => {
     const { calls } = stubFetch({ ...READS, 'PATCH /auth/me': { body: ME } });
     renderLive(<ProfilePage />, { me: ME });
+    await userEvent.click(screen.getByRole('button', { name: /^Bahasa/ }));
+    await userEvent.click(within(await screen.findByRole('dialog', { name: 'Bahasa' })).getByRole('radio', { name: 'English' }));
 
-    await userEvent.selectOptions(field()!, 'en');
-
-    // The screen is in English at once, the field and its status with it.
-    expect(document.documentElement.lang).toBe('en');
-    expect(field()).toHaveAccessibleName('Language');
-    expect(field()).toHaveValue('en');
-    expect(await screen.findByText('Saved ✓')).toBeInTheDocument();
-    const saves = calls.filter((c) => c.init.method === 'PATCH');
-    expect(saves).toHaveLength(1);
-    expect(JSON.parse(saves[0].init.body as string)).toEqual({ locale: 'en' });
+    expect(await screen.findByRole('heading', { level: 1, name: 'My profile' })).toBeInTheDocument();
     expect(languageCookie()).toBe('en');
-    // Not *Your details*' own *Save*: that button sends nothing of the language, and nothing else was sent.
-    expect(saves[0].url).toBe('http://api.test/api/v1/auth/me');
+    expect(calls.some((c) => c.init.method === 'PATCH' && JSON.parse(String(c.init.body)).locale === 'en')).toBe(true);
+    expect(screen.queryByRole('dialog', { name: 'Language' })).not.toBeInTheDocument();
   });
 
-  it('AC-4 says its status in the language just chosen: Menyimpan… and Tersimpan ✓ in Bahasa Indonesia', async () => {
-    document.cookie = 'ab_lang=en; Path=/';
-    document.documentElement.lang = 'en';
-    stubFetch({ ...READS, 'PATCH /auth/me': { body: ME } });
-    renderLive(<ProfilePage />, { me: ME });
-    expect(field()).toHaveValue('en');
-
-    await userEvent.selectOptions(field()!, 'id');
-
-    expect(await screen.findByText('Tersimpan ✓')).toBeInTheDocument();
-    expect(languageCookie()).toBe('id');
-  });
-
-  it('AC-3, AC-4 keeps what was typed in Your details across the change: the open form is not refilled', async () => {
-    stubFetch({ ...READS, 'PATCH /auth/me': { body: ME } });
-    renderLive(<ProfilePage />, { me: ME });
-    // Live, somebody who has chosen nothing reads Bahasa Indonesia (P18.98-T4, the account's words).
-    const preferred = screen.getByLabelText('Nama panggilan');
-    await userEvent.clear(preferred);
-    await userEvent.type(preferred, 'Rin');
-
-    await userEvent.selectOptions(field()!, 'en');
-    await screen.findByText('Saved ✓');
-
-    // The same box, its label now English, what was typed in it kept.
-    expect(screen.getByLabelText('Preferred name')).toBe(preferred);
-    expect(preferred).toHaveValue('Rin');
-  });
-
-  it('AC-4 says Couldn’t save — retry when the account cannot be told, and the retry sends it again', async () => {
-    const { calls } = stubFetch({
-      ...READS,
-      'PATCH /auth/me': [
-        { status: 503, body: { error: { code: 'INTERNAL_ERROR', message: 'Down', requestId: 'r' } } },
-        { body: ME },
-      ],
-    });
-    renderLive(<ProfilePage />, { me: ME });
-
-    await userEvent.selectOptions(field()!, 'en');
-    const retry = await screen.findByRole('button', { name: "Couldn't save — retry: Language" });
-    // The screen and the browser keep the choice meanwhile.
-    expect(document.documentElement.lang).toBe('en');
-
-    await userEvent.click(retry);
-
-    expect(await screen.findByText('Saved ✓')).toBeInTheDocument();
-    const saves = calls.filter((c) => c.init.method === 'PATCH').map((c) => JSON.parse(c.init.body as string));
-    expect(saves).toEqual([{ locale: 'en' }, { locale: 'en' }]);
-  });
-
-  it('AC-2 in a support session is shown and not offered, as the rest of Your details is', () => {
-    const { calls } = stubFetch(READS);
+  it('UI-111 in a support session it is shown and not offered: the person’s language is theirs (ADR-0162 §4)', () => {
+    stubFetch(READS);
     renderLive(<ProfilePage />, { me: SUPPORT });
-
-    expect(field()).toBeDisabled();
-    // Live and chosen nothing, the support session's reason is the account's Indonesian (P18.98-T4).
-    expect(field()).toHaveAccessibleDescription('Hanya dia yang dapat mengubah ini, bukan sesi dukungan.');
-    expect(calls.filter((c) => c.init.method === 'PATCH')).toHaveLength(0);
+    expect(screen.getByRole('button', { name: /^Bahasa/ })).toBeDisabled();
   });
 
-  it('AC-4 is everybody’s: the Super Admin has it too', () => {
+  it('UI-111 is everybody’s: the Super Admin has it too', () => {
     stubFetch(READS);
     renderLive(<ProfilePage />, {
       me: makeMe({
         user: { ...ME.user, platformRole: 'super_admin' }, membership: null, permissions: ['profile:read_self'],
       }),
     });
-
-    expect(field()).toBeEnabled();
+    expect(screen.getByRole('button', { name: /^Bahasa/ })).toBeEnabled();
   });
 });

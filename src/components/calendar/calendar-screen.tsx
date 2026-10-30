@@ -1,7 +1,9 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Button, ErrorBanner, Select } from '@/components/ui/field';
+import { LineIcon } from '@/components/ui/line-icon';
 import { shortOfRung } from '@/components/ui/role-badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Toast, useToast } from '@/components/ui/toast';
@@ -10,35 +12,47 @@ import { calendarMessages } from '@/i18n/messages/calendar';
 import { confirmationMessages } from '@/i18n/messages/confirmations';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import {
-  COMPARE_MAX, entryDate, initialsOf, peopleOn, readCalendar, readDownline, readEntry, viewOf,
+  COMPARE_MAX, DISPLAYS, entryDate, initialsOf, isHiddenTask, peopleOn, readCalendar, readDownline, readEntry,
+  setCoachingItemDone, setLeadActionDone, viewOf,
   type CalendarDisplay, type CalendarDownlinePerson, type CalendarEntry, type CalendarNow, type CalendarRead,
-  type CalendarView,
+  type CalendarTask, type CalendarView,
 } from '@/lib/calendar';
+import { readLead, type Lead } from '@/lib/leads';
 import { HOUR_PX, nextHalfHour, OPEN_AT_HOUR } from '@/lib/calendar-layout';
 import { DEFAULT_END, DEFAULT_START, type Slot } from '@/lib/calendar-form';
-import { formatMonth, formatWeekRange } from '@/lib/format';
+import { formatMonth, formatShortDay, formatWeekRange } from '@/lib/format';
 import { joinInFlight } from '@/lib/in-flight';
 import { announceInboxChanged } from '@/lib/notifications';
 import { useCan, useSession } from '@/lib/session';
 import { usePhone } from '@/lib/use-phone';
 import { cn } from '@/lib/cn';
-import { AgendaPane, AgendaSkeleton } from './agenda';
-import { TypeLegend, type PaneHead } from './calendar-parts';
+import { AgendaPane, AgendaSkeleton, type AgendaPerson } from './agenda';
+import { type PaneHead } from './calendar-parts';
+import {
+  CalendarTasksContext, filterRead, TaskPopup, TypeChips, type CalendarTasks, type ComparedTasks, type FilterKind,
+  type TaskPerson,
+} from './calendar-tasks';
 import { CompareBar } from './compare-bar';
-import { DetailDialog } from './detail-dialog';
-import { EntryDialog, type EditorState } from './entry-dialog';
-import { HideDetailsSwitch, useHideDetails } from './hide-details-switch';
+import type { EditorState } from './entry-dialog';
 import { MonthGrid, MonthSkeleton } from './month-grid';
+import { ThreeDays } from './three-days';
 import { WeekPane, WeekSkeleton, type ScrollGroup } from './week-pane';
+
+/** The lead's details from a task's › (UI-104 point 4; D-19), loaded when a lead is opened. */
+const LeadSheet = dynamic(() => import('@/components/lead-sheet').then((m) => m.LeadSheet), { ssr: false });
+/**
+ * An entry's detail and the new/edit form, downloaded when one is first opened (P18.99-T16, the bundle): drawn only
+ * after a tap or an address that asks for one, and with the invite picker a third of the screen's own code.
+ */
+const DetailDialog = dynamic(() => import('./detail-dialog').then((m) => m.DetailDialog), { ssr: false });
+const EntryDialog = dynamic(() => import('./entry-dialog').then((m) => m.EntryDialog), { ssr: false });
 
 /** A pane's frame: a tile of its own, side by side with the others or stacked below 980px (`:96-101`, `:232-234`). */
 const TILE = 'overflow-hidden rounded-lg border border-hairline';
 
-/** The phone's three views, in the switch's order: the agenda it opens on, then the prototype's two. */
-const PHONE_VIEWS: readonly CalendarDisplay[] = ['agenda', 'week', 'month'];
 
 /**
- * `/calendar` (`Calendar_Section.html:275-349`; Phase 12).
+ * `/calendar` (`Calendar_Section.html:275-349`; Phase 12; UI V1, 2026-10-30, UI-104).
  *
  * **The office's clock, never the browser's** (invariant §9; exit criterion 1). The read serves the
  * period's dates, the dates ‹ and › ask for, the office's today and its minute; *Today*, ‹ and › ask
@@ -46,47 +60,34 @@ const PHONE_VIEWS: readonly CalendarDisplay[] = ['agenda', 'week', 'month'];
  * when it passes midnight the page reads again rather than deciding what tomorrow is.
  *
  * The prototype's four `alert('Mockup: …')` stand-ins are built as they describe (contradiction 3):
- * *Today* returns to the office's today, scrolled to 7 AM; ‹ and › step a week, or a month in Month;
- * a save is saved, and the grid moves to the week holding the entry and draws it. **A new entry also says
- * *Event created ✓*** (P18.95-T1 AC-6, ADR-0167 §5; UI-008) — *+ New event*, a slot taken on the grid and
- * *Block time* alike; an edit says nothing more than the entry it redraws, as before.
+ * *Today* returns to the office's today; ‹ and › step the period; a save is saved, and the view moves to
+ * the period holding the entry and draws it. **A new entry also says *Event created ✓*** (P18.95-T1 AC-6).
  *
  * **From a notice** the address carries `?entry=&date=` (ADR-0095): the entry is read, and its week
- * opens with its detail; if it no longer reads — deleted, or the reader taken off it — the week of
- * `date` opens, with a line saying so.
+ * opens with its detail; if it no longer reads, the week of `date` opens, with a line saying so.
  *
- * **A read-only support session draws no write** (D-write, roles §3.13): the server refuses every write
- * in one, and the session says which kind it is (`impersonationReadOnly`), so *+ New event*, a slot
- * taken on the grid, *Edit*, *Delete*, *Accept*, *Decline* and *Block time* are not drawn, and the
- * detail offers *Close* alone. Each is also held to its own permission, which the server strips from a
- * read-only session as well; the server refuses the call whatever this draws.
+ * **A read-only support session draws no write** (D-write, roles §3.13): no *+ New event*, no slot, no *Edit*, no
+ * *Delete*, no answer, no *Block time*, and **no task checkbox** — the server refuses every one regardless.
  *
- * **After a delete the focus lands on the reader's own week** (m7), once the read without the entry
- * arrives: the entry that opened the detail, where the focus would have gone back, is gone with it.
- * In Month, where there is no pane, it lands on *+ New event*.
+ * **After a delete the focus lands on the reader's own calendar** (m7), or on *+ New event* in Month.
  *
- * ***Hide my personal activities*** (ADR-0110; P13.1-T8) is a switch in the toolbar's right-hand group,
- * before *Week* and *Month*: the reader's own setting, switched at once and put back if the save is
- * refused (`useHideDetails`). Drawn for a reader who may save it — never in a read-only support session.
+ * **A compared calendar is read when what it shows changes, and at no other time** (D-audit): its period, its person,
+ * or a write of the reader's that touched that person's calendar.
  *
- * **A compared pane is read when what it shows changes, and at no other time** (D-audit): every read
- * of somebody else's calendar writes an audit entry on the server. Its period changes (‹, ›, *Today*,
- * a save that moves the grid, Week to Month), its person changes, or a write of the reader's touches
- * that person's calendar — a block placed on them, an entry inviting them, an edit or a delete of one.
- * The reader's own reloads — a save of their own, an answer, midnight — read the reader's calendar alone.
+ * **UI V1 (UI-104)**:
  *
- * **Compare in every view** (P18.95-T8 AC-2; the client's UI review, UI-020; ADR-0167): the bar, its
- * popover and the people chosen are the same in Week, in Month and in a phone's Agenda. In Month each
- * person's month is a pane of its own, stacked under the reader's, read once per month by `for` — the
- * read the server opened to a month for it — and audited as a week's is.
- *
- * **On a phone** (below 768px; P18.95-T8 AC-1): the page opens on the ***Agenda***, the week's read drawn
- * as a list by day, unless the address asks for `view=week` or `view=month`. **The controls sit in one
- * row** — *Today*, ‹ and ›, the view (*Agenda*, *Week*, *Month*) and ***Filters*** — with the range and
- * *+ New event* on the line under it, where the toolbar wrapped into some 470px of controls before the
- * grid. *Filters* opens, in place, what the row has no room for: the compare bar, the legend and *Hide
- * my personal activities*. In Month a tap on a day lists that day under the grid. **At 768px and wider
- * nothing of this is drawn**: the page opens on Week, with the toolbar it always had.
+ * - **Four views at every width — *Agenda · 3 Hari · Week · Month*** — the Agenda the phone's default, starting from
+ *   today (points 5, 10); Week the default from 768px, as before.
+ * - **What other features put on it**, read-only: a lead's next action and an open coaching action item as *Tugas*
+ *   (no time: never on the grid), and the events joined, at their time (point 1). **A tick on the reader's own task**
+ *   completes it at its source — the toast says *Selesai* with *Urungkan* — strikes it through and lowers every count
+ *   at once (point 4); a lead row's › opens the lead's details (`LeadSheet`).
+ * - ***Filter*** **on a phone** slides a panel open under the controls — the button turns navy — with *Melihat* (the
+ *   compare bar) and *Jenis*: one tick chip per type, which replace the coloured-dot legend at every width (point 9).
+ * - ***Sembunyikan aktivitas calendar*** **is no longer here**: it lives on *Profil saya* (UI-111); a person who keeps
+ *   it on is still read by a leader as *Sibuk* blocks and a count of tasks — the server's rule (ADR-0110).
+ * - **Compared people** appear in the Agenda and 3 Hari among the reader's own, each with their avatar; in Week and
+ *   Month as panes of their own, as before.
  */
 export function CalendarScreen({
   initialView,
@@ -106,6 +107,13 @@ export function CalendarScreen({
   const language = useFigureLanguage();
   const { me } = useSession();
   const phone = usePhone();
+  /*
+   * **The first read waits one effect** (UI-104): `usePhone` answers in an effect, after the first render, and since UI
+   * V1 the phone's Agenda and the wider Week are different reads — asking before it answered would read a week a
+   * phone never shows. This effect runs after the media query's, in the same commit, so the first read asks once.
+   */
+  const [ready, setReady] = useState(false);
+  useEffect(() => { setReady(true); }, []);
   const readOnly = !!me?.isImpersonating && !!me.impersonationReadOnly;
   const may = {
     create: useCan('calendar_entry:create') && !readOnly,
@@ -114,18 +122,15 @@ export function CalendarScreen({
     answer: useCan('calendar_entry:answer') && !readOnly,
   };
   const canBlock = useCan('calendar_entry:block') && !readOnly;
-  // The setting is saved under the edit grant (`PUT /calendar/settings`), so it is drawn where that is held.
-  const hiding = useHideDetails(may.edit);
   // A leader is anybody with a direct report (ADR-0087), on a rung whose role reaches a downline: an
   // Agent coaches nobody, so compares nobody. The server decides who is listed; this decides the button.
   const membership = me?.membership;
   const canCompare = (membership?.directCount ?? 0) > 0 && membership?.hierarchyRole !== 'agent';
 
-  // What the reader chose, or the address named; `null` until then, which is Week — or a phone's Agenda.
-  // A notice's entry opens on its week, so it names no view. The Agenda is a phone's alone: wider, it is
-  // drawn as the Week, whose read it shares, so turning a phone on its side asks for nothing.
+  // What the reader chose, or the address named; `null` until then, which is Week — or a phone's Agenda. A notice's
+  // entry opens on the default view at its date: its week, or on a phone the Agenda from that day.
   const [chosen, setChosen] = useState<CalendarDisplay | null>(initialEntry ? null : initialView ?? null);
-  const display: CalendarDisplay = chosen === 'agenda' || chosen === null ? (phone ? 'agenda' : 'week') : chosen;
+  const display: CalendarDisplay = chosen ?? (phone ? 'agenda' : 'week');
   const view = viewOf(display);
   const [date, setDate] = useState<string | undefined>(initialEntry ? undefined : initialDate);
   const [resolved, setResolved] = useState(!initialEntry);
@@ -136,9 +141,8 @@ export function CalendarScreen({
   const [entryError, setEntryError] = useState<ApiError | null>(null);
   const [compared, setCompared] = useState<CalendarDownlinePerson[]>([]);
   const [lost, setLost] = useState<string | null>(null);
-  // Per person, how many of the reader's writes have touched their calendar: a compared pane reads
-  // again when its count moves. A write's people wait in `touching` until the reader's own read
-  // answers, so a save that also moves the grid reads each pane once, for the week it lands on.
+  // Per person, how many of the reader's writes have touched their calendar: a compared read is asked
+  // again when its count moves.
   const [touched, setTouched] = useState<Readonly<Record<string, number>>>({});
   const touching = useRef<string[]>([]);
   const comparedReads = useRef(new Map<string, ComparedRead>());
@@ -149,14 +153,19 @@ export function CalendarScreen({
   const scroll = useScrollGroup();
   const panes = useRef<HTMLDivElement>(null);
   const newEventButton = useRef<HTMLButtonElement>(null);
-  // Set by a delete; taken by the first read to answer after it (m7).
   const refocus = useRef(false);
-  // A phone's *Filters*, and the day a phone's month lists under its grid (`undefined`: today, or the 1st).
+  // A phone's *Filter* panel, and the types unticked (UI-104 point 9).
   const [filtersOpen, setFiltersOpen] = useState(false);
   const filtersId = useId();
-  const [picked, setPicked] = useState<string | undefined>(undefined);
+  const [hiddenKinds, setHiddenKinds] = useState<ReadonlySet<FilterKind>>(new Set());
+  // The day whose *Tugas* popup is open (UI-104 point 3), and the lead a task's › opened.
+  const [popupDay, setPopupDay] = useState<string | null>(null);
+  const [sheetLead, setSheetLead] = useState<Lead | null>(null);
 
   const again = useCallback(() => setReload((n) => n + 1), []);
+  const ticks = useTaskTicks({
+    canTick: may.edit, canTickCoaching: may.edit && !me?.isImpersonating, show, onChanged: again, onLead: setSheetLead,
+  });
 
   // A notice's address: open the entry's week with its detail, or the notice's week with a line.
   useEffect(() => {
@@ -181,7 +190,7 @@ export function CalendarScreen({
   }, [initialEntry, initialDate]);
 
   useEffect(() => {
-    if (!resolved) return undefined;
+    if (!resolved || !ready) return undefined;
     let live = true;
     setError(null);
     readCalendar({ view, date })
@@ -200,7 +209,7 @@ export function CalendarScreen({
       })
       .catch((err) => { if (live) setError(toDisplayError(err)); });
     return () => { live = false; };
-  }, [resolved, view, date, reload]);
+  }, [resolved, ready, view, date, reload]);
 
   /** A write of the reader's: their own calendar reads again, and so does each person it touched. */
   const wrote = (ids: readonly string[]) => {
@@ -208,12 +217,11 @@ export function CalendarScreen({
     again();
   };
 
-  // A read of the other view is not drawn as this one: until it arrives, the skeleton.
-  const shown = read && read.view === view ? read : null;
-  const nowMinute = useOfficeMinute(shown?.now, again);
+  // A read of another view is not drawn as this one: until it arrives, the skeleton.
+  const raw = read && read.view === view ? read : null;
+  const shown = raw ? filterRead(raw, hiddenKinds) : null;
+  const nowMinute = useOfficeMinute(raw?.now, again);
 
-  // The read after a delete has drawn the week without the entry: the focus, which went back to that
-  // entry and was lost with it, goes to the reader's own week, or to *+ New event* in Month (m7).
   useEffect(() => {
     if (!refocus.current || !shown) return;
     refocus.current = false;
@@ -227,11 +235,16 @@ export function CalendarScreen({
     setEditor({ key: opened.current, state });
   };
 
-  const changeView = (to: CalendarDisplay) => {
-    if (to === display) return;
-    // The Agenda and the Week share a read: moving between them asks for nothing.
-    if (viewOf(to) !== view) setRead(null);
+  /**
+   * **A view chosen** (UI-104 points 5, 10): the Agenda and 3 Hari start on the office's today — no past day on open —
+   * and Week and Month open on the period holding the day shown.
+   */
+  const changeView = (to: CalendarDisplay, on?: string) => {
+    if (to === display && on === undefined) return;
+    setRead(null);
     setChosen(to);
+    if (on !== undefined) setDate(on);
+    else if (to === 'agenda' || to === 'three_days') setDate(raw?.today);
   };
 
   const step = (to: string) => {
@@ -241,23 +254,21 @@ export function CalendarScreen({
 
   const goToday = () => {
     setGone(false);
-    setPicked(undefined);
-    if (shown) setDate(shown.today);
+    if (raw) setDate(raw.today);
     scroll.reset();
   };
 
   /*
-   * **A 1:1 asked for by the address** (P18.96-T6 AC-4; `/new-hires`' *Schedule 1:1*): once the reader's week is read —
-   * so the office's today is known — the new-entry dialog opens as *1:1 coaching*, *"1:1 with {full name}"*, them
-   * invited, the name from the reader's own downline. Somebody not in it opens the same entry with nobody invited and
-   * no name: the address carries an id, never a person's name. Once per address.
+   * **A 1:1 asked for by the address** (P18.96-T6 AC-4; `/new-hires`' *Schedule 1:1*): once the reader's calendar is
+   * read — so the office's today is known — the new-entry dialog opens as *1:1 coaching*, *"1:1 with {full name}"*, them
+   * invited, the name from the reader's own downline. Once per address.
    */
   const askedFor = useRef(false);
   useEffect(() => {
-    if (!initialWith || !may.create || !shown || askedFor.current) return undefined;
+    if (!initialWith || !may.create || !raw || askedFor.current) return undefined;
     askedFor.current = true;
     let live = true;
-    const slot = { date: shown.today, start: DEFAULT_START, end: DEFAULT_END };
+    const slot = { date: raw.today, start: DEFAULT_START, end: DEFAULT_END };
     readDownline()
       .then((answer) => answer.people.find((p) => p.membershipId === initialWith) ?? null)
       .catch(() => null)
@@ -271,13 +282,12 @@ export function CalendarScreen({
         });
       });
     return () => { live = false; };
-    // The title is written once, as the dialog opens, in the writer's words (`oneOnOneWith`); a later switch leaves it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialWith, may.create, shown]);
+  }, [initialWith, may.create, raw]);
 
   /** *+ New event*: the office's today when it is in view, else the first day shown (P12-T2 AC-4). */
   const newEvent = () => {
-    const inView = shown?.days.find((d) => d.date === shown.today && (shown.view === 'week' || d.inPeriod));
+    const inView = shown?.days.find((d) => d.date === shown.today && (shown.view !== 'month' || d.inPeriod));
     const first = shown?.view === 'month' ? shown.days.find((d) => d.inPeriod) : shown?.days[0];
     const day = inView?.date ?? first?.date ?? shown?.today ?? '';
     open({ mode: 'new', slot: { date: day, start: DEFAULT_START, end: DEFAULT_END } });
@@ -286,50 +296,62 @@ export function CalendarScreen({
   const saved = (entry: CalendarEntry, before: CalendarEntry | null) => {
     setEditor(null);
     setGone(false);
-    setDate(entryDate(entry));
+    // The Agenda and 3 Hari stay where they are; Week and Month move to the period holding the entry.
+    if (view === 'week' || view === 'month') setDate(entryDate(entry));
     wrote(peopleOn(entry, before));
-    // A create has no entry before it (P18.95-T1 AC-6); a refusal never reaches here, and stays in the dialog.
     if (before === null) show(done.eventCreated);
   };
 
   const forget = (membershipId: string) => {
-    for (const kind of ['week', 'month'] as const) comparedReads.current.delete(`${membershipId}:${kind}`);
+    for (const kind of ['week', 'month', 'agenda', 'three_days'] as const) comparedReads.current.delete(`${membershipId}:${kind}`);
     setCompared((now) => now.filter((c) => c.membershipId !== membershipId));
   };
 
   /** A cell of the desktop's month: Week, on that day's week (D-month). */
-  const toWeek = (day: string) => {
-    setRead(null);
-    setChosen('week');
-    setDate(day);
-  };
+  const toWeek = (day: string) => changeView('week', day);
+  /** A phone's month cell, or a *Tugas* badge: that day in the Agenda (UI-104 point 2). */
+  const toAgenda = (day: string) => changeView('agenda', day);
 
-  const week = view === 'week';
-  const label = shown ? (shown.view === 'month' ? formatMonth(shown.month ?? '', language) : formatWeekRange(shown.from, shown.to, language)) : '';
-  const previousLabel = week ? t.previousWeek : t.previousMonth;
-  const nextLabel = week ? t.nextWeek : t.nextMonth;
+  const label = shown
+    ? (shown.view === 'month' ? formatMonth(shown.month ?? '', language) : formatWeekRange(shown.from, shown.to, language))
+    : '';
+  const stepWords = view === 'month'
+    ? { previous: t.previousMonth, next: t.nextMonth }
+    : { previous: t.previousWeek, next: t.nextWeek };
 
-  // The day a phone's month lists: the one tapped, while it is in this month's read; else today, if
-  // this month holds it; else the 1st.
-  const monthDay = shown?.view === 'month'
-    ? (picked && shown.days.some((d) => d.date === picked) ? picked
-      : shown.days.find((d) => d.date === shown.today && d.inPeriod)?.date ?? shown.days.find((d) => d.inPeriod)?.date)
-    : undefined;
-  // What a compared pane asks for: the week shown, or a day of the month shown.
+  // What a compared read asks for: the period shown, by its first day (a month's own first day).
   const comparedDate = shown ? (shown.view === 'month' ? shown.days.find((d) => d.inPeriod)?.date ?? shown.from : shown.from) : '';
   const ownHead: PaneHead | null = shown ? {
     name: shown.subject.name,
     initials: me?.user.initials ?? initialsOf(shown.subject.name),
-    // The rung by its badge's name, *AB · You* (P18.95-T9 AC-1; T8 left the ladder's whole label here).
     role: `${shortOfRung(shown.subject.rung)} · ${t.you}`,
     me: true,
   } : null;
+
+  /*
+   * **The Agenda's and 3 Hari's compared people** (UI-104 point 9): read here, so their things go among the reader's
+   * own. At most two (`COMPARE_MAX`), so two fixed reads; Week and Month read theirs in their own panes.
+   */
+  const merged = display === 'agenda' || display === 'three_days';
+  const lostPerson = (person: CalendarDownlinePerson) => {
+    forget(person.membershipId);
+    setLost(person.name);
+    if (phone) setFiltersOpen(true);
+  };
+  const first = useComparedRead(merged && shown ? compared[0] : undefined, view, comparedDate, touched, comparedReads.current, lostPerson);
+  const second = useComparedRead(merged && shown ? compared[1] : undefined, view, comparedDate, touched, comparedReads.current, lostPerson);
+  const others: AgendaPerson[] = [first, second]
+    .map((slot, i) => (compared[i] ? {
+      person: taskPersonOf(compared[i], slot.read),
+      read: slot.read ? filterRead(slot.read, hiddenKinds) : null,
+    } : null))
+    .filter((o): o is AgendaPerson => o !== null);
 
   const nav = (size: string) => (
     <div className="inline-flex overflow-hidden rounded-md border border-hairline bg-card">
       <button
         type="button"
-        aria-label={previousLabel}
+        aria-label={stepWords.previous}
         disabled={!shown}
         onClick={() => shown && step(shown.previous)}
         className={cn(size, 'text-md text-navy hover:bg-base')}
@@ -338,7 +360,7 @@ export function CalendarScreen({
       </button>
       <button
         type="button"
-        aria-label={nextLabel}
+        aria-label={stepWords.next}
         disabled={!shown}
         onClick={() => shown && step(shown.next)}
         className={cn(size, 'text-md text-navy hover:bg-base')}
@@ -353,7 +375,35 @@ export function CalendarScreen({
   const newEventControl = may.create && (
     <Button ref={newEventButton} onClick={newEvent} className={phone ? 'shrink-0' : undefined}>{t.newEvent}</Button>
   );
-  const hideSwitch = hiding.on !== null && <HideDetailsSwitch on={hiding.on} onChange={hiding.change} status={hiding.status} />;
+  const viewSelect = (className: string) => (
+    <Select
+      aria-label={t.view}
+      value={display}
+      onChange={(e) => changeView(e.target.value as CalendarDisplay)}
+      className={className}
+    >
+      {DISPLAYS.map((v) => <option key={v} value={v}>{t[v]}</option>)}
+    </Select>
+  );
+  const filterButton = (
+    <Button
+      variant="secondary"
+      aria-expanded={filtersOpen}
+      aria-controls={filtersId}
+      onClick={() => setFiltersOpen((now) => !now)}
+      className={cn('ml-auto h-11 gap-1 px-2', filtersOpen && 'border-navy bg-navy text-white hover:bg-navy')}
+    >
+      <LineIcon name="adjust" className="h-4 w-4" />
+      {t.filters}
+    </Button>
+  );
+  const toggleKind = (kind: FilterKind) => setHiddenKinds((now) => {
+    const next = new Set(now);
+    if (next.has(kind)) next.delete(kind);
+    else next.add(kind);
+    return next;
+  });
+  const chips = <TypeChips hidden={hiddenKinds} onToggle={toggleKind} />;
 
   const compareBar = (
     <CompareBar
@@ -375,7 +425,7 @@ export function CalendarScreen({
     />
   );
 
-  const comparedPanes = shown ? compared.map((person) => (
+  const comparedPanes = shown && !merged ? compared.map((person) => (
     <ComparedPane
       key={person.membershipId}
       person={person}
@@ -384,30 +434,34 @@ export function CalendarScreen({
       today={shown.today}
       touched={touched[person.membershipId] ?? 0}
       reads={comparedReads.current}
+      hidden={hiddenKinds}
       range={label}
       nowMinute={nowMinute}
       canBlock={canBlock}
       phone={phone}
-      monthDay={monthDay}
-      onPick={setPicked}
+      onAgenda={toAgenda}
       onWeek={toWeek}
       onOpen={setDetail}
+      onTasks={setPopupDay}
       onBlock={(slot) => open({ mode: 'block', slot, member: { membershipId: person.membershipId, name: person.name } })}
       blockNow={() => ({ date: shown.today, ...nextHalfHour(nowMinute ?? shown.now.minute) })}
-      onLost={() => {
-        forget(person.membershipId);
-        setLost(person.name);
-        // On a phone the bar is inside *Filters*: it opens, so the line saying why is seen.
-        if (phone) setFiltersOpen(true);
-      }}
+      onLost={() => lostPerson(person)}
       scroll={scroll}
     />
   )) : [];
 
+  // The popup's people: each compared person's tasks, in Week and Month from their panes' reads too.
+  const popupOthers: ComparedTasks[] = merged
+    ? others.filter((o) => o.read).map((o) => ({ person: o.person, tasks: o.read!.tasks }))
+    : compared.flatMap((person) => {
+      const held = [...comparedReads.current.values()].find((r) => r.read.subject.membershipId === person.membershipId && r.read.view === view);
+      return held ? [{ person: taskPersonOf(person, held.read), tasks: filterRead(held.read, hiddenKinds).tasks }] : [];
+    });
+
   let body: ReactNode;
   if (error) {
     body = (
-      <div className="rounded-lg border border-hairline bg-card p-4">
+      <div className="rounded-lg border border-card-edge bg-card p-4">
         <ErrorBanner code={error.code} message={t.loadFailed} requestId={error.requestId} />
         <Button variant="secondary" className="mt-3" onClick={again}>{t.tryAgain}</Button>
       </div>
@@ -415,7 +469,7 @@ export function CalendarScreen({
   } else if (!shown || !ownHead) {
     body = (
       <Skeleton label={t.loading} className={cn(TILE, 'bg-card')}>
-        {display === 'week' ? <WeekSkeleton /> : display === 'month' ? <MonthSkeleton phone={phone} /> : <AgendaSkeleton />}
+        {display === 'week' || display === 'three_days' ? <WeekSkeleton /> : display === 'month' ? <MonthSkeleton phone={phone} /> : <AgendaSkeleton />}
       </Skeleton>
     );
   } else if (display === 'month') {
@@ -424,8 +478,7 @@ export function CalendarScreen({
         read={shown}
         head={compared.length > 0 ? ownHead : undefined}
         phone={phone}
-        selected={monthDay}
-        onSelect={setPicked}
+        onAgenda={toAgenda}
         onOpen={setDetail}
         onWeek={toWeek}
       />
@@ -433,15 +486,49 @@ export function CalendarScreen({
     body = compared.length === 0 ? month : <div className="flex flex-col gap-2">{month}{comparedPanes}</div>;
   } else if (display === 'agenda') {
     body = (
-      <div ref={panes} className="flex flex-col gap-2">
-        <AgendaPane
-          className={TILE}
+      <div ref={panes}>
+        <AgendaPane className={TILE} read={shown} others={others} regionLabel={t.region({ range: label })} onOpen={setDetail} />
+      </div>
+    );
+  } else if (display === 'three_days') {
+    body = (
+      <div ref={panes}>
+        <ThreeDays
           read={shown}
-          head={compared.length > 0 ? ownHead : undefined}
+          others={others}
+          nowMinute={nowMinute}
           regionLabel={t.region({ range: label })}
+          onStep={(direction) => step(direction < 0 ? shown.previous : shown.next)}
           onOpen={setDetail}
+          onSlot={may.create ? (slot) => open({ mode: 'new', slot }) : undefined}
+          onTasks={setPopupDay}
+          controls={(
+            // The pinned header's row (UI-104 point 5): ‹ the range › *Hari ini* and the compact switcher.
+            <div className="flex h-[52px] items-center gap-1.5 px-2.5">
+              <button
+                type="button"
+                aria-label={t.previousDays}
+                onClick={() => step(shown.previous)}
+                className="flex h-11 w-11 items-center justify-center rounded-full text-pill-grey-ink hover:bg-hover-row"
+              >
+                <LineIcon name="chevronLeft" className="h-5 w-5" />
+              </button>
+              <span aria-live="polite" className="min-w-0 flex-1 truncate text-base font-bold text-navy">
+                {formatShortDay(shown.from, {}, language)} – {formatShortDay(shown.to, {}, language)}
+              </span>
+              <button
+                type="button"
+                aria-label={t.nextDays}
+                onClick={() => step(shown.next)}
+                className="flex h-11 w-11 items-center justify-center rounded-full text-pill-grey-ink hover:bg-hover-row"
+              >
+                <LineIcon name="chevronRight" className="h-5 w-5" />
+              </button>
+              <Button variant="secondary" className="h-11 px-2.5 md:h-9" onClick={goToday}>{t.today}</Button>
+              {viewSelect('h-11 px-2 font-semibold md:h-9')}
+            </div>
+          )}
         />
-        {comparedPanes}
       </div>
     );
   } else {
@@ -455,6 +542,7 @@ export function CalendarScreen({
           nowMinute={nowMinute}
           onOpen={setDetail}
           onSlot={may.create ? (slot) => open({ mode: 'new', slot }) : undefined}
+          onTasks={setPopupDay}
           scroll={scroll}
         />
         {comparedPanes}
@@ -462,125 +550,274 @@ export function CalendarScreen({
     );
   }
 
+  const threeDays = display === 'three_days';
   return (
-    <div>
-      {phone ? (
-        <div className="mb-3 flex flex-col gap-2">
-          {/* One row at 320px, the content of a 360px phone inside the shell's 20px gutters: each control
-              44px tall and as narrow as its words allow. It wraps, rather than clips, on anything narrower. */}
-          <div className="flex flex-wrap items-center gap-1">
-            <Button variant="secondary" className="h-11 px-2" onClick={goToday}>{t.today}</Button>
-            {nav('h-11 w-11')}
-            <Select
-              aria-label={t.view}
-              value={display}
-              onChange={(e) => changeView(e.target.value as CalendarDisplay)}
-              className="h-11 px-2 font-semibold"
-            >
-              {PHONE_VIEWS.map((v) => <option key={v} value={v}>{t[v]}</option>)}
-            </Select>
-            <Button
-              variant="secondary"
-              aria-expanded={filtersOpen}
-              aria-controls={filtersId}
-              onClick={() => setFiltersOpen((now) => !now)}
-              className={cn('ml-auto h-11 px-2', filtersOpen && 'border-navy')}
-            >
-              {t.filters}
-            </Button>
+    <CalendarTasksContext.Provider value={ticks.value}>
+      <div>
+        {phone ? (
+          <div className="mb-3 flex flex-col gap-2">
+            {/* One row at 320px: each control 44px tall and as narrow as its words allow. In 3 Hari the range and the
+                switcher move into its pinned header, and this row keeps *Filter* and *+ New event*. */}
+            {threeDays ? (
+              <div className="flex flex-wrap items-center gap-1">
+                {newEventControl}
+                {filterButton}
+              </div>
+            ) : (
+              <>
+                <div className="flex flex-wrap items-center gap-1">
+                  <Button variant="secondary" className="h-11 px-2" onClick={goToday}>{t.today}</Button>
+                  {nav('h-11 w-11')}
+                  {viewSelect('h-11 px-2 font-semibold')}
+                  {filterButton}
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  {rangeLabel('min-w-0 truncate text-lg')}
+                  {newEventControl}
+                </div>
+              </>
+            )}
           </div>
-          <div className="flex items-center justify-between gap-2">
-            {rangeLabel('min-w-0 truncate text-lg')}
-            {newEventControl}
-          </div>
-        </div>
-      ) : (
-        <div className="mb-3.5 flex flex-wrap items-center justify-between gap-3.5">
-          <div className="flex flex-wrap items-center gap-3">
-            <Button variant="secondary" className="h-[34px] px-3.5" onClick={goToday}>{t.today}</Button>
-            {nav('h-[34px] w-8')}
-            {rangeLabel('whitespace-nowrap text-xl')}
-          </div>
-          <div className="flex flex-wrap items-center justify-end gap-2.5">
-            {hideSwitch}
-            <div role="group" aria-label={t.view} className="inline-flex rounded-[9px] border border-hairline bg-card p-[3px]">
-              {(['week', 'month'] as const).map((v) => (
-                <button
-                  key={v}
-                  type="button"
-                  aria-pressed={display === v}
-                  onClick={() => changeView(v)}
-                  className={cn(
-                    'rounded-[6px] px-4 py-[7px] text-base font-semibold',
-                    display === v ? 'bg-navy text-white' : 'text-muted hover:text-navy',
-                  )}
-                >
-                  {t[v]}
-                </button>
-              ))}
+        ) : (
+          <div className="mb-3.5 flex flex-wrap items-center justify-between gap-3.5">
+            <div className="flex flex-wrap items-center gap-3">
+              {!threeDays && (
+                <>
+                  <Button variant="secondary" className="h-[34px] px-3.5" onClick={goToday}>{t.today}</Button>
+                  {nav('h-[34px] w-8')}
+                  {rangeLabel('whitespace-nowrap text-xl')}
+                </>
+              )}
             </div>
-            {newEventControl}
+            <div className="flex flex-wrap items-center justify-end gap-2.5">
+              <div role="group" aria-label={t.view} className="inline-flex rounded-[9px] border border-hairline bg-card p-[3px]">
+                {DISPLAYS.map((v) => (
+                  <button
+                    key={v}
+                    type="button"
+                    aria-pressed={display === v}
+                    onClick={() => changeView(v)}
+                    className={cn(
+                      'rounded-[6px] px-4 py-[7px] text-base font-semibold',
+                      display === v ? 'bg-navy text-white' : 'text-muted hover:text-navy',
+                    )}
+                  >
+                    {t[v]}
+                  </button>
+                ))}
+              </div>
+              {newEventControl}
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {phone ? (
-        // In place, not a dialog: what it holds is the page's own, and it stays put while the reader works.
-        <div id={filtersId} hidden={!filtersOpen}>
-          {compareBar}
-          <TypeLegend />
-          {hideSwitch && <div className="mb-4">{hideSwitch}</div>}
-        </div>
-      ) : (
-        <>
-          {compareBar}
-          <TypeLegend />
-        </>
-      )}
+        {phone ? (
+          // In place, not a dialog: what it holds is the page's own, and it stays put while the reader works.
+          <div id={filtersId} hidden={!filtersOpen} className="mb-3">
+            {compareBar}
+            <p className="mb-1.5 text-xs font-bold text-muted">{t.type}</p>
+            {chips}
+          </div>
+        ) : (
+          <>
+            {compareBar}
+            <div className="mb-4">{chips}</div>
+          </>
+        )}
 
-      {gone && <p role="status" className="mb-3 text-md font-semibold text-navy">{t.gone}</p>}
-      {entryError && <div className="mb-3"><ErrorBanner {...entryError} /></div>}
-      {hiding.error && (
-        <div className="mb-3">
-          <ErrorBanner code={hiding.error.code} message={t.hideDetailsFailed} requestId={hiding.error.requestId} />
-        </div>
-      )}
+        {gone && <p role="status" className="mb-3 text-md font-semibold text-navy">{t.gone}</p>}
+        {entryError && <div className="mb-3"><ErrorBanner {...entryError} /></div>}
+        {ticks.error && (
+          <div className="mb-3"><ErrorBanner code={ticks.error.code} message={t.taskFailed} requestId={ticks.error.requestId} /></div>
+        )}
 
-      {body}
+        {body}
 
-      {detail && (
-        <DetailDialog
-          key={detail.entryId}
-          entry={detail}
-          may={may}
-          onClose={() => setDetail(null)}
-          onEdit={(entry) => {
-            setDetail(null);
-            open({ mode: 'edit', entry });
-          }}
-          onDeleted={(entry) => {
-            setDetail(null);
-            refocus.current = true;
-            wrote(peopleOn(entry));
-          }}
-          // An answer is the reader's own: it moves nothing on a compared calendar. The detail closes and
-          // the toast says what changed, since an accepted entry looks as it did before; the server read the
-          // invitation's notice, so the badge reads its count again.
-          onAnswered={(answered) => {
-            setDetail(null);
-            show(answered.myAnswer === 'declined' ? t.answeredDeclined : t.answeredAccepted);
-            announceInboxChanged();
-            again();
-          }}
-        />
-      )}
+        {popupDay && shown && (
+          <TaskPopup
+            day={popupDay}
+            tasks={shown.tasks.filter((task): task is CalendarTask => !isHiddenTask(task) && task.date === popupDay)}
+            others={popupOthers}
+            onClose={() => setPopupDay(null)}
+          />
+        )}
 
-      {editor && (
-        <EntryDialog key={editor.key} state={editor.state} onClose={() => setEditor(null)} onSaved={saved} />
-      )}
-      <Toast toast={toast} />
-    </div>
+        {detail && (
+          <DetailDialog
+            key={detail.entryId}
+            entry={detail}
+            may={may}
+            onClose={() => setDetail(null)}
+            onEdit={(entry) => {
+              setDetail(null);
+              open({ mode: 'edit', entry });
+            }}
+            onDeleted={(entry) => {
+              setDetail(null);
+              refocus.current = true;
+              wrote(peopleOn(entry));
+            }}
+            onAnswered={(answered) => {
+              setDetail(null);
+              show(answered.myAnswer === 'declined' ? t.answeredDeclined : t.answeredAccepted);
+              announceInboxChanged();
+              again();
+            }}
+          />
+        )}
+
+        {editor && (
+          <EntryDialog key={editor.key} state={editor.state} onClose={() => setEditor(null)} onSaved={saved} />
+        )}
+        {sheetLead && (
+          <LeadSheet
+            open
+            lead={sheetLead}
+            offerDelete={false}
+            onClose={() => setSheetLead(null)}
+            onSaved={() => again()}
+            onClosedLead={() => { setSheetLead(null); again(); }}
+          />
+        )}
+        <Toast toast={toast} />
+      </div>
+    </CalendarTasksContext.Provider>
   );
+}
+
+/** A compared person as a task group names them: their name, initials, and the number their read carries. */
+function taskPersonOf(person: CalendarDownlinePerson, read: CalendarRead | null): TaskPerson {
+  return { membershipId: person.membershipId, name: person.name, initials: initialsOf(person.name), phone: read?.subject.phone ?? null };
+}
+
+/**
+ * **Ticking a task, at its source** (UI V1, UI-104 point 4): a lead's next action (`PUT /leads/:id/next-action/done`,
+ * pinned to the version the task carried) or a coaching action item (`PUT /coaching/sessions/…/done`). Ticked, the row
+ * is struck through and every count drops at once; the toast says *Selesai* and offers *Urungkan*, which — or the
+ * checkbox again — takes the tick back and reads the calendar again. One write per task at a time; a refusal is said
+ * above the calendar and the row is left as it was.
+ */
+function useTaskTicks({
+  canTick, canTickCoaching, show, onChanged, onLead,
+}: {
+  canTick: boolean;
+  canTickCoaching: boolean;
+  show: ReturnType<typeof useToast>['show'];
+  onChanged: () => void;
+  onLead: (lead: Lead) => void;
+}): { value: CalendarTasks; error: ApiError | null } {
+  const t = useMessages(calendarMessages);
+  const [struck, setStruck] = useState<ReadonlyMap<string, number | undefined>>(new Map());
+  const [error, setError] = useState<ApiError | null>(null);
+  const busy = useRef(new Set<string>());
+
+  const value = useMemo<CalendarTasks>(() => {
+    const write = async (task: CalendarTask, done: boolean, version?: number): Promise<number | undefined> => {
+      if (task.source === 'lead' && task.lead) {
+        return (await setLeadActionDone(task.lead.leadId, done, version ?? task.lead.version)).version;
+      }
+      if (task.coaching) await setCoachingItemDone(task.coaching.sessionId, task.coaching.itemId, done);
+      return undefined;
+    };
+    const undo = async (task: CalendarTask, version: number | undefined) => {
+      await write(task, false, version);
+      setStruck((now) => {
+        const next = new Map(now);
+        next.delete(task.taskId);
+        return next;
+      });
+      onChanged();
+    };
+    const toggle = (task: CalendarTask) => {
+      if (!canTick || (task.source === 'coaching' && !canTickCoaching) || busy.current.has(task.taskId)) return;
+      busy.current.add(task.taskId);
+      setError(null);
+      const ticked = struck.has(task.taskId);
+      const run = ticked
+        ? undo(task, struck.get(task.taskId))
+        : write(task, true).then((version) => {
+          setStruck((now) => new Map(now).set(task.taskId, version));
+          show(t.done, {
+            action: {
+              label: t.undo,
+              onAction: () => { undo(task, version).catch((err) => setError(toDisplayError(err))); },
+            },
+          });
+        });
+      run
+        .catch((err) => setError(toDisplayError(err)))
+        .finally(() => { busy.current.delete(task.taskId); });
+    };
+    return {
+      struck: new Set(struck.keys()),
+      toggle,
+      openLead: (task) => {
+        if (!task.lead) return;
+        readLead(task.lead.leadId).then(onLead).catch((err) => setError(toDisplayError(err)));
+      },
+      canTick,
+      canTickCoaching,
+      onPhoneSaved: onChanged,
+    };
+  }, [canTick, canTickCoaching, struck, show, onChanged, onLead, t]);
+
+  return { value, error };
+}
+
+/**
+ * **One compared person's read** (D-audit): read once for each period, and again only after a write that touched
+ * them (`touched`). The page keeps the last answer per person and kind of period (`reads`), so drawing the same
+ * period again asks for nothing, and an identical read already out is joined rather than sent twice. A read the
+ * server now refuses — they left, or the edge closed — takes them out of the bar (D-leave). `person` absent: nothing.
+ */
+function useComparedRead(
+  person: CalendarDownlinePerson | undefined,
+  view: CalendarView,
+  date: string,
+  touchedBy: Readonly<Record<string, number>>,
+  reads: Map<string, ComparedRead>,
+  onLost: (person: CalendarDownlinePerson) => void,
+): { read: CalendarRead | null; error: ApiError | null; retry: () => void } {
+  const id = person?.membershipId;
+  const slot = id ? `${id}:${view}` : '';
+  const key = `${date}:${id ? touchedBy[id] ?? 0 : 0}`;
+  const kept = slot ? reads.get(slot) : undefined;
+  const [read, setRead] = useState<CalendarRead | null>(kept?.key === key ? kept.read : null);
+  const [error, setError] = useState<ApiError | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  const lostRef = useRef(onLost);
+  lostRef.current = onLost;
+  const personRef = useRef(person);
+  personRef.current = person;
+
+  useEffect(() => {
+    if (!id || !date) {
+      setRead(null);
+      return undefined;
+    }
+    const held = reads.get(slot);
+    if (held?.key === key) {
+      setRead(held.read);
+      return undefined;
+    }
+    let live = true;
+    setError(null);
+    setRead(null);
+    joinInFlight(`calendar:${slot}:${key}:${attempt}`, () => readCalendar({ view, date, forId: id }))
+      .then((answer) => {
+        reads.set(slot, { key, read: answer });
+        if (live) setRead(answer);
+      })
+      .catch((err) => {
+        if (!live) return;
+        const refused = toDisplayError(err);
+        if (refused.code === 'NOT_FOUND' && personRef.current) lostRef.current(personRef.current);
+        else setError(refused);
+      });
+    return () => { live = false; };
+  }, [reads, slot, view, id, date, key, attempt]);
+
+  return { read: read && read.view === view ? read : null, error, retry: () => setAttempt((a) => a + 1) };
 }
 
 /** A compared pane's last answer, kept by the page, and what it was the answer to. */
@@ -590,23 +827,12 @@ interface ComparedRead {
 }
 
 /**
- * A member compared beside the reader (`:967-999`; P12-T5 AC-3 to AC-6): their week — or, since
- * P18.95-T8 AC-2, their month, or a phone's agenda of their week — read through `?for=`, which the
- * server audits once per read (D-audit).
- *
- * **Read once for each period, and again only after a write that touched them** (`touched`). The
- * reader's own reloads do not reach it. Its last answer for each kind of period is kept by the page
- * (`reads`, keyed by the person and `week` or `month`), so a pane drawn again for the same period and
- * the same writes — back from Month, the Agenda and the Week on a phone, or after the reader's own grid
- * failed and was tried again — shows that answer rather than asking again; an identical read already
- * out is joined rather than sent twice, so a re-render writes no second audit entry either. Taking the
- * person out of the bar forgets the answers: compared again, they are read afresh.
- *
- * Their own entries come in full (ADR-0093); one they only attend comes as a busy block. **Today is
- * the reader's read's** (`today`): one office, one today, and the pane is not read again at midnight to
- * learn it. A slot on the pane, or the *"Drag to block"* pill as a button (D-block-key), opens *Block
- * time*; the pill heads the pane in every view. A read the server now refuses — they left, or the edge
- * closed — takes them out of the bar (D-leave).
+ * A member compared beside the reader in **Week or Month** (`:967-999`; P12-T5 AC-3 to AC-6): their week or month,
+ * read through `?for=` (`useComparedRead`), which the server audits once per read (D-audit). Their own entries come
+ * in full (ADR-0093); one they only attend comes as a busy block; **their *Tugas* in the count row and the badges**
+ * (UI-104 point 9), which open the popup with their rows and no checkbox — a person who hides their details shows
+ * the counts alone. **Today is the reader's read's**. A slot on the pane, or the *"Drag to block"* pill as a button
+ * (D-block-key), opens *Block time*. A read the server now refuses takes them out of the bar (D-leave).
  */
 function ComparedPane({
   person,
@@ -615,14 +841,15 @@ function ComparedPane({
   today,
   touched,
   reads,
+  hidden,
   range,
   nowMinute,
   canBlock,
   phone,
-  monthDay,
-  onPick,
+  onAgenda,
   onWeek,
   onOpen,
+  onTasks,
   onBlock,
   blockNow,
   onLost,
@@ -630,20 +857,21 @@ function ComparedPane({
 }: {
   person: CalendarDownlinePerson;
   display: CalendarDisplay;
-  /** The Monday of the week shown, or a day of the month shown. */
+  /** The first day of the period shown. */
   date: string;
   today: string;
   touched: number;
   reads: Map<string, ComparedRead>;
+  /** The types the reader unticked (UI-104 point 9): hidden here too. */
+  hidden: ReadonlySet<FilterKind>;
   range: string;
   nowMinute: number | null;
   canBlock: boolean;
   phone: boolean;
-  /** The day a phone's month lists under each grid. */
-  monthDay: string | undefined;
-  onPick: (date: string) => void;
+  onAgenda: (date: string) => void;
   onWeek: (date: string) => void;
   onOpen: (entry: CalendarEntry) => void;
+  onTasks: (day: string) => void;
   onBlock: (slot: Slot) => void;
   blockNow: () => Slot;
   onLost: () => void;
@@ -651,55 +879,24 @@ function ComparedPane({
 }) {
   const t = useMessages(calendarMessages);
   const view = viewOf(display);
-  const slot = `${person.membershipId}:${view}`;
-  const key = `${date}:${touched}`;
-  const kept = reads.get(slot);
-  const [read, setRead] = useState<CalendarRead | null>(kept?.key === key ? kept.read : null);
-  const [error, setError] = useState<ApiError | null>(null);
-  const [attempt, setAttempt] = useState(0);
-  const lostRef = useRef(onLost);
-  lostRef.current = onLost;
-
-  useEffect(() => {
-    const held = reads.get(slot);
-    if (held?.key === key) {
-      setRead(held.read);
-      return undefined;
-    }
-    let live = true;
-    setError(null);
-    joinInFlight(`calendar:${slot}:${key}:${attempt}`, () =>
-      readCalendar({ view, date, forId: person.membershipId }))
-      .then((answer) => {
-        reads.set(slot, { key, read: answer });
-        if (live) setRead(answer);
-      })
-      .catch((err) => {
-        if (!live) return;
-        const refused = toDisplayError(err);
-        if (refused.code === 'NOT_FOUND') lostRef.current();
-        else setError(refused);
-      });
-    return () => { live = false; };
-  }, [reads, slot, view, person.membershipId, date, key, attempt]);
+  const { read, error, retry } = useComparedRead(person, view, date, { [person.membershipId]: touched }, reads, onLost);
 
   if (error) {
     return (
       <div className={cn(TILE, 'min-w-0 flex-1 bg-card p-4')}>
         <ErrorBanner code={error.code} message={t.loadFailed} requestId={error.requestId} />
-        <Button variant="secondary" className="mt-3" onClick={() => setAttempt((a) => a + 1)}>{t.tryAgain}</Button>
+        <Button variant="secondary" className="mt-3" onClick={retry}>{t.tryAgain}</Button>
       </div>
     );
   }
-  // A read of the other kind of period is not drawn as this one: until this one's arrives, the skeleton.
-  if (!read || read.view !== view) {
+  if (!read) {
     return (
       <Skeleton label={t.loading} className={cn(TILE, 'min-w-0 flex-1 bg-card')}>
-        {display === 'week' ? <WeekSkeleton /> : display === 'month' ? <MonthSkeleton phone={phone} /> : <AgendaSkeleton />}
+        {display === 'month' ? <MonthSkeleton phone={phone} /> : <WeekSkeleton />}
       </Skeleton>
     );
   }
-  const drawn = read.today === today ? read : { ...read, today };
+  const drawn = filterRead(read.today === today ? read : { ...read, today }, hidden);
   const head: PaneHead = { name: person.name, initials: initialsOf(person.name), role: shortOfRung(person.rung), me: false };
   // Named by the words drawn on it, then what it opens (WCAG 2.5.3 Label in Name, M2).
   const pill = canBlock ? (
@@ -714,14 +911,7 @@ function ComparedPane({
   ) : undefined;
 
   if (display === 'month') {
-    return (
-      <MonthGrid read={drawn} head={head} pill={pill} phone={phone} selected={monthDay} onSelect={onPick} onOpen={onOpen} onWeek={onWeek} />
-    );
-  }
-  if (display === 'agenda') {
-    return (
-      <AgendaPane className={TILE} read={drawn} head={head} pill={pill} regionLabel={t.comparedRegion({ name: person.name, range })} onOpen={onOpen} />
-    );
+    return <MonthGrid read={drawn} head={head} pill={pill} phone={phone} onAgenda={onAgenda} onOpen={onOpen} onWeek={onWeek} />;
   }
   return (
     <WeekPane
@@ -734,6 +924,7 @@ function ComparedPane({
       nowMinute={read.days.some((d) => d.date === today) ? nowMinute : null}
       onOpen={onOpen}
       onSlot={canBlock ? onBlock : undefined}
+      onTasks={onTasks}
       scroll={scroll}
     />
   );

@@ -451,3 +451,43 @@ describe('P18.98-T4 coaching’s words in Indonesian', () => {
     expect(PRONOUN_FORMS.she.possessive).toBe('her');
   });
 });
+
+/*
+ * ── UI V1 (Phase 18.99 T8): the tabs in the owner's order, the way back, the session's Leads card ──────────────────
+ */
+describe('UI V1 — coaching (P18.99-T8)', () => {
+  it('UI-029 orders the tabs as the owner does, Coaching Session first, and knows the new Leads tab by its address', async () => {
+    const { COACHING_TABS } = await import('./coaching');
+    expect(COACHING_TABS).toEqual(['session', 'activity', 'leads', 'goal-setting', 'summary', 'activation', 'training', 'leader-notes']);
+    expect(coachingTabOf('/coaching/mem-rina/leads', 'mem-rina')).toBe('leads');
+    expect(coachingTabHref('mem-rina', 'leads')).toBe('/coaching/mem-rina/leads');
+  });
+
+  it('UI-029 opens a person on their Coaching Session, naming where the way back goes when an entry point says', () => {
+    expect(coachingSessionHref('mem-rina')).toBe('/coaching/mem-rina/session');
+    expect(coachingSessionHref('mem-rina', '/new-hires')).toBe('/coaching/mem-rina/session?from=%2Fnew-hires');
+  });
+
+  it('UI-062 says what a lead’s next action is missing: Isi tindakan with neither, Isi tanggal with a note and no date', async () => {
+    const { leadGap } = await import('./coaching');
+    expect(leadGap({ nextActionDate: null, nextActionNote: null })).toBe('action');
+    expect(leadGap({ nextActionDate: null, nextActionNote: '   ' })).toBe('action');
+    expect(leadGap({ nextActionDate: null, nextActionNote: 'Second meeting' })).toBe('date');
+    expect(leadGap({ nextActionDate: '2026-10-30', nextActionNote: null })).toBeNull();
+  });
+
+  it('UI-062 orders the card: gaps first, then the overdue, then by date — never dropping a lead for lack of a date', async () => {
+    const { sessionLeadOrder, SESSION_LEADS_SHOWN } = await import('./coaching');
+    const at = (id: string, nextActionDate: string | null, over: { note?: string | null; overdue?: boolean } = {}) => ({
+      id, nextActionDate, nextActionNote: over.note ?? (nextActionDate ? 'Note' : null), flags: over.overdue ? ['overdue' as const] : [],
+    });
+    const leads = [
+      at('later', '2026-11-04'), at('late', '2026-10-20', { overdue: true }), at('none', null), at('soon', '2026-11-01'),
+      at('noted', null, { note: 'Call' }), at('later-late', '2026-10-25', { overdue: true }),
+    ];
+    expect(sessionLeadOrder(leads).map((l) => l.id)).toEqual(['none', 'noted', 'late', 'later-late', 'soon', 'later']);
+    expect(sessionLeadOrder(leads)).toHaveLength(leads.length);
+    // UI-062: the first five, then *Tampilkan semua*.
+    expect(SESSION_LEADS_SHOWN).toBe(5);
+  });
+});

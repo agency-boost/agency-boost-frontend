@@ -195,7 +195,7 @@ describe('P18.97-T1 the forum’s stats table, the client’s reference slide (A
     const notes = screen.getByText(/^Annual Active Agents — /).closest('ol')!;
     expect([...notes.children].map((li) => li.textContent)).toEqual([
       '1Annual Active Agents — members with APE or a policy in the monthly production file in at least one month of the period.',
-      '23M new agent % — of the new hires who joined in the period and whose 90 days are over, the share with a first paid and issued case by day 90 of their join date.',
+      '23M new agent % — of the new hires who joined in the period and whose result is decided, the share with a first paid and issued case by day 90 of their join date. A first case after day 90 counts on neither side.',
       '3AA — Active Agent, a member whose month shows APE or a policy in the monthly production file.',
       '4Case submission and Avg. Case Size — the policies in the monthly production file, and its APE over them.',
     ]);

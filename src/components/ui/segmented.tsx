@@ -3,6 +3,7 @@
 import { useId, useRef, type ReactNode } from 'react';
 import { cn } from '@/lib/cn';
 import { SEGMENT_PHONE, SEGMENT_WRAP_PHONE, SEGMENTS_PHONE } from '@/components/ui/phone';
+import { SEGMENT_TOUCH } from '@/components/ui/touch';
 import { useTabRow } from '@/components/ui/use-tab-row';
 
 export interface SegmentedTab {
@@ -111,6 +112,8 @@ export function Segmented({
               }}
               className={cn(
                 'flex-1 rounded-md px-2.5 py-2 text-base font-semibold transition-colors',
+                // 44px tall below 1024px (UI V1, UI-010).
+                SEGMENT_TOUCH,
                 phoneLayout === 'scroll' ? SEGMENT_PHONE : SEGMENT_WRAP_PHONE,
                 on ? 'bg-navy text-card' : 'text-muted hover:text-navy',
               )}

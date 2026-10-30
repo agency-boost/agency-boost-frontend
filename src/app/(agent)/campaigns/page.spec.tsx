@@ -3,7 +3,7 @@ import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AgentLayout from '@/app/(agent)/layout';
-import { renderInLayout, routeParams, stubFetch, type StubReply } from '@test/harness';
+import { atWidth, renderInLayout, routeParams, stubFetch, type StubReply } from '@test/harness';
 import {
   APE, CHALLENGE, campaign, detail, LIST, NEW_HIRE, notFound, notOpen, PROMO_AGENT, PUSH, READ_ONLY_RINA,
   RINA_ME, serverError, SHELL_STUBS, SPRINT,
@@ -65,7 +65,8 @@ describe('/campaigns, the list (P18.5-T7)', () => {
     it('P18.5-T7 AC-2 the nav item is live and current, its Upcoming pill gone', async () => {
       list();
       await listReady();
-      const item = screen.getByRole('link', { name: 'Campaign list' });
+      // The field shell's sidebar since UI V1 (UI-004): *Campaign*, under *Program*.
+      const item = within(screen.getByRole('navigation', { name: 'Main' })).getByRole('link', { name: 'Campaign' });
       expect(item).toHaveAttribute('href', '/campaigns');
       expect(item).toHaveAttribute('aria-current', 'page');
       expect(within(item).queryByText('Upcoming')).not.toBeInTheDocument();
@@ -74,7 +75,8 @@ describe('/campaigns, the list (P18.5-T7)', () => {
     it('P18.5-T7 AC-2 the nav item stays current over a campaign’s dialog', async () => {
       dialogAt('APE_SPRINT');
       await dialog();
-      expect(screen.getByRole('link', { name: 'Campaign list' })).toHaveAttribute('aria-current', 'page');
+      expect(within(screen.getByRole('navigation', { name: 'Main' })).getByRole('link', { name: 'Campaign' }))
+        .toHaveAttribute('aria-current', 'page');
     });
 
     it('P18.5-T7 AC-2, P18.95-T9 AC-2 and AC-5 is titled as its nav item, sub-titled as drawn, and reads the list once', async () => {
@@ -661,6 +663,61 @@ describe('P18.97-T7 a ratio requirement on the agents’ cards and dialog', () =
     });
     const box = await dialog('Recruitment Drive');
     await waitFor(() => expect(within(box).getAllByRole('listitem').map((r) => r.textContent))
-      .toEqual(['Recruitment success rate28.6% of 30%']));
+      .toEqual(['Recruitment success rate29% of 30%']));
+  });
+});
+
+/**
+ * **UI V1 on a phone** (UI-108; `campaign-event-mobile` 1): no sub-line; *Seasonal | Structural* as one segmented
+ * control; the groups with their counts and no status row; a card with a line icon in a tinted tile — no emoji — the
+ * name on one line, the office's tag and the period, a round star for *Chase*, and *Prize* and *Requirements* aligned; an
+ * ended campaign a short row. 375px.
+ */
+describe('UI-108 /campaigns on a phone', () => {
+  beforeEach(() => atWidth(375));
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('UI-108 the groups with their counts, no status row; a card with its icon, tag, period, star and the two rows', async () => {
+    list();
+    await listReady();
+    await waitFor(() => expect(screen.queryByRole('group', { name: 'Show campaigns' })).not.toBeInTheDocument());
+    expect(screen.getByRole('region', { name: 'Running' })).toHaveTextContent(/^Running2/);
+    const sprint = cardOf('Q4 APE Sprint');
+    expect(within(sprint).getByRole('heading', { level: 3 })).toHaveClass('truncate');
+    expect(sprint).toHaveTextContent('KPM');
+    // A line icon where the poster's emoji was: no emoji on a phone's card (UI-108, UI-102).
+    expect(sprint.textContent).not.toMatch(/\p{Extended_Pictographic}/u);
+    expect(sprint.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
+    const rows = [...sprint.querySelectorAll('dt')].map((dt) => [dt.textContent, dt.nextElementSibling!.textContent]);
+    expect(rows[0]).toEqual(['Prize', 'Top 10 unit-wide: 3D2N Bali trip · All qualifiers: Rp 5.000.000 cash bonus']);
+    expect(rows[1][0]).toBe('Requirements');
+    // The round star: its state its `aria-pressed`, its name the campaign's.
+    expect(within(sprint).getByRole('button', { name: 'Chase Q4 APE Sprint' })).toHaveAttribute('aria-pressed', 'true');
+    expect(within(cardOf('October New Hire Blitz')).getByRole('button', { name: 'Chase October New Hire Blitz' }))
+      .toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('UI-108 the star chases; the card opens the detail; an ended campaign is a short row that opens it too', async () => {
+    const { calls } = list({ 'PUT /campaigns/NEW_HIRE_BLITZ/chase': { body: { ...LIST.campaigns[1], chasing: true } } });
+    await listReady();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Chase October New Hire Blitz' })).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('button', { name: 'Chase October New Hire Blitz' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Chase October New Hire Blitz' })).toHaveAttribute('aria-pressed', 'true'));
+    expect(calls.some((c) => c.init.method === 'PUT' && c.url.endsWith('/campaigns/NEW_HIRE_BLITZ/chase'))).toBe(true);
+    await userEvent.click(within(cardOf('Q4 APE Sprint')).getByRole('button', { name: 'Q4 APE Sprint' }));
+    expect(nav.push).toHaveBeenCalledWith('/campaigns/APE_SPRINT', { scroll: false });
+    const ended = screen.getByRole('button', { name: /Mid-Year Persistency Push/ });
+    expect(ended.querySelector('[data-chase]')).toBeNull();
+    await userEvent.click(ended);
+    expect(nav.push).toHaveBeenCalledWith('/campaigns/PERSISTENCY_PUSH', { scroll: false });
+  });
+
+  it('UI-108 the two kinds are one segmented control on a phone, and no sub-line is drawn there', async () => {
+    list();
+    await listReady();
+    const tabs = screen.getByRole('tablist');
+    expect(tabs).toHaveClass('max-md:rounded-pill', 'max-md:bg-card');
+    expect(within(tabs).getByRole('tab', { name: 'Seasonal' }).firstElementChild).toHaveClass('max-md:bg-navy');
+    expect(screen.getByRole('heading', { level: 1 }).nextElementSibling).toHaveClass('max-md:hidden');
   });
 });

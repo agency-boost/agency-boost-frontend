@@ -29,7 +29,7 @@ export default function RecruitmentIndex() {
 
   return (
     <Skeleton label={t.redirecting}>
-      <div className="rounded-lg border border-hairline bg-card p-4">
+      <div className="rounded-lg border border-card-edge bg-card p-4">
         <SkeletonText lines={5} />
       </div>
     </Skeleton>

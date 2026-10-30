@@ -6,6 +6,7 @@ import { ApiConfigError } from '@/lib/api';
 import { ApiRequestError } from '@/lib/api-client';
 import type { Me } from '@/lib/session';
 import { AUTH_PAGE } from '@/components/auth-page';
+import { SIGN_IN_PAGE } from '@/components/sign-in-welcome';
 import LoginPage from './page';
 
 const push = vi.fn();
@@ -48,13 +49,38 @@ async function signInFrom(search: string, who: Me | null): Promise<unknown> {
 }
 
 describe('login', () => {
-  it('P18.95-T7 AC-3 places its title where registration places its own: the one column the two share', () => {
+  it('UI-102 is a welcome screen: Boost pointing and the three icon cards above the name, its one line, then the form', () => {
     renderWithSession(<LoginPage />);
     const main = screen.getByRole('main');
-    // Centred from 768px, as before; below it the column starts 16% of the window down, as registration's does.
-    expect(main.className).toBe(AUTH_PAGE);
-    expect(main).toHaveClass('justify-center', 'max-md:justify-start', 'max-md:pt-[16svh]');
-    expect(main.firstElementChild).toBe(screen.getByRole('heading', { level: 1, name: 'AgencyBoost' }));
+    // Centred from 768px as registration's column is; on a phone it starts near the top, the welcome filling the space
+    // P18.95-T7 AC-3's 16% left above the title (reverses that row, UI-102).
+    expect(main.className).toBe(SIGN_IN_PAGE);
+    expect(main.className).not.toBe(AUTH_PAGE);
+    const welcome = main.querySelector('[data-sign-in-welcome]')!;
+    expect(main.firstElementChild).toBe(welcome);
+    expect(welcome).toHaveAttribute('aria-hidden', 'true');
+    expect(welcome.querySelector('[data-boost="pointing"]')).toHaveAttribute('width', '200');
+    expect([...welcome.querySelectorAll('[data-sign-in-card]')].map((c) => c.getAttribute('data-sign-in-card')))
+      .toEqual(['chart', 'calendar', 'checklist']);
+    // Each card holds its 3D icon (UI-102), not a line icon.
+    expect([...welcome.querySelectorAll('[data-sign-in-card] [data-icon-3d]')].map((i) => i.getAttribute('data-icon-3d')))
+      .toEqual(['chart', 'calendar', 'checklist']);
+    expect(screen.getByRole('heading', { level: 1, name: 'AgencyBoost' })).toBeInTheDocument();
+    // Not a form card: the form stands on the page.
+    expect(screen.getByRole('button', { name: 'Sign in' }).closest('[data-card]')).toBeNull();
+  });
+
+  it('UI-102 the sign-in button is one big pill, at least 52px, the full width of the column', () => {
+    renderWithSession(<LoginPage />);
+    const button = screen.getByRole('button', { name: 'Sign in' });
+    expect(button).toHaveClass('h-[3.25rem]', 'w-full', 'rounded-pill');
+  });
+
+  it('UI-102 keeps today’s method and words: email, password, the two links', () => {
+    renderWithSession(<LoginPage />);
+    expect(screen.getByText('Sign in to continue.')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Forgot your password?' })).toHaveAttribute('href', '/forgot-password');
+    expect(screen.getByRole('link', { name: 'Create an account' })).toHaveAttribute('href', '/register');
   });
 
   it('labels both fields and marks them for the password manager', () => {
@@ -71,7 +97,7 @@ describe('login', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Sign in' }));
 
     expect(session.signIn).toHaveBeenCalledWith('rina@kpm0417.test', 'demo password rina');
-    expect(push).toHaveBeenCalledWith('/activity/log');
+    expect(push).toHaveBeenCalledWith('/home');
   });
 
   it('P18.1-T3 AC-2 returns to the page that sent the reader to sign in, such as a shared meeting', async () => {
@@ -90,12 +116,12 @@ describe('login', () => {
       expect(await signInFrom(COMPLIANCE, OWNER)).toBe('/kpm/analytics/compliance?category=training');
     });
 
-    it('the reported case: an Agent who signs in after them lands on their own day, not on the Owner’s page', async () => {
-      expect(await signInFrom(COMPLIANCE, AGENT)).toBe('/activity/log');
+    it('the reported case: an Agent who signs in after them lands on Home (UI-100), not on the Owner’s page', async () => {
+      expect(await signInFrom(COMPLIANCE, AGENT)).toBe('/home');
     });
 
-    it('a leader who signs in after them lands on their unit’s dashboard', async () => {
-      expect(await signInFrom(COMPLIANCE, LEADER)).toBe('/unit/dashboard');
+    it('a leader who signs in after them lands on Home (UI-100)', async () => {
+      expect(await signInFrom(COMPLIANCE, LEADER)).toBe('/home');
     });
 
     it('an address that is no page of the app lands on their own page rather than a 404', async () => {
@@ -103,7 +129,7 @@ describe('login', () => {
     });
 
     it('an unsafe next still lands on their own page: a host written as a path', async () => {
-      expect(await signInFrom('?next=%2F%2Fevil.test%2Fx', AGENT)).toBe('/activity/log');
+      expect(await signInFrom('?next=%2F%2Fevil.test%2Fx', AGENT)).toBe('/home');
     });
 
     it('an unsafe next still lands on their own page: another origin, whatever path it ends in', async () => {
@@ -150,7 +176,7 @@ describe('login', () => {
     });
 
     it('still honours next only for somebody who can open it', async () => {
-      expect(await signInFrom('?next=%2Fkpm%2Fanalytics%2Fcompliance&reason=expired', AGENT)).toBe('/activity/log');
+      expect(await signInFrom('?next=%2Fkpm%2Fanalytics%2Fcompliance&reason=expired', AGENT)).toBe('/home');
     });
   });
 

@@ -88,9 +88,9 @@ describe('P18.97-T5 AC-1 — the amber badge’s contrast (WCAG 2.1 AA 1.4.3)', 
     `#${[0, 2, 4].map((i) => Math.round(channel(fg, i) * alpha + channel(bg, i) * (1 - alpha)).toString(16).padStart(2, '0')).join('')}`;
   const TINT = over(token('amber'), 0.14, token('card'));
 
-  it('P18.97-T5 AC-1 navy words on the 14% amber tint over the card clear 4.5:1 — 12.7:1', () => {
+  it('P18.97-T5 AC-1 navy words on the 14% amber tint over the card clear 4.5:1 — 12.5:1 on UI V1’s accent (UI-008)', () => {
     expect(ratio(token('navy'), TINT)).toBeGreaterThanOrEqual(4.5);
-    expect(Math.round(ratio(token('navy'), TINT) * 10) / 10).toBe(12.7);
+    expect(Math.round(ratio(token('navy'), TINT) * 10) / 10).toBe(12.5);
   });
 
   it('P18.97-T5 AC-1 neither text amber would: amber-dark and amber-ink both miss 4.5:1 on the tint', () => {

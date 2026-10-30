@@ -651,12 +651,13 @@ describe('P18.97-T7 AC-6 the checklist’s targets on a phone (UI-040)', () => {
   /** The checklist's markup on the build before P18.97-T7, at rest and with an item being edited, from this fixture on 2026-10-28. */
   const BEFORE_T7: Record<'rest' | 'editing', Record<768 | 1280, string>> = {
     rest: {
-      768: '60ec720df464aae622def020395568c907c0277501dca6922f5345475eeebf24',
-      1280: 'ba59a104c75438d68a900702510966026ffc8742ee6a35b7c527e060ecdacf60',
+      // Re-recorded 2026-10-30 (UI V1): UI-008's card edge (`border-card-edge`) and UI-010's 44px/48px targets below 1024px.
+      768: '0d3bbf8fa669fa0a5fa3d661cbf3b4db3066479d241a8432982b5828376c4f28',
+      1280: '0598691fa01e3600375f5e235bb02562a3ec6796ecbe5775d0d2b38fbdd99ed3',
     },
     editing: {
-      768: 'dd5850d0850cd54edad3d4363beb1d4b1db417bf4f0fa981bd11228571a522af',
-      1280: '66b0b8d847d07cd4b5e8085a3da244e67c7baabc4c6d7bad33aa927eed63893f',
+      768: '09a4f6885f622839b19e5e0ebc775332bcb4dc44916aa7bcce1441d1e5d06ee9',
+      1280: '0f58649e4bf806fa8046bd22fd621563caa7c60c621045f68f0ca164a20fd901',
     },
   };
 

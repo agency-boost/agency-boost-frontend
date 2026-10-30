@@ -91,7 +91,7 @@ function OverviewSkeleton() {
       <SkeletonBar className="mb-3.5 h-4 w-40" />
       <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4">
         {[0, 1, 2, 3].map((i) => (
-          <div key={i} className="rounded-lg border border-hairline bg-card px-[18px] py-4">
+          <div key={i} className="rounded-lg border border-card-edge bg-card px-[18px] py-4">
             <SkeletonBar className="h-2.5 w-1/2" />
             <SkeletonBar className="mt-3 h-6 w-1/3" />
           </div>
@@ -101,7 +101,7 @@ function OverviewSkeleton() {
       <SkeletonBar className="mb-3.5 mt-[34px] h-4 w-32" />
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {[0, 1].map((i) => (
-          <div key={i} className="rounded-lg border border-hairline bg-card p-[18px]">
+          <div key={i} className="rounded-lg border border-card-edge bg-card p-[18px]">
             <SkeletonBar className="h-3.5 w-2/3" />
             <SkeletonBar className="mt-2 w-1/2" />
             <SkeletonBar className="mt-4 h-7 w-1/3" />
@@ -113,7 +113,7 @@ function OverviewSkeleton() {
       {['h-40', 'h-28', 'h-48'].map((height) => (
         <div key={height}>
           <SkeletonBar className="mb-3.5 mt-[34px] h-4 w-44" />
-          <div className={`rounded-lg border border-hairline bg-card p-5 ${height}`}>
+          <div className={`rounded-lg border border-card-edge bg-card p-5 ${height}`}>
             <SkeletonBar className="w-1/3" />
             <SkeletonBar className="mt-3 w-2/3" />
             <SkeletonBar className="mt-3 w-1/2" />

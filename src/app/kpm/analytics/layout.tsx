@@ -1,6 +1,9 @@
 'use client';
 
 import type { ReactNode } from 'react';
+import { RouteSegments } from '@/components/analytics/route-segments';
+import { SubtitleOnPhone } from '@/components/app-shell';
+import { useFieldChrome } from '@/components/field-nav';
 import { NotAvailableToYou } from '@/components/require-session';
 import { RoleShell } from '@/components/role-shell';
 import { RouteTabs } from '@/components/ui/route-tabs';
@@ -9,6 +12,7 @@ import { kpmAnalyticsMessages } from '@/i18n/messages/kpm-analytics';
 import { readsOfficeAnalytics } from '@/lib/route-access';
 import { useSession } from '@/lib/session';
 import { TenantConfigProvider } from '@/lib/tenant-config-cache';
+import { usePhone } from '@/lib/use-phone';
 
 /**
  * **KPM Analytics** (`/kpm/analytics/*`; `KPM_Owner.html:1225-1229`, title `:2028`; P18-T2 AC-1): the title,
@@ -30,22 +34,41 @@ import { TenantConfigProvider } from '@/lib/tenant-config-cache';
  */
 export default function KpmAnalyticsLayout({ children }: { children: ReactNode }) {
   const t = useMessages(kpmAnalyticsMessages);
+  const { me } = useSession();
+  /*
+   * **UI V1 on a phone in the field shell** (UI-109, ADR-0180 §2): no sub-line under the title row. The Owner and the
+   * Admins read this in the office console, which UI V1 leaves as it was — their sub-line stays.
+   */
+  const inConsole = Boolean(me?.membership?.isKpmOwner || me?.membership?.isKpmAdmin || me?.user.platformRole === 'super_admin');
   return (
     <TenantConfigProvider>
-      <RoleShell title={t.title} subtitle={t.subtitle} permission="kpm_analytics:read">
-        <OfficeAnalyticsReader>
-          <RouteTabs
-            label={t.title}
-            tabs={[
-              { href: '/kpm/analytics', label: t.tabOverview },
-              { href: '/kpm/analytics/compliance', label: t.tabCompliance },
-            ]}
-          />
-          {children}
-        </OfficeAnalyticsReader>
-      </RoleShell>
+      <SubtitleOnPhone.Provider value={inConsole}>
+        <RoleShell title={t.title} subtitle={t.subtitle} permission="kpm_analytics:read">
+          <OfficeAnalyticsReader>
+            <AnalyticsTabs />
+            {children}
+          </OfficeAnalyticsReader>
+        </RoleShell>
+      </SubtitleOnPhone.Provider>
     </TenantConfigProvider>
   );
+}
+
+/**
+ * *Overview | Compliance* (UI-109: the second tab renamed at every width, its content keeping Events and Campaigns). **On
+ * a phone in the field shell, one segmented control** (`RouteSegments`); the underlined strip everywhere else.
+ */
+function AnalyticsTabs() {
+  const t = useMessages(kpmAnalyticsMessages);
+  const field = useFieldChrome() !== null;
+  const phone = usePhone();
+  const tabs = [
+    { href: '/kpm/analytics', label: t.tabOverview },
+    { href: '/kpm/analytics/compliance', label: t.tabCompliance },
+  ];
+  return field && phone
+    ? <RouteSegments label={t.title} segments={tabs} />
+    : <RouteTabs label={t.title} tabs={tabs} />;
 }
 
 /** The Owner, an Admin or a Core Leader reads on; anybody else meets the denied state and no read is made. */

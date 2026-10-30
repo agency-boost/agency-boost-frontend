@@ -1,8 +1,8 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import { usePathname } from 'next/navigation';
 import { useEffect, useId, useRef, useState } from 'react';
-import { NotificationList } from '@/components/notification-list';
 import { inModal } from '@/components/ui/modal';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button, ButtonLink, ErrorBanner } from '@/components/ui/field';
@@ -17,6 +17,13 @@ import { shellMessages } from '@/i18n/messages/shell';
 import { cn } from '@/lib/cn';
 import { POPOVER_PAGE_SIZE } from '@/lib/notifications';
 import { useCanMark, useInbox } from '@/lib/use-inbox';
+
+/**
+ * **The popover's rows, downloaded when it first has some to draw** (P18.99-T16, the bundle): the bell is on every page
+ * from 768px and the rows only after a tap and a read, so the list — its rows, its notice dialog — was in every route's
+ * first load for nothing. `/notifications` draws the same list, imported as before.
+ */
+const NotificationList = dynamic(() => import('@/components/notification-list').then((m) => m.NotificationList), { ssr: false });
 
 /**
  * The bell at the foot of the sidebar, and the short list it opens (P12.1-T2).

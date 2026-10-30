@@ -1,7 +1,8 @@
 import { useId } from 'react';
-import { CHIP_GRID_PHONE, CHIP_PHONE } from '@/components/ui/phone';
 import { cn } from '@/lib/cn';
-import type { ChoiceOption } from '../brief-card';
+import {
+  PLAN_CHIP_OFF_PHONE, PLAN_CHIP_PHONE, PLAN_CHIPS_PHONE, PLAN_QUESTION_PHONE, type ChoiceOption,
+} from '../brief-card';
 
 /**
  * **One question, any number of answers** (D-components; `.chips[data-multi="true"]`,
@@ -40,9 +41,9 @@ export function MultiChoiceGroup<T extends string | number>({
     onChange(options.filter((o) => next.has(o.value)).map((o) => o.value));
   };
   return (
-    <div role="group" aria-labelledby={labelId}>
-      <p id={labelId} className="m-0 mb-2.5 text-xs font-bold uppercase tracking-wide text-muted">{label}</p>
-      <div className={cn('flex flex-wrap gap-2', CHIP_GRID_PHONE)}>
+    <div role="group" aria-labelledby={labelId} tabIndex={-1} data-question="" data-answered={value.length > 0}>
+      <p id={labelId} className={cn('m-0 mb-2.5 text-xs font-bold uppercase tracking-wide text-muted', PLAN_QUESTION_PHONE)}>{label}</p>
+      <div className={cn('flex flex-wrap gap-2', PLAN_CHIPS_PHONE)}>
         {options.map((option) => {
           const on = chosen.has(option.value);
           return (
@@ -53,8 +54,8 @@ export function MultiChoiceGroup<T extends string | number>({
               onClick={() => toggle(option.value)}
               className={cn(
                 'rounded-md border px-[15px] py-[9px] text-base font-semibold transition-colors',
-                CHIP_PHONE,
-                on ? 'border-navy bg-navy text-white' : 'border-hairline bg-base text-navy hover:border-navy',
+                PLAN_CHIP_PHONE,
+                on ? 'border-navy bg-navy text-white' : cn('border-hairline bg-base text-navy hover:border-navy', PLAN_CHIP_OFF_PHONE),
               )}
             >
               {option.label}

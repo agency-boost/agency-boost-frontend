@@ -107,13 +107,12 @@ const en = {
     caption: 'Everyone you coach',
     loading: 'Loading everyone you coach…',
     directAgents: 'Your direct agents',
-    aabUnits: kept('AAB units'),
+    aabUnits: `${kept('AAB')} units`,
     unitOf: ({ name }: { name: string }) => `${name}’s unit`,
     /** *Coaching →* (`:10642`): the arrow is drawn apart, hidden from a screen reader. */
     coaching: kept('Coaching'),
     /** A phone card's *by {coach}*, under *Last 1:1*. */
     by: ({ name }: { name: string }) => `by ${name}`,
-    ownCoaching: 'Your own coaching',
     myNotes: 'My Coaching Notes',
     /** Ours (L-01): a reader nobody reports to, on a typed address. */
     empty: 'No one to coach yet.',
@@ -123,19 +122,21 @@ const en = {
   person: {
     /** *← Back to {to}* (`.back-link`, `:3970`): the roster, or the reader's own coaching. */
     back: ({ to }: { to: string }) => `← Back to ${to}`,
-    /** *Leader view* / *Agent view* (`:3980-3985`), a group the screen reader names. */
-    view: 'View',
-    leaderView: 'Leader view',
-    agentView: 'Agent view',
-    /** The tabs (`:3988-3995`, and *Activity*, P13.1-T9), names (§A.3). */
+    /** The way back to wherever the leader came from (UI-029, `?from=`): no page to name. */
+    backOnly: '← Back',
+    /**
+     * The tabs, names (§A.3; UI-006's kept list), **in the owner's order** (UI V1, UI-029) — *Leads* new, *Leader Notes*
+     * renamed *Capability mapping*, the heading its page already had. *Leader view* / *Agent view* went (UI-041).
+     */
     tabs: {
-      summary: kept('Personal Summary'),
-      goalSetting: kept('Goal Setting'),
-      activity: kept('Activity'),
-      training: kept('Training'),
-      activation: kept('Activation'),
       session: kept('Coaching Session'),
-      leaderNotes: kept('Leader Notes'),
+      activity: kept('Activity'),
+      leads: kept('Leads'),
+      goalSetting: kept('Goal Setting'),
+      summary: kept('Personal Summary'),
+      activation: kept('Activation'),
+      training: kept('Training'),
+      leaderNotes: kept('Capability mapping'),
     },
     /** The tab bar's name. */
     nav: kept('Coaching'),
@@ -158,6 +159,20 @@ const en = {
     /** The *Personal Summary* tab's wait, in the coachee's pronoun, and its period switch. */
     puttingTogether: ({ pronoun }: { pronoun: Pronoun }) => `Putting ${f(pronoun).possessive} summary together…`,
     period: 'Period',
+    /**
+     * The *Activity* tab's three views of the coachee (UI V1, UI-029: *their Log / Dashboard / Ratio*), named as
+     * `/activity`'s strip names them (§A.1), and the Log's day — read-only: nobody logs another person's day.
+     */
+    activity: {
+      views: kept('Activity'),
+      log: kept('Log Activity'),
+      dashboard: kept('Dashboard'),
+      ratio: kept('Ratio'),
+      previous: 'Previous day',
+      next: 'Next day',
+      reading: 'Reading the day…',
+      none: 'Nothing logged on this day.',
+    },
   },
 };
 
@@ -210,28 +225,26 @@ const id: MessagesOf<typeof en> = {
     caption: `Semua orang yang Anda ${kept('coaching')}`,
     loading: `Memuat semua orang yang Anda ${kept('coaching')}…`,
     directAgents: 'Agen langsung Anda',
-    aabUnits: kept('AAB units'),
+    aabUnits: `${kept('Unit')} ${kept('AAB')}`,
     unitOf: ({ name }) => `${kept('Unit')} ${name}`,
     coaching: kept('Coaching'),
     by: ({ name }) => `oleh ${name}`,
-    ownCoaching: `${kept('Coaching')} Anda sendiri`,
     myNotes: `Catatan ${kept('coaching')} saya`,
     empty: `Belum ada orang yang Anda ${kept('coaching')}.`,
   },
 
   person: {
     back: ({ to }) => `← Kembali ke ${to}`,
-    view: 'Tampilan',
-    leaderView: `Tampilan ${kept('leader')}`,
-    agentView: `Tampilan ${kept('Agent')}`,
+    backOnly: '← Kembali',
     tabs: {
-      summary: kept('Personal Summary'),
-      goalSetting: kept('Goal Setting'),
-      activity: kept('Activity'),
-      training: kept('Training'),
-      activation: kept('Activation'),
       session: kept('Coaching Session'),
-      leaderNotes: kept('Leader Notes'),
+      activity: kept('Activity'),
+      leads: kept('Leads'),
+      goalSetting: kept('Goal Setting'),
+      summary: kept('Personal Summary'),
+      activation: kept('Activation'),
+      training: kept('Training'),
+      leaderNotes: kept('Capability mapping'),
     },
     nav: kept('Coaching'),
     upcoming: 'Segera hadir',
@@ -247,6 +260,16 @@ const id: MessagesOf<typeof en> = {
     opening: `Membuka sesi ${kept('coaching')}…`,
     puttingTogether: () => 'Menyusun ringkasannya…',
     period: 'Periode',
+    activity: {
+      views: kept('Activity'),
+      log: kept('Log Activity'),
+      dashboard: kept('Dashboard'),
+      ratio: kept('Ratio'),
+      previous: 'Hari sebelumnya',
+      next: 'Hari berikutnya',
+      reading: 'Memuat hari tersebut…',
+      none: 'Tidak ada yang dicatat pada hari tersebut.',
+    },
   },
 };
 

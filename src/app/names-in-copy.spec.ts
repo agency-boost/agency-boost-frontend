@@ -24,7 +24,11 @@ const LONG_NAMES = /\bAssociate AB\b|\bAssociate Agency Builders?\b|\bAgency Bui
 const CLICK = /\bclick(?:s|ed|ing)?\b(?=\s+\S)|\bclick(?:s|ed|ing)?\b[.,:;!?]|\bklik\b/i;
 
 /** Where the long form is the definition itself, and test data a company could have written. */
-const MAY_SPELL_OUT = new Set(['i18n/messages/terms.ts']);
+/*
+ * The one definition (`terms.ts`), and *Profil saya*'s *Peran*, which UI-111 writes out — "AB · Agency Builder" (UI V1,
+ * 2026-10-30; the later client request wins over P18.95-T9 for that one line).
+ */
+const MAY_SPELL_OUT = new Set(['i18n/messages/terms.ts', 'i18n/messages/account.ts']);
 const isFixture = (file: string) => /fixtures?\.tsx?$/.test(file);
 
 /** Every rendered string in `source` that `pattern` matches, as `line: text`. */
@@ -101,6 +105,18 @@ describe('the app’s own words', () => {
     // Once in English and once in Indonesian (P18.98-T4: the tips moved into the catalogue).
     const path = 'i18n/messages/terms.ts';
     expect(mentions(path, readFileSync(join(SRC, path), 'utf8'), LONG_NAMES)).toHaveLength(2);
+  });
+
+  it('UI-111 lets Profil saya spell the rung out on its Peran line, and nowhere else in its catalogue', () => {
+    const path = 'i18n/messages/account.ts';
+    const hits = mentions(path, readFileSync(join(SRC, path), 'utf8'), LONG_NAMES);
+    // `rungNames`, once in English and once in Indonesian: AB's and AAB's long names on each.
+    expect(hits).toHaveLength(4);
+    const lines = new Set(hits.map((hit) => hit.split(':')[0]));
+    expect(lines.size).toBe(2);
+    for (const line of lines) {
+      expect(readFileSync(join(SRC, path), 'utf8').split('\n')[Number(line) - 1]).toMatch(/^\s*rungNames:/);
+    }
   });
 
   it('P18.95-T9 AC-5 tells nobody to click: instructions say Tap', () => {

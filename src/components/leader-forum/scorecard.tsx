@@ -91,7 +91,7 @@ const TILE_TONE: Record<keyof ScorecardData['chips'], string> = {
 export function Chips({ chips }: { chips: ScorecardData['chips'] }) {
   const words = useLanguage();
   return (
-    <dl className="mb-5 grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-hairline bg-card md:grid-cols-5">
+    <dl className="mb-5 grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-card-edge bg-card md:grid-cols-5">
       {chipsIn(words).map(({ key, label }) => (
         <div
           key={key}
@@ -149,7 +149,7 @@ export function ScorecardTable({
   const { scorecard } = meeting;
   const { marks } = numberedFootnotes(scorecard.rows.map((r) => r.key));
   return (
-    <div className="mb-2 overflow-hidden rounded-lg border border-hairline bg-card">
+    <div className="mb-2 overflow-hidden rounded-lg border border-card-edge bg-card">
       {/* The table keeps its shape and scrolls inside its card on a tablet; a phone draws the cards instead. */}
       <div className={print ? undefined : 'overflow-x-auto'}>
         <table className={cn('relative w-full border-collapse text-left text-base', !print && 'min-w-[760px]')}>
@@ -396,7 +396,7 @@ function MetricCards({ meeting, readOnly }: { meeting: MeetingView; readOnly: bo
   );
 }
 
-function MetricCard({
+export function MetricCard({
   meeting, row, mark, readOnly,
 }: { meeting: MeetingView; row: ScorecardRow; mark: number | undefined; readOnly: boolean }) {
   const t = useMessages(forumStatsMessages);
@@ -421,7 +421,7 @@ function MetricCard({
   const DT = 'text-sm font-semibold text-navy';
   const DD = 'text-right text-sm text-navy';
   return (
-    <li aria-labelledby={titleId} className="rounded-lg border border-hairline bg-card px-4 py-3">
+    <li aria-labelledby={titleId} className="rounded-lg border border-card-edge bg-card px-4 py-3">
       <h4 id={titleId} className="mb-2 text-md font-bold text-navy">
         {rowName(row.key, language)}
         {mark !== undefined && <sup className="ml-0.5 text-2xs font-semibold">{mark}</sup>}
@@ -485,7 +485,8 @@ export function ScorecardNotes({ scorecard }: { scorecard: ScorecardData }) {
       <ol>
         {list.map(({ n, text }) => (
           <li key={n}>
-            <sup className="mr-0.5 font-semibold">{n}</sup>
+            {/* `text-xs`: a `<sup>` alone is 0.75em, 9px under these 12px notes (UI-008, T16). */}
+            <sup className="mr-0.5 text-xs font-semibold">{n}</sup>
             {text}
           </li>
         ))}

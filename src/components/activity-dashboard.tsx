@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Fragment, useEffect, useId, useState, type ReactNode } from 'react';
+import { useEffect, useId, useState, type ReactNode } from 'react';
 import { ConfigBadge } from '@/components/ui/config-badge';
 import { Cell, DataTable, Row, type Column } from '@/components/ui/data-table';
 import { DateField } from '@/components/ui/date-field';
@@ -10,10 +10,12 @@ import { NumberBadge } from '@/components/ui/number-badge';
 import { Segmented } from '@/components/ui/segmented';
 import { SkeletonCards, SkeletonTable } from '@/components/ui/skeleton';
 import { TermText } from '@/components/ui/term-tip';
+import { LineIcon } from '@/components/ui/line-icon';
+import { TippedGlyph } from '@/components/ui/tipped-glyph';
 import { SummaryStrip } from '@/components/summary-strip';
 import type { MessagesOf } from '@/i18n/catalogue';
 import type { Language } from '@/i18n/language';
-import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
+import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
 import { activityMessages } from '@/i18n/messages/activity';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import {
@@ -24,8 +26,8 @@ import { cn } from '@/lib/cn';
 import { PRONOUN_FORMS, type Pronoun } from '@/lib/coaching';
 import { formatShortDay, formatWeekday } from '@/lib/format';
 import { useSession } from '@/lib/session';
-import { summaryTiles } from '@/lib/summary-tiles';
-import { activityTermMentions, type TermKey } from '@/lib/terms';
+import { summaryTiles, type SummaryTile } from '@/lib/summary-tiles';
+import { activityTermMentions, termDefinition, termQuestion, type TermKey } from '@/lib/terms';
 import { useTenantConfig } from '@/lib/tenant-config-cache';
 import { usePhone } from '@/lib/use-phone';
 
@@ -109,6 +111,12 @@ export function ActivityDashboardPanel({ subject }: { subject?: DashboardSubject
   const [refused, setRefused] = useState<string | null>(null);
   const forId = subject?.membershipId;
   const phone = usePhone();
+  /**
+   * Whether the window has answered (`usePhone` answers in an effect): until then neither layout is drawn, so a phone
+   * never paints the table's skeleton for a frame (P18.95-T3 AC-6).
+   */
+  const [settled, setSettled] = useState(false);
+  useEffect(() => setSettled(true), []);
 
   const today = view?.today ?? null;
   const problem = range === 'CUSTOM' && custom && today ? invalid(custom.from, custom.to, today, t, figures) : null;
@@ -157,6 +165,69 @@ export function ActivityDashboardPanel({ subject }: { subject?: DashboardSubject
   const showing = current && !problem && !refused ? view : null;
   const caption = subject ? t.dashboard.theirs({ name: subject.name }) : t.dashboard.yours;
   const ranges = RANGES.map((id) => ({ id, label: t.dashboard.ranges[id] }));
+
+  /*
+   * **On a phone, UI V1's dashboard** (UI-106): the range as chips — *7 hari · 30 hari · Kustom* — and the days under
+   * them on one line, then the navy total, the group totals and the same group cards as the log. From 768px, as before.
+   */
+  if (!settled) return <SkeletonCards count={3} label={t.dashboard.loadingList({ caption })} />;
+
+  if (phone) {
+    return (
+      <>
+        {error && <ErrorBanner {...error} />}
+        <div role="group" aria-label={t.dashboard.range} className="mt-2.5 flex gap-1.5">
+          {RANGES.map((id) => (
+            <button
+              key={id}
+              type="button"
+              aria-pressed={range === id}
+              onClick={() => choose(id)}
+              className={cn(
+                'flex min-h-11 items-center gap-1 rounded-pill px-3 text-base font-semibold',
+                range === id ? 'bg-navy text-white' : 'bg-card text-muted hover:text-navy',
+              )}
+            >
+              {t.dashboard.phoneRanges[id]}
+              {id === 'CUSTOM' && <LineIcon name="calendar" className="h-4 w-4" />}
+            </button>
+          ))}
+        </div>
+        {range === 'CUSTOM' && custom && (
+          <div className="mt-2 flex items-center gap-2">
+            <DateField
+              aria-label={t.dashboard.from}
+              value={custom.from}
+              max={today ?? undefined}
+              onChange={(from) => setCustom({ ...custom, from })}
+              className="min-w-0 flex-1"
+            />
+            <span className="text-sm text-muted">{t.dashboard.toWord}</span>
+            <DateField
+              aria-label={t.dashboard.to}
+              value={custom.to}
+              max={today ?? undefined}
+              onChange={(to) => setCustom({ ...custom, to })}
+              className="min-w-0 flex-1"
+            />
+          </div>
+        )}
+        {/* The screen's one live region, as from 768px: what the cards show, or why a range cannot be shown. */}
+        {view && (
+          <p role="status" className="mx-0.5 mt-2 text-sm text-muted">
+            {problem || refused ? (
+              <span className="text-alert">{t.dashboard.pickValid({ reason: problem ?? refused ?? '' })}</span>
+            ) : showing ? t.dashboard.span({
+              from: formatShortDay(showing.from, { year: showing.from.slice(0, 4) !== showing.to.slice(0, 4) }, figures),
+              to: formatShortDay(showing.to, { year: true }, figures),
+            }) : error ? null : t.dashboard.loading}
+          </p>
+        )}
+        {!view && !error && <SkeletonCards count={3} label={t.dashboard.loadingList({ caption })} />}
+        {showing && <Dashboard view={showing} subject={subject} caption={caption} phone />}
+      </>
+    );
+  }
 
   return (
     <>
@@ -307,6 +378,8 @@ function Dashboard({
     { label: t.dashboard.totalTouches, value: view.total, term: 'TOUCHES' },
   );
 
+  if (phone) return <PhoneDashboard view={view} tiles={tiles} subject={subject} caption={caption} />;
+
   return (
     <>
       <SummaryStrip tiles={tiles} />
@@ -323,7 +396,7 @@ function Dashboard({
         </p>
       )}
 
-      {phone ? <PhoneTotals view={view} subject={subject} caption={caption} /> : (
+      {(
         <DataTable
           caption={caption}
           columns={columns}
@@ -414,15 +487,12 @@ function SectionRows({
 }
 
 /*
- * ── On a phone: totals, and a tap for the days (P18.95-T3 AC-6) ─────────────────────────────────
+ * ── On a phone: UI V1's dashboard (UI-106), the item's days a tap away (P18.95-T3 AC-6) ─────────────────────────────
  */
 
-/** What one line of the phone's list holds: a row of the table. */
+/** What one line of a phone's card holds: a row of the table. */
 interface PhoneItem {
-  kind: 'all' | 'section' | 'type';
   label: string;
-  /** The type's display number (`NumberBadge`), 0 for none. */
-  order: number;
   description: string | null;
   /** Why it is not one of the sections shown today (`standingNote`), or null. */
   note: string | null;
@@ -431,14 +501,17 @@ interface PhoneItem {
 }
 
 /**
- * **The table on a phone** (P18.95-T3 AC-6): *Activity* and *Total*, the table's two first columns, a line per row
- * in the table's order — *Total — all categories* first in 30-day mode, then each section and its items — and **a
- * tap on a line shows its count for each column of the period** (a day, or under a longer range a week and the
- * days remaining), each column's name above its count. Each line is a button (`aria-expanded`), so a keyboard opens
- * it as a tap does. The figures are the same answer's, the zero muted as in the table.
+ * **The dashboard on a phone** (UI-106): a navy *Total aktivitas ⓘ n* bar — the word *aktivitas*, never *sentuhan*, its ⓘ
+ * saying what counts — then **the group totals as one strip** (the office's summary tiles: *Leads Gen · Selling ·
+ * Recruitment · Development* on the seed), then **the same group cards as the log**, each item's count on the right and
+ * a zero in grey. No item numbers, no per-row ⌄: **a tap on an item shows its count for each column of the period** (a
+ * day, or under a longer range a week and the days remaining), as P18.95-T3 AC-6 built it.
  */
-function PhoneTotals({ view, subject, caption }: { view: ActivityDashboard; subject?: DashboardSubject; caption: string }) {
+function PhoneDashboard({
+  view, tiles, subject, caption,
+}: { view: ActivityDashboard; tiles: SummaryTile[]; subject?: DashboardSubject; caption: string }) {
   const t = useMessages(activityMessages);
+  const language = useLanguage();
   const figures = useFigureLanguage();
   const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set());
   const toggle = (key: string) => setOpen((was) => {
@@ -448,52 +521,96 @@ function PhoneTotals({ view, subject, caption }: { view: ActivityDashboard; subj
     return next;
   });
   const columns = view.buckets.map((bucket, i) => ({ kind: bucket.kind, ...heading(bucket, i, t, figures) }));
-  const line = (key: string, item: PhoneItem) => (
-    <PhoneLine key={key} item={item} columns={columns} open={open.has(key)} onToggle={() => toggle(key)} />
-  );
+  const groups = tiles.filter((tile) => !tile.total);
 
   return (
-    <div className="overflow-hidden rounded-lg border border-hairline bg-card">
-      {/* The table's first two headings, over the lines: each line's name is its own. */}
-      <p aria-hidden="true" className="flex justify-between border-b border-hairline px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-muted">
-        <span>{t.dashboard.activity}</span>
-        <span className="pr-6">{t.dashboard.total}</span>
-      </p>
-      <ul role="list" aria-label={caption}>
-        {view.range === 'ROLLING_30D' && line('all', {
-          kind: 'all', label: t.dashboard.totalAll, order: 0, description: null, note: null, total: view.total, counts: view.counts,
-        })}
+    <div data-phone-dashboard="">
+      <div className="mt-2 flex items-center gap-1.5 rounded-lg bg-navy px-3.5 py-2.5 text-white">
+        <span className="text-md font-semibold">{t.dashboard.totalTouches}</span>
+        <TippedGlyph
+          glyph="ⓘ"
+          name={termQuestion('TOUCHES', language)}
+          tip={termDefinition('TOUCHES', language)}
+          align="fit"
+          face="text-on-navy-muted hover:bg-white/10 hover:text-white"
+        />
+        <strong className="ml-auto text-[1.375rem] font-bold tabular-nums">{view.total}</strong>
+      </div>
+
+      {groups.length > 0 && (
+        <div role="group" aria-label={t.dashboard.groupTotals}>
+          {/*
+            Equal columns that never grow past a quarter (`minmax(0, 1fr)`), and a label that breaks inside a long word
+            — hyphenated where the browser knows the language, anywhere else — so an office's *Pengembangan* stays in
+            its tile at 360px instead of pushing the page sideways (T16).
+          */}
+          <dl className="mt-2 grid auto-cols-[minmax(0,1fr)] grid-flow-col gap-1.5">
+            {groups.map((tile) => (
+              <div key={tile.key} className="flex min-w-0 flex-col-reverse rounded-row bg-card px-1 py-2 text-center">
+                <dt className="hyphens-auto text-xs leading-tight text-muted [overflow-wrap:anywhere]">{tile.label}</dt>
+                <dd className={cn('text-[1.25rem] font-bold leading-tight tabular-nums', tile.value === 0 ? 'text-signal-grey' : 'text-ink')}>
+                  {tile.value}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      )}
+
+      {view.total === 0 && (
+        <p className="mt-3 text-sm text-muted">
+          {t.dashboard.nothingLogged}
+          {!subject && (
+            <>
+              {' '}
+              <Link href="/activity/log" className="font-semibold text-navy underline">{t.dashboard.logActivity}</Link>
+            </>
+          )}
+        </p>
+      )}
+
+      <div aria-label={caption} role="region">
         {view.sections.map((section) => {
           const sectionKey = section.code || section.label;
+          const note = section.standing !== 'shown' ? standingNote(section.standing, t, subject) : null;
           return (
-            <Fragment key={sectionKey}>
-              {line(`section:${sectionKey}`, {
-                kind: 'section',
-                label: section.label,
-                order: 0,
-                description: null,
-                note: section.standing !== 'shown' ? standingNote(section.standing, t, subject) : null,
-                total: section.total,
-                counts: section.counts,
-              })}
-              {section.types.map((type) => line(`type:${sectionKey}:${type.code}`, {
-                kind: 'type',
-                label: type.label,
-                order: type.displayOrder,
-                description: type.description,
-                note: type.standing !== 'shown' && section.standing === 'shown' ? standingNote(type.standing, t, subject) : null,
-                total: type.total,
-                counts: type.counts,
-              }))}
-            </Fragment>
+            <section key={sectionKey} className="mt-2 overflow-hidden rounded-lg bg-card">
+              <h2 className="flex items-center justify-between gap-2 bg-hover-row px-3 py-[7px] font-body text-base font-bold text-navy">
+                <span className="min-w-0">
+                  {section.label}
+                  {note && <ConfigBadge tone="navy" className="ml-2 align-middle">{note}</ConfigBadge>}
+                </span>
+                <span className="shrink-0 text-xs font-semibold text-muted">{section.total}</span>
+              </h2>
+              <ul>
+                {section.types.map((type) => {
+                  const key = `${sectionKey}:${type.code}`;
+                  return (
+                    <PhoneLine
+                      key={key}
+                      item={{
+                        label: type.label,
+                        description: type.description,
+                        note: type.standing !== 'shown' && section.standing === 'shown' ? standingNote(type.standing, t, subject) : null,
+                        total: type.total,
+                        counts: type.counts,
+                      }}
+                      columns={columns}
+                      open={open.has(key)}
+                      onToggle={() => toggle(key)}
+                    />
+                  );
+                })}
+              </ul>
+            </section>
           );
         })}
-      </ul>
+      </div>
     </div>
   );
 }
 
-/** One line: its name and total as a button, and under it, once opened, the count for each column. */
+/** One line: its name and count as a button, and under it, once opened, the count for each column. */
 function PhoneLine({
   item, columns, open, onToggle,
 }: {
@@ -502,37 +619,26 @@ function PhoneLine({
   open: boolean;
   onToggle: () => void;
 }) {
-  const t = useMessages(activityMessages);
   const panelId = useId();
   return (
-    <li
-      className={cn(
-        'border-b border-hairline last:border-b-0',
-        item.kind === 'all' && 'bg-amber/[0.16]',
-        item.kind === 'section' && 'bg-navy/5',
-      )}
-    >
+    <li className="border-t border-divider first:border-t-0">
       <button
         type="button"
         aria-expanded={open}
         aria-controls={open ? panelId : undefined}
         onClick={onToggle}
-        className="flex min-h-11 w-full items-start gap-2 px-4 py-2.5 text-left text-base text-navy"
+        className="flex min-h-11 w-full items-center gap-2 px-3 py-1 text-left text-base text-ink hover:bg-hover-row"
       >
-        {item.order > 0 && <NumberBadge n={item.order} className="mt-0.5" />}
         <span className="min-w-0 flex-1">
-          <span className={cn('block', item.kind !== 'type' && 'font-display font-bold')}>{item.label}</span>
-          {item.description && <span className="mt-0.5 block text-xs italic text-muted">{item.description}</span>}
+          <span className="block leading-tight">{item.label}</span>
           {item.note && <ConfigBadge tone="navy" className="mt-1">{item.note}</ConfigBadge>}
         </span>
-        <span className="shrink-0 font-bold">
-          <span className="sr-only">{t.dashboard.totalSaid}</span>
+        <span className={cn('w-7 shrink-0 text-right text-[0.9375rem] font-bold tabular-nums', item.total === 0 && 'text-signal-grey')}>
           {item.total}
         </span>
-        <span aria-hidden="true" className={cn('w-4 shrink-0 text-center leading-normal text-muted transition-transform', open && 'rotate-180')}>⌄</span>
       </button>
       {open && (
-        <dl id={panelId} className="grid grid-cols-4 gap-x-2 gap-y-2.5 px-4 pb-3 pt-0.5">
+        <dl id={panelId} className="grid grid-cols-4 gap-x-2 gap-y-2.5 px-3 pb-3 pt-0.5">
           {columns.map((column, i) => {
             const n = item.counts[i] ?? 0;
             return (
@@ -545,7 +651,7 @@ function PhoneLine({
                     </>
                   )}
                 </dt>
-                <dd className={cn('text-base', n === 0 ? 'text-muted' : 'font-semibold text-navy')}>{n}</dd>
+                <dd className={cn('text-base', n === 0 ? 'text-signal-grey' : 'font-semibold text-navy')}>{n}</dd>
               </div>
             );
           })}

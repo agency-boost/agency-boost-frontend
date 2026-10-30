@@ -32,6 +32,12 @@ export const KEPT_ENGLISH = {
     'Overview', 'Data upload', 'Activity types', 'Lead statuses', 'Activation checklist', 'Capability Mapping',
     'Events', 'Campaigns', 'Products', 'Recruitment pitch', 'Branch info', 'All members', 'Import people', 'Org tree',
     'Manage KPM admins',
+    // UI V1 (UI-004, D-13, D-20; ADR-0180): the field shell's tab bar, its *Lainnya* sheet and its regrouped sidebar — the
+    // report's own words, which it gives in English inside the Indonesian UI (`lib/field-nav.ts`). The groups' headings
+    // (*Saya*, *Aktivitas*, *Tim saya*, *Program*) are Indonesian words, translated (`shellMessages`); *KPM* is above.
+    'Home', 'Activity', 'Unit', 'Unit Dashboard', 'Search agent', 'Summary', 'Leads', 'Goal Setting', 'Personal Summary',
+    'Sales', 'Coaching', 'New Hires', 'Group Tree', 'User Management', 'User Mgmt', 'Event', 'Leader Forum', 'KPM Analytics',
+    '90-day activation',
     // The platform console (`components/admin-shell.tsx`), beyond the two above.
     'Companies', 'KPMs', 'Platform admin',
     'Manage companies', 'Org role ladder', 'All KPMs', 'Pending KPM requests', 'Leaders past the limit',
@@ -53,6 +59,9 @@ export const KEPT_ENGLISH = {
     // For approval (§B.10, P18.98-T4, coaching and unit): the Leader Notes tab's card, §A.1's *Capability Mapping* in the
     // prototype's sentence case (`Overall.html:4346`) — *Capability mapping diperbarui.*
     'Capability mapping',
+    // UI V1 (UI-006, UI-036; Phase 18.99 T10): the *Capability mapping* tab's second card, kept English in both
+    // languages by the report's list — it was *Pelacak skill* in ID mode.
+    'Skill tracker',
   ],
   /**
    * §A.3 — every tab row as built, and the two rows approved as tabs: Calendar's *Week · Month* and the Product
@@ -66,6 +75,8 @@ export const KEPT_ENGLISH = {
     'Personal Summary', 'Goal Setting', 'Activity', 'Training', 'Activation', 'Coaching Session', 'Leader Notes',
     'Register KPM', 'Find Your Leader', 'Add New Agents', 'Pending Requests',
     'Overview', 'Compliance, Events, and Campaigns',
+    // UI V1 (UI-109, the report's own word): KPM Analytics' second tab, *Overview | Compliance*, in both languages.
+    'Compliance',
     'Activity Mgmt', 'Events', 'Campaigns',
     'Overview & Stats', 'Agenda', 'Action Items',
     'Activity types', 'Ratio benchmarks',
@@ -107,6 +118,8 @@ export const KEPT_ENGLISH = {
     'Event attendance status', 'Event attendance rate', 'Event NPS', 'Campaign qualification',
     'Maintenance of Contract', 'Production club tier', 'Recruitment pipeline now', 'Expected to close',
     'Open sales leads', 'Sales leads closing this month', 'Recruitment candidates nominated this month',
+    // UI V1 (Phase 18.99 T4; UI-028): the roster's *Closing*, registered in T16.
+    'Closing (sales leads paid and issued in the period)',
     'Potential Monthly Active Agents in unit', 'Touches on the goal activities', 'New active agents',
     'Rolling persistency', 'New Hire', 'Leaders used', 'Headcount', 'New members this month',
     'Agents who logged activity this month', 'Recruitment closed last month', 'Projected APE for the year', 'Net APE',
@@ -133,15 +146,18 @@ export const KEPT_ENGLISH = {
     // KPM Analytics.
     'Unit comparison', 'AB', 'APE — This Month', 'APE — Last Month', 'APE — Annual', 'Coached (7d)',
     'Producing this month', 'Producing last month', 'Total leads', 'MOC', 'ABs meeting MOC', 'Monthly production',
-    // The Unit Dashboard.
-    'Your team', 'Direct Group production', 'On pace to be active (Group)', 'Potential Recruits (Group)', 'AAB units',
-    'Activity breakdown', 'Ratios', 'Sales-only', 'Gap',
-    // Personal Summary.
-    'Goal vs. actual (APE)', 'Activity pulse', 'Activity Ratios', 'Policies still needed', 'Closes this month',
-    // Goal Settings.
-    'Annual APE target', 'Annual savings target', 'APE already produced this year', "This month's APE target",
-    'Policies per month', 'Policies per week', 'Monthly activity target', 'Conversion assumptions', 'Closing rate',
-    'Commission rate',
+    // The Unit Dashboard. *Changed 2026-10-30 (UI V1, UI-006; ADR-0180):* the owner's kept list is UI-006's, and *Your
+    // team*, *Direct Group production*, *On pace to be active (Group)*, *Potential Recruits (Group)*, *AAB units*,
+    // *Activity breakdown*, *Ratios* and *Gap* are Indonesian in ID mode now (UI-003's *Tim Anda*, *Produksi Group*; the
+    // rest proposed in §B.10, P18.99). Was kept here. *Gap* stays kept for KPM Analytics' MOC verdict alone, which UI-006
+    // does not name.
+    'Sales-only', 'Gap',
+    // Personal Summary. *Changed 2026-10-30 (UI-006's table):* *Goal vs. actual (APE)*, *Activity pulse* and *Policies still
+    // needed* (as a KPI label) are translated — *Target vs. realisasi (APE)*, *Rasio aktivitas*, *Polis yang dibutuhkan*.
+    'Activity Ratios', 'Closes this month',
+    // Goal Settings. *Changed 2026-10-30 (UI-006):* its ten KPI labels are Indonesian in ID mode (proposed in §B.10, P18.99),
+    // and *Appointment to Sales meeting* is UI-016's *Appointment to meeting*, kept as the report writes it.
+    'Appointment to meeting',
     // New Hires.
     '3M activation %',
     // For approval (§B.10, P18.98-T4): the forum's *Avg. Case Size* with its unit apart, a format (§E) as *APE*'s is; its
@@ -153,13 +169,10 @@ export const KEPT_ENGLISH = {
     // For approval (§B.10, P18.98-T4, new hires and activation): the coaching record's *✓ Done · New Active Agent*, the
     // metric's name in the singular.
     'New Active Agent',
-    // For approval (§B.10, P18.98-T4, field selling): Goal Settings' second conversion rate, the client's label (ADR-0160
-    // §4), the twin of *Closing rate* beside it and named from §A.6's cascade stages.
-    'Appointment to Sales meeting',
     // For approval (§B.10, P18.98-T4, coaching and unit): the Unit Dashboard's *Monthly Active Agent* in a sentence (the
-    // registry's *Monthly Active Agent (MAA)*), the ✓'s name *Potential Monthly Active Agent*, and a total's *On pace to be
-    // active: 6/12* — its tile's name without *(Group)*.
-    'Monthly Active Agent', 'Potential Monthly Active Agent', 'On pace to be active',
+    // registry's *Monthly Active Agent (MAA)*). *Changed 2026-10-30 (UI-006):* *Potential Monthly Active Agent* and *On pace
+    // to be active* are translated — *Monthly Active Agent potensial*, *Berpotensi aktif* (proposed in §B.10, P18.99).
+    'Monthly Active Agent',
     // For approval (§B.10, P18.98-T4, events): the *Feedback Summary*'s score, *Net Promoter Score*, as the registry's
     // *Event NPS* names it — *Kehadiran belum dikonfirmasi — tidak dihitung dalam NPS*.
     'NPS',
@@ -211,6 +224,15 @@ export const KEPT_ENGLISH = {
     // For approval (§B.10, P18.98-T4, field selling): *case size* in a sentence, as §A.4's *Avg. case size* names it —
     // Goal Settings' *Rata-rata case size (APE per polis)*.
     'case size',
+    // For approval (§B.10, Phase 18.99 T12, UI-105): the pipeline strip's short words for three stages, as the trade
+    // writes them in Indonesian — *SPAJ* (the report's), *AAJI* and *JFW* (`glossary.md`).
+    'SPAJ', 'AAJI', 'JFW',
+    // UI V1 (Phase 18.99 T4; UI-006's list, ADR-0180 §4): *Last updated* (UI-028's date line) and *Group*, D-16's *Unit /
+    // Group* — the Activities tab's switch, *Produksi Group* — kept in both languages as the report writes them.
+    'Last updated', 'Group',
+    // UI V1 (Phase 18.99 T13; UI-108: *Say "Feedback", not "Masukan"*): an event's *Feedback*, as the owner writes it —
+    // *Feedback belum dikirim*, *Kirim feedback*.
+    'Feedback', 'feedback',
   ],
   /**
    * For approval (§B.10, P18.98-T4, public and account): *Your account*'s *Pronoun* options — English pronouns, which only
@@ -230,6 +252,9 @@ export type KeptTerm = (typeof KEPT_ENGLISH)[keyof typeof KEPT_ENGLISH][number];
  */
 export const SAME_IN_INDONESIAN = [
   'Menu', 'Status', 'Email', 'email', 'Total', 'Label', 'Item', 'PDF', 'online', 'WhatsApp',
+  // For approval (§B.10, Phase 18.99 T9): the invite share block's *QR* button (UI-084), as the report writes it in
+  // both languages.
+  'QR',
   // For approval (§B.10, P18.98-T4): the forum's *PIC*, the person in charge, as Indonesian offices write it.
   'PIC',
   // For approval (§B.10, P18.98-T4, new hires and activation): New Hires' column, the loanword §B.10's *checklist* is.
@@ -249,6 +274,9 @@ export const SAME_IN_INDONESIAN = [
   // For approval (§B.10, P18.98-T6, company templates): a company's web-address name, the column and the field on
   // *Manage Companies* — as the API's refusals write it (*Slug "…" sudah dipakai*).
   'Slug',
+  // For approval (§B.10, Phase 18.99 T11): Home's *+ Log* pill in the *Aktivitas saya* tile (UI-100), as the report
+  // writes it in both languages.
+  'Log',
 ] as const;
 
 /**
@@ -264,9 +292,6 @@ export const KEPT_ELSEWHERE = [
   // P18.98-T4, the office reporting: *Month* is §B.4's field (*Bulan*, Data upload's month) and §A.3's Calendar tab;
   // *Categories* is §B.4's word for a group of chips (*Kategori*, the compliance tree's) and §A.3's Training tab.
   'Month', 'Categories',
-  // P18.98-T4, new hires and activation: *Your team* is §A.4's Unit Dashboard KPI and *Add New Agents*' card of the
-  // people who report to the reader (*Tim Anda*, approved in §B.10, 2026-10-29).
-  'Your team',
   // P18.98-T4, field selling: *Activity* is §A.3's coaching tab and the Activity Dashboard's first column, a header
   // (*Aktivitas*, §B bucket 2).
   'Activity',
@@ -274,6 +299,10 @@ export const KEPT_ELSEWHERE = [
   // Catalog categories, kept as its tabs, and three of the Sales Attack Plan's eight needs — a brief's answers, translated
   // with the other five (*Kesehatan*, *Penyakit kritis*, *Pendidikan*, the words §A.3 offered for the tabs).
   'Health', 'Critical illness', 'Education',
+  // UI V1 (Phase 18.99 T13; UI-107): the field's Product Catalog writes its categories in Indonesian in ID mode — *Semua
+  // produk*, *Jiwa*, *Kesehatan*, *Penyakit kritis*, *Pendidikan*, *Unit link* — where the Super Admin's Company template
+  // still keeps them (§A.3).
+  'All products', 'Life', 'Investment-linked',
   // P18.98-T4, coaching and unit: *Details* is §A.3's product drawer tab and §B.1's *Detail* — the Unit Dashboard's ⌄
   // column as a screen reader names it.
   'Details',
@@ -285,4 +314,10 @@ export const KEPT_ELSEWHERE = [
   // branch) and §B.4's column (*KPM*, §B.9) — *Leaders past the limit*' and *KPM Owners & Admins*' tables; *Member* is
   // §A.2's title of a member's page and *Leaders past the limit*' column (*Anggota*, §B.4 *Members*).
   'Office', 'Member',
+  // UI V1 (UI-006, 2026-10-30): *Gap* is KPM Analytics' MOC verdict, kept (§A.4), and the Unit Dashboard's tile, translated
+  // — *Selisih* (proposed in §B.10, P18.99).
+  'Gap',
+  // UI V1 (Phase 18.99 T16): *Group* is D-16's *Unit / Group* switch, kept (`kept('Group')`, UI-006), and the office's
+  // informal groups' column in *All members*, translated with the rest of that tab — *Grup*, as *Grup informal* is.
+  'Group',
 ] as const;

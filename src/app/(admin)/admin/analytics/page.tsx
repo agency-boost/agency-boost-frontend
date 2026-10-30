@@ -77,7 +77,7 @@ function PlatformAnalytics() {
 
   if (view.offices.length === 0) {
     return (
-      <div className="rounded-lg border border-hairline bg-card">
+      <div className="rounded-lg border border-card-edge bg-card">
         <EmptyState title={COPY.empty} />
       </div>
     );

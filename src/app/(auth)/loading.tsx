@@ -10,7 +10,7 @@ export default function Loading() {
     <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-5">
       <Skeleton>
         <SkeletonBar className="h-8 w-3/4" />
-        <div className="mt-6 rounded-lg border border-hairline bg-card p-5">
+        <div className="mt-6 rounded-lg border border-card-edge bg-card p-5">
           <SkeletonText lines={4} />
           <SkeletonBar className="mt-6 h-9 w-full" />
         </div>

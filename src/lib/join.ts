@@ -113,6 +113,12 @@ export interface UntaggedMember {
 
 export const readInbox = () => api<PendingRequest[]>('/join/requests');
 
+/**
+ * **How many requests are waiting on the reader** (UI V1, UI-085): the orange count on the *Pending Requests* tab, read
+ * on all four User Management screens — the requests `readInbox` lists, counted on the server without their names.
+ */
+export const readWaitingCount = () => api<{ count: number }>('/join/requests/count');
+
 export const readRoutingChoices = () => api<RoutingChoice[]>('/join/requests/routing');
 
 /**

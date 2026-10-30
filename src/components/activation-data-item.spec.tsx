@@ -33,6 +33,8 @@ const leaderPage = (routes: Record<string, StubReply | StubReply[]> = {}, view: 
   return stub;
 };
 const row = (code: string) => document.querySelector(`[data-code="${code}"]`) as HTMLElement;
+/** UI V1 (UI-027): on the leader's detail an automatic item's rule and source line are behind its ⓘ, in its tooltip. */
+const tipOf = (code: string) => Array.from(row(code).querySelectorAll('[role="tooltip"]')).map((t) => t.textContent).join(' ');
 const writes = (calls: { url: string; init: RequestInit }[]) =>
   calls.filter((c) => (c.init.method ?? 'GET') !== 'GET').map((c) => [c.init.method, c.url.replace('http://api.test/api/v1', ''), c.init.body ? JSON.parse(String(c.init.body)) : undefined]);
 /** `items`, with one changed. */
@@ -65,17 +67,16 @@ describe('the data-backed checklist items (P18.96-T4)', () => {
     expect(own.getByRole('link', { name: 'Completed from Coaching sessions · 1 Oct 2026' })).toHaveAttribute('href', '/coaching/me?session=s-4');
   });
 
-  it('P18.96-T4 AC-2 a leader’s detail links a session to its archive, and draws a lead’s source line with no link', async () => {
+  it('P18.96-T4 AC-2, UI-027 a leader’s detail says where each came from behind ⓘ: the session, and the sales data', async () => {
     const items = changed('WEEKLY_CHECK_IN', {
       done: true, doneAt: '2026-10-01T03:00:00.000Z', source: 'link', doneBy: SARI, record: { collection: 'coachingSessions', id: 's-4' },
     }).map((list) => list.map((it) => ({ ...it, note: null, date: null })));
     leaderPage({}, { ...leaderView(), aspects: activationView({}, items).aspects });
     await screen.findByRole('heading', { level: 2, name: 'Activation progress' });
-    expect(within(row('WEEKLY_CHECK_IN')).getByRole('link', { name: 'Completed from Coaching sessions · 1 Oct 2026' }))
-      .toHaveAttribute('href', '/coaching/mem-rina/archive/s-4');
-    const first = within(row('FIRST_CASE_CLOSED'));
-    expect(first.getByText('Completed from Sales data · 20 Sep 2026')).toBeInTheDocument();
-    expect(first.queryByRole('link', { name: /Completed from/ })).not.toBeInTheDocument();
+    expect(tipOf('WEEKLY_CHECK_IN')).toContain('Completed from Coaching sessions · 1 Oct 2026');
+    expect(tipOf('FIRST_CASE_CLOSED')).toContain('Completed from Sales data · 20 Sep 2026');
+    // No visible source line under the item on the leader's detail (UI-027).
+    expect(row('WEEKLY_CHECK_IN').querySelector('[data-testid="source-line"]')).toBeNull();
   });
 
   it('P18.96-T4 AC-4 a tick its data has not confirmed reads “Ticked by {name}, waiting for data”, the tick’s own date kept in its ⓘ', async () => {
@@ -175,8 +176,8 @@ describe('the data-backed checklist items (P18.96-T4)', () => {
     expect(writes(calls)[1]).toEqual(['PUT', '/new-hires/mem-rina/items/WEEKLY_CHECK_IN', {
       done: true, record: { kind: 'one_on_one', date: '2026-10-03', note: 'Went through his first presentations.' },
     }]);
-    // Sari reads her own tick as hers.
-    expect(await checkIn.findByText('Ticked by you, waiting for data')).toBeInTheDocument();
+    // Sari reads her own tick as hers — behind the ⓘ on the leader's detail (UI-027).
+    await waitFor(() => expect(tipOf('WEEKLY_CHECK_IN')).toContain('Ticked by you, waiting for data'));
     expect(checkIn.queryByRole('group', { name: 'Log 1:1' })).not.toBeInTheDocument();
   });
 
@@ -202,7 +203,7 @@ describe('the data-backed checklist items (P18.96-T4)', () => {
     expect(writes(stub.calls)).toEqual([]);
   });
 
-  it('P18.96-T4 AC-5 the leader’s detail and the hire’s page draw the same items the same way, the reader named “you” on their own', async () => {
+  it('P18.96-T4 AC-5, UI-027 the leader’s detail and the hire’s page say the same of each item — the leader’s behind ⓘ — the reader “you” on their own', async () => {
     const items = withWaitingCheckIn();
     const state = () => ['FIRST_CASE_CLOSED', 'WEEKLY_CHECK_IN', 'INDEPENDENT_AGENT_MILESTONE'].map((code) => [
       code, row(code).querySelector('[data-testid="source-line"]')?.textContent ?? null, (within(row(code)).getByRole('checkbox') as HTMLInputElement).checked,
@@ -217,10 +218,9 @@ describe('the data-backed checklist items (P18.96-T4)', () => {
     document.body.innerHTML = '';
     leaderPage({}, { ...leaderView(), aspects: activationView({}, items.map((l) => l.map((it) => ({ ...it, note: null, date: null })))).aspects });
     await screen.findByRole('heading', { level: 2, name: 'Activation progress' });
-    expect(state()).toEqual([
-      ['FIRST_CASE_CLOSED', 'Completed from Sales data · 20 Sep 2026', true],
-      ['WEEKLY_CHECK_IN', 'Ticked by you, waiting for data', true],
-      ['INDEPENDENT_AGENT_MILESTONE', null, false],
-    ]);
+    expect(tipOf('FIRST_CASE_CLOSED')).toContain('Completed from Sales data · 20 Sep 2026');
+    expect(tipOf('WEEKLY_CHECK_IN')).toContain('Ticked by you, waiting for data');
+    expect((within(row('WEEKLY_CHECK_IN')).getByRole('checkbox') as HTMLInputElement).checked).toBe(true);
+    expect((within(row('INDEPENDENT_AGENT_MILESTONE')).getByRole('checkbox') as HTMLInputElement).checked).toBe(false);
   });
 });

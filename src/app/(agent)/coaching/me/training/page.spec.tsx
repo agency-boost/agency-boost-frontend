@@ -23,13 +23,9 @@ const show = (routes: Record<string, StubReply | StubReply[]> = {}, me = LEARNER
 
 const sales = () => screen.findByRole('heading', { level: 2, name: 'Sales (4/10)' });
 
-/** Each row of every table as the reader sees it: the skill's card, the module, its status cell. */
-const rowsShown = () => screen.getAllByRole('table').flatMap((table) =>
-  within(table).getAllByRole('row').slice(1).map((r) => [
-    table.querySelector('caption')?.textContent,
-    within(r).getByRole('rowheader').textContent,
-    within(r).getAllByRole('cell')[3].textContent,
-  ]));
+/** Each row of every skill's list as the reader sees it: the skill's list, the module's row (UI V1, UI-066). */
+const rowsShown = () => screen.getAllByRole('list', { name: / modules$/ }).flatMap((list) =>
+  within(list).getAllByRole('listitem').map((r) => [list.getAttribute('aria-label'), r.textContent]));
 
 describe('/coaching/me/training, the reader’s own Training tab (P18.5-T4 AC-3)', () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -51,7 +47,7 @@ describe('/coaching/me/training, the reader’s own Training tab (P18.5-T4 AC-3)
     show();
     await sales();
     expect(screen.getByRole('heading', { level: 2, name: 'Product (0/0)' })).toBeInTheDocument();
-    for (const table of screen.getAllByRole('table')) expect(within(table).queryAllByRole('link')).toEqual([]);
+    for (const list of screen.getAllByRole('list', { name: / modules$/ })) expect(within(list).queryAllByRole('link')).toEqual([]);
     expect(screen.queryByRole('group', { name: 'Status' })).not.toBeInTheDocument();
   });
 

@@ -73,7 +73,7 @@ export function UnitComparisonTable({
   // The first badge of each club the reader meets carries its ⓘ (AC-8): the agencies in the table's order.
   const clubTerms = clubTermFirsts(view.agencies);
   return (
-    <div className="overflow-hidden rounded-lg border border-hairline bg-card">
+    <div className="overflow-hidden rounded-lg border border-card-edge bg-card">
       <div className="relative overflow-x-auto">
         <table aria-labelledby={labelledBy} className="w-full min-w-[1180px] border-collapse text-left text-md">
           <thead>

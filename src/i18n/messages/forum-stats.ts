@@ -87,7 +87,8 @@ const en = {
     producing_agents:
       'Annual Active Agents — members with APE or a policy in the monthly production file in at least one month of the period.',
     new_agent_3m:
-      '3M new agent % — of the new hires who joined in the period and whose 90 days are over, the share with a first paid and issued case by day 90 of their join date.',
+      // UI-023, rule A: a first case by day 90 counts at once; one after day 90 counts on neither side.
+      '3M new agent % — of the new hires who joined in the period and whose result is decided, the share with a first paid and issued case by day 90 of their join date. A first case after day 90 counts on neither side.',
     avg_monthly_aa: 'AA — Active Agent, a member whose month shows APE or a policy in the monthly production file.',
     case_submission: 'Case submission and Avg. Case Size — the policies in the monthly production file, and its APE over them.',
   },
@@ -155,7 +156,7 @@ const id: MessagesOf<typeof en> = {
     producing_agents:
       `${kept('Annual Active Agents')} — anggota yang memiliki ${kept('APE')} atau polis di file produksi bulanan, minimal dalam satu bulan pada periode ini.`,
     new_agent_3m:
-      `${kept('3M new agent %')} — dari agen baru yang bergabung dalam periode ini dan 90 harinya sudah lewat, persentase yang memiliki ${kept('case')} pertama yang dibayar dan terbit paling lambat hari ke-90 sejak tanggal bergabungnya.`,
+      `${kept('3M new agent %')} — dari agen baru yang bergabung dalam periode ini dan hasilnya sudah ditetapkan, persentase yang memiliki ${kept('case')} pertama yang dibayar dan terbit paling lambat hari ke-90 sejak tanggal bergabungnya. ${kept('Case')} pertama setelah hari ke-90 tidak dihitung di kedua sisi.`,
     avg_monthly_aa:
       `${kept('AA')} — ${kept('Active Agent')}, anggota yang bulannya menunjukkan ${kept('APE')} atau polis di file produksi bulanan.`,
     case_submission:

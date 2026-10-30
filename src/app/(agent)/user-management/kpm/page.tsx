@@ -5,10 +5,13 @@ import { Page } from '@/components/page';
 import { USER_MANAGEMENT_TITLE, UserManagementTabs } from '@/components/user-management-tabs';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button, ButtonLink, Card, ErrorBanner, Field, TextInput } from '@/components/ui/field';
+import { REMOVED_ON_PHONE } from '@/components/ui/phone';
+import { PhoneTip } from '@/components/ui/phone-tip';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { useMessages } from '@/i18n/language-provider';
 import { userManagementMessages } from '@/i18n/messages/user-management';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
+import { cn } from '@/lib/cn';
 import {
   askForKpm,
   readJoinState,
@@ -31,6 +34,10 @@ import {
  *
  * Its words are the catalogue's (`user-management.ts`; P18.98-T4): *office* is *KPM* in Indonesian (§B.9). An office's
  * company, code and branch are shown as stored.
+ *
+ * **UI V1 (2026-10-30, Phase 18.99 T9; UI-088, UI-087).** One card for the one fact: *KPM terdaftar* in sentence case,
+ * the office as its title, *Pindah ke KPM lain…* as 12px meta inside it — behind ⓘ on a phone (Appendix A); no
+ * uppercase eyebrow and no orange left border, here or on *Anda mengajukan KPM*. No sub-line below 1024px.
  */
 export default function RegisterKpmPage() {
   const words = useMessages(userManagementMessages);
@@ -82,6 +89,8 @@ export default function RegisterKpmPage() {
     <Page
       title={USER_MANAGEMENT_TITLE}
       subtitle={t.subtitle}
+      subtitleOnPhone={false}
+      subtitleOnTablet={false}
     >
       <UserManagementTabs leaderLocked={!registered} />
       {error && <ErrorBanner {...error} />}
@@ -91,16 +100,19 @@ export default function RegisterKpmPage() {
       )}
 
       {state && registered && (
-        <Card className="border-l-4 border-l-amber">
-          <p className="text-sm font-semibold uppercase tracking-wide text-muted">{t.registered}</p>
-          <p className="mt-1 font-display text-xl font-bold text-navy">{state.kpmLabel}</p>
+        <Card data-testid="registered-office">
+          <p className="text-sm text-muted">{t.registered}</p>
+          <p className="mt-0.5 flex items-center gap-1.5 font-display text-xl font-bold text-navy">
+            {state.kpmLabel}
+            <PhoneTip text={t.moving} className="font-normal" />
+          </p>
           <p className="mt-1 text-md text-muted">
             {state.status === 'pending' ? t.pendingLine : t.activeLine}
           </p>
           {/* No "Switch KPM". The prototype's button only hides a card; moving between
               offices is a real operation with real consequences for your history, and it
               is not one you do to yourself from here. */}
-          <p className="mt-3 text-sm text-muted">{t.moving}</p>
+          <p className={cn('mt-2 text-sm text-muted', REMOVED_ON_PHONE)}>{t.moving}</p>
           {state.status === 'pending' && (
             <ButtonLink href="/user-management/leader" className="mt-4">
               {words.tabs.leader}
@@ -209,8 +221,8 @@ function AskForKpm({
 
   if (mine && mine.status === 'pending') {
     return (
-      <Card className="mt-4 border-l-4 border-l-amber">
-        <p className="text-sm font-semibold uppercase tracking-wide text-muted">{t.askedTitle}</p>
+      <Card className="mt-4">
+        <p className="text-sm text-muted">{t.askedTitle}</p>
         <p className="mt-1 font-display text-xl font-bold text-navy">{mine.branchName}</p>
         <p className="mt-1 text-md text-muted">{t.askedLine({ company: mine.companyName })}</p>
       </Card>

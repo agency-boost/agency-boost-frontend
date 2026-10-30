@@ -2,6 +2,7 @@
 
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useId, useState } from 'react';
+import { useFieldChrome } from '@/components/field-nav';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button, Card, ErrorBanner } from '@/components/ui/field';
 import { Skeleton, SkeletonBar } from '@/components/ui/skeleton';
@@ -16,6 +17,7 @@ import { usePhone } from '@/lib/use-phone';
 import { MocDialog, type MocOpen } from './moc';
 import { MonthlyProductionChart } from './monthly-production';
 import { UnitComparisonCards, UnitComparisonTable } from './unit-comparison';
+import { V1Overview } from './v1-overview';
 
 /**
  * KPM analytics' *Overview* tab (`KPM_Owner.html:1233-1260`; P18-T2): *Unit comparison* with its *Period*,
@@ -54,6 +56,9 @@ export function KpmAnalytics({ period }: { period: AnalyticsPeriod }) {
   const [listed, setListed] = useState<ReadonlySet<string>>(() => new Set());
   const [moc, setMoc] = useState<MocOpen | null>(null);
   const phone = usePhone();
+  // UI V1 (UI-109): a phone in the field shell reads the compact Overview; the console and wider screens as before.
+  const field = useFieldChrome() !== null;
+  const v1 = phone && field;
 
   useEffect(() => {
     let live = true;
@@ -78,6 +83,22 @@ export function KpmAnalytics({ period }: { period: AnalyticsPeriod }) {
   const toggleList = useCallback((id: string) => setListed((open) => flip(open, id)), []);
 
   const abCount = view?.total.abCount ?? null;
+
+  if (v1) {
+    return (
+      <div className="min-w-0">
+        {error && (
+          <div>
+            <ErrorBanner {...error} />
+            <Button variant="secondary" className="mt-3" onClick={() => setAttempt((n) => n + 1)}>{t.tryAgain}</Button>
+          </div>
+        )}
+        {!view && !error && <AnalyticsSkeleton phone />}
+        {view && <V1Overview view={view} period={shown} onPeriod={choose} onOpenMoc={setMoc} />}
+        <MocDialog open={moc} onClose={() => setMoc(null)} />
+      </div>
+    );
+  }
 
   return (
     <div className="min-w-0">
@@ -193,7 +214,7 @@ function AnalyticsSkeleton({ phone }: { phone: boolean }) {
       {phone ? (
         <div className="space-y-3">
           {[0, 1, 2].map((i) => (
-            <div key={i} className="rounded-lg border border-hairline bg-card p-4">
+            <div key={i} className="rounded-lg border border-card-edge bg-card p-4">
               <SkeletonBar className="h-4 w-1/2" />
               <SkeletonBar className="mt-3 h-2.5 w-1/4" />
               <SkeletonBar className="mt-2 h-3.5 w-2/3" />
@@ -203,7 +224,7 @@ function AnalyticsSkeleton({ phone }: { phone: boolean }) {
           ))}
         </div>
       ) : (
-        <div className="rounded-lg border border-hairline bg-card">
+        <div className="rounded-lg border border-card-edge bg-card">
           <div className="flex gap-6 border-b border-hairline bg-base px-4 py-3">
             {[0, 1, 2, 3, 4].map((i) => <SkeletonBar key={i} className="h-2.5 w-1/6" />)}
           </div>
@@ -219,7 +240,7 @@ function AnalyticsSkeleton({ phone }: { phone: boolean }) {
         </div>
       )}
       <SkeletonBar className="mt-[34px] h-4 w-40" />
-      <div className="mt-3.5 flex h-[140px] items-end gap-3.5 rounded-lg border border-hairline bg-card p-5">
+      <div className="mt-3.5 flex h-[140px] items-end gap-3.5 rounded-lg border border-card-edge bg-card p-5">
         {CHART_OUTLINE.map((height, i) => (
           <div key={i} className="w-full flex-1" style={{ height: `${height}%` }}>
             <SkeletonBar className="h-full w-full" />

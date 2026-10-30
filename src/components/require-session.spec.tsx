@@ -106,7 +106,7 @@ describe('RequireSession', () => {
       renderWithSession(<RequireSession family="tenant" permission="member:read_profile">secret</RequireSession>, {
         me: makeMe({ permissions: ['member:read_profile'] }),
       });
-      expect(replace.mock.calls).toEqual([['/activity/log']]);
+      expect(replace.mock.calls).toEqual([['/home']]);
       expect(screen.queryByText('secret')).not.toBeInTheDocument();
       expect(screen.queryByRole('alert')).not.toBeInTheDocument();
       expect(screen.getByRole('status')).toHaveTextContent('Taking you to your work…');

@@ -46,7 +46,7 @@ export function PrintLayout({ meeting }: { meeting: MeetingView }) {
       {/* `.agenda-cols` in print (`:765`): the three side by side. */}
       <div className="grid grid-cols-3 items-start gap-4">
         {AGENDA_SECTIONS.map((section) => (
-          <div key={section} className="break-inside-avoid rounded-lg border border-hairline bg-card px-4 pb-3 pt-4">
+          <div key={section} className="break-inside-avoid rounded-lg border border-card-edge bg-card px-4 pb-3 pt-4">
             <h4 className="mb-3 text-md font-extrabold text-navy">{t.sections[section]}</h4>
             {meeting.agenda[section].map((item) => (
               <div key={item.id} className="mb-3">
@@ -59,7 +59,7 @@ export function PrintLayout({ meeting }: { meeting: MeetingView }) {
       </div>
 
       <h3 className={h3}>{tabs.actions}</h3>
-      <div className="overflow-hidden rounded-lg border border-hairline bg-card">
+      <div className="overflow-hidden rounded-lg border border-card-edge bg-card">
         <table className="relative w-full border-collapse text-left text-base">
           <thead>
             <tr><TrackerHeaders /></tr>

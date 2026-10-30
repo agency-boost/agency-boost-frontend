@@ -1,5 +1,4 @@
 import { messagesIn } from '@/i18n/catalogue';
-import { kept } from '@/i18n/kept';
 import { DEFAULT_LANGUAGE, SOURCE_LANGUAGE, type Language } from '@/i18n/language';
 import { planMessages } from '@/i18n/messages/plan';
 import { productCatalogMessages } from '@/i18n/messages/product-catalog';
@@ -247,17 +246,28 @@ export const MONTHLY_BUDGET_CHOICES: readonly Choice<number>[] = BUDGET_CHOICES.
 /** The option of its own after them: *Lump-sum*. */
 export const LUMP_SUM_CHOICES: readonly Choice<number>[] = BUDGET_CHOICES.filter((c) => c.value === LUMP_SUM_BUDGET);
 
+/** A category's code, the domain constants' (`PRODUCT_CATEGORIES`), in the tabs' order (`Overall.html:10116-10122`). */
+export type CategoryCode = keyof typeof productCatalogMessages.en.category;
+const CATEGORY_CODES: readonly CategoryCode[] = ['life', 'health', 'ci', 'education', 'investment'];
+
 /**
- * The catalog's category tabs after *All products*, in order (`Overall.html:10116-10122`): §A.3's, kept English in both
- * languages (`kept`), so one list serves every reader.
+ * **The catalog's category tabs after *All products*, in the reader's `words`** (UI V1, UI-107: *Jiwa*, *Kesehatan*,
+ * *Penyakit kritis*, *Pendidikan*, *Unit link* in Indonesian; §A.3 kept them English until 2026-10-30). English when no
+ * language is passed.
  */
-export const CATEGORY_TABS: readonly Choice<string>[] = [
-  { value: 'life', label: kept('Life') },
-  { value: 'health', label: kept('Health') },
-  { value: 'ci', label: kept('Critical illness') },
-  { value: 'education', label: kept('Education') },
-  { value: 'investment', label: kept('Investment-linked') },
-];
+export const categoryTabs = (words: Language = SOURCE_LANGUAGE): Choice<string>[] => {
+  const t = messagesIn(productCatalogMessages, words);
+  return CATEGORY_CODES.map((value) => ({ value, label: t.category[value] }));
+};
+
+/** The tabs in English, the catalogue's source: what the address's `?category=` is checked against. */
+export const CATEGORY_TABS: readonly Choice<string>[] = categoryTabs();
+
+/** A category's name in the reader's `words`, or `undefined` for a code that is not one of the five. */
+export const categoryLabel = (code: string, words: Language = SOURCE_LANGUAGE): string | undefined =>
+  (CATEGORY_CODES as readonly string[]).includes(code)
+    ? messagesIn(productCatalogMessages, words).category[code as CategoryCode]
+    : undefined;
 
 /** A product's channel in the reader's `words` (`:9534`): *Conventional*, *Syariah*; English when none is passed. */
 export const channelLabel = (channel: ProductChannel, words: Language = SOURCE_LANGUAGE): string =>

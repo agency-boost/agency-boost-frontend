@@ -3,7 +3,7 @@
 import { Suspense, use } from 'react';
 import { Page } from '@/components/page';
 import { UnitDashboard } from '@/components/unit/unit-dashboard';
-import { periodFrom } from '@/lib/unit-dashboard';
+import { periodFrom, tabFrom } from '@/lib/unit-dashboard';
 import { useQuery } from '@/lib/use-query';
 
 /**
@@ -26,7 +26,7 @@ function UnitBelow({ membershipId }: { membershipId: string }) {
   const query = useQuery();
   return (
     <Page permission="unit_dashboard:read">
-      <UnitDashboard key={membershipId} forId={membershipId} period={periodFrom(query.period)} />
+      <UnitDashboard key={membershipId} forId={membershipId} period={periodFrom(query.period)} tab={tabFrom(query.tab)} />
     </Page>
   );
 }

@@ -217,7 +217,7 @@ export default function OrgLevelsPage() {
           {levels === null && <SkeletonTable caption={t.ladder} columns={columns} rows={3} />}
 
           {levels !== null && forCompany.length === 0 && (
-            <div className="rounded-lg border border-hairline bg-card">
+            <div className="rounded-lg border border-card-edge bg-card">
               <EmptyState
                 title={company ? t.noLadder({ company: company.name }) : t.noCompany}
               />

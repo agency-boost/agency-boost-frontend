@@ -38,7 +38,11 @@ export function RoleShell({
   allowSignedOut = false,
   children,
 }: {
-  title: string;
+  /**
+   * Omitted when the page draws its own title row (UI V1, UI-110: a forum meeting's header on a phone is the page's
+   * title), as a group layout's shell omits it; every shell beneath takes it as optional.
+   */
+  title?: string;
   subtitle?: string;
   actions?: ReactNode;
   /** What this route needs — not what the chrome's own application needs. */

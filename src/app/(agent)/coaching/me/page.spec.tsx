@@ -151,7 +151,7 @@ describe('/coaching/me, the reader’s own coaching (P11-T10 AC-4)', () => {
     const goal = await card('Goal');
     expect(goal).toHaveTextContent('IDR 108M / IDR 100M');
     expect(goal).toHaveTextContent('IDR 850M / IDR 1.2B');
-    expect(await card('Ratios')).toHaveTextContent('Selling success rate20.0%');
+    expect(await card('Ratios')).toHaveTextContent('Selling success rate20%');
     expect(await card('Next action items')).toHaveTextContent('26 SepLeads · Hendra WibowoSend proposal');
 
     // Read-only: nothing to start, finalize, reopen or edit, and no Leads or Activity card.

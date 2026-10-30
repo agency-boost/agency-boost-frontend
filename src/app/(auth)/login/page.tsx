@@ -7,8 +7,8 @@ import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { useSession } from '@/lib/session';
 import { type DemoAccount } from '@/lib/demo-accounts';
 import { DemoAccountsPanel } from '@/components/demo-accounts-panel';
-import { AUTH_PAGE } from '@/components/auth-page';
-import { Button, Card, ErrorBanner, Field, TextInput } from '@/components/ui/field';
+import { SignInWelcome, SIGN_IN_PAGE } from '@/components/sign-in-welcome';
+import { Button, ErrorBanner, Field, TextInput } from '@/components/ui/field';
 import { resendVerification } from '@/lib/sessions';
 import { destinationAfterSignIn, sessionEndedIn } from '@/lib/return-path';
 import { PasswordInput } from '@/components/ui/password-input';
@@ -16,6 +16,13 @@ import { PublicTitle } from '@/components/public-title';
 import { useMessages } from '@/i18n/language-provider';
 import { authMessages } from '@/i18n/messages/auth';
 
+/**
+ * **Sign in** (`/login`; UI V1, UI-102, D-11 and D-12; Phase 18.99 T11): **a welcome screen, not a form card** — soft
+ * warm-grey and peach shapes behind, Boost pointing on his peach circle in the middle with the three icon cards floating
+ * around him, the app's name and one short line under it, then the form, and **one big pill *Sign in*** (52px) near the
+ * thumb. **Today's method and today's words**: email and password, *Forgot your password?*, *Create an account*, the
+ * verification resend and the development accounts — only the look changes (`SignInWelcome`).
+ */
 export default function LoginPage() {
   const { signIn } = useSession();
   const t = useMessages(authMessages).signIn;
@@ -71,16 +78,17 @@ export default function LoginPage() {
   const notVerified = error?.code === 'AUTH_EMAIL_NOT_VERIFIED';
 
   return (
-    <main className={AUTH_PAGE}>
+    <main className={SIGN_IN_PAGE}>
+      <SignInWelcome />
       <PublicTitle>
-        <h1 className="font-display text-3xl font-bold text-navy">{t.title}</h1>
+        <h1 className="w-full text-center font-display text-3xl font-bold text-navy">{t.title}</h1>
       </PublicTitle>
       {/* `useSearchParams` needs a boundary; until the address is read, the sentence everybody else reads. */}
       <Suspense fallback={<Lede ended={false} />}>
         <LedeFromAddress />
       </Suspense>
 
-      <Card>
+      <div className="relative">
         <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
           {error && <ErrorBanner {...error} />}
           {notVerified && (
@@ -132,7 +140,8 @@ export default function LoginPage() {
             />
           </Field>
 
-          <Button type="submit" disabled={busy}>
+          {/* UI-102: one big pill, 52px, near the thumb. */}
+          <Button type="submit" disabled={busy} data-sign-in="" className="mt-1 h-[3.25rem] w-full rounded-pill text-base">
             {busy ? t.signingIn : t.signIn}
           </Button>
 
@@ -144,7 +153,7 @@ export default function LoginPage() {
             {t.createAccount}
           </Link>
         </form>
-      </Card>
+      </div>
 
       <DemoAccountsPanel onChoose={chooseDemo} disabled={busy} />
     </main>
@@ -163,7 +172,7 @@ function LedeFromAddress() {
 function Lede({ ended }: { ended: boolean }) {
   const t = useMessages(authMessages).signIn;
   return (
-    <p className="mb-6 mt-1 text-md text-muted">
+    <p className="mb-6 mt-1 text-center text-md text-muted">
       {ended ? t.sessionEnded : t.toContinue}
     </p>
   );

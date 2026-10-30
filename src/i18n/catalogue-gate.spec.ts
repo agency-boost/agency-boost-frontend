@@ -169,6 +169,8 @@ describe('P18.98-T1 AC-6 a module already moved keeps its words in the catalogue
       'components/app-shell.tsx', 'components/sidebar-user-menu.tsx', 'components/notification-bell.tsx',
       'components/agent-shell.tsx', 'components/tenant-shell.tsx', 'components/admin-shell.tsx',
       'lib/landing.ts', 'lib/profile-line.ts',
+      // UI V1 (UI-004): the field shell's tab bar, its *Lainnya* sheet and the model both draw.
+      'components/field-nav.tsx', 'components/field-more-sheet.tsx', 'lib/field-nav.ts',
     ]);
   });
 

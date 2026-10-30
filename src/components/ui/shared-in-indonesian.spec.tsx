@@ -241,7 +241,8 @@ describe('P18.98-T4 the words read outside a screen, in both languages', () => {
       expect(termDefinition(key, 'id')).not.toBe(TERMS[key].definition);
     }
     expect(termQuestion('APE', 'id')).toBe('Apa itu APE?');
-    expect(termQuestion('TOUCHES', 'id')).toBe('Apa itu sentuhan?');
+    // UI-106: *aktivitas*, never *sentuhan*.
+    expect(termQuestion('TOUCHES', 'id')).toBe('Apa itu aktivitas?');
     expect(termQuestion('CHAIRMANS_CLUB', 'id')).toBe('Apa itu Chairman’s Club?');
     expect(termMessages.id.MOC.definition).toMatch(/^Maintenance of Contract: /);
   });

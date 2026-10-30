@@ -2,10 +2,11 @@
 
 import { useState } from 'react';
 import { InviteShare } from '@/components/invite-share';
-import { Dialog } from '@/components/ui/dialog';
+import { ActionMenu } from '@/components/ui/action-menu';
+import { destructiveLast, useDestructiveAction } from '@/components/ui/destructive-action';
 import { Button } from '@/components/ui/field';
 import { Modal } from '@/components/ui/modal';
-import { StatusPill } from '@/components/ui/status-pill';
+import { TonePill } from '@/components/ui/tone-pill';
 import { toDisplayError } from '@/lib/api-client';
 import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
 import { newHiresMessages } from '@/i18n/messages/new-hires';
@@ -17,19 +18,18 @@ import {
 import { usePhone } from '@/lib/use-phone';
 
 /**
- * **Waiting to join** on `/new-hires` (P18.96-T3 AC-2, AC-3; ADR-0170 §2, §4): the people a leader has added who are
- * not in the unit yet — each invite, *Invited, waiting to join* or *Invite expired*, with **Resend** and **Cancel
- * invite**, and each transfer the leader asked for, *Transfer requested*, which the office decides — by the name and
- * code the leader typed, and nothing of the unit the person is in now, which the server does not send (the P18.96 exit
- * review, M3). Nothing here counts
- * anywhere: an invite is no membership, and a transfer moves nobody until it is approved. Drawn only when somebody is
- * waiting.
+ * **Waiting to join** on `/new-hires` (P18.96-T3 AC-2, AC-3; ADR-0170 §2, §4; **UI V1, UI-024**, D-24): the people a
+ * leader has added who are not in the unit yet — each invite, *Diundang, menunggu bergabung* or *Undangan kedaluwarsa*,
+ * and each transfer the leader asked for, *Pemindahan diajukan*, which the office decides — by the name and code the
+ * leader typed, and nothing of the unit the person is in now, which the server does not send (the P18.96 exit review,
+ * M3). Nothing here counts anywhere: an invite is no membership, and a transfer moves nobody until it is approved.
  *
- * *Resend* gives a new link and 14 days more, and shows the share step again — the link is never kept, so it cannot
- * be shown otherwise. *Cancel invite* asks first.
+ * **A list, not a card** (UI-024): behind the *Menunggu bergabung n ›* tile in a bottom sheet below 768px, in the
+ * right column from it. **An invite's actions are in its ⋯** — *Kirim ulang*, then *Batalkan undangan*, last, red, and
+ * asked about first (`useDestructiveAction`, D-06). *Kirim ulang* gives a new link and 14 days more and shows the share
+ * step again — the link is never kept, so it cannot be shown otherwise.
  *
- * **Its words are the catalogue's** (`new-hires.ts`' `waiting`, the client's *Invited, waiting to join*, *Resend*,
- * *Cancel invite*; P18.98-T4), a join date written in the figures' language.
+ * **Its words are the catalogue's** (`new-hires.ts`' `waiting`; P18.98-T4), a join date written in the figures' language.
  */
 export function WaitingToJoin({
   invites, transfers, reader, onInvites, onToast,
@@ -48,8 +48,16 @@ export function WaitingToJoin({
   const phone = usePhone();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<{ id: string; message: string } | null>(null);
-  const [cancelling, setCancelling] = useState<InviteView | null>(null);
+  const [target, setTarget] = useState<InviteView | null>(null);
   const [shared, setShared] = useState<SharedInvite | null>(null);
+  const cancelling = useDestructiveAction({
+    label: t.cancelInvite,
+    message: target ? t.cancelAsk({ name: target.fullName }) : '',
+    confirmLabel: t.cancelInvite,
+    cancelLabel: t.keep,
+    onConfirm: () => { if (target) void cancel(target); },
+    disabled: busy !== null,
+  });
 
   if (invites.length === 0 && transfers.length === 0) return null;
 
@@ -68,7 +76,6 @@ export function WaitingToJoin({
   }
 
   async function cancel(invite: InviteView) {
-    setCancelling(null);
     setBusy(invite.inviteId);
     setError(null);
     try {
@@ -79,65 +86,54 @@ export function WaitingToJoin({
       setError({ id: invite.inviteId, message: toDisplayError(err).message });
     } finally {
       setBusy(null);
+      setTarget(null);
     }
   }
 
   return (
-    <section aria-labelledby="waiting-to-join" className="mb-4 rounded-lg border border-hairline bg-card px-6 py-[22px] max-md:px-4">
-      <h2 id="waiting-to-join" className="mb-1 font-display text-md font-bold text-navy">{t.heading}</h2>
-      <ul role="list" aria-labelledby="waiting-to-join">
+    <>
+      <ul role="list" aria-label={t.heading} className="flex flex-col">
         {invites.map((invite) => (
-          <li key={invite.inviteId} className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-hairline py-3 last:border-b-0">
-            <div className="min-w-0 flex-1 basis-56">
-              <p className="flex flex-wrap items-center gap-2 text-md font-semibold text-navy">
-                <span className="break-words">{invite.fullName}</span>
-                <StatusPill
-                  status={invite.status === 'expired' ? 'alert' : 'neutral'}
-                  label={invite.status === 'expired' ? t.expired : t.invited}
-                />
-              </p>
-              <p className="text-sm text-muted">
-                {invite.agentCode} · {t.joinDate({ day: formatCalendarDay(invite.joinDate, figures) })}
-                {invite.leader.membershipId !== reader && <> · {t.intoUnit({ leader: invite.leader.name })}</>}
+          <li key={invite.inviteId} className="flex items-center gap-2 border-b border-divider py-2.5 last:border-b-0">
+            <div className="min-w-0 flex-1">
+              <p className="break-words text-md font-bold uppercase text-ink">{invite.fullName}</p>
+              <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted">
+                <TonePill tone={invite.status === 'expired' ? 'red' : 'grey'}>
+                  {invite.status === 'expired' ? t.expired : t.invited}
+                </TonePill>
+                <span>
+                  {invite.agentCode} · {t.joinDate({ day: formatCalendarDay(invite.joinDate, figures) })}
+                  {invite.leader.membershipId !== reader && <> · {t.intoUnit({ leader: invite.leader.name })}</>}
+                </span>
               </p>
               {error?.id === invite.inviteId && <p role="alert" className="mt-1 text-xs font-semibold text-alert">{error.message}</p>}
             </div>
-            <div className="flex flex-wrap gap-2">
-              <Button variant="secondary" disabled={busy !== null} onClick={() => void resend(invite)}>
-                {busy === invite.inviteId ? t.resending : t.resend}
-              </Button>
-              <Button variant="secondary" disabled={busy !== null} onClick={() => setCancelling(invite)}>
-                {t.cancelInvite}
-              </Button>
-            </div>
+            <ActionMenu
+              label={t.actionsFor({ name: invite.fullName })}
+              inert={busy !== null}
+              items={destructiveLast([
+                { label: busy === invite.inviteId ? t.resending : t.resend, onSelect: () => void resend(invite) },
+                { ...cancelling.item, onSelect: () => { setTarget(invite); cancelling.ask(); } },
+              ])}
+            />
           </li>
         ))}
         {transfers.map((transfer) => (
-          <li key={transfer.transferId} className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-hairline py-3 last:border-b-0">
-            <div className="min-w-0 flex-1">
-              <p className="flex flex-wrap items-center gap-2 text-md font-semibold text-navy">
-                <span className="break-words">{askedFor(transfer)}</span>
-                <StatusPill status="neutral" label={t.transfer} />
-              </p>
-              <p className="text-sm text-muted">
+          <li key={transfer.transferId} className="border-b border-divider py-2.5 last:border-b-0">
+            <p className="break-words text-md font-bold uppercase text-ink">{askedFor(transfer)}</p>
+            <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted">
+              <TonePill tone="grey">{t.transfer}</TonePill>
+              <span>
                 {transfer.agentCode}
                 {transfer.to.membershipId !== reader && <> · {t.intoUnit({ leader: transfer.to.name })}</>}
                 {' · '}{t.officeDecides}
-              </p>
-            </div>
+              </span>
+            </p>
           </li>
         ))}
       </ul>
 
-      <Dialog
-        open={cancelling !== null}
-        message={cancelling ? t.cancelAsk({ name: cancelling.fullName }) : ''}
-        confirmLabel={t.cancelInvite}
-        cancelLabel={t.keep}
-        tone="danger"
-        onConfirm={() => { if (cancelling) void cancel(cancelling); }}
-        onCancel={() => setCancelling(null)}
-      />
+      {cancelling.dialog}
       <Modal
         open={shared !== null}
         title={shared ? t.shareTitle({ name: shared.invite.fullName }) : ''}
@@ -148,6 +144,6 @@ export function WaitingToJoin({
       >
         {shared && <InviteShare {...shared} />}
       </Modal>
-    </section>
+    </>
   );
 }

@@ -116,7 +116,8 @@ describe('P18.98-T6 the Products tab in Indonesian', () => {
     expect(within(card).getByLabelText('4a · Jika ada keberatan — dia berkata')).toHaveValue('Pensiun masih lama.');
     expect(within(card).getByLabelText('5 · Tindakan berikutnya')).toBeInTheDocument();
 
-    const table = within(card).getByRole('table', { name: 'Commission rate' });
+    // UI V1 (UI-006): *Commission rate* is Indonesian in ID mode — *Persentase komisi* (proposed in §B.10, P18.99).
+    const table = within(card).getByRole('table', { name: 'Persentase komisi' });
     expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['Tahun', 'Persentase (%)']);
     expect(within(table).getByRole('rowheader')).toHaveTextContent('Tahun 1');
     // A rate as typed and read, in the reader's mark: *12,5*.

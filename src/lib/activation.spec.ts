@@ -2,10 +2,10 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { stubFetch } from '@test/harness';
-import { activationView, item, LINKS, RINA, SARI } from '@test/activation-fixtures';
+import { activationView, item, LINKS, RINA, ROSTER, SARI } from '@test/activation-fixtures';
 import {
   ACTIVATION_3M_LABEL, ACTIVATION_NOTE_MAX, aspectTitle, attributionOf, autoBadge, byHandBadge, correctionOf, correctStartDate,
-  dayShown, earliestStart, fromDataWords,
+  dayShown, earliestStart, fromDataWords, inFilter, newHireCounts, newHireGroups,
   FIRST_CASE_CLOSED, graduateMyActivation, groupTitle, isComplete, isDataBacked, isManual, isTickedByHandLink, isWholeDate, ITEM_NOTE_MAX,
   newHireHref, OWN_COPY, PROTOTYPE_COPY, readHireClosings, readMyActivation, readMyClosings, readNewHire, readNewHires, recordHref,
   saveActivationNote, saveHireItem, saveMyItem, sourceLineOf, startDateAllowed, startDateRangeText, takesHandWrite,
@@ -365,7 +365,31 @@ describe('P18.98-T4 the activation’s words in Indonesian', () => {
     expect(PROTOTYPE_COPY.pctComplete(31)).toBe('31% complete');
     expect(PROTOTYPE_COPY.goTo('Goal Settings')).toBe('Go to Goal Settings →');
     expect(OWN_COPY.completedFrom('Goal Settings', null, '1 Okt 2026')).toBe('Completed from Goal Settings · 1 Okt 2026');
-    expect(OWN_COPY.leftOn('21 Okt 2026')).toBe('Left 21 Okt 2026');
+    // UI-025: *Mark left* and *Left {date}* are gone with the route.
+    expect('leftOn' in OWN_COPY || 'markLeft' in OWN_COPY).toBe(false);
     expect(OWN_COPY.closingOption('Ibu Ratna', '20 Sep 2026')).toBe('Ibu Ratna · 20 Sep 2026');
+  });
+});
+
+describe('UI V1 — the roster as a tree (UI-024, D-24)', () => {
+  it('UI-024 groups every row under its unit, the reader’s Direct Unit first, newest joiner on top', () => {
+    const groups = newHireGroups(ROSTER);
+    expect(groups.map((g) => g.key)).toEqual(['direct', 'mem-arief', 'mem-sari']);
+    expect(groups.map((g) => g.rows.map((r) => r.hire.name))).toEqual([
+      ['Fikri Ramadhan', 'Dimas Saputra', 'Indah Permata', 'Lukman Hakim', 'Kemal Pratama'],
+      ['Tari Wulandari', 'Novi Lestari'],
+      ['Rina Wijaya', 'Budi Hartono'],
+    ]);
+    // Each group's share is the server's, never worked out here.
+    expect(groups.map((g) => g.unit.activation3M.all.pct)).toEqual([67, 100, 100]);
+  });
+
+  it('UI-024 counts and filters: Teraktivasi is a first sale, late ones included; Belum is everybody without one', () => {
+    expect(newHireCounts(ROSTER)).toEqual({ all: 9, activated: 5, not_yet: 4 });
+    const rows = newHireGroups(ROSTER).flatMap((g) => g.rows);
+    expect(rows.filter((r) => inFilter(r, 'not_yet')).map((r) => r.hire.name).sort())
+      .toEqual(['Budi Hartono', 'Fikri Ramadhan', 'Kemal Pratama', 'Tari Wulandari']);
+    expect(rows.filter((r) => inFilter(r, 'activated')).map((r) => r.status)).not.toContain('not_yet');
+    expect(inFilter({ status: 'activated_late' }, 'activated')).toBe(true);
   });
 });

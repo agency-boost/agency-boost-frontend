@@ -235,6 +235,13 @@ export const chasedToast = (title: string, language: Language = SOURCE_LANGUAGE)
 export const unchasedToast = (title: string, language: Language = SOURCE_LANGUAGE) => campaignWordsIn(language).unchased({ title });
 
 /**
+ * The toast a chase answer says (`:8144`), from what the server answered, not from what was asked — in `language`. Here,
+ * not in `campaign-list.tsx`, so the Summary's chasing card says it without loading the campaigns list (P18.99-T16).
+ */
+export const chaseToast = (card: Pick<CampaignCard, 'title' | 'chasing'>, language?: Language) =>
+  (card.chasing ? chasedToast(card.title, language) : unchasedToast(card.title, language));
+
+/**
  * The module's own words, in English — the states the prototype lacks, the reasons it never gives. None of OD-39's six
  * words (*office*, *KPM*, *reports to*, *tagged to*, *untagged*, *unassigned*), no phase, no code.
  */
@@ -375,9 +382,9 @@ export const rowSubline = (c: ChasedCampaign) => c.runs;
  * `language`, its figures in `figures`.
  *
  * **A ratio in the office's unit for it** (`ratioUnit`, P18.97-T7; ADR-0174 §2): its target as typed — *30%* — and the
- * reader's figure as a ratio beside its benchmark is written, a percentage to its tenth, a number to two places, with
- * a place more where the rounding would reach a target it falls short of (`formatRatioForStatus`) — *28,6% of 30%*,
- * *29,96% of 30%*, never *30,0% of 30%* unmet.
+ * reader's figure as a ratio beside its benchmark is written (`formatRatioForStatus`): a percentage **whole** (UI-080) —
+ * *29% of 30%*, and *30% of 30%* for an unmet 29,96%, its state the server's, judged on the unrounded value — and a
+ * number to two places, with a place more where the rounding would reach a target it falls short of.
  */
 export function progressWords(
   row: ProgressRow | undefined,

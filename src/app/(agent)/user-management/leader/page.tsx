@@ -8,7 +8,9 @@ import { Button, ButtonLink, Card, ErrorBanner, Field, TextInput } from '@/compo
 import { RoleBadge, rungShort, useLadder } from '@/components/ui/role-badge';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { StatusPill } from '@/components/ui/status-pill';
+import { PhoneTip } from '@/components/ui/phone-tip';
 import { REMOVED_ON_PHONE } from '@/components/ui/phone';
+import { TippedGlyph } from '@/components/ui/tipped-glyph';
 import { Toast, useToast } from '@/components/ui/toast';
 import { useMessages } from '@/i18n/language-provider';
 import { userManagementMessages } from '@/i18n/messages/user-management';
@@ -37,6 +39,13 @@ import {
  * Its words are the catalogue's (`user-management.ts`; P18.98-T4) — *Changing leader goes through your office admin.*,
  * the line a reader who has a leader sees in place of the search (ADR-0170 §6), verbatim among them. A leader's name,
  * their rung's badge and the office's label are shown as stored.
+ *
+ * **UI V1 (2026-10-30, Phase 18.99 T9).** **No invite card for somebody already in an office** (UI-086):
+ * *Gunakan undangan saja* led to `/join`, which refuses anybody with a membership, with a leader or without one
+ * (`GET /join/me`'s `kpmId` is the flag; widened from *with a leader* in T16). **One card for one fact** (UI-088): *Saat ini melapor ke* in sentence case over the
+ * leader's name, and *Penggantian leader…* as 12px meta inside it — behind ⓘ on a phone; no orange left border. The
+ * invite card's *Ketiganya sama saja…* behind ⓘ from 768px, not drawn on a phone (Appendix A). No sub-line below
+ * 1024px (UI-087).
  */
 export default function FindLeaderPage() {
   const words = useMessages(userManagementMessages);
@@ -112,6 +121,8 @@ export default function FindLeaderPage() {
     <Page
       title={USER_MANAGEMENT_TITLE}
       subtitle={t.subtitle}
+      subtitleOnPhone={false}
+      subtitleOnTablet={false}
     >
       <UserManagementTabs leaderLocked={!registered} />
       {error && <ErrorBanner {...error} />}
@@ -130,35 +141,38 @@ export default function FindLeaderPage() {
         </Card>
       )}
 
-      {state && registered && (
-        <>
-          <Card className="mb-4">
-            <h2 className="font-display text-lg font-bold text-navy">{t.haveCode}</h2>
-            {/* The client's *Remove* on a phone (P18.95-T7 AC-1, grey text row 1): its words stay from 768px. */}
-            <p className={cn('mt-1 text-md text-muted', REMOVED_ON_PHONE)}>{t.haveCodeLine}</p>
-            <ButtonLink href="/join" variant="secondary" className="mt-3">
-              {t.useInvite}
-            </ButtonLink>
-          </Card>
-        </>
+      {/*
+        UI-086: offered only to somebody with no office yet. `/join` refuses anybody who already has one, so for a member
+        with no leader the card was a dead end too; they ask a leader through the search above (decided 2026-10-30, T16).
+      */}
+      {state && !registered && (
+        <Card className="mb-4">
+          <h2 className="flex items-center gap-1.5 font-display text-lg font-bold text-navy">
+            {t.haveCode}
+            {/* Appendix A (UI-086): behind ⓘ from 768px; a phone has never shown it (P18.95-T7 AC-1, grey text row 1). */}
+            <TippedGlyph glyph="ⓘ" name={t.haveCodeLine} tip={t.haveCodeLine} align="fit" className={cn('font-normal', REMOVED_ON_PHONE)} />
+          </h2>
+          <ButtonLink href="/join" variant="secondary" className="mt-3">
+            {t.useInvite}
+          </ButtonLink>
+        </Card>
       )}
 
       {state && registered && (
         <>
-          {state.leaderName && (
-            <Card className="mb-4 border-l-4 border-l-amber">
-              <p className="text-sm font-semibold uppercase tracking-wide text-muted">{t.reportingTo}</p>
-              <p className="mt-1 font-display text-xl font-bold text-navy">{state.leaderName}</p>
-            </Card>
-          )}
-
           {hasLeader ? (
             /*
              * **Changing leader is the office's** (P18.96-T3 AC-6, ADR-0170 §6): the search stood here for a reader who
-             * already has a leader, and every request they sent was refused. One line in its place, the client's words.
+             * already has a leader, and every request they sent was refused. **One card for the one fact** (UI-088): whom
+             * they report to as its title, the client's line as 12px meta inside it — behind ⓘ on a phone.
              */
-            <Card>
-              <p className="text-md text-navy">{t.changingLeader}</p>
+            <Card data-testid="reporting-to">
+              <p className="text-sm text-muted">{t.reportingTo}</p>
+              <p className="mt-0.5 flex items-center gap-1.5 font-display text-xl font-bold text-navy">
+                {state.leaderName}
+                <PhoneTip text={t.changingLeader} className="font-normal" />
+              </p>
+              <p className={cn('mt-1 text-sm text-muted', REMOVED_ON_PHONE)}>{t.changingLeader}</p>
             </Card>
           ) : (
           <Card>

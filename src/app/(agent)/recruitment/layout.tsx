@@ -2,7 +2,7 @@
 
 import type { ReactNode } from 'react';
 import { Page } from '@/components/page';
-import { RouteTabs } from '@/components/ui/route-tabs';
+import { PlanTabs } from '@/components/plan/plan-tabs';
 import { useMessages } from '@/i18n/language-provider';
 import { recruitmentPlanMessages } from '@/i18n/messages/recruitment-plan';
 import { ATTACK_PLAN_HREF, PITCH_MATERIALS_HREF } from '@/lib/recruitment';
@@ -23,7 +23,8 @@ export default function RecruitmentLayout({ children }: { children: ReactNode })
   return (
     // The sub-line is not drawn on a phone: the client's *Remove* (P18.95-T7 AC-1, grey text row 8).
     <Page title={t.title} subtitle={t.subtitle} subtitleOnPhone={false} permission="recruitment:read">
-      <RouteTabs
+      {/* One segmented control on a phone (UI V1, UI-107), the underlined strip from 768px. */}
+      <PlanTabs
         label={t.tabs}
         tabs={[
           { href: ATTACK_PLAN_HREF, label: t.tabAttackPlan },

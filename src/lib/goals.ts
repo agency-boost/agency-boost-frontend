@@ -160,6 +160,28 @@ export const saveGoal = (period: string, inputs: GoalInputs, membershipId?: stri
   );
 
 /**
+ * **A plan worked out and not saved** (P18.99-T5, UI V1 UI-014): what the inputs the screen holds would mean, by the
+ * formula a save uses. `monthsLeft` is the figure in force — typed, or the office's calendar; `projected` is `null`
+ * when the inputs cannot make a plan.
+ */
+export interface GoalPreview {
+  period: string;
+  monthsLeft: number;
+  monthsLeftIsOverride: boolean;
+  achieved: GoalAchieved;
+  projected: GoalProjection | null;
+}
+
+/**
+ * **The cascade over the inputs on screen, written nowhere** (`POST /goals/:period/preview`, P18.99-T5): Goal
+ * Settings' result card, its tiles and its commitment move with every change, and the screen still holds no copy
+ * of the formula (P8-T3 AC-2). `membershipId` is a coachee's, as on a read — 404 outside the reader's reach. On
+ * their plan the APE produced is what they stored, whatever was typed (ADR-0075).
+ */
+export const previewGoal = (period: string, inputs: GoalInputs, membershipId?: string) =>
+  api<GoalPreview>(`/goals/${period}/preview` + forWhom(membershipId), { method: 'POST', body: inputs });
+
+/**
  * The six inputs the server takes, as a goal it answered holds them. Everything else on a goal is
  * derived or stamped. One place, so the calculator and the coaching Goal card send the same plan.
  */

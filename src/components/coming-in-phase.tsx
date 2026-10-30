@@ -75,7 +75,7 @@ export function ComingInPhase({
       </section>
 
       {elsewhere.length > 0 && (
-        <div className="rounded-lg border border-hairline bg-card p-6">
+        <div className="rounded-lg border border-card-edge bg-card p-6">
           <h2 className="font-display text-lg font-bold text-navy">{t.whatYouCanDo}</h2>
           <ul className="mt-3 flex flex-col gap-3">
             {elsewhere.map((link) => (

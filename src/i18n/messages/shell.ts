@@ -22,6 +22,9 @@ import { kept } from '@/i18n/kept';
  * @moved components/admin-shell.tsx
  * @moved lib/landing.ts
  * @moved lib/profile-line.ts
+ * @moved components/field-nav.tsx
+ * @moved components/field-more-sheet.tsx
+ * @moved lib/field-nav.ts
  */
 const en = {
   /** The bar's ☰, on a phone (§B.1). */
@@ -63,6 +66,17 @@ const en = {
   tryAgain: 'Try again',
   loadingNotifications: 'Loading your notifications…',
   seeAllNotifications: 'See all notifications',
+  /**
+   * **UI V1's field shell** (UI-004, D-13, D-20): the *Lainnya* sheet's group headings — Indonesian words, translated (the
+   * destinations in them are kept, `lib/field-nav.ts`) — the bar's fifth tab and the sheet's name, its ✕, the account
+   * row's *Ubah foto*, and the title row's avatar by what it opens. Proposed in §B.10, P18.99, where the report gives
+   * no English.
+   */
+  fieldGroups: { saya: 'Me', aktivitas: 'Activities', timSaya: 'My team', program: 'Programs', kpm: kept('KPM') },
+  more: 'More',
+  closeSheet: 'Close',
+  changePhoto: 'Change photo',
+  yourProfile: 'Your profile',
 };
 
 const id: MessagesOf<typeof en> = {
@@ -91,6 +105,11 @@ const id: MessagesOf<typeof en> = {
   tryAgain: 'Coba lagi',
   loadingNotifications: 'Memuat notifikasi Anda…',
   seeAllNotifications: 'Lihat semua notifikasi',
+  fieldGroups: { saya: 'Saya', aktivitas: 'Aktivitas', timSaya: 'Tim saya', program: 'Program', kpm: kept('KPM') },
+  more: 'Lainnya',
+  closeSheet: 'Tutup',
+  changePhoto: 'Ubah foto',
+  yourProfile: 'Profil saya',
 };
 
 export const shellMessages = defineMessages({ en, id });

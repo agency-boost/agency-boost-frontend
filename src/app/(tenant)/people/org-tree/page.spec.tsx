@@ -186,8 +186,9 @@ describe('P18.97-T7 AC-4 the office’s tree on a phone (UI-036)', () => {
 
   /** The page's markup on the build before P18.97-T7, rendered from this fixture on 2026-10-28. */
   const BEFORE_T7: Record<768 | 1280, string> = {
-    768: '14efc4bd063b0f1b9447d13d87e40f0b8c89a523a05d7e9e3ff195dac5137ea2',
-    1280: '14efc4bd063b0f1b9447d13d87e40f0b8c89a523a05d7e9e3ff195dac5137ea2',
+    // Re-recorded 2026-10-30 (UI V1): UI-008's card edge (`border-card-edge`) and UI-010's 44px/48px targets below 1024px.
+    768: '27a100e172092353f88f741b5359f30575e17de6c4deb374e814977db9528d2f',
+    1280: '27a100e172092353f88f741b5359f30575e17de6c4deb374e814977db9528d2f',
   };
 
   it.each([768, 1280] as const)('P18.97-T7 AC-4 at %ipx draws the canvas it drew, to the byte', async (px) => {

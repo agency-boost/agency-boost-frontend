@@ -3,7 +3,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AgentLayout from '@/app/(agent)/layout';
-import { renderInLayout, stubFetch, type StubReply } from '@test/harness';
+import { atWidth, renderInLayout, stubFetch, type StubReply } from '@test/harness';
 import {
   notFound, PGB, plan, product, READ_ONLY_RINA, RINA_ME, SCRIPT, serverError, SHELF, SHELL_STUBS,
 } from '@test/sales-tools-fixtures';
@@ -70,7 +70,8 @@ describe('/attack-plan, the Sales Attack Plan (P14-T8)', () => {
     it('P14-T8 AC-1 the nav item is live and current', async () => {
       show();
       await screen.findByRole('heading', { level: 2, name: 'Who are we talking to?' });
-      const item = within(screen.getByRole('navigation', { name: 'Main' })).getByRole('link', { name: 'Sales Attack Plan' });
+      // The field shell's sidebar since UI V1 (UI-004): *Sales*, under *Aktivitas*.
+      const item = within(screen.getByRole('navigation', { name: 'Main' })).getByRole('link', { name: 'Sales' });
       expect(item).toHaveAttribute('href', '/attack-plan');
       expect(item).toHaveAttribute('aria-current', 'page');
       expect(within(item).queryByText('Upcoming')).not.toBeInTheDocument();
@@ -100,7 +101,9 @@ describe('/attack-plan, the Sales Attack Plan (P14-T8)', () => {
       const steps = within(screen.getByRole('list', { name: 'Steps' })).getAllByRole('listitem');
       expect(steps.map((s) => s.textContent)).toEqual(['11 Customer brief', '22 Attack plan']);
       expect(steps[0]).toHaveAttribute('aria-current', 'step');
-      expect(screen.getByText('Answer 3 questions to get your pitch.').className).not.toMatch(/hidden/);
+      // From 768px the client's line, as before; on a phone no grey line (UI-107, D-08).
+      expect(desktopOnly(screen.getByText('Answer 3 questions to get your pitch.'))).not.toContain('hidden');
+      expect(screen.getByText('Answer 3 questions to get your pitch.')).toHaveClass('max-md:hidden');
       expect(screen.queryByText(/Three questions/)).not.toBeInTheDocument();
       expect(calls.filter((c) => c.url.includes('/attack-plan'))).toEqual([]);
       expect(calls.filter((c) => c.url.includes('/product-catalog')).map((c) => c.url)).toEqual(['http://api.test/api/v1/product-catalog']);
@@ -182,29 +185,50 @@ describe('/attack-plan, the Sales Attack Plan (P14-T8)', () => {
       expect(screen.getByRole('button', { name: 'Build attack plan' })).toBeEnabled();
     });
 
-    it('P18.95-T6 AC-1 grid/sticky classes scoped to max-md: two chips to a row, Build in a bar fixed to the bottom', async () => {
+    it('UI-107 on a phone the button sits under the last question, in the flow — never a fixed bar — the note not drawn', async () => {
       show();
       await screen.findByRole('heading', { level: 2, name: 'Who are we talking to?' });
       for (const name of ['Primary need', 'Age band', 'Monthly premium budget', 'Or pay once']) {
         const box = within(group(name)).getAllByRole('button')[0].parentElement!;
-        expect(box).toHaveClass('flex', 'flex-wrap', 'max-md:grid', 'max-md:grid-cols-2');
+        expect(box).toHaveClass('flex', 'flex-wrap', 'max-md:gap-1.5');
+        expect(box).not.toHaveClass('max-md:grid');
         for (const chip of within(group(name)).getAllByRole('button')) {
-          expect(chip).toHaveClass('max-md:w-full', 'max-md:min-h-11');
+          expect(chip).toHaveClass('max-md:h-[2.375rem]', 'max-md:rounded-pill');
           expect(desktopOnly(chip)).not.toContain('w-full');
         }
       }
       const build = screen.getByRole('button', { name: 'Build attack plan' });
-      const bar = build.parentElement!;
-      expect(bar).toHaveClass('max-md:fixed', 'max-md:inset-x-0', 'max-md:bottom-0', 'max-md:pb-[calc(0.75rem_+_env(safe-area-inset-bottom))]');
-      expect(document.querySelector('.max-md\\:fixed')).toBe(bar);
-      // The note stays beside the action, in the bar; at 768px and wider the row is as it was.
-      expect(bar).toContainElement(screen.getByText('Pick a need, age band, and budget to continue.'));
-      expect(desktopOnly(bar)).toEqual(['flex', 'flex-wrap', 'items-center', 'justify-end', 'gap-3.5']);
-      // Disabled until the brief is complete, as before — the bar changes where it is, not when.
+      expect(document.querySelector('.max-md\\:fixed')).toBeNull();
+      expect(build).toHaveClass('max-md:w-full', 'max-md:rounded-pill', 'max-md:min-h-[3.25rem]');
+      // Under the brief's card, the next thing after it.
+      expect(build.parentElement!.previousElementSibling).toContainElement(group('Or pay once'));
+      expect(screen.getByText('Pick a need, age band, and budget to continue.')).toHaveClass('max-md:hidden');
+      // From 768px: disabled until the brief is complete, as before.
       expect(build).toBeDisabled();
-      // The page makes room for the bar, so the last chips are never behind it.
-      expect(bar.parentElement).toHaveClass('max-md:pb-24');
-      expect(bar.parentElement).toContainElement(group('Or pay once'));
+      expect(desktopOnly(build.parentElement!)).toEqual(['flex', 'flex-wrap', 'items-center', 'justify-end', 'gap-3.5']);
+    });
+
+    it('UI-107 on a phone the button is always active: with a question open it shows that question and focuses it', async () => {
+      atWidth(375);
+      const scrolled = vi.fn();
+      Element.prototype.scrollIntoView = scrolled;
+      show();
+      await screen.findByRole('heading', { level: 2, name: 'Who are we talking to?' });
+      const build = await screen.findByRole('button', { name: 'Build attack plan' });
+      await waitFor(() => expect(build).toBeEnabled());
+      await userEvent.click(within(group('Primary need')).getByRole('button', { name: 'Retirement income' }));
+      await userEvent.click(build);
+      // Age band is the first question still open: brought into view and focused; nothing is asked of the server.
+      expect(group('Age band')).toHaveFocus();
+      expect(scrolled).toHaveBeenCalled();
+      expect(nav.push).not.toHaveBeenCalled();
+      await userEvent.click(within(group('Age band')).getByRole('button', { name: '25–34' }));
+      await userEvent.click(build);
+      expect(group('Monthly premium budget')).toHaveFocus();
+      await userEvent.click(within(group('Monthly premium budget')).getAllByRole('button')[1]);
+      await userEvent.click(build);
+      expect(nav.push).toHaveBeenCalledWith('/attack-plan?need=retirement&age=2&budget=2', { scroll: false });
+      delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
     });
 
     it('P18.95-T6 AC-1 no bar on the plan, nor beside the empty shelf', async () => {
@@ -517,5 +541,75 @@ describe('/attack-plan, the Sales Attack Plan (P14-T8)', () => {
       show({ ...BRIEF, product: 'PRUSEHAT' }, { 'GET /attack-plan': notFound });
       expect(await screen.findByText('This product isn\'t on your shelf.')).toBeInTheDocument();
     });
+  });
+});
+
+/**
+ * **UI V1 on a phone** (UI-107; `attack-plan-mobile` 3): the plan's second step as the phone draws it — the answers as
+ * chips with *Ubah*, the product in a navy card, five numbered sections, the long parts folded, the push-back as two
+ * bubbles, the alternatives as chips with the catalog's link. 375px.
+ */
+describe('UI-107 /attack-plan on a phone', () => {
+  beforeEach(() => {
+    nav.push.mockReset();
+    nav.replace.mockReset();
+    nav.back.mockReset();
+    atWidth(375);
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('UI-107 step 2: the answers with Ubah, the navy card, five numbered sections, the alternatives with the catalog’s link', async () => {
+    const benefits = ['One.', 'Two.', 'Three.', 'Four.', 'Five.', 'Six.'];
+    show(BRIEF, { 'GET /attack-plan': { body: plan({ product: product({ script: { ...SCRIPT, benefits } }) }) } });
+    const heading = await result();
+    await waitFor(() => expect(document.querySelector('[data-layout="phone-plan"]')).not.toBeNull());
+    expect(within(screen.getByRole('list', { name: 'Customer brief' })).getAllByRole('listitem').map((li) => li.textContent))
+      .toEqual(['Retirement income', '25–34', 'IDR 500K–IDR 2M']);
+    // *Ubah* goes back to the brief; the wider *‹ Back* is not drawn.
+    expect(screen.queryByRole('button', { name: 'Back' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Change' }));
+    expect(nav.replace).toHaveBeenCalledWith('/attack-plan', { scroll: false });
+    // The navy card: the need and the channel, the verdict, the name, the line and *Good fit for*.
+    const card = heading.closest('article')!;
+    expect(card).toHaveClass('bg-navy');
+    expect(card).toHaveTextContent('Retirement incomeConventionalGood fitPRUMapan');
+    expect(card).toHaveTextContent('Good fit for Sandwich-generation milenial.');
+    const sections = [...document.querySelectorAll('[data-layout="phone-plan"] section[data-block]')];
+    expect(sections.map((sec) => sec.querySelector('h3')!.textContent)).toEqual([
+      '11 Opening line', '22 Lead with these benefits', '33 Full script', '44 If they push back', '55 Next action',
+    ]);
+    // Four benefits, then *See 2 more benefits*, which unfolds the rest.
+    const list = within(sections[1] as HTMLElement).getByRole('list');
+    expect(within(list).getAllByRole('listitem')).toHaveLength(4);
+    await userEvent.click(screen.getByRole('button', { name: 'See 2 more benefits' }));
+    expect(within(list).getAllByRole('listitem')).toHaveLength(6);
+    // The full script folded until *Read all*; the push-back as two bubbles.
+    const readAll = within(sections[2] as HTMLElement).getByRole('button', { name: 'Read all' });
+    expect(readAll).toHaveAttribute('aria-expanded', 'false');
+    await userEvent.click(readAll);
+    expect(within(sections[2] as HTMLElement).getByRole('button', { name: 'Show less' })).toHaveAttribute('aria-expanded', 'true');
+    expect(sections[3]).toHaveTextContent('They say“Retirement is too far away to think about right now.”You say“I hear that a lot');
+    // The alternatives, and the catalog's link.
+    await userEvent.click(screen.getByRole('button', { name: 'PRUAnugerah' }));
+    expect(nav.replace).toHaveBeenCalledWith('/attack-plan?need=retirement&age=2&budget=2&product=PRUANUGERAH', { scroll: false });
+    expect(screen.getByRole('link', { name: 'See in Product Catalog' })).toHaveAttribute('href', '/product-catalog');
+  });
+
+  it('UI-107 the tabs are one segmented control on a phone: the same links, the current half navy', async () => {
+    show();
+    await screen.findByRole('heading', { level: 2, name: 'Who are we talking to?' });
+    const tabs = screen.getByRole('navigation', { name: 'Sales tools' });
+    expect(tabs).toHaveClass('max-md:rounded-pill', 'max-md:bg-card');
+    const current = within(tabs).getByRole('link', { name: 'Sales Attack Plan' });
+    expect(current).toHaveClass('max-md:flex-1', 'max-md:min-h-11');
+    expect(current.firstElementChild).toHaveClass('max-md:bg-navy', 'max-md:text-white');
+  });
+
+  it('UI-107 the step line never wraps on a phone, and a step done is a ✓', async () => {
+    show(BRIEF);
+    await result();
+    const steps = screen.getByRole('list', { name: 'Steps' });
+    expect(steps).toHaveClass('max-md:flex-nowrap', 'max-md:whitespace-nowrap');
+    expect(within(steps).getAllByRole('listitem')[0].querySelector('svg')).not.toBeNull();
   });
 });

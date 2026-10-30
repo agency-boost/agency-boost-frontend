@@ -73,7 +73,8 @@ describe('RoleShell', () => {
     stubFetch({ '/notifications': { body: { items: [], unread: 0 } } });
     renderWithSession(<RoleShell title="Notifications">body</RoleShell>, { me: member({}) });
 
-    expect(await screen.findByRole('link', { name: 'Activity management' })).toBeInTheDocument();
+    // The field shell's sidebar since UI V1 (UI-004): *Activity*, in its first section.
+    expect(await screen.findByRole('link', { name: 'Activity' })).toBeInTheDocument();
     expect(screen.queryByText('SUPERADMIN')).toBeNull();
   });
 

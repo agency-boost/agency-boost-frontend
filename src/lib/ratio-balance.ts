@@ -4,9 +4,9 @@
  * The API answers a `band` ratio with `share`, the first side's percent of both, beside the lean in
  * points (`metrics-and-definitions.md`, `SELLING_RECRUITMENT_BALANCE`). The client read the lean and the
  * prototype's `100% / 0% / 100%` ticks as ambiguous (2026-10-07): two selling and three recruiting is
- * *40,0% Selling · 60,0% Recruitment*, and that is how a balance is written now, on the agent's card and on
- * a coaching session's — **to its tenth**, the comma `id-ID`'s: a split is a ratio read against its benchmark,
- * whose tenth can decide the status (ADR-0174 §2, parity I-501). **The benchmark stays in points** — stored,
+ * *40% Selling · 60% Recruitment*, and that is how a balance is written now, on the agent's card and on
+ * a coaching session's — **whole** (UI V1, UI-080; until then to its tenth, ADR-0174 §2, parity I-501), its status
+ * judged on the unrounded share. **The benchmark stays in points** — stored,
  * typed and edited as ±30 — and is read as the shares it allows, **as typed**: ±30 points is each side between
  * 35% and 65%, never *35,0%*.
  *
@@ -17,15 +17,12 @@
 import { messagesIn } from '@/i18n/catalogue';
 import { DEFAULT_LANGUAGE, SOURCE_LANGUAGE, type Language } from '@/i18n/language';
 import { ratioWordMessages } from '@/i18n/messages/ratio-words';
-import { formatPercent } from '@/lib/format';
+import { formatPercent, wholePercent } from '@/lib/format';
 
 type Status = 'success' | 'alert' | 'neutral';
 
 /** At most `places` decimals, and none when whole: `40`, `37.5`. */
 const rounded = (value: number, places: number) => Number(value.toFixed(places));
-
-/** The places a split is written to before it needs more to stay on its side of the band: its tenth (ADR-0174 §2). */
-const SPLIT_PLACES = 1;
 
 /** Where each side must sit to be on track, in percent: `{ low: 35, high: 65 }` for ±30 points. */
 export function balanceBand(benchmark: number): { low: number; high: number } {
@@ -48,36 +45,24 @@ export function formatBalanceBand(benchmark: number, language: Language = DEFAUL
 }
 
 /**
- * The split, **summing to 100**: `{ first: '40,0%', second: '60,0%' }` for a 40% share.
+ * The split, **whole, summing to 100**: `{ first: '40%', second: '60%' }` for a 40% share, `{ '67%', '33%' }` for 66,7
+ * (UI V1, UI-080, the owner: every percentage whole, rounded half up; ADR-0180, which reverses ADR-0174 §2's tenth).
  *
- * Its tenth (ADR-0174 §2: a ratio beside its benchmark), the second side written as 100 less the first so the two
- * never add up to 99,9 or 100,1. **A split never rounds onto the other side of its status**, as `formatRatioForStatus` keeps a
- * rate from doing: a 65.04% share misses a 35–65% band, and written `65,0% · 35,0%` it would read as inside
- * it, so it is written `65,04% · 34,96%`. **A side with any activity on it never reads 0,0%**, either — the
- * zero the client asked to have taken off the bar is not put back in the sentence.
+ * The first side is rounded half up and the second is 100 less it, so the two never add up to 99 or 101. **The status
+ * is the server's, judged on the unrounded share**, and this writes it as it is: a 65,4% share misses a 35–65% band and
+ * reads `65% · 35%` beside *Below benchmark* — as *29,6% reads 30%, below a 30% target* (UI-080). Until UI V1 a place
+ * was added here where the rounding met the band's edge, and a side with any activity never read 0; UI-080's
+ * *0,4% → 0%* settles both.
  *
- * The places are chosen on the figures, never on their text, so they are the same in both languages (P18.98-T3
- * AC-2): `65.04% · 34.96%` in English.
+ * The figures are the same in both languages (P18.98-T3 AC-2): `65% · 35%` in English too.
  */
 export function formatBalanceSplit(
-  share: number, benchmark: number, status: Status, language: Language = DEFAULT_LANGUAGE,
+  share: number, _benchmark: number, _status: Status, language: Language = DEFAULT_LANGUAGE,
 ): { first: string; second: string } {
-  const { high } = balanceBand(benchmark);
-  const write = (places: number) => {
-    const first = rounded(share, places);
-    return { first, second: rounded(100 - first, places) };
-  };
-  const honest = ({ first, second }: { first: number; second: number }) => {
-    const larger = Math.max(first, second);
-    const agrees = status === 'alert' ? larger > high : status === 'success' ? larger <= high : true;
-    const bothSeen = share <= 0 || share >= 100 || (first > 0 && second > 0);
-    return agrees && bothSeen;
-  };
-  const places = [SPLIT_PLACES, SPLIT_PLACES + 1].find((p) => honest(write(p))) ?? SPLIT_PLACES + 2;
-  const split = write(places);
+  const first = Math.min(100, Math.max(0, wholePercent(share)));
   return {
-    first: formatPercent(split.first, { decimals: SPLIT_PLACES, maxDecimals: places }, language),
-    second: formatPercent(split.second, { decimals: SPLIT_PLACES, maxDecimals: places }, language),
+    first: formatPercent(first, {}, language),
+    second: formatPercent(100 - first, {}, language),
   };
 }
 

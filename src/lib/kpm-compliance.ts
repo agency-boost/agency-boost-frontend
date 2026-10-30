@@ -295,6 +295,8 @@ export interface ComplianceView {
   selected: ComplianceSelection;
   tree: ComplianceSection[];
   can: ComplianceCan;
+  /** UI V1 (UI-109): a bar is red below `lowBelowPct` done and green from `highFromPct` — the server's, never ours. */
+  thresholds: { lowBelowPct: number; highFromPct: number };
 }
 
 /** The address's `?category=&item=`, as the read takes it. */

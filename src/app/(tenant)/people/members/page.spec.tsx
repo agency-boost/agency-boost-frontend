@@ -1093,12 +1093,13 @@ describe('P18.97-T7 AC-1 the directory as cards on a phone (UI-034)', () => {
   /** The roster's markup on the build before P18.97-T7, each tab, rendered from this fixture on 2026-10-28. */
   const BEFORE_T7: Record<'directory' | 'removed', Record<768 | 1280, string>> = {
     directory: {
-      768: '926198cdebf3c343171ffcd31a56a896996b2cde56758de931ff99b3c058a145',
-      1280: '926198cdebf3c343171ffcd31a56a896996b2cde56758de931ff99b3c058a145',
+      // Re-recorded 2026-10-30 (UI V1): UI-008's card edge (`border-card-edge`) and UI-010's 44px/48px targets below 1024px.
+      768: 'daa24fa71b9693598ea70e30984c277bbfbe13f253d15538122d7e42946c0086',
+      1280: 'daa24fa71b9693598ea70e30984c277bbfbe13f253d15538122d7e42946c0086',
     },
     removed: {
-      768: 'f0d066d19130c1cc24fc76ae97c6617d21dfb5f5c581d23f72ae2411a564f7c2',
-      1280: 'f0d066d19130c1cc24fc76ae97c6617d21dfb5f5c581d23f72ae2411a564f7c2',
+      768: '60bf1f0f29ca54a76de75db39811a32cb7f24c0e8a4351f8e765f49898586ef6',
+      1280: '60bf1f0f29ca54a76de75db39811a32cb7f24c0e8a4351f8e765f49898586ef6',
     },
   };
 

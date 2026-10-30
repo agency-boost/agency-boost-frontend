@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { stubFetch } from '@test/harness';
-import { monthsOf, periodSearch, readSummary, summaryPeriodFrom, yearsOf } from './summary';
+import { daysLeftIn, monthsOf, periodSearch, readSummary, summaryPeriodFrom, yearsOf } from './summary';
 
 /** The Summary's period, as the address and the read carry it (P18.8-T11, ADR-0161 §4). */
 describe('the Summary’s period (P18.8-T11)', () => {
@@ -43,5 +43,35 @@ describe('the Summary’s period (P18.8-T11)', () => {
     await readSummary('mem-rina', { year: '2025' });
 
     expect(calls.map((c) => new URL(c.url).search)).toEqual(['', '?month=2026-08', '?for=mem-rina', '?for=mem-rina&year=2025']);
+  });
+});
+
+/** UI-054: *sisa 1 hari bulan ini* — the days left after the office's today, from the date the server sent. */
+describe('the days left in the month or the year (UI-054)', () => {
+  it('UI-054 the 30th of October leaves 1; the last day 0; the first day the rest of the month', () => {
+    expect(daysLeftIn('2026-10-30', 'month')).toBe(1);
+    expect(daysLeftIn('2026-10-31', 'month')).toBe(0);
+    expect(daysLeftIn('2026-10-01', 'month')).toBe(30);
+    expect(daysLeftIn('2026-09-30', 'month')).toBe(0);
+  });
+
+  it('UI-054 February, in a leap year and not', () => {
+    expect(daysLeftIn('2028-02-01', 'month')).toBe(28);
+    expect(daysLeftIn('2026-02-01', 'month')).toBe(27);
+    expect(daysLeftIn('2026-02-28', 'month')).toBe(0);
+  });
+
+  it('UI-054 the year: 31 December leaves 0, 1 January 364, 365 in a leap year', () => {
+    expect(daysLeftIn('2026-12-31', 'year')).toBe(0);
+    expect(daysLeftIn('2026-01-01', 'year')).toBe(364);
+    expect(daysLeftIn('2028-01-01', 'year')).toBe(365);
+    expect(daysLeftIn('2026-09-14', 'year')).toBe(108);
+  });
+
+  it('UI-054 reads no clock and no zone: the same answer at any hour, in any browser zone', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-03-08T23:30:00-08:00'));
+    expect(daysLeftIn('2026-03-08', 'month')).toBe(23);
+    vi.useRealTimers();
   });
 });

@@ -21,7 +21,10 @@ export function Page({
   title,
   subtitle,
   subtitleOnPhone,
+  subtitleOnTablet,
   actions,
+  control,
+  bell,
   permission,
   children,
 }: {
@@ -30,14 +33,33 @@ export function Page({
   subtitle?: ReactNode;
   /** `false`: the sub-line is not drawn below 768px (the client's *Remove*, P18.95-T7 AC-1; `PageHeader`). */
   subtitleOnPhone?: boolean;
+  /** `false`: nor from 768 to 1023px (UI V1, UI-004: *subtitle hidden on Mobile + Tablet*; `PageHeader`). */
+  subtitleOnTablet?: boolean;
   actions?: ReactNode;
+  /**
+   * The field shell's title-row control below 1024px (UI V1, UI-004; `PageHeader`): the page's one compact control
+   * beside its title — a period pill, a search pill. `actions` then show from 1024px; `null` for none below it.
+   */
+  control?: ReactNode;
+  /** Home's bell on its title row, below 1024px (UI-004; `PageHeader`). */
+  bell?: boolean;
   permission?: string;
   children: ReactNode;
 }) {
   const titledAbove = useContext(TitledPageContext);
   const body = (
     <>
-      {title !== undefined && <PageHeader title={title} subtitle={subtitle} subtitleOnPhone={subtitleOnPhone} actions={actions} />}
+      {title !== undefined && (
+        <PageHeader
+          title={title}
+          subtitle={subtitle}
+          subtitleOnPhone={subtitleOnPhone}
+          subtitleOnTablet={subtitleOnTablet}
+          actions={actions}
+          control={control}
+          bell={bell}
+        />
+      )}
       {/* What is inside is under a title now: a nested page's refusal is a section of this one. */}
       <TitledPageContext.Provider value={titledAbove || title !== undefined}>{children}</TitledPageContext.Provider>
     </>

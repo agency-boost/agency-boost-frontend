@@ -1,18 +1,21 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useId, useState, type ReactNode } from 'react';
 import { DownloadPdfButton } from '@/components/coaching-print';
+import { byDueDate, EditAgainButton, EMPTY_LINE, NumberDot } from '@/components/coaching-parts';
 import {
-  ActivityPanel, byDueDate, DateTag, EditAgainButton, EMPTY_LINE, FinalizedBadge, FromLeadTag, GoalRow, GROUP_LABEL,
-  NumberDot, RatiosPanel, ReopenDialog,
-} from '@/components/coaching-parts';
+  ActivityPanel, DateTag, FinalizedBadge, FromLeadTag, GoalRow, GROUP_LABEL, RatiosPanel,
+} from '@/components/coaching-record-parts';
 import {
   BackLink, CoachingTabBar, PersonIdentity, useCoacheeIfAny, useLeadsSomebody,
 } from '@/components/coaching-person';
 import { SummaryCard } from '@/components/summary-card';
+import { actionDay } from '@/components/ui/action-row';
 import { ButtonLink, Card, ErrorBanner } from '@/components/ui/field';
+import { LineIcon } from '@/components/ui/line-icon';
 import { TAP_HEIGHT, TEXT_TAP } from '@/components/ui/phone';
 import { useRoleShort } from '@/components/ui/role-badge';
 import { Skeleton, SkeletonBar, SkeletonText } from '@/components/ui/skeleton';
@@ -28,10 +31,14 @@ import {
   type ActionItem, type Agreement, type CoachingSession, type CoachingTip, type EarlierVersion, type LastWeekItem,
   type LeadAction, type MySessions, type SessionSnapshot, type SnapshotGoal,
 } from '@/lib/coaching';
-import { MY_COACHING_ACTIVATION_HREF } from '@/lib/activation';
+import { MY_COACHING_ACTIVATION_HREF } from '@/lib/hrefs';
 import { MY_COACHING_TRAINING_HREF } from '@/lib/training';
 import { formatCalendarDayLong, formatDay, formatRupiahCompact, formatShortDay } from '@/lib/format';
 import { useCan, useSession } from '@/lib/session';
+import { useOpenedOnce } from '@/lib/use-opened-once';
+
+/** *Edit again*'s dialog, downloaded when it is first opened and mounted from then on (`useOpenedOnce`; P18.99-T16). */
+const ReopenDialog = dynamic(() => import('@/components/coaching-reopen-dialog').then((m) => m.ReopenDialog), { ssr: false });
 
 /**
  * **The record after the meeting** (P11-T10, `functional/coaching.md`, *Archive* and *`/coaching/me`*):
@@ -84,7 +91,7 @@ function RecordHeader({
   const [showPast, setShowPast] = useState(false);
   const listId = useId();
   return (
-    <div className="rounded-lg border border-hairline bg-card px-5 py-3">
+    <div className="rounded-lg border border-card-edge bg-card px-5 py-3">
       <div className="flex flex-wrap items-center justify-between gap-2.5">
         {date ? (
           <p className="text-base text-muted">
@@ -371,7 +378,7 @@ function EarlierVersionRow({ version }: { version: EarlierVersion }) {
 
 function RecordSkeleton({ label }: { label: string }) {
   return (
-    <Skeleton label={label} className="rounded-lg border border-hairline bg-card px-[22px] py-[18px]">
+    <Skeleton label={label} className="rounded-lg border border-card-edge bg-card px-[22px] py-[18px]">
       <SkeletonBar className="h-4 w-1/3" />
       <SkeletonText lines={3} className="mt-3" />
     </Skeleton>
@@ -400,7 +407,7 @@ function RecordSkeleton({ label }: { label: string }) {
 export function SessionArchive({ membershipId, sessionId }: { membershipId: string; sessionId: string }) {
   const figures = useFigureLanguage();
   const t = useMessages(coachingRecordMessages);
-  const { agreement, ratios, editAgain, opening } = useMessages(coachingSessionMessages);
+  const { agreement, ratios, editAgain, opening, bar: strip } = useMessages(coachingSessionMessages);
   const coachee = useCoacheeIfAny();
   const { me } = useSession();
   const canReopen = useCan('coaching_session:reopen');
@@ -409,6 +416,7 @@ export function SessionArchive({ membershipId, sessionId }: { membershipId: stri
   const [error, setError] = useState<ApiError | null>(null);
   const [missing, setMissing] = useState(false);
   const [asking, setAsking] = useState(false);
+  const reopenOpened = useOpenedOnce(asking);
 
   const load = useCallback(async () => {
     try {
@@ -451,6 +459,46 @@ export function SessionArchive({ membershipId, sessionId }: { membershipId: stri
 
       {session && record && (
         <>
+          {/*
+            * **The finalized strip at the top** (UI V1, UI-060): *✓ Difinalkan 30 Okt*, *Ubah lagi* and *Unduh sebagai PDF*
+            * — where it was only at the very bottom of the page.
+            */}
+          <div data-archive-strip="" className="flex flex-wrap items-center gap-2.5 rounded-lg border border-card-edge bg-card p-3.5">
+            <p className="flex min-h-[50px] min-w-0 flex-1 basis-48 items-center gap-2 rounded-row bg-pill-green px-3 text-md font-semibold text-pill-green-ink">
+              <LineIcon name="checkCircle" className="h-5 w-5" />
+              <span className="truncate">{strip.finalized({ day: session.date ? actionDay(session.date, figures) : '' })}</span>
+            </p>
+            <div className="flex flex-wrap gap-2.5 empty:hidden">
+              {session.status === 'reopened' && mine ? (
+                // Already reopened, by this reader: the correction is open on the tab.
+                <ButtonLink href={sessionTabHref(membershipId, session.sessionId)} variant="secondary" className="h-11 gap-1.5 rounded-pill px-4">
+                  <LineIcon name="pencil" className="h-4 w-4" />{editAgain.button}
+                </ButtonLink>
+              ) : canReopen && session.reopenableUntil !== null && (
+                <EditAgainButton closed={closed} until={until} onClick={() => setAsking(true)} className="h-11 rounded-pill px-4" />
+              )}
+              <DownloadPdfButton sessionId={session.sessionId} showCoach={!mine} className="h-11 rounded-pill" />
+            </div>
+            {reopenOpened && (
+              <ReopenDialog
+                open={asking}
+                coacheeName={session.coachee.name}
+                session={session}
+                onClose={() => setAsking(false)}
+                onReopened={async (next) => {
+                  setAsking(false);
+                  // Its coach finishes the correction on the tab; anybody else reads the version that still counts.
+                  if (next.coach.membershipId === me?.membership?.membershipId) router.push(sessionTabHref(membershipId, next.sessionId));
+                  else await load();
+                }}
+                onConflict={() => {
+                  setAsking(false);
+                  void load();
+                }}
+              />
+            )}
+          </div>
+
           <RecordHeader date={session.date} coach={session.coach.name} />
           <RecordBody
             session={session}
@@ -459,35 +507,6 @@ export function SessionArchive({ membershipId, sessionId }: { membershipId: stri
             ratiosEmpty={ratios.none({ pronoun: coachee?.pronoun ?? 'they' })}
             withActivity
           />
-
-          <div className="rounded-lg border border-hairline bg-card px-[22px] py-[18px] text-center">
-            <FinalizedBadge date={session.date} />
-            <div className="mt-3.5 flex flex-wrap justify-center gap-2.5 empty:hidden">
-              {session.status === 'reopened' && mine ? (
-                // Already reopened, by this reader: the correction is open on the tab.
-                <ButtonLink href={sessionTabHref(membershipId, session.sessionId)} variant="secondary">{editAgain.button}</ButtonLink>
-              ) : canReopen && session.reopenableUntil !== null && (
-                <EditAgainButton closed={closed} until={until} onClick={() => setAsking(true)} />
-              )}
-              <DownloadPdfButton sessionId={session.sessionId} showCoach={!mine} />
-            </div>
-            <ReopenDialog
-              open={asking}
-              coacheeName={session.coachee.name}
-              session={session}
-              onClose={() => setAsking(false)}
-              onReopened={async (next) => {
-                setAsking(false);
-                // Its coach finishes the correction on the tab; anybody else reads the version that still counts.
-                if (next.coach.membershipId === me?.membership?.membershipId) router.push(sessionTabHref(membershipId, next.sessionId));
-                else await load();
-              }}
-              onConflict={() => {
-                setAsking(false);
-                void load();
-              }}
-            />
-          </div>
 
           <EarlierVersions versions={record.earlier} />
         </>
@@ -669,7 +688,7 @@ export function MyCoaching({ selected }: { selected?: string }) {
                 ratiosEmpty={ratios.noneYours}
                 withActivity={false}
               />
-              <div className="rounded-lg border border-hairline bg-card px-[22px] py-[18px] text-center">
+              <div className="rounded-lg border border-card-edge bg-card px-[22px] py-[18px] text-center">
                 <FinalizedBadge date={session.date} />
                 <div className="mt-3.5 flex flex-wrap justify-center gap-2.5 empty:hidden">
                   <DownloadPdfButton sessionId={session.sessionId} showCoach />

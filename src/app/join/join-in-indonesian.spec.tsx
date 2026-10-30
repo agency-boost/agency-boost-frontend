@@ -86,7 +86,7 @@ describe('P18.98-T4 /join in Indonesian', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'Bergabung ke KPM' })).toBeInTheDocument();
     expect(screen.getByText('Dengan kode, tautan, atau QR dari leader. Ketiganya adalah undangan yang sama.')).toBeInTheDocument();
     expect(screen.getByText(/^Pindah antar-KPM tidak dapat Anda lakukan sendiri/)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Kembali ke halaman kerja Anda' })).toHaveAttribute('href', '/activity/log');
+    expect(screen.getByRole('link', { name: 'Kembali ke halaman kerja Anda' })).toHaveAttribute('href', '/home');
     noEnglishLeft();
   });
 

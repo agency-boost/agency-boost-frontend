@@ -34,8 +34,11 @@ const en = {
   /** Nobody who joined as a new hire in the year it lists (P18.96-T6). */
   empty: 'No one you lead joined as a new hire in the last 12 months.',
 
-  /** The 3M activation % (P18.96-T6 AC-2, AC-3): its counts, a share over nobody decided, its filter. */
-  activation3M: kept('3M activation %'),
+  /**
+   * The 3M activation % (P18.96-T6 AC-2, AC-3): its counts, a share over nobody decided, its filter. **UI V1 (UI-023)**:
+   * *Aktivasi 3M*, the percentage alone — the counts and the month filter are no longer drawn.
+   */
+  activation3M: '3M activation rate',
   counts: ({ activated, notActivated, inProgress }: { activated: number; notActivated: number; inProgress: number }) =>
     `${activated} activated · ${notActivated} not activated · ${inProgress} in progress`,
   noFigureName: 'No result yet',
@@ -51,6 +54,8 @@ const en = {
   sections: { inProgress: 'In progress (day 1–90)', activated: 'Activated', notActivated: 'Not activated' },
   sectionEmpty: 'No one here.',
   result3M: { in_progress: 'In progress', activated: 'Activated', not_activated: 'Not activated' },
+  /** After *Activated*, for a first sale after day 90 (UI-023, D-24): outside the 3M share. */
+  late3M: 'after 3M',
   columns: {
     name: 'Name',
     joinDate: 'Join date',
@@ -62,24 +67,13 @@ const en = {
   },
   /** A new hire with no checklist: an AB or an AAB placed as one (ADR-0103). */
   noChecklist: 'No checklist',
-  /** After an overdue checklist's percentage, for a screen reader. */
-  overdue: ', overdue',
-  /** One who left (ADR-0173 §3), after their result: `on` the day, written. */
-  leftOn: ({ on }: { on: string }) => `Left ${on}`,
   /** A phone's card (P18.95-T3 AC-4; UI-012): the day in words, and the two dates, each written or *—*. */
   dayOf: ({ day, of }: { day: string; of: number }) => `Day ${day} of ${of}`,
   cardDates: ({ join, firstSale }: { join: string; firstSale: string }) => `Join date ${join} · First sale ${firstSale}`,
 
-  /** A row's two actions (P18.96-T6 AC-4): each name begins with its visible words (WCAG 2.5.3). */
+  /** *Schedule 1:1* (P18.96-T6 AC-4; UI-027's detail button): its name begins with its visible words (WCAG 2.5.3). */
   scheduleOneOnOne: 'Schedule 1:1',
   scheduleOneOnOneName: ({ name }: { name: string }) => `Schedule 1:1 with ${name}`,
-  markLeft: 'Mark left',
-  markLeftName: ({ name }: { name: string }) => `Mark left — ${name}`,
-  markLeftQuestion: ({ name }: { name: string }) =>
-    `Mark ${name} as left? They stay in your records with their history, and their 3M activation is decided today. This can't be undone.`,
-  markedLeft: ({ name }: { name: string }) => `${name} is marked as left.`,
-  /** `why` the server's sentence, as it comes. */
-  markLeftFailed: ({ why }: { why: string }) => `Not marked as left. ${why}`,
   cancel: 'Cancel',
   tryAgain: 'Try again',
 
@@ -110,6 +104,71 @@ const en = {
     empty: 'Write a note before saving.',
   },
 
+  /**
+   * **UI V1 — the list** (UI-024, D-24): two tiles, the filter, a tree of leaders, a row per person. `n` a count, `day`
+   * a day number; the words around them only.
+   */
+  list: {
+    waiting: 'Waiting to join',
+    waitingOpen: ({ n }: { n: number }) => `Waiting to join: ${n}. Show them`,
+    filterName: 'Show',
+    filter: {
+      all: ({ n }: { n: number }) => `All ${n}`,
+      activated: ({ n }: { n: number }) => `Activated ${n}`,
+      not_yet: ({ n }: { n: number }) => `Not yet ${n}`,
+    },
+    /** A leader's row: the reader's own group, or the unit below by its rung, and how many it holds. */
+    ownGroup: ({ n }: { n: number }) => `You · ${kept('Direct Unit')} · ${n}`,
+    aabGroup: ({ n }: { n: number }) => `${kept('AAB')} · ${n}`,
+    abGroup: ({ n }: { n: number }) => `${kept('AB')} · ${n}`,
+    groupShare: ({ name }: { name: string }) => `${name}’s 3M activation`,
+    /** A person's one meta line (UI-024, Appendix A). */
+    firstSaleOnDay: ({ day }: { day: number }) => `First sale on day ${day}`,
+    dayN: ({ day }: { day: number }) => `Day ${day}`,
+    /** The status circle's words, for a screen reader and the table's *Status*. */
+    status: { activated: 'Activated', activated_late: 'Activated after 3M', not_yet: 'Not yet' },
+    columns: { name: 'Name', status: 'Status', checklist: 'Checklist' },
+    noWaiting: 'Nobody is waiting to join.',
+  },
+
+  /** **UI V1 — one hire** (UI-027, D-25, D-26): the header, the strip, the tiles, the buttons, First Sale's date. */
+  hire: {
+    back: 'Back to New Hires',
+    more: ({ name }: { name: string }) => `More for ${name}`,
+    correctJoinDate: 'Correct join date',
+    /** The header's line: their leader by rung and name, or *you* — then the join date, written. */
+    joinedUnder: ({ role, leader, on }: { role: string; leader: string; on: string }) => `${role} ${leader} · Joined ${on}`,
+    joinedUnderYou: ({ on }: { on: string }) => `You · Joined ${on}`,
+    joined: ({ on }: { on: string }) => `Joined ${on}`,
+    /** The strip: `on` the first sale's short day. */
+    strip: ({ day }: { day: number }) => `Activated · first sale on day ${day}`,
+    stripLate: ({ day }: { day: number }) => `Activated · first sale on day ${day} · after 3M`,
+    stripChange: 'Change the first sale date',
+    day: 'Day',
+    threeMDone: '3M done',
+    checklist: kept('Activation checklist'),
+    whatsApp: 'WhatsApp',
+    whatsAppName: ({ name }: { name: string }) => `WhatsApp ${name}`,
+    /** First Sale's *Close first case independently*: its date pill, or the way to give one. */
+    addDate: 'Add date',
+    changeDate: ({ on }: { on: string }) => `${on}, change the date`,
+    sheetTitle: 'When was the first sale?',
+    sheetLine: ({ from, to }: { from: string; to: string }) => `The day they closed their first case on their own · between ${from} and ${to}`,
+    today: 'today',
+    dateLabel: 'First sale date',
+    save: 'Save',
+    saved: 'Saved',
+    /** *Dicatat oleh* (D-26): who recorded a first sale by hand, and when. */
+    recordedBy: ({ who, when }: { who: string; when: string }) => `Recorded by ${who} · ${when}`,
+    /** A section's count, for a screen reader: `done` of `total`. */
+    sectionCount: ({ done, total }: { done: number; total: number }) => `${done} of ${total} done`,
+  },
+
+  /** **+ Add agent's modal** (UI-024): what sending the invite says. Its share block's toasts are the confirmations'. */
+  invite: {
+    sent: ({ name }: { name: string }) => `Invite sent to ${name}`,
+  },
+
   /** The header's *Review requests (n)* and the inbox it opens (ADR-0170 §5), and what *+ Add agent* did. */
   joining: {
     review: ({ n }: { n: number }) => `Review requests (${n})`,
@@ -137,6 +196,8 @@ const en = {
     officeDecides: 'The office decides',
     done: 'Done',
     shareTitle: ({ name }: { name: string }) => `Invite ${name}`,
+    /** The ⋯ on a row (UI-024): its name. */
+    actionsFor: ({ name }: { name: string }) => `Actions for ${name}`,
   },
 };
 
@@ -146,7 +207,7 @@ const id: MessagesOf<typeof en> = {
   loading: `Memuat ${kept('new hires')} Anda…`,
   empty: `Tidak ada orang yang Anda pimpin yang bergabung sebagai ${kept('new hire')} dalam 12 bulan terakhir.`,
 
-  activation3M: kept('3M activation %'),
+  activation3M: 'Aktivasi 3M',
   counts: ({ activated, notActivated, inProgress }) =>
     `${activated} teraktivasi · ${notActivated} tidak teraktivasi · ${inProgress} berjalan`,
   noFigureName: 'Belum ada hasil',
@@ -160,6 +221,7 @@ const id: MessagesOf<typeof en> = {
   sections: { inProgress: 'Berjalan (hari 1–90)', activated: 'Teraktivasi', notActivated: 'Tidak teraktivasi' },
   sectionEmpty: 'Tidak ada siapa pun di sini.',
   result3M: { in_progress: 'Berjalan', activated: 'Teraktivasi', not_activated: 'Tidak teraktivasi' },
+  late3M: 'lewat 3M',
   columns: {
     name: 'Nama',
     joinDate: 'Tanggal bergabung',
@@ -170,20 +232,11 @@ const id: MessagesOf<typeof en> = {
     actions: 'Aksi',
   },
   noChecklist: 'Tanpa checklist',
-  overdue: ', terlambat',
-  leftOn: ({ on }) => `Keluar ${on}`,
   dayOf: ({ day, of }) => `Hari ke-${day} dari ${of}`,
   cardDates: ({ join, firstSale }) => `Tanggal bergabung ${join} · ${kept('First sale')} ${firstSale}`,
 
   scheduleOneOnOne: `Jadwalkan ${kept('1:1')}`,
   scheduleOneOnOneName: ({ name }) => `Jadwalkan ${kept('1:1')} dengan ${name}`,
-  markLeft: 'Tandai keluar',
-  markLeftName: ({ name }) => `Tandai keluar — ${name}`,
-  markLeftQuestion: ({ name }) =>
-    `Tandai ${name} sebagai keluar? Dia tetap ada di catatan Anda beserta riwayatnya, dan hasil ${kept('3M activation')} `
-      + 'miliknya ditetapkan hari ini. Ini tidak dapat diurungkan.',
-  markedLeft: ({ name }) => `${name} ditandai keluar.`,
-  markLeftFailed: ({ why }) => `Gagal menandai keluar. ${why}`,
   cancel: 'Batal',
   tryAgain: 'Coba lagi',
 
@@ -212,6 +265,57 @@ const id: MessagesOf<typeof en> = {
     empty: 'Tulis catatan sebelum menyimpan.',
   },
 
+  list: {
+    waiting: 'Menunggu bergabung',
+    waitingOpen: ({ n }) => `Menunggu bergabung: ${n}. Tampilkan`,
+    filterName: 'Tampilkan',
+    filter: {
+      all: ({ n }) => `Semua ${n}`,
+      activated: ({ n }) => `Teraktivasi ${n}`,
+      not_yet: ({ n }) => `Belum ${n}`,
+    },
+    ownGroup: ({ n }) => `Anda · ${kept('Direct Unit')} · ${n}`,
+    aabGroup: ({ n }) => `${kept('AAB')} · ${n}`,
+    abGroup: ({ n }) => `${kept('AB')} · ${n}`,
+    groupShare: ({ name }) => `Aktivasi 3M ${name}`,
+    firstSaleOnDay: ({ day }) => `Pecah telor di hari ke-${day}`,
+    dayN: ({ day }) => `Hari ke-${day}`,
+    status: { activated: 'Teraktivasi', activated_late: 'Teraktivasi, lewat 3M', not_yet: 'Belum' },
+    columns: { name: 'Nama', status: 'Status', checklist: 'Checklist' },
+    noWaiting: 'Tidak ada yang menunggu bergabung.',
+  },
+
+  hire: {
+    back: `Kembali ke ${kept('New Hires')}`,
+    more: ({ name }) => `Pilihan lain untuk ${name}`,
+    correctJoinDate: 'Koreksi tanggal bergabung',
+    joinedUnder: ({ role, leader, on }) => `${role} ${leader} · Bergabung ${on}`,
+    joinedUnderYou: ({ on }) => `Anda · Bergabung ${on}`,
+    joined: ({ on }) => `Bergabung ${on}`,
+    strip: ({ day }) => `Teraktivasi · pecah telor hari ke-${day}`,
+    stripLate: ({ day }) => `Teraktivasi · pecah telor hari ke-${day} · lewat 3M`,
+    stripChange: 'Ubah tanggal pecah telor',
+    day: 'Hari',
+    threeMDone: '3M selesai',
+    checklist: kept('Activation checklist'),
+    whatsApp: 'WhatsApp',
+    whatsAppName: ({ name }) => `WhatsApp ${name}`,
+    addDate: 'Isi tanggal',
+    changeDate: ({ on }) => `${on}, ubah tanggal`,
+    sheetTitle: 'Kapan pecah telor?',
+    sheetLine: ({ from, to }) => `Tanggal first case ditutup sendiri · antara ${from} dan ${to}`,
+    today: 'hari ini',
+    dateLabel: 'Tanggal pecah telor',
+    save: 'Simpan',
+    saved: 'Tersimpan',
+    recordedBy: ({ who, when }) => `Dicatat oleh ${who} · ${when}`,
+    sectionCount: ({ done, total }) => `${done} dari ${total} selesai`,
+  },
+
+  invite: {
+    sent: ({ name }) => `Undangan terkirim ke ${name}`,
+  },
+
   joining: {
     review: ({ n }) => `Tinjau permintaan (${n})`,
     inboxTitle: 'Tinjau permintaan',
@@ -236,6 +340,7 @@ const id: MessagesOf<typeof en> = {
     officeDecides: `${kept('KPM')} yang memutuskan`,
     done: 'Selesai',
     shareTitle: ({ name }) => `Undang ${name}`,
+    actionsFor: ({ name }) => `Tindakan untuk ${name}`,
   },
 };
 

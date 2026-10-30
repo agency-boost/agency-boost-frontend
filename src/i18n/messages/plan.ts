@@ -39,6 +39,17 @@ const en = {
   theySay: 'They say:',
   youSay: 'You say:',
   nextAction: 'Next action',
+
+  /**
+   * **The plan on a phone** (UI V1, UI-107; `attack-plan-mobile` 3 and 5): the brief's answers as chips with *Change*,
+   * the long lists and the full script folded, the push-back as two bubbles.
+   */
+  change: 'Change',
+  moreBenefits: ({ n }: { n: number }) => (n === 1 ? 'See 1 more benefit' : `See ${n} more benefits`),
+  showLess: 'Show less',
+  readAll: 'Read all',
+  theySaid: 'They say',
+  youAnswer: 'You say',
 };
 
 const id: MessagesOf<typeof en> = {
@@ -56,6 +67,13 @@ const id: MessagesOf<typeof en> = {
   theySay: 'Dia berkata:',
   youSay: 'Anda menjawab:',
   nextAction: 'Tindakan berikutnya',
+
+  change: 'Ubah',
+  moreBenefits: ({ n }) => `Lihat ${n} manfaat lagi`,
+  showLess: 'Tampilkan lebih sedikit',
+  readAll: 'Baca semua',
+  theySaid: 'Dia berkata',
+  youAnswer: 'Anda menjawab',
 };
 
 export const planMessages = defineMessages({ en, id });

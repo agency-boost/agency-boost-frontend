@@ -102,7 +102,7 @@ export function Agenda({ meeting }: { meeting: MeetingView }) {
     // `.agenda-cols` (`:704`, `:769-771`): three columns, the middle widest; one below 900px.
     <div className="grid grid-cols-1 items-start gap-4 min-[900px]:grid-cols-[1fr_1.6fr_1fr]">
       {AGENDA_SECTIONS.map((section) => (
-        <section key={section} className="rounded-lg border border-hairline bg-card px-4 pb-3 pt-4">
+        <section key={section} className="rounded-lg border border-card-edge bg-card px-4 pb-3 pt-4">
           <h3 className="mb-3 text-md font-extrabold text-navy">{t.sections[section]}</h3>
           {meeting.agenda[section].map((item, i) => (
             <Item

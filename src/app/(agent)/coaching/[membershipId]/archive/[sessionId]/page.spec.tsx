@@ -213,9 +213,9 @@ describe('a past session’s archive (P11-T10)', () => {
 
       const ratios = await card('Ratios');
       expect(within(ratios).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
-        'Selling success rate18.0%Benchmark: 15%',
+        'Selling success rate18%Benchmark: 15%',
         // The snapshot keeps the sides as the live read named them that day, and reads as two shares (P13.1-T6 AC-7).
-        'Sales vs. Recruitment70.0% Sales · 30.0% RecruitmentBenchmark: 35%–65% each side',
+        'Sales vs. Recruitment70% Sales · 30% RecruitmentBenchmark: 35%–65% each side',
       ]);
 
       const week = await card(/^Activity/);
@@ -246,7 +246,8 @@ describe('a past session’s archive (P11-T10)', () => {
       show();
       const week = await card(/^Activity/);
       await userEvent.click(within(week).getByRole('button', { name: '→ view full dashboard' }));
-      const dialog = screen.getByRole('dialog', { name: 'Rina Wijaya — Activity Dashboard' });
+      // The drill's module is fetched on its first opening (P18.99-T16).
+      const dialog = await screen.findByRole('dialog', { name: 'Rina Wijaya — Activity Dashboard' });
       expect(within(dialog).getAllByRole('row').map((r) => [...r.children].map((c) => c.textContent))).toEqual([
         ['Category', 'Logged', 'Target (pro-rated)'],
         ['Set appointment', '14', '16'],
@@ -325,7 +326,8 @@ describe('a past session’s archive (P11-T10)', () => {
       });
       await userEvent.click(await screen.findByRole('button', { name: 'Edit again' }));
 
-      const dialog = screen.getByRole('dialog', { name: 'Edit this session again?' });
+      // The dialog's module is fetched on its first opening (P18.99-T16).
+      const dialog = await screen.findByRole('dialog', { name: 'Edit this session again?' });
       expect(dialog).toHaveAccessibleDescription(
         'Say why it needs changing. The reason stays with the session, and everyone who reads the session reads it — Rina Wijaya included.',
       );
@@ -369,6 +371,18 @@ describe('a past session’s archive (P11-T10)', () => {
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
 
+    it('UI-060 puts the finalized strip at the top: Finalized {day}, Edit again and Download as PDF before the record', async () => {
+      show();
+      await card('Coaching tips');
+      const strip = document.querySelector('[data-archive-strip]') as HTMLElement;
+      expect(strip).toHaveTextContent('Finalized 24 Sep');
+      expect(within(strip).getByRole('button', { name: 'Download as PDF' })).toBeInTheDocument();
+      expect(within(strip).getByRole('button', { name: 'Edit again' })).toHaveClass('h-11', 'rounded-pill');
+      // Before every card of the record.
+      const tips = await card('Coaching tips');
+      expect(strip.compareDocumentPosition(tips) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
     it('P11-T10 offers no Edit again to a reader who may not reopen it', async () => {
       show({ 'GET /coaching/sessions/s-0924': { body: archived({ reopenableUntil: null }) } });
       await card('Coaching tips');
@@ -383,7 +397,9 @@ describe('a past session’s archive (P11-T10)', () => {
       const { seen, print } = stubPrint();
       const { calls } = show();
       const download = await screen.findByRole('button', { name: 'Download as PDF' });
-      expect(download).toHaveTextContent('⬇Download as PDF');
+      // A line icon, never the ⬇ glyph (UI V1: no emoji as icons).
+      expect(download).toHaveTextContent(/^Download as PDF$/);
+      expect(download.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
 
       await userEvent.click(download);
 

@@ -35,7 +35,7 @@ export function SummaryStrip({ tiles, className }: { tiles: SummaryTile[]; class
         <div
           key={tile.key}
           data-total={tile.total || undefined}
-          className="min-w-0 rounded-lg border border-hairline bg-card px-4 py-3"
+          className="min-w-0 rounded-lg border border-card-edge bg-card px-4 py-3"
         >
           <span className="mb-1 block text-sm text-muted">
             {tile.label}

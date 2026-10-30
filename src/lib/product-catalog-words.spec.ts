@@ -7,7 +7,7 @@ import { planMessages } from '@/i18n/messages/plan';
 import { productCatalogMessages } from '@/i18n/messages/product-catalog';
 import { salesAttackPlanMessages } from '@/i18n/messages/sales-attack-plan';
 import {
-  BUDGET_CHOICES, budgetChoices, budgetLabel, CATEGORY_TABS, CHANNEL_LABELS, channelLabel, fitNote, formatRate,
+  BUDGET_CHOICES, budgetChoices, budgetLabel, CATEGORY_TABS, categoryLabel, categoryTabs, CHANNEL_LABELS, channelLabel, fitNote, formatRate,
   moreLine, NEED_CHOICES, needChoices, needLabel, OWN_COPY, productCount, resultTag,
 } from './product-catalog';
 
@@ -87,9 +87,13 @@ describe('P18.98-T4 sales tools’ words, language by language', () => {
     expect([formatRate(0.125, 'id'), formatRate(0.125)]).toEqual(['12,5%', '12,5%']);
   });
 
-  it('AC-7 the categories are §A.3’s tabs, kept and marked, in both languages', () => {
+  it('AC-7, UI-107 the categories in the reader’s language: English in EN, the report’s Indonesian in ID, never kept', () => {
     expect(CATEGORY_TABS.map((c) => c.label)).toEqual(['Life', 'Health', 'Critical illness', 'Education', 'Investment-linked']);
-    expect(CATEGORY_TABS.every((c) => isKept(c.label))).toBe(true);
+    expect(categoryTabs('id').map((c) => [c.value, c.label])).toEqual([
+      ['life', 'Jiwa'], ['health', 'Kesehatan'], ['ci', 'Penyakit kritis'], ['education', 'Pendidikan'], ['investment', 'Unit link'],
+    ]);
+    expect(categoryTabs('id').some((c) => isKept(c.label))).toBe(false);
+    expect([categoryLabel('ci', 'id'), categoryLabel('nope', 'id')]).toEqual(['Penyakit kritis', undefined]);
   });
 
   /**

@@ -410,7 +410,7 @@ describe('/activation, the hire’s own 90-Day Activation (P13-T4)', () => {
     expect(await screen.findByText('Marked as tenured agent — 90-Day Activation removed from menu.')).toBeInTheDocument();
     expect(writes(calls)).toEqual([['POST', '/activation/me/graduate', undefined]]);
     // An Agent who leads nobody lands on their own day (`landing.ts`), in place of the prototype's *New hires*.
-    expect(nav.replace).toHaveBeenCalledWith('/activity/log');
+    expect(nav.replace).toHaveBeenCalledWith('/home');
     expect(session.reload).toHaveBeenCalled();
   });
 

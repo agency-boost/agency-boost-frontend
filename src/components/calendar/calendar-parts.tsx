@@ -1,9 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { useMessages } from '@/i18n/language-provider';
-import { calendarMessages } from '@/i18n/messages/calendar';
-import { ENTRY_TYPES, type EntryType } from '@/lib/calendar';
+import type { EntryType } from '@/lib/calendar';
 import { cn } from '@/lib/cn';
 
 /**
@@ -118,20 +116,10 @@ export function PaneHeadBar({ head, pill }: { head: PaneHead; pill?: ReactNode }
   );
 }
 
-/** The five swatches, in the legend's order (`:309-315`). */
-export function TypeLegend() {
-  const t = useMessages(calendarMessages);
-  return (
-    <ul className="mb-4 flex flex-wrap gap-4 text-sm text-muted">
-      {ENTRY_TYPES.map((type) => (
-        <li key={type} className="inline-flex items-center gap-1.5">
-          <span aria-hidden="true" className={cn('h-2.5 w-2.5 shrink-0 rounded-[3px]', TYPE_SWATCH[type])} />
-          {t.types[type]}
-        </li>
-      ))}
-    </ul>
-  );
-}
+/*
+ * The legend (`:309-315`) is gone since UI V1 (UI-104 point 9, D-27): the *Jenis* tick chips replace its coloured dots,
+ * and filter as they name (`TypeChips`, `calendar-tasks.tsx`).
+ */
 
 /** A chip — the compare bar's, the invite field's, the detail's (`:68-72`, `:200-204`, `:229`). */
 export const CHIP = 'inline-flex items-center gap-1.5 rounded-pill border border-hairline bg-base py-1 pl-1 pr-2.5 text-sm font-semibold text-navy';
