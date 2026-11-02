@@ -17,6 +17,11 @@ export interface FigureSource {
    */
   correctedBy?: { membershipId: string; name: string } | null;
   correctedAt?: string | null;
+  /**
+   * **Who typed a `self_reported` figure, when it was not the member** — a coach (S2): `self_reported` is *typed in the
+   * app, not uploaded*, by the member or by whoever coaches them. Absent when the member typed it.
+   */
+  typedBy?: { membershipId: string; name: string | null };
 }
 
 export interface PeriodFigures {

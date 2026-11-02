@@ -188,11 +188,23 @@ describe('UI-070 the toast’s place and its action', () => {
     );
   });
 
-  it('UI-070 stands over a floating save pill below 1024px, the tablet included, where no action bar lifts it', () => {
+  it('UI-070 stands over a floating bar below 1024px, the tablet included, measured as the pill is', () => {
     render(<Harness />);
     expect(screen.getByRole('status')).toHaveClass(
-      'max-lg:[body:has([data-floating-save])_&]:bottom-[calc(var(--tab-bar-space)+4.75rem)]',
+      'max-lg:[body:has([data-floating-bar])_&]:bottom-[calc(max(var(--tab-bar-space),env(safe-area-inset-bottom))+4.75rem)]',
     );
+  });
+
+  /*
+   * **One marker for every floating bar** (the product owner's staging review, 2026-10-31): Goal Setting's pill, Activity's
+   * save on a phone and the coaching session's *Finalkan* all wear `FloatingBar`, so the toast reads its marker and no
+   * other — the full-width strip's `data-action-bar` and the pill's own `data-floating-save` lift nothing on their own.
+   */
+  it('UI-070 is lifted by the floating bar’s one marker, and by no other', () => {
+    render(<Harness />);
+    const lifts = screen.getByRole('status').className.split(/\s+/).filter((c) => c.includes('body:has('));
+    expect(lifts).toHaveLength(1);
+    expect(lifts[0]).toContain('[data-floating-bar]');
   });
 
   function WithUndo({ onUndo }: { onUndo: () => void }) {

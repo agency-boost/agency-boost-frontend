@@ -204,27 +204,41 @@ describe('companies', () => {
     });
 
     it('says on the row when a company took none of the defaults', async () => {
-      // Nine template tabs come up empty for it, and this is the only thing that explains why.
+      // Every template section comes up empty for it, and this is the only thing that explains why.
       render([{ ...PRUDENTIAL, usesPlatformDefaults: false }]);
 
       expect(await screen.findByText('Started blank')).toBeInTheDocument();
     });
 
-    it('P18.9-T3 AC-3 labels the Template library on its row, and no insurer', async () => {
+    it('ADR-0185 §1 shows the built-in templates as one card above the insurers, never a row among them', async () => {
       render([PRUDENTIAL, TEMPLATE]);
 
       const table = within(await screen.findByRole('table'));
-      const row = table.getByRole('row', { name: /Template/ });
-      expect(within(row).getByText('Template library')).toBeInTheDocument();
-      // Its templates are reached as every company's are.
-      expect(within(row).getByRole('link', { name: 'Company template' }))
-        .toHaveAttribute('href', `/admin/companies/${TEMPLATE._id}/template`);
-      expect(within(table.getByRole('row', { name: /Prudential/ })).queryByText('Template library')).toBeNull();
+      expect(table.queryByRole('row', { name: /^Template/ })).toBeNull();
+      const card = screen.getByRole('link', { name: /AgencyBoost built-in templates/ });
+      expect(card).toHaveAttribute('href', `/admin/companies/${TEMPLATE._id}`);
+      expect(card).toHaveTextContent('Copied when a company or an office is created.');
+      expect(screen.queryByText('Template library')).toBeNull();
+    });
+
+    it('ADR-0185 §2 opens a company’s page from its name, and has no hidden Company template link', async () => {
+      render([PRUDENTIAL]);
+
+      const row = within(await screen.findByRole('table')).getByRole('row', { name: /Prudential/ });
+      expect(within(row).getByRole('link', { name: 'Prudential' })).toHaveAttribute('href', '/admin/companies/co-1');
+      expect(screen.queryByRole('link', { name: 'Company template' })).toBeNull();
+      expect(screen.queryByRole('columnheader', { name: 'Company template' })).toBeNull();
+    });
+
+    it('draws no card where there is no library', async () => {
+      render([PRUDENTIAL]);
+      await screen.findByRole('table');
+      expect(screen.queryByRole('link', { name: /AgencyBoost built-in templates/ })).toBeNull();
     });
   });
 
   describe('starting a company from nothing', () => {
-    it('P18.9-T3 AC-4 starts from Template · Default template by default, and sends it as the defaults', async () => {
+    it('P18.9-T3 AC-4, ADR-0185 §1 starts from AgencyBoost built-in templates by default, and sends it as the defaults', async () => {
       const stub = stubFetch({
         '/admin/companies': { body: [PRUDENTIAL, TEMPLATE] },
         'POST /admin/companies': { body: { ...PRUDENTIAL, _id: 'co-2', name: 'Allianz Life', slug: 'allianz-life' } },
@@ -232,9 +246,8 @@ describe('companies', () => {
       renderInLayout(AdminLayout, <CompaniesPage />, { me: SUPER_ADMIN });
 
       const select = await screen.findByLabelText('Start from');
-      await screen.findByRole('option', { name: 'Template · Default template' });
-      expect(select).toHaveDisplayValue('Template · Default template');
-      expect(screen.getByText(/A copy of the Template library/)).toBeInTheDocument();
+      expect(select).toHaveDisplayValue('AgencyBoost built-in templates');
+      expect(select).toHaveAccessibleDescription('A copy of them, with the products, carrier rules and playbook, ready to edit.');
 
       await userEvent.type(screen.getByLabelText('Name'), 'Allianz Life');
       await userEvent.click(screen.getByRole('button', { name: 'Add company' }));
@@ -242,13 +255,14 @@ describe('companies', () => {
       expect(JSON.parse(String(sent?.init?.body))).toMatchObject({ name: 'Allianz Life', usesPlatformDefaults: true });
     });
 
-    it('P18.9-T3 AC-4 offers the AgencyBoost defaults where no Template library exists', async () => {
+    it('ADR-0185 §1 never says AgencyBoost defaults — not even where no library exists', async () => {
       stubFetch({ '/admin/companies': { body: [PRUDENTIAL] } });
       renderInLayout(AdminLayout, <CompaniesPage />, { me: SUPER_ADMIN });
 
       await screen.findByRole('table');
-      expect(screen.getByLabelText('Start from')).toHaveDisplayValue('AgencyBoost defaults');
+      expect(screen.getByLabelText('Start from')).toHaveDisplayValue('AgencyBoost built-in templates');
       expect(screen.getByRole('option', { name: 'Empty' })).toBeInTheDocument();
+      expect(screen.queryByText(/AgencyBoost defaults/)).toBeNull();
     });
 
     it('sends the choice, so a blank company stays blank on every tab', async () => {
@@ -263,7 +277,7 @@ describe('companies', () => {
 
       await userEvent.type(await screen.findByLabelText('Name'), 'Blank Co');
       await userEvent.selectOptions(screen.getByLabelText('Start from'), 'Empty');
-      expect(screen.getByText(/Every one of them starts empty/)).toBeInTheDocument();
+      expect(screen.getByText('Everything starts empty but the role ladder.')).toBeInTheDocument();
       await userEvent.click(screen.getByRole('button', { name: 'Add company' }));
 
       const sent = stub.calls.find((c) => c.init?.method === 'POST');

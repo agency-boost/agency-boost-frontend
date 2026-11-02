@@ -140,9 +140,28 @@ describe('Modal (P11-T8)', () => {
     it('P18.96-T1 AC-2 never taller than the dynamic viewport: the box scrolls inside, and hands nothing on to the page', () => {
       render(<Modal open title="Edit subscription" onClose={() => {}}><p>Fields</p></Modal>);
       const dialog = screen.getByRole('dialog', { name: 'Edit subscription' });
-      expect(dialog).toHaveClass('max-h-[calc(100dvh-2.5rem)]', 'overflow-y-auto', 'overscroll-contain');
+      expect(dialog).toHaveClass('max-h-[calc(100dvh-1.25rem-max(1.25rem,env(safe-area-inset-top)))]', 'overflow-y-auto', 'overscroll-contain');
       // `vh` is the large viewport on a phone, taller than what shows while the browser's bar is out.
       expect(dialog.className).not.toContain('100vh');
+    });
+
+    /*
+     * **Never under the clock** (the product owner's staging review, 2026-10-31): a Home Screen app on an iPhone draws the
+     * page under the status bar (UI-103), so a tall centred box's top would sit in its frosted band. Its 20px above
+     * becomes the top inset where that is more, and the box's cap is the screen less both.
+     */
+    it('a centred box keeps its top below the top inset, its cap the screen less that and its 20px foot', () => {
+      render(<Modal open title="Edit subscription" onClose={() => {}}><p>Fields</p></Modal>);
+      const dialog = screen.getByRole('dialog', { name: 'Edit subscription' });
+      expect(dialog.parentElement).toHaveClass('p-5', 'pt-[max(1.25rem,env(safe-area-inset-top))]');
+      expect(dialog.className).toContain('env(safe-area-inset-top)');
+    });
+
+    it('a responsive box does the same from 1024px, and stays a sheet from the bottom below it', () => {
+      render(<Modal open placement="responsive" title="Lead" onClose={() => {}}><p>Fields</p></Modal>);
+      const dialog = screen.getByRole('dialog', { name: 'Lead' });
+      expect(dialog.parentElement).toHaveClass('lg:pt-[max(1.25rem,env(safe-area-inset-top))]', 'max-lg:items-end');
+      expect(dialog).toHaveClass('lg:max-h-[calc(100dvh-1.25rem-max(1.25rem,env(safe-area-inset-top)))]', 'max-lg:max-h-[90dvh]');
     });
 
     it('P18.96-T1 AC-2 the title stays at the top as the content scrolls under it', () => {

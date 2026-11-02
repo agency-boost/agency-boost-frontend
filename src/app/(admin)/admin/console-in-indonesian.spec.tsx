@@ -225,14 +225,16 @@ describe('P18.98-T6 the Super Admin’s console in Indonesian', () => {
     await vi.waitFor(() => expect(select).toHaveDisplayValue('Prudential template · Default'));
     expect([...(select as HTMLSelectElement).options].map((o) => o.textContent)).toEqual(['Prudential template · Default', 'Kosong']);
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^KPM baru$/);
-    expect(screen.getByText(/^Pengaturannya disalin dari bagian templat ini yang sudah diterbitkan/)).toBeInTheDocument();
+    expect(screen.getByText('Bagian yang sudah terbit disalin; bagian yang belum terbit dimulai kosong.')).toBeInTheDocument();
     await userEvent.type(screen.getByLabelText('Kode KPM'), 'has space');
     expect(screen.getByText('2–16 karakter: huruf, angka, dan tanda hubung.')).toBeInTheDocument();
     expect(screen.getByLabelText('Nama cabang')).toBeInTheDocument();
     expect(screen.getByText('Asia/Jakarta')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Buat KPM' })).toBeDisabled();
     await userEvent.selectOptions(select, 'empty');
-    expect(screen.getByText(/^Hanya tiga jenis aktivitas yang dihitung rencana goal/)).toBeInTheDocument();
+    // ADR-0185 §5: Kosong says, once, that it cannot be filled later.
+    expect(screen.getByText('Hanya tiga jenis aktivitas yang dihitung rencana goal. Tidak dapat diisi dari template nanti.'))
+      .toBeInTheDocument();
     noEnglishLeft();
   });
 

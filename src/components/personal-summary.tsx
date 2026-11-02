@@ -162,7 +162,8 @@ export function SummaryCards({
   return (
     /*
      * **One column below 1024px, two from it** (UI-050, UI-056): on a desktop the goal and the activity targets on the
-     * left (~60%), the ratios, the campaigns, the next steps and the leads on the right (~40%). The order in the
+     * left (~60%), the ratios, the leads, the campaigns and the next steps on the right (~40%) — the leads right after
+     * the ratios since the staging review of 2026-10-31. The order in the
      * document is the phone's, so a keyboard and a screen reader meet the sections as a phone shows them. Not centred:
      * the cards' edge is the title's (UI-056).
      */
@@ -230,6 +231,13 @@ export function SummaryCards({
         )}
 
         {/*
+          * **The leads directly after the ratios** (staging review 2026-10-31, the product owner: *Mestinya setelah
+          * ratio*): Ratio → Leads → Campaign → next steps, on `/summary` and on a coachee's Summary tab alike. Still left
+          * out on a phone while empty (UI-055).
+          */}
+        <LeadsSection leads={summary.leads} voice={voice} />
+
+        {/*
           * *Campaign yang Anda kejar* (P18.5-T7 AC-6; UI-006): the chases from the Campaign list that have not ended, each
           * opening its dialog in place; *Dari Campaign list* on a desktop only (Appendix A). About a coachee, in their
           * pronoun, as chips by title (P18.5-T9 AC-1).
@@ -245,7 +253,6 @@ export function SummaryCards({
         </Section>
 
         <InsightSections actions={actions} improve={improve} voice={voice} />
-        <LeadsSection leads={summary.leads} voice={voice} />
       </div>
     </div>
   );
@@ -563,8 +570,8 @@ function TargetColumn({ target, when }: { target: ActivityTarget; when: PeriodWo
  * **The flags are the Leads screen's**, from the server's one definition, and *Closes this month* hides
  * none of them (I-103). The nearest ten are listed.
  *
- * **UI V1** (UI-050, UI-055, UI-056): the heading outside the card, last on the page — on a desktop the right column's
- * last section; its tag, *Leads terbuka Anda, tanggal terdekat lebih dulu*, on a desktop only (Appendix A). **On a
+ * **UI V1** (UI-050, UI-055, UI-056): the heading outside the card, directly after the ratio card (the staging review
+ * of 2026-10-31 moved it up from last on the page); its tag, *Leads terbuka Anda, tanggal terdekat lebih dulu*, on a desktop only (Appendix A). **On a
  * phone it is not drawn while there is no open lead** (UI-055); from 768px the empty card says so, as before.
  */
 function LeadsSection({ leads, voice }: { leads: Summary['leads']; voice: PageVoice }) {

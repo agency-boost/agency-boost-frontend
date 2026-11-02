@@ -353,6 +353,8 @@ export function stubFetch(routes: Record<string, StubReply | StubReply[]>) {
       ok: status >= 200 && status < 300,
       status,
       json: async () => stub.body,
+      // A file the API answers as itself — a template asked for as `.xlsx` or `.csv` (ADR-0184): a `Blob` body as it is.
+      blob: async () => (stub.body instanceof Blob ? stub.body : new Blob([JSON.stringify(stub.body ?? null)])),
     } as Response;
   });
 

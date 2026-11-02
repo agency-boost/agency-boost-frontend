@@ -277,6 +277,9 @@ export const SAME_IN_INDONESIAN = [
   // For approval (§B.10, Phase 18.99 T11): Home's *+ Log* pill in the *Aktivitas saya* tile (UI-100), as the report
   // writes it in both languages.
   'Log',
+  // For approval (§B.10, Phase 18.99 T20; ADR-0185): a template card's *★ Default*, the loanword the API's refusals and
+  // *Jadikan default* already use for a company's default template.
+  'Default',
 ] as const;
 
 /**
@@ -320,4 +323,8 @@ export const KEPT_ELSEWHERE = [
   // UI V1 (Phase 18.99 T16): *Group* is D-16's *Unit / Group* switch, kept (`kept('Group')`, UI-006), and the office's
   // informal groups' column in *All members*, translated with the rest of that tab — *Grup*, as *Grup informal* is.
   'Group',
+  // For approval (§B.10, Phase 18.99 T20; ADR-0185): the KPM template's section *Checklist aktivasi* and *Pengaturan
+  // perusahaan*'s three parts, *Produk · Campaign · Rekrutmen*, translated as the developer wrote them for the product
+  // owner — where the Owner's own nav keeps *Activation checklist*, *Products*, *Campaigns* and *Recruitment* (§A.1).
+  'Activation checklist', 'Products', 'Campaigns', 'Recruitment',
 ] as const;

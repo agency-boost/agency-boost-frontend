@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type FocusEvent, type ReactNode } from 'react';
 import { AutoMarker } from '@/components/ui/auto-marker';
 import { Button, Card, ErrorBanner } from '@/components/ui/field';
 import { LineIcon } from '@/components/ui/line-icon';
@@ -27,7 +27,7 @@ import { voiceOf } from '@/i18n/messages/goal-words';
 import { goalsMessages } from '@/i18n/messages/goals';
 import { formatDay, formatDayLong, formatDecimalInput, formatNumber, formatRupiahCompact, moneyPrefix, parseDecimal } from '@/lib/format';
 import {
-  goalInputsOf, groupDigits, parseDigits, previewGoal, producedFrom, readGoal, saveGoal, toMajor, toMinor,
+  goalBodyOf, goalInputsOf, groupDigits, parseDigits, previewGoal, producedFrom, readGoal, saveGoal, toMajor, toMinor,
   type Goal, type GoalInputs, type GoalMode, type GoalPreview,
 } from '@/lib/goals';
 import { useMediaQuery } from '@/lib/use-media-query';
@@ -72,7 +72,14 @@ import { useTenantConfig, type TenantConfig } from '@/lib/tenant-config-cache';
  *
  * What stays beyond the revision is what a requirement needs: *Set by your leader* (ADR-0046), the provenance marker
  * on the APE already produced (ADR-0063 §5), the disclaimer (L-29), the target-passed state (ADR-0047) — and **a figure
- * the office uploaded is not typed over** (P9-T6): it wears the same pill, with no ✎, and its ⓘ says whose it is.
+ * the office uploaded is not typed over** (P9-T6): since the staging review of 2026-10-31 it is plain figures, no pill
+ * frame and no ✎, so it no longer looks like a field; its ⚡ and ⓘ say whose it is.
+ *
+ * **Step 2's two pills, since the staging review of 2026-10-31** (the product owner tapped *2 bulan ✎* on a phone and
+ * typed *3*, and got *23*): the whole pill — the figure, the unit and the ✎ — is the field's target, and a tap selects
+ * the whole figure, so what is typed replaces it. **The APE produced is typed by whoever saves the plan** while the
+ * office holds no figure — the member on `/goals`, and since ADR-0183 a leader on the coachee's tab (the server stores
+ * it on the same rule, `typedApeOf`).
  *
  * **Its words are the catalogue's** (`i18n/messages/goals.tsx`; the marker's `goal-words.ts`; the save state's and the
  * ⚡'s `ui-v1.ts`), every figure in the reader's figures (`useFigureLanguage()`). The activities a tile's ⓘ names are
@@ -165,7 +172,7 @@ export function GoalCalculator({
     }
     let current = true;
     const timer = window.setTimeout(() => {
-      previewGoal(period, draft, forId).then(
+      previewGoal(period, goalBodyOf(draft, goalInputsOf(goal)), forId).then(
         (next) => {
           if (!current) return;
           setShown(next);
@@ -207,7 +214,8 @@ export function GoalCalculator({
     setBusy(true);
     setError(null);
     try {
-      const result = await saveGoal(period, draft, forId);
+      // The APE produced only when this edit changed it (S1): a figure the member typed since the read is kept.
+      const result = await saveGoal(period, goalBodyOf(draft, saved), forId);
       setGoal(result);
       setDraft(goalInputsOf(result));
       setShown(previewOf(result));
@@ -239,11 +247,12 @@ export function GoalCalculator({
   const money = (minor: number) => formatRupiahCompact(minor, {}, figures);
 
   /*
-   * **A figure the office uploaded is not the reader's to type** (P9-T6; ADR-0063 §5), and **nobody types somebody
-   * else's** (ADR-0075, ADR-0058): the same pill, in the same ink, with no ✎ — and its ⚡ and ⓘ say whose it is.
+   * **A figure the office uploaded is nobody's to type** (P9-T6; ADR-0063 §5): plain figures, no pill frame, no ✎ — and
+   * its ⚡ and ⓘ say whose it is. **Otherwise it is typed by whoever saves the plan** (ADR-0183, partly reversing
+   * ADR-0075): the member on `/goals`, a leader on the coachee's tab — the save stores it on the same rule.
    */
   const ownFigure = shown.achieved.provenance === 'self_reported';
-  const producedTypable = ownFigure && mine;
+  const producedTypable = ownFigure;
   const produced = producedFrom(shown.achieved, 'year', subject?.pronoun, figures, language);
 
   const monthsField = (
@@ -552,10 +561,8 @@ export function GoalCalculator({
           {stepFour}
           {commitment}
           {inSync}
-          {/* `data-action-bar` lifts the shell's toast above the pill on a phone (`toast.tsx`). */}
-          <div data-action-bar="">
-            <FloatingSavePill state={state} label={t.save} onSave={() => void commit()} />
-          </div>
+          {/* The shared floating bar (`ui/floating-bar.tsx`): its own `data-floating-bar` lifts the shell's toast above it. */}
+          <FloatingSavePill state={state} label={t.save} onSave={() => void commit()} />
         </div>
       ) : (
         /*
@@ -736,6 +743,47 @@ function PillLine({ layout, label, children }: { layout: 'row' | 'stacked'; labe
 }
 
 /**
+ * **A tap on a pill selects its whole figure** (the staging review of 2026-10-31), so what is typed replaces it — the
+ * owner tapped *2 bulan*, typed *3* and got *23*. After the focus has drawn the raw figure (`typing`), on the next tick:
+ * a value written moves the caret to its end, and iOS ignores a selection made inside the focus event. The mouse-up
+ * that ends the tap would put the caret back where the finger was, so that one is held.
+ */
+function useSelectAll() {
+  const fresh = useRef(false);
+  return {
+    onFocus: (e: FocusEvent<HTMLInputElement>) => {
+      const input = e.currentTarget;
+      fresh.current = true;
+      window.setTimeout(() => {
+        if (document.activeElement === input) input.setSelectionRange(0, input.value.length);
+      }, 0);
+    },
+    onMouseUp: (e: { preventDefault: () => void }) => {
+      if (!fresh.current) return;
+      fresh.current = false;
+      e.preventDefault();
+    },
+    onKeyDown: () => { fresh.current = false; },
+    onBlur: () => { fresh.current = false; },
+  };
+}
+
+/**
+ * **The whole pill is the field's target** (the staging review of 2026-10-31): a `<label>` around the figure, the unit
+ * and the ✎, 48px high, so a tap on any of them focuses the field — not only on the figure's own ~48px. The field is
+ * named by the line's label alone (`aria-labelledby`), never by the unit or the figure the pill also holds.
+ */
+function PillField({ id, layout, width, children }: {
+  id: string; layout: 'row' | 'stacked'; width: string; children: ReactNode;
+}) {
+  return (
+    <label htmlFor={id} className={cn(PILL, 'cursor-text', layout === 'row' ? width : 'w-full')}>
+      {children}
+    </label>
+  );
+}
+
+/**
  * **The months left** (UI-020): *2,1 bulan* as a real figure, not a pale placeholder, and a field the moment it is
  * tapped — a comma or a point (ADR-0167 §1), a numeric keyboard, 16px. Emptied, it goes back to the office's calendar
  * (`null`).
@@ -746,17 +794,27 @@ function PillDecimal({ id, label, marker, value, unit, onValueChange, layout }: 
 }) {
   const figures = useFigureLanguage();
   const [typing, setTyping] = useState<string | null>(null);
+  const selectAll = useSelectAll();
+  const nameId = useId();
   return (
-    <PillLine layout={layout} label={<><label htmlFor={id}>{label}</label>{marker}</>}>
-      <span className={cn(PILL, layout === 'row' ? 'w-36' : 'w-full')}>
+    <PillLine layout={layout} label={<><label id={nameId} htmlFor={id}>{label}</label>{marker}</>}>
+      <PillField id={id} layout={layout} width="w-36">
         <input
           id={id}
           type="text"
           inputMode="decimal"
           autoComplete="off"
+          aria-labelledby={nameId}
           value={typing ?? formatNumber(value, { maxDecimals: 1 }, figures)}
-          onFocus={() => setTyping(formatDecimalInput(value, figures))}
-          onBlur={() => setTyping(null)}
+          {...selectAll}
+          onFocus={(e) => {
+            setTyping(formatDecimalInput(value, figures));
+            selectAll.onFocus(e);
+          }}
+          onBlur={() => {
+            setTyping(null);
+            selectAll.onBlur();
+          }}
           onChange={(e) => {
             const next = e.target.value.replace(/[^\d.,]/g, '');
             setTyping(next);
@@ -768,13 +826,13 @@ function PillDecimal({ id, label, marker, value, unit, onValueChange, layout }: 
         />
         <span className="shrink-0 font-bold">{unit}</span>
         <LineIcon name="pencil" className="h-4 w-4 shrink-0 text-signal-grey" />
-      </span>
+      </PillField>
     </PillLine>
   );
 }
 
 /**
- * **The APE already produced, the member's own** (UI-020): short — *Rp 290 jt* — until tapped, then every digit,
+ * **The APE already produced, typed** (UI-020; ADR-0183): short — *Rp 290 jt* — until tapped, then every digit,
  * grouped as it is typed (*290.000.000*), the currency mark beside it. Digits only, in either language's grouping.
  */
 function PillMoney({ id, label, marker, value, onChange, layout }: {
@@ -783,18 +841,28 @@ function PillMoney({ id, label, marker, value, onChange, layout }: {
 }) {
   const figures = useFigureLanguage();
   const [typing, setTyping] = useState<string | null>(null);
+  const selectAll = useSelectAll();
+  const nameId = useId();
   return (
-    <PillLine layout={layout} label={<><label htmlFor={id}>{label}</label>{marker}</>}>
-      <span className={cn(PILL, layout === 'row' ? 'w-40' : 'w-full')}>
+    <PillLine layout={layout} label={<><label id={nameId} htmlFor={id}>{label}</label>{marker}</>}>
+      <PillField id={id} layout={layout} width="w-40">
         {typing !== null && <span aria-hidden="true" className="shrink-0 font-bold text-muted">{moneyPrefix(figures)}</span>}
         <input
           id={id}
           type="text"
           inputMode="numeric"
           autoComplete="off"
+          aria-labelledby={nameId}
           value={typing ?? formatRupiahCompact(value, {}, figures)}
-          onFocus={() => setTyping(groupDigits(toMajor(value), figures))}
-          onBlur={() => setTyping(null)}
+          {...selectAll}
+          onFocus={(e) => {
+            setTyping(groupDigits(toMajor(value), figures));
+            selectAll.onFocus(e);
+          }}
+          onBlur={() => {
+            setTyping(null);
+            selectAll.onBlur();
+          }}
           onChange={(e) => {
             const digits = e.target.value.replace(/\D/g, '');
             const major = parseDigits(digits);
@@ -804,14 +872,15 @@ function PillMoney({ id, label, marker, value, onChange, layout }: {
           className="w-full min-w-0 bg-transparent text-right font-bold text-ink outline-none [font-size:16px]"
         />
         <LineIcon name="pencil" className="h-4 w-4 shrink-0 text-signal-grey" />
-      </span>
+      </PillField>
     </PillLine>
   );
 }
 
 /**
- * **The office's figure** (P9-T6): the same pill, the same ink, no ✎ — nothing typed here would be read. A `<dl>`, so
- * the label names the figure.
+ * **The office's figure** (P9-T6): nothing typed here would be read, so since the staging review of 2026-10-31 it is
+ * **plain figures, not a pill** — no frame, no fill, no ✎ — and no longer looks tappable; the ⚡ and the ⓘ beside the
+ * label say whose it is. A `<dl>`, so the label names the figure.
  */
 function PillReadOnly({ label, marker, value, layout }: {
   label: string; marker: ReactNode; value: string; layout: 'row' | 'stacked';
@@ -827,7 +896,15 @@ function PillReadOnly({ label, marker, value, layout }: {
         {label}
         {marker}
       </dt>
-      <dd className={cn(PILL, 'shrink-0', layout === 'row' ? 'w-40 justify-end' : 'w-full justify-end')}>{value}</dd>
+      <dd
+        data-read-only=""
+        className={cn(
+          'inline-flex h-12 shrink-0 items-center justify-end px-3.5 text-lg font-bold text-ink',
+          layout === 'row' ? 'w-40' : 'w-full',
+        )}
+      >
+        {value}
+      </dd>
     </dl>
   );
 }

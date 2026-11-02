@@ -14,6 +14,11 @@ import type { Me } from './session';
  * given a `next` at all (`SessionValue.signedOut`); an expired session or a link opened signed out still is, and
  * an expired one says so (`reason=expired`, ADR-0168 §1).
  *
+ * **Signing in again after an expired session starts on the landing, not on the page it ended on** (the product
+ * owner's staging review, 2026-10-31: *"Tiap login masuknya ke home"*). `destinationAfterSignIn` reads `next` only
+ * when the address does not say `reason=expired`; a link opened signed out — a shared meeting, an invitation — has no
+ * reason and still lands where it points.
+ *
  * Only a path inside this app is honoured. A prefix check is not enough: the URL parser drops tabs and line
  * breaks and reads `\` as `/`, so `/\t/evil.test` and `/\evil.test` both resolve to another host. So `next` is
  * parsed the way the browser will parse it, against a placeholder origin, and kept only when it stays on that
@@ -68,7 +73,8 @@ export interface SessionEnd {
  *
  * **A session that ended under the reader adds `reason=expired`** (ADR-0168 §1), so the sign-in page says so.
  * Three cases, then: signed out → `/login`; expired → `/login?next=<page>&reason=expired`; arrived signed out →
- * `/login?next=<page>`.
+ * `/login?next=<page>`. Only the last is brought back to its page: after an expired session signing in starts on
+ * the landing (`destinationAfterSignIn`, staging review 2026-10-31).
  */
 export function signInPathFrom(
   location: { pathname: string; search: string },
@@ -88,8 +94,14 @@ export function signInPathFrom(
  * app *and* they can open it, otherwise their own landing (`landingFor`). One function, so the rule is
  * readable and tested without rendering the page. `me` is who `signIn` found — `null` when the session could
  * not be read, which lands on `/login` as `/` would.
+ *
+ * **After an expired session, always their landing** (staging review, 2026-10-31): the address's `next` is the page
+ * the session ended on — Goals, the Unit Dashboard, Activity — and every sign-in is to start on Home (an Owner or an
+ * Admin on the office overview, a Super Admin on the console). The guard still writes `next` beside the reason
+ * (`signInPathFrom`); it is not read.
  */
 export function destinationAfterSignIn(search: string, me: Me | null): string {
+  if (sessionEndedIn(search)) return landingFor(me);
   const next = returnPathFrom(search);
   return next !== '/' && canOpen(next, me) ? next : landingFor(me);
 }

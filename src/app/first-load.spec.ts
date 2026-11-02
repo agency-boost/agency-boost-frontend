@@ -98,8 +98,16 @@ const HELD_BACK: readonly [page: string, modules: readonly string[]][] = [
   ['app/leader-meetings/[meetingId]/page.tsx', [
     'components/leader-forum/meeting-dialog.tsx', 'components/leader-forum/share-dialog.tsx',
   ]],
-  ['app/(admin)/admin/companies/[companyId]/template/page.tsx', [
-    'lib/activation.ts', 'components/import-template-dialog.tsx',
+  // ADR-0185: the company's page and a template's checklist draw no editor; a section draws one, and no activation client.
+  ['app/(admin)/admin/companies/[companyId]/page.tsx', [
+    'components/template-editor.tsx', 'components/products-tab.tsx', 'components/recruitment-playbook-tab.tsx',
+  ]],
+  ['app/(admin)/admin/companies/[companyId]/templates/[templateId]/page.tsx', [
+    'components/template-editor.tsx', 'components/products-tab.tsx', 'components/recruitment-playbook-tab.tsx',
+  ]],
+  ['app/(admin)/admin/companies/[companyId]/templates/[templateId]/[section]/page.tsx', ['lib/activation.ts']],
+  ['app/(admin)/admin/companies/[companyId]/settings/page.tsx', [
+    'lib/activation.ts', 'components/products-tab.tsx', 'components/recruitment-playbook-tab.tsx',
   ]],
 ];
 

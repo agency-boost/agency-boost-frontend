@@ -11,8 +11,8 @@ import { kept } from '@/i18n/kept';
  *
  * **English is the source**, byte for byte what the console wrote before. The Indonesian is the approved glossary's:
  * §A.2's sentence titles (*KPM baru*, *Tetapkan Owner · Pindahkan Owner*, *Impor roster*), §B.1 to §B.5, *office* is
- * *KPM* (§B.9), *Ubah langganan* for *Edit subscription* (§B.10, agreed with the leader limit's advice), *templat*
- * (§B.1), *bagian* for a section and *susunan jenjang* for the ladder (§B.10). **Kept** (§A): the pages' titles that are
+ * *KPM* (§B.9), *Ubah langganan* for *Edit subscription* (§B.10, agreed with the leader limit's advice), *template*
+ * (ADR-0185), *bagian* for a section and *susunan jenjang* for the ladder (§B.10). **Kept** (§A): the pages' titles that are
  * names (*All KPMs*, *Office*, *KPM Owners & Admins*), *KPM*, the roles, *Capability Mapping*, *AgencyBoost*, *leader*
  * and *Leaders*. *Office*, *Owner* and *Pending* are kept in one place and translated in another (`KEPT_ELSEWHERE`).
  * **Typed content stays as typed**: an office's code and branch, a company's and a template's name, people's names
@@ -85,14 +85,15 @@ const en = {
       `This end date, ${day}, has passed. Once you save, nobody in this office can use AgencyBoost until the date is moved or it is kept active.`,
   },
 
-  /** *New office* (`/admin/tenants/new`; ADR-0115 §4, ADR-0164 §5, ADR-0168 §2). */
+  /** *New office* (`/admin/tenants/new`; ADR-0115 §4, ADR-0164 §5, ADR-0168 §2, ADR-0185 §5). */
   create: {
     title: 'New office',
     subtitle: 'Its settings are copied from what it starts from; the office owns them afterwards.',
+    /** Under *Start from*, one sentence for what is chosen (ADR-0185 §5). */
     hint: {
-      template: 'Its settings are copied from this template’s published sections; a section it has not published starts empty, except Capability Mapping, which starts with AgencyBoost’s standard capability ladder.',
-      library: 'Its settings are copied from the Template library’s published sections, and every role they show must be on this company’s ladder. Changing the Template later changes nothing in this office.',
-      empty: 'Nothing but the three activity types the goal plan counts and AgencyBoost’s standard capability ladder. The Owner builds the rest.',
+      template: 'Its published sections are copied; one it has not published starts empty.',
+      library: 'Copied across companies: every role they show must be on this company’s ladder.',
+      empty: 'Only the three activity types the goal plan counts. It cannot be filled from a template later.',
     },
     noCompany: 'There is no company to attach an office to.',
     createCompany: 'Create a company first',
@@ -103,8 +104,6 @@ const en = {
       `This company’s templates could not be read, so there is nothing to start from yet. ${message}`,
     notLoaded: 'Not loaded',
     loading: 'Loading…',
-    /** A company's default template, by its name as typed. */
-    defaultTemplate: ({ name }: { name: string }) => `${name} · Default`,
     empty: 'Empty',
     tryAgain: 'Try again',
     code: 'Office code',
@@ -251,18 +250,17 @@ const id: MessagesOf<typeof en> = {
     title: `${kept('KPM')} baru`,
     subtitle: `Pengaturannya disalin dari titik awal yang dipilih; setelah itu, pengaturan menjadi milik ${kept('KPM')} ini.`,
     hint: {
-      template: `Pengaturannya disalin dari bagian templat ini yang sudah diterbitkan; bagian yang belum diterbitkan dimulai kosong, kecuali ${kept('Capability Mapping')}, yang dimulai dengan susunan jenjang kapabilitas standar ${kept('AgencyBoost')}.`,
-      library: `Pengaturannya disalin dari bagian ${kept('Template library')} yang sudah diterbitkan, dan setiap peran yang ditampilkannya harus ada di susunan jenjang perusahaan ini. Mengubah Template nanti tidak mengubah apa pun di ${kept('KPM')} ini.`,
-      empty: `Hanya tiga jenis aktivitas yang dihitung rencana ${kept('goal')} dan susunan jenjang kapabilitas standar ${kept('AgencyBoost')}. ${kept('Owner')} menyusun sisanya.`,
+      template: 'Bagian yang sudah terbit disalin; bagian yang belum terbit dimulai kosong.',
+      library: 'Disalin antarperusahaan: setiap peran yang ditampilkannya harus ada di susunan jenjang perusahaan ini.',
+      empty: `Hanya tiga jenis aktivitas yang dihitung rencana ${kept('goal')}. Tidak dapat diisi dari template nanti.`,
     },
     noCompany: `Belum ada perusahaan untuk dikaitkan dengan ${kept('KPM')}.`,
     createCompany: 'Buat perusahaan terlebih dahulu',
     company: 'Perusahaan',
     startFrom: 'Mulai dari',
-    templatesFailed: ({ message }) => `Templat perusahaan ini tidak dapat dimuat, jadi belum ada titik awal. ${message}`,
+    templatesFailed: ({ message }) => `Template perusahaan ini tidak dapat dimuat, jadi belum ada titik awal. ${message}`,
     notLoaded: 'Tidak termuat',
     loading: 'Memuat…',
-    defaultTemplate: ({ name }) => `${name} · Default`,
     empty: 'Kosong',
     tryAgain: 'Coba lagi',
     code: `Kode ${kept('KPM')}`,
@@ -282,7 +280,7 @@ const id: MessagesOf<typeof en> = {
     title: kept('Office'),
     loading: `Memuat ${kept('KPM')}…`,
     subtitle: `Penyiapan dan siklus hidup. Konsol ini tidak pernah membaca data bisnis ${kept('KPM')}.`,
-    saveAsTemplate: 'Simpan sebagai templat',
+    saveAsTemplate: 'Simpan sebagai template',
     profile: 'Profil',
     kpmId: `ID ${kept('KPM')}`,
     company: 'Perusahaan',

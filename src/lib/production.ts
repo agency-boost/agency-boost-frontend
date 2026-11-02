@@ -2,7 +2,7 @@ import { messagesIn } from '@/i18n/catalogue';
 import { kept } from '@/i18n/kept';
 import { SOURCE_LANGUAGE, type Language } from '@/i18n/language';
 import { dataUploadMessages } from '@/i18n/messages/data-upload';
-import { api } from '@/lib/api-client';
+import { api, apiBlob } from '@/lib/api-client';
 
 /** Which writer a figure came from. `null` when nothing has written it. */
 export type Provenance = 'imported' | 'corrected' | 'self_reported';
@@ -139,6 +139,16 @@ export interface TemplateFile {
 export const readTemplate = (month: string) =>
   api<TemplateFile>(`/kpm/data-upload/template?month=${encodeURIComponent(month)}`);
 
+/**
+ * **The month's template as an Excel workbook** (ADR-0184): the same header and rows on its *Data* sheet, the guide on a
+ * sheet of its own. Fetched with the token and saved by the screen (`saveFile`); named as the CSV is, with `.xlsx`.
+ */
+export const readTemplateWorkbook = (month: string) =>
+  apiBlob(`/kpm/data-upload/template?month=${encodeURIComponent(month)}&format=xlsx`);
+
+/** `KPM0417-agent-data-Sep-2026.xlsx`: the server's name for the CSV, the workbook's extension (`templateFilename`). */
+export const workbookFilename = (t: Pick<TemplateFile, 'filename'>) => t.filename.replace(/\.csv$/i, '.xlsx');
+
 export type Cadence = 'monthly' | 'ytd';
 
 /** `not_provided` is a blank cell — it changes nothing, because a file never clears a figure. */
@@ -207,6 +217,8 @@ export interface UploadPreview {
   month: string;
   filename: string;
   templateVersion: number;
+  /** A CSV, or an Excel workbook whose Data sheet was read (ADR-0184). */
+  format: 'csv' | 'xlsx';
   encoding: 'utf-8' | 'windows-1252';
   delimiter: ',' | ';' | '\t';
   /** The month's revision the preview was taken against. */
@@ -216,9 +228,9 @@ export interface UploadPreview {
 }
 
 /**
- * The file as **bytes**, in a form. `FileReader.readAsText` — what the roster import does — would
- * decode it in the browser first, and a byte the encoding cannot explain would already be U+FFFD
- * when it reached the server that knows how to read it (ADR-0052).
+ * The file as **bytes**, in a form — a CSV or an Excel workbook (ADR-0184). `FileReader.readAsText` would decode it in
+ * the browser first, and a byte the encoding cannot explain would already be U+FFFD when it reached the server that
+ * knows how to read it (ADR-0052); a workbook is opened on the server only.
  */
 export const previewUpload = (month: string, file: File) => {
   const form = new FormData();

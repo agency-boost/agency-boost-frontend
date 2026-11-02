@@ -285,6 +285,13 @@ const en = {
     delete: 'Delete',
     deleteAsk: ({ who }: { who: string }) => `Delete ${who}? It leaves your leads.`,
     deleted: 'Lead deleted',
+    /**
+     * *Hapus tugas* (the staging review of 2026-10-31): the calendar's sheet, in *Delete*'s place — the lead's next action
+     * cleared, which is the task, and the lead kept.
+     */
+    clearTask: 'Delete task',
+    clearTaskAsk: ({ who }: { who: string }) => `Delete the task for ${who}? The lead stays; only its next action is cleared.`,
+    taskCleared: 'Task deleted',
     saved: 'Saved',
     discard: 'You have changes that are not saved yet. Close without saving?',
     discardConfirm: 'Close without saving',
@@ -506,6 +513,9 @@ const id: MessagesOf<typeof en> = {
     delete: 'Hapus',
     deleteAsk: ({ who }) => `Hapus ${who}? ${kept('Lead')} ini keluar dari daftar Anda.`,
     deleted: `${kept('Lead')} dihapus`,
+    clearTask: 'Hapus tugas',
+    clearTaskAsk: ({ who }) => `Hapus tugas untuk ${who}? ${kept('Lead')}-nya tetap ada; hanya tindakan berikutnya yang dikosongkan.`,
+    taskCleared: 'Tugas dihapus',
     saved: 'Tersimpan',
     discard: 'Ada perubahan yang belum disimpan. Tutup tanpa menyimpan?',
     discardConfirm: 'Tutup tanpa menyimpan',

@@ -383,10 +383,10 @@ describe('org role ladder (P3.5-T7)', () => {
       expect([...(company as HTMLSelectElement).options].map((o) => o.textContent)).toEqual(['Prudential', 'Template']);
       expect(company).toHaveDisplayValue('Prudential');
       expect(await screen.findByText('Agent → AAB → AB')).toBeInTheDocument();
-      expect(screen.queryByText('Template library')).not.toBeInTheDocument();
+      expect(screen.queryByText('AgencyBoost built-in templates')).not.toBeInTheDocument();
     });
 
-    it('labels it Template library while it is chosen, the badge describing the select, and shows its ladder', async () => {
+    it('ADR-0185 §1 labels it AgencyBoost built-in templates while it is chosen, the badge describing the select, and shows its ladder', async () => {
       routes();
       renderInLayout(AdminLayout, <OrgLevelsPage />, { me: SUPER_ADMIN });
 
@@ -394,8 +394,8 @@ describe('org role ladder (P3.5-T7)', () => {
       // The companies arrive after the select does: choose the library once it is an option.
       await screen.findByRole('option', { name: 'Template' });
       await userEvent.selectOptions(company, 'co-lib');
-      const badge = await screen.findByText('Template library');
-      expect(company).toHaveAccessibleDescription('Template library');
+      const badge = await screen.findByText('AgencyBoost built-in templates');
+      expect(company).toHaveAccessibleDescription('AgencyBoost built-in templates');
       // The same chip `/admin/companies` puts on the library's row: the component, its tone and its words.
       expect(badge).toHaveAttribute('data-tone', 'navy');
       expect(await screen.findByText('Agent → AAB → Agency Builder')).toBeInTheDocument();
@@ -429,7 +429,7 @@ describe('org role ladder (P3.5-T7)', () => {
 
       expect(await screen.findByRole('combobox', { name: 'Company' })).toHaveDisplayValue('Template');
       expect(await screen.findByText('Agent → AAB → Agency Builder')).toBeInTheDocument();
-      expect(screen.getByText('Template library')).toBeInTheDocument();
+      expect(screen.getByText('AgencyBoost built-in templates')).toBeInTheDocument();
     });
   });
 });

@@ -232,6 +232,27 @@ describe('UI-111 Profil saya', () => {
     expect(await within(sheet).findByText('Password changed. Your other sessions were signed out.')).toBeInTheDocument();
   });
 
+  it('the password sheet asks for 8 characters (the owner, 2026-11-01): 7 hold the button, 8 release it', async () => {
+    stubFetch(reads({}));
+    renderWithSession(<ProfilePage />, { me: AGUS });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Change password' }));
+    const sheet = await screen.findByRole('dialog', { name: 'Change password' });
+    const submit = within(sheet).getByRole('button', { name: 'Change password' });
+    expect(within(sheet).getByLabelText('New password')).toHaveAccessibleDescription('At least 8 characters.');
+    expect(within(sheet).getByLabelText('New password')).toHaveAttribute('minLength', '8');
+
+    await userEvent.type(within(sheet).getByLabelText('Current password'), 'old-password-1');
+    await userEvent.type(within(sheet).getByLabelText('New password'), '1234567');
+    await userEvent.type(within(sheet).getByLabelText('Confirm new password'), '1234567');
+    expect(submit).toBeDisabled();
+    expect(within(sheet).getByText(/The new password needs at least 8 characters\./)).toBeInTheDocument();
+
+    await userEvent.type(within(sheet).getByLabelText('New password'), '8');
+    await userEvent.type(within(sheet).getByLabelText('Confirm new password'), '8');
+    expect(submit).toBeEnabled();
+  });
+
   it('UI-111 devices still work as today: the row counts them and names this one; its sheet signs another out', async () => {
     const { calls } = stubFetch(reads({ 'DELETE /auth/sessions/s2': { body: null } }));
     renderWithSession(<ProfilePage />, { me: AGUS });

@@ -414,8 +414,9 @@ describe('Goal Settings (P8-T3) as UI V1 draws it (P18.99-T5)', () => {
       await waitFor(() => expect(sent(calls, 'PUT')).toHaveLength(1));
       await waitFor(() => expect(status()).toHaveTextContent('Saved ✓'));
       expect(await screen.findByText('Goal saved ✓')).toBeInTheDocument();
-      // The pill lifts the shell's toast above it on a phone.
-      expect(document.querySelector('[data-floating-save]')!.parentElement).toHaveAttribute('data-action-bar');
+      // The pill is the shared floating bar, whose own marker lifts the shell's toast above it on a phone.
+      expect(document.querySelector('[data-floating-save]')).toHaveAttribute('data-floating-bar');
+      expect(document.querySelector('[data-action-bar]')).toBeNull();
     });
 
     it('UI-022 the disclaimer: a footnote on a desktop, an ⓘ in the commitment’s header on a tablet, nothing on a phone', async () => {
@@ -568,6 +569,71 @@ describe('Goal Settings (P8-T3) as UI V1 draws it (P18.99-T5)', () => {
       await save();
       await waitFor(() => expect(sent(calls, 'PUT')).toHaveLength(1));
       expect(sent(calls, 'PUT')[0].apeAchievedMinor).toBe(120_000_000_00);
+    });
+  });
+
+  /*
+   * The staging review of 2026-10-31 (the product owner, on an iPhone): only the figure's own ~48px of a 144px pill took
+   * a tap, the ✎ and the unit were decorations, and a tap left the caret at the end, so typing *3* over *2* made *23*.
+   */
+  describe('staging review 2026-10-31 — the whole pill is the field, and a tap selects the figure', () => {
+    it('a tap on the ✎ or the unit focuses the field: the pill is a label for it, 48px high', async () => {
+      render({ '/goals': { body: goal({ monthsLeft: 2 }) } });
+      await resultCard();
+      const months = screen.getByRole('textbox', { name: 'Months left this year' });
+      const pill = months.closest('label')!;
+      expect(pill).toHaveAttribute('for', months.id);
+      expect(pill).toHaveClass('h-12', 'w-full', 'cursor-text');
+      // Named by its line's label alone, never by the unit or the figure in the pill.
+      expect(months).toHaveAccessibleName('Months left this year');
+
+      await userEvent.click(pill.querySelector('svg')!);
+      expect(months).toHaveFocus();
+      await userEvent.tab();
+      await userEvent.click(within(pill).getByText('months'));
+      expect(months).toHaveFocus();
+    });
+
+    it('focus selects the whole figure, so typing 3 over 2 is 3, not 23', async () => {
+      const { calls } = render({ '/goals': [{ body: goal({ monthsLeft: 2 }) }, { body: goal({ monthsLeft: 3 }) }] });
+      await resultCard();
+      const months = screen.getByRole('textbox', { name: 'Months left this year' }) as HTMLInputElement;
+
+      await userEvent.click(months.closest('label')!.querySelector('svg')!);
+      await waitFor(() => expect([months.selectionStart, months.selectionEnd]).toEqual([0, months.value.length]));
+      expect(months.value).toBe('2');
+      await userEvent.keyboard('3');
+      expect(months).toHaveValue('3');
+      expect(status()).toHaveTextContent('Not saved yet');
+      await save();
+      await waitFor(() => expect(sent(calls, 'PUT')).toHaveLength(1));
+      expect(sent(calls, 'PUT')[0].monthsLeft).toBe(3);
+    });
+
+    it('the APE produced: a tap anywhere on its pill selects every digit, and what is typed replaces them', async () => {
+      render({ '/goals': { body: goal({ apeAchievedMinor: 290_000_000_00 }) } });
+      await resultCard();
+      const produced = screen.getByRole('textbox', { name: 'APE already produced this year' }) as HTMLInputElement;
+
+      await userEvent.click(produced.closest('label')!.querySelector('svg')!);
+      expect(produced).toHaveFocus();
+      await waitFor(() => expect([produced.selectionStart, produced.selectionEnd]).toEqual([0, produced.value.length]));
+      expect(produced.value).toBe('290,000,000');
+      await userEvent.keyboard('300000000');
+      expect(produced).toHaveValue('300,000,000');
+    });
+
+    it('the selection survives the mouse-up that ends the tap, once; a later click places the caret', async () => {
+      render({ '/goals': { body: goal({ monthsLeft: 2 }) } });
+      await resultCard();
+      const months = screen.getByRole('textbox', { name: 'Months left this year' }) as HTMLInputElement;
+      months.focus();
+      const first = new MouseEvent('mouseup', { bubbles: true, cancelable: true });
+      months.dispatchEvent(first);
+      expect(first.defaultPrevented).toBe(true);
+      const second = new MouseEvent('mouseup', { bubbles: true, cancelable: true });
+      months.dispatchEvent(second);
+      expect(second.defaultPrevented).toBe(false);
     });
   });
 
@@ -770,13 +836,19 @@ describe('Goal Settings — the APE already produced, once the office holds prod
     ...over,
   });
 
-  it('UI-020 P9-T6 the office’s figure wears the same pill, short and in normal ink, with no ✎ and no field: ⚡, and ⓘ says whose', async () => {
+  /*
+   * The staging review of 2026-10-31: the office's figure looked exactly like the field beside it. It is plain figures
+   * now — short, normal ink, the row's height — with no pill frame, no fill and no ✎; ⚡ and ⓘ still say whose.
+   */
+  it('UI-020 P9-T6 the office’s figure is plain figures, short and in normal ink, with no pill, no ✎ and no field: ⚡, and ⓘ says whose', async () => {
     render({ '/goals': { body: imported() } });
     await resultCard();
 
     const shown = screen.getByText('APE already produced this year').closest('dl')!;
     expect(shown.querySelector('dd')).toHaveTextContent(/^IDR 120M$/);
-    expect(shown.querySelector('dd')).toHaveClass('h-12', 'rounded-pill', 'text-ink');
+    expect(shown.querySelector('dd')).toHaveClass('h-12', 'text-ink', 'font-bold');
+    expect(shown.querySelector('dd')!.className).not.toMatch(/\b(rounded-pill|border-line|border-\[1\.5px\]|bg-card)\b/);
+    expect(shown.querySelector('dd svg')).toBeNull();
     expect(screen.queryByRole('textbox', { name: 'APE already produced this year' })).not.toBeInTheDocument();
     expect(shown.querySelector('[data-auto-marker]')).not.toBeNull();
     await userEvent.click(within(shown).getByRole('button', { name: 'Why APE already produced this year is automatic' }));
@@ -791,13 +863,15 @@ describe('Goal Settings — the APE already produced, once the office holds prod
     expect(await screen.findByText('Corrected by hand, year to date as of Aug 2026')).toBeInTheDocument();
   });
 
-  it('keeps the typed figure on save, untouched — it is the agent’s own', async () => {
+  it('keeps the typed figure on save, untouched — left out of the body, so the server keeps the figure it stores (S1)', async () => {
     const { calls } = render({ '/goals': [{ body: imported() }, { body: imported() }] });
     await resultCard();
     await save();
 
     await waitFor(() => expect(sent(calls, 'PUT')).toHaveLength(1));
-    expect(sent(calls, 'PUT')[0].apeAchievedMinor).toBe(50_000_000_00);
+    // Not sent back: a figure typed since this screen read the plan — by a coach, say — stands (S1).
+    expect(sent(calls, 'PUT')[0]).not.toHaveProperty('apeAchievedMinor');
+    expect(sent(calls, 'PUT')[0]).toMatchObject({ annualApeTargetMinor: expect.any(Number) });
   });
 });
 

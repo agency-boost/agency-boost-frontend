@@ -2,6 +2,7 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import AgentLayout from '@/app/(agent)/layout';
+import { FLOATING_BAR_ROOM } from '@/components/ui/floating-bar';
 import { PHONE_QUERY } from '@/lib/use-phone';
 import { makeMe, renderInLayout, stubFetch } from '@test/harness';
 import LogActivityPage from './page';
@@ -611,9 +612,8 @@ describe('Log activity (P6-T2)', () => {
       phoneDay();
       await screen.findByRole('heading', { name: 'Leads' });
       const save = screen.getByRole('button', { name: 'Save activity' });
-      const bar = save.parentElement!;
+      const bar = save.closest('[data-floating-bar]') as HTMLElement;
       expect(bar).toHaveAttribute('data-action-bar');
-      expect(bar).toHaveClass('fixed', 'inset-x-0', 'bottom-[max(calc(var(--tab-bar-space)+0.25rem),env(safe-area-inset-bottom))]');
       expect(save).toHaveClass('bg-amber', 'text-navy');
       expect(bar).toContainElement(screen.getByRole('button', { name: 'Cancel' }));
       // One save status on the screen, in the bar.
@@ -621,8 +621,27 @@ describe('Log activity (P6-T2)', () => {
       expect(statuses).toHaveLength(1);
       expect(bar).toContainElement(statuses[0]);
       expect(statuses[0]).toHaveTextContent('Saved ✓');
-      // Room under the cards, so the last row is never behind the bar.
-      expect(screen.getByRole('heading', { name: 'Selling' }).closest('section')!.parentElement).toHaveClass('pb-20');
+      // Room under the cards, so the last row is never behind the bar: the floating bar's one room class.
+      expect(screen.getByRole('heading', { name: 'Selling' }).closest('section')!.parentElement).toHaveClass(FLOATING_BAR_ROOM);
+    });
+
+    /*
+     * **Goal Setting's pill, not a full-width strip** (the product owner's staging review, 2026-10-31: *"semua floating
+     * tambahan itu bisa buat modelan kayak goal setting gini"*): 12px from the sides, 12px over the tab bar, round-ended,
+     * the save the pill's 44px accent button.
+     */
+    it('UI-106 the save bar is the floating bar: the Goal Setting pill’s form, not the full-width strip', async () => {
+      phoneDay();
+      await screen.findByRole('heading', { name: 'Leads' });
+      const save = screen.getByRole('button', { name: 'Save activity' });
+      const bar = save.closest('[data-floating-bar]') as HTMLElement;
+      expect(bar).toHaveClass('fixed', 'inset-x-3', 'bottom-[max(calc(var(--tab-bar-space)+0.75rem),calc(env(safe-area-inset-bottom)+0.75rem))]');
+      expect(bar.className).not.toMatch(/inset-x-0|border-t/);
+      const pill = save.parentElement!;
+      expect(pill).toHaveAttribute('data-floating-bar-pill');
+      expect(pill).toHaveClass('rounded-pill', 'bg-card', 'shadow-modal');
+      expect(save).toHaveClass('min-h-11', 'rounded-pill', 'font-bold');
+      expect(screen.getByRole('button', { name: 'Cancel' })).toHaveClass('min-h-11', 'rounded-pill');
     });
 
     it('UI-106 keeps a closed day’s reason above the bar, and a closed day never logged has no bar', async () => {
@@ -630,8 +649,8 @@ describe('Log activity (P6-T2)', () => {
       stubFetch({ ...base, '/activity/log': { body: day({ editable: false, frozenAt: '2026-03-08T00:00:00Z' }) } });
       const { unmount } = renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
       const reason = await screen.findByLabelText('Why is this being corrected?');
-      expect(reason.closest('.max-w-xl')).toHaveClass('pb-20');
-      expect(screen.getByRole('button', { name: 'Save the correction' }).parentElement).toHaveAttribute('data-action-bar');
+      expect(reason.closest('.max-w-xl')).toHaveClass(FLOATING_BAR_ROOM);
+      expect(screen.getByRole('button', { name: 'Save the correction' }).closest('[data-floating-bar]')).toHaveAttribute('data-action-bar');
       unmount();
 
       stubFetch({ ...base, '/activity/log': { body: day({
@@ -655,6 +674,8 @@ describe('Log activity (P6-T2)', () => {
       expect(bar).not.toContainElement(saveStatus() as HTMLElement);
       expect((bar.getAttribute('class') ?? '').split(/\s+/).filter(Boolean))
         .toEqual(['flex', 'flex-wrap', 'items-center', 'justify-end', 'gap-2.5']);
+      // Not a floating bar from 768px: the row under the cards, as it was.
+      expect(document.querySelector('[data-floating-bar]')).toBeNull();
       expect(screen.queryByText(/^Today:/)).not.toBeInTheDocument();
       expect(strip().at(-1)).toEqual(['Total activities today', '3']);
     });

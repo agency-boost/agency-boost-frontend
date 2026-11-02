@@ -14,7 +14,8 @@ const words = (...parts: ReactNode[]) => createElement(Fragment, null, ...parts)
  * (§B.1), *Menambahkan…* (§B.2), *Aktif · Diarsipkan* (§B.3), *Kode · Status · Aksi · Label* (§B.4) — with the API's
  * words for the same things (P18.98-T5's rows of §B.10): a rung a ***jenjang***, the ladder a ***susunan jenjang***, a
  * leader tier a ***tingkat leader***. **Kept English** (§A): the title (§A.1's *Org role ladder*), the two tiers, the
- * client's names (*Senior Leader*, *Associate Leader*, ADR-0156 — for approval), *Template library*, *leader* (§A.6).
+ * client's names (*Senior Leader*, *Associate Leader*, ADR-0156 — for approval), *AgencyBoost*, *leader* (§A.6); the
+ * platform's library is *Template bawaan AgencyBoost* (ADR-0185 §1).
  * **Content stays as typed** (ADR-0179 §5): a company's name, a rung's label and code; the example codes *AGENT, AAB,
  * AB* are identifiers, the same in both languages.
  *
@@ -25,7 +26,8 @@ const en = {
   subtitle: 'The rungs a company promotes people along. An office cannot invent one — this is the company\'s to '
     + 'define, and only the platform writes it.',
   company: 'Company',
-  templateLibrary: kept('Template library'),
+  /** The platform's library, by the name ADR-0185 §1 gives it wherever it is shown. */
+  templateLibrary: 'AgencyBoost built-in templates',
 
   /** The table's columns, its caption and the skeleton's; the last column said to a screen reader only. */
   columns: {
@@ -84,7 +86,7 @@ const id: MessagesOf<typeof en> = {
   subtitle: `Jenjang tempat perusahaan mempromosikan orang. ${kept('KPM')} tidak dapat membuat jenjang sendiri — `
     + 'perusahaanlah yang menetapkannya, dan hanya platform yang menuliskannya.',
   company: 'Perusahaan',
-  templateLibrary: kept('Template library'),
+  templateLibrary: `Template bawaan ${kept('AgencyBoost')}`,
 
   columns: {
     order: 'Urutan',

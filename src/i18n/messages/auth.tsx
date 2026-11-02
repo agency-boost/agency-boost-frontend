@@ -66,7 +66,7 @@ const en = {
   },
   /** The rules every form that makes a password applies, and says. */
   password: {
-    hint: ({ n }: { n: number }) => `At least ${n} characters. Length beats symbols.`,
+    hint: ({ n }: { n: number }) => `At least ${n} characters.`,
     tooShort: ({ n }: { n: number }) => `Use at least ${n} characters.`,
     padded: 'Do not begin or end with a space.',
     mismatch: 'The two passwords do not match.',
@@ -198,7 +198,7 @@ const id: MessagesOf<typeof en> = {
     showAll: ({ n }) => `Tampilkan semua ${n} akun`,
   },
   password: {
-    hint: ({ n }) => `Minimal ${n} karakter. Panjang lebih penting daripada simbol.`,
+    hint: ({ n }) => `Minimal ${n} karakter.`,
     tooShort: ({ n }) => `Gunakan minimal ${n} karakter.`,
     padded: 'Jangan diawali atau diakhiri spasi.',
     mismatch: 'Kedua kata sandi tidak sama.',

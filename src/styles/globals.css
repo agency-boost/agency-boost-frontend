@@ -130,7 +130,7 @@
   --color-pill-blue-ink: #0c447c;
 
   /*
-   * **The floating tab bar's room** (UI V1, UI-004): what a fixed bar at the foot of the screen (`ACTION_BAR_PHONE`) and the
+   * **The floating tab bar's room** (UI V1, UI-004): what a floating bar at the foot of the screen (`FloatingBar`) and the
    * toast stand above, and what the page's content leaves under its last line. Nothing, but where the field shell draws
    * its bar — below 1024px (*V1 surfaces*, below): the bar's 64px, its 12px from the bottom, and the home indicator.
    */

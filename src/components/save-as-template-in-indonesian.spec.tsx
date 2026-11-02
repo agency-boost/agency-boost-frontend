@@ -47,8 +47,8 @@ describe('P18.98-T6 Save as template and the activity binding in Indonesian', ()
       <SaveAsTemplateDialog open kpm={{ _id: 'kpm-1', code: '0417', companyId: 'co-1' }} onClose={vi.fn()} onSaved={vi.fn()} />,
       { me: SUPER_ADMIN },
     );
-    const dialog = within(screen.getByRole('dialog', { name: 'Simpan sebagai templat' }));
-    expect(dialog.getByText(/^Yang dibaca agent KPM 0417 sekarang menjadi templat baru:/)).toBeInTheDocument();
+    const dialog = within(screen.getByRole('dialog', { name: 'Simpan sebagai template' }));
+    expect(dialog.getByText(/^Yang dibaca agent KPM 0417 sekarang menjadi template baru:/)).toBeInTheDocument();
     const company = await dialog.findByLabelText('Perusahaan');
     // Its own company first, as stored.
     expect(within(company).getAllByRole('option').map((o) => o.textContent)).toEqual(['Prudential', 'Allianz Life']);
@@ -56,8 +56,8 @@ describe('P18.98-T6 Save as template and the activity binding in Indonesian', ()
       'Ke perusahaan lain, setiap file pelatihan disalin, dan setiap peran yang disebut pengaturan ini harus ada di '
       + 'susunan jenjangnya.',
     );
-    await userEvent.click(dialog.getByRole('button', { name: 'Simpan templat' }));
-    expect(dialog.getByLabelText('Nama')).toHaveAccessibleDescription('Beri nama templat ini.');
+    await userEvent.click(dialog.getByRole('button', { name: 'Simpan template' }));
+    expect(dialog.getByLabelText('Nama')).toHaveAccessibleDescription('Beri nama template ini.');
     expect(dialog.getByRole('button', { name: 'Batal' })).toBeInTheDocument();
     noEnglishLeft();
     await clean();

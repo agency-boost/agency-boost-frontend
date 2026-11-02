@@ -9,8 +9,7 @@ import { PasswordInput } from '@/components/ui/password-input';
 import { PublicTitle } from '@/components/public-title';
 import { useMessages } from '@/i18n/language-provider';
 import { authMessages } from '@/i18n/messages/auth';
-
-const MIN_LENGTH = 10;
+import { PASSWORD_MIN_LENGTH } from '@/lib/password';
 
 export default function ResetPasswordPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = use(params);
@@ -24,7 +23,7 @@ export default function ResetPasswordPage({ params }: { params: Promise<{ token:
   const rules = all.password;
 
   const mismatch = confirm.length > 0 && password !== confirm;
-  const tooShort = password.length > 0 && password.length < MIN_LENGTH;
+  const tooShort = password.length > 0 && password.length < PASSWORD_MIN_LENGTH;
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -55,8 +54,8 @@ export default function ResetPasswordPage({ params }: { params: Promise<{ token:
           <Field
             label={t.newPassword}
             htmlFor="password"
-            hint={rules.hint({ n: MIN_LENGTH })}
-            error={tooShort ? rules.tooShort({ n: MIN_LENGTH }) : undefined}
+            hint={rules.hint({ n: PASSWORD_MIN_LENGTH })}
+            error={tooShort ? rules.tooShort({ n: PASSWORD_MIN_LENGTH }) : undefined}
           >
             <PasswordInput
               id="password"

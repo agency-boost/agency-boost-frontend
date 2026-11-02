@@ -142,6 +142,12 @@ describe('a coachee’s Goal Setting tab (P11-T7 AC-5)', () => {
     const put = calls.find((c) => c.init.method === 'PUT')!;
     expect(put.url).toBe('http://api.test/api/v1/goals/2026?for=mem-rina');
     expect(JSON.parse(String(put.init.body))).toMatchObject({ annualApeTargetMinor: 900_000_000_00 });
+    /*
+     * S1 (the T17–T20 permission review): the leader changed the target and not her APE produced, so the figure is left
+     * out of the save — and of the preview — and the server keeps hers, a newer one she typed since this read included.
+     */
+    expect(JSON.parse(String(put.init.body))).not.toHaveProperty('apeAchievedMinor');
+    expect(JSON.parse(String(calls.find((c) => c.init.method === 'POST')!.init.body))).not.toHaveProperty('apeAchievedMinor');
     await waitFor(() => expect(within(document.querySelector('[data-goal-aside]') as HTMLElement).getByRole('status'))
       .toHaveTextContent('Saved ✓'));
   });
@@ -171,17 +177,42 @@ describe('a coachee’s Goal Setting tab (P11-T7 AC-5)', () => {
     expect(screen.queryByText('Set by your leader')).not.toBeInTheDocument();
   });
 
-  it('P11-T7 AC-5 names her own figure as hers, and an upload without ADR-0084’s six words', async () => {
-    show();
+  /*
+   * ADR-0183 (OD-242; the owner's staging review SR-07, P18.99-T17), partly reversing ADR-0075: while the office holds
+   * no figure for her, her leader types her APE produced here, and the save stores it (`typedApeOf`).
+   */
+  it('ADR-0183 her leader types her APE produced while the office holds none: tapping the ✎ focuses it, the figure selected', async () => {
+    const { calls } = show([{ body: goal() }, { body: goal({ apeAchievedMinor: 75_000_000_00 }) }]);
     await screen.findByRole('button', { name: 'Save goal' });
-    // ADR-0075 / ADR-0058 (exit review B2): a leader reads her production and never types it.
-    expect(screen.getByText('APE already produced this year')).toBeInTheDocument();
-    expect(screen.queryByRole('textbox', { name: 'APE already produced this year' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Her own figure, entered in Goal Settings' })).toBeInTheDocument();
-    vi.unstubAllGlobals();
-    document.body.innerHTML = '';
+    const field = screen.getByRole('textbox', { name: 'APE already produced this year' }) as HTMLInputElement;
+    expect(field).toHaveValue('IDR 0');
+    // The whole pill is the target: a tap on its ✎ focuses the field, and the figure is selected, so typing replaces it.
+    const pill = field.closest('label')!;
+    expect(pill).toHaveAttribute('for', field.id);
+    await userEvent.click(pill.querySelector('svg')!);
+    expect(field).toHaveFocus();
+    await waitFor(() => expect([field.selectionStart, field.selectionEnd]).toEqual([0, field.value.length]));
+    await userEvent.keyboard('75000000');
+    expect(field).toHaveValue('75,000,000');
+    // UI-020: an edit marks the plan unsaved.
+    await waitFor(() => expect(within(document.querySelector('[data-goal-aside]') as HTMLElement).getByRole('status'))
+      .toHaveTextContent('Not saved yet'));
 
+    await userEvent.click(screen.getByRole('button', { name: 'Save goal' }));
+    await waitFor(() => expect(calls.filter((c) => c.init.method === 'PUT')).toHaveLength(1));
+    const put = calls.find((c) => c.init.method === 'PUT')!;
+    expect(put.url).toBe('http://api.test/api/v1/goals/2026?for=mem-rina');
+    expect(JSON.parse(String(put.init.body))).toMatchObject({ apeAchievedMinor: 75_000_000_00 });
+  });
+
+  it('P11-T7 AC-5 an upload is hers and nobody’s to type: plain figures, no field, ⚡ and ⓘ, and no ADR-0084 six words', async () => {
     show({ body: goal({ achieved: { minor: 120_000_000_00, provenance: 'corrected', month: '2026-08' } }) });
+    await screen.findByRole('button', { name: 'Save goal' });
+    expect(screen.queryByRole('textbox', { name: 'APE already produced this year' })).not.toBeInTheDocument();
+    // The staging review of 2026-10-31: no pill frame, so it no longer looks like a field.
+    const figure = screen.getByText('APE already produced this year').closest('dl')!.querySelector('dd')!;
+    expect(figure).toHaveAttribute('data-read-only');
+    expect(figure.className).not.toMatch(/\b(rounded-pill|border-line|bg-card)\b/);
     // UI-020: the upload's figure is automatic, ⚡, and its ⓘ says whose.
     expect(await screen.findByRole('button', { name: 'Why APE already produced this year is automatic' }))
       .toHaveAccessibleDescription('Corrected after the production upload, year to date as of Aug 2026');

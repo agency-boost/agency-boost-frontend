@@ -142,7 +142,8 @@ export function LeadDetailsDialog({
   return (
     // The backdrop closes; a click inside the box must not, or selecting a number to copy it
     // would dismiss the dialog it is in.
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy/35 p-5" onClick={close}>
+    // The top inset where it is more than 20px: never under a Home Screen app's clock (staging review, 2026-10-31).
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy/35 p-5 pt-[max(1.25rem,env(safe-area-inset-top))]" onClick={close}>
       <div
         ref={box}
         role="dialog"

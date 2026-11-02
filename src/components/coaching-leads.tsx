@@ -20,7 +20,7 @@ import { dayInZone, formatShortDay, OFFICE_TIME_ZONE } from '@/lib/format';
 import {
   countByType, listEveryLead, nameMatches, nextActionState, updateLead, type Lead, type LeadType, type LeadTypeChip,
 } from '@/lib/leads';
-import { useCan } from '@/lib/session';
+import { useCan, useSession } from '@/lib/session';
 import { useOpenedOnce } from '@/lib/use-opened-once';
 import type { LeadStatusRow } from '@/lib/tenant-config';
 import { useTenantConfig } from '@/lib/tenant-config-cache';
@@ -38,7 +38,8 @@ const LeadSheet = dynamic(() => import('@/components/lead-sheet').then((m) => m.
  * and the note — and **WhatsApp and Call**, always enabled (UI-081: with no number they ask for one first). A lead with
  * no next action **never drops out**: in the line's place, in red, ***Isi tindakan*** (no note, no date — opens the lead
  * sheet) or ***Isi tanggal*** (a note, no date — opens the date picker, and the date is saved to the lead). The whole row
- * opens the lead sheet (`LeadSheet`, the Leads agent's, T12) — read-only where the session is finalized and on the tab.
+ * opens the lead sheet (`LeadSheet`, the Leads agent's, T12) — read-only where the session is finalized, and on the tab
+ * in a read-only support session.
  */
 
 /**
@@ -408,21 +409,33 @@ export function SessionLeadsCard({
 }
 
 /**
- * **The coachee's *Leads* tab** (UI V1, UI-029): that agent's leads, **read-only**, in the same compact rows — the search
- * pill, the type chips with their counts, every open lead in the card's order, the closed leads in one line. A row opens
- * the lead sheet read-only. WhatsApp and Call stay live (UI-081: no disabled button anywhere), and a number typed for a
- * lead with none is saved to it, as everywhere they are drawn.
+ * **The coachee's *Leads* tab** (UI V1, UI-029; the staging review of 2026-10-31): that agent's leads in the same compact
+ * rows — the search pill, the type chips with their counts, every open lead in the card's order, the closed leads in one
+ * line. WhatsApp and Call stay live (UI-081: no disabled button anywhere), and a number typed for a lead with none is
+ * saved to it, as everywhere they are drawn.
+ *
+ * **It writes, as the session's Leads card does** (`SessionLeadsCard`; the product owner, 2026-11-01: *add and edit,
+ * never delete*), replacing UI-029's read-only tab. The floating **+** of `/leads` adds a lead to the coachee's pipeline
+ * (`POST /leads?owner=`, `lead:create` resolved to `COACH`); a row opens the lead sheet to edit, *Isi tindakan* and *Isi
+ * tanggal* act, and each write is pinned to the version it read (P11-T4 AC-3). **No *Hapus***: `lead:delete` is the
+ * owner's alone (§3.7). A read-only support session, or a reader the server granted no write, is drawn none of it.
  */
 export function CoacheeLeadsTab({ coachee }: { coachee: Coachee }) {
   const t = useMessages(leadsMessages);
   const typeName = useTypeName();
   const ladderFor = useLadders();
   const s = useMessages(coachingSessionMessages).leadsCard;
+  const { me } = useSession();
   const { leads, error, put } = useCoacheeLeads(coachee.membershipId);
   const [term, setTerm] = useState('');
   const [type, setType] = useState<LeadTypeChip>('all');
-  const [sheet, setSheet] = useState<Lead | null>(null);
+  /** The lead sheet: a lead, or `null` for a new one in the coachee's pipeline. */
+  const [sheet, setSheet] = useState<{ lead: Lead | null; focus?: 'nextAction' } | null>(null);
   const sheetOpened = useOpenedOnce(sheet !== null);
+  // A support session that may look and not touch (§3.13): no add, no edit, the sheet only to read.
+  const readOnly = !!me?.isImpersonating && !!me.impersonationReadOnly;
+  const canCreate = useCan('lead:create') && !readOnly;
+  const canUpdate = useCan('lead:update') && !readOnly;
   const { open, rows } = useShownLeads(leads, term, type);
   const counts = countByType(open);
 
@@ -459,8 +472,8 @@ export function CoacheeLeadsTab({ coachee }: { coachee: Coachee }) {
                 key={lead.id}
                 lead={lead}
                 ladder={ladderFor(lead.type)}
-                editable={false}
-                onOpen={() => setSheet(lead)}
+                editable={canUpdate}
+                onOpen={(focus) => setSheet({ lead, focus })}
                 onSaved={put}
               />
             ))}
@@ -468,15 +481,34 @@ export function CoacheeLeadsTab({ coachee }: { coachee: Coachee }) {
         ))}
         {leads && <div className="pb-2"><ClosedLine leads={leads} /></div>}
       </section>
+      {canCreate && (
+        /*
+         * `/leads`' floating **+** (`leads-list.tsx`), at every width: the tab has no table whose *+ Tambah lead* would
+         * stand in for it on a desktop.
+         */
+        <button
+          type="button"
+          onClick={() => setSheet({ lead: null })}
+          aria-label={t.list.add}
+          className={cn(
+            'fixed bottom-[calc(var(--tab-bar-space)+1rem)] right-4 z-30 flex h-14 w-14 items-center justify-center rounded-full',
+            'bg-amber text-navy shadow-modal hover:bg-amber-dark lg:bottom-6 lg:right-6',
+          )}
+        >
+          <LineIcon name="plus" className="h-7 w-7" />
+        </button>
+      )}
       {sheetOpened && (
         <LeadSheet
           open={sheet !== null}
-          lead={sheet}
+          lead={sheet?.lead ?? null}
+          focus={sheet?.focus}
           owner={coachee.membershipId}
-          readOnly
+          readOnly={!canUpdate && !(sheet?.lead === null && canCreate)}
           offerDelete={false}
           onClose={() => setSheet(null)}
           onSaved={put}
+          onClosedLead={put}
         />
       )}
     </div>

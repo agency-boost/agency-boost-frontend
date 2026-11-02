@@ -8,8 +8,7 @@ import { useSession } from '@/lib/session';
 import { useSignOut } from '@/lib/use-sign-out';
 import { useMessages } from '@/i18n/language-provider';
 import { authMessages } from '@/i18n/messages/auth';
-
-const MIN_LENGTH = 10;
+import { PASSWORD_MIN_LENGTH } from '@/lib/password';
 
 /**
  * Where somebody lands when the password they signed in with is not theirs.
@@ -33,7 +32,7 @@ export default function ChooseAPasswordPage() {
   const t = all.choose;
   const rules = all.password;
 
-  const tooShort = form.newPassword.length > 0 && form.newPassword.length < MIN_LENGTH;
+  const tooShort = form.newPassword.length > 0 && form.newPassword.length < PASSWORD_MIN_LENGTH;
   const padded = /^\s|\s$/.test(form.newPassword);
   const mismatch = form.confirmPassword.length > 0 && form.confirmPassword !== form.newPassword;
   // The server refuses this too. Saying so here means the round trip is not spent
@@ -95,10 +94,10 @@ export default function ChooseAPasswordPage() {
           <Field
             label={t.newPassword}
             htmlFor="newPassword"
-            hint={rules.hint({ n: MIN_LENGTH })}
+            hint={rules.hint({ n: PASSWORD_MIN_LENGTH })}
             error={
               tooShort
-                ? rules.tooShort({ n: MIN_LENGTH })
+                ? rules.tooShort({ n: PASSWORD_MIN_LENGTH })
                 : padded
                   ? rules.padded
                   : unchanged

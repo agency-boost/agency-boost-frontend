@@ -24,7 +24,7 @@ type Strong = (words: string) => ReactNode;
  * `autoBadge` and `byHandBadge`). Here is only what a template says and an office's screen does not.
  *
  * **English is the source**, every word as it was; the Indonesian the approved glossary's, with the API's words for the
- * same things (P18.98-T5's rows of §B.10: a template is a ***templat***, a rule an ***aturan***, a comparator a
+ * same things (P18.98-T5's rows of §B.10: a template is a ***template***, a rule an ***aturan***, a comparator a
  * ***pembanding***, a tier a ***tingkat***, a promotion path a ***jalur promosi***, a standing a ***hasil campaign***), and
  * what it lacked proposed in the glossary for approval's §B.10. **Kept English** (§A): the tabs a sentence names, the
  * three features an item may complete from (§A.2), *Maintenance of Contract* and *Promotion paths* (§A.3), *KPM* (§B.9),
@@ -232,37 +232,37 @@ const id: MessagesOf<typeof en> = {
   codeReason: 'Permanen. Semua yang merujuk ke baris ini merujuk ke kodenya.',
 
   add: {
-    section: { open: 'Tambah bagian', clash: 'Templat ini sudah punya bagian dengan kode ini.' },
-    activityType: { open: 'Tambah jenis aktivitas', clash: 'Templat ini sudah punya jenis aktivitas dengan kode ini.' },
+    section: { open: 'Tambah bagian', clash: 'Template ini sudah punya bagian dengan kode ini.' },
+    activityType: { open: 'Tambah jenis aktivitas', clash: 'Template ini sudah punya jenis aktivitas dengan kode ini.' },
     salesStage: {
-      open: `Tambah tahap ${kept('Sales')}`, clash: `Templat ini sudah punya tahap ${kept('Sales')} dengan kode ini.`,
+      open: `Tambah tahap ${kept('Sales')}`, clash: `Template ini sudah punya tahap ${kept('Sales')} dengan kode ini.`,
     },
     recruitmentStage: {
       open: `Tambah tahap ${kept('Recruitment')}`,
-      clash: `Templat ini sudah punya tahap ${kept('Recruitment')} dengan kode ini.`,
+      clash: `Template ini sudah punya tahap ${kept('Recruitment')} dengan kode ini.`,
     },
-    ratio: { open: `Tambah ${kept('ratio')}`, clash: `Templat ini sudah punya ${kept('ratio')} dengan kode ini.` },
-    category: { open: 'Tambah kategori', clash: 'Templat ini sudah punya kategori dengan kode ini.' },
-    skill: { open: `Tambah ${kept('skill')}`, clash: `Templat ini sudah punya ${kept('skill')} dengan kode ini.` },
-    module: { open: 'Tambah modul', clash: 'Templat ini sudah punya modul dengan kode ini.' },
-    aspect: { open: 'Tambah aspek', clash: 'Templat ini sudah punya aspek dengan kode ini.' },
-    item: { open: 'Tambah item', clash: 'Templat ini sudah punya item dengan kode ini.' },
+    ratio: { open: `Tambah ${kept('ratio')}`, clash: `Template ini sudah punya ${kept('ratio')} dengan kode ini.` },
+    category: { open: 'Tambah kategori', clash: 'Template ini sudah punya kategori dengan kode ini.' },
+    skill: { open: `Tambah ${kept('skill')}`, clash: `Template ini sudah punya ${kept('skill')} dengan kode ini.` },
+    module: { open: 'Tambah modul', clash: 'Template ini sudah punya modul dengan kode ini.' },
+    aspect: { open: 'Tambah aspek', clash: 'Template ini sudah punya aspek dengan kode ini.' },
+    item: { open: 'Tambah item', clash: 'Template ini sudah punya item dengan kode ini.' },
     eventType: {
-      open: `Tambah jenis ${kept('event')}`, clash: `Templat ini sudah punya jenis ${kept('event')} dengan kode ini.`,
+      open: `Tambah jenis ${kept('event')}`, clash: `Template ini sudah punya jenis ${kept('event')} dengan kode ini.`,
     },
     productionClubRule: {
-      open: 'Tambah aturan klub produksi', clash: 'Templat ini sudah punya aturan klub produksi dengan kode ini.',
+      open: 'Tambah aturan klub produksi', clash: 'Template ini sudah punya aturan klub produksi dengan kode ini.',
     },
     mocRule: {
       open: `Tambah aturan ${kept('Maintenance of Contract')}`,
-      clash: `Templat ini sudah punya aturan ${kept('Maintenance of Contract')} dengan kode ini.`,
+      clash: `Template ini sudah punya aturan ${kept('Maintenance of Contract')} dengan kode ini.`,
     },
     promotionPathRule: {
-      open: 'Tambah aturan jalur promosi', clash: 'Templat ini sudah punya aturan jalur promosi dengan kode ini.',
+      open: 'Tambah aturan jalur promosi', clash: 'Template ini sudah punya aturan jalur promosi dengan kode ini.',
     },
-    milestone: { open: 'Tambah milestone', clash: 'Templat ini sudah punya milestone dengan kode ini.' },
-    stage: { open: 'Tambah tahap', clash: 'Templat ini sudah punya tahap dengan kode ini.' },
-    grid: { open: 'Tambah grid', clash: 'Templat ini sudah punya grid dengan kode ini.' },
+    milestone: { open: 'Tambah milestone', clash: 'Template ini sudah punya milestone dengan kode ini.' },
+    stage: { open: 'Tambah tahap', clash: 'Template ini sudah punya tahap dengan kode ini.' },
+    grid: { open: 'Tambah grid', clash: 'Template ini sudah punya grid dengan kode ini.' },
   },
   codeHintSuggested: 'Diisi dari nama. Permanen setelah diterbitkan.',
   codeHint: 'Permanen setelah diterbitkan.',
@@ -275,8 +275,8 @@ const id: MessagesOf<typeof en> = {
     title: 'Pengaitan aktivitas',
     edit: 'Ubah pengaitan',
     set: `Aktivitas mana yang dihitung ringkasan dan rencana ${kept('goal')} di setiap tahap, di setiap ${kept('KPM')} `
-      + 'yang dibuat dari templat ini.',
-    notSet: `Belum diatur: ${kept('KPM')} yang dibuat dari templat ini menghitung aktivitas default platform.`,
+      + 'yang dibuat dari template ini.',
+    notSet: `Belum diatur: ${kept('KPM')} yang dibuat dari template ini menghitung aktivitas default platform.`,
     done: 'Selesai',
   },
 
@@ -323,7 +323,7 @@ const id: MessagesOf<typeof en> = {
     chooseSkill: `Pilih ${kept('skill')} untuk menambahkan modul ke dalamnya.`,
     noModules: `Belum ada modul untuk kategori/${kept('skill')} ini.`,
     publishState: 'Status terbit',
-    publishStateHint: `Apakah ${kept('KPM')} yang dibuat dari templat ini menawarkannya kepada agent.`,
+    publishStateHint: `Apakah ${kept('KPM')} yang dibuat dari template ini menawarkannya kepada agent.`,
     draft: 'Draf',
     published: 'Diterbitkan',
   },

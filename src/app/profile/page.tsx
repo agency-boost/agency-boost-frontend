@@ -32,6 +32,7 @@ import {
 } from '@/lib/phone-number';
 import { CORE_LEADER_LABEL } from '@/lib/profile-line';
 import { readProfileFacts, type ProfileFacts } from '@/lib/profile';
+import { PASSWORD_MIN_LENGTH } from '@/lib/password';
 import { listSessions } from '@/lib/sessions';
 import { useCan, useSession, type Me } from '@/lib/session';
 import { useSignOut } from '@/lib/use-sign-out';
@@ -1007,15 +1008,15 @@ function PasswordForm() {
 
   // Only once they have started the second box — an empty field has not disagreed yet.
   const mismatch = confirmNewPassword.length > 0 && confirmNewPassword !== newPassword;
-  const tooShort = newPassword.length > 0 && newPassword.length < 10;
+  const tooShort = newPassword.length > 0 && newPassword.length < PASSWORD_MIN_LENGTH;
   const missing = [
     [!currentPassword, t.current],
     [!newPassword, t.newPassword],
     [!confirmNewPassword, t.confirm],
   ].filter(([empty]) => empty).map(([, label]) => label as string);
-  const held = !currentPassword || newPassword.length < 10 || mismatch || !confirmNewPassword;
+  const held = !currentPassword || newPassword.length < PASSWORD_MIN_LENGTH || mismatch || !confirmNewPassword;
   const heldWhy = held && !busy
-    ? heldBecause({ missing, fix: tooShort ? t.tooShort({ n: 10 }) : mismatch ? t.fix : null }, language)
+    ? heldBecause({ missing, fix: tooShort ? t.tooShort({ n: PASSWORD_MIN_LENGTH }) : mismatch ? t.fix : null }, language)
     : null;
 
   async function submit(event: React.FormEvent) {
@@ -1045,8 +1046,8 @@ function PasswordForm() {
       <Field label={t.current} htmlFor="currentPassword">
         <PasswordInput id="currentPassword" autoComplete="current-password" required value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} />
       </Field>
-      <Field label={t.newPassword} htmlFor="newPassword" hint={t.hint({ n: 10 })}>
-        <PasswordInput id="newPassword" autoComplete="new-password" required minLength={10} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+      <Field label={t.newPassword} htmlFor="newPassword" hint={t.hint({ n: PASSWORD_MIN_LENGTH })}>
+        <PasswordInput id="newPassword" autoComplete="new-password" required minLength={PASSWORD_MIN_LENGTH} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
       </Field>
       <Field label={t.confirm} htmlFor="confirmNewPassword" error={mismatch ? t.mismatch : undefined}>
         <PasswordInput id="confirmNewPassword" autoComplete="new-password" required value={confirmNewPassword} onChange={(e) => setConfirmNewPassword(e.target.value)} invalid={mismatch} />

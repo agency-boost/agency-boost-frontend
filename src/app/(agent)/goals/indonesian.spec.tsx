@@ -257,9 +257,9 @@ describe('P18.98-T4 a coachee’s Goal Setting in Indonesian', () => {
     expect(screen.getByRole('heading', { name: 'Komitmen (per 13 Sep 2026)' })).toBeInTheDocument();
     // UI-017: the report's sentence needs no pronoun.
     expect(await commitment()).toHaveTextContent('Bulan ini APE Rp 100 jt (menuju Rp 500 jt tahun ini): 67 Set appointment');
-    // Her own figure, read-only to her leader (ADR-0075): the same pill, its ⓘ saying whose.
-    expect(screen.getByRole('button', { name: 'Angkanya sendiri, diisi di Goal Settings' })).toBeInTheDocument();
-    expect(screen.queryByRole('textbox', { name: 'APE yang sudah dicapai tahun ini' })).not.toBeInTheDocument();
+    // ADR-0183 (SR-07): nothing uploaded, so her leader types her APE produced — a field, named in Indonesian, and no ⓘ.
+    expect(screen.getByRole('textbox', { name: 'APE yang sudah dicapai tahun ini' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Angkanya sendiri, diisi di Goal Settings' })).not.toBeInTheDocument();
     expect(screen.getByText(
       'Perubahan di sini langsung diperbarui di Personal Summary dan Coaching Session — ketiganya tetap selaras.',
     )).toBeInTheDocument();

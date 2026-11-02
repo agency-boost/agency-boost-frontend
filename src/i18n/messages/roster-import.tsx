@@ -5,10 +5,11 @@ import { kept } from '@/i18n/kept';
 /**
  * **Filling an office from a spreadsheet** (P18.98-T4, people and forum; `functional/tenant-provisioning.md`, *Filling an
  * office from a spreadsheet*): `components/roster-import.tsx`, drawn by the office's *Import people* (`/people/import`)
- * and the Super Admin's *Import a roster* (`/admin/tenants/[kpmId]/roster`) — the file's columns, the template, the
- * two ways in, the check, the problems, and the people made with the password each starts on.
+ * and the Super Admin's *Import a roster* (`/admin/tenants/[kpmId]/roster`) — the template (Excel or CSV, ADR-0184), the
+ * fill-in guide (*Panduan pengisian*: the file's columns and three rules), the two ways in, the check, the problems, and
+ * the people made with the password each starts on.
  *
- * **English is the source.** The Indonesian is the approved glossary's: *Unduh templat*, *Unggah*, *Mengimpor…* (§B.1,
+ * **English is the source.** The Indonesian is the approved glossary's: *Unduh template*, *Unggah*, *Mengimpor…* (§B.1,
  * §B.2), *Kode agen* and *Tanggal lahir* (§B.4), *Lupa kata sandi?* (§B.1), *office* as *KPM* (§B.9). **Files are not
  * words** (P18.98-T3 AC-4): what is typed in a cell — `AB`, `YYYY-MM-DD`, `full-time`, `male` — is the import's contract,
  * passed in as written, never translated; so are the template, its examples, and the server's own sentences about a
@@ -27,7 +28,6 @@ const en = {
   importSubtitle: 'Create several people at once from a spreadsheet.',
   notInOffice: 'You are not in an office.',
   /** The file's nine columns, in its order (P18.97-T4 AC-4): each name, and what each holds. */
-  file: 'The file',
   guideCaption: 'The file’s columns, in order: one row per person',
   guideColumns: { column: 'Column', holds: 'What it holds' },
   columns: {
@@ -52,21 +52,32 @@ const en = {
     joinMonth: ({ shape }: { shape: ReactNode }) => <>{shape}, the month they joined the insurer</>,
     either: ({ a, b }: { a: ReactNode; b: ReactNode }) => <>{a} or {b}</>,
   },
-  /** The template, always in view (P18.97-T4 AC-4). */
-  downloadTemplate: 'Download template',
+  /**
+   * **Card 1, the template** (ADR-0184; the developer for the product owner, 2026-11-01): Excel recommended, CSV beside
+   * it. *Excel (.xlsx)* and *CSV* are the files' own names, kept as they are inside each language's verb.
+   */
+  downloadHeading: 'Download the template',
+  downloadExcel: 'Download Excel (.xlsx)',
+  recommended: 'Recommended',
+  downloadCsv: 'Download CSV',
+  preparing: 'Preparing the file…',
   /** `message` the server's own sentence. */
   templateFailed: ({ message }: { message: string }) => `The template could not be prepared. ${message}`,
   tryAgain: 'Try again',
-  loadingTemplate: 'Loading the template…',
-  /** The two ways in, the one that needs no file first. */
+  /** **The fill-in guide**, apart from the data: the columns, then three rules (ADR-0184). */
+  guideHeading: 'How to fill it in',
+  ruleOnePerRow: 'One person per row.',
+  ruleLeaders: 'Rows can come in any order, and the leader’s code is empty for somebody who reports to nobody.',
+  /** `day`, `month`: each shape as typed in the file. */
+  ruleDates: ({ day, month }: { day: ReactNode; month: ReactNode }) => <>Dates are written {day}, and months {month}.</>,
+  /** **Card 2, the upload**: the filled file first, the paste second (ADR-0184). */
+  uploadHeading: 'Upload',
   how: 'How are you adding them?',
+  upload: 'Upload the filled file (.xlsx or .csv)',
   paste: 'Paste from a spreadsheet',
-  upload: 'Upload a CSV file',
   rows: 'Rows from your spreadsheet',
   rowsHint: 'Select the rows in Excel, Google Sheets or Numbers, copy them, and paste here. The header row is optional.',
   rosterFile: 'Roster file',
-  /** A file the browser could not read. */
-  unreadable: ({ file }: { file: string }) => `Could not read ${file}. Try saving it again as CSV.`,
   /** The check, and the import — all or nothing. */
   check: 'Check the file',
   checking: 'Checking…',
@@ -96,7 +107,6 @@ const en = {
 const id: MessagesOf<typeof en> = {
   importSubtitle: 'Buat beberapa orang sekaligus dari spreadsheet.',
   notInOffice: `Anda belum tergabung di ${kept('KPM')} mana pun.`,
-  file: 'File',
   guideCaption: 'Kolom file, berurutan: satu baris per orang',
   guideColumns: { column: 'Kolom', holds: 'Isinya' },
   columns: {
@@ -120,17 +130,24 @@ const id: MessagesOf<typeof en> = {
     joinMonth: ({ shape }) => <>{shape}, bulan dia bergabung dengan perusahaan asuransi</>,
     either: ({ a, b }) => <>{a} atau {b}</>,
   },
-  downloadTemplate: 'Unduh templat',
-  templateFailed: ({ message }) => `Templat tidak dapat disiapkan. ${message}`,
+  downloadHeading: 'Unduh template',
+  downloadExcel: 'Unduh Excel (.xlsx)',
+  recommended: 'Disarankan',
+  downloadCsv: 'Unduh CSV',
+  preparing: 'Menyiapkan file…',
+  templateFailed: ({ message }) => `Template tidak dapat disiapkan. ${message}`,
   tryAgain: 'Coba lagi',
-  loadingTemplate: 'Memuat templat…',
+  guideHeading: 'Panduan pengisian',
+  ruleOnePerRow: 'Satu orang per baris.',
+  ruleLeaders: `Urutan baris bebas, dan kode agen ${kept('leader')} dikosongkan untuk orang yang tidak melapor kepada siapa pun.`,
+  ruleDates: ({ day, month }) => <>Tanggal ditulis {day}, dan bulan {month}.</>,
+  uploadHeading: 'Unggah',
   how: 'Bagaimana Anda menambahkan mereka?',
+  upload: 'Unggah file yang sudah diisi (.xlsx atau .csv)',
   paste: 'Tempel dari spreadsheet',
-  upload: 'Unggah file CSV',
   rows: 'Baris dari spreadsheet Anda',
   rowsHint: 'Pilih baris di Excel, Google Sheets, atau Numbers, salin, lalu tempel di sini. Baris judul kolom bersifat opsional.',
   rosterFile: 'File roster',
-  unreadable: ({ file }) => `Tidak dapat membaca ${file}. Coba simpan ulang sebagai CSV.`,
   check: 'Periksa file',
   checking: 'Memeriksa…',
   importing: 'Mengimpor…',

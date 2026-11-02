@@ -128,12 +128,14 @@ function CircleCheck() {
  * it takes no pointer, so it never stands between a finger and the dialog. **A toast with an action takes the pointer
  * on itself alone**, so *Urungkan* can be pressed and nothing around it is covered.
  *
- * **Above the tab bar, and above a phone's action bar** (P18.95-T5 AC-1, AC-4; UI-070): below 1024px it stands 12px over
- * `--tab-bar-space` — the floating tab bar's room in the field shell, nothing elsewhere — and a screen whose save sits
- * in a bar fixed to the bottom (`ACTION_BAR_PHONE`, marked `data-action-bar`) puts it 96px higher still below 768px, clear
- * of the bar: *Activity logged ✓* and *Goal saved ✓* would otherwise cover the button they confirm. A screen that floats
- * a save pill (`FloatingSavePill`, marked `data-floating-save`) puts it 64px higher below 1024px, over the pill, which
- * stands where the toast does — on a tablet too, where no action bar lifts it (UI V1 T16).
+ * **Above the tab bar, and above a floating bar** (P18.95-T5 AC-1, AC-4; UI-070): below 1024px it stands 12px over
+ * `--tab-bar-space` — the floating tab bar's room in the field shell, nothing elsewhere. **A screen that floats a bar
+ * over its foot** (`FloatingBar`, marked `data-floating-bar`: Goal Setting's save pill, Activity's save on a phone, the
+ * coaching session's *Finalkan*) puts it 64px higher below 1024px, over the pill, which stands where the toast would:
+ * *Activity logged ✓*, *Goal saved ✓* and *Tersimpan* would otherwise cover the button they confirm. Measured, as the
+ * pill is, from the tab bar's room or the home indicator, whichever is higher — so a pill on a page with no tab bar is
+ * cleared too. One marker for every bar (the product owner's staging review, 2026-10-31): two used to lift it by two
+ * heights, one for a full-width strip and one for the pill.
  */
 function ToastRegion({ toast }: { toast: ToastMessage | null }) {
   return (
@@ -145,8 +147,7 @@ function ToastRegion({ toast }: { toast: ToastMessage | null }) {
       className={
         'pointer-events-none fixed z-[60] flex print:hidden '
         + 'max-lg:inset-x-4 max-lg:bottom-[calc(var(--tab-bar-space)+0.75rem)] max-lg:justify-center '
-        + 'max-lg:[body:has([data-floating-save])_&]:bottom-[calc(var(--tab-bar-space)+4.75rem)] '
-        + 'max-md:[body:has([data-action-bar])_&]:bottom-[calc(var(--tab-bar-space)+6rem)] '
+        + 'max-lg:[body:has([data-floating-bar])_&]:bottom-[calc(max(var(--tab-bar-space),env(safe-area-inset-bottom))+4.75rem)] '
         + 'lg:bottom-8 lg:right-8 lg:justify-end'
       }
     >

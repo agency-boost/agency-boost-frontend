@@ -18,6 +18,7 @@ import { Segmented } from './segmented';
 import { CascadeRow } from './cascade-row';
 import { AutoGrowTextarea } from './auto-grow-textarea';
 import { Dialog } from './dialog';
+import { inModal, Modal } from './modal';
 import { DataTable, Row, Cell } from './data-table';
 import { RouteTabs } from './route-tabs';
 import { SectionCard } from './section-card';
@@ -739,6 +740,31 @@ describe('Dialog', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
+  it('SR-10 is drawn over the modal that asked it, never under it (staging review, 2026-10-31)', () => {
+    // A Modal draws at the end of <body> (z-50); a question asked from inside one — a calendar entry's Hapus, a lead
+    // sheet's Hapus tugas — must come after it in <body> and one step above, or the tap lands on the sheet behind.
+    function Asked() {
+      return (
+        <>
+          <Modal open title="Ibu Wulan Sari" onClose={() => {}}>
+            <p>sheet</p>
+          </Modal>
+          <Dialog open message="Hapus tugas untuk Ibu Wulan Sari?" confirmLabel="Hapus tugas" onConfirm={() => {}} onCancel={() => {}} />
+        </>
+      );
+    }
+    const { container } = render(<Asked />);
+    const question = screen.getByRole('dialog', { name: 'Hapus tugas untuk Ibu Wulan Sari?' });
+    const layer = question.parentElement!;
+    expect(layer.parentElement).toBe(document.body);
+    expect(container.contains(question)).toBe(false);
+    expect(layer).toHaveClass('z-[55]');
+    expect(layer).toHaveAttribute('data-modal-root');
+    const sheet = document.querySelector('[data-modal-root]:not([data-dialog-root])')!;
+    expect(sheet.compareDocumentPosition(layer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(inModal(screen.getByRole('button', { name: 'Hapus tugas' }))).toBe(true);
+  });
+
   it('is a modal dialog named by its question', () => {
     render(<Host />);
     expect(screen.getByRole('dialog', { name: 'Delete Rina Wijaya?' })).toHaveAttribute(
@@ -823,7 +849,9 @@ describe('Dialog', () => {
     const { unmount } = render(<Host />);
     const box = screen.getByRole('dialog');
     // The dynamic viewport, so a phone's browser bar coming back never hides the buttons.
-    expect(box).toHaveClass('flex', 'flex-col', 'max-h-[calc(100dvh-2.5rem)]');
+    // And its top below the top inset, never under a Home Screen app's clock (staging review, 2026-10-31).
+    expect(box).toHaveClass('flex', 'flex-col', 'max-h-[calc(100dvh-1.25rem-max(1.25rem,env(safe-area-inset-top)))]');
+    expect(box.parentElement).toHaveClass('pt-[max(1.25rem,env(safe-area-inset-top))]');
     expect(box.className).not.toMatch(/\d+vh/);
     const message = screen.getByText('Delete Rina Wijaya?');
     expect(message).toHaveClass('min-h-0', 'overflow-y-auto', 'overscroll-contain');

@@ -757,9 +757,10 @@ function PhoneMenu({
         onClick={closeOnLink}
         /*
           * The sidebar's own width, and never more than 85% of the screen, so a strip of the page stays in
-          * sight and the scrim is there to tap. Its padding is the sidebar's.
+          * sight and the scrim is there to tap. Its padding is the sidebar's, the top inset added to it so ✕ is never
+          * under the clock (staging review, 2026-10-31).
           */
-        className="fixed inset-y-0 left-0 z-50 flex w-sidebar max-w-[85vw] flex-col bg-navy px-4 pb-4 pt-3.5 text-sidebar-text shadow-modal print:hidden md:hidden"
+        className="fixed inset-y-0 left-0 z-50 flex w-sidebar max-w-[85vw] flex-col bg-navy px-4 pb-4 pt-[calc(0.875rem+env(safe-area-inset-top))] text-sidebar-text shadow-modal print:hidden md:hidden"
       >
         <div className="mb-3 flex items-center gap-2 border-b border-white/10 px-1 pb-3.5">
           <BrandMark />
@@ -979,7 +980,10 @@ export function AppShell({
         <aside
           className={cn(
             // `print:hidden`: a printed page is the page, not the app around it (`Overall.html:1022`, ADR-0061).
-            'sticky top-0 z-10 flex w-full shrink-0 flex-row items-center bg-navy px-4 py-3.5 text-sidebar-text print:hidden md:h-screen md:flex-col md:items-stretch md:py-5',
+            // Its navy runs up under the clock and its content starts below it: the top inset is added to its 14px (20px as
+            // the sidebar), so a Home Screen app's status bar never sits over ☰ or the brand (staging review, 2026-10-31).
+            'sticky top-0 z-10 flex w-full shrink-0 flex-row items-center bg-navy px-4 pb-3.5 pt-[calc(0.875rem+env(safe-area-inset-top))] text-sidebar-text print:hidden '
+              + 'md:h-screen md:flex-col md:items-stretch md:pb-5 md:pt-[calc(1.25rem+env(safe-area-inset-top))]',
             // The field shell's sidebar is a desktop's alone: below 1024px its pages' title rows and the tab bar stand in (UI-004).
             field && 'max-lg:hidden',
             /*
@@ -1090,16 +1094,37 @@ export function AppShell({
         </PhoneMenu>
       )}
 
+      {/*
+        * **The status bar's band, in the page's ground** (the product owner's staging review, 2026-10-31: the top of every
+        * screen looked blurred on an iPhone). `viewport-fit=cover` (UI-103) draws the page from the very top of the screen,
+        * under the clock, where iOS frosts whatever passes beneath it. Below 1024px the field shell has no bar up there, so
+        * this strip, as tall as the top inset and the page's own colour, stands over the page as it scrolls: nothing is
+        * read under the clock. Under the tab bar, every sheet and dialog; 0px tall wherever there is no inset — Safari with
+        * its own bars, Android, a desktop. Decoration: nothing to read, nothing to reach.
+        */}
+      {field && (
+        <div
+          aria-hidden="true"
+          data-safe-top=""
+          className="pointer-events-none fixed inset-x-0 top-0 z-30 h-[env(safe-area-inset-top)] bg-base print:hidden lg:hidden"
+        />
+      )}
+
       <main
         className={cn(
           'min-w-0 flex-1 print:p-0',
           /*
            * The field shell below 1024px (UI-004): the page's 16px gutter (24px on a tablet), its title row near the top
            * with no bar above it, and room under the last line for the tab bar. From 1024px, as every shell is.
+           *
+           * **Never under the clock** (staging review, 2026-10-31): the page starts below the top inset — 8px down where
+           * there is none, as before, and at the inset where the status bar is drawn over the page (a Home Screen app on an
+           * iPhone, UI-103). Beside the sidebar from 768px (1024px in the field) the same, for a tablet's Home Screen app.
            */
           field
-            ? 'px-4 pb-[calc(var(--tab-bar-space)+1.5rem)] pt-2 md:px-6 md:pt-3 lg:px-10 lg:pb-14 lg:pt-8'
-            : 'px-5 py-6 md:px-10 md:pb-14 md:pt-8',
+            ? 'px-4 pb-[calc(var(--tab-bar-space)+1.5rem)] pt-[max(0.5rem,env(safe-area-inset-top))] md:px-6 '
+              + 'md:pt-[max(0.75rem,env(safe-area-inset-top))] lg:px-10 lg:pb-14 lg:pt-[max(2rem,env(safe-area-inset-top))]'
+            : 'px-5 py-6 md:px-10 md:pb-14 md:pt-[max(2rem,env(safe-area-inset-top))]',
         )}
       >
         {/*

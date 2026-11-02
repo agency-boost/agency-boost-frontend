@@ -193,9 +193,16 @@ export function Modal({
     <div
       data-modal-root=""
       data-placement={placement}
+      /*
+        * **A centred box never reaches under the clock** (the product owner's staging review, 2026-10-31): its 20px above
+        * becomes the top inset where that is more — a Home Screen app on an iPhone draws the page under the status bar
+        * (UI-103) — and its height is capped by the same. A sheet's 90% and a popup's 60% stop well below it already.
+        */
       className={cn(
         'fixed inset-0 z-50 flex justify-center bg-navy/35',
-        sheet ? 'items-end' : responsive ? 'max-lg:items-end lg:items-center lg:p-5' : popup ? 'items-center p-4' : 'items-center p-5',
+        sheet ? 'items-end'
+          : responsive ? 'max-lg:items-end lg:items-center lg:p-5 lg:pt-[max(1.25rem,env(safe-area-inset-top))]'
+            : popup ? 'items-center p-4' : 'items-center p-5 pt-[max(1.25rem,env(safe-area-inset-top))]',
       )}
       onClick={onClose}
     >
@@ -217,9 +224,10 @@ export function Modal({
         className={cn(
           'w-full overflow-y-auto overscroll-contain bg-card px-6 shadow-modal',
           sheet ? 'max-h-[90dvh] rounded-t-lg'
-            : responsive ? 'max-lg:max-h-[90dvh] max-lg:rounded-t-lg lg:max-h-[calc(100dvh-2.5rem)] lg:max-w-[35rem] lg:rounded-lg'
+            : responsive ? 'max-lg:max-h-[90dvh] max-lg:rounded-t-lg '
+              + 'lg:max-h-[calc(100dvh-1.25rem-max(1.25rem,env(safe-area-inset-top)))] lg:max-w-[35rem] lg:rounded-lg'
               : popup ? 'max-h-[60dvh] max-w-[26rem] rounded-lg px-4'
-                : 'max-h-[calc(100dvh-2.5rem)] max-w-[26rem] rounded-lg',
+                : 'max-h-[calc(100dvh-1.25rem-max(1.25rem,env(safe-area-inset-top)))] max-w-[26rem] rounded-lg',
           !footer && footPadding,
           pulled === null && swipes && 'transition-transform',
           className,

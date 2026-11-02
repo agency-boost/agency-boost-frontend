@@ -20,7 +20,7 @@ import { SaveStatus } from '@/components/ui/save-status';
 import { SectionCard } from '@/components/ui/section-card';
 import { Stepper } from '@/components/ui/stepper';
 import { Toast, useToast } from '@/components/ui/toast';
-import { ACTION_BAR_ROOM_PHONE } from '@/components/ui/phone';
+import { FLOATING_BAR_BUTTON, FLOATING_BAR_ROOM, FloatingBar } from '@/components/ui/floating-bar';
 import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
 import { activityMessages } from '@/i18n/messages/activity';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
@@ -207,7 +207,10 @@ export default function LogActivityPage() {
   const termsIn = activityTermMentions(sections);
   /** A closed day's reason field, below the cards: then it is the last thing above the bar. */
   const reasonShown = sections.length > 0 && frozen && !unloggedAndClosed;
-  /** Room under whatever is last above the bar, so its last line is never behind it (`ACTION_BAR_ROOM_PHONE`). */
+  /**
+   * Room under whatever is last above the floating bar on a phone, so its last line is never behind it
+   * (`FLOATING_BAR_ROOM`). From 768px the bar is a row in the page and needs none.
+   */
   const roomUnderCards = saving && !reasonShown;
 
   /*
@@ -218,6 +221,38 @@ export default function LogActivityPage() {
   const unsaved = dirty || savedTotal === null;
   const added = Math.max(0, total - (savedTotal ?? 0));
   const barState = busy ? 'saving' as const : unsaved ? 'unsaved' as const : 'saved' as const;
+  /** *Batal* and the save: in the floating bar on a phone, right-aligned under the cards from 768px. */
+  const barActions = (
+    <>
+      <Button
+        variant="secondary"
+        disabled={busy}
+        onClick={() => void load(date)}
+        className={cn(phone && 'min-h-11 shrink-0 rounded-pill border-0 bg-pill-grey px-3.5 text-pill-grey-ink')}
+      >
+        {t.cancel}
+      </Button>
+      {frozen ? (
+        <Button
+          disabled={busy || !reason.trim()}
+          onClick={() => void run(
+            () => correctActivityDay({ date, counts, reason: reason.trim() }),
+          )}
+          className={cn(phone && SAVE_ON_PHONE)}
+        >
+          {busy ? t.saving : t.saveCorrection}
+        </Button>
+      ) : (
+        <Button
+          disabled={busy}
+          onClick={() => void run(() => saveActivityDay({ date, counts }))}
+          className={cn(phone && SAVE_ON_PHONE)}
+        >
+          {busy ? t.saving : t.saveActivity}
+        </Button>
+      )}
+    </>
+  );
 
   return (
     <Page
@@ -291,7 +326,7 @@ export default function LogActivityPage() {
       )}
 
       {phone ? (
-        <div className={cn(saving && !reasonShown && 'pb-20')}>
+        <div className={cn(roomUnderCards && FLOATING_BAR_ROOM)}>
           {sections.map((section) => {
             const types = section.types.filter((ty) => ty.status === 'active');
             const mentions = termsIn.get(section.code);
@@ -323,7 +358,7 @@ export default function LogActivityPage() {
          * stacked full-width put three activities on a screen; side by side a reader sees the whole
          * day at once, which is what "in 1 minute" depends on.
          */
-        <div className={cn('mb-5 grid items-start gap-4 lg:grid-cols-2', roomUnderCards && ACTION_BAR_ROOM_PHONE)}>
+        <div className="mb-5 grid items-start gap-4 lg:grid-cols-2">
           {sections.map((section) => {
             const types = section.types.filter((ty) => ty.status === 'active');
             const mentions = termsIn.get(section.code);
@@ -392,7 +427,7 @@ export default function LogActivityPage() {
           label={t.why}
           htmlFor="correction-reason"
           hint={corrections > 0 ? t.closedCorrected({ n: corrections }) : t.closed}
-          className={cn('mb-4 max-w-xl max-md:mt-4', phone ? 'pb-20' : ACTION_BAR_ROOM_PHONE)}
+          className={cn('mb-4 max-w-xl max-md:mt-4', phone && FLOATING_BAR_ROOM)}
         >
           {/* Required, and capped where the API caps it (`activity.dto.ts`, 500), so a reason is never
               refused far from the field a phone user is looking at. */}
@@ -413,51 +448,22 @@ export default function LogActivityPage() {
         *
         * **On a phone, the save bar held just above the tab bar at every scroll position** (UI-106, D-03): *Belum
         * disimpan · n aktivitas baru* or *Tersimpan ✓* on the left, *Batal*, and the accent's *Simpan aktivitas* — its
-        * words navy on the accent (I-542). `data-action-bar` lifts the shell's toast above it (`toast.tsx`), so
-        * *Activity logged ✓* never covers the button it confirms.
+        * words navy on the accent (I-542). **In Goal Setting's pill** (`FloatingBar`; the product owner's staging review,
+        * 2026-10-31), not the full-width strip it was. The floating bar lifts the shell's toast above it (`toast.tsx`), so
+        * *Activity logged ✓* never covers the button it confirms. `data-action-bar` names the row at every width.
         */}
-      {saving && (
-        <div
-          data-action-bar=""
-          className={cn(
-            'flex flex-wrap items-center justify-end gap-2.5',
-            phone && 'fixed inset-x-0 bottom-[max(calc(var(--tab-bar-space)+0.25rem),env(safe-area-inset-bottom))] z-[9] '
-              + 'flex-nowrap border-t border-line bg-card px-4 py-2.5',
-          )}
-        >
-          {phone && (
-            <span className="mr-auto flex min-w-0 flex-col">
-              <SaveStateLabel state={barState} />
-              {barState === 'unsaved' && added > 0 && <span className="text-sm text-muted">{t.newCount({ n: added })}</span>}
-            </span>
-          )}
-          <Button
-            variant="secondary"
-            disabled={busy}
-            onClick={() => void load(date)}
-            className={cn(phone && 'min-h-11 rounded-pill border-0 bg-pill-grey px-3.5 text-pill-grey-ink')}
-          >
-            {t.cancel}
-          </Button>
-          {frozen ? (
-            <Button
-              disabled={busy || !reason.trim()}
-              onClick={() => void run(
-                () => correctActivityDay({ date, counts, reason: reason.trim() }),
-              )}
-              className={cn(phone && SAVE_ON_PHONE)}
-            >
-              {busy ? t.saving : t.saveCorrection}
-            </Button>
-          ) : (
-            <Button
-              disabled={busy}
-              onClick={() => void run(() => saveActivityDay({ date, counts }))}
-              className={cn(phone && SAVE_ON_PHONE)}
-            >
-              {busy ? t.saving : t.saveActivity}
-            </Button>
-          )}
+      {saving && phone && (
+        <FloatingBar data-action-bar="" pillClassName="gap-2">
+          <span className="flex min-w-0 flex-1 flex-col">
+            <SaveStateLabel state={barState} />
+            {barState === 'unsaved' && added > 0 && <span className="text-sm text-muted">{t.newCount({ n: added })}</span>}
+          </span>
+          {barActions}
+        </FloatingBar>
+      )}
+      {saving && !phone && (
+        <div data-action-bar="" className="flex flex-wrap items-center justify-end gap-2.5">
+          {barActions}
         </div>
       )}
 
@@ -483,8 +489,11 @@ function isFuture(chosen: string, serverDay: string): boolean {
   return chosen > serverDay;
 }
 
-/** *Simpan aktivitas* on a phone (UI-106): the accent, 44px, its words navy on it (parity I-542). */
-const SAVE_ON_PHONE = 'min-h-11 rounded-pill bg-amber px-4 font-bold text-navy hover:bg-amber-dark';
+/**
+ * *Simpan aktivitas* on a phone (UI-106): the floating bar's accent button, 44px, its words navy on it (parity I-542) —
+ * 16px either side rather than 20px, as it shares the pill with *Batal*.
+ */
+const SAVE_ON_PHONE = cn(FLOATING_BAR_BUTTON, 'px-4');
 
 /** A calendar day moved by whole days, `YYYY-MM-DD` to `YYYY-MM-DD`: arithmetic on the date, never on an instant. */
 function addDays(day: string, by: number): string {

@@ -39,7 +39,10 @@ export type RouteFamily = 'admin' | 'tenant' | 'agent' | 'auth' | 'shared';
 const PAGES: Readonly<Record<RouteFamily, readonly string[]>> = {
   admin: [
     '/admin', '/admin/analytics', '/admin/audit', '/admin/billing', '/admin/companies',
-    '/admin/companies/[companyId]/template', '/admin/impersonate/[userId]', '/admin/impersonation/[sessionId]',
+    // ADR-0185: a company's page, its settings, a template's checklist and a section; the old address redirects.
+    '/admin/companies/[companyId]', '/admin/companies/[companyId]/settings', '/admin/companies/[companyId]/template',
+    '/admin/companies/[companyId]/templates/[templateId]', '/admin/companies/[companyId]/templates/[templateId]/[section]',
+    '/admin/impersonate/[userId]', '/admin/impersonation/[sessionId]',
     '/admin/kpm-requests', '/admin/leader-limit-requests', '/admin/org-levels', '/admin/tenant-admins', '/admin/tenants', '/admin/tenants/new',
     '/admin/tenants/[kpmId]', '/admin/tenants/[kpmId]/owner', '/admin/tenants/[kpmId]/roster',
   ],
@@ -96,7 +99,11 @@ export const GATES: readonly RouteGate[] = [
   // The platform console.
   { route: '/admin/analytics', on: 'page', permission: 'platform_analytics:read' },
   { route: '/admin/billing', on: 'page', permission: 'billing:read_prices' },
-  { route: '/admin/companies/[companyId]/template', on: 'page', permission: 'company_template:read' },
+  // ADR-0185: the KPM template's four pages. The old address only redirects, under the console's own gate.
+  { route: '/admin/companies/[companyId]', on: 'page', permission: 'company_template:read' },
+  { route: '/admin/companies/[companyId]/settings', on: 'page', permission: 'company_template:read' },
+  { route: '/admin/companies/[companyId]/templates/[templateId]', on: 'page', permission: 'company_template:read' },
+  { route: '/admin/companies/[companyId]/templates/[templateId]/[section]', on: 'page', permission: 'company_template:read' },
   { route: '/admin/impersonation/[sessionId]', on: 'page', permission: 'impersonation:elevate_to_write' },
   // ADR-0157: deciding a leader past an office's limit is AgencyBoost's alone.
   { route: '/admin/leader-limit-requests', on: 'page', permission: 'leader_limit_request:decide' },

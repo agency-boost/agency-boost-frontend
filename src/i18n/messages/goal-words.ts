@@ -61,6 +61,11 @@ const en = {
   produced: {
     /** The member's own figure, which has no month: *Your own figure*, *Her own figure*. */
     own: ({ who }: { who: Voice }) => `${cap(who.possessive)} own figure, entered in Goal Settings`,
+    /**
+     * A figure typed in the app by somebody other than the member — a coach (S2): never *their own*. `name` as stored,
+     * or `null` when they can no longer be named, and then *a leader*.
+     */
+    typedBy: ({ name }: { name: string | null }) => `Entered by ${name ?? `a ${kept('leader')}`}, not uploaded`,
     /** The reader's: the office's upload. */
     upload: 'From your office’s upload',
     /** The reader's: a correction, by whom when the payload says, *by hand* when it does not (ADR-0121, F-156). */
@@ -87,6 +92,7 @@ const en = {
 const id: MessagesOf<typeof en> = {
   produced: {
     own: ({ who }) => `${who.self ? 'Angka Anda sendiri' : 'Angkanya sendiri'}, diisi di ${kept('Goal Settings')}`,
+    typedBy: ({ name }) => `Diisi oleh ${name ?? kept('leader')}, bukan dari unggahan`,
     upload: `Dari unggahan ${kept('KPM')} Anda`,
     corrected: ({ by }) => (by === null ? 'Dikoreksi manual' : `Dikoreksi oleh ${by}`),
     theirUpload: 'Dari unggahan produksi',

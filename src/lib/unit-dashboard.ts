@@ -76,6 +76,8 @@ export interface GoalSource {
   month: string | null;
   correctedBy: UnitPerson | null;
   correctedAt: string | null;
+  /** Who typed a `self_reported` figure, when it was not the member — a coach (S2). Absent otherwise. */
+  typedBy?: { membershipId: string; name: string | null };
 }
 
 /** The Summary's figures for the period: the month's under *Last 7 days* (D-period). */
@@ -549,7 +551,8 @@ export function provenanceWords(
 ): string | null {
   if (!source || source.provenance === 'imported') return null;
   const t = wordsIn(language).provenance;
-  if (source.provenance === 'self_reported') return own ? t.yours : t.theirs;
+  // A figure a coach typed is never called the member's own (S2): it names who typed it.
+  if (source.provenance === 'self_reported') return source.typedBy ? t.typedBy({ name: source.typedBy.name }) : own ? t.yours : t.theirs;
   return t.corrected({
     month: source.month ? formatMonth(source.month, figures) : null,
     span,

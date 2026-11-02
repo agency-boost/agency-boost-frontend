@@ -8,6 +8,7 @@ import { act } from 'react';
 import CoachingPersonLayout from '../layout';
 import CoachingSessionTabPage from './page';
 import { sessionTag } from '@/components/coaching-session';
+import { FLOATING_BAR_ROOM } from '@/components/ui/floating-bar';
 
 const nav = vi.hoisted(() => ({ search: '' }));
 vi.mock('next/navigation', () => ({
@@ -454,9 +455,10 @@ describe('the session workspace (P11-T8)', () => {
       await toastSays('Goal updated — reflected across both tabs.');
       const [put] = sent(calls, 'PUT', '/goals/');
       expect(put.url).toBe('http://api.test/api/v1/goals/2026?for=mem-rina&session=s-1');
+      // The target alone: the APE produced is left out (S1), so the coachee's own figure stands, whatever this read.
       expect(bodyOf(put)).toEqual({
         mode: 'direct', annualApeTargetMinor: 1_200_000_000_00, savingsTargetMinor: 96 * M, commissionRatePct: 10,
-        monthsLeft: null, apeAchievedMinor: 0, caseSizeMinor: 18 * M, leadsToApptPct: 30, closingRatePct: 30,
+        monthsLeft: null, caseSizeMinor: 18 * M, leadsToApptPct: 30, closingRatePct: 30,
       });
       expect(sent(calls, 'GET', '/goals/2026?for=mem-rina')).toHaveLength(1);
       // The figures are read again, so this month's target moves by its formula, not by a hand.
@@ -876,8 +878,11 @@ describe('the session workspace (P11-T8)', () => {
       await userEvent.type(within(tips).getByRole('textbox', { name: 'Tip 1' }), '!');
 
       const bar = document.querySelector('[data-finalize-bar="draft"]') as HTMLElement;
-      // UI-062: pinned above the tab bar below 1024px, the sticky column's foot from 1024px; *Draf · n tindakan* beside it.
-      expect(bar).toHaveClass('fixed', 'bottom-[var(--tab-bar-space,0px)]', 'lg:static');
+      // UI-062: the floating bar above the tab bar below 1024px, the sticky column's foot from 1024px; *Draf · n tindakan*
+      // beside it.
+      expect(bar).toHaveAttribute('data-floating-bar');
+      expect(bar).toHaveClass('fixed', 'lg:static');
+      expect(bar.className).toContain('var(--tab-bar-space)');
       expect(bar).toHaveTextContent('Draft · 3 actions');
       const finalize = within(bar).getByRole('button', { name: 'Finalize this session' });
       expect(finalize).not.toHaveTextContent('✓');
@@ -904,6 +909,44 @@ describe('the session workspace (P11-T8)', () => {
       expect(within(goal).queryByRole('button')).not.toBeInTheDocument();
       // The history is read again, so the finalized session is among the past ones.
       expect(sent(calls, 'GET', '/coaching/coachees/mem-rina/sessions').length).toBeGreaterThan(1);
+    });
+
+    /*
+     * **The floating bar, in Goal Setting's form** (the product owner's staging review, 2026-10-31: *"yang lain jelek,
+     * kotak gitu, sizenya juga aneh"*). Below 1024px a pill 12px from the sides and 12px over the tab bar — not the
+     * full-width square strip with a rule above it — and the home indicator counted once: the strip stood on
+     * `--tab-bar-space`, which holds it, and padded it again under the button. From 1024px, the column's card as before.
+     */
+    it('UI-062 draws Finalkan in the floating bar’s pill, the inset counted once, and the card from 1024px', async () => {
+      show({ 'POST /coaching/sessions/s-1/finalize': { body: finalized() } });
+      await card('Coaching tips');
+
+      const bar = document.querySelector('[data-finalize-bar="draft"]') as HTMLElement;
+      expect(bar).toHaveClass('inset-x-3', 'bottom-[max(calc(var(--tab-bar-space)+0.75rem),calc(env(safe-area-inset-bottom)+0.75rem))]');
+      expect(bar.className).not.toMatch(/inset-x-0|border-t|pb-\[calc/);
+      expect(bar).toHaveClass('lg:static', 'lg:rounded-lg', 'lg:border', 'lg:p-3.5');
+      const finalize = within(bar).getByRole('button', { name: 'Finalize this session' });
+      const pill = finalize.parentElement!;
+      expect(pill).toHaveAttribute('data-floating-bar-pill');
+      expect(pill).toHaveClass('rounded-pill', 'bg-card', 'shadow-modal', 'lg:rounded-none', 'lg:shadow-none');
+      expect(within(pill).getByText('Draft · 3 actions')).toHaveClass('min-w-0', 'flex-1');
+      // The pill's 44px accent button below 1024px; the column's 50px one from 1024px.
+      expect(finalize).toHaveClass('min-h-11', 'rounded-pill', 'bg-amber', 'font-bold', 'lg:h-[50px]', 'lg:flex-1');
+      // Room under the last card for the pill: the floating bar's one room class.
+      expect(document.querySelector('[data-session-workspace]')).toHaveClass(FLOATING_BAR_ROOM);
+      expect(document.querySelector('[data-session-workspace]')).not.toHaveClass('max-lg:pb-28');
+
+      await userEvent.click(finalize);
+      await toastSays('Saved');
+      const done = document.querySelector('[data-finalize-bar="finalized"]') as HTMLElement;
+      expect(done).toHaveAttribute('data-floating-bar');
+      expect(done).toHaveClass('inset-x-3', 'lg:static');
+      // In the pill, the words in green on its left and *Edit again* on its right; the green strip from 1024px.
+      const words = within(done).getByText('Finalized 2 Oct').closest('p')!;
+      expect(words).toHaveClass('min-h-11', 'text-pill-green-ink', 'lg:bg-pill-green', 'lg:h-[50px]');
+      expect(words).not.toHaveClass('bg-pill-green');
+      expect(words.parentElement).toHaveAttribute('data-floating-bar-pill');
+      expect(words.parentElement).toContainElement(within(done).getByRole('button', { name: 'Edit again' }));
     });
 
     it('UI-060 a cleared date: Finalkan scrolls to it, outlines it red with Pilih tanggal, and says the count above the button', async () => {
@@ -934,6 +977,11 @@ describe('the session workspace (P11-T8)', () => {
       // Right above the button, in the same bar; the button still enabled.
       expect(message.closest('[data-finalize-bar]')).toContainElement(finalize);
       expect(finalize).toBeEnabled();
+      // Below 1024px, in the floating bar's card over its pill: the pill and its button are the same ones, the focus kept.
+      const note = message.closest('[data-floating-bar-note]') as HTMLElement;
+      expect(note.nextElementSibling).toHaveAttribute('data-floating-bar-pill');
+      expect(note.nextElementSibling).toContainElement(screen.getByRole('button', { name: 'Finalize this session' }));
+      expect(screen.getByRole('button', { name: 'Finalize this session' })).toBe(finalize);
       const invalid = next.querySelectorAll('[data-action-row][data-invalid]');
       expect(invalid).toHaveLength(2);
       for (const row of invalid) expect(row).toHaveTextContent('Choose a date');

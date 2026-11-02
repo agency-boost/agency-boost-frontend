@@ -85,6 +85,10 @@ const shortDayOf = (iso: string, figures: Parameters<typeof formatShortDay>[2]) 
  * - **The pinned foot** (D-01): the save state above (*Belum disimpan* / *Tersimpan*), the white **Hapus** (red words,
  *   a bin, asks to confirm) left of **Simpan**. Hapus only where the reader may delete the lead — their own (`lead:delete`
  *   is `own`, roles §3.7); D-10: an action that is not available is not shown.
+ * - **The calendar's *Hapus tugas*** (`offerClearTask`; the staging review of 2026-10-31), in Hapus's place, which the
+ *   calendar never offers: the reader's own open lead's next action — its date and note, the calendar's and Home's task —
+ *   cleared through `PATCH /leads/:id`, pinned, after the same kind of question. The lead stays. What else is typed in
+ *   the sheet stays typed: the sheet closes only when nothing else is left unsaved.
  *
  * **One explicit save** (the report's *Simpan* with its save state): the form holds the changes, and *Simpan* writes
  * them through the lead's own routes in order — the type, the stage, then the fields in one patch — each pinned by the
@@ -98,6 +102,7 @@ export function LeadSheet({
   owner,
   readOnly = false,
   offerDelete = true,
+  offerClearTask = false,
   onSaved,
   onDeleted,
   onClosedLead,
@@ -113,6 +118,8 @@ export function LeadSheet({
   readOnly?: boolean;
   /** Whether *Hapus* may be offered at all — the coaching session offers none (`lead:delete` is the owner's). */
   offerDelete?: boolean;
+  /** The calendar's: *Hapus tugas*, clearing the reader's own lead's next action (never somebody else's). */
+  offerClearTask?: boolean;
   /** After a save or a new number lands: the lead as the server now has it. */
   onSaved?: (lead: Lead) => void;
   onDeleted?: (id: string) => void;
@@ -130,6 +137,7 @@ export function LeadSheet({
   const { me } = useSession();
   const canMarkOutcome = useCan('lead:mark_outcome');
   const canDelete = useCan('lead:delete');
+  const canUpdate = useCan('lead:update');
   const { show } = useToast();
   const uid = useId();
 
@@ -291,6 +299,26 @@ export function LeadSheet({
     }
   }
 
+  /** *Hapus tugas*: the next action cleared and nothing else, pinned to the version last read. */
+  async function clearTask() {
+    if (!current) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const cleared = await updateLead(current.id, { nextActionDate: null, nextActionNote: null }, current.version);
+      const rest = { ...form, nextActionDate: '', nextActionNote: '' };
+      setCurrent(cleared);
+      setForm(rest);
+      onSaved?.(cleared);
+      show(t.sheet.taskCleared);
+      if (sameForm(rest, formOf(cleared))) onClose();
+    } catch (err) {
+      await caughtUp(err);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function closeAs(outcome: LeadOutcome) {
     if (!current) return;
     setSaving(true);
@@ -317,6 +345,16 @@ export function LeadSheet({
     disabled: saving,
   });
   const offerHapus = !isNew && editable && offerDelete && canDelete && mine;
+  const clearing = useDestructiveAction({
+    label: t.sheet.clearTask,
+    message: t.sheet.clearTaskAsk({ who: name }),
+    confirmLabel: t.sheet.clearTask,
+    onConfirm: () => void clearTask(),
+    disabled: saving,
+  });
+  const holdsTask = Boolean(current?.nextActionDate || current?.nextActionNote?.trim());
+  const offerClear = !offerHapus && offerClearTask && !isNew && editable && canUpdate && mine
+    && current?.outcome === null && holdsTask;
   const offerOutcome = !isNew && editable && canMarkOutcome && current?.outcome === null;
 
   /** Closing asks first when something typed would be lost. */
@@ -331,10 +369,10 @@ export function LeadSheet({
   const footer = editable ? (
     <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 pb-1">
       <SaveStateLabel state={isNew && !dirty ? 'unsaved' : state} className="w-full" />
-      {offerHapus && (
+      {(offerHapus || offerClear) && (
         <button
           type="button"
-          onClick={destructive.ask}
+          onClick={offerHapus ? destructive.ask : clearing.ask}
           disabled={saving}
           className={cn(
             'inline-flex min-h-[52px] shrink-0 items-center gap-1.5 rounded-pill border-[1.5px] border-line bg-card px-[18px]',
@@ -342,7 +380,7 @@ export function LeadSheet({
           )}
         >
           <LineIcon name="trash" className="h-5 w-5" />
-          {t.sheet.delete}
+          {offerHapus ? t.sheet.delete : t.sheet.clearTask}
         </button>
       )}
       <button
@@ -634,6 +672,7 @@ export function LeadSheet({
       )}
 
       {destructive.dialog}
+      {clearing.dialog}
       <Dialog
         open={askingClose}
         message={t.sheet.discard}

@@ -552,6 +552,95 @@ describe('P12-T2 — my calendar, week view', () => {
       await waitFor(() => expect(screen.getByRole('button', { name: '+ New event' })).toHaveFocus());
     });
 
+    /*
+     * The staging review of 2026-10-31 (the product owner: *di calendar tidak bisa hapus*): *Edit event* offers the
+     * detail's *Delete* too, the same question and the same pinned delete.
+     */
+    describe('from Edit event (staging review 2026-10-31)', () => {
+      const editDialog = async () => {
+        await userEvent.click(standup());
+        await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
+        return screen.findByRole('dialog', { name: 'Edit event' });
+      };
+
+      it('offers Delete left of Cancel and Save event, asks the detail’s question, deletes pinned and reads again', async () => {
+        const stub = show({
+          [WEEK_READ]: [{ body: weekRead() }, { body: weekRead({ entries: [] }) }],
+          'DELETE /calendar/entries/e-standup': deleted,
+        });
+        await grid();
+        const dialog = await editDialog();
+        expect(within(dialog).getAllByRole('button').map((b) => b.textContent).slice(-3)).toEqual(['Delete', 'Cancel', 'Save event']);
+        await userEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
+        const question = await screen.findByRole('dialog', { name: 'Delete "Weekly unit standup"?' });
+        expect(question).not.toHaveTextContent(/undone/);
+        await userEvent.click(within(question).getByRole('button', { name: 'Delete' }));
+        await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+        expect(calls(stub, '/calendar/entries/e-standup?version=1', 'DELETE')).toHaveLength(1);
+        expect(calls(stub, WEEK_READ)).toHaveLength(2);
+        await waitFor(() => expect(screen.queryByRole('button', { name: /^Internal meeting: Weekly unit standup/ })).not.toBeInTheDocument());
+      });
+
+      it('keeps the entry when the question is cancelled; a stale one is read again, and the next delete sends its version', async () => {
+        const stub = show({
+          'DELETE /calendar/entries/e-standup': [refusal(409, 'VERSION_CONFLICT'), deleted],
+          'GET /calendar/entries/e-standup': { body: entry({ version: 2 }) },
+        });
+        await grid();
+        const dialog = await editDialog();
+        await userEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
+        await userEvent.click(within(await screen.findByRole('dialog', { name: 'Delete "Weekly unit standup"?' })).getByRole('button', { name: 'Cancel' }));
+        expect(calls(stub, '/calendar/entries/e-standup', 'DELETE')).toHaveLength(0);
+        expect(screen.getByRole('dialog', { name: 'Edit event' })).toBeInTheDocument();
+
+        await userEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
+        await userEvent.click(within(await screen.findByRole('dialog', { name: 'Delete "Weekly unit standup"?' })).getByRole('button', { name: 'Delete' }));
+        expect(await screen.findByText('This entry was changed somewhere else, so it has been read again.')).toBeInTheDocument();
+        await userEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
+        await userEvent.click(within(await screen.findByRole('dialog', { name: 'Delete "Weekly unit standup"?' })).getByRole('button', { name: 'Delete' }));
+        await waitFor(() => expect(calls(stub, '/calendar/entries/e-standup?version=2', 'DELETE')).toHaveLength(1));
+      });
+
+      it('create → edit → delete: the delete after an edit sends the version the edit answered, never a stale one', async () => {
+        const stub = show({
+          [WEEK_READ]: [{ body: weekRead() }, { body: weekRead({ entries: [entry({ title: 'Unit standup', version: 2 })] }) }],
+          'PATCH /calendar/entries/e-standup': ({ body }) => ({ body: entry({ ...(body as Partial<CalendarEntry>), version: 2 }) }),
+          'DELETE /calendar/entries/e-standup': deleted,
+        });
+        await grid();
+        const dialog = await editDialog();
+        await userEvent.clear(within(dialog).getByLabelText('Title'));
+        await userEvent.type(within(dialog).getByLabelText('Title'), 'Unit standup');
+        await userEvent.click(within(dialog).getByRole('button', { name: 'Save event' }));
+        await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+        await userEvent.click(await screen.findByRole('button', { name: 'Internal meeting: Unit standup, 09:00–09:30' }));
+        await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
+        await userEvent.click(within(await screen.findByRole('dialog', { name: 'Edit event' })).getByRole('button', { name: 'Delete' }));
+        await userEvent.click(within(await screen.findByRole('dialog', { name: 'Delete "Unit standup"?' })).getByRole('button', { name: 'Delete' }));
+        await waitFor(() => expect(calls(stub, '/calendar/entries/e-standup', 'DELETE')).toHaveLength(1));
+        expect(calls(stub, '/calendar/entries/e-standup', 'DELETE')[0].url).toMatch(/\?version=2$/);
+      });
+
+      it('offers no Delete to a reader who may edit and not delete, and none on a new event', async () => {
+        show({}, makeMe({ ...AGUS, permissions: AGUS.permissions.filter((p) => p !== 'calendar_entry:delete') }));
+        await grid();
+        const dialog = await editDialog();
+        expect(within(dialog).queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
+        await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+        await userEvent.click(screen.getByRole('button', { name: '+ New event' }));
+        expect(within(await screen.findByRole('dialog', { name: 'New event' })).queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
+      });
+
+      it('shows a refused delete in the dialog, which stays open', async () => {
+        show({ 'DELETE /calendar/entries/e-standup': refusal(403, 'PERM_DENIED') });
+        await grid();
+        const dialog = await editDialog();
+        await userEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
+        await userEvent.click(within(await screen.findByRole('dialog', { name: 'Delete "Weekly unit standup"?' })).getByRole('button', { name: 'Delete' }));
+        expect(await within(dialog).findByText('Refused: PERM_DENIED')).toBeInTheDocument();
+      });
+    });
+
     it('shows a refused delete in the detail', async () => {
       show({ 'DELETE /calendar/entries/e-standup': refusal(403, 'PERM_DENIED') });
       await grid();
@@ -2436,6 +2525,153 @@ describe('UI-104 — Calendar: auto items, Tugas, 3 Hari, the coaching button, t
     await waitFor(() => expect(calls(stub, '/leads/lead-wiwik').filter((c) => !c.url.includes('next-action'))).toHaveLength(1));
   });
 
+  /*
+   * The staging review of 2026-10-31: a lead's task can be removed. *Hapus tugas* sits in the lead sheet's foot — the
+   * sheet the row opens — in *Delete*'s place, for the reader's own open lead; it clears the next action and keeps the lead.
+   */
+  describe('Delete task — the reader’s own lead’s next action (staging review 2026-10-31)', () => {
+    const LEADER = makeMe({ ...AGUS, permissions: [...AGUS.permissions, 'lead:read', 'lead:update'] });
+    const wiwik = (over: Record<string, unknown> = {}) => ({
+      id: 'lead-wiwik', ownerMembershipId: 'mem-agus', type: 'sales', name: 'Ibu Wiwik Setyaningsih',
+      contact: { phone: '+6281234567890', email: null }, statusCode: null, thisMonth: false, remarks: null,
+      nextActionDate: '2026-09-28', nextActionNote: 'Invite BOP', outcome: null, source: null,
+      dateRegistered: '2026-09-04T03:00:00.000Z', version: 3, flags: [], overdueDays: null, committedMonths: [],
+      lastEditedBy: null, history: [], ...over,
+    });
+    const openWiwik = async () => {
+      const list = within(today(await region())).getByRole('region', { name: 'Tasks' });
+      await userEvent.click(within(list).getByRole('button', { name: 'Open Ibu Wiwik Setyaningsih' }));
+      return screen.findByRole('dialog', { name: 'Ibu Wiwik Setyaningsih' });
+    };
+
+    it('asks first, clears the next action pinned to its version through PATCH /leads/:id, says so, and the task leaves', async () => {
+      onPhone();
+      const stub = show({
+        [AGENDA_READ]: [{ body: agendaWith() }, { body: agendaRead({ tasks: [coachingTask()], events: [joinedEvent()] }) }],
+        'GET /leads/lead-wiwik': { body: wiwik() },
+        'PATCH /leads/lead-wiwik': { body: wiwik({ nextActionDate: null, nextActionNote: null, version: 4 }) },
+      }, LEADER);
+      const sheet = await openWiwik();
+      // In *Delete*'s place, which the calendar never offers.
+      expect(within(sheet).queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
+      await userEvent.click(within(sheet).getByRole('button', { name: 'Delete task' }));
+      const question = await screen.findByRole('dialog', {
+        name: 'Delete the task for Ibu Wiwik Setyaningsih? The lead stays; only its next action is cleared.',
+      });
+      expect(calls(stub, '/leads/lead-wiwik', 'PATCH')).toHaveLength(0);
+      await userEvent.click(within(question).getByRole('button', { name: 'Delete task' }));
+      await waitFor(() => expect(calls(stub, '/leads/lead-wiwik', 'PATCH')).toHaveLength(1));
+      expect(bodyOf(calls(stub, '/leads/lead-wiwik', 'PATCH')[0])).toEqual({ nextActionDate: null, nextActionNote: null, version: 3 });
+      // The sheet closes (its *Task deleted* toast is the shell's, which this page renders without).
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+      await waitFor(() => expect(calls(stub, AGENDA_READ)).toHaveLength(2));
+      await waitFor(() => expect(document.querySelector('[data-task="lead:lead-wiwik"]')).not.toBeInTheDocument());
+      // Nothing else was written: the lead stays, its next-action tick untouched.
+      expect(calls(stub, '/next-action/done', 'PUT')).toHaveLength(0);
+      expect(calls(stub, '/leads/lead-wiwik', 'DELETE')).toHaveLength(0);
+    });
+
+    it('clears the task alone: anything else typed in the sheet stays typed, and the sheet stays open to save it', async () => {
+      onPhone();
+      const stub = show({
+        [AGENDA_READ]: { body: agendaWith() },
+        'GET /leads/lead-wiwik': { body: wiwik() },
+        'PATCH /leads/lead-wiwik': { body: wiwik({ nextActionDate: null, nextActionNote: null, version: 4 }) },
+      }, LEADER);
+      const sheet = await openWiwik();
+      await userEvent.type(within(sheet).getByLabelText('Remarks'), 'Two kids.');
+      await userEvent.click(within(sheet).getByRole('button', { name: 'Delete task' }));
+      await userEvent.click(within(await screen.findByRole('dialog', { name: /^Delete the task for/ })).getByRole('button', { name: 'Delete task' }));
+      await waitFor(() => expect(calls(stub, '/leads/lead-wiwik', 'PATCH')).toHaveLength(1));
+      expect(bodyOf(calls(stub, '/leads/lead-wiwik', 'PATCH')[0])).toEqual({ nextActionDate: null, nextActionNote: null, version: 3 });
+      expect(screen.getByRole('dialog', { name: 'Ibu Wiwik Setyaningsih' })).toBeInTheDocument();
+      expect(within(sheet).getByLabelText('Remarks')).toHaveValue('Two kids.');
+      expect(within(sheet).getByLabelText('Next action note')).toHaveValue('');
+      // The task is gone, so nothing is left to delete.
+      expect(within(sheet).queryByRole('button', { name: 'Delete task' })).not.toBeInTheDocument();
+    });
+
+    it('cancelled, nothing is written; a stale version is read again and said', async () => {
+      onPhone();
+      const stub = show({
+        [AGENDA_READ]: { body: agendaWith() },
+        'GET /leads/lead-wiwik': [{ body: wiwik() }, { body: wiwik() }, { body: wiwik({ version: 5 }) }],
+        'PATCH /leads/lead-wiwik': refusal(409, 'VERSION_CONFLICT'),
+      }, LEADER);
+      const sheet = await openWiwik();
+      await userEvent.click(within(sheet).getByRole('button', { name: 'Delete task' }));
+      await userEvent.click(within(await screen.findByRole('dialog', { name: /^Delete the task for/ })).getByRole('button', { name: 'Cancel' }));
+      expect(calls(stub, '/leads/lead-wiwik', 'PATCH')).toHaveLength(0);
+      await userEvent.click(within(sheet).getByRole('button', { name: 'Delete task' }));
+      await userEvent.click(within(await screen.findByRole('dialog', { name: /^Delete the task for/ })).getByRole('button', { name: 'Delete task' }));
+      expect(await within(sheet).findByText('Refused: VERSION_CONFLICT')).toBeInTheDocument();
+    });
+
+    it.each([
+      ['somebody else’s lead', { ownerMembershipId: 'mem-indah' }, true],
+      ['a lead with no next action', { nextActionDate: null, nextActionNote: null }, true],
+      ['a closed lead', { outcome: 'won' }, true],
+      ['a reader without lead:update', {}, false],
+    ] as [string, Record<string, unknown>, boolean][])('is not offered on %s', async (_name, over, updates) => {
+      onPhone();
+      show({ [AGENDA_READ]: { body: agendaWith() }, 'GET /leads/lead-wiwik': { body: wiwik(over) } }, updates ? LEADER : AGUS);
+      const sheet = await openWiwik();
+      expect(within(sheet).queryByRole('button', { name: 'Delete task' })).not.toBeInTheDocument();
+    });
+
+    it('a coaching item stays tick-only: its row opens the 1:1, and offers no Delete task', async () => {
+      onPhone();
+      show({ [AGENDA_READ]: { body: agendaWith() } }, LEADER);
+      const list = within(today(await region())).getByRole('region', { name: 'Tasks' });
+      const coaching = list.querySelector<HTMLElement>('[data-task^="coaching:"]')!;
+      expect(within(coaching).getByRole('link', { name: 'Open the 1:1 with Wilson Tanoto' })).toBeInTheDocument();
+      expect(within(coaching).queryByRole('button', { name: /Delete/ })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /Delete task/ })).not.toBeInTheDocument();
+    });
+
+    it('a read-only support session is offered no Delete task', async () => {
+      onPhone();
+      const support = makeMe({ ...LEADER, isImpersonating: true, impersonationReadOnly: true, impersonatedBy: 'u-admin' });
+      show({ [AGENDA_READ]: { body: agendaWith() }, 'GET /leads/lead-wiwik': { body: wiwik() } }, support);
+      expect(within(await openWiwik()).queryByRole('button', { name: 'Delete task' })).not.toBeInTheDocument();
+    });
+
+    it('N1 a read-only support session reads the lead in the sheet and is offered no Save, and no field it could type in', async () => {
+      onPhone();
+      const support = makeMe({ ...LEADER, isImpersonating: true, impersonationReadOnly: true, impersonatedBy: 'u-admin' });
+      const stub = show({ [AGENDA_READ]: { body: agendaWith() }, 'GET /leads/lead-wiwik': { body: wiwik() } }, support);
+      const sheet = await openWiwik();
+      expect(within(sheet).queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
+      expect(within(sheet).getByRole('textbox', { name: 'Next action note' })).toBeDisabled();
+      expect(calls(stub, '/leads/lead-wiwik', 'PATCH')).toHaveLength(0);
+    });
+
+    it('N1 the same sheet outside a support session offers Save', async () => {
+      onPhone();
+      show({ [AGENDA_READ]: { body: agendaWith() }, 'GET /leads/lead-wiwik': { body: wiwik() } }, LEADER);
+      expect(within(await openWiwik()).getByRole('button', { name: 'Save' })).toBeInTheDocument();
+    });
+
+    it('in Indonesian: Hapus tugas and its question', async () => {
+      onPhone();
+      stubFetch({
+        [AGENDA_READ]: { body: agendaWith() }, [SETTINGS]: { body: { hideDetails: false } }, [WEEK_READ]: { body: weekRead() },
+        'GET /leads/lead-wiwik': { body: wiwik() },
+        'PATCH /leads/lead-wiwik': { body: wiwik({ nextActionDate: null, nextActionNote: null, version: 4 }) },
+      });
+      renderWithSession(<InLanguage language="id"><CalendarPage /></InLanguage>, { me: LEADER });
+      const list = await screen.findByRole('region', { name: 'Tugas' });
+      await userEvent.click(within(list).getByRole('button', { name: 'Buka Ibu Wiwik Setyaningsih' }));
+      const sheet = await screen.findByRole('dialog', { name: 'Ibu Wiwik Setyaningsih' });
+      await userEvent.click(within(sheet).getByRole('button', { name: 'Hapus tugas' }));
+      const question = await screen.findByRole('dialog', {
+        name: 'Hapus tugas untuk Ibu Wiwik Setyaningsih? Lead-nya tetap ada; hanya tindakan berikutnya yang dikosongkan.',
+      });
+      await userEvent.click(within(question).getByRole('button', { name: 'Hapus tugas' }));
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    });
+  });
+
   it('UI-104 #4 a read-only support session draws no checkbox: the server would refuse the tick', async () => {
     onPhone();
     const support = makeMe({ ...AGUS, isImpersonating: true, impersonationReadOnly: true, impersonatedBy: 'u-admin' });
@@ -2496,6 +2732,8 @@ describe('UI-104 — Calendar: auto items, Tugas, 3 Hari, the coaching button, t
     // The pinned header: sticky, with its own ‹ › and the switcher; the Tugas row in it.
     const header = view.firstElementChild as HTMLElement;
     expect(header.className).toContain('sticky');
+    // Below the top inset, never under a Home Screen app's clock (staging review, 2026-10-31).
+    expect(header).toHaveClass('top-[env(safe-area-inset-top)]');
     expect(within(header).getByRole('button', { name: 'Tasks on Mon, 28 Sep: 2' })).toBeInTheDocument();
     // A swipe left, past the line: exactly three days on — the server's `next`.
     fireEvent.touchStart(view, { touches: [{ clientX: 300, clientY: 400 }] });

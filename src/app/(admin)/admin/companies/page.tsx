@@ -9,10 +9,12 @@ import { ConfigBadge } from '@/components/ui/config-badge';
 import {
   Button, Card, ErrorBanner, Field, FieldRow, ReadOnlyField, Select, TextInput,
 } from '@/components/ui/field';
+import { LineIcon } from '@/components/ui/line-icon';
 import { SkeletonTable } from '@/components/ui/skeleton';
 import {
-  createCompany, isTemplateLibrary, listCompanies, setCompanyStatus, updateCompany, type Company,
+  createCompany, insurersOf, isTemplateLibrary, listCompanies, setCompanyStatus, updateCompany, type Company,
 } from '@/lib/admin';
+import { companyHref } from '@/lib/template-sections';
 import { toDisplayError } from '@/lib/api-client';
 import { SLUG_MAX, toSlug } from '@/lib/slug';
 import type { MessagesOf } from '@/i18n/catalogue';
@@ -32,10 +34,8 @@ const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
  * the thing it stands in for. Its words are the catalogue's, in the reader's language.
  */
 const columnsOf = (t: MessagesOf<typeof adminTemplateCompaniesMessages.en>['columns']) => [
+  // A company's name opens its page — its KPM templates and its own settings (ADR-0185 §2).
   t.name, t.slug, t.currency, t.timeZone, t.status,
-  // The template belongs to the company (ADR-0018), so it is reached through the company
-  // rather than from a nav item that would have nothing to point at.
-  { label: t.template, visuallyHidden: true },
   { label: t.actions, visuallyHidden: true },
 ] as const;
 
@@ -52,13 +52,11 @@ export default function CompaniesPage() {
    */
   const [slugTouched, setSlugTouched] = useState(false);
   /**
-   * **Start from** (ADR-0164 §4): a copy of the Template library, or *Empty*.
+   * **Start from** (ADR-0164 §4, ADR-0185 §1): a copy of *Template bawaan AgencyBoost*, or *Empty*.
    *
-   * **The Template by default, because it is right almost every time** — an insurer being onboarded
-   * wants the twelve activity types and the five ratios to edit, not a blank screen. *Empty* is for a
-   * company whose presets are being authored from scratch, and it has to be a choice made *here*: the
-   * eight template kinds are computed on read, so a company that took the defaults by accident cannot
-   * later be told it did not want them.
+   * **The built-in templates by default, because they are right almost every time** — an insurer being
+   * onboarded wants the twelve activity types and the five ratios to edit, not a blank screen. *Empty* is for
+   * a company whose presets are being authored from scratch, and it has to be a choice made *here*.
    */
   const [withDefaults, setWithDefaults] = useState(true);
   const [error, setError] = useState<{ code: string; message: string; requestId: string } | null>(null);
@@ -72,8 +70,12 @@ export default function CompaniesPage() {
   }, []);
 
   const badSlug = slug.length > 0 && !SLUG.test(slug);
-  /** The Template library, which a new company copies. Absent where no migration has made it. */
+  /**
+   * **The platform's built-in templates** (ADR-0164, ADR-0185 §1): the library company, which a new company copies —
+   * one card above the insurers, never a row among them. Absent where no migration has made it.
+   */
   const library = companies?.find(isTemplateLibrary) ?? null;
+  const insurers = companies ? insurersOf(companies) : null;
   // A slug already in use comes back as its own code, so it belongs on the field that
   // caused it rather than only in the banner above the form.
   const takenSlug = error?.code === 'COMPANY_SLUG_TAKEN' ? error.message : undefined;
@@ -129,17 +131,29 @@ export default function CompaniesPage() {
           at every size; the table scrolls in its own frame instead (P18.98-T4 AC-6, the walk of 2026-10-29). */}
       <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
         <div>
-          {companies === null && (
+          {library && (
+            <Link
+              href={companyHref(library._id)}
+              className="mb-4 flex items-center gap-4 rounded-lg border border-card-edge bg-card px-5 py-4 hover:border-navy/30"
+            >
+              <span className="min-w-0 flex-1">
+                <span className="block font-display text-lg font-bold text-navy">{t.library.name}</span>
+                <span className="block text-md text-muted">{t.library.lead}</span>
+              </span>
+              <LineIcon name="chevronRight" className="h-5 w-5 shrink-0 text-navy" />
+            </Link>
+          )}
+          {insurers === null && (
             <SkeletonTable caption={t.caption} columns={columns} rows={4} />
           )}
-          {companies?.length === 0 && (
+          {insurers?.length === 0 && (
             <div className="rounded-lg border border-card-edge bg-card">
               <EmptyState title={t.empty} />
             </div>
           )}
-          {companies && companies.length > 0 && (
+          {insurers && insurers.length > 0 && (
             <DataTable caption={t.caption} columns={columns}>
-              {companies.map((c) => (editing === c._id ? (
+              {insurers.map((c) => (editing === c._id ? (
                 <Row key={c._id}>
                   {/* The whole row, because a rename is two fields and a name field alone
                       would leave the slug reachable only by creating a second company. */}
@@ -183,7 +197,12 @@ export default function CompaniesPage() {
                 </Row>
               ) : (
                 <Row key={c._id}>
-                  <Cell className="font-semibold">{c.name}</Cell>
+                  <Cell className="font-semibold">
+                    <Link href={companyHref(c._id)} className="inline-flex items-center gap-1 text-navy underline">
+                      {c.name}
+                      <LineIcon name="chevronRight" className="h-4 w-4" />
+                    </Link>
+                  </Cell>
                   <Cell>
                     <code className="text-sm">{c.slug}</code>
                   </Cell>
@@ -195,24 +214,12 @@ export default function CompaniesPage() {
                         {c.status === 'active' ? t.active : t.suspended}
                       </ConfigBadge>
                       {/* Said once, on the row it is true of. A company that took nothing
-                          shows nine empty template tabs, and this is the only thing that
+                          shows every template section empty, and this is the only thing that
                           explains why. */}
                       {!c.usesPlatformDefaults && (
                         <ConfigBadge tone="open">{t.startedBlank}</ConfigBadge>
                       )}
-                      {/* ADR-0164 §3: it holds the templates new companies and offices copy, and no office. */}
-                      {isTemplateLibrary(c) && (
-                        <ConfigBadge tone="navy">{t.templateLibrary}</ConfigBadge>
-                      )}
                     </span>
-                  </Cell>
-                  <Cell>
-                    <Link
-                      href={`/admin/companies/${c._id}/template`}
-                      className="text-md font-semibold text-navy underline"
-                    >
-                      {t.columns.template}
-                    </Link>
                   </Cell>
                   <Cell>
                     <span className="flex flex-wrap items-center gap-2">
@@ -290,15 +297,14 @@ export default function CompaniesPage() {
                 single-currency and single-timezone (ADR-0016). Shown rather than offered,
                 because a form field nobody can vary is worse than a stated fact. */}
             {/*
-              * **The Template by default, and a choice rather than a fact.** The eight Company template
-              * kinds are computed when a tab is opened, not written at creation — so a company
-              * that did not want the platform's presets has to say so here, or it will find the
-              * twelve activity types waiting for it with no way to decline them.
+              * **The built-in templates by default, and a choice rather than a fact** (ADR-0185 §1): named the
+              * same whether the library exists or the API falls back to the code's own starting point — the
+              * same settings either way, and *AgencyBoost defaults* is no longer a name the console says.
               */}
             <Field
               label={t.startFrom}
               htmlFor="start-from"
-              hint={withDefaults ? (library ? t.fromLibraryHint : t.fromDefaultsHint) : t.emptyHint}
+              hint={withDefaults ? t.fromLibraryHint : t.emptyHint}
             >
               <Select
                 id="start-from"
@@ -306,9 +312,7 @@ export default function CompaniesPage() {
                 disabled={busy}
                 onChange={(e) => setWithDefaults(e.target.value === 'template')}
               >
-                <option value="template">
-                  {library ? t.libraryDefault({ library: library.name }) : t.defaults}
-                </option>
+                <option value="template">{t.fromLibrary}</option>
                 <option value="empty">{t.startEmpty}</option>
               </Select>
             </Field>

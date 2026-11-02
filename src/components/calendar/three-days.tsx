@@ -135,7 +135,8 @@ export function ThreeDays({
         'md:overflow-hidden md:rounded-lg',
       )}
     >
-      <div ref={header} className="sticky top-0 z-20 border-b border-divider bg-card">
+      {/* Sticks below the top inset, never under a Home Screen app's clock (staging review, 2026-10-31). */}
+      <div ref={header} className="sticky top-[env(safe-area-inset-top)] z-20 border-b border-divider bg-card">
         {controls}
         <div className="flex h-12 items-center">
           <div className={cn(GUTTER, 'shrink-0')} />

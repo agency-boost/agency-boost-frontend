@@ -29,7 +29,12 @@ import EventsSettingsPage from './(tenant)/kpm/settings/events/page';
 import CampaignsSettingsPage from './(tenant)/kpm/settings/campaigns/page';
 import CapabilityMappingPage from './(tenant)/kpm/settings/capability-mapping/page';
 import ActivationChecklistPage from './(tenant)/kpm/settings/activation-checklist/page';
-import CompanyTemplatePage from './(admin)/admin/companies/[companyId]/template/page';
+// ADR-0185: the KPM template — a company's page, its settings, a template's checklist, a section, and the old address.
+import CompanyPage from './(admin)/admin/companies/[companyId]/page';
+import CompanySettingsPage from './(admin)/admin/companies/[companyId]/settings/page';
+import TemplateChecklistPage from './(admin)/admin/companies/[companyId]/templates/[templateId]/page';
+import TemplateSectionPage from './(admin)/admin/companies/[companyId]/templates/[templateId]/[section]/page';
+import OldTemplateAddress from './(admin)/admin/companies/[companyId]/template/page';
 import AdminOverviewPage from './(admin)/admin/page';
 import TenantsPage from './(admin)/admin/tenants/page';
 import NewTenantPage from './(admin)/admin/tenants/new/page';
@@ -541,7 +546,7 @@ describe('screens have no axe violations', () => {
     });
     renderInLayout(TenantLayout, <DataUploadPage />, { me: owner });
     await screen.findByText('Budi Santoso');
-    await screen.findByRole('link', { name: 'Download template' });
+    await screen.findByRole('button', { name: 'Download template' });
     await expectClean('kpm/data-upload');
   });
 
@@ -592,7 +597,7 @@ describe('screens have no axe violations', () => {
     });
     renderWithSession(<InLanguage language="id"><TenantLayout><DataUploadPage /></TenantLayout></InLanguage>, { me: owner });
     await screen.findByRole('table', { name: 'Data untuk Sep 2026' });
-    await screen.findByRole('link', { name: 'Unduh templat' });
+    await screen.findByRole('button', { name: 'Unduh template' });
     await screen.findByRole('heading', { name: 'Impor untuk Sep 2026' });
     await expectClean('kpm/data-upload, in Indonesian');
   });
@@ -1745,7 +1750,7 @@ describe('screens have no axe violations', () => {
     renderInLayout(AgentLayout, <LogActivityPage />, { me: makeMe() });
 
     const save = await screen.findByRole('button', { name: 'Save activity' });
-    expect(save.parentElement).toHaveAttribute('data-action-bar');
+    expect(save.closest('[data-floating-bar]')).toHaveAttribute('data-action-bar');
     expect(screen.getByText(/^Today:/)).toHaveTextContent('Today: 2 activities');
     await userEvent.click(screen.getByRole('button', { name: 'Increase Set Appointment' }));
     await expectClean('activity/log (phone)');
@@ -2619,8 +2624,12 @@ describe('screens have no axe violations', () => {
       <TenantRosterImportPage params={routeParams({ kpmId: 'kpm-1' })} />,
       { me: makeMe({ ...SUPER_ADMIN, permissions: [...SUPER_ADMIN.permissions, 'kpm:import_roster'] }) },
     );
-    await screen.findByLabelText('Rows from your spreadsheet');
+    // ADR-0184: the three parts, the filled file first; then the paste, whose box shows the worked examples.
+    await screen.findByRole('button', { name: 'Download Excel (.xlsx)' });
     await expectClean('admin/tenants/[kpmId]/roster');
+    await userEvent.click(screen.getByLabelText('Paste from a spreadsheet'));
+    await screen.findByLabelText('Rows from your spreadsheet');
+    await expectClean('admin/tenants/[kpmId]/roster (paste)');
   });
 
   it('choosing your own password, which wears no chrome at all', async () => {
@@ -4106,7 +4115,14 @@ describe('screens have no axe violations', () => {
       await expectClean('kpm/settings/activation-checklist');
     });
 
-    /** P13.2-T6: the company's one template, its default — what the picker opens on. */
+    /**
+     * ADR-0185: the company's templates, each with its sections — what a card, a checklist and a section read. The
+     * default every section published; a second with a change waiting and a section empty.
+     */
+    const SECTIONS = (over: Record<string, { publishedVersion: number | null; hasDraft: boolean }> = {}) => Object.fromEntries([
+      'activity_taxonomy', 'lead_pipeline', 'ratio_set', 'activation_checklist', 'training_taxonomy', 'capability_ladder',
+      'event_types',
+    ].map((kind) => [kind, over[kind] ?? { publishedVersion: 1, hasDraft: false }]));
     const COMPANY_TEMPLATES = [{
       id: 't-default', companyId: 'c1', name: 'Prudential template', isDefault: true, status: 'active',
       archivedAt: null, origin: { kind: 'migration' }, officeCount: 1,
@@ -4114,143 +4130,122 @@ describe('screens have no axe violations', () => {
         activity_taxonomy: 1, lead_pipeline: 1, ratio_set: 1, activation_checklist: 1,
         training_taxonomy: 1, capability_ladder: 1, event_types: 1,
       },
+      sections: SECTIONS(),
+      createdAt: '2026-10-07T03:00:00.000Z', updatedAt: '2026-10-07T03:00:00.000Z',
+    }, {
+      id: 't-bsd', companyId: 'c1', name: 'BSD City settings', isDefault: false, status: 'active',
+      archivedAt: null, origin: { kind: 'office' }, officeCount: 0, publishedVersions: {},
+      sections: SECTIONS({
+        lead_pipeline: { publishedVersion: 1, hasDraft: true }, ratio_set: { publishedVersion: null, hasDraft: false },
+      }),
       createdAt: '2026-10-07T03:00:00.000Z', updatedAt: '2026-10-07T03:00:00.000Z',
     }];
+    const ROOT = makeMe({
+      ...SUPER_ADMIN,
+      permissions: [...SUPER_ADMIN.permissions, 'company_template:read', 'company_template:write', 'recruitment_playbook:write',
+        'product_catalog:crud', 'commission_rates:read'],
+    });
+    const kind = (k: string, payload: unknown) => ({
+      id: `tpl-${k}`, companyId: 'c1', templateId: 't-default', kind: k, version: 1, status: 'draft', payload,
+      publishedAt: null, publishedVersion: 0, officesBehind: 0, officesUnrecorded: 0,
+    });
+    const templateRoutes = {
+      '/admin/companies': { body: [{ ...COMPANY, _id: 'c1', kind: 'insurer' }] },
+      '/admin/companies/c1/templates': { body: COMPANY_TEMPLATES },
+      '/admin/companies/c1/templates/t-bsd/offices': {
+        body: [{ id: 'k-1', code: '0417', branchName: 'BSD City Branch', behind: ['lead_pipeline'], unrecorded: [] }],
+      },
+    };
 
-    it('the company template’s Training tab', async () => {
-      stubFetch({
-        // P13.2-T6: the picker reads the company’s templates before any tab.
-        '/admin/companies/c1/templates': { body: COMPANY_TEMPLATES },
-        '/admin/companies/c1/template': {
-          body: {
-            id: 'tpl-1', companyId: 'c1', kind: 'activity_taxonomy', version: 1,
-            status: 'draft', payload: { categories: [TAXONOMY[0]], types: [TYPE] },
-            publishedAt: null, publishedVersion: 0, officesBehind: 0, officesUnrecorded: 0,
-          },
-        },
-        '/admin/companies/c1/template/training_taxonomy': {
-          body: {
-            id: 'tpl-3', companyId: 'c1', kind: 'training_taxonomy', version: 1, status: 'draft',
-            publishedAt: null, publishedVersion: 0, officesBehind: 0, officesUnrecorded: 0,
-            payload: {
-              categories: [{ code: 'SALES', label: 'Sales', description: null }],
-              skills: [{ code: 'PROSPECTING', categoryCode: 'SALES', label: 'Prospecting' }],
-              modules: [{ code: 'PROSPECT_LIST', skillCode: 'PROSPECTING', title: 'Building Your Prospect List', publishState: 'published' }],
-            },
-          },
-        },
-      });
-      renderInLayout(
-        AdminLayout,
-        <CompanyTemplatePage params={routeParams({ companyId: 'c1' })} />,
-        { me: makeMe({ ...SUPER_ADMIN, permissions: [...SUPER_ADMIN.permissions, 'company_template:read'] }) },
-      );
-      await screen.findByText('Submission polis');
-      await userEvent.click(screen.getByRole('link', { name: 'Training' }));
-      await screen.findByText('1 skill · 1 module published');
-      await expectClean('admin/companies/[companyId]/template#training');
+    it('admin/companies/[companyId]: the template cards, and New template copying', async () => {
+      stubFetch(templateRoutes);
+      nav.pathname = '/admin/companies/c1';
+      renderInLayout(AdminLayout, <CompanyPage params={routeParams({ companyId: 'c1' })} />, { me: ROOT });
+      await screen.findByRole('list', { name: 'Templates' });
+      await expectClean('admin/companies/[companyId]');
+      await userEvent.click(screen.getByRole('button', { name: 'New template' }));
+      await userEvent.click(screen.getByRole('radio', { name: /^Copy from/ }));
+      await screen.findByLabelText('Source template');
+      await expectClean('admin/companies/[companyId] (New template)');
     });
 
-    it('the Company template’s Events, Campaigns and Capability tabs (P5-T9)', async () => {
+    it('admin/companies/[companyId]/templates/[templateId]: the checklist, Publish all asked, the offices behind', async () => {
+      stubFetch(templateRoutes);
+      nav.pathname = '/admin/companies/c1/templates/t-bsd';
+      renderInLayout(
+        AdminLayout, <TemplateChecklistPage params={routeParams({ companyId: 'c1', templateId: 't-bsd' })} />, { me: ROOT },
+      );
+      await screen.findByRole('list', { name: 'Template sections' });
+      await expectClean('admin/companies/[companyId]/templates/[templateId]');
+      await userEvent.click(screen.getByRole('button', { name: 'Publish all (1)' }));
+      await expectClean('admin/companies/[companyId]/templates/[templateId] (Publish all)');
+      await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+      await userEvent.click(await screen.findByRole('button', { name: '1 office is on an older version' }));
+      await expectClean('admin/companies/[companyId]/templates/[templateId] (offices behind)');
+    });
+
+    it('a template’s sections: Training, Events and Capability Mapping through their editors', async () => {
       stubFetch({
-        // P13.2-T6: the picker reads the company’s templates before any tab.
-        '/admin/companies/c1/templates': { body: COMPANY_TEMPLATES },
-        ...configStubs,
+        ...templateRoutes,
+        '/admin/companies/c1/template/training_taxonomy': {
+          body: kind('training_taxonomy', {
+            categories: [{ code: 'SALES', label: 'Sales', description: null }],
+            skills: [{ code: 'PROSPECTING', categoryCode: 'SALES', label: 'Prospecting' }],
+            modules: [{ code: 'PROSPECT_LIST', skillCode: 'PROSPECTING', title: 'Building Your Prospect List', publishState: 'published' }],
+          }),
+        },
         '/admin/companies/c1/template/event_types': {
-          body: {
-            id: 'tpl-4', companyId: 'c1', kind: 'event_types', version: 1, status: 'draft',
-            publishedAt: null, publishedVersion: 0, officesBehind: 0, officesUnrecorded: 0,
-            payload: {
-              types: [{
-                code: 'TRAINING', label: 'Training', description: null,
-                emoji: '📚', color: '#2D9CDB', displayOrder: 1,
-              }],
-            },
-          },
-        },
-        '/admin/companies/c1/template/campaign_kinds': {
-          body: {
-            id: 'tpl-5', companyId: 'c1', kind: 'campaign_kinds', version: 1, status: 'draft',
-            publishedAt: null, publishedVersion: 0, officesBehind: 0, officesUnrecorded: 0,
-            payload: {
-              rules: [{
-                kind: 'production_club', code: 'STAR_CLUB', name: 'Star Club', rank: 1,
-                reward: 'Promotion bonus', groupMode: 'all',
-                criteriaGroups: [{
-                  mode: 'all',
-                  criteria: [{ metricKey: 'APE_ACHIEVED', comparator: 'gte', value: 120000000000 }],
-                }],
-              }],
-            },
-          },
-        },
-        '/admin/companies/c1/template': {
-          body: {
-            id: 'tpl-1', companyId: 'c1', kind: 'activity_taxonomy', version: 1,
-            status: 'draft', payload: { categories: [TAXONOMY[0]], types: [TYPE] },
-            publishedAt: null, publishedVersion: 0, officesBehind: 0, officesUnrecorded: 0,
-          },
+          body: kind('event_types', { types: [{ code: 'TRAINING', label: 'Training', description: null, emoji: '📚', color: '#2D9CDB', displayOrder: 1 }] }),
         },
         '/admin/companies/c1/template/capability_ladder': {
-          body: {
-            id: 'tpl-6', companyId: 'c1', kind: 'capability_ladder', version: 1, status: 'draft',
-            publishedAt: null, publishedVersion: 0, officesBehind: 0, officesUnrecorded: 0,
-            payload: {
-              stages: [{
-                code: 'COMPETENT', label: 'Competent', requiredMilestoneCodes: ['SELLS'],
-                stageOrder: 1,
-              }],
-              milestones: [{ code: 'SELLS', label: 'Sells independently' }],
-              grids: [{
-                code: 'PERSONAL', label: 'Personal selling', requiresDownline: false,
-                items: [{ code: 'APPROACH', label: 'Approach' }],
-              }],
-            },
-          },
-        },
-        '/metrics': {
-          body: [{
-            key: 'APE_ACHIEVED', name: 'APE achieved', unit: 'idr_minor', phase: 9, computed: true,
-          }],
+          body: kind('capability_ladder', {
+            stages: [{ code: 'COMPETENT', label: 'Competent', requiredMilestoneCodes: ['SELLS'], stageOrder: 1 }],
+            milestones: [{ code: 'SELLS', label: 'Sells independently' }],
+            grids: [{ code: 'PERSONAL', label: 'Personal selling', requiresDownline: false, items: [{ code: 'APPROACH', label: 'Approach' }] }],
+          }),
         },
       });
-      renderInLayout(
-        AdminLayout,
-        <CompanyTemplatePage params={routeParams({ companyId: 'c1' })} />,
-        { me: makeMe({ ...SUPER_ADMIN, permissions: [...SUPER_ADMIN.permissions, 'company_template:read'] }) },
-      );
-      await screen.findByText('Submission polis');
+      const section = (slug: string) => {
+        nav.pathname = `/admin/companies/c1/templates/t-default/${slug}`;
+        return renderInLayout(
+          AdminLayout,
+          <TemplateSectionPage params={routeParams({ companyId: 'c1', templateId: 't-default', section: slug })} />,
+          { me: ROOT },
+        );
+      };
+      const training = section('training');
+      await screen.findByText('1 skill · 1 module published');
+      await expectClean('admin/companies/[companyId]/templates/[templateId]/training');
+      training.unmount();
 
-      await userEvent.click(screen.getByRole('link', { name: 'Events' }));
+      const events = section('events');
       await screen.findByText(/every new office of this company starts with/);
-      await expectClean('admin/companies/[companyId]/template#events');
+      await expectClean('admin/companies/[companyId]/templates/[templateId]/events');
+      events.unmount();
 
-      await userEvent.click(screen.getByRole('link', { name: 'Campaigns' }));
-      await screen.findByText('Star Club');
-      await expectClean('admin/companies/[companyId]/template#campaigns');
-
-      // Renamed and split by the 2026-09-24 feedback: the platform's own words for the
-      // card (`Overall.html:4349`), with the grids on their own half.
-      await userEvent.click(screen.getByRole('link', { name: 'Capability Mapping' }));
+      section('capability');
       await screen.findByRole('heading', { name: 'Milestones' });
-      await expectClean('admin/companies/[companyId]/template#capability-ladder');
-
+      await expectClean('admin/companies/[companyId]/templates/[templateId]/capability#ladder');
       await userEvent.click(screen.getByRole('link', { name: 'Skills' }));
       await screen.findByText('Approach');
-      await expectClean('admin/companies/[companyId]/template#capability-skills');
+      await expectClean('admin/companies/[companyId]/templates/[templateId]/capability#skills');
     });
 
-    it('the company template’s Products tab, with a product open', async () => {
+    it('admin/companies/[companyId]/settings: the carrier rules, and Products with a product open', async () => {
       stubFetch({
-        // P13.2-T6: the picker reads the company’s templates before any tab.
-        '/admin/companies/c1/templates': { body: COMPANY_TEMPLATES },
-        '/admin/companies/c1/template': {
+        ...templateRoutes,
+        '/admin/companies/c1/template/campaign_kinds': {
           body: {
-            id: 'tpl-1', companyId: 'c1', kind: 'activity_taxonomy', version: 1,
-            status: 'draft', payload: { categories: [TAXONOMY[0]], types: [TYPE] },
-            publishedAt: null, publishedVersion: 0, officesBehind: 0, officesUnrecorded: 0,
+            ...kind('campaign_kinds', {
+              rules: [{
+                kind: 'production_club', code: 'STAR_CLUB', name: 'Star Club', rank: 1, reward: 'Promotion bonus', groupMode: 'all',
+                criteriaGroups: [{ mode: 'all', criteria: [{ metricKey: 'APE_ACHIEVED', comparator: 'gte', value: 120000000000 }] }],
+              }],
+            }),
+            templateId: null,
           },
         },
+        '/metrics': { body: [{ key: 'APE_ACHIEVED', name: 'APE achieved', unit: 'idr_minor', phase: 9, computed: true }] },
         '/admin/companies/c1/products': {
           body: [{
             id: 'p1', companyId: 'c1', code: 'PRUMAPAN', name: 'PRUMapan',
@@ -4271,36 +4266,13 @@ describe('screens have no axe violations', () => {
           }],
         },
       });
-      renderInLayout(
-        AdminLayout,
-        <CompanyTemplatePage params={routeParams({ companyId: 'c1' })} />,
-        { me: makeMe({ ...SUPER_ADMIN, permissions: [...SUPER_ADMIN.permissions, 'company_template:read'] }) },
-      );
-      await screen.findByText('Submission polis');
-      await userEvent.click(screen.getByRole('link', { name: 'Products' }));
+      nav.pathname = '/admin/companies/c1/settings';
+      renderInLayout(AdminLayout, <CompanySettingsPage params={routeParams({ companyId: 'c1' })} />, { me: ROOT });
       await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
-      await expectClean('admin/companies/[companyId]/template#products');
-    });
-
-    it('the company template, with an editor open', async () => {
-      stubFetch({
-        // P13.2-T6: the picker reads the company’s templates before any tab.
-        '/admin/companies/c1/templates': { body: COMPANY_TEMPLATES },
-        '/admin/companies/c1/template': {
-          body: {
-            id: 'tpl-1', companyId: 'c1', kind: 'activity_taxonomy', version: 1,
-            status: 'draft', payload: { categories: [TAXONOMY[0]], types: [TYPE] },
-            publishedAt: null, publishedVersion: 0, officesBehind: 0, officesUnrecorded: 0,
-          },
-        },
-      });
-      renderInLayout(
-        AdminLayout,
-        <CompanyTemplatePage params={routeParams({ companyId: 'c1' })} />,
-        { me: makeMe({ ...SUPER_ADMIN, permissions: [...SUPER_ADMIN.permissions, 'company_template:read'] }) },
-      );
-      await screen.findByText('Submission polis');
-      await expectClean('admin/companies/[companyId]/template');
+      await expectClean('admin/companies/[companyId]/settings#products');
+      await userEvent.click(screen.getByRole('link', { name: 'Campaigns' }));
+      await screen.findByText('Star Club');
+      await expectClean('admin/companies/[companyId]/settings#campaigns');
     });
   });
 
@@ -4479,8 +4451,8 @@ describe('screens have no axe violations', () => {
     });
   });
 
-  /** P17-T8: the Company template's *Recruitment* tab — the company's playbook, a card open. */
-  describe('the Company template’s Recruitment tab (P17-T8)', () => {
+  /** P17-T8: the company's recruitment playbook — *Company settings › Recruitment* since ADR-0185 — a card open. */
+  describe('the company’s Recruitment playbook (P17-T8)', () => {
     const PLAYBOOK_TEMPLATES = [{
       id: 't-default', companyId: 'c1', name: 'Prudential template', isDefault: true, status: 'active',
       archivedAt: null, origin: { kind: 'migration' }, officeCount: 1, publishedVersions: { activity_taxonomy: 1 },
@@ -4524,18 +4496,19 @@ describe('screens have no axe violations', () => {
           },
         },
       });
+      nav.pathname = '/admin/companies/c1/settings';
       renderInLayout(
         AdminLayout,
-        <CompanyTemplatePage params={routeParams({ companyId: 'c1' })} />,
-        { me: makeMe({ ...SUPER_ADMIN, permissions: [...SUPER_ADMIN.permissions, 'company_template:read'] }) },
+        <CompanySettingsPage params={routeParams({ companyId: 'c1' })} />,
+        { me: makeMe({ ...SUPER_ADMIN, permissions: [...SUPER_ADMIN.permissions, 'company_template:read', 'recruitment_playbook:write'] }) },
       );
-      const sections = within(await screen.findByRole('navigation', { name: 'Template sections' }));
-      await userEvent.click(sections.getByRole('link', { name: 'Recruitment' }));
+      const parts = within(await screen.findByRole('navigation', { name: 'Company settings' }));
+      await userEvent.click(parts.getByRole('link', { name: 'Recruitment' }));
       await screen.findByText('This playbook is live.');
       for (const name of ['Retiree', 'Objections']) {
         await userEvent.click(within(screen.getByRole('group', { name })).getByRole('button', { name: 'Edit' }));
       }
-      await expectClean('admin/companies/[companyId]/template#recruitment');
+      await expectClean('admin/companies/[companyId]/settings#recruitment');
     });
   });
 
@@ -4975,7 +4948,7 @@ describe('P18.97-T7 the Owner’s screens on a phone have no axe violations', ()
     });
     renderInLayout(TenantLayout, <DataUploadPage />, { me: owner });
     await screen.findByRole('list', { name: 'Data for Sep 2026' });
-    await screen.findByRole('link', { name: 'Download template' });
+    await screen.findByRole('button', { name: 'Download template' });
     await expectClean('kpm/data-upload (phone)');
     await userEvent.click(screen.getByRole('button', { name: 'Correct figures for Rina Wijaya' }));
     const sheet = screen.getByRole('dialog', { name: 'Correct figures for Rina Wijaya' });
@@ -5243,7 +5216,8 @@ describe('P18.98-T4 the forum and the people screens in Indonesian', () => {
       '/admin/tenants/kpm-1/roster/preview': { body: { willCreate: 0, rows: [], issues: [{ line: 2, column: 'email', message: '"x" is not an email address.' }] } },
     });
     inIndonesian('/people/import', <TenantLayout><PeopleImportPage /></TenantLayout>);
-    await screen.findByRole('link', { name: 'Unduh templat' });
+    await screen.findByRole('button', { name: 'Unduh Excel (.xlsx)' });
+    await userEvent.click(screen.getByLabelText('Tempel dari spreadsheet'));
     await userEvent.type(screen.getByLabelText('Baris dari spreadsheet Anda'), 'A,x,881,ab');
     await userEvent.click(screen.getByRole('button', { name: 'Periksa file' }));
     await screen.findByRole('table', { name: 'Yang salah dengan file ini' });
@@ -6830,9 +6804,9 @@ describe('P18.98-T4 events, campaigns and the calendar in Indonesian', () => {
 
 /**
  * **P18.98-T6: the Super Admin's company templates in ID mode, each in its main state** — axe in Indonesian, as the
- * blocks above run them in English (ADR-0179 §9): *Manage Companies*, a company's Company template on its tabs with its
- * picker's dialogs, and the *Org role ladder* (`admin-template*.ts(x)`). What a company typed is as typed; `lang` on
- * kept terms is T7's.
+ * blocks above run them in English (ADR-0179 §9): *Manage Companies*, a company's *Template KPM* — its cards, a
+ * template's checklist, its sections — and *Pengaturan perusahaan* (ADR-0185), and the *Org role ladder*
+ * (`admin-template*.ts(x)`). What a company typed is as typed; `lang` on kept terms is T7's.
  */
 describe('P18.98-T6 the company templates in Indonesian', () => {
   afterEach(() => {
@@ -6855,15 +6829,19 @@ describe('P18.98-T6 the company templates in Indonesian', () => {
     id: `tpl-${kind}`, companyId: 'c1', kind, version: 2, status: 'draft', publishedAt: null, publishedVersion: 1,
     officesBehind: 1, officesUnrecorded: 2, payload, ...over,
   });
+  const SECTIONS = Object.fromEntries([
+    'activity_taxonomy', 'lead_pipeline', 'ratio_set', 'activation_checklist', 'training_taxonomy', 'capability_ladder',
+    'event_types',
+  ].map((k) => [k, { publishedVersion: 1, hasDraft: k === 'activity_taxonomy' }]));
   const TEMPLATES = [
     {
       id: 't-default', companyId: 'c1', name: 'Prudential template', isDefault: true, status: 'active', archivedAt: null,
-      origin: { kind: 'migration' }, officeCount: 3, publishedVersions: { activity_taxonomy: 1 },
+      origin: { kind: 'migration' }, officeCount: 3, publishedVersions: { activity_taxonomy: 1 }, sections: SECTIONS,
       createdAt: '2026-10-07T03:00:00.000Z', updatedAt: '2026-10-07T03:00:00.000Z',
     },
     {
       id: 't-old', companyId: 'c1', name: 'Old settings', isDefault: false, status: 'archived',
-      archivedAt: '2026-10-01T00:00:00.000Z', origin: { kind: 'empty' }, officeCount: 0, publishedVersions: {},
+      archivedAt: '2026-10-01T00:00:00.000Z', origin: { kind: 'empty' }, officeCount: 0, publishedVersions: {}, sections: {},
       createdAt: '2026-10-07T03:00:00.000Z', updatedAt: '2026-10-07T03:00:00.000Z',
     },
   ];
@@ -6875,22 +6853,28 @@ describe('P18.98-T6 the company templates in Indonesian', () => {
     ],
     bindings: { leads: [], appointments: ['SELL_PRESENTATION'], closings: ['SELL_SUBMISSION'] },
   });
-  const template = (routes: Record<string, unknown> = {}, hash = '') => {
-    window.location.hash = hash;
-    stubFetch({
-      '/admin/companies/c1/templates': { body: TEMPLATES },
-      '/admin/companies/c1/template': { body: TAXONOMY },
-      '/admin/companies': {
-        body: [
-          { _id: 'c1', name: 'Prudential', slug: 'prudential', status: 'active', kind: 'insurer' },
-          { _id: 'c2', name: 'Allianz Life', slug: 'allianz-life', status: 'active', kind: 'insurer' },
-        ],
-      },
-      '/admin/companies/c2/templates': { body: [{ ...TEMPLATES[0], id: 'a-1', companyId: 'c2', name: 'Allianz Life template' }] },
-      ...routes,
-    });
-    return inIndonesian('/admin/companies/c1/template', <CompanyTemplatePage params={routeParams({ companyId: 'c1' })} />);
-  };
+  /** The company's routes every KPM template page reads, and the page in ID mode. */
+  const templateRoutes = (routes: Record<string, unknown> = {}) => stubFetch({
+    '/admin/companies/c1/templates': { body: TEMPLATES },
+    '/admin/companies/c1/templates/t-default/offices': {
+      body: [{ id: 'k-1', code: '0417', branchName: 'BSD City Branch', behind: ['activity_taxonomy'], unrecorded: [] }],
+    },
+    '/admin/companies/c1/template/activity_taxonomy': { body: TAXONOMY },
+    '/admin/companies/c1/template/ratio_set': { body: draft('ratio_set', { ratios: [] }) },
+    '/admin/companies': {
+      body: [
+        { _id: 'c1', name: 'Prudential', slug: 'prudential', status: 'active', kind: 'insurer' },
+        { _id: 'c2', name: 'Allianz Life', slug: 'allianz-life', status: 'active', kind: 'insurer' },
+      ],
+    },
+    '/admin/companies/c2/templates': { body: [{ ...TEMPLATES[0], id: 'a-1', companyId: 'c2', name: 'Allianz Life template' }] },
+    ...routes,
+  });
+  const section = (slug: string) => inIndonesian(
+    `/admin/companies/c1/templates/t-default/${slug}`,
+    <TemplateSectionPage params={routeParams({ companyId: 'c1', templateId: 't-default', section: slug })} />,
+  );
+  const settings = () => inIndonesian('/admin/companies/c1/settings', <CompanySettingsPage params={routeParams({ companyId: 'c1' })} />);
 
   it('admin/companies: the list, a row being renamed, and Add a company', async () => {
     stubFetch({
@@ -6909,33 +6893,45 @@ describe('P18.98-T6 the company templates in Indonesian', () => {
     await expectClean('admin/companies (id, renaming)');
   });
 
-  it('admin/companies/[companyId]/template: Activity types with its binding, a section being renamed', async () => {
-    template();
-    await screen.findByText('Kirim SPAJ');
-    await screen.findByText(/^1 KPM menjalankan versi yang lebih lama\./);
-    await expectClean('admin/companies/[companyId]/template (id)');
-    const section = screen.getByRole('heading', { name: 'Penjualan' }).closest('.rounded-lg') as HTMLElement;
-    await userEvent.click(within(section).getAllByRole('button', { name: 'Ubah' })[0]);
-    await userEvent.click(screen.getByRole('button', { name: 'Ubah pengaitan' }));
-    await expectClean('admin/companies/[companyId]/template (id, editing)');
+  it('admin/companies/[companyId]: the cards, and Template baru copying (id)', async () => {
+    templateRoutes();
+    inIndonesian('/admin/companies/c1', <CompanyPage params={routeParams({ companyId: 'c1' })} />);
+    await screen.findByRole('list', { name: 'Daftar template' });
+    await expectClean('admin/companies/[companyId] (id)');
+    await userEvent.click(screen.getByRole('button', { name: 'Template baru' }));
+    await userEvent.click(screen.getByRole('radio', { name: /^Salin dari…/ }));
+    await screen.findByLabelText('Template sumber');
+    await expectClean('admin/companies/[companyId] (id, Template baru)');
   });
 
-  it('admin/companies/[companyId]/template: the picker’s New template and Import from another company', async () => {
-    template();
-    await userEvent.click(await screen.findByRole('button', { name: 'Templat baru' }));
-    await screen.findByRole('dialog', { name: 'Templat baru' });
-    await expectClean('admin/companies/[companyId]/template (id, New template)');
+  it('admin/companies/[companyId]/templates/[templateId]: the checklist, Terbitkan semua and the offices behind (id)', async () => {
+    templateRoutes();
+    inIndonesian(
+      '/admin/companies/c1/templates/t-default',
+      <TemplateChecklistPage params={routeParams({ companyId: 'c1', templateId: 't-default' })} />,
+    );
+    await screen.findByRole('list', { name: 'Bagian template' });
+    await expectClean('admin/companies/[companyId]/templates/[templateId] (id)');
+    await userEvent.click(screen.getByRole('button', { name: 'Terbitkan semua (1)' }));
+    await expectClean('admin/companies/[companyId]/templates/[templateId] (id, Terbitkan semua)');
     await userEvent.click(screen.getByRole('button', { name: 'Batal' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Impor dari perusahaan lain' }));
-    // The dialog's module is fetched on its first opening (P18.99-T16).
-    const dialog = within(await screen.findByRole('dialog', { name: 'Impor dari perusahaan lain' }));
-    await userEvent.selectOptions(await dialog.findByLabelText('Perusahaan'), 'c2');
-    await dialog.findByLabelText('Templat');
-    await expectClean('admin/companies/[companyId]/template (id, Import)');
+    await userEvent.click(await screen.findByRole('button', { name: '1 KPM memakai versi lama' }));
+    await expectClean('admin/companies/[companyId]/templates/[templateId] (id, KPM versi lama)');
   });
 
-  it('admin/companies/[companyId]/template: the checklist, the carrier rules and the capability ladder', async () => {
-    const { unmount } = template({
+  it('admin/companies/[companyId]/templates/[templateId]/activity: Activity types with its binding, a section being renamed (id)', async () => {
+    templateRoutes();
+    section('activity');
+    await screen.findByText('Kirim SPAJ');
+    await expectClean('admin/companies/[companyId]/templates/[templateId]/activity (id)');
+    const head = screen.getByRole('heading', { name: 'Penjualan' }).closest('.rounded-lg') as HTMLElement;
+    await userEvent.click(within(head).getAllByRole('button', { name: 'Ubah' })[0]);
+    await userEvent.click(screen.getByRole('button', { name: 'Ubah pengaitan' }));
+    await expectClean('admin/companies/[companyId]/templates/[templateId]/activity (id, editing)');
+  });
+
+  it('a template’s sections: the checklist and the capability ladder (id)', async () => {
+    templateRoutes({
       '/admin/companies/c1/template/activation_checklist': {
         body: {
           ...draft('activation_checklist', {
@@ -6954,29 +6950,14 @@ describe('P18.98-T6 the company templates in Indonesian', () => {
         },
       },
       '/admin/companies/c1/template/training_taxonomy': { body: draft('training_taxonomy', { categories: [], skills: [], modules: [] }) },
-    }, '#activation');
+    });
+    const first = section('activation');
     await screen.findByText('2 item di 1 aspek');
-    await expectClean('admin/companies/[companyId]/template#activation (id)');
-    unmount();
+    await expectClean('admin/companies/[companyId]/templates/[templateId]/activation (id)');
+    first.unmount();
     vi.unstubAllGlobals();
 
-    const rules = template({
-      '/admin/companies/c1/template/campaign_kinds': {
-        body: draft('campaign_kinds', {
-          rules: [{
-            kind: 'production_club', code: 'STAR_CLUB', name: 'Star Club', rank: 1, reward: 'Bonus promosi', groupMode: 'all',
-            criteriaGroups: [{ mode: 'all', criteria: [{ metricKey: 'APE_ACHIEVED', comparator: 'gte', value: 120000000000 }] }],
-          }],
-        }),
-      },
-      '/metrics': { body: [{ key: 'APE_ACHIEVED', name: 'APE achieved', unit: 'idr_minor', phase: 9, computed: true }] },
-    }, '#campaign-tiers');
-    await screen.findByText('Bonus promosi');
-    await expectClean('admin/companies/[companyId]/template#campaign-tiers (id)');
-    rules.unmount();
-    vi.unstubAllGlobals();
-
-    template({
+    templateRoutes({
       '/admin/companies/c1/template/capability_ladder': {
         body: draft('capability_ladder', {
           stages: [{ code: 'COMPETENT', label: 'Kompeten', requiredMilestoneCodes: ['SELLS'], stageOrder: 1 }],
@@ -6984,13 +6965,25 @@ describe('P18.98-T6 the company templates in Indonesian', () => {
           grids: [],
         }),
       },
-    }, '#capability-ladder');
+    });
+    section('capability');
     await screen.findByRole('group', { name: 'Dicapai dengan' });
-    await expectClean('admin/companies/[companyId]/template#capability-ladder (id)');
+    await expectClean('admin/companies/[companyId]/templates/[templateId]/capability (id)');
   });
 
-  it('admin/companies/[companyId]/template: Products with a product open, and Recruitment with a type open', async () => {
-    const products = template({
+  it('admin/companies/[companyId]/settings: Produk with a product open, Campaign, and Rekrutmen with a type open (id)', async () => {
+    const body = {
+      profiles: {
+        'fresh-grad': {
+          label: 'Lulusan baru', tagline: 'Baru masuk dunia kerja.', goodFitFor: 'Pekerjaan pertama.',
+          benefits: ['Tanpa pengalaman.'], openings: { 'side-income': 'Mau penghasilan tambahan?' },
+        },
+      },
+      objections: { time: { theySay: 'Butuh berapa lama?', youSay: 'Yang diukur aktivitas.' } },
+      profileObjections: {},
+      nextAction: 'Kirimkan Opportunity Overview.',
+    };
+    templateRoutes({
       '/admin/companies/c1/products': {
         body: [{
           id: 'p1', companyId: 'c1', code: 'PRUMAPAN', name: 'PRUMapan', tagline: 'Proteksi jiwa dengan manfaat pensiun',
@@ -7004,25 +6997,6 @@ describe('P18.98-T6 the company templates in Indonesian', () => {
           activeByDefault: true, sortOrder: 1, version: 1,
         }],
       },
-    }, '#products');
-    await userEvent.click(await screen.findByRole('button', { name: 'Ubah' }));
-    await screen.findByRole('table', { name: 'Persentase komisi' });
-    await expectClean('admin/companies/[companyId]/template#products (id, a product open)');
-    products.unmount();
-    vi.unstubAllGlobals();
-
-    const body = {
-      profiles: {
-        'fresh-grad': {
-          label: 'Lulusan baru', tagline: 'Baru masuk dunia kerja.', goodFitFor: 'Pekerjaan pertama.',
-          benefits: ['Tanpa pengalaman.'], openings: { 'side-income': 'Mau penghasilan tambahan?' },
-        },
-      },
-      objections: { time: { theySay: 'Butuh berapa lama?', youSay: 'Yang diukur aktivitas.' } },
-      profileObjections: {},
-      nextAction: 'Kirimkan Opportunity Overview.',
-    };
-    template({
       '/admin/companies/c1/recruitment-playbook': {
         body: {
           playbook: { companyId: 'c1', version: 2, body, updatedAt: '2026-10-09T07:05:00.000Z', updatedBy: { name: 'Root' } },
@@ -7035,10 +7009,35 @@ describe('P18.98-T6 the company templates in Indonesian', () => {
           limits: { textMax: 600, benefitsMax: 6 },
         },
       },
-    }, '#recruitment');
+      '/admin/companies/c1/template/campaign_kinds': {
+        body: {
+          ...draft('campaign_kinds', {
+            rules: [{
+              kind: 'production_club', code: 'STAR_CLUB', name: 'Star Club', rank: 1, reward: 'Bonus promosi', groupMode: 'all',
+              criteriaGroups: [{ mode: 'all', criteria: [{ metricKey: 'APE_ACHIEVED', comparator: 'gte', value: 120000000000 }] }],
+            }],
+          }),
+          templateId: null,
+        },
+      },
+      '/metrics': { body: [{ key: 'APE_ACHIEVED', name: 'APE achieved', unit: 'idr_minor', phase: 9, computed: true }] },
+    });
+    settings();
+    await userEvent.click(await screen.findByRole('button', { name: 'Ubah' }));
+    await screen.findByRole('table', { name: 'Persentase komisi' });
+    await expectClean('admin/companies/[companyId]/settings#products (id, a product open)');
+    await userEvent.click(screen.getByRole('link', { name: 'Campaign' }));
+    await screen.findByText('Bonus promosi');
+    await expectClean('admin/companies/[companyId]/settings#campaigns (id)');
+    await userEvent.click(screen.getByRole('link', { name: 'Rekrutmen' }));
     await screen.findByText('Playbook ini langsung berlaku.');
     await userEvent.click(within(screen.getByRole('group', { name: 'Lulusan baru' })).getByRole('button', { name: 'Ubah' }));
-    await expectClean('admin/companies/[companyId]/template#recruitment (id, a type open)');
+    await expectClean('admin/companies/[companyId]/settings#recruitment (id, a type open)');
+  });
+
+  it('admin/companies/[companyId]/template: the old address while it sends the reader on (id)', async () => {
+    inIndonesian('/admin/companies/c1/template', <OldTemplateAddress params={routeParams({ companyId: 'c1' })} />);
+    await expectClean('admin/companies/[companyId]/template (id, the wait)');
   });
 
   it('admin/org-levels: the ladder, its tiers and Add a rung', async () => {

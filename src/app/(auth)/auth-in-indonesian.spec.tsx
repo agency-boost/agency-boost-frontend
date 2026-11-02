@@ -120,9 +120,9 @@ describe('P18.98-T4 the pages before a session in Indonesian', () => {
       .toEqual(['Pilih', 'Laki-laki', 'Perempuan']);
     expect([...screen.getByLabelText<HTMLSelectElement>('Status').options].map((o) => o.text))
       .toEqual(['Pilih', 'Penuh waktu', 'Paruh waktu']);
-    expect(screen.getByLabelText('Kata sandi')).toHaveAccessibleDescription('Minimal 10 karakter. Panjang lebih penting daripada simbol.');
+    expect(screen.getByLabelText('Kata sandi')).toHaveAccessibleDescription('Minimal 8 karakter.');
     await userEvent.type(screen.getByLabelText('Kata sandi'), 'short ');
-    expect(screen.getByText('Gunakan minimal 10 karakter.')).toBeInTheDocument();
+    expect(screen.getByText('Gunakan minimal 8 karakter.')).toBeInTheDocument();
     await userEvent.type(screen.getByLabelText('Konfirmasi kata sandi'), 'other');
     expect(screen.getByText('Kedua kata sandi tidak sama.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Buat akun' })).toBeDisabled();
@@ -208,7 +208,7 @@ describe('P18.98-T4 the pages before a session in Indonesian', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'Buat kata sandi baru' })).toBeInTheDocument();
     expect(screen.getByText(/^Ini membuat Anda keluar di semua perangkat lain/)).toBeInTheDocument();
     await userEvent.type(screen.getByLabelText('Kata sandi baru'), 'short');
-    expect(screen.getByText('Gunakan minimal 10 karakter.')).toBeInTheDocument();
+    expect(screen.getByText('Gunakan minimal 8 karakter.')).toBeInTheDocument();
     await userEvent.type(screen.getByLabelText('Konfirmasi kata sandi'), 'other');
     expect(screen.getByText('Kedua kata sandi tidak sama.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Atur kata sandi baru' })).toBeDisabled();

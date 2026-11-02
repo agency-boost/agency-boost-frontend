@@ -459,9 +459,21 @@ describe('P18.98-T4 Import people in Indonesian', () => {
     expect(within(guide).getByRole('row', { name: /^Peran/ })).toHaveTextContent('AB, AAB, atau Agent');
     expect(within(guide).getByRole('row', { name: /^Tanggal lahir/ })).toHaveTextContent('YYYY-MM-DD, minimal 18 tahun yang lalu');
     expect(within(guide).getByRole('row', { name: /^Jenis kelamin/ })).toHaveTextContent('male atau female');
-    expect(await screen.findByRole('link', { name: 'Unduh templat' })).toBeInTheDocument();
+    // ADR-0184: the three parts — Unduh template, Panduan pengisian, Unggah — Excel recommended, the filled file first.
+    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent))
+      .toEqual(['Unduh template', 'Panduan pengisian', 'Unggah']);
+    expect(screen.getByRole('button', { name: 'Unduh Excel (.xlsx)' })).toHaveAccessibleDescription('Disarankan');
+    expect(screen.getByRole('button', { name: 'Unduh CSV' })).toBeInTheDocument();
+    expect(within(screen.getByRole('group', { name: 'Panduan pengisian' })).getAllByRole('listitem').map((li) => li.textContent))
+      .toEqual([
+        'Satu orang per baris.',
+        'Urutan baris bebas, dan kode agen leader dikosongkan untuk orang yang tidak melapor kepada siapa pun.',
+        'Tanggal ditulis YYYY-MM-DD, dan bulan YYYY-MM.',
+      ]);
     expect(screen.getByRole('group', { name: 'Bagaimana Anda menambahkan mereka?' })).toBeInTheDocument();
-    expect(screen.getByLabelText('Tempel dari spreadsheet')).toBeChecked();
+    expect(screen.getByLabelText('Unggah file yang sudah diisi (.xlsx atau .csv)')).toBeChecked();
+    expect(screen.getByLabelText('File roster')).toBeInTheDocument();
+    await userEvent.click(screen.getByLabelText('Tempel dari spreadsheet'));
     expect(screen.getByLabelText('Baris dari spreadsheet Anda')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Periksa file' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Impor 0' })).toBeDisabled();
@@ -480,6 +492,7 @@ describe('P18.98-T4 Import people in Indonesian', () => {
       },
     } as never);
     renderInIndonesian(<RosterImport kpmId="kpm-1" backHref="/people/members" />, { me: OWNER });
+    await userEvent.click(screen.getByLabelText('Tempel dari spreadsheet'));
     await userEvent.type(await screen.findByLabelText('Baris dari spreadsheet Anda'), 'A,nope,881,ab');
     await userEvent.click(screen.getByRole('button', { name: 'Periksa file' }));
     expect(await screen.findByRole('heading', { name: '1 masalah — tidak ada yang akan dibuat' })).toBeInTheDocument();

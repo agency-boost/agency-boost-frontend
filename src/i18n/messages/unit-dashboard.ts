@@ -182,6 +182,8 @@ const en = {
   provenance: {
     yours: 'Your own figure, entered in Goal Settings',
     theirs: 'Their own figure, entered in Goal Settings',
+    /** A figure a coach typed for them (S2): never *their own*. `name` `null` when they can no longer be named. */
+    typedBy: ({ name }: { name: string | null }) => `Entered by ${name ?? `a ${kept('leader')}`}, not uploaded`,
     corrected: ({ month, span, by, day }: { month: string | null; span: 'month' | 'year'; by: string | null; day: string | null }) =>
       `Corrected after the production upload${month ? (span === 'year' ? `, year to date as of ${month}` : `, ${month}`) : ''}`
       + `${by ? `, by ${by}${day ? ` on ${day}` : ''}` : ''}`,
@@ -360,6 +362,7 @@ const id: MessagesOf<typeof en> = {
   provenance: {
     yours: `Angka Anda sendiri, diisi di ${kept('Goal Settings')}`,
     theirs: `Angkanya sendiri, diisi di ${kept('Goal Settings')}`,
+    typedBy: ({ name }) => `Diisi oleh ${name ?? kept('leader')}, bukan dari unggahan`,
     corrected: ({ month, span, by, day }) =>
       `Dikoreksi setelah unggahan produksi${month ? (span === 'year' ? `, sejak awal tahun per ${month}` : `, ${month}`) : ''}`
       + `${by ? `, oleh ${by}${day ? ` pada ${day}` : ''}` : ''}`,

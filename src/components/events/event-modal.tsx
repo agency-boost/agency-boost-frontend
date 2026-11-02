@@ -143,7 +143,11 @@ export function EventModal({ id }: { id: string }) {
   return (
     <>
       <div aria-hidden="true" className="fixed inset-0 z-40 bg-navy/35" onClick={close} data-scrim />
-      <div className="pointer-events-none fixed inset-0 z-50 flex items-start justify-center sm:items-center sm:p-5">
+      {/*
+        * Below the top inset, never under a Home Screen app's clock (staging review, 2026-10-31): the whole screen less
+        * the inset below 640px, the band above it the card's white; from 640px the inset where it is more than 20px.
+        */}
+      <div className="pointer-events-none fixed inset-0 z-50 flex items-start justify-center pt-[env(safe-area-inset-top)] max-sm:bg-card sm:items-center sm:p-5 sm:pt-[max(1.25rem,env(safe-area-inset-top))]">
         <div
           ref={box}
           role="dialog"
@@ -158,8 +162,8 @@ export function EventModal({ id }: { id: string }) {
             * poster and *Submit feedback* are sticky inside it; a field tabbed to stops clear of both.
             */
           className={cn(
-            'pointer-events-auto relative h-[100dvh] w-full overflow-y-auto overscroll-contain bg-card shadow-modal',
-            'sm:h-auto sm:max-h-[calc(100dvh-2.5rem)] sm:max-w-[560px] sm:rounded-lg',
+            'pointer-events-auto relative h-[calc(100dvh-env(safe-area-inset-top))] w-full overflow-y-auto overscroll-contain bg-card shadow-modal',
+            'sm:h-auto sm:max-h-[calc(100dvh-1.25rem-max(1.25rem,env(safe-area-inset-top)))] sm:max-w-[560px] sm:rounded-lg',
             form ? 'scroll-pb-24 scroll-pt-[126px]' : 'scroll-pt-[206px]',
           )}
         >

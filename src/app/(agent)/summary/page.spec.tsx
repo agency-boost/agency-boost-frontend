@@ -216,6 +216,20 @@ describe('the Personal Summary — the date header and the goal card (P10-T4; UI
     expect(within(goal).getByRole('button', { name: 'Your own figure, entered in Goal Settings' })).toBeInTheDocument();
   });
 
+  it('S2: a figure their coach typed is not called their own — the marker names who entered it', async () => {
+    show(summary({
+      yearly: {
+        ...figures({ actualMinor: 150 * M }),
+        source: { provenance: 'self_reported', month: null, typedBy: { membershipId: 'mem-agus', name: 'Agus Salim' } },
+      },
+    }));
+    await card('Goal vs. actual (APE)');
+    await yearly();
+    const goal = await card('Goal vs. actual (APE)');
+    expect(within(goal).getByRole('button', { name: 'Entered by Agus Salim, not uploaded' })).toBeInTheDocument();
+    expect(within(goal).queryByRole('button', { name: /own figure/ })).not.toBeInTheDocument();
+  });
+
   it('UI-054, UI-006: the gap is the card’s foot — Remaining this month | Policies needed ± n', async () => {
     show(summary({ monthly: { ...figures({ policiesNeeded: 1 }), source: null } }));
     const foot = (await card('Goal vs. actual (APE)')).querySelector('dl')!;
@@ -938,17 +952,33 @@ describe('Campaigns you’re chasing (P18.5-T7 AC-6; UI-050)', () => {
     return stub;
   };
 
-  it('P18.5-T7 AC-6, UI-050: its heading outside the card, From the Campaign list on a desktop, after the ratios and before the next steps', async () => {
+  it('P18.5-T7 AC-6, UI-050: its heading outside the card, From the Campaign list on a desktop, after the leads and before the next steps', async () => {
     showWith({ 'GET /campaigns/chasing': { body: RINA_CHASING } });
     const section = await campaigns();
     expect(within(section).getByRole('heading', { level: 2 })).toHaveTextContent(/^Campaigns you're chasing$/);
     const from = within(section).getByText('From the Campaign list');
     expect(wears(from, 1280)).not.toMatch(/\bhidden\b/);
     expect(wears(from, 768)).toMatch(/\bhidden\b/);
-    const ratiosCard = await card('Ratio · last 30 days');
+    const leads = await card('Leads that need you');
     const next = await card('What to do next');
-    expect(ratiosCard.compareDocumentPosition(section) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(leads.compareDocumentPosition(section) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(section.compareDocumentPosition(next) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  /*
+   * The staging review of 2026-10-31 (the product owner: *Ini leads nya kegeser ke bawah, Mestinya setelah ratio*):
+   * the right column reads Ratio → Leads → Campaign → next steps, replacing UI-056's *leads last*.
+   */
+  it('staging review 2026-10-31: Leads directly after the ratio card, then the campaigns, then the next steps', async () => {
+    showWith({ 'GET /campaigns/chasing': { body: RINA_CHASING } });
+    const ratiosCard = await card('Ratio · last 30 days');
+    const leads = await card('Leads that need you');
+    expect(ratiosCard.nextElementSibling).toBe(leads);
+    expect(leads.nextElementSibling).toBe(await campaigns());
+    const order = [...ratiosCard.parentElement!.querySelectorAll(':scope > section')]
+      .map((s) => s.querySelector('h2, h3')?.textContent);
+    expect(order[0]).toMatch(/^Ratio/);
+    expect(order.slice(1, 4)).toEqual(['Leads that need you', "Campaigns you're chasing", 'What to do next']);
   });
 
   it('P18.5-T7 AC-6, UI-057 a row per chase: a trophy line icon, its title, the months it runs and View →, read with no for', async () => {

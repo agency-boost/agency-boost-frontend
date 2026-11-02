@@ -164,6 +164,34 @@ async function raw(path: string, options: RequestOptions = {}): Promise<Response
 }
 
 export async function api<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const response = await send(path, options);
+  if (response.status === 204) return undefined as T;
+
+  const payload = (await response.json().catch(() => null)) as
+    | { error?: ApiError }
+    | T
+    | null;
+
+  if (!response.ok) throw refusal(response, payload);
+  return payload as T;
+}
+
+/**
+ * **A file the API answers as itself**, as a `Blob` (ADR-0184): a template asked for as `.xlsx` or `.csv`.
+ *
+ * **Through here, never a link.** The access token lives in this module's memory and nowhere else, so an `<a href>` to
+ * the API would arrive with no token and be refused; this sends it, retries once on a 401 as `api` does, and a refusal
+ * is the same `ApiRequestError` — the API answers one as JSON whatever was asked for. The screen saves the blob
+ * (`saveFile`, `lib/save-file.ts`).
+ */
+export async function apiBlob(path: string, options: RequestOptions = {}): Promise<Blob> {
+  const response = await send(path, options);
+  if (!response.ok) throw refusal(response, await response.json().catch(() => null));
+  return response.blob();
+}
+
+/** The request, with the one transparent retry a 401 earns. */
+async function send(path: string, options: RequestOptions): Promise<Response> {
   const sentWith = accessToken;
   let response = await raw(path, options);
 
@@ -180,26 +208,20 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
     // not an ended session.
     else if (outcome === 'ended' || outcome === 'none') sessionLostListener?.();
   }
+  return response;
+}
 
-  if (response.status === 204) return undefined as T;
-
-  const payload = (await response.json().catch(() => null)) as
-    | { error?: ApiError }
-    | T
-    | null;
-
-  if (!response.ok) {
-    const error = (payload as { error?: ApiError } | null)?.error ?? {
-      code: 'INTERNAL_ERROR',
-      // The catalogue's English, written in the reader's language where it is shown (`ErrorWords`, P18.98-T4).
-      message: uiMessages.en.errors.noAnswer,
-      requestId: 'unknown',
-    };
-    // The office cannot be used at all (ADR-0112 §4): the app is replaced, whichever request met it.
-    if (response.status === 403 && isOfficeUnavailable(error)) officeUnavailableListener?.(error);
-    throw new ApiRequestError(response.status, error);
-  }
-  return payload as T;
+/** A refusal's envelope as the error a screen shows, telling the session first when the office cannot be used. */
+function refusal(response: Response, payload: unknown): ApiRequestError {
+  const error = (payload as { error?: ApiError } | null)?.error ?? {
+    code: 'INTERNAL_ERROR',
+    // The catalogue's English, written in the reader's language where it is shown (`ErrorWords`, P18.98-T4).
+    message: uiMessages.en.errors.noAnswer,
+    requestId: 'unknown',
+  };
+  // The office cannot be used at all (ADR-0112 §4): the app is replaced, whichever request met it.
+  if (response.status === 403 && isOfficeUnavailable(error)) officeUnavailableListener?.(error);
+  return new ApiRequestError(response.status, error);
 }
 
 /**

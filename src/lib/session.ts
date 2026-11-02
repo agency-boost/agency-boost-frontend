@@ -111,9 +111,10 @@ export interface SessionValue {
   /**
    * **The reader ended the session themselves** (the product owner's report, 2026-10-11): set by
    * `signOut`, cleared when somebody signs in or a reload finds a session. A page that loses its session
-   * sends the reader to plain `/login` while this is set, and to `/login?next=<the page>` otherwise — an
-   * expired session or a link opened signed out is on its way back to that page (P18.1-T3 AC-2); somebody
-   * who pressed *Sign out* is not, and the next person to sign in on the device was being sent there.
+   * sends the reader to plain `/login` while this is set, and to `/login?next=<the page>` otherwise — a link
+   * opened signed out is on its way back to that page (P18.1-T3 AC-2); somebody who pressed *Sign out* is not,
+   * and the next person to sign in on the device was being sent there. An expired session carries the page too,
+   * beside `reason=expired`, and signing in again starts on the landing all the same (staging review, 2026-10-31).
    */
   signedOut: boolean;
   /**

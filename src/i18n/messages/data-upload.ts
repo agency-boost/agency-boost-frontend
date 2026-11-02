@@ -37,6 +37,9 @@ const en = {
   month: 'Month',
   /** **⬇ Download template** (`:1301`) and what it says when the file could not be made. */
   downloadTemplate: 'Download template',
+  /** ADR-0184: *Download template* is the Excel file, the recommended one; this is the CSV beside it. */
+  downloadCsv: 'Download CSV',
+  preparingFile: 'Preparing the file…',
   templateFailed: ({ message }: { message: string }) => `The template could not be prepared. ${message}`,
   tryAgain: 'Try again',
   /** **+ Upload filled template** (`:1302`), the file input dressed as the primary button. */
@@ -221,10 +224,12 @@ const id: MessagesOf<typeof en> = {
   title: kept('Data upload'),
   subtitle: `${kept('APE')}, ${kept('Rolling persistency')}, ${kept('Recruitment')}, ${kept('New active agents')}, ${kept('FYP')} dan ${kept('# of policy')} — satu file per bulan, dicocokkan dengan kode agen.`,
   month: 'Bulan',
-  downloadTemplate: 'Unduh templat',
-  templateFailed: ({ message }) => `Templat tidak dapat disiapkan. ${message}`,
+  downloadTemplate: 'Unduh template',
+  downloadCsv: 'Unduh CSV',
+  preparingFile: 'Menyiapkan file…',
+  templateFailed: ({ message }) => `Template tidak dapat disiapkan. ${message}`,
   tryAgain: 'Coba lagi',
-  upload: '+ Unggah templat yang sudah diisi',
+  upload: '+ Unggah template yang sudah diisi',
   readingFile: 'Membaca file…',
 
   agentCode: 'Kode agen',

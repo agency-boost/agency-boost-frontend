@@ -147,7 +147,8 @@ export function CampaignDialog({
 
   return (
     // The backdrop closes it (`:8224-8229`); a click inside does not, so selecting its words never does.
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy/35 p-4 print:hidden" onClick={onClose} data-scrim>
+    // The top inset where it is more than 16px: never under a Home Screen app's clock (staging review, 2026-10-31).
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy/35 p-4 pt-[max(1rem,env(safe-area-inset-top))] print:hidden" onClick={onClose} data-scrim>
       <div
         ref={box}
         role="dialog"
@@ -157,7 +158,7 @@ export function CampaignDialog({
         tabIndex={-1}
         onKeyDown={keys}
         onClick={(e) => e.stopPropagation()}
-        className="relative max-h-[calc(100dvh-2rem)] w-[560px] max-w-full overflow-y-auto overscroll-contain rounded-[14px] bg-card shadow-modal"
+        className="relative max-h-[calc(100dvh-1rem-max(1rem,env(safe-area-inset-top)))] w-[560px] max-w-full overflow-y-auto overscroll-contain rounded-[14px] bg-card shadow-modal"
       >
         {campaign ? (
           <Poster campaign={campaign} size="dialog">{close}</Poster>

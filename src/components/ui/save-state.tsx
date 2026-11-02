@@ -5,6 +5,7 @@ import { useMessages } from '@/i18n/language-provider';
 import { uiV1Messages } from '@/i18n/messages/ui-v1';
 import { cn } from '@/lib/cn';
 import { Dialog } from './dialog';
+import { FLOATING_BAR_BUTTON, FLOATING_BAR_ROOM, FloatingBar } from './floating-bar';
 
 /** Where an explicit save stands: nothing to save, something to save, or on its way. */
 export type SaveState = 'saved' | 'unsaved' | 'saving';
@@ -142,6 +143,9 @@ export function SaveStateLabel({ state, className }: { state: SaveState; classNa
  *
  * Below 1024px only; a desktop puts the same two at the foot of its sticky column (UI-022), the page's. A page that
  * draws it leaves room under its last line (`FLOATING_SAVE_ROOM`), so nothing ends hidden behind it.
+ *
+ * **It is the floating bar's model** (staging review, 2026-10-31): its frame is `FloatingBar`'s, which every other bar
+ * floating over a phone's page now wears. `data-floating-save` still names this one.
  */
 export function FloatingSavePill({
   state,
@@ -163,28 +167,23 @@ export function FloatingSavePill({
   className?: string;
 }) {
   return (
-    <div
-      data-floating-save=""
-      className={cn(
-        // Above the tab bar where the shell draws one (its room counts the home indicator); above the home indicator where not.
-        'fixed inset-x-3 bottom-[max(calc(var(--tab-bar-space)+0.75rem),calc(env(safe-area-inset-bottom)+0.75rem))] z-[9]',
-        'flex items-center gap-3 rounded-pill bg-card py-1.5 pl-4 pr-1.5 shadow-modal lg:hidden',
-        className,
-      )}
-    >
+    <FloatingBar data-floating-save="" className={className}>
       <SaveStateLabel state={state} className="min-w-0 flex-1" />
       <button
         type={form ? 'submit' : 'button'}
         form={form}
         onClick={onSave}
         disabled={disabled || state === 'saving'}
-        className="min-h-11 shrink-0 rounded-pill bg-amber px-5 text-md font-bold text-navy hover:bg-amber-dark disabled:cursor-not-allowed disabled:opacity-40"
+        className={FLOATING_BAR_BUTTON}
       >
         {label}
       </button>
-    </div>
+    </FloatingBar>
   );
 }
 
-/** The room a page leaves under its last line while a `FloatingSavePill` floats over its foot (below 1024px). */
-export const FLOATING_SAVE_ROOM = 'max-lg:pb-24';
+/**
+ * The room a page leaves under its last line while a `FloatingSavePill` floats over its foot (below 1024px): the
+ * floating bar's one room class (`FLOATING_BAR_ROOM`), by the name its first pages know it by.
+ */
+export const FLOATING_SAVE_ROOM = FLOATING_BAR_ROOM;

@@ -148,6 +148,44 @@ describe('UI-004 the field shell below 1024px: no app bar, the title row, the fl
     expect(wears(main, 1280)).toContain('lg:pb-14'.replace('lg:', ''));
   });
 
+  /*
+   * **Never under the clock** (the product owner's staging review, 2026-10-31: *the top of every screen looks blurred* on
+   * an iPhone, partly as a Home Screen app). `viewport-fit=cover` (UI-103) draws the page under the status bar, where iOS
+   * frosts what passes beneath; the field shell has no bar up there below 1024px. So the page starts below the top inset,
+   * and a strip as tall as the inset, in the page's ground, stands over the page as it scrolls. jsdom computes no `env()`:
+   * what is pinned is what each element asks for — 0px wherever there is no inset.
+   */
+  it('starts the page below the top inset: 8px where there is none, the inset where the status bar is drawn over it', () => {
+    atWidth(375);
+    renderWithSession(screenWith(), { me: AB });
+    const main = screen.getByRole('main');
+    expect(wears(main, 375).split(' ')).toContain('pt-[max(0.5rem,env(safe-area-inset-top))]');
+    expect(wears(main, 768).split(' ')).toContain('pt-[max(0.75rem,env(safe-area-inset-top))]');
+    expect(wears(main, 1280).split(' ')).toContain('pt-[max(2rem,env(safe-area-inset-top))]');
+    expect(main.className.split(/\s+/)).not.toContain('pt-2');
+  });
+
+  it.each([375, 768])('draws the status bar’s band at %ipx: fixed at the top, the inset tall, the page’s ground, hidden from readers', (px) => {
+    atWidth(px);
+    renderWithSession(screenWith(), { me: AB });
+    const band = document.querySelector('[data-safe-top]') as HTMLElement;
+    expect(band).toHaveAttribute('aria-hidden', 'true');
+    expect(band).toHaveClass('fixed', 'inset-x-0', 'top-0', 'h-[env(safe-area-inset-top)]', 'bg-base', 'pointer-events-none');
+    expect(wears(band, px).split(' ')).not.toContain('hidden');
+    // Over the page as it scrolls (the calendar's pinned head is z-20), under the tab bar (z-40), every sheet and dialog
+    // (z-50) and the toast (z-[60]); the floating bars (z-[9]) are at the foot and never meet it.
+    expect(band).toHaveClass('z-30');
+    expect(tabBar()).toHaveClass('z-40');
+    expect(band.textContent).toBe('');
+  });
+
+  it('has no band from 1024px, where the sidebar stands at the top', () => {
+    atWidth(1280);
+    renderWithSession(screenWith(), { me: AB });
+    const band = document.querySelector('[data-safe-top]') as HTMLElement;
+    expect(wears(band, 1280).split(' ')).toContain('hidden');
+  });
+
   it('UI-008 marks the field shell a V1 surface at every width; the office console is not', () => {
     atWidth(1280);
     const field = renderWithSession(screenWith(), { me: AB });

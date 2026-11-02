@@ -156,6 +156,16 @@ describe('a coachee’s Personal Summary tab (P11-T7 AC-4)', () => {
     expect(document.body.textContent).not.toMatch(/⚠️|✅/u);
   });
 
+  it('staging review 2026-10-31: her Leads directly after the ratio card, then the campaigns, then the next steps', async () => {
+    show(summary());
+    const ratiosCard = await card(/^Ratio/);
+    const leads = await card('Leads that need her');
+    expect(ratiosCard.nextElementSibling).toBe(leads);
+    const campaigns = await card("Campaigns she's chasing");
+    expect(leads.nextElementSibling).toBe(campaigns);
+    expect(campaigns.compareDocumentPosition(await card('What to do next')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it('P11-T7 AC-4 says him and his for a man, and them and their for somebody who chose neither', async () => {
     show(summary(), person('he', 'Fajar Hidayat'));
     expect(await card('His sales activity targets')).toBeInTheDocument();
@@ -189,6 +199,14 @@ describe('a coachee’s Personal Summary tab (P11-T7 AC-4)', () => {
     }));
     const goal = await card('Goal vs. actual (APE)');
     expect(within(goal).getByRole('button', { name: 'Her own figure, entered in Goal Settings' })).toBeInTheDocument();
+  });
+
+  it('S2 names the leader who typed her figure, rather than calling it hers', async () => {
+    show(summary({
+      monthly: { ...figures(), source: { provenance: 'self_reported', month: null, typedBy: { membershipId: 'mem-agus', name: 'Agus Salim' } } },
+    }));
+    const goal = await card('Goal vs. actual (APE)');
+    expect(within(goal).getByRole('button', { name: 'Entered by Agus Salim, not uploaded' })).toBeInTheDocument();
   });
 
   it('P11-T7 AC-4 keeps the insight rules under the prototype’s AI-powered badge, in her words, linking nowhere', async () => {

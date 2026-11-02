@@ -2,7 +2,8 @@ import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import TenantLayout from '@/app/(tenant)/layout';
-import { atWidth, digestAt, makeMe, renderInLayout, stubFetch, wears } from '@test/harness';
+import { createHash } from 'node:crypto';
+import { atWidth, drawnAt, makeMe, renderInLayout, stubFetch, wears } from '@test/harness';
 import OrgTreePage from './page';
 
 vi.mock('next/navigation', () => ({
@@ -191,12 +192,21 @@ describe('P18.97-T7 AC-4 the office’s tree on a phone (UI-036)', () => {
     1280: '27a100e172092353f88f741b5359f30575e17de6c4deb374e814977db9528d2f',
   };
 
+  /*
+   * *2026-11-01 (the product owner's staging review: the top of every screen blurred on an iPhone):* the console's
+   * `main` beside the sidebar starts at the top inset where that is more than its 32px —
+   * `md:pt-[max(2rem,env(safe-area-inset-top))]` in place of `md:pt-8`, the same 32px wherever there is no inset. The
+   * digest reads that one class back as the one it replaces, so it still proves the canvas is drawn as it was, to the byte.
+   */
+  const asBefore = (main: HTMLElement, px: number) => createHash('sha256')
+    .update(drawnAt(main, px).replace('pt-[max(2rem,env(safe-area-inset-top))]', 'pt-8')).digest('hex');
+
   it.each([768, 1280] as const)('P18.97-T7 AC-4 at %ipx draws the canvas it drew, to the byte', async (px) => {
     atWidth(px);
     open(FOREST);
     await screen.findByText('Layer 1');
     expect(screen.getByTestId('tree-canvas')).toBeInTheDocument();
-    expect(digestAt(screen.getByRole('main'), px)).toBe(BEFORE_T7[px]);
+    expect(asBefore(screen.getByRole('main'), px)).toBe(BEFORE_T7[px]);
   });
   const line = (id: string) => document.querySelector<HTMLElement>(`[data-node="${id}"]`);
   const row = (id: string) => line(id)!.firstElementChild as HTMLElement;

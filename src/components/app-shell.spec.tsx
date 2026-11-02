@@ -719,10 +719,12 @@ describe('below 768px, ☰ opens the sidebar as a drawer (P18.95-T2)', () => {
   it('P18.95-T2 AC-1 draws the sidebar at 1280px exactly as it was drawn before ☰', () => {
     renderPhoneShell(1280);
     const aside = document.querySelector('aside')!;
-    // The bar's classes, unchanged, and every element after ☰ the sidebar's own.
+    // The bar's classes, unchanged but for the top inset added to its padding (staging review, 2026-10-31), and every
+    // element after ☰ the sidebar's own.
     expect(aside.className).toBe(
-      'sticky top-0 z-10 flex w-full shrink-0 flex-row items-center bg-navy px-4 py-3.5 text-sidebar-text print:hidden '
-      + 'md:h-screen md:flex-col md:items-stretch md:py-5 md:w-sidebar',
+      'sticky top-0 z-10 flex w-full shrink-0 flex-row items-center bg-navy px-4 pb-3.5 pt-[calc(0.875rem+env(safe-area-inset-top))] '
+      + 'text-sidebar-text print:hidden md:h-screen md:flex-col md:items-stretch md:pb-5 '
+      + 'md:pt-[calc(1.25rem+env(safe-area-inset-top))] md:w-sidebar',
     );
     const [first, brand, nav, foot] = Array.from(aside.children);
     expect(first).toBe(burger());
@@ -733,6 +735,27 @@ describe('below 768px, ☰ opens the sidebar as a drawer (P18.95-T2)', () => {
     expect(foot.className).toContain('md:border-t');
     expect(aside.children).toHaveLength(4);
     expect(drawer()).toBeNull();
+  });
+
+  /*
+   * **Never under the clock** (the product owner's staging review, 2026-10-31: the top of every screen looked blurred on
+   * an iPhone). `viewport-fit=cover` (UI-103) draws the page under the status bar, so the office's and the platform's
+   * phone bar, the drawer and — beside the sidebar — the page add the top inset to their own padding. jsdom computes no
+   * `env()`; what is pinned is what each asks for, and it is 0px wherever there is no inset.
+   */
+  it('the phone bar, the drawer and the page beside the sidebar start below the top inset', async () => {
+    renderPhoneShell(375);
+    const aside = document.querySelector('aside')!;
+    expect(wears(aside, 375).split(' ')).toContain('pt-[calc(0.875rem+env(safe-area-inset-top))]');
+    expect(wears(aside, 1280).split(' ')).toContain('pt-[calc(1.25rem+env(safe-area-inset-top))]');
+    expect(aside.className).not.toMatch(/(^|\s)py-/);
+    const main = screen.getByRole('main');
+    expect(wears(main, 375).split(' ')).toContain('py-6');
+    expect(wears(main, 1280).split(' ')).toContain('pt-[max(2rem,env(safe-area-inset-top))]');
+    await userEvent.click(burger());
+    expect(drawer()).toHaveClass('pt-[calc(0.875rem+env(safe-area-inset-top))]');
+    // The field shell's band over the clock is the field's alone: the office's bar is navy up there already.
+    expect(document.querySelector('[data-safe-top]')).toBeNull();
   });
 
   it('P18.95-T2 AC-1 closes the drawer when the width crosses 768px, and the sidebar has the nav again', async () => {
@@ -1043,7 +1066,19 @@ describe('below 768px, the avatar holds the account and the notices (P18.95-T12)
     open: '1dafc10cde45fd6282eaabc68f287281fa646c458048dd1335192f285b7cc255',
   };
   const DIGESTS = { 768: T6_TABLET, 1280: BEFORE_T12 } as const;
-  const digest = (html: string) => createHash('sha256').update(html.replace(/_r_[0-9a-z]+_/g, '_id_')).digest('hex');
+  /*
+   * *2026-10-31 (the product owner's staging review: the top of every screen blurred on an iPhone):* the bar's top padding
+   * gained the top inset — `pt-[calc(…+env(safe-area-inset-top))]` in place of half of `py-3.5` and `md:py-5`, which is
+   * the same padding wherever there is no inset. The digest reads those two classes back as the ones they replace, so it
+   * still proves that nothing else of the tablet's or the desktop's bar moved, to the byte.
+   */
+  const INSET_PADDING: readonly (readonly [string, string])[] = [
+    ['pb-3.5 pt-[calc(0.875rem+env(safe-area-inset-top))]', 'py-3.5'],
+    ['md:pb-5 md:pt-[calc(1.25rem+env(safe-area-inset-top))]', 'md:py-5'],
+  ];
+  const digest = (html: string) => createHash('sha256').update(
+    INSET_PADDING.reduce((out, [now, was]) => out.replace(now, was), html).replace(/_r_[0-9a-z]+_/g, '_id_'),
+  ).digest('hex');
 
   it.each([768, 1280] as const)('P18.95-T12 AC-5, P18.97-T6 AC-5 draws the bar at %ipx to its recorded digest: the bell says how many, the chip who', async (px) => {
     window.localStorage.clear();

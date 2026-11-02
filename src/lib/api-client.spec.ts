@@ -4,6 +4,7 @@ import { LANGUAGE_UNCHOSEN } from '@/i18n/language';
 import { ApiConfigError } from './api';
 import {
   api,
+  apiBlob,
   ApiRequestError,
   getAccessToken,
   getRequestLanguage,
@@ -363,6 +364,70 @@ describe('api client', () => {
       expect(isOfficeUnavailable({ code: 'TENANT_ARCHIVED' })).toBe(true);
       expect(isOfficeUnavailable(null)).toBe(false);
     });
+  });
+});
+
+/**
+ * **A file the API answers as itself** (ADR-0184): a template asked for as `.xlsx` or `.csv`, fetched with the token —
+ * never a link, which would arrive without it — with the same retry and the same refusal as `api`.
+ */
+describe('apiBlob (ADR-0184)', () => {
+  beforeEach(() => {
+    setAccessToken(null);
+    setImpersonating(false);
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('answers the bytes as a Blob, the bearer token sent with the request', async () => {
+    setAccessToken('tok');
+    const file = new Blob(['PK']);
+    const { calls } = stubFetch({ '/admin/tenants/roster-template': { body: file } });
+    await expect(apiBlob('/admin/tenants/roster-template?format=xlsx')).resolves.toBe(file);
+    expect((calls[0].init.headers as Record<string, string>).Authorization).toBe('Bearer tok');
+  });
+
+  it('refreshes once and replays on a 401, as api does', async () => {
+    setAccessToken('stale');
+    const file = new Blob(['PK']);
+    const { calls } = stubFetch({
+      '/kpm/data-upload/template': [{ status: 401, body: {} }, { body: file }],
+      '/auth/refresh': { body: { accessToken: 'fresh' } },
+    });
+    await expect(apiBlob('/kpm/data-upload/template?month=2026-09&format=xlsx')).resolves.toBe(file);
+    expect(calls.map((c) => c.url.split('/api/v1')[1].split('?')[0])).toEqual([
+      '/kpm/data-upload/template', '/auth/refresh', '/kpm/data-upload/template',
+    ]);
+  });
+
+  it('refuses with the server’s envelope, which is JSON whatever was asked for', async () => {
+    stubFetch({
+      '/kpm/data-upload/template': {
+        status: 400,
+        body: { error: { code: 'VALIDATION_FAILED', message: 'Sep-2026 is not a month.', requestId: 'r-9' } },
+      },
+    });
+    await expect(apiBlob('/kpm/data-upload/template?month=Sep-2026&format=xlsx')).rejects.toMatchObject({
+      status: 400, error: { code: 'VALIDATION_FAILED', requestId: 'r-9' },
+    });
+  });
+
+  it('tells the session when the office cannot be used, as api does', async () => {
+    const heard = vi.fn();
+    const off = onOfficeUnavailable(heard);
+    stubFetch({
+      '/kpm/data-upload/template': {
+        status: 403,
+        body: { error: { code: 'TENANT_SUSPENDED', message: 'Suspended.', requestId: 'r-10' } },
+      },
+    });
+    await expect(apiBlob('/kpm/data-upload/template?month=2026-09&format=xlsx')).rejects.toBeInstanceOf(ApiRequestError);
+    expect(heard).toHaveBeenCalledWith(expect.objectContaining({ code: 'TENANT_SUSPENDED' }));
+    off();
+  });
+
+  it('falls back to a generic error when a refusal is not the envelope', async () => {
+    stubFetch({ '/widgets': { status: 502, body: null } });
+    await expect(apiBlob('/widgets')).rejects.toMatchObject({ error: { code: 'INTERNAL_ERROR', requestId: 'unknown' } });
   });
 });
 

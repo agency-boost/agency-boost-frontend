@@ -14,8 +14,9 @@ vi.mock('next/navigation', () => ({
 
 /**
  * **P18.98-T6, the *Org role ladder* in ID mode** (AC-1 as T4's AC-1 to AC-3; area "admin-template"): the ladder and
- * *Add a rung* in the approved glossary's Indonesian (`admin-template-org-levels.tsx`), the title, the two tiers and
- * *Template library* kept English (§A), and a company's name and a rung's label and code as stored. The same page in
+ * *Add a rung* in the approved glossary's Indonesian (`admin-template-org-levels.tsx`), the title and the two tiers
+ * kept English (§A), the library *Template bawaan AgencyBoost* (ADR-0185 §1), and a company's name and a rung's label
+ * and code as stored. The same page in
  * English is `page.spec.tsx`.
  */
 const ENGLISH = englishOnly(adminTemplateOrgLevelsMessages);

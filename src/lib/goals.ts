@@ -68,9 +68,12 @@ export interface GoalInputs {
  */
 export interface GoalAchieved {
   minor: number;
+  /** `self_reported` is typed in the app, not uploaded — by the member, or by whoever coaches them (`typedBy`). */
   provenance: 'imported' | 'corrected' | 'self_reported';
   /** The month whose year-to-date figure it is; `null` for the agent's own. */
   month: string | null;
+  /** Who typed a `self_reported` figure, when it was not the member — a coach (S2). Absent otherwise. */
+  typedBy?: { membershipId: string; name: string | null };
 }
 
 /**
@@ -153,7 +156,7 @@ const inSession = (membershipId: string, sessionId: string) =>
  * is finalized. The server answers 404 when it is not the leader's open session with that coachee,
  * and `COACHING_SESSION_FINALIZED` once it is finalized. Without it, each save is its own notice.
  */
-export const saveGoal = (period: string, inputs: GoalInputs, membershipId?: string, sessionId?: string) =>
+export const saveGoal = (period: string, inputs: GoalBody, membershipId?: string, sessionId?: string) =>
   api<Goal>(
     `/goals/${period}` + (membershipId && sessionId ? inSession(membershipId, sessionId) : forWhom(membershipId)),
     { method: 'PUT', body: inputs },
@@ -178,8 +181,22 @@ export interface GoalPreview {
  * of the formula (P8-T3 AC-2). `membershipId` is a coachee's, as on a read — 404 outside the reader's reach. On
  * their plan the APE produced is what they stored, whatever was typed (ADR-0075).
  */
-export const previewGoal = (period: string, inputs: GoalInputs, membershipId?: string) =>
+export const previewGoal = (period: string, inputs: GoalBody, membershipId?: string) =>
   api<GoalPreview>(`/goals/${period}/preview` + forWhom(membershipId), { method: 'POST', body: inputs });
+
+/**
+ * **What a save or a preview sends**: the plan's inputs, with the APE produced **only when this edit changed it** (S1 of
+ * the T17–T20 permission review). Left out, the server keeps the figure it stores — so a coach saving the target never
+ * writes back, over the member's newer figure, the one their screen read; and a member's own save keeps a figure their
+ * coach typed since. Sent, it is an edit, and the last write wins.
+ */
+export type GoalBody = Omit<GoalInputs, 'apeAchievedMinor'> & { apeAchievedMinor?: number };
+
+/** `inputs` as a body (`GoalBody`): the APE produced kept only when it differs from the plan as read, `saved`. */
+export function goalBodyOf(inputs: GoalInputs, saved: Pick<GoalInputs, 'apeAchievedMinor'> | null): GoalBody {
+  const { apeAchievedMinor, ...rest } = inputs;
+  return saved !== null && apeAchievedMinor === saved.apeAchievedMinor ? rest : inputs;
+}
 
 /**
  * The six inputs the server takes, as a goal it answered holds them. Everything else on a goal is
@@ -277,6 +294,8 @@ export function producedFrom(
     month: string | null;
     /** Who corrected it by hand, when the payload says (the Summary's, since ADR-0121). */
     correctedBy?: { name: string } | null;
+    /** Who typed it, when it was not the member (S2). */
+    typedBy?: { name: string | null };
   },
   span: 'month' | 'year',
   /** The coachee's pronoun, on a coaching tab; absent on the reader's own screen. */
@@ -287,7 +306,12 @@ export function producedFrom(
   words: Language = SOURCE_LANGUAGE,
 ): string {
   const t = messagesIn(goalWordMessages, words).produced;
-  if (source.provenance === 'self_reported') return t.own({ who: voiceOf(subject ? PRONOUN_FORMS[subject] : undefined) });
+  if (source.provenance === 'self_reported') {
+    // A figure a coach typed is never called the member's own (S2): it names who typed it.
+    return source.typedBy
+      ? t.typedBy({ name: source.typedBy.name })
+      : t.own({ who: voiceOf(subject ? PRONOUN_FORMS[subject] : undefined) });
+  }
   // **Who corrected it** (ADR-0121, F-156): since a leader's *Update production* writes corrections too,
   // *by your office* stopped being true of every one. The name when the payload carries it; *by hand*,
   // which is true whoever it was, when it does not.

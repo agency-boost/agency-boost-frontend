@@ -432,7 +432,8 @@ function RosterTable({
           <col className="w-[4%]" />
         </colgroup>
       )}
-      <thead className="[&_th]:sticky [&_th]:top-0 [&_th]:z-[1]">
+      {/* The head sticks below the top inset, never under a Home Screen app's clock (staging review, 2026-10-31). */}
+      <thead className="[&_th]:sticky [&_th]:top-[env(safe-area-inset-top)] [&_th]:z-[1]">
         <tr>
           <th scope="col" className={HEAD}>{t.columns.name}</th>
           <th scope="col" className={HEAD}>{t.columns.goal}</th>

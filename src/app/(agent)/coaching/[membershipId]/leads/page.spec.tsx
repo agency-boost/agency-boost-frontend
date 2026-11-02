@@ -78,7 +78,7 @@ const show = (language?: Language, over: Record<string, unknown> = {}, me = LEAD
 
 const rows = () => [...document.querySelectorAll('[data-coachee-lead]')].map((li) => li.getAttribute('data-coachee-lead'));
 
-describe('UI-029 — the coachee’s Leads tab, read-only (P18.99-T8)', () => {
+describe('UI-029 — the coachee’s Leads tab (P18.99-T8), writable since the staging review of 2026-10-31', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it('UI-029 lists only that agent’s open leads, read once by owner, in the card’s order; the closed in one line', async () => {
@@ -94,10 +94,68 @@ describe('UI-029 — the coachee’s Leads tab, read-only (P18.99-T8)', () => {
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
   });
 
-  it('UI-029 is read-only: no + Add lead, Isi tindakan and Isi tanggal as words, and the sheet opens to read', async () => {
+  /*
+   * The staging review of 2026-10-31 (the product owner: *ini saya lihat tim saya, tapi ga bisa tambah leads*), decided
+   * 2026-11-01: the leader **adds and edits** a team member's leads here, as in a session, and **never deletes** —
+   * replacing UI-029's read-only tab.
+   */
+  const writes = (calls: { url: string; init: RequestInit }[]) => calls
+    .filter((c) => (c.init.method ?? 'GET') !== 'GET')
+    .map((c) => `${c.init.method} ${new URL(c.url).pathname.replace('/api/v1', '')}${new URL(c.url).search} ${String(c.init.body)}`);
+
+  it('staging review 2026-10-31: the floating + adds a lead to her pipeline (POST /leads?owner=), and it joins the list', async () => {
+    const { calls } = show(undefined, {
+      'POST /leads': { status: 201, body: lead({ id: 'l-joko', name: 'Pak Joko', statusCode: null, nextActionDate: null, nextActionNote: null, version: 1 }) },
+    });
+    await screen.findByRole('button', { name: 'Desi Pratama' });
+    const add = screen.getByRole('button', { name: 'Add lead' });
+    // `/leads`' own floating +, and at every width: the tab has no table button to stand in for it on a desktop.
+    expect(add).toHaveClass('fixed', 'bottom-[calc(var(--tab-bar-space)+1rem)]', 'bg-amber');
+    expect(add.className).not.toMatch(/\blg:hidden\b/);
+    await userEvent.click(add);
+    const sheet = within(await screen.findByRole('dialog', { name: 'New lead' }));
+    await userEvent.type(sheet.getByLabelText('Name'), 'Pak Joko');
+    await userEvent.click(sheet.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(writes(calls)).toHaveLength(1));
+    expect(writes(calls)[0]).toMatch(/^POST \/leads\?owner=mem-rina \{"name":"Pak Joko",/);
+    await waitFor(() => expect(rows()).toContain('l-joko'));
+  });
+
+  it('staging review 2026-10-31: a row opens the sheet to edit, pinned to the version it read; the row is the answer', async () => {
+    const { calls } = show(undefined, {
+      'PATCH /leads/l-desi': { body: lead({ remarks: 'Two kids.', version: 4 }) },
+    });
+    await userEvent.click(await screen.findByRole('button', { name: 'Desi Pratama' }));
+    const sheet = within(await screen.findByRole('dialog', { name: 'Desi Pratama' }));
+    await userEvent.type(sheet.getByLabelText('Remarks'), 'Two kids.');
+    await userEvent.click(sheet.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(writes(calls)).toEqual(['PATCH /leads/l-desi {"remarks":"Two kids.","version":3}']));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
+  it('staging review 2026-10-31: never Delete — not in the sheet, not on a row', async () => {
+    show(undefined, {}, makeMe({ ...LEADER, permissions: [...LEADER.permissions, 'lead:delete'] }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Desi Pratama' }));
+    const sheet = within(await screen.findByRole('dialog', { name: 'Desi Pratama' }));
+    expect(sheet.getByRole('button', { name: 'Save' })).toBeInTheDocument();
+    expect(sheet.queryByRole('button', { name: /Delete/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Delete/ })).not.toBeInTheDocument();
+  });
+
+  it('staging review 2026-10-31: Isi tindakan opens the sheet on the next action, and Isi tanggal is a date to set', async () => {
     show();
     await screen.findByRole('button', { name: 'Desi Pratama' });
-    expect(screen.queryByRole('button', { name: /Add lead/ })).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Next action date for Sdri. Laras Wulandari')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Add an action' }));
+    const sheet = within(await screen.findByRole('dialog', { name: 'Ibu Shinta Maharani' }));
+    await waitFor(() => expect(sheet.getByLabelText('Next action note')).toHaveFocus());
+  });
+
+  it('a read-only support session adds nothing and edits nothing: no +, the sheet opens to read', async () => {
+    const support = makeMe({ ...LEADER, isImpersonating: true, impersonationReadOnly: true, impersonatedBy: 'u-admin' });
+    show(undefined, {}, support);
+    await screen.findByRole('button', { name: 'Desi Pratama' });
+    expect(screen.queryByRole('button', { name: 'Add lead' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Add an action' })).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/Next action date for/)).not.toBeInTheDocument();
     expect(document.body).toHaveTextContent('Add an action');
@@ -106,6 +164,15 @@ describe('UI-029 — the coachee’s Leads tab, read-only (P18.99-T8)', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Desi Pratama' }));
     const sheet = await screen.findByRole('dialog');
     expect(within(sheet).queryByRole('button', { name: /^Save$|^Simpan$/ })).not.toBeInTheDocument();
+  });
+
+  it('a reader the server granted no lead:create is offered no +, and one with no lead:update no edit', async () => {
+    show(undefined, {}, makeMe({ ...LEADER, permissions: ['coaching_session:read', 'lead:read'] }));
+    await screen.findByRole('button', { name: 'Desi Pratama' });
+    expect(screen.queryByRole('button', { name: 'Add lead' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add an action' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Desi Pratama' }));
+    expect(within(await screen.findByRole('dialog')).queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
   });
 
   it('UI-029 narrows by type with the chips, each counted, and by the search', async () => {

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { stubFetch } from '@test/harness';
-import { goalInputsOf, groupDigits, monthsLeftInWords, producedFrom, saveGoal, type Goal } from './goals';
+import { goalBodyOf, goalInputsOf, groupDigits, monthsLeftInWords, producedFrom, saveGoal, type Goal } from './goals';
 
 /**
  * The provenance marker's words (ADR-0063 §5, P10.1-T6 AC-1): where the APE produced came from, and
@@ -40,6 +40,17 @@ describe('producedFrom', () => {
 
   it('names the source alone when the payload carries no month for it', () => {
     expect(producedFrom({ provenance: 'imported', month: null }, 'month')).toBe('From your office’s upload');
+  });
+
+  /* S2 (the T17–T20 permission review): a figure a coach typed is never called the member's own. */
+  it('S2 names who typed it when it was not the member — on the member’s own page and a coachee’s tab alike', () => {
+    const typed = { provenance: 'self_reported' as const, month: null, typedBy: { name: 'Agus Salim' } };
+    expect(producedFrom(typed, 'year')).toBe('Entered by Agus Salim, not uploaded');
+    expect(producedFrom(typed, 'year', 'she')).toBe('Entered by Agus Salim, not uploaded');
+    expect(producedFrom(typed, 'year', undefined, 'id', 'id')).toBe('Diisi oleh Agus Salim, bukan dari unggahan');
+    // Somebody the office can no longer name is still not the member.
+    expect(producedFrom({ ...typed, typedBy: { name: null } }, 'year')).toBe('Entered by a leader, not uploaded');
+    expect(producedFrom({ ...typed, typedBy: { name: null } }, 'year', undefined, 'id', 'id')).toBe('Diisi oleh leader, bukan dari unggahan');
   });
 });
 
@@ -90,6 +101,16 @@ describe('saving a plan from a coaching session (P11-T8 AC-4)', () => {
       ['PUT', '/goals/2026?for=mem-rina'],
       ['PUT', '/goals/2026'],
     ]);
+  });
+
+  it('S1 a body carries the APE produced only when this edit changed it: left out, the server keeps the stored figure', () => {
+    const read = { ...inputs, apeAchievedMinor: 120_000_000_00 } as typeof inputs;
+    const { apeAchievedMinor: _left, ...rest } = read;
+    expect(goalBodyOf({ ...read, annualApeTargetMinor: 900_000_000_00 }, read))
+      .toEqual({ ...rest, annualApeTargetMinor: 900_000_000_00 });
+    expect(goalBodyOf({ ...read, apeAchievedMinor: 150_000_000_00 }, read)).toEqual({ ...read, apeAchievedMinor: 150_000_000_00 });
+    // Nothing read to compare with: sent whole.
+    expect(goalBodyOf(read, null)).toEqual(read);
   });
 
   it('P11-T8 AC-4 sends back the six inputs a goal holds, its months left only when they were typed over', () => {

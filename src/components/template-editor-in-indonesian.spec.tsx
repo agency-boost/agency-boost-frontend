@@ -70,7 +70,7 @@ describe('P18.98-T6 the Company template’s editors in Indonesian', () => {
     expect(screen.getAllByRole('button', { name: 'Tambah jenis aktivitas' })).toHaveLength(2);
     // The template's binding, not set: what its offices count instead.
     const binding = screen.getByRole('heading', { name: 'Pengaitan aktivitas' }).closest('.rounded-lg') as HTMLElement;
-    expect(binding).toHaveTextContent('Belum diatur: KPM yang dibuat dari templat ini menghitung aktivitas default platform.');
+    expect(binding).toHaveTextContent('Belum diatur: KPM yang dibuat dari template ini menghitung aktivitas default platform.');
     expect(within(binding).getByRole('button', { name: 'Ubah pengaitan' })).toBeInTheDocument();
     noEnglishLeft();
 
@@ -112,7 +112,7 @@ describe('P18.98-T6 the Company template’s editors in Indonesian', () => {
     expect(screen.getByLabelText('Deskripsi')).toHaveAccessibleDescription('Opsional. Agent membacanya di bawah kategori.');
     await userEvent.type(screen.getByLabelText('Kode'), 'SALES');
     expect(screen.getByLabelText('Kode')).toHaveAccessibleDescription(
-      expect.stringContaining('Templat ini sudah punya kategori dengan kode ini.'),
+      expect.stringContaining('Template ini sudah punya kategori dengan kode ini.'),
     );
     expect(screen.getByRole('button', { name: 'Tambah' })).toBeDisabled();
     noEnglishLeft();

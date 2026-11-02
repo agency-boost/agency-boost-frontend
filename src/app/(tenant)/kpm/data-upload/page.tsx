@@ -13,13 +13,15 @@ import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-pro
 import { dataUploadMessages } from '@/i18n/messages/data-upload';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { errorReference } from '@/lib/browser-errors';
+import { saveFile } from '@/lib/save-file';
 import { cn } from '@/lib/cn';
 import type { Language } from '@/i18n/language';
 import { formatDayLong, formatNumber, formatPercent, formatRupiah, monthInZone } from '@/lib/format';
 import { useCan } from '@/lib/session';
 import {
   AGENT_COLUMN, CADENCE_GROUP_LABEL, CADENCES, commitUpload, FIGURE_COLUMNS, figureLabel, METRIC_COLUMN_LABEL, MONEY_METRICS,
-  previewUpload, PRODUCTION_METRICS, readMonth, readTemplate, templateHref, type CorrectionResult, type ImportResult,
+  previewUpload, PRODUCTION_METRICS, readMonth, readTemplate, readTemplateWorkbook, templateHref, workbookFilename,
+  type CorrectionResult, type ImportResult,
   type MetricCell, type MonthRow, type MonthState, type MonthView, type PreviewCell, type ProductionMetric,
   type TemplateFile, type UploadPreview,
 } from '@/lib/production';
@@ -86,12 +88,15 @@ export default function DataUploadPage() {
  * which is a permission enforced on the pixels and not on the wire.
  */
 /**
- * **⬇ Download template** — the prototype's own control (`KPM_Owner.html:1301`).
+ * **⬇ Download template** — the prototype's own control (`KPM_Owner.html:1301`), **and since ADR-0184 the Excel
+ * template**, the recommended file: its guide on a sheet of its own, its Data sheet the same header and rows as the
+ * CSV. **Download CSV** beside it is the CSV as it always was.
  *
- * A real `<a download>`, because saving a file is neither an action a `<button>` performs nor a
- * navigation `ButtonLink` should intercept; it wears the secondary button's classes so the toolbar
- * reads as one row of controls. The prototype builds the file in the browser from the array the table
- * reads; ours is the server's, so the header the file carries is the one the importer will know.
+ * The workbook is a `<button>`: it is fetched with the token (`apiBlob`) and saved (`saveFile`), because a link to the
+ * API would arrive without the token, which lives in memory only. The CSV stays a real `<a download>` over a `data:`
+ * URL of the file the JSON carries, as it was, wearing the inline button's classes. The prototype builds the file in
+ * the browser from the array the table reads; ours is the server's, so the header the file carries is the one the
+ * importer will know.
  *
  * **Three states, and each looks like itself.** Waiting renders nothing, because a button that would
  * download nothing is worse than no button. Arrived renders the link. **Failed says so, beside the
@@ -108,6 +113,9 @@ function TemplateDownload({ month }: { month: string }) {
   const [template, setTemplate] = useState<TemplateFile | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [attempt, setAttempt] = useState(0);
+  /** The workbook being fetched, and why the last one could not be (ADR-0184). */
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<ApiError | null>(null);
 
   useEffect(() => {
     if (!allowed) return undefined;
@@ -138,12 +146,43 @@ function TemplateDownload({ month }: { month: string }) {
 
   if (!template) return null;
 
+  async function downloadWorkbook(file: TemplateFile) {
+    setSaving(true);
+    setSaveError(null);
+    try {
+      saveFile(await readTemplateWorkbook(month), workbookFilename(file));
+    } catch (err) {
+      setSaveError(toDisplayError(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
-    // The prototype's glyph before the word, kept out of the link's name as the Summary's ⬇ Download keeps
-    // it (ADR-0068): a screen reader says *Download template*, not *downwards black arrow* first.
-    <a href={templateHref(template)} download={template.filename} className={buttonClass('secondary', cn('gap-1', CONTROL_PHONE))}>
-      <span aria-hidden="true">⬇</span>{t.downloadTemplate}
-    </a>
+    <>
+      {/* The prototype's glyph before the word, kept out of the control's name as the Summary's ⬇ Download keeps
+          it (ADR-0068): a screen reader says *Download template*, not *downwards black arrow* first. */}
+      <Button
+        variant="secondary"
+        className={cn('gap-1', CONTROL_PHONE)}
+        onClick={() => void downloadWorkbook(template)}
+        disabled={saving}
+      >
+        <span aria-hidden="true">⬇</span>{saving ? t.preparingFile : t.downloadTemplate}
+      </Button>
+      <a href={templateHref(template)} download={template.filename} className={buttonClass('inline', cn('self-center', CONTROL_PHONE))}>
+        {t.downloadCsv}
+      </a>
+      {saveError && (
+        <p role="alert" className="flex min-h-10 w-full flex-wrap items-center gap-x-2 text-sm text-alert">
+          <span>{t.templateFailed({ message: saveError.message })}</span>
+          <Button variant="inline" onClick={() => void downloadWorkbook(template)}>{t.tryAgain}</Button>
+          {errorReference(saveError) === null
+            ? <ConsoleCode code={saveError.code} message={saveError.message} />
+            : <span className="text-2xs text-muted">{errorReference(saveError)}</span>}
+        </p>
+      )}
+    </>
   );
 }
 
@@ -612,7 +651,8 @@ function UploadButton({ busy, onFile }: { busy: boolean; onFile: (file: File) =>
     <span className="relative inline-flex">
       <input
         type="file"
-        accept=".csv,text/csv"
+        // A filled template as Excel or as CSV (ADR-0184): either is read on the server, the browser opens neither.
+        accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
         aria-label={t.upload}
         disabled={busy}
         onChange={(e) => {

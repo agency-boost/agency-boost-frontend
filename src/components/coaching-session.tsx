@@ -14,6 +14,7 @@ import { ActionRow, actionDay } from '@/components/ui/action-row';
 import { AutoGrowTextarea } from '@/components/ui/auto-grow-textarea';
 import { AutoMarker } from '@/components/ui/auto-marker';
 import { Button, ErrorBanner, TextInput } from '@/components/ui/field';
+import { FLOATING_BAR_BUTTON, FLOATING_BAR_ROOM, FloatingBar } from '@/components/ui/floating-bar';
 import { LineIcon } from '@/components/ui/line-icon';
 import { Skeleton, SkeletonBar, SkeletonText } from '@/components/ui/skeleton';
 import {
@@ -38,7 +39,7 @@ import {
 } from '@/lib/coaching';
 import { formatCalendarDayLong, formatPercent, formatRupiahCompact, formatShortDay, moneyPrefix } from '@/lib/format';
 import {
-  goalInputsOf, groupDigits, parseDigits, readGoal, saveGoal, toMajor, toMinor,
+  goalBodyOf, goalInputsOf, groupDigits, parseDigits, readGoal, saveGoal, toMajor, toMinor,
 } from '@/lib/goals';
 import { readLead, type Lead } from '@/lib/leads';
 import { useCan, useSession } from '@/lib/session';
@@ -239,7 +240,7 @@ export function SessionWorkspace({ coachee, opening }: { coachee: Coachee; openi
   const SPAN = 'md:max-lg:col-span-2';
 
   return (
-    <div data-session-workspace="" className={cn('min-w-0', bar && 'max-lg:pb-28')}>
+    <div data-session-workspace="" className={cn('min-w-0', bar && FLOATING_BAR_ROOM)}>
       {error && <ErrorBanner {...error} />}
       {!history && !error && <SessionSkeleton />}
       {history && !error && (
@@ -841,9 +842,11 @@ function GoalCard({
     setSaveError(null);
     try {
       const plan = await readGoal(summary.year, membershipId);
+      const inputs = goalInputsOf(plan);
       await saveGoal(
         summary.year,
-        { ...goalInputsOf(plan), mode: 'direct', annualApeTargetMinor: toMinor(parseDigits(typed)) },
+        // The target alone: the APE produced is left out (S1), so the coachee's own figure stands whatever this read.
+        goalBodyOf({ ...inputs, mode: 'direct', annualApeTargetMinor: toMinor(parseDigits(typed)) }, inputs),
         membershipId,
         sessionId,
       );
@@ -1276,8 +1279,9 @@ function NextActionsCard({
  */
 
 /**
- * **Finalkan, always in reach** (UI V1, UI-060, UI-062; D-01): **a bar pinned above the tab bar below 1024px** — the
- * message and the button seen together — and **the foot of the sticky right column on a desktop**.
+ * **Finalkan, always in reach** (UI V1, UI-060, UI-062; D-01): **the floating bar above the tab bar below 1024px** — the
+ * message and the button seen together, in Goal Setting's pill (`FloatingBar`; the product owner's staging review,
+ * 2026-10-31, in place of the full-width strip) — and **the foot of the sticky right column on a desktop**.
  *
  * **Open**: *Draf · 6 tindakan* and ***Finalkan sesi ini***. Whatever is unsaved is saved first, then finalize goes with
  * the version that save answered. **A refusal is the server's** — the prototype's five checks, in its order — said
@@ -1315,13 +1319,6 @@ function FinalizeBar({
   const finalized = session.status === 'finalized';
   const mine = session.coach.membershipId === me?.membership?.membershipId;
 
-  // Below 1024px, pinned above the tab bar (`--tab-bar-space`); from 1024px, a card at the sticky column's foot.
-  const FRAME = cn(
-    'fixed inset-x-0 bottom-[var(--tab-bar-space,0px)] z-[9] border-t border-hairline bg-card px-3.5 pt-2.5',
-    'pb-[calc(0.75rem_+_env(safe-area-inset-bottom))] shadow-bar',
-    'lg:static lg:z-auto lg:rounded-lg lg:border lg:border-card-edge lg:p-3.5 lg:shadow-none',
-  );
-
   async function finalize() {
     setBusy(true);
     onRefusal(null);
@@ -1349,40 +1346,53 @@ function FinalizeBar({
         ? (undated > 0 ? t.bar.count({ sentence: refusal.sentence, n: undated }) : null)
         : refusal.sentence;
     const count = session.leadActions.length + (draft.state?.actions.length ?? 0);
-    return (
-      <div data-finalize-bar="draft" className={FRAME}>
+    /*
+     * **The floating bar** (staging review, 2026-10-31): below 1024px the Goal Setting pill's form — *Draf · n tindakan*
+     * on the left, the accent's 44px *Finalkan sesi ini* on the right — and a refusal or a failure in a card of its own
+     * right above it. From 1024px, the card at the sticky column's foot it always was.
+     */
+    const note = message || error ? (
+      <>
         {message && (
-          <p role="alert" data-finalize-refusal="" className="mb-2 flex items-start gap-1.5 text-md font-medium text-pill-red-ink">
+          <p role="alert" data-finalize-refusal="" className="flex items-start gap-1.5 text-md font-medium text-pill-red-ink">
             <LineIcon name="alert" className="mt-px h-[18px] w-[18px]" />
             {message}
           </p>
         )}
-        {error && <div className="mb-2"><ErrorBanner {...error} /></div>}
-        <div className="flex items-center gap-3">
-          <span className="shrink-0 text-base text-muted">{t.bar.draft({ n: count })}</span>
-          <Button onClick={() => void finalize()} disabled={busy} className="h-[50px] min-w-0 flex-1 gap-2 rounded-pill text-lg max-lg:h-[50px]">
-            <LineIcon name="check" className="h-5 w-5" />
-            {t.finalize.button}
-          </Button>
-        </div>
-      </div>
+        {error && <ErrorBanner {...error} />}
+      </>
+    ) : null;
+    return (
+      <FloatingBar data-finalize-bar="draft" wide="card" note={note}>
+        <span className="min-w-0 flex-1 text-base text-muted lg:flex-none">{t.bar.draft({ n: count })}</span>
+        <Button
+          onClick={() => void finalize()}
+          disabled={busy}
+          className={cn(FLOATING_BAR_BUTTON, 'gap-2 lg:h-[50px] lg:min-w-0 lg:flex-1 lg:text-lg')}
+        >
+          <LineIcon name="check" className="h-5 w-5" />
+          {t.finalize.button}
+        </Button>
+      </FloatingBar>
     );
   }
 
   const closed = reopenWindowClosed(today, session.reopenableUntil);
   const until = session.reopenableUntil ? formatShortDay(session.reopenableUntil, { year: true }, figures) : '';
+  /*
+   * Below 1024px the same pill: *Difinalkan 30 Okt* in green on its left, *Ubah lagi* on its right. From 1024px, the
+   * green strip and *Ubah lagi* on one line and *Unduh sebagai PDF* under them, as the column's foot always had them.
+   */
   return (
-    <div data-finalize-bar="finalized" className={FRAME}>
-      <div className="flex items-center gap-3">
-        <p className="flex h-[50px] min-w-0 flex-1 items-center gap-2 rounded-row bg-pill-green px-3 text-md font-semibold text-pill-green-ink">
-          <LineIcon name="checkCircle" className="h-5 w-5" />
-          <span className="truncate">{t.bar.finalized({ day: session.date ? actionDay(session.date, figures) : '' })}</span>
-        </p>
-        {canReopen && session.reopenableUntil !== null && (
-          <EditAgainButton closed={closed} until={until} onClick={() => setAsking(true)} className="h-11 shrink-0 rounded-pill px-4" />
-        )}
-      </div>
-      <div className="mt-2.5 max-lg:hidden">
+    <FloatingBar data-finalize-bar="finalized" wide="card">
+      <p className="flex min-h-11 min-w-0 flex-1 items-center gap-2 text-md font-semibold text-pill-green-ink lg:h-[50px] lg:rounded-row lg:bg-pill-green lg:px-3">
+        <LineIcon name="checkCircle" className="h-5 w-5" />
+        <span className="truncate">{t.bar.finalized({ day: session.date ? actionDay(session.date, figures) : '' })}</span>
+      </p>
+      {canReopen && session.reopenableUntil !== null && (
+        <EditAgainButton closed={closed} until={until} onClick={() => setAsking(true)} className="h-11 shrink-0 rounded-pill px-4" />
+      )}
+      <div className="basis-full max-lg:hidden">
         <DownloadPdfButton sessionId={session.sessionId} showCoach={!mine} className="w-full" />
       </div>
       {reopenOpened && (
@@ -1401,6 +1411,6 @@ function FinalizeBar({
           }}
         />
       )}
-    </div>
+    </FloatingBar>
   );
 }

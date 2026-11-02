@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useMessages } from '@/i18n/language-provider';
 import { uiMessages } from '@/i18n/messages/ui';
 import { useScrollLock } from '@/lib/use-scroll-lock';
@@ -77,11 +78,22 @@ export function Dialog({
     }
   };
 
-  return (
+  return createPortal(
     // The backdrop cancels; a click inside the box must not, or dragging to select the message
     // dismisses the question you were reading.
+    // Its 20px above becomes the top inset where that is more, so the box never sits under a Home Screen app's clock
+    // (staging review, 2026-10-31); its cap is the screen less both.
+    //
+    // **Over the dialog that asked** (staging review, 2026-10-31: *"di calendar tidak bisa hapus"*): a question asked
+    // from a `Modal` — a calendar entry's *Hapus*, a lead sheet's *Hapus tugas* — was drawn where its caller sits in
+    // the page, under the modal, which `Modal` draws at the end of `<body>` at the same `z-50`: the backdrop dimmed, the
+    // question never showed, and the tap did nothing. So it is drawn at the end of `<body>` too, one step above
+    // (`z-[55]`, under the toast's `z-[60]`), and marked a modal root, so a popover that asks `inModal` treats it as
+    // its own and not as a click outside.
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-navy/35 p-5"
+      data-modal-root=""
+      data-dialog-root=""
+      className="fixed inset-0 z-[55] flex items-center justify-center bg-navy/35 p-5 pt-[max(1.25rem,env(safe-area-inset-top))]"
       onClick={onCancel}
     >
       <div
@@ -91,7 +103,7 @@ export function Dialog({
         onClick={(e) => e.stopPropagation()}
         onKeyDown={trap}
         // Never taller than the screen (P18.96-T1 AC-2): a long question scrolls inside, and the two buttons stay.
-        className="flex max-h-[calc(100dvh-2.5rem)] w-full max-w-[22.5rem] flex-col rounded-lg bg-card p-6 shadow-modal"
+        className="flex max-h-[calc(100dvh-1.25rem-max(1.25rem,env(safe-area-inset-top)))] w-full max-w-[22.5rem] flex-col rounded-lg bg-card p-6 shadow-modal"
       >
         <p className="mb-4 min-h-0 overflow-y-auto overscroll-contain text-md leading-relaxed text-navy">{message}</p>
         <div className="flex shrink-0 justify-end gap-2.5">
@@ -103,6 +115,7 @@ export function Dialog({
           </Button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

@@ -32,7 +32,7 @@ const en = {
   totalMembers: kept('Total members'),
   /** The AB badge's name in its English plural (P18.95-T9 AC-1; §B.0 rule 8). */
   abs: ({ ab }: { ab: string }) => `${ab}s`,
-  companiesLine: 'Each company has its own role ladder, product catalog, and Company template',
+  companiesLine: 'Each company has its own role ladder, product catalog, and KPM templates',
   /** `ladder` the company's rungs as typed, joined with arrows. */
   ladder: ({ ladder }: { ladder: string }) => `Role ladder: ${ladder}`,
   noLadder: 'No role ladder defined yet',
@@ -55,7 +55,7 @@ const id: MessagesOf<typeof en> = {
   kpms: kept('KPMs'),
   totalMembers: kept('Total members'),
   abs: ({ ab }) => `${ab}s`,
-  companiesLine: `Setiap perusahaan memiliki susunan jenjang, katalog produk, dan ${kept('Company template')} sendiri`,
+  companiesLine: `Setiap perusahaan memiliki susunan jenjang, katalog produk, dan Template ${kept('KPM')} sendiri`,
   ladder: ({ ladder }) => `Susunan jenjang: ${ladder}`,
   noLadder: 'Belum ada susunan jenjang',
   members: 'Anggota',

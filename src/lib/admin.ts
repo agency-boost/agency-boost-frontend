@@ -3,7 +3,7 @@
 import { messagesIn } from '@/i18n/catalogue';
 import { DEFAULT_LANGUAGE, SOURCE_LANGUAGE, type Language } from '@/i18n/language';
 import { officeSubscriptionMessages } from '@/i18n/messages/office-subscription';
-import { api } from './api-client';
+import { api, apiBlob } from './api-client';
 import { formatCalendarDay } from './format';
 
 /**
@@ -453,7 +453,7 @@ export const rosterTemplate = () =>
   api<{
     header: string;
     columns: string[];
-    /** The whole file, with worked examples commented out so they never import. */
+    /** The CSV template: the header and nothing else since ADR-0184. */
     template: string;
     /**
      * The same three example rows, as cells — what the paste box shows, joined with tabs.
@@ -474,6 +474,38 @@ export const importRoster = (kpmId: string, rows: string) =>
     method: 'POST',
     body: { rows },
   });
+
+/** The two files the roster template comes in (ADR-0184): Excel, the recommended one, and CSV. */
+export type RosterTemplateFormat = 'xlsx' | 'csv';
+
+/** What each is saved as. */
+export const ROSTER_TEMPLATE_FILENAME: Record<RosterTemplateFormat, string> = {
+  xlsx: 'roster-template.xlsx',
+  csv: 'roster-template.csv',
+};
+
+/**
+ * **The template as a file** (ADR-0184), fetched with the token and saved by the screen (`saveFile`). `kpmId` names the
+ * office whose company ladder fills the workbook's *role* dropdown.
+ */
+export const downloadRosterTemplate = (format: RosterTemplateFormat, kpmId: string) =>
+  apiBlob(`/admin/tenants/roster-template?format=${format}&kpmId=${encodeURIComponent(kpmId)}`);
+
+/**
+ * **A roster file — an Excel workbook or a CSV — sent as it is** (ADR-0184): bytes in a form, read on the server by
+ * the same parser as a paste. The browser opens nothing, so no spreadsheet code is in the bundle.
+ */
+const rosterForm = (file: File) => {
+  const form = new FormData();
+  form.append('file', file);
+  return form;
+};
+
+export const previewRosterFile = (kpmId: string, file: File) =>
+  api<RosterPreview>(`/admin/tenants/${kpmId}/roster/file/preview`, { method: 'POST', body: rosterForm(file) });
+
+export const importRosterFile = (kpmId: string, file: File) =>
+  api<{ created: ImportedPerson[] }>(`/admin/tenants/${kpmId}/roster/file`, { method: 'POST', body: rosterForm(file) });
 
 export type TemplateKind =
   | 'activity_taxonomy'
@@ -573,6 +605,15 @@ export interface TemplateOrigin {
   companyId?: string | null;
 }
 
+/**
+ * **Where one kind of a template stands** (ADR-0185 §3): its newest published version, `null` where none is, and
+ * whether a draft waits — what the card's *x/6 bagian terbit* and the checklist's *Terbit vN · Draf · Kosong* read.
+ */
+export interface TemplateSectionState {
+  publishedVersion: number | null;
+  hasDraft: boolean;
+}
+
 /** One of a company's named templates (ADR-0115 §3). */
 export interface NamedTemplate {
   id: string;
@@ -585,6 +626,8 @@ export interface NamedTemplate {
   origin: TemplateOrigin;
   /** Each kind's newest published version; `null` where none is, which its offices get empty. */
   publishedVersions: Record<OfficeTemplateKind, number | null>;
+  /** Each kind: its newest published version and whether a draft waits (ADR-0185 §3). */
+  sections: Record<OfficeTemplateKind, TemplateSectionState>;
   /** The live offices it answers for. */
   officeCount: number;
   createdAt: string;
@@ -595,9 +638,39 @@ export interface NamedTemplate {
 export const listTemplates = (companyId: string) =>
   api<NamedTemplate[]>(`/admin/companies/${companyId}/templates`);
 
+/** What *Terbitkan semua* did with one kind (ADR-0185 §3). */
+export type PublishAllOutcome =
+  | { kind: OfficeTemplateKind; outcome: 'published'; version: number }
+  | { kind: OfficeTemplateKind; outcome: 'skipped'; reason: 'no_changes' }
+  /** Refused as its own publish would refuse it, in the reader's language. Still a draft. */
+  | { kind: OfficeTemplateKind; outcome: 'refused'; error: { code: string; message: string } };
+
 /**
- * *New template*: empty, each kind a published version 1 of the AgencyBoost defaults, or **a copy** of one
- * of the company's templates — each kind's newest published version as the copy's version 1 (P13.2-T7).
+ * **Terbitkan semua** (ADR-0185 §3): every kind of the template holding a draft, published in the API's order —
+ * a refusal stops only its own kind. Reaches no office that already exists.
+ */
+export const publishAllTemplate = (companyId: string, templateId: string) =>
+  api<{ template: NamedTemplate; results: PublishAllOutcome[] }>(
+    `/admin/companies/${companyId}/templates/${templateId}/publish`, { method: 'POST' },
+  );
+
+/** One office a template answers for, and the kinds it is behind on and has no record of (ADR-0185 §4). */
+export interface TemplateOffice {
+  id: string;
+  code: string;
+  branchName: string;
+  behind: OfficeTemplateKind[];
+  unrecorded: OfficeTemplateKind[];
+}
+
+/** The offices a template answers for, by code, each with what it is behind on — information only (ADR-0185 §4). */
+export const listTemplateOffices = (companyId: string, templateId: string) =>
+  api<TemplateOffice[]>(`/admin/companies/${companyId}/templates/${templateId}/offices`);
+
+/**
+ * *New template*: empty, or **a copy** of one of the company's templates — each kind's newest published version as the
+ * copy's version 1 (P13.2-T7). The API still admits `from: 'defaults'`; no screen sends it since ADR-0185 §5 — the
+ * built-in templates hold the defaults, copied through *Salin dari…* (`importTemplate`).
  */
 export const createTemplate = (
   companyId: string,

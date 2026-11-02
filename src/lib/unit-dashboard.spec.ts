@@ -182,6 +182,18 @@ describe('the words a row is drawn in', () => {
     expect(provenanceWords(null, 'month', false)).toBeNull();
   });
 
+  it('S2 a figure a coach typed is never called the member’s own: it names who typed it', () => {
+    const typed = {
+      provenance: 'self_reported' as const, month: null, correctedBy: null, correctedAt: null,
+      typedBy: { membershipId: 'mem-agus', name: 'Agus Salim' },
+    };
+    expect(provenanceWords(typed, 'year', false)).toBe('Entered by Agus Salim, not uploaded');
+    expect(provenanceWords(typed, 'year', true)).toBe('Entered by Agus Salim, not uploaded');
+    expect(provenanceWords(typed, 'year', false, 'id')).toBe('Diisi oleh Agus Salim, bukan dari unggahan');
+    expect(provenanceWords({ ...typed, typedBy: { membershipId: 'mem-x', name: null } }, 'year', false))
+      .toBe('Entered by a leader, not uploaded');
+  });
+
   it('P15-T2 AC-4 names who a total leaves out, by name where the rows say, else by count', () => {
     expect(missingWords(0, [])).toBeNull();
     expect(missingWords(1, ['Yanti Puspita'])).toBe('Not uploaded yet for Yanti Puspita, so not counted in this total.');

@@ -21,7 +21,7 @@ describe('template names (P13.2 exit review)', () => {
 describe('savedTemplateSentence (P13.2 exit review, finding 2)', () => {
   const template = {
     id: 't', companyId: 'co-1', name: 'BSD City settings', isDefault: false, status: 'active' as const,
-    archivedAt: null, origin: { kind: 'office' as const }, officeCount: 0, publishedVersions: {} as never,
+    archivedAt: null, origin: { kind: 'office' as const }, officeCount: 0, publishedVersions: {} as never, sections: {} as never,
     createdAt: '', updatedAt: '', dropped: [],
   };
 
@@ -51,12 +51,12 @@ describe('savedTemplateSentence (P13.2 exit review, finding 2)', () => {
 describe('P18.98-T6 savedTemplateSentence in Indonesian', () => {
   const template = {
     id: 't', companyId: 'co-1', name: 'BSD City settings', isDefault: false, status: 'active' as const,
-    archivedAt: null, origin: { kind: 'office' as const }, officeCount: 0, publishedVersions: {} as never,
+    archivedAt: null, origin: { kind: 'office' as const }, officeCount: 0, publishedVersions: {} as never, sections: {} as never,
     createdAt: '', updatedAt: '', dropped: [],
   };
 
   it('says what was made, the names as stored', () => {
-    expect(savedTemplateSentence(template, 'Prudential', 'id')).toBe('Tersimpan sebagai BSD City settings, templat milik Prudential.');
+    expect(savedTemplateSentence(template, 'Prudential', 'id')).toBe('Tersimpan sebagai BSD City settings, template milik Prudential.');
     expect(savedTemplateSentence(template, 'Prudential', 'en')).toBe(savedTemplateSentence(template, 'Prudential'));
   });
 
@@ -64,11 +64,11 @@ describe('P18.98-T6 savedTemplateSentence in Indonesian', () => {
     const one = [{ kind: 'ratio_set' as const, code: 'R1', reason: 'Ratio R1 tidak disertakan.' }];
     const two = [...one, { kind: 'activation_checklist' as const, code: 'A1', reason: 'Item A1 menjadi item manual.' }];
     expect(savedTemplateSentence({ ...template, dropped: one }, 'Prudential', 'id')).toBe(
-      'Tersimpan sebagai BSD City settings, templat milik Prudential. Tidak disertakan atau diubah, karena menyebut '
+      'Tersimpan sebagai BSD City settings, template milik Prudential. Tidak disertakan atau diubah, karena menyebut '
         + 'sesuatu yang diarsipkan: Ratio R1 tidak disertakan.',
     );
     expect(savedTemplateSentence({ ...template, dropped: two }, 'Prudential', 'id')).toBe(
-      'Tersimpan sebagai BSD City settings, templat milik Prudential. Tidak disertakan atau diubah, karena menyebut '
+      'Tersimpan sebagai BSD City settings, template milik Prudential. Tidak disertakan atau diubah, karena menyebut '
         + 'sesuatu yang diarsipkan: Ratio R1 tidak disertakan. Item A1 menjadi item manual.',
     );
   });

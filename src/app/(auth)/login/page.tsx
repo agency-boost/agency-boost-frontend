@@ -43,7 +43,8 @@ export default function LoginPage() {
         // open it; otherwise their own landing — a Super Admin to the console, a tenant admin to their
         // office, everyone else to their field landing. Whoever signed out before them on this device
         // left their page in `next`, and it was honoured for anybody (the product owner's report,
-        // 2026-10-11).
+        // 2026-10-11). After an expired session (`reason=expired`) `next` is not read at all: every
+        // sign-in again starts on the landing (staging review, 2026-10-31).
         router.push(destinationAfterSignIn(window.location.search, signedIn));
       } catch (err) {
         setError(toDisplayError(err));

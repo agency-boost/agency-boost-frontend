@@ -14,9 +14,9 @@ vi.mock('next/navigation', () => ({
 
 /**
  * **P18.98-T6, *Manage Companies* in ID mode** (AC-1 as T4's AC-1 to AC-3; area "admin-template"): the list and *Add a
- * company* in the approved glossary's Indonesian (`admin-template-companies.ts`), the title, *Company template* and
- * *Template library* kept English (§A), and a company's name, slug, currency and time zone as stored. The same page in
- * English is `page.spec.tsx`.
+ * company* in the approved glossary's Indonesian (`admin-template-companies.ts`), the title kept English (§A), the
+ * library *Template bawaan AgencyBoost* and a company's templates *Template KPM* (ADR-0185 §1), and a company's name,
+ * slug, currency and time zone as stored. The same page in English is `page.spec.tsx`.
  */
 const ENGLISH = englishOnly(adminTemplateCompaniesMessages);
 const noEnglishLeft = () => expect(englishShown(document.body, ENGLISH)).toEqual([]);
@@ -52,19 +52,19 @@ describe('P18.98-T6 Manage Companies in Indonesian', () => {
     expect(ENGLISH).toEqual(expect.arrayContaining(['Add a company', 'Suspend', 'Started blank']));
   });
 
-  it('AC-1, AC-2, AC-4 the list: its words in Indonesian, the title and the template kept, every company as stored', async () => {
+  it('AC-1, AC-2, AC-4, ADR-0185 the list: its words in Indonesian, the title kept, the library a card, every company as stored', async () => {
     mount([PRUDENTIAL, BLANK, LIBRARY]);
     const table = await screen.findByRole('table', { name: 'Perusahaan' });
 
     expect(screen.getByRole('heading', { level: 1, name: 'Manage Companies' })).toBeInTheDocument();
-    expect(screen.getByText(/^Setiap perusahaan memiliki susunan jenjang, katalog produk, dan Company template sendiri\./))
+    expect(screen.getByText('Setiap perusahaan memiliki susunan jenjang, produk, dan Template KPM sendiri.'))
       .toBeInTheDocument();
     expect(within(table).getAllByRole('columnheader').map((h) => h.textContent))
-      .toEqual(['Nama', 'Slug', 'Mata uang', 'Zona waktu', 'Status', 'Company template', 'Aksi']);
+      .toEqual(['Nama', 'Slug', 'Mata uang', 'Zona waktu', 'Status', 'Aksi']);
     const prudential = within(table).getByRole('row', { name: /Prudential/ });
     expect(within(prudential).getByText('prudential')).toBeInTheDocument();
     expect(within(prudential).getByText('Aktif')).toBeInTheDocument();
-    expect(within(prudential).getByRole('link', { name: 'Company template' })).toBeInTheDocument();
+    expect(within(prudential).getByRole('link', { name: 'Prudential' })).toHaveAttribute('href', '/admin/companies/co-1');
     expect(within(prudential).getByRole('button', { name: 'Ubah' })).toBeInTheDocument();
     expect(within(prudential).getByRole('button', { name: 'Tangguhkan' })).toHaveAttribute(
       'title', 'Tidak ada orang baru dan KPM baru yang bergabung ke perusahaan ini. KPM yang sudah ada tetap berjalan.',
@@ -73,8 +73,9 @@ describe('P18.98-T6 Manage Companies in Indonesian', () => {
     expect(within(blank).getByText('Ditangguhkan')).toBeInTheDocument();
     expect(within(blank).getByText('Dimulai kosong')).toBeInTheDocument();
     expect(within(blank).getByRole('button', { name: 'Aktifkan kembali' })).toBeInTheDocument();
-    expect(within(within(table).getByRole('row', { name: /^Template template / })).getByText('Template library'))
-      .toBeInTheDocument();
+    const library = screen.getByRole('link', { name: /Template bawaan AgencyBoost/ });
+    expect(library).toHaveTextContent('Disalin saat perusahaan atau KPM baru dibuat.');
+    expect(within(table).queryByRole('row', { name: /^Template template / })).toBeNull();
     noEnglishLeft();
   });
 
@@ -97,12 +98,12 @@ describe('P18.98-T6 Manage Companies in Indonesian', () => {
     await screen.findByRole('table', { name: 'Perusahaan' });
     expect(screen.getByRole('heading', { name: 'Tambah perusahaan' })).toBeInTheDocument();
     expect(screen.getByLabelText('Slug', { selector: '#slug' }))
-      .toHaveAccessibleDescription('Diisi dari nama, dan boleh Anda ubah. Unik, dan tidak diganti nama nanti.');
+      .toHaveAccessibleDescription('Diisi dari nama. Unik.');
     const start = screen.getByLabelText('Mulai dari');
-    expect(within(start).getAllByRole('option').map((o) => o.textContent)).toEqual(['Template · Templat default', 'Kosong']);
-    expect(start).toHaveAccessibleDescription(expect.stringMatching(/^Salinan Template library: susunan jenjang, produk/));
+    expect(within(start).getAllByRole('option').map((o) => o.textContent)).toEqual(['Template bawaan AgencyBoost', 'Kosong']);
+    expect(start).toHaveAccessibleDescription('Salinannya, dengan produk, aturan perusahaan asuransi, dan playbook, siap diubah.');
     await userEvent.selectOptions(start, 'empty');
-    expect(start).toHaveAccessibleDescription(expect.stringMatching(/^Semuanya dimulai kosong\./));
+    expect(start).toHaveAccessibleDescription('Semuanya dimulai kosong, kecuali susunan jenjang.');
     expect(screen.getByText('Yang diwarisi KPM')).toBeInTheDocument();
     expect(screen.getByText('IDR · Asia/Jakarta · id-ID')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Tambah perusahaan' })).toBeDisabled();
@@ -113,7 +114,7 @@ describe('P18.98-T6 Manage Companies in Indonesian', () => {
     mount([]);
     expect(await screen.findByText('Belum ada perusahaan. Tambahkan satu untuk mulai menyiapkan KPM.')).toBeInTheDocument();
     expect(within(screen.getByLabelText('Mulai dari')).getAllByRole('option').map((o) => o.textContent))
-      .toEqual(['Pengaturan default AgencyBoost', 'Kosong']);
+      .toEqual(['Template bawaan AgencyBoost', 'Kosong']);
     noEnglishLeft();
   });
 });

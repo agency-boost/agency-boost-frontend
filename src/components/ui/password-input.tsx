@@ -13,9 +13,9 @@ import { TextInput } from './field';
  * one screen and missing on the next — which is what six separate `type="password"`
  * inputs had already produced.
  *
- * **Why offer it at all.** The rule we ask people to follow is *"at least 10 characters,
- * length beats symbols"*, and a long passphrase is exactly the thing that is easy to
- * mistype and impossible to check. Masking defends against somebody reading over your
+ * **Why offer it at all.** The rule we ask people to follow is length and nothing else
+ * (`PASSWORD_MIN_LENGTH`, `lib/password.ts`), and a long passphrase is exactly the thing
+ * that is easy to mistype and impossible to check. Masking defends against somebody reading over your
  * shoulder; it does nothing about the far commoner failure, which is typing a passphrase
  * wrong twice and being told only that the two do not match. The person decides which
  * risk is in the room — so it starts masked and they open it.

@@ -28,7 +28,8 @@ const COMPANIES = [
 /** A company's templates, as `GET /admin/companies/:id/templates` lists them (ADR-0115 §3). */
 const template = (id: string, name: string, over: Record<string, unknown> = {}) => ({
   id, companyId: 'co-1', name, isDefault: false, status: 'active', archivedAt: null, origin: { kind: 'empty' },
-  publishedVersions: {}, officeCount: 0, createdAt: '2026-10-07T03:00:00.000Z', updatedAt: '2026-10-07T03:00:00.000Z',
+  publishedVersions: {}, sections: {}, officeCount: 0, createdAt: '2026-10-07T03:00:00.000Z',
+  updatedAt: '2026-10-07T03:00:00.000Z',
   ...over,
 });
 const PRUDENTIAL_TEMPLATES = [
@@ -201,8 +202,9 @@ describe('new tenant', () => {
 
     it.each([
       // ADR-0116: the capability ladder is the platform's wherever the source has none, Empty included.
-      ['Empty', { kind: 'empty' }, /Nothing but the three activity types the goal plan counts and AgencyBoost’s standard capability ladder\./],
-      ['Jakarta branches', { kind: 'template', templateId: 't-jkt' }, /copied from this template.*except Capability Mapping, which starts with AgencyBoost’s standard capability ladder/],
+      // ADR-0185 §5: Empty says, once, that it cannot be filled later.
+      ['Empty', { kind: 'empty' }, 'Only the three activity types the goal plan counts. It cannot be filled from a template later.'],
+      ['Jakarta branches', { kind: 'template', templateId: 't-jkt' }, 'Its published sections are copied; one it has not published starts empty.'],
     ] as const)('sends %s, and says what it gives the office', async (label, startFrom, hint) => {
       const { calls } = stubFetch({
         '/admin/companies': { body: COMPANIES },
@@ -224,8 +226,9 @@ describe('new tenant', () => {
   });
 
   /*
-   * **P18.9-T3 AC-3, AC-5 — the Template library** (ADR-0164 §3, §5): not a company an office is made in, and
-   * *Template · Default template* offered after the company's own templates, the company's default still chosen.
+   * **P18.9-T3 AC-3, AC-5 — the Template library** (ADR-0164 §3, §5): not a company an office is made in, and its
+   * templates offered after the company's own, the company's default still chosen. *Changed 2026-11-01 (ADR-0185 §5):*
+   * under *AgencyBoost built-in templates*, the one picker *New template* uses — every active one of them.
    */
   describe('the Template library (P18.9-T3)', () => {
     const LIBRARY = { _id: 'co-lib', name: 'Template', slug: 'template', kind: 'template' };
@@ -255,18 +258,18 @@ describe('new tenant', () => {
       expect(await screen.findByRole('link', { name: 'Create a company first' })).toBeInTheDocument();
     });
 
-    it('AC-5 offers Template · Default template after the company’s own, the company’s default still chosen', async () => {
+    it('AC-5, ADR-0185 §5 offers the built-in templates after the company’s own, grouped, the company’s default still chosen', async () => {
       withLibrary();
       renderInLayout(AdminLayout, <NewTenantPage />, { me: SUPER_ADMIN });
 
       const select = await screen.findByRole('combobox', { name: 'Start from' });
-      await screen.findByRole('option', { name: 'Template · Default template' });
+      await screen.findByRole('option', { name: 'Default template' });
       expect(select).toHaveDisplayValue('Prudential template · Default');
+      expect([...(select as HTMLSelectElement).querySelectorAll('optgroup')].map((g) => g.label))
+        .toEqual(['Prudential', 'AgencyBoost built-in templates']);
       expect([...(select as HTMLSelectElement).options].map((o) => o.textContent)).toEqual([
-        'Prudential template · Default', 'Jakarta branches', 'Template · Default template', 'Empty',
+        'Prudential template · Default', 'Jakarta branches', 'Default template', 'Lean start', 'Empty',
       ]);
-      // Only its default: the library's other templates are the Template's own business.
-      expect(screen.queryByRole('option', { name: /Lean start/ })).not.toBeInTheDocument();
     });
 
     it('AC-5 sends it as the library’s template, and says the roles must be on the company’s ladder', async () => {
@@ -274,8 +277,8 @@ describe('new tenant', () => {
       renderInLayout(AdminLayout, <NewTenantPage />, { me: SUPER_ADMIN });
 
       const select = await screen.findByRole('combobox', { name: 'Start from' });
-      await userEvent.selectOptions(select, await screen.findByRole('option', { name: 'Template · Default template' }));
-      expect(screen.getByText(/copied from the Template library’s published sections, and every role they show must be on this company’s ladder/))
+      await userEvent.selectOptions(select, await screen.findByRole('option', { name: 'Default template' }));
+      expect(screen.getByText('Copied across companies: every role they show must be on this company’s ladder.'))
         .toBeInTheDocument();
       await userEvent.type(screen.getByLabelText('Office code'), '0701');
       await userEvent.type(screen.getByLabelText('Branch name'), 'Cempaka Putih Branch');
@@ -300,7 +303,7 @@ describe('new tenant', () => {
       renderInLayout(AdminLayout, <NewTenantPage />, { me: SUPER_ADMIN });
 
       const select = await screen.findByRole('combobox', { name: 'Start from' });
-      await userEvent.selectOptions(select, await screen.findByRole('option', { name: 'Template · Default template' }));
+      await userEvent.selectOptions(select, await screen.findByRole('option', { name: 'Default template' }));
       await userEvent.type(screen.getByLabelText('Office code'), '0701');
       await userEvent.type(screen.getByLabelText('Branch name'), 'Cempaka Putih Branch');
       await userEvent.click(screen.getByRole('button', { name: 'Create office' }));
@@ -324,7 +327,7 @@ describe('new tenant', () => {
      * **ADR-0168 §2 — a company with no active template of its own**, the one case the AgencyBoost defaults were
      * chosen for: the Template's Default template, which holds them, is chosen instead, and sent as the library's.
      */
-    it('ADR-0168 §2 chooses Template · Default template for a company with no template of its own, and sends it', async () => {
+    it('ADR-0168 §2 chooses the built-in default for a company with no template of its own, and sends it', async () => {
       const { calls } = withLibrary({
         '/admin/companies/co-1/templates': { body: [template('t-old', 'Old settings', { status: 'archived' })] },
         '/admin/tenants': { status: 201, body: { _id: 'kpm-9' } },
@@ -332,11 +335,11 @@ describe('new tenant', () => {
       renderInLayout(AdminLayout, <NewTenantPage />, { me: SUPER_ADMIN });
 
       const select = await screen.findByRole('combobox', { name: 'Start from' });
-      await vi.waitFor(() => expect(select).toHaveDisplayValue('Template · Default template'));
+      await vi.waitFor(() => expect(select).toHaveDisplayValue('Default template'));
       expect([...(select as HTMLSelectElement).options].map((o) => o.textContent)).toEqual([
-        'Template · Default template', 'Empty',
+        'Default template', 'Lean start', 'Empty',
       ]);
-      expect(screen.getByText(/copied from the Template library’s published sections/)).toBeInTheDocument();
+      expect(screen.getByText('Copied across companies: every role they show must be on this company’s ladder.')).toBeInTheDocument();
       await userEvent.type(screen.getByLabelText('Office code'), '0701');
       await userEvent.type(screen.getByLabelText('Branch name'), 'Cempaka Putih Branch');
       await userEvent.click(screen.getByRole('button', { name: 'Create office' }));

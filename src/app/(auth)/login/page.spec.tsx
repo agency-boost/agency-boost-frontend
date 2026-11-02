@@ -170,13 +170,20 @@ describe('login', () => {
       expect(screen.queryByText('Your session ended. Sign in again.')).not.toBeInTheDocument();
     });
 
-    it('still returns to next: the reason beside it changes nothing of where signing in lands', async () => {
-      expect(await signInFrom('?next=%2Fleader-meetings%2Fshared%2Fabc&reason=expired', AGENT))
-        .toBe('/leader-meetings/shared/abc');
+    /*
+     * **After an expired session, signing in starts on the landing** (the product owner's staging review, 2026-10-31:
+     * *"Tiap login masuknya ke home jangan activity/unit"*): the page the session ended on is not where they go back to.
+     */
+    it('lands on Home, not on the Goals page the session ended on', async () => {
+      expect(await signInFrom('?next=%2Fgoals&reason=expired', AGENT)).toBe('/home');
     });
 
-    it('still honours next only for somebody who can open it', async () => {
-      expect(await signInFrom('?next=%2Fkpm%2Fanalytics%2Fcompliance&reason=expired', AGENT)).toBe('/home');
+    it('lands on Home even from a page they can open: the reason decides, not the page', async () => {
+      expect(await signInFrom('?next=%2Fleader-meetings%2Fshared%2Fabc&reason=expired', AGENT)).toBe('/home');
+    });
+
+    it('lands an Owner on the office overview, not on the analytics page the session ended on', async () => {
+      expect(await signInFrom('?next=%2Fkpm%2Fanalytics%2Fcompliance&reason=expired', OWNER)).toBe('/kpm/overview');
     });
   });
 

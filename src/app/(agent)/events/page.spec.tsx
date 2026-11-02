@@ -517,8 +517,13 @@ describe('/events, KPM Events (P18.5-T5, T6)', () => {
     it('P18.96-T1 AC-1 the box is capped at the dynamic viewport and scrolls inside itself, never pushed off the screen', async () => {
       modal(PRULINK);
       const box = await dialog('PRULink briefing');
-      // From 640px: at most the screen less its 1.25rem margins; below it, the whole screen, the same way.
-      expect(box).toHaveClass('sm:max-h-[calc(100dvh-2.5rem)]', 'h-[100dvh]', 'sm:h-auto', 'sm:max-w-[560px]');
+      // From 640px: at most the screen less its 1.25rem margins; below it, the whole screen, the same way. Either way
+      // below the top inset, never under a Home Screen app's clock (staging review, 2026-10-31).
+      expect(box).toHaveClass(
+        'sm:max-h-[calc(100dvh-1.25rem-max(1.25rem,env(safe-area-inset-top)))]', 'h-[calc(100dvh-env(safe-area-inset-top))]',
+        'sm:h-auto', 'sm:max-w-[560px]',
+      );
+      expect(box.parentElement).toHaveClass('pt-[env(safe-area-inset-top)]', 'max-sm:bg-card', 'sm:pt-[max(1.25rem,env(safe-area-inset-top))]');
       expect(box).toHaveClass('overflow-y-auto', 'overscroll-contain');
       expect(box).not.toHaveClass('overflow-hidden');
       expect(box).not.toHaveClass('min-h-full');

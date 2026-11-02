@@ -81,7 +81,9 @@ const TILE = 'overflow-hidden rounded-lg border border-hairline';
  * - **What other features put on it**, read-only: a lead's next action and an open coaching action item as *Tugas*
  *   (no time: never on the grid), and the events joined, at their time (point 1). **A tick on the reader's own task**
  *   completes it at its source — the toast says *Selesai* with *Urungkan* — strikes it through and lowers every count
- *   at once (point 4); a lead row's › opens the lead's details (`LeadSheet`).
+ *   at once (point 4); a lead row's › opens the lead's details (`LeadSheet`), whose foot offers the reader's own lead
+ *   ***Hapus tugas*** — the next action cleared, the lead kept (the staging review of 2026-10-31).
+ * - **An entry is deleted from its detail or from *Edit event*** (the same question, the same pinned delete).
  * - ***Filter*** **on a phone** slides a panel open under the controls — the button turns navy — with *Melihat* (the
  *   compare bar) and *Jenis*: one tick chip per type, which replace the coloured-dot legend at every width (point 9).
  * - ***Sembunyikan aktivitas calendar*** **is no longer here**: it lives on *Profil saya* (UI-111); a person who keeps
@@ -667,13 +669,30 @@ export function CalendarScreen({
         )}
 
         {editor && (
-          <EntryDialog key={editor.key} state={editor.state} onClose={() => setEditor(null)} onSaved={saved} />
+          <EntryDialog
+            key={editor.key}
+            state={editor.state}
+            onClose={() => setEditor(null)}
+            onSaved={saved}
+            canDelete={may.delete}
+            onDeleted={(entry) => {
+              // As the detail popup's *Hapus* (`onDeleted` above): the dialog closes, and every calendar it was on reads again.
+              setEditor(null);
+              refocus.current = true;
+              wrote(peopleOn(entry));
+            }}
+          />
         )}
         {sheetLead && (
           <LeadSheet
             open
             lead={sheetLead}
             offerDelete={false}
+            // A read-only support session reads the lead and writes nothing: no *Simpan*, no field to type in (N1).
+            readOnly={readOnly}
+            // *Hapus tugas* (the staging review of 2026-10-31): the reader's own lead's next action, cleared — never in a
+            // read-only support session, never on a compared person's lead (the sheet checks whose it is).
+            offerClearTask={!readOnly}
             onClose={() => setSheetLead(null)}
             onSaved={() => again()}
             onClosedLead={() => { setSheetLead(null); again(); }}

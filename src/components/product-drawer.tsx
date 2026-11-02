@@ -131,7 +131,8 @@ export function ProductDrawer({ code }: { code: string }) {
         onKeyDown={keys}
         className="fixed right-0 top-0 z-50 h-[100dvh] w-full overflow-y-auto overscroll-contain bg-card shadow-modal sm:w-[460px] sm:max-w-[92vw]"
       >
-        <div className="px-5 pb-10 pt-[26px] sm:px-7">
+        {/* Its first line below the top inset: ✕ never under a Home Screen app's clock (staging review, 2026-10-31). */}
+        <div className="px-5 pb-10 pt-[calc(26px+env(safe-area-inset-top))] sm:px-7">
           <div className="mb-1.5 flex justify-end">
             <button
               type="button"

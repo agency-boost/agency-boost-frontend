@@ -249,6 +249,8 @@ describe('the Unit Dashboard (P15-T2; UI V1, Phase 18.99 T4)', () => {
       expect(grid).toHaveClass('w-full', 'table-fixed');
       expect(grid.className).not.toMatch(/min-w-/);
       expect(grid.querySelector('thead')!.className).toMatch(/\[&_th\]:sticky/);
+      // Below the top inset, never under a Home Screen app's clock (staging review, 2026-10-31).
+      expect(grid.querySelector('thead')).toHaveClass('[&_th]:top-[env(safe-area-inset-top)]');
     });
 
     it('UI-009 every unit open, its header row its totals and Active n/m; the header closes it', async () => {

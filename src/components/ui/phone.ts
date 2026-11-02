@@ -131,24 +131,10 @@ export const CHIP_GRID_PHONE = 'max-md:grid max-md:grid-cols-2';
  */
 export const CHIP_PHONE = 'max-md:w-full max-md:min-h-11 max-md:px-2.5 max-md:leading-snug';
 
-/**
- * **A screen's one action, in a bar fixed to the bottom of a phone's screen** (P18.95-T6 AC-1; UI-015: *Build
- * attack plan* at 1,029px). The card's ground with a hairline above it, the page's own 20px gutter, and the
- * home indicator's inset below the action where the phone has one (`env(safe-area-inset-bottom)`, zero where it
- * has none). Under the header (`z-10`) and every dialog, over the page it scrolls above.
- *
- * The page beneath gives it room: `ACTION_BAR_ROOM_PHONE` on the content above, so its last line is never
- * hidden behind the bar.
- *
- * **Above the field shell's tab bar** (UI V1, UI-004): it stands on `--tab-bar-space` — the floating bar's room where the
- * field shell draws it, nothing elsewhere — so the bar never covers the save it holds.
+/*
+ * A bar held over the foot of a phone's page is `FloatingBar` (`floating-bar.tsx`): one pill, the Goal Setting save's
+ * form, for every such bar (the product owner's staging review, 2026-10-31). The full-width strip that stood here is gone.
  */
-export const ACTION_BAR_PHONE = 'max-md:fixed max-md:inset-x-0 max-md:bottom-[var(--tab-bar-space)] max-md:z-[9] '
-  + 'max-md:border-t max-md:border-hairline max-md:bg-card max-md:px-5 max-md:pt-3 '
-  + 'max-md:pb-[calc(0.75rem_+_env(safe-area-inset-bottom))]';
-
-/** The room under the content an `ACTION_BAR_PHONE` stands over: taller than the bar, so nothing is behind it. */
-export const ACTION_BAR_ROOM_PHONE = 'max-md:pb-24';
 
 /**
  * **The client's *Remove* verdict on a grey sentence: not drawn on a phone** (P18.95-T7 AC-1; ADR-0167 §7, OD-202 —

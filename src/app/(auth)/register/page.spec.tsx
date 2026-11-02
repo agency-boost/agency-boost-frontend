@@ -231,7 +231,7 @@ describe('register', () => {
     await personal();
 
     await userEvent.type(screen.getByLabelText('Password'), 'short');
-    expect(screen.getByText('Use at least 10 characters.')).toBeInTheDocument();
+    expect(screen.getByText('Use at least 8 characters.')).toBeInTheDocument();
     expect(submit).toBeDisabled();
 
     await userEvent.clear(screen.getByLabelText('Password'));

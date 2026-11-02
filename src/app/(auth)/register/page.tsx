@@ -8,6 +8,7 @@ import { inviteTokenOf, readInviteBanner, type InviteBanner } from '@/lib/invite
 import { signInPathFrom } from '@/lib/return-path';
 import { listInsurers, type Insurer } from '@/lib/companies';
 import { genderLabels, workStatusLabels, type Gender, type WorkStatus } from '@/lib/personal';
+import { PASSWORD_MIN_LENGTH } from '@/lib/password';
 import { useLanguage, useMessages } from '@/i18n/language-provider';
 import { authMessages } from '@/i18n/messages/auth';
 import { AUTH_PAGE } from '@/components/auth-page';
@@ -38,7 +39,6 @@ import { PublicTitle } from '@/components/public-title';
  * or part-time, and their gender. All four required. Whether the birth date is 18 years ago and the
  * month not still to come is the server's to say, and its sentence is shown under the field it names.
  */
-const MIN_LENGTH = 10;
 
 /** The four `POST /auth/register` refuses by name (`details.field`), shown under their own field. */
 const PERSONAL_FIELDS = ['dateOfBirth', 'companyJoinMonth', 'workStatus', 'gender'] as const;
@@ -105,7 +105,7 @@ function Register() {
 
   // The same three rules the server applies, checked here so the failure is immediate
   // rather than a round trip. The server check remains the real one.
-  const tooShort = form.password.length > 0 && form.password.length < MIN_LENGTH;
+  const tooShort = form.password.length > 0 && form.password.length < PASSWORD_MIN_LENGTH;
   const padded = /^\s|\s$/.test(form.password);
   // Only once they have started the second box: complaining that an empty field does not
   // match the one above it is telling somebody off for not having finished typing.
@@ -357,10 +357,10 @@ function Register() {
             <Field
               label={t.password}
               htmlFor="password"
-              hint={rules.hint({ n: MIN_LENGTH })}
+              hint={rules.hint({ n: PASSWORD_MIN_LENGTH })}
               error={
                 tooShort
-                  ? rules.tooShort({ n: MIN_LENGTH })
+                  ? rules.tooShort({ n: PASSWORD_MIN_LENGTH })
                   : padded
                     ? rules.padded
                     : undefined

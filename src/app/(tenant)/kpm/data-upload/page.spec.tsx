@@ -5,6 +5,7 @@ import {
 } from '@test/harness';
 import { englishOnly, englishShown } from '@test/english-left';
 import { dataUploadMessages } from '@/i18n/messages/data-upload';
+import { setAccessToken } from '@/lib/api-client';
 import { showFigure } from './correction-panel';
 import DataUploadPage from './page';
 
@@ -84,8 +85,12 @@ describe('Data upload — the month table (P9-T1)', () => {
     await waitFor(() => expect(calls.some((c) => c.url.includes('/kpm/data-upload/2026-10'))).toBe(true));
   });
 
+  /*
+   * *Amended 2026-11-01 (ADR-0184):* **⬇ Download template** is the Excel workbook, a button that fetches it with the
+   * token; the CSV, as it always was, is **Download CSV** beside it — the `data:` link these tests read.
+   */
   describe('the template (P9-T2)', () => {
-    const link = () => screen.findByRole('link', { name: 'Download template' });
+    const link = () => screen.findByRole('link', { name: 'Download CSV' });
     const templateCalls = (calls: { url: string }[]) =>
       calls.filter((c) => c.url.includes('/kpm/data-upload/template'));
 
@@ -95,9 +100,11 @@ describe('Data upload — the month table (P9-T1)', () => {
 
       const a = await link();
       expect(a).toHaveAttribute('download', 'KPM0417-agent-data-Sep-2026.csv');
-      // The prototype's ⬇ is drawn and kept out of the name, as on the Summary's Download (ADR-0068).
-      expect(a).toHaveTextContent('⬇Download template');
-      expect(a.querySelector('[aria-hidden="true"]')).toHaveTextContent('⬇');
+      // The prototype's ⬇ is drawn on the control it drew it on — now the workbook's — and kept out of the name, as on
+      // the Summary's Download (ADR-0068).
+      const workbook = screen.getByRole('button', { name: 'Download template' });
+      expect(workbook).toHaveTextContent('⬇Download template');
+      expect(workbook.querySelector('[aria-hidden="true"]')).toHaveTextContent('⬇');
       // A data: URL carrying the whole file, so saving it needs no second request.
       const href = a.getAttribute('href')!;
       expect(href.startsWith('data:text/csv;charset=utf-8,')).toBe(true);
@@ -139,7 +146,8 @@ describe('Data upload — the month table (P9-T1)', () => {
       fireEvent.change(screen.getByLabelText('Month'), { target: { value: '2026-08' } });
 
       // Gone at once — the link is for the month the table shows, and the table is reloading.
-      expect(screen.queryByRole('link', { name: 'Download template' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: 'Download CSV' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Download template' })).not.toBeInTheDocument();
       await waitFor(async () => {
         expect(await link()).toHaveAttribute('download', 'KPM0417-agent-data-Aug-2026.csv');
       });
@@ -159,7 +167,8 @@ describe('Data upload — the month table (P9-T1)', () => {
       expect(alert).toHaveTextContent('The template could not be prepared. Something went wrong on our side.');
       expect(alert).toHaveTextContent('INTERNAL_ERROR · req-42');
       expect(within(alert).getByRole('button', { name: 'Try again' })).toBeInTheDocument();
-      expect(screen.queryByRole('link', { name: 'Download template' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: 'Download CSV' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Download template' })).not.toBeInTheDocument();
       // The table it sits beside loaded, and says so.
       expect(screen.getByText('Rina Wijaya')).toBeInTheDocument();
       expect(screen.getByRole('status')).toBeInTheDocument();
@@ -194,7 +203,8 @@ describe('Data upload — the month table (P9-T1)', () => {
 
       await screen.findByRole('alert');
       expect(templateCalls(calls)).toHaveLength(0);
-      expect(screen.queryByRole('link', { name: 'Download template' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: 'Download CSV' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Download template' })).not.toBeInTheDocument();
     });
 
     it('shows the table and not the control to somebody who may read and may not download', async () => {
@@ -202,10 +212,71 @@ describe('Data upload — the month table (P9-T1)', () => {
       renderWithSession(<DataUploadPage />, { me: READER });
 
       await screen.findByText('Rina Wijaya');
-      expect(screen.queryByRole('link', { name: 'Download template' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: 'Download CSV' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Download template' })).not.toBeInTheDocument();
       expect(screen.queryByRole('alert')).not.toBeInTheDocument();
       // Not asked for either: a grant enforced on the pixels and not on the wire is the defect.
       expect(templateCalls(calls)).toHaveLength(0);
+    });
+
+    describe('ADR-0184 the Excel workbook', () => {
+      const XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+      afterEach(() => { vi.restoreAllMocks(); setAccessToken(null); });
+
+      /** Saving a file, as far as the browser lets a test see it: the link clicked, with its name. */
+      const watchSaves = () => {
+        const saved: string[] = [];
+        vi.stubGlobal('URL', Object.assign(Object.create(URL), { createObjectURL: vi.fn(() => 'blob:test'), revokeObjectURL: vi.fn() }));
+        vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+          if (this.getAttribute('href') === 'blob:test') saved.push(this.download);
+        });
+        return saved;
+      };
+
+      it('fetches the month’s workbook with the token and saves it, named as the CSV is with .xlsx', async () => {
+        setAccessToken('token-in-memory');
+        const saved = watchSaves();
+        const { calls } = stubFetch({
+          ...routes(month([rina()])),
+          'GET /kpm/data-upload/template': ({ url }: { url: string }) => (url.includes('format=xlsx')
+            ? { body: new Blob(['PK'], { type: XLSX }) }
+            : { body: template() }),
+        });
+        renderWithSession(<DataUploadPage />, { me: OWNER });
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Download template' }));
+        await waitFor(() => expect(saved).toEqual(['KPM0417-agent-data-Sep-2026.xlsx']));
+        const asked = calls.find((c) => c.url.includes('format=xlsx'))!;
+        expect(asked.url).toContain('/kpm/data-upload/template?month=2026-09&format=xlsx');
+        expect((asked.init.headers as Record<string, string>).Authorization).toBe('Bearer token-in-memory');
+      });
+
+      it('says a workbook that could not be prepared, with the reference and a way to ask again', async () => {
+        const saved = watchSaves();
+        let refuse = true;
+        stubFetch({
+          ...routes(month([rina()])),
+          'GET /kpm/data-upload/template': ({ url }: { url: string }) => {
+            if (!url.includes('format=xlsx')) return { body: template() };
+            if (refuse) {
+              refuse = false;
+              return { status: 500, body: { error: { code: 'INTERNAL_ERROR', message: 'Something went wrong on our side.', requestId: 'req-43' } } };
+            }
+            return { body: new Blob(['PK']) };
+          },
+        });
+        renderWithSession(<DataUploadPage />, { me: OWNER });
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Download template' }));
+        const alert = await screen.findByRole('alert');
+        expect(alert).toHaveTextContent('The template could not be prepared. Something went wrong on our side.');
+        expect(alert).toHaveTextContent('INTERNAL_ERROR · req-43');
+        // The CSV is still there to take.
+        expect(screen.getByRole('link', { name: 'Download CSV' })).toBeInTheDocument();
+        fireEvent.click(within(alert).getByRole('button', { name: 'Try again' }));
+        await waitFor(() => expect(saved).toEqual(['KPM0417-agent-data-Sep-2026.xlsx']));
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      });
     });
   });
 
@@ -410,6 +481,10 @@ describe('Data upload — reading a filled file (P9-T3)', () => {
     stubFetch(withPreview());
     const { unmount } = renderWithSession(<DataUploadPage />, { me: OWNER });
     expect(await screen.findByLabelText('+ Upload filled template')).toHaveAttribute('type', 'file');
+    // ADR-0184: an Excel workbook or a CSV, either read on the server.
+    expect(screen.getByLabelText('+ Upload filled template')).toHaveAttribute(
+      'accept', '.xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv',
+    );
     unmount();
 
     stubFetch(withPreview());
@@ -1336,8 +1411,10 @@ describe('P18.97-T7 AC-2 Data upload on a phone (UI-034, UI-040)', () => {
   /** The page's markup on the build before P18.97-T7, rendered from this fixture on 2026-10-28. */
   const BEFORE_T7: Record<768 | 1280, string> = {
     // Re-recorded 2026-10-30 (UI V1): UI-008's card edge (`border-card-edge`) and UI-010's 44px/48px targets below 1024px.
-    768: '2f3f34ef15d1e0277f648e0dcc9e74ddd93c0fd3cbef24f14b8cc49189dd6ba8',
-    1280: '2f3f34ef15d1e0277f648e0dcc9e74ddd93c0fd3cbef24f14b8cc49189dd6ba8',
+    // Re-recorded 2026-11-01 (ADR-0184): ⬇ Download template is the Excel workbook's button, and Download CSV beside it
+    // is the CSV's link; the upload accepts .xlsx as well. Nothing else in the page moved.
+    768: '58a838af9aefefc58518bee08b873b6ea9bfc111f3e115bf7feabd70bac447c7',
+    1280: '58a838af9aefefc58518bee08b873b6ea9bfc111f3e115bf7feabd70bac447c7',
   };
 
   it.each([768, 1280] as const)('P18.97-T7 AC-2 at %ipx draws the month table and its controls as they were, to the byte', async (px) => {
@@ -1348,7 +1425,7 @@ describe('P18.97-T7 AC-2 Data upload on a phone (UI-034, UI-040)', () => {
     // (`InLanguage`) until P18.98-T4 moved the page's words, which an Indonesian screen now writes in Indonesian too.
     const { container } = renderWithLanguage(<DataUploadPage />, { me: ALL }, { live: false });
     await screen.findByRole('table', { name: 'Data for Sep 2026' });
-    await screen.findByRole('link', { name: 'Download template' });
+    await screen.findByRole('button', { name: 'Download template' });
     await screen.findByText(/KPM0417-agent-data-Sep-2026-corrected\.csv/);
     expect(digestAt(container, px)).toBe(BEFORE_T7[px]);
     resetLanguage();
@@ -1625,10 +1702,11 @@ describe('P18.97-T7 AC-2 Data upload on a phone (UI-034, UI-040)', () => {
     stubFetch(everything());
     renderWithSession(<DataUploadPage />, { me: ALL });
     await cardsOf();
-    const link = await screen.findByRole('link', { name: 'Download template' });
+    const workbook = await screen.findByRole('button', { name: 'Download template' });
     const tall = [
       screen.getByLabelText('Month'),
-      link,
+      workbook,
+      screen.getByRole('link', { name: 'Download CSV' }),
       screen.getByLabelText('+ Upload filled template').nextElementSibling!,
     ];
     for (const el of tall) {
@@ -1662,7 +1740,7 @@ describe('P18.97-T7 AC-2 Data upload on a phone (UI-034, UI-040)', () => {
       stubFetch(everything());
       const { container } = renderWithLanguage(<DataUploadPage />, { me: ALL }, { live: false });
       await screen.findByRole('table', { name: 'Data for Sep 2026' });
-      await screen.findByRole('link', { name: 'Download template' });
+      await screen.findByRole('button', { name: 'Download template' });
       await screen.findByText(/KPM0417-agent-data-Sep-2026-corrected\.csv/);
 
       const row = screen.getAllByRole('row').find((r) => within(r).queryByText('Rina Wijaya'))!;
@@ -1744,8 +1822,9 @@ describe('P18.98-T4 Data upload in Indonesian', () => {
     inIndonesian();
     const table = await screen.findByRole('table', { name: 'Data untuk Sep 2026' });
     expect(screen.getByRole('heading', { level: 1, name: /^Data upload/ })).toBeInTheDocument();
-    expect(await screen.findByRole('link', { name: 'Unduh templat' })).toBeInTheDocument();
-    expect(screen.getByLabelText('+ Unggah templat yang sudah diisi')).toHaveAttribute('type', 'file');
+    expect(await screen.findByRole('button', { name: 'Unduh template' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Unduh CSV' })).toBeInTheDocument();
+    expect(screen.getByLabelText('+ Unggah template yang sudah diisi')).toHaveAttribute('type', 'file');
     expect(screen.getByLabelText('Bulan')).toHaveValue('2026-09');
     expect(screen.getByText('Terbuka untuk impor dan koreksi sampai 7 Okt 2026, lalu terkunci.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Kunci bulan' })).toBeInTheDocument();
@@ -1810,7 +1889,7 @@ describe('P18.98-T4 Data upload in Indonesian', () => {
   it('P18.98-T4 previews a filled file in Indonesian: the summary, what is not taken, and the diff', async () => {
     stubFetch({ ...routes(month([rina(), budi()])), '/kpm/data-upload/preview': { body: PREVIEW } });
     inIndonesian();
-    fireEvent.change(await screen.findByLabelText('+ Unggah templat yang sudah diisi'), { target: { files: [csvFile()] } });
+    fireEvent.change(await screen.findByLabelText('+ Unggah template yang sudah diisi'), { target: { files: [csvFile()] } });
     expect(await screen.findByRole('heading', { name: '2 agent siap diimpor, 1 baris dilewati.' })).toBeInTheDocument();
     expect(screen.getByText(/^Dari “filled\.csv”\. Angka: 1 baru · 1 berubah · 0 sudah sama dengan yang tersimpan · 21 dibiarkan kosong/))
       .toHaveTextContent('4 anggota aktif tidak ada di file dan tetap dengan angkanya.');

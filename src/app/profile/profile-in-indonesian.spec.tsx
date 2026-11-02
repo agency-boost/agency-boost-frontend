@@ -107,8 +107,12 @@ describe('UI-111 Profil saya in Indonesian', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Ubah kata sandi' }));
     const sheet = await screen.findByRole('dialog', { name: 'Ubah kata sandi' });
     expect(within(sheet).getByLabelText('Kata sandi saat ini')).toBeInTheDocument();
-    expect(within(sheet).getByLabelText('Kata sandi baru')).toBeInTheDocument();
+    expect(within(sheet).getByLabelText('Kata sandi baru')).toHaveAccessibleDescription('Minimal 8 karakter.');
     expect(within(sheet).getByLabelText('Konfirmasi kata sandi baru')).toBeInTheDocument();
+    await userEvent.type(within(sheet).getByLabelText('Kata sandi saat ini'), 'kata-sandi-1');
+    await userEvent.type(within(sheet).getByLabelText('Kata sandi baru'), '1234567');
+    await userEvent.type(within(sheet).getByLabelText('Konfirmasi kata sandi baru'), '1234567');
+    expect(within(sheet).getByText(/Kata sandi baru minimal 8 karakter\./)).toBeInTheDocument();
   });
 
   it('UI-111 the email in Indonesian: the report’s hint, Ubah email, Kirim tautan, and the line once the link is sent', async () => {

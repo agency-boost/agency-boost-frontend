@@ -397,7 +397,9 @@ describe('/campaigns/[campaignCode], the dialog (P18.5-T7 AC-4, P18.5-T8 AC-6)',
     try {
       dialogAt('APE_SPRINT');
       const box = await dialog();
-      expect(box).toHaveClass('max-h-[calc(100dvh-2rem)]', 'overflow-y-auto', 'overscroll-contain');
+      // Below the top inset as well, never under a Home Screen app's clock (staging review, 2026-10-31).
+      expect(box).toHaveClass('max-h-[calc(100dvh-1rem-max(1rem,env(safe-area-inset-top)))]', 'overflow-y-auto', 'overscroll-contain');
+      expect(box.parentElement).toHaveClass('pt-[max(1rem,env(safe-area-inset-top))]');
       expect(box.className).not.toContain('100vh');
       expect(document.body.style.overflow).toBe('hidden');
       cleanup();
