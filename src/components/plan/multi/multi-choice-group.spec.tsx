@@ -3,6 +3,7 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { MultiChoiceGroup } from './multi-choice-group';
+import { PLAN_CHIP_PHONE, PLAN_CHIPS_PHONE } from '../brief-card';
 
 const DRIVERS = [
   { value: 'side-income', label: 'Extra income on the side' },
@@ -71,6 +72,13 @@ describe('MultiChoiceGroup', () => {
   it('P17-T3 AC-8 wraps its chips, so a phone never scrolls sideways', () => {
     render(<Harness />);
     expect(chip('Full career change').parentElement).toHaveClass('flex-wrap');
+  });
+
+  it('UI-107 on a phone: wrapping pill chips as ChoiceGroup’s, and the question says whether it is answered', () => {
+    render(<Harness />);
+    expect(chip('Full career change').parentElement).toHaveClass('flex', 'flex-wrap', ...PLAN_CHIPS_PHONE.split(' '));
+    for (const each of within(group()).getAllByRole('button')) expect(each).toHaveClass(...PLAN_CHIP_PHONE.split(' '));
+    expect(group()).toHaveAttribute('data-question');
   });
 
   it('renders a label as text', () => {

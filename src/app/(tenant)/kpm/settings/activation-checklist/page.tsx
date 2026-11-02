@@ -2,30 +2,40 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { SettingsScreen } from '@/components/settings-screen';
-import { DragHandle } from '@/components/ui/drag-handle';
+import { BelowDesktopTip } from '@/components/ui/below-desktop-tip';
+import { DRAG_HANDLE_CLASS, DragHandle } from '@/components/ui/drag-handle';
 import { ConfigBadge } from '@/components/ui/config-badge';
 import { EmptyState } from '@/components/ui/empty-state';
 import {
   Button, Card, CodeField, Field, FieldRow, Select, TextInput,
 } from '@/components/ui/field';
+import { CONTROL_PHONE, TAP_TARGET } from '@/components/ui/phone';
+import { ReorderArrows } from '@/components/ui/reorder-arrows';
 import { SkeletonCards } from '@/components/ui/skeleton';
+import { SHOWN_FROM_DESKTOP } from '@/components/ui/tablet';
 import { TippedGlyph } from '@/components/ui/tipped-glyph';
-import { OWN_COPY, PROTOTYPE_COPY } from '@/lib/activation';
+import { kept } from '@/i18n/kept';
+import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
+import { settingsMessages } from '@/i18n/messages/settings';
+import { checklistMessages } from '@/i18n/messages/settings-checklist';
+import { autoBadge, byHandBadge, fromDataWords } from '@/lib/activation';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import { suggestCode } from '@/lib/config-code';
+import { formatNumber } from '@/lib/format';
 import { useCan } from '@/lib/session';
+import { usePhone } from '@/lib/use-phone';
 import {
   listTraining, publishActivationChecklist, readActivationChecklist, saveActivationDraft,
   type ActivationChecklist, type ActivationDraft, type ActivationLink, type ActivationVersion,
   type TrainingCategoryRow,
 } from '@/lib/tenant-config';
 
-/** The link options the prototype's select offers, plus the office's own published modules. */
+/** The link options the prototype's select offers, plus the office's own published modules: §A.2's titles, kept. */
 const FEATURE_LINKS = [
-  { value: 'feature:goals', label: 'Goal Settings' },
-  { value: 'feature:leads', label: 'Leads Management' },
-  { value: 'feature:activity', label: 'Activity Management' },
+  { value: 'feature:goals', label: kept('Goal Settings') },
+  { value: 'feature:leads', label: kept('Leads Management') },
+  { value: 'feature:activity', label: kept('Activity Management') },
 ];
 
 type DraftAspect = ActivationDraft['aspects'][number];
@@ -57,6 +67,23 @@ function resolvedLinks(server: ActivationChecklist | null): Map<string, Activati
   return links;
 }
 
+/**
+ * **The three data-backed items, by code** (P18.96-T7 G2; ADR-0171 §3): *Close first case independently*, *Reach
+ * Independent Agent milestone* and *Weekly 1-on-1 check-in* store no link — their kind is bound by their code — and
+ * the server serves each its kind as `link`, a data kind's carrying its `form`. Read from every version it answered
+ * with, so an item the draft keeps keeps its kind; one that stores a link of its own reads that link, as the field
+ * does (`effectiveAutoLink`). Nothing here knows which codes are bound (invariant §7).
+ */
+function boundLinks(server: ActivationChecklist | null): Map<string, ActivationLink> {
+  const bound = new Map<string, ActivationLink>();
+  for (const version of [server?.published, server?.draft]) {
+    for (const aspect of version?.aspects ?? []) {
+      for (const item of aspect.items) if (item.autoLink === null && item.link?.form) bound.set(item.code, item.link);
+    }
+  }
+  return bound;
+}
+
 /** `ConfigBadge`'s pill, painted on the button that carries the badge's words (ADR-0062 §2, form 2). */
 const BADGE_FACE = 'h-auto w-auto whitespace-nowrap rounded-pill px-2 py-0.5 text-2xs font-bold uppercase tracking-wide';
 
@@ -64,22 +91,26 @@ const BADGE_FACE = 'h-auto w-auto whitespace-nowrap rounded-pill px-2 py-0.5 tex
  * The row's badge (`.checklist-auto-badge`, `KPM_Owner.html:1532-1560`), saying **whether** the link
  * completes the item and never when (P13-T3 AC-1, ADR-0062 §3; parity I-80). *Auto* only for a link that
  * works, with the registry's sentence as its tooltip and in its name, as on the hire's page; for one that
- * does not, *Ticked by hand*, and its tooltip says who ticks it. A link not yet resolved claims neither.
+ * does not, *Ticked by hand*, and its tooltip says who ticks it. A link not yet resolved claims neither. Its words are
+ * the hire's activation's (`autoBadge`, `byHandBadge`; P18.98-T4), in the reader's language.
  */
 function LinkBadge({ link }: { link: ActivationLink }) {
+  const language = useLanguage();
+  const auto = autoBadge(link.completesWhen, language);
+  const byHand = byHandBadge(language);
   return link.live ? (
     <TippedGlyph
-      glyph={PROTOTYPE_COPY.auto}
-      name={OWN_COPY.autoName(link.completesWhen)}
-      tip={OWN_COPY.autoTip(link.completesWhen)}
+      glyph={auto.glyph}
+      name={auto.name}
+      tip={auto.tip}
       align="fit"
       face={cn(BADGE_FACE, 'bg-success/10 text-success hover:bg-success/15 hover:text-success')}
     />
   ) : (
     <TippedGlyph
-      glyph={OWN_COPY.byHand}
-      name={OWN_COPY.byHandName}
-      tip={OWN_COPY.byHandTip}
+      glyph={byHand.glyph}
+      name={byHand.name}
+      tip={byHand.tip}
       align="fit"
       face={cn(BADGE_FACE, 'border border-hairline bg-base text-muted hover:bg-base hover:text-navy')}
     />
@@ -105,7 +136,19 @@ const move = <T,>(rows: T[], from: number, to: number): T[] => {
  * the next version, which is given to hires who start after it. Somebody halfway through their
  * ninety days keeps the checklist they started on.
  */
+/*
+ * **The checklist's two grey sentences, in the client's words, each with its verdict per size** (P18.97-T4 AC-6,
+ * ADR-0176 §6; the grey-text table of 2026-10-27, UI-027). From 1024px both are shown; at 768–1023px both are behind
+ * an ⓘ beside their subject; below 768px the first is behind its ⓘ and the second is removed. *New versions* was 32
+ * words, *Linked items* the prototype's 27-word toolbar sentence. Their words are the catalogue's (`newVersions`,
+ * `linkedItems`, `messages/settings-checklist.ts`), and the verdicts hold in both languages.
+ */
+
 export default function ActivationChecklistPage() {
+  const t = useMessages(checklistMessages);
+  const language = useLanguage();
+  const s = useMessages(settingsMessages);
+  const figures = useFigureLanguage();
   const canWrite = useCan('tenant_config:write');
   // The screen's own gate (P18.5-T3): a field member meets the refusal, and nothing is asked for them.
   const canRead = useCan('activation_settings:read');
@@ -128,6 +171,12 @@ export default function ActivationChecklistPage() {
    */
   const [dragging, setDragging] = useState<{ aspect: string; item?: string } | null>(null);
   const [over, setOver] = useState<string | null>(null);
+  /*
+   * **On a phone, ↑ and ↓ beside each handle** (P18.97-T7 AC-6, ADR-0178 §5; UI-040): a drag never starts on a touch
+   * screen and its handle's keys need a keyboard, so the list could not be reordered there at all. They move a row
+   * through the same `move` the handle's keys do; and below 768px every control here is a 44 × 44px target.
+   */
+  const phone = usePhone();
 
   const load = useCallback(async () => {
     try {
@@ -148,6 +197,7 @@ export default function ActivationChecklistPage() {
   useEffect(() => { if (canRead) void load(); }, [load, canRead]);
 
   const links = resolvedLinks(server);
+  const bound = boundLinks(server);
 
   /** Every module agents are offered, which is the only kind an item may wait for. */
   const offered = modules.flatMap((c) => c.skills.flatMap((s) => s.modules))
@@ -242,8 +292,19 @@ export default function ActivationChecklistPage() {
             <DragHandle
               label={aspect.label}
               disabled={busy}
+              className={cn(DRAG_HANDLE_CLASS, TAP_TARGET)}
               onPick={() => setDragging({ aspect: aspect.code })}
               onDrop={() => { setDragging(null); setOver(null); }}
+              onMove={(by) => change({ aspects: move(draft!.aspects, at, at + by) })}
+            />
+          )}
+          {/* Not while its name is being edited: the field takes the line, and a name is not an order. */}
+          {canWrite && phone && editing !== `aspect-${aspect.code}` && (
+            <ReorderArrows
+              label={aspect.label}
+              index={at}
+              count={draft!.aspects.length}
+              disabled={busy}
               onMove={(by) => change({ aspects: move(draft!.aspects, at, at + by) })}
             />
           )}
@@ -254,28 +315,31 @@ export default function ActivationChecklistPage() {
               <CodeField
                 id={`code-aspect-${aspect.code}`}
                 value={aspect.code}
-                reason="Every hire's progress on this aspect points at it."
+                reason={t.aspectReason}
+                inputClassName={CONTROL_PHONE}
               />
-              <Field label="Name" htmlFor={`aspect-name-${aspect.code}`} className="min-w-60 flex-1">
+              <Field label={s.name} htmlFor={`aspect-name-${aspect.code}`} className="min-w-60 flex-1">
                 <TextInput
                   id={`aspect-name-${aspect.code}`}
                   value={editLabel}
                   disabled={busy}
                   onChange={(e) => setEditLabel(e.target.value)}
+                  className={CONTROL_PHONE}
                 />
               </Field>
               <FieldRow.Actions>
                 <Button
                   disabled={busy || !editLabel.trim()}
+                  className={CONTROL_PHONE}
                   onClick={() => {
                     patchAspect(aspect.code, { label: editLabel.trim() });
                     setEditing(null);
                   }}
                 >
-                  Save
+                  {s.save}
                 </Button>
-                <Button variant="secondary" disabled={busy} onClick={() => setEditing(null)}>
-                  Cancel
+                <Button variant="secondary" disabled={busy} className={CONTROL_PHONE} onClick={() => setEditing(null)}>
+                  {s.cancel}
                 </Button>
               </FieldRow.Actions>
             </FieldRow>
@@ -284,7 +348,7 @@ export default function ActivationChecklistPage() {
           )}
           <span className="ml-auto flex flex-wrap items-center gap-2">
             <ConfigBadge tone={aspect.items.length > 0 ? 'won' : 'open'}>
-              {aspect.items.length} {aspect.items.length === 1 ? 'item' : 'items'}
+              {s.items({ n: aspect.items.length })}
             </ConfigBadge>
             {canWrite && editing !== `aspect-${aspect.code}` && (
               <>
@@ -295,17 +359,18 @@ export default function ActivationChecklistPage() {
                     setEditLabel(aspect.label);
                   }}
                 >
-                  Rename
+                  {s.rename}
                 </Button>
                 <Button
                   variant="secondary"
+                  className={CONTROL_PHONE}
                   onClick={() => {
                     setAddingAspect(false);
                     setAddingTo(aspect.code);
                     setEntry({ label: '', code: '', codeTouched: false, first: '' });
                   }}
                 >
-                  + Add item
+                  {t.addItem}
                 </Button>
 {/*
                   * One rule, on both screens: an aspect is removed **with** its items. An aspect
@@ -316,14 +381,13 @@ export default function ActivationChecklistPage() {
                   variant="inlineDanger"
                   disabled={busy || draft!.aspects.length === 1}
                   title={draft!.aspects.length === 1
-                    ? 'A checklist needs at least one aspect.'
-                    : `Removes ${aspect.label} and its ${aspect.items.length} `
-                      + `${aspect.items.length === 1 ? 'item' : 'items'} from the next version.`}
+                    ? t.oneAspect
+                    : t.removesAspect({ name: aspect.label, n: aspect.items.length })}
                   onClick={() => change({
                     aspects: draft!.aspects.filter((a) => a.code !== aspect.code),
                   })}
                 >
-                  Remove
+                  {s.remove}
                 </Button>
               </>
             )}
@@ -332,6 +396,8 @@ export default function ActivationChecklistPage() {
 
         <ul className="flex flex-col divide-y divide-hairline">
           {aspect.items.map((item, index) => {
+            // P18.96-T7 G2: completes from the office's data, by its code — drawn so, and not re-linked here.
+            const data = item.autoLink === null ? bound.get(item.code) : undefined;
             return (
               <li
                 key={item.code}
@@ -354,9 +420,20 @@ export default function ActivationChecklistPage() {
                   <DragHandle
                     label={item.label}
                     disabled={busy}
-                    className="cursor-grab select-none text-md text-muted disabled:cursor-not-allowed"
+                    className={cn(DRAG_HANDLE_CLASS, TAP_TARGET)}
                     onPick={() => setDragging({ aspect: aspect.code, item: item.code })}
                     onDrop={() => { setDragging(null); setOver(null); }}
+                    onMove={(by) => patchAspect(aspect.code, {
+                      items: move(aspect.items, index, index + by),
+                    })}
+                  />
+                )}
+                {canWrite && phone && editing !== item.code && (
+                  <ReorderArrows
+                    label={item.label}
+                    index={index}
+                    count={aspect.items.length}
+                    disabled={busy}
                     onMove={(by) => patchAspect(aspect.code, {
                       items: move(aspect.items, index, index + by),
                     })}
@@ -369,27 +446,30 @@ export default function ActivationChecklistPage() {
                       <CodeField
                         id={`code-item-code-${item.code}`}
                         value={item.code}
-                        reason="Every hire's progress on this item points at it."
+                        reason={t.itemReason}
+                        inputClassName={CONTROL_PHONE}
                       />
                       <FieldRow>
-                        <Field label="Item" htmlFor={`label-${item.code}`} className="min-w-60 flex-1">
+                        <Field label={s.item} htmlFor={`label-${item.code}`} className="min-w-60 flex-1">
                           <TextInput
                             id={`label-${item.code}`}
                             value={editLabel}
                             onChange={(e) => setEditLabel(e.target.value)}
+                            className={CONTROL_PHONE}
                           />
                         </Field>
                         <FieldRow.Actions>
                           <Button
                             disabled={!editLabel.trim()}
+                            className={CONTROL_PHONE}
                             onClick={() => {
                               patchItem(aspect.code, item.code, { label: editLabel.trim() });
                               setEditing(null);
                             }}
                           >
-                            Save
+                            {s.save}
                           </Button>
-                          <Button variant="secondary" onClick={() => setEditing(null)}>Cancel</Button>
+                          <Button variant="secondary" className={CONTROL_PHONE} onClick={() => setEditing(null)}>{s.cancel}</Button>
                         </FieldRow.Actions>
                       </FieldRow>
                     </div>
@@ -402,6 +482,7 @@ export default function ActivationChecklistPage() {
                   )}
                 </div>
 
+                {data && <LinkBadge link={data} />}
                 {item.autoLink !== null && links.has(item.autoLink) && (
                   <LinkBadge link={links.get(item.autoLink)!} />
                 )}
@@ -410,45 +491,52 @@ export default function ActivationChecklistPage() {
                   /* Wraps rather than holding its width: the select alone is wider than half a
                      phone, and a row that cannot shrink pushes the whole page sideways. */
                   <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
-                    <Field label="Completes from" htmlFor={`link-${item.code}`} className="min-w-44 flex-1">
-                      <Select
-                        id={`link-${item.code}`}
-                        value={item.autoLink ?? ''}
-                        disabled={busy}
-                        onChange={(e) => patchItem(aspect.code, item.code, {
-                          autoLink: e.target.value === '' ? null : e.target.value,
-                        })}
-                      >
-                        <option value="">No link (manual)</option>
-                        <optgroup label="Feature">
-                          {FEATURE_LINKS.map((f) => (
-                            <option key={f.value} value={f.value}>{f.label}</option>
-                          ))}
-                        </optgroup>
-                        <optgroup label="Training module">
-                          {offered.map((m) => (
-                            <option key={m.code} value={`training:${m.code}`}>{m.title}</option>
-                          ))}
-                        </optgroup>
-                      </Select>
+                    <Field label={t.completesFrom} htmlFor={`link-${item.code}`} className="min-w-44 flex-1">
+                      {data ? (
+                        /* The same select, holding the one thing it completes from and offering nothing else: the
+                           Owner reads it as data-backed, where *No link (manual)* said a leader ticks it (G2). */
+                        <Select id={`link-${item.code}`} value={data.kind} disabled onChange={() => undefined} className={CONTROL_PHONE}>
+                          <option value={data.kind}>{fromDataWords(data.label, language)}</option>
+                        </Select>
+                      ) : (
+                        <Select
+                          id={`link-${item.code}`}
+                          value={item.autoLink ?? ''}
+                          disabled={busy}
+                          className={CONTROL_PHONE}
+                          onChange={(e) => patchItem(aspect.code, item.code, {
+                            autoLink: e.target.value === '' ? null : e.target.value,
+                          })}
+                        >
+                          <option value="">{t.noLink}</option>
+                          <optgroup label={t.feature}>
+                            {FEATURE_LINKS.map((f) => (
+                              <option key={f.value} value={f.value}>{f.label}</option>
+                            ))}
+                          </optgroup>
+                          <optgroup label={t.trainingModule}>
+                            {offered.map((m) => (
+                              <option key={m.code} value={`training:${m.code}`}>{m.title}</option>
+                            ))}
+                          </optgroup>
+                        </Select>
+                      )}
                     </Field>
                     <Button
                       variant="inline"
                       onClick={() => { setEditing(item.code); setEditLabel(item.label); }}
                     >
-                      Edit
+                      {s.edit}
                     </Button>
                     <Button
                       variant="inlineDanger"
                       disabled={busy || aspect.items.length === 1}
-                      title={aspect.items.length === 1
-                        ? 'An aspect needs at least one item — remove the aspect instead.'
-                        : undefined}
+                      title={aspect.items.length === 1 ? t.oneItem : undefined}
                       onClick={() => patchAspect(aspect.code, {
                         items: aspect.items.filter((i) => i.code !== item.code),
                       })}
                     >
-                      Remove
+                      {s.remove}
                     </Button>
                   </div>
                 )}
@@ -459,9 +547,10 @@ export default function ActivationChecklistPage() {
 
         {canWrite && addingTo === aspect.code && (
           <FieldRow className="border-t border-hairline px-4 py-3 sm:px-5">
-            <Field label="Item" htmlFor="new-item-label" className="min-w-60 flex-1">
+            <Field label={s.item} htmlFor="new-item-label" className="min-w-60 flex-1">
               <TextInput
                 id="new-item-label"
+                className={CONTROL_PHONE}
                 value={entry.label}
                 onChange={(e) => setEntry((d) => ({
                   ...d, label: e.target.value, code: d.codeTouched ? d.code : suggestCode(e.target.value),
@@ -469,13 +558,14 @@ export default function ActivationChecklistPage() {
               />
             </Field>
             <Field
-              label="Code"
+              label={s.code}
               htmlFor="new-item-code"
-              hint="Filled in from the item. Permanent once saved."
+              hint={t.itemCodeHint}
               className="min-w-48"
             >
               <TextInput
                 id="new-item-code"
+                className={CONTROL_PHONE}
                 value={entry.code}
                 onChange={(e) => setEntry((d) => ({
                   ...d, code: e.target.value.toUpperCase(), codeTouched: e.target.value !== '',
@@ -485,6 +575,7 @@ export default function ActivationChecklistPage() {
             <FieldRow.Actions>
               <Button
                 disabled={!entry.label.trim() || !entry.code.trim()}
+                className={CONTROL_PHONE}
                 onClick={() => {
                   patchAspect(aspect.code, {
                     items: [...aspect.items, {
@@ -494,9 +585,9 @@ export default function ActivationChecklistPage() {
                   setAddingTo(null);
                 }}
               >
-                Add
+                {s.add}
               </Button>
-              <Button variant="secondary" onClick={() => setAddingTo(null)}>Cancel</Button>
+              <Button variant="secondary" className={CONTROL_PHONE} onClick={() => setAddingTo(null)}>{s.cancel}</Button>
             </FieldRow.Actions>
           </FieldRow>
         )}
@@ -506,26 +597,31 @@ export default function ActivationChecklistPage() {
 
   return (
     <SettingsScreen
-      title="Activation checklist"
-      subtitle="What every new hire works through in their first 90 days."
+      title={kept('Activation checklist')}
+      subtitle={t.subtitle}
       // The office's administration's own read since P18.5-T3 (as `training_settings:read`): a field member typing
       // the address meets the permission-denied state rather than a page of failed reads.
       permission="activation_settings:read"
       error={error}
       toolbar={{
-        /* The prototype's own sentence, which is the whole explanation of the AUTO badge. */
-        hint: 'Applies to every new hire’s 90-day activation. Items linked to a feature or '
-          + 'training module auto-complete when the agent does that action — no manual check-off needed.',
+        /* The prototype's own sentence, the whole explanation of the AUTO badge, in the client's words: shown from
+           1024px, an ⓘ in its place at 768–1023px, and nothing on a phone — each AUTO badge says what it waits for. */
+        hint: (
+          <>
+            <span className={SHOWN_FROM_DESKTOP}>{t.linkedItems}</span>
+            <BelowDesktopTip text={t.linkedItems} onPhone="remove" />
+          </>
+        ),
         actions: (
           <>
             {canWrite && draft && !addingAspect && (
-              <Button onClick={() => {
+              <Button className={CONTROL_PHONE} onClick={() => {
                 setAddingTo(null);
                 setAddingAspect(true);
                 setEntry({ label: '', code: '', codeTouched: false, first: '' });
               }}
               >
-                + Add aspect
+                {t.addAspect}
               </Button>
             )}
           </>
@@ -539,44 +635,33 @@ export default function ActivationChecklistPage() {
           <Card>
             <p className="text-md text-navy">
               {server.published ? (
-                <>
-                  Hires starting now are given{' '}
-                  <strong>version {server.published.version}</strong>.
-                  {hasDraft && <> You have an unpublished draft, which will become version {version}.</>}
-                </>
+                t.published({
+                  version: <strong>{t.version({ n: server.published.version })}</strong>,
+                  draft: hasDraft ? version : null,
+                })
               ) : hasDraft ? (
-                <>
-                  Nothing is published yet, so no hire has been given a checklist. Your draft will
-                  become <strong>version {version}</strong>.
-                </>
+                t.draftOnly({ version: <strong>{t.version({ n: version })}</strong> })
               ) : server.draft === null ? (
                 /*
                  * Neither a version nor a starting point: an office started from a source that held
                  * no checklist (ADR-0115 §8). Its Owner authors the first aspect from nothing; until
                  * a version is published nobody has an activation.
                  */
-                <>
-                  Nothing is published yet, so no hire has been given a checklist. Add its first
-                  aspect, save it, then publish <strong>version 1</strong>.
-                </>
+                t.fromNothing({ version: <strong>{t.version({ n: 1 })}</strong> })
               ) : (
-                <>
-                  Nothing is published yet, so no hire has been given a checklist. What you are
-                  looking at is the <strong>standard checklist</strong>, ready to edit — save it, then
-                  publish version 1.
-                </>
+                t.fromStandard({ standard: <strong>{t.standardChecklist}</strong> })
               )}
+              {/* Below 1024px the sentence under this one is its ⓘ, beside the version it is about (P18.97-T4 AC-6). */}
+              <BelowDesktopTip text={t.newVersions} className="ml-1" />
             </p>
-            <p className="mt-2 text-md text-muted">
-              Publishing gives the new version to hires who start <strong>after</strong> it. Anybody
-              part-way through their ninety days keeps the checklist they started on, which is why a
-              published version is never edited.
-            </p>
+            <p className={cn('mt-2 text-md text-muted', SHOWN_FROM_DESKTOP)}>{t.newVersions}</p>
             {/* The one setting this screen shows and does not own. It used to end "— change it in
                 Branch info", linking there; Branch info has no window field and no screen edits
                 the window, so the sentence states the fact and points nowhere (X-45). */}
             <p className="mt-2 text-sm text-muted">
-              The window is <strong className="text-navy">{server.windowDays} days</strong>.
+              {t.window({
+                days: <strong className="text-navy">{t.days({ n: formatNumber(server.windowDays, {}, figures) })}</strong>,
+              })}
             </p>
 
             {canWrite && (
@@ -584,23 +669,26 @@ export default function ActivationChecklistPage() {
                 {/* The starting point is savable as it stands: saving it is what makes the office
                     have a checklist at all. */}
                 <Button
+                  className={CONTROL_PHONE}
                   disabled={busy || draft.aspects.length === 0
                     || (!dirty && (hasDraft || server.published !== null))}
                   onClick={() => void run(() => saveActivationDraft(draft))}
                 >
-                  {busy ? 'Saving…' : 'Save draft'}
+                  {busy ? s.saving : t.saveDraft}
                 </Button>
                 <Button
                   variant="secondary"
+                  className={CONTROL_PHONE}
                   disabled={busy || dirty || !hasDraft}
-                  title={dirty ? 'Save the draft first.' : undefined}
+                  title={dirty ? t.saveDraftFirst : undefined}
                   onClick={() => void run(publishActivationChecklist)}
                 >
-                  Publish version {version}
+                  {t.publishVersion({ n: version })}
                 </Button>
                 {dirty && (
                   <Button
                     variant="secondary"
+                    className={CONTROL_PHONE}
                     disabled={busy}
                     onClick={() => {
                       const current = server.draft ?? server.published;
@@ -608,11 +696,11 @@ export default function ActivationChecklistPage() {
                       setDirty(false);
                     }}
                   >
-                    Undo my edits
+                    {t.undoEdits}
                   </Button>
                 )}
                 {saved && !dirty && (
-                  <p role="status" className="text-md font-semibold text-success">Saved.</p>
+                  <p role="status" className="text-md font-semibold text-success">{s.saved}</p>
                 )}
               </div>
             )}
@@ -620,15 +708,13 @@ export default function ActivationChecklistPage() {
 
           {canWrite && addingAspect && (
             <Card>
-              <h2 className="font-display text-lg font-bold text-navy">Add an aspect</h2>
-              <p className="mt-1 text-sm text-muted">
-                An aspect is a heading with items under it. It needs its first item now, because an
-                aspect with nothing in it is a heading a hire opens and finds empty.
-              </p>
+              <h2 className="font-display text-lg font-bold text-navy">{t.addAnAspect}</h2>
+              <p className="mt-1 text-sm text-muted">{t.aspectLead}</p>
               <FieldRow className="mt-3">
-                <Field label="Aspect" htmlFor="new-aspect-label" className="min-w-60 flex-1">
+                <Field label={t.aspect} htmlFor="new-aspect-label" className="min-w-60 flex-1">
                   <TextInput
                     id="new-aspect-label"
+                    className={CONTROL_PHONE}
                     value={entry.label}
                     onChange={(e) => setEntry((d) => ({
                       ...d,
@@ -638,22 +724,24 @@ export default function ActivationChecklistPage() {
                   />
                 </Field>
                 <Field
-                  label="Code"
+                  label={s.code}
                   htmlFor="new-aspect-code"
-                  hint="Filled in from the name. Permanent once saved."
+                  hint={t.aspectCodeHint}
                   className="min-w-48"
                 >
                   <TextInput
                     id="new-aspect-code"
+                    className={CONTROL_PHONE}
                     value={entry.code}
                     onChange={(e) => setEntry((d) => ({
                       ...d, code: e.target.value.toUpperCase(), codeTouched: e.target.value !== '',
                     }))}
                   />
                 </Field>
-                <Field label="Its first item" htmlFor="new-aspect-item" className="min-w-60 flex-1">
+                <Field label={t.firstItem} htmlFor="new-aspect-item" className="min-w-60 flex-1">
                   <TextInput
                     id="new-aspect-item"
+                    className={CONTROL_PHONE}
                     value={entry.first}
                     onChange={(e) => setEntry((d) => ({ ...d, first: e.target.value }))}
                   />
@@ -662,6 +750,7 @@ export default function ActivationChecklistPage() {
               <div className="mt-3 flex flex-wrap gap-2">
                 <Button
                   disabled={!entry.label.trim() || !entry.code.trim() || !entry.first.trim()}
+                  className={CONTROL_PHONE}
                   onClick={() => {
                     change({
                       aspects: [...draft.aspects, {
@@ -677,16 +766,16 @@ export default function ActivationChecklistPage() {
                     setAddingAspect(false);
                   }}
                 >
-                  Add the aspect
+                  {t.addTheAspect}
                 </Button>
-                <Button variant="secondary" onClick={() => setAddingAspect(false)}>Cancel</Button>
+                <Button variant="secondary" className={CONTROL_PHONE} onClick={() => setAddingAspect(false)}>{s.cancel}</Button>
               </div>
             </Card>
           )}
 
           {draft.aspects.length === 0 && !addingAspect && (
             <Card>
-              <EmptyState title="This office has no activation checklist yet." />
+              <EmptyState title={t.none} />
             </Card>
           )}
           {draft.aspects.map((aspect, at) => aspectCard(aspect, at))}

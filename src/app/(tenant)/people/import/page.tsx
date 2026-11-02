@@ -2,6 +2,9 @@
 
 import { Page } from '@/components/page';
 import { RosterImport } from '@/components/roster-import';
+import { kept } from '@/i18n/kept';
+import { useMessages } from '@/i18n/language-provider';
+import { rosterImportMessages } from '@/i18n/messages/roster-import';
 import { useSession } from '@/lib/session';
 
 /**
@@ -12,19 +15,20 @@ import { useSession } from '@/lib/session';
  * exist, because a 403 would confirm the id is real.
  */
 export default function PeopleImportPage() {
+  const t = useMessages(rosterImportMessages);
   const { me } = useSession();
   const kpmId = me?.membership?.kpmId;
 
   return (
     <Page
-      title="Import people"
-      subtitle="Create several people at once from a spreadsheet."
+      title={kept('Import people')}
+      subtitle={t.importSubtitle}
       permission="kpm:import_roster"
     >
       {kpmId ? (
         <RosterImport kpmId={kpmId} backHref="/people/members" />
       ) : (
-        <p className="text-md text-muted">You are not in an office.</p>
+        <p className="text-md text-muted">{t.notInOffice}</p>
       )}
     </Page>
   );

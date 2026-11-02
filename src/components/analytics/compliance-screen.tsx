@@ -3,16 +3,21 @@
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useId, useState, type ReactNode } from 'react';
 import { FeedbackSummarySection } from '@/components/events/feedback-summary';
+import { useFieldChrome } from '@/components/field-nav';
 import { Button, ErrorBanner } from '@/components/ui/field';
+import { useMessages } from '@/i18n/language-provider';
+import { kpmComplianceMessages } from '@/i18n/messages/kpm-compliance';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import {
-  campaignOf, complianceQuery, firstModuleOf, OWN_COPY, PROTOTYPE_COPY, readCompliance, searchTree, trainingPathOf, treeKindOf,
+  campaignOf, complianceQuery, firstModuleOf, readCompliance, searchTree, trainingPathOf, treeKindOf,
   type ComplianceCategory, type ComplianceSelection, type ComplianceTrainingCategory, type ComplianceView,
   type SortDirection,
 } from '@/lib/kpm-compliance';
 import { CampaignPicker, EventPicker, TooltipNote, TrainingTabs } from './compliance-pickers';
 import { ComplianceSummary } from './compliance-summary';
 import { ComplianceTree, TreeSkeleton } from './compliance-tree';
+import { V1Compliance } from './v1-compliance';
+import { usePhone } from '@/lib/use-phone';
 
 /**
  * **Compliance, Events, and Campaigns** (`KPM_Owner.html:1262-1286`, `:3449-4118`; P18.6-T1, P18.6-T2): the
@@ -31,8 +36,12 @@ import { ComplianceTree, TreeSkeleton } from './compliance-tree';
  *
  * The states the prototype lacks are Fills (L-01): the outline while reading, an error with a retry that keeps
  * the selection, a team with no AB, and a year with no training, event or campaign to show.
+ *
+ * **Its words are the reader's** (P18.98-T4; `kpmComplianceMessages`): the heading and the six chips kept English, the
+ * rest the approved glossary's; a category's, an event's and a campaign's names are the office's, shown as typed.
  */
 export function ComplianceScreen({ selection }: { selection: ComplianceSelection }) {
+  const t = useMessages(kpmComplianceMessages);
   const router = useRouter();
   const pathname = usePathname();
   const headingId = useId();
@@ -50,6 +59,9 @@ export function ComplianceScreen({ selection }: { selection: ComplianceSelection
   const [direction, setDirection] = useState<SortDirection>('worst');
   /** A training category with no module, pressed: shown on the screen, read from nowhere. */
   const [emptyCategory, setEmptyCategory] = useState<string | null>(null);
+  // UI V1 (UI-109): a phone in the field shell reads the compact Compliance; the console and wider screens as before.
+  const phone = usePhone();
+  const field = useFieldChrome() !== null;
 
   useEffect(() => {
     let live = true;
@@ -92,15 +104,42 @@ export function ComplianceScreen({ selection }: { selection: ComplianceSelection
    */
   const missing = (error?.code === 'NOT_FOUND' || error?.code === 'VALIDATION_FAILED') && item !== null;
   const retry = missing
-    ? { label: OWN_COPY.backTo(PROTOTYPE_COPY.chips[category]), run: () => choose({ category, item: null }) }
-    : { label: OWN_COPY.tryAgain, run: () => setAttempt((n) => n + 1) };
+    ? { label: t.backTo({ category: t.chips[category] }), run: () => choose({ category, item: null }) }
+    : { label: t.tryAgain, run: () => setAttempt((n) => n + 1) };
+
+  if (phone && field) {
+    return (
+      <div className="min-w-0" data-part="compliance">
+        {!view && !error && <TreeSkeleton withChips />}
+        {error && <Failed error={error} onRetry={retry} />}
+        {view && (
+          <>
+            <V1Compliance
+              view={view}
+              fresh={fresh}
+              category={category}
+              selected={selected}
+              emptyCategory={emptyCategory}
+              direction={direction}
+              onCategory={chooseCategory}
+              onTraining={chooseTraining}
+              onItem={(next) => choose({ category, item: next })}
+              onToggle={() => setDirection((d) => (d === 'worst' ? 'best' : 'worst'))}
+            />
+            {fresh && <div className="mt-3"><PastEventCard view={view} /></div>}
+            {!fresh && !error && <TreeSkeleton />}
+          </>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="min-w-0" data-part="compliance">
       {/* `.section-head` (`:1265-1268`): the title and its sub-line, both counts the read's (contradiction 1). */}
       <div className="mb-3.5 flex flex-col items-start gap-[3px] md:flex-row md:items-baseline md:justify-between">
-        <h2 id={headingId} className="font-display text-lg font-bold text-navy">{PROTOTYPE_COPY.title}</h2>
-        {view && view.units > 0 && <p className="text-sm text-muted">{PROTOTYPE_COPY.sub(view.people, view.units)}</p>}
+        <h2 id={headingId} className="font-display text-lg font-bold text-navy">{t.title}</h2>
+        {view && view.units > 0 && <p className="text-sm text-muted">{t.sub({ people: view.people, units: view.units })}</p>}
       </div>
 
       {!view && !error && <TreeSkeleton withChips />}
@@ -117,7 +156,7 @@ export function ComplianceScreen({ selection }: { selection: ComplianceSelection
             onTraining={chooseTraining}
             onItem={(next) => choose({ category, item: next })}
           />
-          {category === 'activity' && <TooltipNote>{PROTOTYPE_COPY.activityTooltip}</TooltipNote>}
+          {category === 'activity' && <TooltipNote>{t.activityTooltip}</TooltipNote>}
           {fresh && <PastEventCard view={view} />}
 
           {view.tree.length > 0 && (
@@ -230,15 +269,16 @@ function Filters({
   direction: SortDirection;
   onToggle: () => void;
 }) {
-  const [arrow, words] = PROTOTYPE_COPY.sort[kind][direction];
+  const t = useMessages(kpmComplianceMessages);
+  const arrow = direction === 'worst' ? '↓' : '↑';
   return (
     <div className="mb-3.5 flex flex-wrap items-center gap-2">
       <input
         type="search"
         value={search}
         onChange={(e) => onSearch(e.target.value)}
-        placeholder={PROTOTYPE_COPY.searchPlaceholder}
-        aria-label={OWN_COPY.searchName}
+        placeholder={t.searchPlaceholder}
+        aria-label={t.searchName}
         // A row of its own below `sm`, the sort under it: beside the sort at 360px it cut its own placeholder.
         className="min-w-[160px] flex-1 basis-full rounded-md border border-hairline bg-card px-2.5 py-2 text-sm text-navy focus:border-amber sm:max-w-[240px] sm:basis-0"
       />
@@ -247,7 +287,7 @@ function Filters({
         onClick={onToggle}
         className="ml-auto rounded-pill border border-hairline bg-card px-3 py-1.5 text-sm font-semibold text-muted hover:border-navy/30 hover:text-navy"
       >
-        <span aria-hidden="true">{arrow}</span> {words}
+        <span aria-hidden="true">{arrow}</span> {t.sort[kind][direction]}
       </button>
     </div>
   );
@@ -263,23 +303,24 @@ function Body({
   direction: SortDirection;
   onChanged: () => void;
 }) {
+  const t = useMessages(kpmComplianceMessages);
   const { catalog, selected } = view;
   const category = selected.category;
 
   if (view.tree.length === 0) {
-    return <Empty title={OWN_COPY.noAbTitle}><p>{OWN_COPY.noAbLine}</p></Empty>;
+    return <Empty title={t.noAbTitle}><p>{t.noAbLine}</p></Empty>;
   }
   if (category === 'training') {
-    if (catalog.training.length === 0) return <Empty title={OWN_COPY.noTraining} />;
+    if (catalog.training.length === 0) return <Empty title={t.noTraining} />;
     const path = trainingPathOf(catalog.training, selected.item);
     const active = catalog.training.find((c) => c.code === emptyCategory) ?? path?.category ?? catalog.training[0];
-    if (!firstModuleOf(active)) return <Empty title={PROTOTYPE_COPY.comingSoon(active.label)} />;
+    if (!firstModuleOf(active)) return <Empty title={t.comingSoon({ name: active.label })} />;
   }
-  if (category === 'events' && catalog.events.length === 0) return <Empty title={OWN_COPY.noEvents} />;
-  if (category === 'campaigns' && catalog.campaigns.length === 0) return <Empty title={OWN_COPY.noCampaigns} />;
+  if (category === 'events' && catalog.events.length === 0) return <Empty title={t.noEvents} />;
+  if (category === 'campaigns' && catalog.campaigns.length === 0) return <Empty title={t.noCampaigns} />;
 
   const sections = searchTree(view.tree, search);
-  if (sections.length === 0) return <Empty title={PROTOTYPE_COPY.noMatch} filtered />;
+  if (sections.length === 0) return <Empty title={t.noMatch} filtered />;
 
   const campaign = category === 'campaigns' ? campaignOf(catalog.campaigns, selected.item) : null;
   return (

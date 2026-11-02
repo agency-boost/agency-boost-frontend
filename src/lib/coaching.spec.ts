@@ -2,12 +2,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { stubFetch } from '@test/harness';
 import {
   capitalized, coacheeInitials, coacheeUnitLine, coachingArchiveHref, coachingSessionHref, coachingTabHref, coachingTabOf,
-  finalizeRefusal, finalizeSession, lastOneOnOneOverdue, lastOneOnOneText, pastSessionSummary, PRONOUN_FORMS, readCoachee,
-  readRoster, readSession, readSessionHistory, reopenSession, reopenWindowClosed, ROSTER_STATUS_LABEL, saveSessionDraft,
-  startSession, type LastOneOnOne,
+  finalizeRefusal, finalizeSession, lastOneOnOneLine, lastOneOnOneOverdue, lastOneOnOneText, pastSessionSummary, PRONOUN_FORMS, readCoachee,
+  readRoster, readSession, readSessionHistory, reopenSession, reopenWindowClosed, ROSTER_STATUS_LABEL, rosterStatusLabel,
+  saveSessionDraft, startSession, type LastOneOnOne,
 } from './coaching';
 import {
-  agreedVersions, firstName, goalHasTarget, myCoachingHref, printActionLine, printGoalLine, printLeadActionLine,
+  agreedVersions, firstName, goalHasTarget, leadActionText, myCoachingHref, printActionLine, printGoalLine, printLeadActionLine,
   readMySessions, readSessionPrint, readSessionShared, sessionTabHref,
 } from './coaching';
 import {
@@ -29,6 +29,14 @@ describe('the roster’s words (P11-T6)', () => {
     expect(lastOneOnOneText(last(0))).toBe('Today');
     expect(lastOneOnOneText(last(1))).toBe('1 day ago');
     expect(lastOneOnOneText(last(12))).toBe('12 days ago');
+  });
+
+  it('P18.8-T15 AC-7 says overdue in the words when the server marks it, and nothing more otherwise', () => {
+    expect(lastOneOnOneLine(last(14, true))).toBe('14 days ago · overdue');
+    expect(lastOneOnOneLine(last(1, true))).toBe('1 day ago · overdue');
+    expect(lastOneOnOneLine(last(30, false))).toBe('30 days ago');
+    // *No 1:1 yet* says it already, and red besides.
+    expect(lastOneOnOneLine(null)).toBe('No 1:1 yet');
   });
 
   it('P11-T6 AC-3 marks red what the server marks overdue, and a member never coached — never by counting days here', () => {
@@ -311,8 +319,8 @@ describe('the record after the meeting (P11-T10)', () => {
 
   it('P11-T10 AC-3 writes the print’s lines as the prototype’s export does, in the one money formatter', () => {
     const money = (minor: number) => `Rp ${minor / 100}`;
-    expect(printGoalLine('This month', { targetMinor: 8000, actualMinor: 6500 }, money)).toBe('This month: Rp 65 / Rp 80');
-    expect(printGoalLine('This year', { targetMinor: null, actualMinor: null }, money)).toBe('This year: Not uploaded yet / —');
+    expect(printGoalLine('month', { targetMinor: 8000, actualMinor: 6500 }, money)).toBe('This month: Rp 65 / Rp 80');
+    expect(printGoalLine('year', { targetMinor: null, actualMinor: null }, money)).toBe('This year: Not uploaded yet / —');
     const day = (d: string) => `<${d}>`;
     expect(printLeadActionLine(0, { dueDate: '2026-10-03', text: 'Collect the SPAJ.', leadName: 'Desi' }, day))
       .toBe('1. <2026-10-03> — Collect the SPAJ. (Leads: Desi)');
@@ -369,5 +377,117 @@ describe('the record after the meeting (P11-T10)', () => {
       'http://api.test/api/v1/coaching/me/sessions',
       'http://api.test/api/v1/coaching/sessions/s%2F1/print',
     ]);
+  });
+});
+
+/**
+ * **P18.98-T4 (coaching and unit): the words in Indonesian.** Each function takes the reader's language last, English
+ * when passed none — every case above — and writes the approved glossary's Indonesian when asked: one form for one and
+ * many, *dia* whatever the pronoun (§B.0 rule 8), the kept terms English, names and labels as typed.
+ */
+describe('P18.98-T4 coaching’s words in Indonesian', () => {
+  it('words Last 1:1, its overdue and a status pill', () => {
+    expect(lastOneOnOneText(null, 'id')).toBe('Belum ada 1:1');
+    expect(lastOneOnOneText(last(0), 'id')).toBe('Hari ini');
+    expect(lastOneOnOneText(last(1), 'id')).toBe('1 hari lalu');
+    expect(lastOneOnOneLine(last(14, true), 'id')).toBe('14 hari lalu · terlambat');
+    expect(rosterStatusLabel('on_track', 'id')).toBe('Sesuai target');
+    expect(rosterStatusLabel('watch_closely', 'id')).toBe('Perlu dipantau');
+    expect(rosterStatusLabel('needs_attention', 'id')).toBe('Perlu perhatian');
+    expect(rosterStatusLabel('no_goal_set', 'id')).toBe('Goal belum diatur');
+    // The English is the old constant's, word for word.
+    expect(rosterStatusLabel('on_track')).toBe(ROSTER_STATUS_LABEL.on_track);
+  });
+
+  it('says whose unit, the rung as the ladder names it and the leader as named', () => {
+    const rung = { code: 'AGENT', label: 'Agent' };
+    expect(coacheeUnitLine({ rung, direct: true, leader: null }, 'id')).toBe('Agent · Unit langsung');
+    expect(coacheeUnitLine({ rung, direct: false, leader: { membershipId: 'm', name: 'Arief Nugroho' } }, 'id')).toBe('Agent · Unit Arief Nugroho');
+  });
+
+  it('counts a history row with one form for one and many', () => {
+    expect(pastSessionSummary({ actionItemCount: 1, completedCount: 0 }, 'id')).toBe('1 tindakan · 0 selesai');
+    expect(pastSessionSummary({ actionItemCount: 3, completedCount: 1 }, 'id')).toBe('3 tindakan · 1 selesai');
+  });
+
+  it.each([
+    ['NO_ACTION_ITEM', {}, 'Tambahkan setidaknya satu tindakan sebelum memfinalkan.'],
+    ['EMPTY_TIP', {}, 'Isi atau hapus tips coaching yang kosong sebelum memfinalkan.'],
+    ['EMPTY_ACTION_ITEM', {}, 'Isi atau hapus tindakan yang kosong sebelum memfinalkan.'],
+    ['UNDATED_ACTION_ITEM', {}, 'Setiap tindakan perlu tanggal sebelum memfinalkan.'],
+    ['LEAD_THIS_MONTH_UNDATED', { leadName: 'Alvin Sanjaya' }, 'Alvin Sanjaya ditandai "bulan ini", tetapi belum punya tanggal tindakan berikutnya — tambahkan sebelum memfinalkan.'],
+    ['LEAD_THIS_MONTH_UNDATED', {}, 'Sebuah lead ditandai "bulan ini", tetapi belum punya tanggal tindakan berikutnya — tambahkan sebelum memfinalkan.'],
+  ])('says %s in Indonesian', (rule, extra, sentence) => {
+    expect(finalizeRefusal({ rule, ...extra }, 'id')).toBe(sentence);
+  });
+
+  it('tags the stage, the office’s label as typed', () => {
+    const stage = (code: string, label: string, order: number) => ({ code, label, displayOrder: order, status: 'active' as const, stageOrder: order, requiredMilestoneCodes: [] });
+    const catalog = { stages: [stage('JUNIOR', 'Competent Producer', 1), stage('SENIOR', 'Independent Producer', 2)], milestones: [], grids: [] };
+    expect(capabilityTag(catalog, 'SENIOR', 'id')).toBe('Saat ini: Independent Producer');
+    expect(capabilityTag(catalog, null, 'id')).toBe('Belum mencapai Competent Producer');
+  });
+
+  it('says a downline section does not apply with *dia*, whatever the pronoun', () => {
+    const grid = (code: string) => ({ code, label: code, displayOrder: 1, status: 'active' as const, requiresDownline: true, items: [] });
+    const none = { members: 0, leaders: 0 };
+    for (const pronoun of ['she', 'he', 'they'] as const) {
+      expect(gridNotApplicable(grid('DEVELOPING_DOWNLINE_AGENT'), none, pronoun, 'id')).toBe('Tidak berlaku — dia belum punya agen di bawahnya.');
+      expect(gridNotApplicable(grid('DEVELOPING_DOWNLINE_LEADER'), none, pronoun, 'id')).toBe('Tidak berlaku — dia belum punya leader di downline-nya.');
+    }
+  });
+
+  it('writes the print’s lines in Indonesian, the figures as the caller wrote them', () => {
+    const money = (minor: number) => `Rp ${minor / 100}`;
+    expect(printGoalLine('month', { targetMinor: 8000, actualMinor: 6500 }, money, 'id')).toBe('Bulan ini: Rp 65 / Rp 80');
+    expect(printGoalLine('year', { targetMinor: null, actualMinor: null }, money, 'id')).toBe('Tahun ini: Belum diunggah / —');
+    const day = (d: string) => `<${d}>`;
+    expect(printLeadActionLine(0, { dueDate: '2026-10-03', text: '', leadName: 'Desi' }, day, 'id'))
+      .toBe('1. <2026-10-03> — Lakukan follow up dengan Desi (Leads: Desi)');
+    expect(leadActionText({ text: 'Collect the SPAJ.', leadName: 'Desi' }, 'id')).toBe('Collect the SPAJ.');
+  });
+
+  it('keeps English’s pronoun table, which the screens still building such a sentence read', () => {
+    expect(PRONOUN_FORMS.she.possessive).toBe('her');
+  });
+});
+
+/*
+ * ── UI V1 (Phase 18.99 T8): the tabs in the owner's order, the way back, the session's Leads card ──────────────────
+ */
+describe('UI V1 — coaching (P18.99-T8)', () => {
+  it('UI-029 orders the tabs as the owner does, Coaching Session first, and knows the new Leads tab by its address', async () => {
+    const { COACHING_TABS } = await import('./coaching');
+    expect(COACHING_TABS).toEqual(['session', 'activity', 'leads', 'goal-setting', 'summary', 'activation', 'training', 'leader-notes']);
+    expect(coachingTabOf('/coaching/mem-rina/leads', 'mem-rina')).toBe('leads');
+    expect(coachingTabHref('mem-rina', 'leads')).toBe('/coaching/mem-rina/leads');
+  });
+
+  it('UI-029 opens a person on their Coaching Session, naming where the way back goes when an entry point says', () => {
+    expect(coachingSessionHref('mem-rina')).toBe('/coaching/mem-rina/session');
+    expect(coachingSessionHref('mem-rina', '/new-hires')).toBe('/coaching/mem-rina/session?from=%2Fnew-hires');
+  });
+
+  it('UI-062 says what a lead’s next action is missing: Isi tindakan with neither, Isi tanggal with a note and no date', async () => {
+    const { leadGap } = await import('./coaching');
+    expect(leadGap({ nextActionDate: null, nextActionNote: null })).toBe('action');
+    expect(leadGap({ nextActionDate: null, nextActionNote: '   ' })).toBe('action');
+    expect(leadGap({ nextActionDate: null, nextActionNote: 'Second meeting' })).toBe('date');
+    expect(leadGap({ nextActionDate: '2026-10-30', nextActionNote: null })).toBeNull();
+  });
+
+  it('UI-062 orders the card: gaps first, then the overdue, then by date — never dropping a lead for lack of a date', async () => {
+    const { sessionLeadOrder, SESSION_LEADS_SHOWN } = await import('./coaching');
+    const at = (id: string, nextActionDate: string | null, over: { note?: string | null; overdue?: boolean } = {}) => ({
+      id, nextActionDate, nextActionNote: over.note ?? (nextActionDate ? 'Note' : null), flags: over.overdue ? ['overdue' as const] : [],
+    });
+    const leads = [
+      at('later', '2026-11-04'), at('late', '2026-10-20', { overdue: true }), at('none', null), at('soon', '2026-11-01'),
+      at('noted', null, { note: 'Call' }), at('later-late', '2026-10-25', { overdue: true }),
+    ];
+    expect(sessionLeadOrder(leads).map((l) => l.id)).toEqual(['none', 'noted', 'late', 'later-late', 'soon', 'later']);
+    expect(sessionLeadOrder(leads)).toHaveLength(leads.length);
+    // UI-062: the first five, then *Tampilkan semua*.
+    expect(SESSION_LEADS_SHOWN).toBe(5);
   });
 });

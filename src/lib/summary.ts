@@ -17,6 +17,11 @@ export interface FigureSource {
    */
   correctedBy?: { membershipId: string; name: string } | null;
   correctedAt?: string | null;
+  /**
+   * **Who typed a `self_reported` figure, when it was not the member** — a coach (S2): `self_reported` is *typed in the
+   * app, not uploaded*, by the member or by whoever coaches them. Absent when the member typed it.
+   */
+  typedBy?: { membershipId: string; name: string | null };
 }
 
 export interface PeriodFigures {
@@ -54,7 +59,10 @@ export interface Pace {
 /** One of *Your sales activity targets* (P10-T5): a cascade code logged against the period's target. */
 export interface ActivityTarget {
   key: 'leads' | 'appointments' | 'closings';
+  /** The first code the office binds to this stage. */
   code: string;
+  /** Every code the office binds to this stage (ADR-0163); `logged` is their sum. */
+  codes?: string[];
   logged: number;
   /** `null` without an APE target to derive it from; 0 when the month needs nothing more — met. */
   target: number | null;
@@ -119,20 +127,118 @@ export type Insight =
   | { rule: 'RATIO_BELOW'; kind: 'improve'; facts: RatioFacts }
   | { rule: 'RATIO_STRENGTH'; kind: 'improve'; facts: RatioFacts };
 
+/**
+ * **Which period a Summary is for, and which there are** (P18.8-T11, ADR-0161 §4) — the server's, so no date is
+ * worked out here: the office's first month and its current one, and whether the month and the year read are
+ * the current ones. A closed period is read whole, with no pace; the screen shows *The gap* for the current one.
+ */
+export interface SummaryPeriod {
+  /** `YYYY-MM`, in the office's zone: the earliest month there is, and its year the earliest year. */
+  firstMonth: string;
+  /** `YYYY-MM`: the office's current month, the latest there is. */
+  thisMonth: string;
+  currentMonth: boolean;
+  currentYear: boolean;
+}
+
 export interface Summary {
+  /** The year *Yearly* is about: this one, or one asked for. */
   year: string;
+  /** The month *Monthly* is about, `YYYY-MM`: this one, one asked for, or a closed year's December. */
   month: string;
   today: string;
+  period: SummaryPeriod;
   goal: { set: boolean; savedAt: string | null };
   caseSizeMinor: number;
   monthly: PeriodFigures & { source: FigureSource | null };
   yearly: PeriodFigures & { source: FigureSource };
   pace: Pace | null;
+  /**
+   * **Where the page's counts of policies come from** (UI-052): every one — the *Submission polis* chips and the pace
+   * sentence's *closing N* — is the activity log's, over `codes`; APE and *Polis yang dibutuhkan* are the upload's. The
+   * API always sends it; optional so a fixture about something else need not.
+   */
+  policies?: { source: 'activity_log'; codes: string[] };
+  /**
+   * **The day the page's APE is valid for** (UI-054, the date header): the office's day its latest production file for
+   * `month` — and for `year`, of any of its months up to `month` — was uploaded; `null` while there is none. The API
+   * always sends it; optional so a fixture about something else need not.
+   */
+  uploadedOn?: { month: string | null; year: string | null };
   activity: { monthly: SummaryActivity; yearly: SummaryActivity };
-  /** The nearest of the reader's own open leads, and how many there are. */
-  leads: { rows: OpenLead[]; total: number };
+  /**
+   * The nearest of the reader's own open leads, and how many there are; and `unitOpen`, the open leads Leads
+   * Management lists them besides their own — counted on their own summary while their own card is empty
+   * (P18.8-T15 AC-4). The API always sends it; optional so a fixture about something else need not.
+   */
+  leads: { rows: OpenLead[]; total: number; unitOpen?: number };
   /** The rules that fired, in their fixed priority, at most four. */
   insights: Insight[];
+}
+
+/**
+ * **The period a page asks for** (P18.8-T11): a month, `YYYY-MM`, or a year, `YYYY`, or neither — the office's
+ * current month. It is the page's address, `?month=` or `?year=`, as `/summary` and a coachee's *Personal Summary*
+ * tab carry it.
+ */
+export interface SummaryPeriodQuery {
+  month?: string;
+  year?: string;
+}
+
+const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
+const YEAR = /^\d{4}$/;
+const one = (value: string | string[] | undefined) => (typeof value === 'string' ? value : undefined);
+
+/**
+ * The address's period: a well-formed `month`, else a well-formed `year`, else neither — the current month. A
+ * malformed one is not sent, since the read would refuse it; **one in the future or before the office is**, and
+ * the server's refusal says which months there are.
+ */
+export function summaryPeriodFrom(query: { month?: string | string[]; year?: string | string[] }): SummaryPeriodQuery {
+  const month = one(query.month);
+  if (month !== undefined && MONTH.test(month)) return { month };
+  const year = one(query.year);
+  if (year !== undefined && YEAR.test(year)) return { year };
+  return {};
+}
+
+/** `?month=…` or `?year=…`, or nothing: the address and the read's query alike. */
+export const periodSearch = (period: SummaryPeriodQuery) =>
+  (period.month ? `?month=${period.month}` : period.year ? `?year=${period.year}` : '');
+
+/**
+ * **The months a reader may choose**, newest first: the office's current month back to its first (P18.8-T11).
+ * Calendar arithmetic on two `YYYY-MM` strings the server sent, so no clock and no zone is read here.
+ */
+export function monthsOf(period: Pick<SummaryPeriod, 'firstMonth' | 'thisMonth'>): string[] {
+  const months: string[] = [];
+  let [y, m] = period.thisMonth.split('-').map(Number);
+  for (let month = period.thisMonth; month >= period.firstMonth; month = `${y}-${String(m).padStart(2, '0')}`) {
+    months.push(month);
+    [y, m] = m === 1 ? [y - 1, 12] : [y, m - 1];
+  }
+  return months;
+}
+
+/** **The years a reader may choose**, newest first: the office's current year back to its first. */
+export function yearsOf(period: Pick<SummaryPeriod, 'firstMonth' | 'thisMonth'>): string[] {
+  const years: string[] = [];
+  for (let y = Number(period.thisMonth.slice(0, 4)); y >= Number(period.firstMonth.slice(0, 4)); y -= 1) years.push(String(y));
+  return years;
+}
+
+/**
+ * **The days left after today in the office's month, or its year** (UI-054: *sisa 1 hari bulan ini* on the 30th of
+ * October, *hari terakhir* — 0 — on the 31st): calendar arithmetic on the office's day the server sent (`today`,
+ * `YYYY-MM-DD`), so no clock and no zone is read here. Built from the date's numbers in UTC, where no day is 23 hours.
+ */
+export function daysLeftIn(today: string, period: 'month' | 'year'): number {
+  const [y, m, d] = today.split('-').map(Number);
+  const day = Date.UTC(y, m - 1, d);
+  // The month's last day is day 0 of the next; the year's is 31 December.
+  const last = period === 'month' ? Date.UTC(y, m, 0) : Date.UTC(y, 11, 31);
+  return Math.round((last - day) / 86_400_000);
 }
 
 /**
@@ -142,12 +248,19 @@ export interface Summary {
 const forSubject = (membershipId?: string) =>
   (membershipId ? `?for=${encodeURIComponent(membershipId)}` : '');
 
+/** The query: `for` first, then the period, each only when there is one. */
+const summaryQuery = (membershipId: string | undefined, period: SummaryPeriodQuery) => {
+  const subject = forSubject(membershipId);
+  const when = periodSearch(period);
+  return subject && when ? `${subject}&${when.slice(1)}` : subject || when;
+};
+
 /**
  * The Summary. Without a subject it is the reader's own, unaudited. **With one** it is the same
  * Summary computed for that member (P11-T4, P11-T7): their goal, production and its source, log,
  * leads and compliance, on their rung. The server resolves the subject by the reader's grant — a
  * leader reaches the people they coach (ADR-0074) — answers 404 outside it, and writes one audit
- * entry per read (roles §3.5).
+ * entry per read (roles §3.5). **With a period** (P18.8-T11), an earlier month or year, read whole.
  */
-export const readSummary = (membershipId?: string) =>
-  api<Summary>('/summary' + forSubject(membershipId));
+export const readSummary = (membershipId?: string, period: SummaryPeriodQuery = {}) =>
+  api<Summary>('/summary' + summaryQuery(membershipId, period));

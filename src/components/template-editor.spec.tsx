@@ -278,6 +278,56 @@ describe('TaxonomyEditor', () => {
   });
 });
 
+/*
+ * P18.9-T2 AC-3 (ADR-0163): the template's activity binding — which of its types each cascade stage counts in every
+ * office made from it — read as a line per stage and edited behind *Edit binding*.
+ */
+describe('TaxonomyEditor — the activity binding (P18.9-T2)', () => {
+  const BOUND: TaxonomyPayload = {
+    ...TAXONOMY,
+    bindings: { leads: ['RECRUIT_APPROACH'], appointments: ['SELL_PRESENTATION'], closings: ['SELL_SUBMISSION'] },
+  };
+  /** The editor holding its own payload, as the template screen does. */
+  function Harness({ start, onChange }: { start: TaxonomyPayload; onChange: (p: TaxonomyPayload) => void }) {
+    const [payload, setPayload] = useState(start);
+    return <TaxonomyEditor payload={payload} onChange={(next) => { setPayload(next); onChange(next); }} />;
+  }
+  const card = () => screen.getByRole('heading', { name: 'Activity binding' }).closest('.rounded-lg') as HTMLElement;
+
+  it('P18.9-T2 AC-3 reads one line per stage, in the template’s own labels', () => {
+    render(<TaxonomyEditor payload={BOUND} onChange={vi.fn()} />);
+    expect(within(card()).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
+      'Set appointment: Approach', 'Sales meeting: Presentasi', 'Submission polis: Submission',
+    ]);
+  });
+
+  it('P18.9-T2 AC-3 says a template that never set one gives its offices the platform’s', () => {
+    render(<TaxonomyEditor payload={TAXONOMY} onChange={vi.fn()} />);
+    expect(card()).toHaveTextContent('Not set: offices made from this template count the platform’s default activities.');
+  });
+
+  it('P18.9-T2 AC-3 adds a replacement beside the old one, into the payload the draft saves', async () => {
+    const onChange = vi.fn();
+    render(<Harness start={BOUND} onChange={onChange} />);
+    await userEvent.click(within(card()).getByRole('button', { name: 'Edit binding' }));
+    await userEvent.click(within(card()).getByRole('button', { name: 'Remove Submission from Submission polis' }));
+    // Freed, it is offered again — to the stage that lost it, or any other.
+    await userEvent.selectOptions(within(card()).getByRole('combobox', { name: 'Add an activity to Submission polis' }), 'SELL_SUBMISSION');
+    expect(onChange.mock.calls.at(-1)![0].bindings).toEqual(BOUND.bindings);
+
+    await userEvent.click(within(card()).getByRole('button', { name: 'Done' }));
+    expect(within(card()).getByText('Submission polis: Submission')).toBeInTheDocument();
+  });
+
+  it('P18.9-T2 AC-3 a type removed from the template is taken out of the binding too', async () => {
+    const onChange = vi.fn();
+    render(<TaxonomyEditor payload={BOUND} onChange={onChange} />);
+    const row = screen.getAllByText('Presentasi').map((el) => el.closest('li')).find((li) => li?.querySelector('button'))!;
+    await userEvent.click(within(row).getByRole('button', { name: 'Remove' }));
+    expect(onChange.mock.calls[0][0].bindings).toEqual({ ...BOUND.bindings, appointments: [] });
+  });
+});
+
 describe('RatioSetEditor writes benchmarks in their unit (P4-T25)', () => {
   const ratio = (over: Partial<RatioSetPayload['ratios'][number]>) => ({
     code: 'LEADS_PER_ACTIVITY', label: 'Leads per activity',
@@ -285,7 +335,7 @@ describe('RatioSetEditor writes benchmarks in their unit (P4-T25)', () => {
     displayUnit: 'decimal' as const, displayOrder: 1, ...over,
   });
 
-  it('shows a percentage, a number and a band the way the registry writes them', () => {
+  it('shows a percentage, a number and a band the way the registry writes them — P18.97-T3 AC-2, as typed', () => {
     render(<RatioSetEditor
       available={[]}
       onChange={vi.fn()}
@@ -296,7 +346,8 @@ describe('RatioSetEditor writes benchmarks in their unit (P4-T25)', () => {
       ] }}
     />);
 
-    expect(screen.getByText('15.0%')).toBeInTheDocument();
+    expect(screen.getByText('15%')).toBeInTheDocument();
+    // In the reader's figures since P18.98-T6 — English here, as every spec reads: *0,30* in Indonesian.
     expect(screen.getByText('0.30')).toBeInTheDocument();
     expect(screen.getByText('±30 points')).toBeInTheDocument();
   });
@@ -958,10 +1009,12 @@ describe('CampaignKindsEditor (P5-T9)', () => {
       onChange={vi.fn()}
     />);
 
-    expect(screen.getByText(/APE achieved/).closest('p')).toHaveTextContent(/Rp 600\.000\.000$/);
-    expect(screen.getByText(/APE achieved/).closest('p')).not.toHaveTextContent('60.000.000.000');
-    expect(screen.getByText(/New active agents/).closest('p')).toHaveTextContent(/1\.200$/);
-    expect(screen.getByText(/New active agents/).closest('p')).not.toHaveTextContent('Rp');
+    // A rule in words, compact where that loses nothing (ADR-0167 §1) — in the reader's figures since P18.98-T6,
+    // English here as every spec reads (*Rp 600 jt*, *1.200* in Indonesian).
+    expect(screen.getByText(/APE achieved/).closest('p')).toHaveTextContent(/IDR 600M$/);
+    expect(screen.getByText(/APE achieved/).closest('p')).not.toHaveTextContent('60,000,000,000');
+    expect(screen.getByText(/New active agents/).closest('p')).toHaveTextContent(/1,200$/);
+    expect(screen.getByText(/New active agents/).closest('p')).not.toHaveTextContent('IDR');
   });
 
   it('marks only the metric nothing measures, never one the registry has', () => {

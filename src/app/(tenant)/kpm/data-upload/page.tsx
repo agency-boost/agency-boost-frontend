@@ -2,24 +2,36 @@
 
 import { useEffect, useId, useRef, useState } from 'react';
 import { Page } from '@/components/page';
+import { TermTip } from '@/components/ui/term-tip';
 import { Cell, Row, type Column } from '@/components/ui/data-table';
+import { ConsoleCode } from '@/components/ui/console-code';
 import { Button, buttonClass, Card, ErrorBanner, Field, TextInput } from '@/components/ui/field';
-import { SkeletonBar, SkeletonTable } from '@/components/ui/skeleton';
+import { CHECK_LINE_PHONE, CONTROL_PHONE } from '@/components/ui/phone';
+import { CardField, RowCard, RowCards } from '@/components/ui/row-cards';
+import { SkeletonBar, SkeletonCards, SkeletonTable } from '@/components/ui/skeleton';
+import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
+import { dataUploadMessages } from '@/i18n/messages/data-upload';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
+import { errorReference } from '@/lib/browser-errors';
+import { saveFile } from '@/lib/save-file';
 import { cn } from '@/lib/cn';
-import { formatDayLong, monthInZone } from '@/lib/format';
-import { formatRupiah } from '@/lib/goals';
+import type { Language } from '@/i18n/language';
+import { formatDayLong, formatNumber, formatPercent, formatRupiah, monthInZone } from '@/lib/format';
 import { useCan } from '@/lib/session';
 import {
-  CADENCE_GROUP_LABEL, commitUpload, FIGURE_COLUMNS, figureLabel, METRIC_COLUMN_LABEL, MONEY_METRICS, previewUpload,
-  readMonth, readTemplate, templateHref, type CorrectionResult, type ImportResult, type MetricCell, type MonthState,
-  type MonthView, type PreviewCell, type ProductionMetric, type TemplateFile, type UploadPreview,
+  AGENT_COLUMN, CADENCE_GROUP_LABEL, CADENCES, commitUpload, FIGURE_COLUMNS, figureLabel, METRIC_COLUMN_LABEL, MONEY_METRICS,
+  previewUpload, PRODUCTION_METRICS, readMonth, readTemplate, readTemplateWorkbook, templateHref, workbookFilename,
+  type CorrectionResult, type ImportResult,
+  type MetricCell, type MonthRow, type MonthState, type MonthView, type PreviewCell, type ProductionMetric,
+  type TemplateFile, type UploadPreview,
 } from '@/lib/production';
+import { usePhone } from '@/lib/use-phone';
 import { readBranchInfo } from '@/lib/tenant-config';
-import { CorrectionPanel, type Editing, showFigure } from './correction-panel';
+import { CorrectionPanel, correctedNote, type Editing, showFigure } from './correction-panel';
+import { correctedWords, FiguresSheet } from './figures-sheet';
 import { FigureCell, FigureTable, GROUP_DIVIDER, opensGroup } from './figure-table';
 import { ImportHistory } from './import-history';
-import { monthLabel, plural } from './month-label';
+import { monthLabel } from './month-label';
 import { MonthLock } from './month-lock';
 
 /**
@@ -36,13 +48,34 @@ import { MonthLock } from './month-lock';
  * reported this person; a `0` says it reported nothing produced. An empty table would say the office
  * has nobody, and a table of zeroes that nobody produced — neither is true.
  */
+/**
+ * **The month table's legend, in the client's words** (P18.97-T4 AC-2; UI-023): *"✎ = corrected by hand · — = not
+ * reported · Active = APE or policies > 0 this month"*. `spoken` is what a screen reader says for a glyph it would pass
+ * over. In the reader's words (P18.98-T4): *Active* is the column's own word, *Aktif* in Indonesian.
+ */
+function legendIn(t: typeof dataUploadMessages.en): readonly { symbol: string; spoken?: string; meaning: string }[] {
+  return [
+    { symbol: '✎', meaning: t.legend.corrected },
+    { symbol: '—', spoken: t.legend.dash, meaning: t.legend.notReported },
+    { symbol: t.active, meaning: t.legend.active },
+  ];
+}
+
+/**
+ * **Its words are the reader's** (P18.98-T4; `dataUploadMessages`): the page's name and the table's metric headings
+ * kept English, the rest the approved glossary's; a member's name and code, a file's name and a reason as typed, and the
+ * server's sentences as sent. Its figures were the reader's already (P18.98-T3).
+ */
 export default function DataUploadPage() {
+  const t = useMessages(dataUploadMessages);
+  /*
+   * *APE*'s first appearance on the screen carries its ⓘ (P18.95-T9 AC-3; UI-028) — **after the sentence, never
+   * inside it** (P18.97-T4 AC-2, ADR-0176 §6; UI-023: *"APE ⓘ What is APE? , rolling persistency, …"* read as
+   * one broken sentence to the client and to a screen reader).
+   */
+  const subtitle = <>{t.subtitle} <TermTip term="APE" /></>;
   return (
-    <Page
-      title="Data upload"
-      subtitle="APE, rolling persistency, recruitment, new active agents, FYP and # of policy — one file per month, matched by agent code."
-      permission="data_upload:read"
-    >
+    <Page title={t.title} subtitle={subtitle} permission="data_upload:read">
       <MonthTable />
     </Page>
   );
@@ -55,12 +88,15 @@ export default function DataUploadPage() {
  * which is a permission enforced on the pixels and not on the wire.
  */
 /**
- * **⬇ Download template** — the prototype's own control (`KPM_Owner.html:1301`).
+ * **⬇ Download template** — the prototype's own control (`KPM_Owner.html:1301`), **and since ADR-0184 the Excel
+ * template**, the recommended file: its guide on a sheet of its own, its Data sheet the same header and rows as the
+ * CSV. **Download CSV** beside it is the CSV as it always was.
  *
- * A real `<a download>`, because saving a file is neither an action a `<button>` performs nor a
- * navigation `ButtonLink` should intercept; it wears the secondary button's classes so the toolbar
- * reads as one row of controls. The prototype builds the file in the browser from the array the table
- * reads; ours is the server's, so the header the file carries is the one the importer will know.
+ * The workbook is a `<button>`: it is fetched with the token (`apiBlob`) and saved (`saveFile`), because a link to the
+ * API would arrive without the token, which lives in memory only. The CSV stays a real `<a download>` over a `data:`
+ * URL of the file the JSON carries, as it was, wearing the inline button's classes. The prototype builds the file in
+ * the browser from the array the table reads; ours is the server's, so the header the file carries is the one the
+ * importer will know.
  *
  * **Three states, and each looks like itself.** Waiting renders nothing, because a button that would
  * download nothing is worse than no button. Arrived renders the link. **Failed says so, beside the
@@ -72,10 +108,14 @@ export default function DataUploadPage() {
  * the second sees the table and is neither shown the control nor made to ask for it.
  */
 function TemplateDownload({ month }: { month: string }) {
+  const t = useMessages(dataUploadMessages);
   const allowed = useCan('data_upload:download_template');
   const [template, setTemplate] = useState<TemplateFile | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [attempt, setAttempt] = useState(0);
+  /** The workbook being fetched, and why the last one could not be (ADR-0184). */
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<ApiError | null>(null);
 
   useEffect(() => {
     if (!allowed) return undefined;
@@ -91,30 +131,65 @@ function TemplateDownload({ month }: { month: string }) {
   if (!allowed) return null;
 
   if (error) {
+    // The server's code and request id for support, and none for a failure the browser detected (P18.97-T4 AC-10).
+    const reference = errorReference(error);
     return (
       <p role="alert" className="flex min-h-10 flex-wrap items-center gap-x-2 text-sm text-alert">
-        <span>The template could not be prepared. {error.message}</span>
-        <Button variant="inline" onClick={() => setAttempt((n) => n + 1)}>Try again</Button>
-        <span className="text-2xs text-muted">
-          {error.code}
-          {error.requestId && error.requestId !== 'unknown' ? ` · ${error.requestId}` : ''}
-        </span>
+        <span>{t.templateFailed({ message: error.message })}</span>
+        <Button variant="inline" onClick={() => setAttempt((n) => n + 1)}>{t.tryAgain}</Button>
+        {reference === null
+          ? <ConsoleCode code={error.code} message={error.message} />
+          : <span className="text-2xs text-muted">{reference}</span>}
       </p>
     );
   }
 
   if (!template) return null;
 
+  async function downloadWorkbook(file: TemplateFile) {
+    setSaving(true);
+    setSaveError(null);
+    try {
+      saveFile(await readTemplateWorkbook(month), workbookFilename(file));
+    } catch (err) {
+      setSaveError(toDisplayError(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
-    // The prototype's glyph before the word, kept out of the link's name as the Summary's ⬇ Download keeps
-    // it (ADR-0068): a screen reader says *Download template*, not *downwards black arrow* first.
-    <a href={templateHref(template)} download={template.filename} className={buttonClass('secondary', 'gap-1')}>
-      <span aria-hidden="true">⬇</span>Download template
-    </a>
+    <>
+      {/* The prototype's glyph before the word, kept out of the control's name as the Summary's ⬇ Download keeps
+          it (ADR-0068): a screen reader says *Download template*, not *downwards black arrow* first. */}
+      <Button
+        variant="secondary"
+        className={cn('gap-1', CONTROL_PHONE)}
+        onClick={() => void downloadWorkbook(template)}
+        disabled={saving}
+      >
+        <span aria-hidden="true">⬇</span>{saving ? t.preparingFile : t.downloadTemplate}
+      </Button>
+      <a href={templateHref(template)} download={template.filename} className={buttonClass('inline', cn('self-center', CONTROL_PHONE))}>
+        {t.downloadCsv}
+      </a>
+      {saveError && (
+        <p role="alert" className="flex min-h-10 w-full flex-wrap items-center gap-x-2 text-sm text-alert">
+          <span>{t.templateFailed({ message: saveError.message })}</span>
+          <Button variant="inline" onClick={() => void downloadWorkbook(template)}>{t.tryAgain}</Button>
+          {errorReference(saveError) === null
+            ? <ConsoleCode code={saveError.code} message={saveError.message} />
+            : <span className="text-2xs text-muted">{errorReference(saveError)}</span>}
+        </p>
+      )}
+    </>
   );
 }
 
 function MonthTable() {
+  const t = useMessages(dataUploadMessages);
+  const language = useLanguage();
+  const figures = useFigureLanguage();
   // A convenience for choosing, not a computation over data: the rows for a month are the
   // server's, resolved in the office's zone, and the month is explicit in what the screen asks for.
   const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7));
@@ -148,6 +223,15 @@ function MonthTable() {
   /** The figure being corrected, if one is (P9-T5). */
   const [editing, setEditing] = useState<Editing | null>(null);
   const canCorrect = useCan('data_upload:correct_cell');
+  /*
+   * **Below 768px a card per agent, and a sheet of their figures** (P18.97-T7 AC-2, ADR-0178 §4; the client's UI-034:
+   * the month's table, 1816px on a 375px screen; UI-040: 340 tappable cells under 44px). Asked here, where the screen
+   * mounts and before the month answers, so a phone never draws the table first. No cell is edited in a table on a
+   * phone: a card's tap opens `FiguresSheet`, whose fields save through the same `PATCH /kpm/data-upload/cell`.
+   */
+  const phone = usePhone();
+  /** The agent whose sheet is open, on a phone. */
+  const [sheetFor, setSheetFor] = useState<string | null>(null);
 
   useEffect(() => {
     setView(null);
@@ -162,6 +246,7 @@ function MonthTable() {
     reading.current += 1;
     setUpload({ kind: 'idle' });
     setEditing(null);
+    setSheetFor(null);
     readMonth(month)
       .then((next) => { if (live) setView(next); })
       .catch((err) => { if (live) setError(toDisplayError(err)); });
@@ -175,32 +260,36 @@ function MonthTable() {
     setGeneration((g) => g + 1);
   };
   const imported = (result: ImportResult) => {
-    const { keptCorrectionCount: kept, replacedCorrectionCount: replaced } = result.batch;
-    const corrections = [
-      ...(kept ? [`${plural(kept, 'correction')} kept`] : []),
-      ...(replaced ? [`${plural(replaced, 'correction')} replaced with the file’s figure`] : []),
-    ].join(', ');
-    wrote(`Imported ${plural(result.batch.writtenRowCount, 'agent record')} for ${monthLabel(result.batch.month)}.`
-      + (corrections ? ` ${corrections[0].toUpperCase()}${corrections.slice(1)}.` : ''));
+    const { keptCorrectionCount, replacedCorrectionCount, writtenRowCount } = result.batch;
+    wrote(t.imported({
+      records: writtenRowCount, month: monthLabel(result.batch.month, figures), kept: keptCorrectionCount, replaced: replacedCorrectionCount,
+    }));
   };
-  const reverted = (result: ImportResult) => wrote(
-    `Reverted “${result.batch.filename}”: ${plural(result.batch.restoredCellCount, 'figure')} put back`
-    + `${result.batch.keptCellCount ? `, ${result.batch.keptCellCount} kept because something changed them since` : ''}.`,
-  );
-  const relocked = (next: MonthState) =>
-    wrote(`${monthLabel(next.month)} is ${next.locked ? 'locked' : 'open again'}.`);
+  const reverted = (result: ImportResult) => wrote(t.reverted({
+    filename: result.batch.filename, restored: result.batch.restoredCellCount, kept: result.batch.keptCellCount,
+  }));
+  const relocked = (next: MonthState) => wrote(t.relocked({ month: monthLabel(next.month, figures), locked: next.locked }));
   const corrected = (r: CorrectionResult) => {
-    const who = editing?.name ?? 'this member';
-    const label = figureLabel(r.metric, r.cadence);
+    const who = editing?.name ?? t.thisMember;
+    const label = figureLabel(r.metric, r.cadence, language);
     // Closed here, in the same render as the sentence that replaces it — not by the reload's effect,
     // which would leave the form and the sentence on screen together for a frame.
     setEditing(null);
     wrote(r.changed
-      ? `Corrected ${label} for ${who}: ${showFigure(r.metric, r.before.value)} → ${showFigure(r.metric, r.after.value)}.`
-      : `${label} for ${who} already reads ${showFigure(r.metric, r.after.value)} — nothing was changed.`);
+      ? t.corrected({
+        label, who, before: showFigure(r.metric, r.before.value, figures, language), after: showFigure(r.metric, r.after.value, figures, language),
+      })
+      : t.unchanged({ label, who, after: showFigure(r.metric, r.after.value, figures, language) }));
   };
   /** A figure is a control only for somebody who may correct it, in a month that is open. */
   const correctable = !!view && canCorrect && !view.state.locked;
+  /** The sheet's agent, as the month has them. */
+  const sheetRow = sheetFor ? view?.rows.find((r) => r.membershipId === sheetFor) ?? null : null;
+  /** The sheet closed: what it saved is said and the month read again; with nothing saved, nothing moves. */
+  const sheetClosed = (row: MonthRow, results: CorrectionResult[]) => {
+    setSheetFor(null);
+    if (results.length > 0) wrote(correctedWords(row.name, results, figures, language));
+  };
 
   const read = async (file: File) => {
     if (!view) return;
@@ -226,19 +315,20 @@ function MonthTable() {
    * file's heading does.
    */
   const tableColumns: readonly Column[] = [
-    'Agent',
-    'Agent code',
+    AGENT_COLUMN,
+    t.agentCode,
     ...FIGURE_COLUMNS.map((f) => `${METRIC_COLUMN_LABEL[f.metric]} — ${CADENCE_GROUP_LABEL[f.cadence]}`),
-    'Active (MAA)',
+    t.activeColumn,
   ];
 
   return (
     <>
       <div className="mb-4 flex flex-wrap items-end gap-3">
-        <Field label="Month" htmlFor="upload-month" className="w-44">
+        <Field label={t.month} htmlFor="upload-month" className="w-44">
           <TextInput
             id="upload-month"
             type="month"
+            className={CONTROL_PHONE}
             value={month}
             onChange={(e) => {
               if (!e.target.value) return;
@@ -291,38 +381,59 @@ function MonthTable() {
 
       {error && <ErrorBanner {...error} />}
 
-      {!error && view === null && (
-        <SkeletonTable caption={`Data for ${monthLabel(month)}`} columns={tableColumns} rows={5} />
-      )}
+      {!error && view === null && (phone
+        ? <SkeletonCards count={3} label={t.loadingMonth({ month: monthLabel(month, figures) })} />
+        : <SkeletonTable caption={t.dataFor({ month: monthLabel(month, figures) })} columns={tableColumns} rows={5} />)}
 
       {view && (
         <>
           <h2 className="mb-1 font-display text-md font-bold text-navy">
-            Data for {monthLabel(view.month)}
+            {t.dataFor({ month: monthLabel(view.month, figures) })}
           </h2>
           <p className="mb-3 text-sm text-muted" role="status">
             {view.withData === 0
-              ? `Nothing has been uploaded for ${monthLabel(view.month)} yet. Every member is listed so you can see who the file will need to cover.`
-              : `${view.withData} of ${view.rows.length} members have figures for this month.`}
+              ? t.nothingUploaded({ month: monthLabel(view.month, figures) })
+              : t.withFigures({ n: view.withData, of: view.rows.length })}
           </p>
           {correctable && (
             <p className="-mt-2 mb-1 text-sm text-muted">
-              Click any number to correct it manually — no need to re-upload for a single fix.
+              {/* On a phone the tap is the agent's card, which opens their figures (P18.97-T7 AC-2). */}
+              {phone ? t.tapAgent : t.tapNumber}
             </p>
           )}
-          {/* Where every figure came from, said once rather than on every cell (P9-T6 AC-4). */}
+          {/*
+            * Where every figure came from, said once rather than on every cell (P9-T6 AC-4) — **in the client's one line, at
+            * every size** (P18.97-T4 AC-2, ADR-0176 §6; the grey-text table, UI-023: 45 words). Each of its three parts
+            * stays whole, so a narrow screen breaks the line between them, never inside one. The dash is said as a
+            * dash, as before: a screen reader passes over the glyph.
+            */}
           <p className="mb-3 text-xs text-muted">
-            Figures are from the carrier’s file unless marked <span className="font-bold text-navy">✎</span>{' '}
-            corrected by hand; <span aria-hidden="true">—</span><span className="sr-only">a dash</span> is nothing reported.
-            {' '}<span className="font-semibold text-navy">Active (MAA):</span> Derived, not entered — Active this
-            month if Monthly APE &gt; 0 or Monthly # of Policy &gt; 0. A dash until that is known.
+            {legendIn(t).map((part, i) => (
+              <span key={part.symbol}>
+                {i > 0 && ' · '}
+                <span className="whitespace-nowrap">
+                  {part.spoken ? (
+                    <><span aria-hidden="true">{part.symbol}</span><span className="sr-only">{part.spoken}</span></>
+                  ) : part.symbol}
+                  {' = '}{part.meaning}
+                </span>
+              </span>
+            ))}
           </p>
 
           {/*
             * **The prototype's order** (P13.1-T7): the name, the code, this month's six, the year's six,
             * then *Active (MAA)* — and the rows in the order the org tree reads, which is the server's.
             */}
-          <FigureTable caption={`Data for ${monthLabel(view.month)}`} active tableClassName="min-w-[102.5rem]">
+          {phone ? (
+            <AgentCards
+              rows={view.rows}
+              caption={t.dataFor({ month: monthLabel(view.month, figures) })}
+              correctable={correctable}
+              onOpen={setSheetFor}
+            />
+          ) : (
+          <FigureTable caption={t.dataFor({ month: monthLabel(view.month, figures) })} active tableClassName="min-w-[102.5rem]">
             {(headersOf) => view.rows.map((row) => (
               <Row key={row.membershipId}>
                 <Cell className="whitespace-nowrap">{row.name}</Cell>
@@ -338,7 +449,12 @@ function MonthTable() {
                             membershipId: row.membershipId, name: row.name, agentCode: row.agentCode,
                             metric: m, cadence, current: cell,
                           })}
-                          aria-label={`Correct ${figureLabel(m, cadence)} for ${row.name}, now ${showFigure(m, cell.value)}${cell.provenance === 'corrected' ? `, ${correctedNote(cell)}` : ''}`}
+                          aria-label={t.correctFigure({
+                            label: figureLabel(m, cadence, language),
+                            name: row.name,
+                            now: showFigure(m, cell.value, figures, language),
+                            note: cell.provenance === 'corrected' ? correctedNote(cell, figures, language) : null,
+                          })}
                           className="-mx-1 rounded-sm px-1 underline-offset-2 hover:bg-navy/[0.06] hover:underline"
                         >
                           <Figure metric={m} cell={cell} />
@@ -353,11 +469,85 @@ function MonthTable() {
               </Row>
             ))}
           </FigureTable>
+          )}
+          {/* Opened from a phone's card only; kept open should the window widen, until it is closed and says what it saved. */}
+          {correctable && sheetRow && (
+            <FiguresSheet
+              key={sheetRow.membershipId}
+              row={sheetRow}
+              month={view.month}
+              revision={view.state.revision}
+              onClose={(results) => sheetClosed(sheetRow, results)}
+            />
+          )}
 
           <ImportHistory month={view.month} state={view.state} generation={generation} onReverted={reverted} />
         </>
       )}
     </>
+  );
+}
+
+/**
+ * **The month as a card per agent** (P18.97-T7 AC-2, ADR-0178 §4; UI-034), through the shared card pieces
+ * (`components/ui/row-cards.tsx`), in the table's order and words: the name and the code, then *This Month*'s six and
+ * *YTD*'s six, each figure under its heading — money in full, a dash for nothing reported, ✎ on one corrected by hand,
+ * as the cells write them — and *Active (MAA)*. **For somebody who may correct a figure, in a month that is open, the
+ * name is the card's button**, *Correct figures for {name}*: its tap covers the card and opens the agent's sheet, and the
+ * focus ring is drawn round the card. Otherwise the card is read and nothing more.
+ */
+function AgentCards({
+  rows, caption, correctable, onOpen,
+}: {
+  rows: readonly MonthRow[];
+  caption: string;
+  correctable: boolean;
+  onOpen: (membershipId: string) => void;
+}) {
+  const t = useMessages(dataUploadMessages);
+  return (
+    <RowCards label={caption}>
+      {rows.map((row) => (
+        <RowCard key={row.membershipId} data-row={row.membershipId} className="relative">
+          <p className="min-w-0">
+            {correctable ? (
+              <button
+                type="button"
+                aria-label={t.correctFiguresFor({ name: row.name })}
+                aria-haspopup="dialog"
+                onClick={() => onOpen(row.membershipId)}
+                className={cn(
+                  'break-words text-left text-md font-semibold text-navy underline underline-offset-2',
+                  "after:absolute after:inset-0 after:rounded-sm after:content-['']",
+                  'focus-visible:outline-none focus-visible:after:outline focus-visible:after:outline-2',
+                  'focus-visible:after:-outline-offset-2 focus-visible:after:outline-amber',
+                )}
+              >
+                {row.name}
+              </button>
+            ) : (
+              <span className="break-words text-md font-semibold text-navy">{row.name}</span>
+            )}
+            <span className="block whitespace-nowrap text-sm font-semibold text-muted">{row.agentCode}</span>
+          </p>
+          {CADENCES.map((cadence) => (
+            <div key={cadence} role="group" aria-label={CADENCE_GROUP_LABEL[cadence]} className="mt-3 border-t border-hairline pt-2.5">
+              <p aria-hidden="true" className="text-xs font-bold uppercase tracking-wide text-navy">{CADENCE_GROUP_LABEL[cadence]}</p>
+              <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2.5">
+                {PRODUCTION_METRICS.map((metric) => (
+                  <CardField key={metric} label={METRIC_COLUMN_LABEL[metric]}>
+                    <span className="text-md"><Figure metric={metric} cell={row.metrics[metric][cadence]} /></span>
+                  </CardField>
+                ))}
+              </dl>
+            </div>
+          ))}
+          <dl className="mt-3 border-t border-hairline pt-2.5">
+            <CardField label={t.activeColumn}><ActiveMark active={row.monthlyActiveAgent} /></CardField>
+          </dl>
+        </RowCard>
+      ))}
+    </RowCards>
   );
 }
 
@@ -372,10 +562,13 @@ function MonthTable() {
  * different things to know about a month.
  */
 function Figure({ metric, cell }: { metric: ProductionMetric; cell: MetricCell }) {
-  const mark = cell.provenance === 'corrected' ? correctedNote(cell) : null;
+  const t = useMessages(dataUploadMessages);
+  const language = useLanguage();
+  const figures = useFigureLanguage();
+  const mark = cell.provenance === 'corrected' ? correctedNote(cell, figures, language) : null;
   const shown = cell.value === null
-    ? <span className="text-muted" aria-label={mark ? undefined : 'nothing reported'}>—</span>
-    : <span className="text-navy">{formatFigure(metric, cell.value)}</span>;
+    ? <span className="text-muted" aria-label={mark ? undefined : t.nothingReported}>—</span>
+    : <span className="text-navy">{formatFigure(metric, cell.value, figures)}</span>;
   if (!mark) return shown;
   // `relative`, so the screen-reader note is placed inside the table's scroll box and not beside the
   // page: an `sr-only` span is absolutely positioned, and with no positioned ancestor it escaped the
@@ -402,13 +595,14 @@ function Figure({ metric, cell }: { metric: ProductionMetric; cell: MetricCell }
  * never the only cue.
  */
 function ActiveMark({ active }: { active: boolean | null | undefined }) {
+  const t = useMessages(dataUploadMessages);
   if (active === null || active === undefined) {
-    return <span role="img" aria-label="Not reported" className="text-muted">—</span>;
+    return <span role="img" aria-label={t.notReported} className="text-muted">—</span>;
   }
   return (
     <span
       role="img"
-      aria-label={active ? 'Active' : 'Not active'}
+      aria-label={active ? t.active : t.notActive}
       className={cn(
         'inline-flex h-6 w-6 items-center justify-center rounded-full text-sm font-bold text-navy',
         active ? 'bg-info/[0.12]' : 'bg-amber/[0.16]',
@@ -419,19 +613,15 @@ function ActiveMark({ active }: { active: boolean | null | undefined }) {
   );
 }
 
-/** `corrected by hand by Maya Halim on September 26, 2026 — “Carrier restated it”` */
-function correctedNote(cell: MetricCell): string {
-  const c = cell.correction;
-  const verb = cell.value === null ? 'emptied by hand' : 'corrected by hand';
-  if (!c) return verb;
-  return `${verb}${c.by ? ` by ${c.by}` : ''}${c.at ? ` on ${formatDayLong(c.at)}` : ''}${c.reason ? ` — “${c.reason}”` : ''}`;
-}
-
-/** Money in full rupiah, persistency with its sign, counts as they are — the table's own formats. */
-function formatFigure(metric: ProductionMetric, value: number): string {
-  if (MONEY_METRICS.includes(metric)) return formatRupiah(value);
-  if (metric === 'persistency') return `${value}%`;
-  return String(value);
+/**
+ * Money in full rupiah, persistency with its sign, counts as they are — the table's own formats, in `id-ID`
+ * (ADR-0167 §1). **The file's own figures, so in full** (ADR-0174 §3, §4: Data upload's cells are where precision
+ * matters): money to the rupiah, and a persistency with every decimal the file had — *87,35%*, *87%* — never rounded.
+ */
+function formatFigure(metric: ProductionMetric, value: number, figures: Language): string {
+  if (MONEY_METRICS.includes(metric)) return formatRupiah(value, figures);
+  if (metric === 'persistency') return formatPercent(value, { lossless: true }, figures);
+  return formatNumber(value, { maxDecimals: 4 }, figures);
 }
 
 type UploadState =
@@ -454,14 +644,16 @@ type UploadState =
  * separately.
  */
 function UploadButton({ busy, onFile }: { busy: boolean; onFile: (file: File) => void }) {
+  const t = useMessages(dataUploadMessages);
   const allowed = useCan('data_upload:upload_and_preview');
   if (!allowed) return null;
   return (
     <span className="relative inline-flex">
       <input
         type="file"
-        accept=".csv,text/csv"
-        aria-label="+ Upload filled template"
+        // A filled template as Excel or as CSV (ADR-0184): either is read on the server, the browser opens neither.
+        accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
+        aria-label={t.upload}
         disabled={busy}
         onChange={(e) => {
           const file = e.target.files?.[0];
@@ -475,11 +667,12 @@ function UploadButton({ busy, onFile }: { busy: boolean; onFile: (file: File) =>
         aria-hidden="true"
         className={cn(
           buttonClass('primary'),
+          CONTROL_PHONE,
           'peer-disabled:opacity-60',
           'peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-amber',
         )}
       >
-        {busy ? 'Reading the file…' : '+ Upload filled template'}
+        {busy ? t.readingFile : t.upload}
       </span>
     </span>
   );
@@ -501,12 +694,13 @@ function UploadResult({
   onCancel: () => void;
   onImported: (result: ImportResult) => void;
 }) {
+  const t = useMessages(dataUploadMessages);
   if (state.kind === 'idle') return null;
 
   if (state.kind === 'reading') {
     return (
       <Card className="mb-5" aria-busy="true">
-        <p className="mb-3 text-sm text-muted">Reading “{state.filename}”</p>
+        <p className="mb-3 text-sm text-muted">{t.reading({ filename: state.filename })}</p>
         <div aria-hidden="true" className="space-y-2">
           <SkeletonBar className="w-1/3" />
           <SkeletonBar className="w-2/3" />
@@ -519,10 +713,10 @@ function UploadResult({
   if (state.kind === 'failed') {
     return (
       <Card className="mb-5">
-        <p className="mb-2 text-md font-semibold text-navy">“{state.filename}” was not read. Nothing has been saved.</p>
+        <p className="mb-2 text-md font-semibold text-navy">{t.notRead({ filename: state.filename })}</p>
         <ErrorBanner {...state.error} />
         <div className="mt-3">
-          <Button variant="secondary" onClick={onCancel}>Dismiss</Button>
+          <Button variant="secondary" onClick={onCancel} className={CONTROL_PHONE}>{t.dismiss}</Button>
         </div>
       </Card>
     );
@@ -559,6 +753,8 @@ function PreviewCard({
   onCancel: () => void;
   onImported: (result: ImportResult) => void;
 }) {
+  const t = useMessages(dataUploadMessages);
+  const figures = useFigureLanguage();
   const heading = useRef<HTMLHeadingElement>(null);
   const headingId = useId();
   useEffect(() => { heading.current?.focus(); }, [preview]);
@@ -603,42 +799,34 @@ function PreviewCard({
   const ready = preview.rows.filter((r) => r.status === 'ready');
   const issues = preview.rows.flatMap((r) => r.issues.map((issue, i) => ({ row: r, issue, key: `${r.line}-${i}` })));
 
-  const figures = [
-    `${summary.newCells} new`,
-    `${summary.changedCells} changed`,
-    `${summary.unchangedCells} already as stored`,
-    `${summary.notProvidedCells} left blank, which keep what is stored`,
-    ...(summary.refusedCells ? [`${summary.refusedCells} not taken`] : []),
-    ...(summary.correctionCells ? [`${summary.correctionCells} corrected by hand, kept unless you tick them`] : []),
-  ].join(' · ');
+  const counted = t.figures({
+    fresh: summary.newCells, changed: summary.changedCells, unchanged: summary.unchangedCells,
+    blank: summary.notProvidedCells, refused: summary.refusedCells, corrections: summary.correctionCells,
+  });
 
   return (
     <Card className="mb-5" role="region" aria-labelledby={headingId}>
       <h2 ref={heading} id={headingId} tabIndex={-1} className="text-md font-semibold text-navy">
-        {plural(summary.ready, 'agent')} ready to import
-        {summary.refused ? `, ${plural(summary.refused, 'row')} skipped` : ''}.
+        {t.ready({ ready: summary.ready, skipped: summary.refused })}
       </h2>
       <p className="mt-1 text-sm text-muted">
-        From “{preview.filename}”. Figures: {figures}.
-        {summary.notInFile > 0 && ` ${plural(summary.notInFile, 'active member is', 'active members are')} not in the file and keep what they have.`}
+        {t.fromFile({ filename: preview.filename, figures: counted })}
+        {summary.notInFile > 0 && ` ${t.notInFile({ n: summary.notInFile })}`}
       </p>
       <p className="mt-2 text-sm text-navy">
-        <strong>Nothing has been saved yet.</strong> Confirm import writes the figures in bold into{' '}
-        {monthLabel(month)}; a blank keeps what is stored, and what is not taken is left out.
+        <strong>{t.nothingSavedYet}</strong> {t.confirmWrites({ month: monthLabel(month, figures) })}
       </p>
 
       {corrections.length > 0 && (
         <div className="mt-4">
           <div className="mb-1 flex flex-wrap items-baseline justify-between gap-x-3">
-            <h3 className="text-sm font-semibold text-navy">Corrected by hand ({corrections.length})</h3>
+            <h3 className="text-sm font-semibold text-navy">{t.correctedByHand({ n: corrections.length })}</h3>
             <span className="flex gap-3">
-              <Button variant="inline" onClick={() => setTicked(new Set(corrections.map((c) => c.key)))}>Replace all</Button>
-              <Button variant="inline" onClick={() => setTicked(new Set())}>Keep all</Button>
+              <Button variant="inline" onClick={() => setTicked(new Set(corrections.map((c) => c.key)))}>{t.replaceAll}</Button>
+              <Button variant="inline" onClick={() => setTicked(new Set())}>{t.keepAll}</Button>
             </span>
           </div>
-          <p className="mb-1 text-sm text-muted">
-            The file would change these figures, which somebody corrected by hand. Each is kept unless you tick it.
-          </p>
+          <p className="mb-1 text-sm text-muted">{t.correctionsNote}</p>
           <ul>
             {corrections.map(({ row, cell, key }) => (
               <CorrectionChoice
@@ -655,13 +843,11 @@ function PreviewCard({
 
       {issues.length > 0 && (
         <div className="mt-4">
-          <h3 className="mb-1 text-sm font-semibold text-navy">Not taken ({issues.length})</h3>
+          <h3 className="mb-1 text-sm font-semibold text-navy">{t.notTaken({ n: issues.length })}</h3>
           <ul>
             {issues.map(({ row, issue, key }) => (
               <li key={key} className="flex flex-wrap justify-between gap-x-3 gap-y-0.5 border-b border-hairline py-1.5 text-sm last:border-b-0">
-                <span className="font-semibold text-navy">
-                  Line {row.line} · {row.agentCode || 'no code'}{row.name ? ` · ${row.name}` : ''}
-                </span>
+                <span className="font-semibold text-navy">{t.line({ line: row.line, code: row.agentCode, name: row.name })}</span>
                 <span className="text-alert">{issue.message}</span>
               </li>
             ))}
@@ -672,19 +858,19 @@ function PreviewCard({
       {ready.length > 0 && (
         <div className="mt-4">
           {/* The month table's columns and order, without *Active (MAA)* (P13.1-T7, I-128). */}
-          <FigureTable caption={`What “${preview.filename}” would change`} tableClassName="min-w-[96rem]">
+          <FigureTable caption={t.wouldChange({ filename: preview.filename })} tableClassName="min-w-[96rem]">
             {(headersOf) => ready.map((row) => (
               <Row key={row.line}>
                 <Cell className="whitespace-nowrap">
                   {row.name}
                   {row.nameDiffers && (
-                    <span className="block text-2xs text-muted">the file says “{row.fileName}”</span>
+                    <span className="block text-2xs text-muted">{t.fileSays({ name: row.fileName })}</span>
                   )}
                 </Cell>
                 <Cell className="whitespace-nowrap font-semibold text-muted">
                   {row.resolvedAgentCode}
                   {row.codeRecovered && (
-                    <span className="block text-2xs font-normal">read from “{row.agentCode}”</span>
+                    <span className="block text-2xs font-normal">{t.readFrom({ code: row.agentCode })}</span>
                   )}
                 </Cell>
                 {FIGURE_COLUMNS.map(({ metric: m, cadence }, i) => (
@@ -705,19 +891,17 @@ function PreviewCard({
 
       <div className="mt-3 flex flex-wrap items-center gap-2.5">
         {canConfirm && (
-          <Button onClick={confirm} disabled={confirming || nothing || monthState.locked}>
-            {confirming ? 'Importing…' : 'Confirm import'}
+          <Button onClick={confirm} disabled={confirming || nothing || monthState.locked} className={CONTROL_PHONE}>
+            {confirming ? t.importing : t.confirmImport}
           </Button>
         )}
-        <Button variant="secondary" onClick={onCancel} disabled={confirming}>Cancel</Button>
+        <Button variant="secondary" onClick={onCancel} disabled={confirming} className={CONTROL_PHONE}>{t.cancel}</Button>
         {canConfirm && monthState.locked && (
-          <span className="text-sm text-muted">{monthLabel(month)} is locked — reopen it to import.</span>
+          <span className="text-sm text-muted">{t.lockedImport({ month: monthLabel(month, figures) })}</span>
         )}
         {canConfirm && !monthState.locked && nothing && (
           <span className="text-sm text-muted">
-            {corrections.length
-              ? 'Nothing would change — every figure it would, somebody corrected, and none is ticked.'
-              : 'Nothing in this file would change a figure.'}
+            {corrections.length ? t.nothingWouldChangeCorrected : t.nothingWouldChange}
           </span>
         )}
       </div>
@@ -731,41 +915,43 @@ function PreviewCard({
  * had, in the alert colour, and its reason is in the list above.
  */
 function Change({ cell, replacing }: { cell: PreviewCell; replacing: boolean }) {
+  const t = useMessages(dataUploadMessages);
+  const figures = useFigureLanguage();
   // A correction the file would change: kept unless ticked, and the cell says which (ADR-0053).
   if (cell.correction && !replacing) {
     return (
       <>
-        <span className="text-muted">{cell.before === null ? '—' : formatFigure(cell.metric, cell.before)}</span>
-        <span className="block text-2xs text-muted">correction kept</span>
+        <span className="text-muted">{cell.before === null ? '—' : formatFigure(cell.metric, cell.before, figures)}</span>
+        <span className="block text-2xs text-muted">{t.correctionKept}</span>
       </>
     );
   }
   if (cell.correction && replacing) {
     return (
       <>
-        <span className="font-semibold text-navy">{formatFigure(cell.metric, cell.after!)}</span>
-        <span className="block text-2xs text-alert">replaces a correction</span>
+        <span className="font-semibold text-navy">{formatFigure(cell.metric, cell.after!, figures)}</span>
+        <span className="block text-2xs text-alert">{t.replacesCorrection}</span>
       </>
     );
   }
   switch (cell.status) {
     case 'new':
-      return <span className="font-semibold text-navy">{formatFigure(cell.metric, cell.after!)}</span>;
+      return <span className="font-semibold text-navy">{formatFigure(cell.metric, cell.after!, figures)}</span>;
     case 'changed':
       return (
         <>
-          <span className="font-semibold text-navy">{formatFigure(cell.metric, cell.after!)}</span>
-          <span className="block text-2xs text-muted">was {formatFigure(cell.metric, cell.before!)}</span>
+          <span className="font-semibold text-navy">{formatFigure(cell.metric, cell.after!, figures)}</span>
+          <span className="block text-2xs text-muted">{t.was({ figure: formatFigure(cell.metric, cell.before!, figures) })}</span>
         </>
       );
     case 'unchanged':
-      return <span className="text-muted">{formatFigure(cell.metric, cell.after!)}</span>;
+      return <span className="text-muted">{formatFigure(cell.metric, cell.after!, figures)}</span>;
     case 'not_provided':
-      return <span className="text-muted" aria-label="left blank">—</span>;
+      return <span className="text-muted" aria-label={t.leftBlank}>—</span>;
     default:
       return (
         <span className="font-semibold text-alert">
-          ✕ {cell.raw}<span className="sr-only"> — not taken</span>
+          ✕ {cell.raw}<span className="sr-only">{t.notTakenCell}</span>
         </span>
       );
   }
@@ -790,21 +976,27 @@ function CorrectionChoice({
   ticked: boolean;
   onChange: (on: boolean) => void;
 }) {
+  const t = useMessages(dataUploadMessages);
+  const language = useLanguage();
+  const figures = useFigureLanguage();
   const detailId = useId();
   const c = cell.correction!;
-  const label = figureLabel(cell.metric, cell.cadence);
-  const now = cell.before === null ? 'emptied' : `corrected to ${formatFigure(cell.metric, cell.before)}`;
-  const same = c.replacedValue !== null && c.replacedValue === cell.after;
+  const label = figureLabel(cell.metric, cell.cadence, language);
   return (
     <li className="border-b border-hairline py-2 text-sm last:border-b-0">
       <p className="font-semibold text-navy">{name} · {label}</p>
       <p id={detailId} className="text-muted">
-        {now[0].toUpperCase() + now.slice(1)} by {c.by ?? 'somebody'}
-        {c.at ? ` on ${formatDayLong(c.at)}` : ''}{c.reason ? ` — “${c.reason}”` : ''}.
-        {' '}The file says {formatFigure(cell.metric, cell.after!)}
-        {same ? ' — the figure the correction replaced, so this is probably the old file' : ''}.
+        {t.choice({
+          now: cell.before === null ? null : formatFigure(cell.metric, cell.before, figures),
+          by: c.by,
+          day: c.at ? formatDayLong(c.at, figures) : null,
+          reason: c.reason,
+          file: formatFigure(cell.metric, cell.after!, figures),
+          // The figure the correction replaced: the file carrying it again is probably the old file.
+          old: c.replacedValue !== null && c.replacedValue === cell.after,
+        })}
       </p>
-      <label className="mt-1 inline-flex cursor-pointer items-center gap-2 text-navy">
+      <label className={cn('mt-1 inline-flex cursor-pointer items-center gap-2 text-navy', CHECK_LINE_PHONE)}>
         <input
           type="checkbox"
           className="h-4 w-4 accent-navy"
@@ -812,7 +1004,7 @@ function CorrectionChoice({
           onChange={(e) => onChange(e.target.checked)}
           aria-describedby={detailId}
         />
-        <span><span className="sr-only">{label} for {name}: </span>Replace with the file’s figure</span>
+        <span><span className="sr-only">{t.choiceFor({ label, name })}</span>{t.replaceWithFile}</span>
       </label>
     </li>
   );

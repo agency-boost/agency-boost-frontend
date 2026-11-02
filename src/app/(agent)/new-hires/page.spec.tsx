@@ -2,8 +2,9 @@ import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import AgentLayout from '@/app/(agent)/layout';
-import { renderInLayout, stubFetch, type StubReply } from '@test/harness';
+import { atWidth, renderInLayout, stubFetch, type StubReply } from '@test/harness';
 import { notFound, readOnlySession, ROSTER, SARI_ME, SHELL_STUBS } from '@test/activation-fixtures';
+import { invite, JOINING_PERMISSIONS, requestedTransfer, TODAY } from '@test/joining-fixtures';
 import NewHiresPage from './page';
 
 vi.mock('next/navigation', () => ({
@@ -11,148 +12,209 @@ vi.mock('next/navigation', () => ({
   usePathname: () => '/new-hires',
 }));
 
-const show = (routes: Record<string, StubReply | StubReply[]> = {}, me = SARI_ME) => {
-  const stub = stubFetch({ ...SHELL_STUBS, '/new-hires': { body: ROSTER }, ...routes });
+/** Agus, the AB the roster is his — who coaches, adds agents and decides requests. */
+const AGUS = {
+  ...SARI_ME,
+  user: { ...SARI_ME.user, id: 'u-agus', fullName: 'Agus Prasetyo', preferredName: 'Agus', initials: 'AP' },
+  membership: { ...SARI_ME.membership!, membershipId: 'mem-agus', hierarchyRole: 'ab' as const, orgLevelCode: 'AB' },
+  permissions: [...SARI_ME.permissions, ...JOINING_PERMISSIONS],
+};
+
+const WAITING = {
+  '/new-hires/invites': {
+    body: {
+      today: TODAY,
+      invites: [
+        invite({ inviteId: 'inv-stefan', fullName: 'Stefan Wijaya', agentCode: '80111' }),
+        invite({ inviteId: 'inv-yusuf', fullName: 'Yusuf Hidayat' }),
+      ],
+    },
+  },
+  '/new-hires/transfers': { body: [requestedTransfer({ requestedName: 'Raka Aditama' })] },
+};
+
+const show = (routes: Record<string, StubReply | StubReply[]> = {}, me = AGUS) => {
+  const stub = stubFetch({
+    ...SHELL_STUBS,
+    '/new-hires': { body: ROSTER },
+    ...WAITING,
+    '/join/requests': { body: [] },
+    '/join/requests/routing': { body: [] },
+    '/join/my-code': { body: { code: 'AGUS01', url: 'https://app.test/join?code=AGUS01' } },
+    ...routes,
+  });
   const view = renderInLayout(AgentLayout, <NewHiresPage />, { me });
   return { ...stub, ...view };
 };
 
-const card = (name: string) => screen.findByRole('region', { name });
+const group = (name: string) => screen.findByRole('group', { name });
+const toggleOf = (region: HTMLElement) => within(region).getAllByRole('button', { name: /team$/ })[0];
 
-describe('/new-hires, the leader’s roster (P13-T5)', () => {
+describe('/new-hires below 768px — UI V1 (UI-023 to UI-026, D-24)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('P13-T5 AC-2 is titled verbatim and reads the roster once', async () => {
-    const { calls } = show();
-    await card('Direct Unit');
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Your New Hires$/);
-    expect(screen.getByText('Track your new agents\' 90-day activation progress.')).toBeInTheDocument();
-    expect(calls.filter((c) => c.url.includes('/new-hires')).map((c) => c.url)).toEqual(['http://api.test/api/v1/new-hires']);
+  it('UI-024 two tiles at the top: Aktivasi 3M as the server’s % alone, and Menunggu bergabung with its count', async () => {
+    atWidth(375);
+    show();
+    const tile = await screen.findByRole('region', { name: '3M activation rate' });
+    // UI-023: only the percentage — never "4 activated · 1 not activated", never 3/4.
+    expect(tile).toHaveTextContent(/^3M activation rate80%$/);
+    const waiting = await screen.findByRole('button', { name: 'Waiting to join: 3. Show them' });
+    expect(waiting).toHaveTextContent('3');
+    // The month filter and the counts sentence are gone.
+    expect(screen.queryByRole('combobox')).toBeNull();
+    expect(screen.queryByText(/in progress$/)).toBeNull();
   });
 
-  it('P13-T5 AC-2 a card per group, in the order served: Direct Unit, then AAB: {name}', async () => {
+  it('UI-024 the reader’s own group open on load, the AAB groups closed; newest joiner on top', async () => {
+    atWidth(375);
     show();
-    await card('Direct Unit');
-    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
-      'Direct Unit', 'AAB: Sari Puspita', 'AAB: Arief Hidayat',
+    const own = await group('Agus Prasetyo');
+    expect(own).toHaveTextContent('You · Direct Unit · 5');
+    expect(toggleOf(own)).toHaveAttribute('aria-expanded', 'true');
+    expect(within(own).getAllByRole('link').map((l) => l.textContent)).toEqual([
+      'Fikri Ramadhan', 'Dimas Saputra', 'Indah Permata', 'Lukman Hakim', 'Kemal Pratama',
     ]);
+    for (const name of ['Arief Hidayat', 'Sari Puspita']) {
+      const closed = await group(name);
+      expect(toggleOf(closed)).toHaveAttribute('aria-expanded', 'false');
+      expect(within(closed).queryAllByRole('link')).toEqual([]);
+      expect(closed).toHaveTextContent('AAB · 2');
+    }
+    await userEvent.click(toggleOf(await group('Arief Hidayat')));
+    expect(within(await group('Arief Hidayat')).getAllByRole('link').map((l) => l.textContent)).toEqual(['Tari Wulandari', 'Novi Lestari']);
   });
 
-  it('P13-T5 AC-2 the columns Name · Joined · Progress · Day · Active Agent, and each row as served', async () => {
+  it('UI-023 each person: the status circle, one line — Pecah telor di hari ke-X, amber after day 90, or Hari ke-X — and the checklist %', async () => {
+    atWidth(375);
     show();
-    const direct = within(await card('Direct Unit'));
-    const table = direct.getByRole('table', { name: 'Direct Unit' });
-    expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual([
-      'Name', 'Joined', 'Progress', 'Day', 'Active Agent',
+    const own = await group('Agus Prasetyo');
+    const row = (name: string) => within(own).getByRole('link', { name }).closest('[data-person-row]') as HTMLElement;
+    expect(row('Dimas Saputra')).toHaveTextContent('ActivatedDimas SaputraFirst sale on day 3950%');
+    expect(row('Lukman Hakim').querySelector('[data-status]')).toHaveAttribute('data-status', 'activated_late');
+    expect(within(row('Lukman Hakim')).getByText('First sale on day 96')).toHaveClass('text-amber-ink');
+    expect(row('Fikri Ramadhan')).toHaveTextContent('Not yetFikri RamadhanDay 38No checklist');
+    // UI-024: no join date, first-sale date, agent code or status chip on a row.
+    expect(own).not.toHaveTextContent(/Join date|2026|Activated ·/);
+  });
+
+  it('UI-024, UI-029 the whole row opens the person’s coaching page for a leader who coaches, with a ›', async () => {
+    atWidth(375);
+    show();
+    const link = within(await group('Agus Prasetyo')).getByRole('link', { name: 'Dimas Saputra' });
+    expect(link).toHaveAttribute('href', '/coaching/mem-dimas/session?from=%2Fnew-hires');
+    expect(link.closest('[data-person-row]')!.querySelector('svg')).not.toBeNull();
+  });
+
+  it('UI-024 an Agent who leads, who runs no coaching, opens the person’s detail instead', async () => {
+    atWidth(375);
+    show({}, { ...AGUS, permissions: AGUS.permissions.filter((p) => p !== 'coaching_session:create') });
+    expect(within(await group('Agus Prasetyo')).getByRole('link', { name: 'Dimas Saputra' })).toHaveAttribute('href', '/new-hires/mem-dimas');
+  });
+
+  it('UI-024 Semua · Teraktivasi · Belum with counts; Belum shows only people without a pecah telor and hides empty leaders', async () => {
+    atWidth(375);
+    show();
+    const filter = await screen.findByRole('group', { name: 'Show' });
+    expect(within(filter).getAllByRole('button').map((b) => b.textContent)).toEqual(['All 9', 'Activated 5', 'Not yet 4']);
+    await userEvent.click(within(filter).getByRole('button', { name: 'Not yet 4' }));
+    expect(within(filter).getByRole('button', { name: 'Not yet 4' })).toHaveAttribute('aria-pressed', 'true');
+    expect(within(await group('Agus Prasetyo')).getAllByRole('link').map((l) => l.textContent)).toEqual(['Fikri Ramadhan', 'Kemal Pratama']);
+    await userEvent.click(within(filter).getByRole('button', { name: 'Activated 5' }));
+    // Nobody under Sari but Rina, nobody under Arief but Novi: both stay; a leader with nobody left is hidden.
+    expect(screen.getAllByRole('group').map((r) => r.getAttribute('aria-label'))).toEqual(
+      expect.arrayContaining(['Agus Prasetyo', 'Arief Hidayat', 'Sari Puspita']),
+    );
+  });
+
+  it('UI-024 Menunggu bergabung opens a sheet with the invites and the transfer; Batalkan undangan is last, red, and asks first', async () => {
+    atWidth(375);
+    const { calls } = show({ 'DELETE /new-hires/invites/inv-stefan': { body: { today: TODAY, invites: [invite()] } } });
+    await userEvent.click(await screen.findByRole('button', { name: 'Waiting to join: 3. Show them' }));
+    const sheet = await screen.findByRole('dialog', { name: 'Waiting to join' });
+    expect(within(sheet).getAllByRole('listitem').map((li) => li.querySelector('p')!.textContent)).toEqual([
+      'Stefan Wijaya', 'Yusuf Hidayat', 'Raka Aditama',
     ]);
-    const rows = within(table).getAllByRole('row').slice(1);
-    // By day, highest first, as the server orders them; *Joined* is the start date, `MMM d, yyyy`.
-    expect(rows.map((r) => within(r).getByRole('rowheader').textContent)).toEqual(['Indah Permata', 'Dimas Saputra']);
-    expect(within(rows[0]).getAllByRole('cell').map((c) => c.textContent)).toEqual(['Jun 28, 2026', '94%', '90+ /90, overdue', '']);
+    expect(within(sheet).getByText('Transfer requested')).toBeInTheDocument();
+    // No Resend or Cancel on the row itself: they are in its ⋯.
+    expect(within(sheet).queryByRole('button', { name: 'Cancel invite' })).toBeNull();
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Actions for Stefan Wijaya' }));
+    const items = screen.getAllByRole('menuitem');
+    expect(items.map((i) => i.textContent)).toEqual(['Resend', 'Cancel invite']);
+    await userEvent.click(items[1]);
+    expect(calls.some((c) => c.init.method === 'DELETE')).toBe(false);
+    const ask = (await screen.findByText('Cancel the invite for Stefan Wijaya? Its link stops working.')).closest('[role="dialog"]') as HTMLElement;
+    await userEvent.click(within(ask).getByRole('button', { name: 'Cancel invite' }));
+    expect(calls.filter((c) => c.init.method === 'DELETE').map((c) => c.url)).toEqual(['http://api.test/api/v1/new-hires/invites/inv-stefan']);
   });
 
-  it('Phase 13 exit review: an overdue Day says so in words to a screen reader, and adds nothing visible', async () => {
-    // Colour is never the only cue (`frontend/CLAUDE.md`): the red and the bold say *overdue* to the eye,
-    // and *", overdue"* after the day says it to everybody else (*The module's own strings*).
+  it('UI-025, UI-026 no Keluar, no Tandai keluar and no terlambat anywhere — Tari, marked left, reads as anybody', async () => {
+    atWidth(375);
     show();
-    const direct = within(await card('Direct Unit'));
-    const day = within(direct.getByRole('row', { name: /Indah Permata/ })).getAllByRole('cell')[2];
-    expect(day).toHaveTextContent(/^90\+ \/90, overdue$/);
-    const word = within(day).getByText(', overdue');
-    expect(word).toHaveClass('sr-only');
-    // The row reads with it, so a screen reader moving across the table hears it with the day. (jsdom
-    // cannot tell an inline span from a block, so its name puts a space before the comma; a browser does not.)
-    expect(direct.getByRole('row', { name: /Indah Permata/ })).toHaveAccessibleName(/90\+ \/90\s?, overdue/);
-
-    // A hire within the window has no such word.
-    const sari = within(screen.getByRole('region', { name: 'AAB: Sari Puspita' }));
-    const budi = within(sari.getByRole('row', { name: /Budi Hartono/ })).getAllByRole('cell')[2];
-    expect(budi).toHaveTextContent(/^62 \/90$/);
-    expect(budi).not.toHaveTextContent(/overdue/);
+    await userEvent.click(toggleOf(await group('Arief Hidayat')));
+    const page = document.body;
+    expect(page).not.toHaveTextContent(/Left|Mark left|overdue/);
+    expect(within(await group('Arief Hidayat')).getByRole('link', { name: 'Tari Wulandari' })).toBeInTheDocument();
   });
 
-  it('P13-T5 AC-2 Day is red and bold when overdue, plain otherwise', async () => {
-    show();
-    const direct = within(await card('Direct Unit'));
-    const indah = direct.getByRole('row', { name: /Indah Permata/ });
-    const day = within(indah).getAllByRole('cell')[2];
-    expect(day).toHaveAttribute('data-overdue', 'true');
-    expect(day.className).toContain('text-alert');
-    expect(day.className).toContain('font-bold');
-
-    const sari = within(screen.getByRole('region', { name: 'AAB: Sari Puspita' }));
-    const budi = within(sari.getByRole('row', { name: /Budi Hartono/ })).getAllByRole('cell')[2];
-    expect(budi).toHaveTextContent('62 /90');
-    expect(budi).not.toHaveAttribute('data-overdue');
-    expect(budi.className).not.toContain('text-alert');
-  });
-
-  it('P13-T5 AC-2 Active Agent: a ✓ titled “Closed first case”, also its name, or “—”', async () => {
-    show();
-    const direct = within(await card('Direct Unit'));
-    const indah = direct.getByRole('row', { name: /Indah Permata/ });
-    const check = within(indah).getByRole('img', { name: 'Closed first case' });
-    expect(check).toHaveAttribute('title', 'Closed first case');
-    const dimas = direct.getByRole('row', { name: /Dimas Saputra/ });
-    expect(within(dimas).getAllByRole('cell')[3]).toHaveTextContent(/^—$/);
-    expect(within(dimas).queryByRole('img')).not.toBeInTheDocument();
-  });
-
-  it('P13-T5 AC-4 each name is a link to the hire’s detail', async () => {
-    show();
-    const sari = within(await card('AAB: Sari Puspita'));
-    expect(sari.getByRole('link', { name: 'Rina Wijaya' })).toHaveAttribute('href', '/new-hires/mem-rina');
-  });
-
-  it('P13-T5 AC-9 each table scrolls inside its card, at the prototype’s minimum width', async () => {
-    show();
-    const table = within(await card('Direct Unit')).getByRole('table');
-    expect(table.className).toContain('min-w-[480px]');
-    expect(table.parentElement?.className).toContain('overflow-x-auto');
-  });
-
-  it('P13-T5 AC-3 a reader who reaches no open activation meets an empty roster, not an error', async () => {
+  it('the empty year: Boost and the line, nothing else', async () => {
+    atWidth(375);
     show({ '/new-hires': notFound });
-    expect(await screen.findByText('No one you lead is in their 90-day activation right now.')).toBeInTheDocument();
-    expect(screen.queryByRole('table')).not.toBeInTheDocument();
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(await screen.findByText('No one you lead joined as a new hire in the last 12 months.')).toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Show' })).toBeNull();
   });
 
-  it('P13-T5 AC-3 groups served empty are not drawn', async () => {
-    show({ '/new-hires': { body: { ...ROSTER, groups: [{ kind: 'direct', leader: null, hires: [] }, ROSTER.groups[1]] } } });
-    await card('AAB: Sari Puspita');
-    expect(screen.queryByRole('region', { name: 'Direct Unit' })).not.toBeInTheDocument();
+  it('a read-only support session is offered no + Add agent and no Menunggu bergabung', async () => {
+    atWidth(375);
+    show({}, readOnlySession(AGUS));
+    await group('Agus Prasetyo');
+    expect(screen.queryByRole('button', { name: '+ Add agent' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Waiting to join/ })).toBeNull();
   });
+});
 
-  it('shows a skeleton while the roster is read', async () => {
+describe('/new-hires from 768px — UI V1 (UI-024, D-24)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it.each([768, 1280])('UI-024 at %ipx: the same tree as a table (Nama · Status · Checklist), every leader open', async (px) => {
+    atWidth(px);
     show();
-    expect(screen.getByRole('status')).toHaveTextContent('Loading your new hires…');
-    await card('Direct Unit');
+    const table = await screen.findByRole('table', { name: 'New Hires' });
+    const headers = within(table).getAllByRole('columnheader');
+    expect(headers.filter((h) => h.getAttribute('scope') === 'col').map((h) => h.textContent)).toEqual(['Name', 'Status', 'Checklist']);
+    const leaders = headers.filter((h) => h.getAttribute('scope') === 'colgroup');
+    expect(leaders.map((h) => h.textContent)).toEqual([
+      expect.stringContaining('Agus Prasetyo'), expect.stringContaining('Arief Hidayat'), expect.stringContaining('Sari Puspita'),
+    ]);
+    expect(within(table).getAllByRole('link').map((l) => l.textContent)).toEqual([
+      'Fikri Ramadhan', 'Dimas Saputra', 'Indah Permata', 'Lukman Hakim', 'Kemal Pratama', 'Tari Wulandari', 'Novi Lestari',
+      'Rina Wijaya', 'Budi Hartono',
+    ]);
+    const lukman = within(table).getByRole('link', { name: 'Lukman Hakim' }).closest('tr')!;
+    expect(lukman).toHaveTextContent('Activated after 3MFirst sale on day 96');
   });
 
-  it('a failed read says why, and Try again reads again', async () => {
-    const { calls } = show({
-      '/new-hires': [
-        { status: 500, body: { error: { code: 'INTERNAL_ERROR', message: 'Something broke', requestId: 'r-9' } } },
-        { body: ROSTER },
-      ],
-    });
-    expect(await screen.findByRole('alert')).toHaveTextContent('Something broke');
-    await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
-    await card('Direct Unit');
-    expect(calls.filter((c) => c.url.endsWith('/new-hires'))).toHaveLength(2);
+  it('UI-024 the right column: the Aktivasi 3M tile and the invitation list with every phone action', async () => {
+    atWidth(1280);
+    show();
+    expect(await screen.findByRole('region', { name: '3M activation rate' })).toHaveTextContent('80%');
+    const list = await screen.findByRole('region', { name: 'Waiting to join' });
+    expect(within(list).getAllByRole('button', { name: /^Actions for/ }).map((b) => b.getAttribute('aria-label'))).toEqual([
+      'Actions for Stefan Wijaya', 'Actions for Yusuf Hidayat',
+    ]);
+    // The same filter, the same counts.
+    const filter = screen.getByRole('group', { name: 'Show' });
+    await userEvent.click(within(filter).getByRole('button', { name: 'Not yet 4' }));
+    expect(within(screen.getByRole('table')).getAllByRole('link').map((l) => l.textContent)).toEqual([
+      'Fikri Ramadhan', 'Kemal Pratama', 'Tari Wulandari', 'Budi Hartono',
+    ]);
   });
 
-  it('P13-T5 AC-8 a read-only support session reads the roster: it has no write control to draw', async () => {
-    show({}, readOnlySession(SARI_ME));
-    await card('Direct Unit');
-    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Indah Permata' })).toBeInTheDocument();
-  });
-
-  it('P13-T5 AC-8 is refused, with no read, to a reader without new_hires:read_roster', async () => {
-    const { calls } = show({}, { ...SARI_ME, permissions: ['activation:read'] });
-    expect(await screen.findByRole('alert')).toHaveAttribute('data-permission', 'new_hires:read_roster');
-    expect(calls.some((c) => c.url.includes('/new-hires'))).toBe(false);
+  it('UI-004 keeps the sub-line from 768px and the title as the nav item’s words', async () => {
+    atWidth(1280);
+    show();
+    await screen.findByRole('table');
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^New Hires$/);
+    expect(screen.getByText('Track your new agents\' 90-day activation progress.')).toBeInTheDocument();
   });
 });

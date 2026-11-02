@@ -3,32 +3,38 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AgentLayout from '@/app/(agent)/layout';
-import { renderInLayout, stubFetch, type StubReply } from '@test/harness';
+import { atWidth, renderInLayout, stubFetch, type StubReply } from '@test/harness';
 import {
   notFound, PGB, plan, product, READ_ONLY_RINA, RINA_ME, SCRIPT, serverError, SHELF, SHELL_STUBS,
 } from '@test/sales-tools-fixtures';
 import { SessionContext } from '@/lib/session';
 import AttackPlanPage from './page';
 
-const nav = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn(), back: vi.fn() }));
+const nav = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn(), back: vi.fn(), search: '' }));
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: nav.push, replace: nav.replace, back: nav.back }),
   usePathname: () => '/attack-plan',
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () => new URLSearchParams(nav.search),
   useParams: () => ({}),
 }));
+
+/** The address's query (`useQuery`, `lib/use-query.ts`): each test names its own, and starts from none. */
+beforeEach(() => { nav.search = ''; });
 
 type Query = Record<string, string>;
 type Routes = Record<string, StubReply | StubReply[]>;
 
-/** The page at an address, as the App Router hands it its query: a settled thenable. */
-const searchParams = (query: Query) => Object.assign(Promise.resolve(query), { status: 'fulfilled', value: query });
+/** The page at an address: the query is the address's, which the page reads with `useSearchParams`. */
+const at = (query: Query) => {
+  nav.search = new URLSearchParams(query).toString();
+  return <AttackPlanPage />;
+};
 
 function show(query: Query = {}, routes: Routes = {}, me = RINA_ME) {
   const stub = stubFetch({
     ...SHELL_STUBS, 'GET /attack-plan': { body: plan() }, 'GET /product-catalog': { body: { products: SHELF } }, ...routes,
   });
-  const view = renderInLayout(AgentLayout, <AttackPlanPage searchParams={searchParams(query)} />, { me });
+  const view = renderInLayout(AgentLayout, at(query), { me });
   return { ...stub, ...view };
 }
 
@@ -42,13 +48,15 @@ function navigate(view: ReturnType<typeof renderInLayout>, query: Query) {
   view.rerender(
     <SessionContext.Provider value={view.session}>
       <Suspense fallback={null}>
-        <AgentLayout><AttackPlanPage searchParams={searchParams(query)} /></AgentLayout>
+        <AgentLayout>{at(query)}</AgentLayout>
       </Suspense>
     </SessionContext.Provider>,
   );
 }
-const result = (name = 'PRUMapan (nama kami)') => screen.findByRole('heading', { level: 2, name });
+const result = (name = 'PRUMapan') => screen.findByRole('heading', { level: 2, name });
 const group = (name: string) => screen.getByRole('group', { name });
+/** What an element wears at 768px and wider: every class but the phone's. */
+const desktopOnly = (el: Element) => (el.getAttribute('class') ?? '').split(/\s+/).filter((c) => c && !c.startsWith('max-md:'));
 
 describe('/attack-plan, the Sales Attack Plan (P14-T8)', () => {
   beforeEach(() => {
@@ -62,21 +70,41 @@ describe('/attack-plan, the Sales Attack Plan (P14-T8)', () => {
     it('P14-T8 AC-1 the nav item is live and current', async () => {
       show();
       await screen.findByRole('heading', { level: 2, name: 'Who are we talking to?' });
-      const item = screen.getByRole('link', { name: 'Sales Attack Plan' });
+      // The field shell's sidebar since UI V1 (UI-004): *Sales*, under *Aktivitas*.
+      const item = within(screen.getByRole('navigation', { name: 'Main' })).getByRole('link', { name: 'Sales' });
       expect(item).toHaveAttribute('href', '/attack-plan');
       expect(item).toHaveAttribute('aria-current', 'page');
       expect(within(item).queryByText('Upcoming')).not.toBeInTheDocument();
     });
 
-    it('P14-T8 AC-2 the title, the sub-line, the step pills, the card and its hint; no plan read yet, the shelf read once', async () => {
+    it('P18.8-T12 AC-2 the tabs Sales Attack Plan | Product Catalog under the title, this one current', async () => {
+      show();
+      await screen.findByRole('heading', { level: 2, name: 'Who are we talking to?' });
+      const tabs = screen.getByRole('navigation', { name: 'Sales tools' });
+      const links = within(tabs).getAllByRole('link');
+      expect(links.map((l) => [l.textContent, l.getAttribute('href'), l.getAttribute('aria-current')])).toEqual([
+        ['Sales Attack Plan', '/attack-plan', 'page'], ['Product Catalog', '/product-catalog', null],
+      ]);
+      // Beneath the page's own title and sub-line, as `/activity/*`'s strip is.
+      expect(screen.getByRole('heading', { level: 1 }).compareDocumentPosition(tabs) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      // Route tabs, not a tablist: a `tab` promises a panel in this document.
+      expect(within(tabs).queryByRole('tab')).not.toBeInTheDocument();
+    });
+
+    it('P14-T8 AC-2, P18.95-T7 AC-1 the title, one line for the brief, the step pills and the card; no plan read yet, the shelf read once', async () => {
       const { calls } = show();
       await screen.findByRole('heading', { level: 2, name: 'Who are we talking to?' });
       expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Sales Attack Plan$/);
-      expect(screen.getByText('Tell us about the customer. Get the product, the pitch, and the objection response.')).toBeInTheDocument();
+      // Grey text row 10: the sub-line and the hint became the client's one line, at every size — the page has no sub-line.
+      expect(screen.queryByText('Tell us about the customer. Get the product, the pitch, and the objection response.')).not.toBeInTheDocument();
+      expect(screen.getByRole('heading', { level: 1 }).nextElementSibling).toBeNull();
       const steps = within(screen.getByRole('list', { name: 'Steps' })).getAllByRole('listitem');
       expect(steps.map((s) => s.textContent)).toEqual(['11 Customer brief', '22 Attack plan']);
       expect(steps[0]).toHaveAttribute('aria-current', 'step');
-      expect(screen.getByText('Three questions. Enough to get a defensible recommendation, fast.')).toBeInTheDocument();
+      // From 768px the client's line, as before; on a phone no grey line (UI-107, D-08).
+      expect(desktopOnly(screen.getByText('Answer 3 questions to get your pitch.'))).not.toContain('hidden');
+      expect(screen.getByText('Answer 3 questions to get your pitch.')).toHaveClass('max-md:hidden');
+      expect(screen.queryByText(/Three questions/)).not.toBeInTheDocument();
       expect(calls.filter((c) => c.url.includes('/attack-plan'))).toEqual([]);
       expect(calls.filter((c) => c.url.includes('/product-catalog')).map((c) => c.url)).toEqual(['http://api.test/api/v1/product-catalog']);
     });
@@ -90,10 +118,12 @@ describe('/attack-plan, the Sales Attack Plan (P14-T8)', () => {
         'Legacy / inheritance',
       ]);
       expect(chips('Age band').map(([t]) => t)).toEqual(['< 25', '25–34', '35–49', '50–64', '65+']);
+      // P18.95-T6 AC-3: six monthly bands, and *Lump-sum* as an option of its own after them.
       expect(chips('Monthly premium budget').map(([t]) => t)).toEqual([
-        '< Rp500K', 'Rp500K–Rp2M', 'Rp2M–Rp5M', 'Rp5M–Rp10M', 'Rp10M–Rp20M', '> Rp20M', 'Lump-sum',
+        '< IDR 500K', 'IDR 500K–IDR 2M', 'IDR 2M–IDR 5M', 'IDR 5M–IDR 10M', 'IDR 10M–IDR 20M', '> IDR 20M',
       ]);
-      for (const name of ['Primary need', 'Age band', 'Monthly premium budget']) {
+      expect(chips('Or pay once').map(([t]) => t)).toEqual(['Lump-sum']);
+      for (const name of ['Primary need', 'Age band', 'Monthly premium budget', 'Or pay once']) {
         expect(chips(name).every(([, pressed]) => pressed === 'false')).toBe(true);
       }
     });
@@ -107,7 +137,7 @@ describe('/attack-plan, the Sales Attack Plan (P14-T8)', () => {
       await userEvent.click(within(group('Primary need')).getByRole('button', { name: 'Retirement income' }));
       await userEvent.click(within(group('Age band')).getByRole('button', { name: '25–34' }));
       expect(build).toBeDisabled();
-      await userEvent.click(within(group('Monthly premium budget')).getByRole('button', { name: 'Rp500K–Rp2M' }));
+      await userEvent.click(within(group('Monthly premium budget')).getByRole('button', { name: 'IDR 500K–IDR 2M' }));
       expect(build).toBeEnabled();
       expect(screen.queryByText('Pick a need, age band, and budget to continue.')).not.toBeInTheDocument();
       expect(within(group('Age band')).getByRole('button', { name: '25–34' })).toHaveAttribute('aria-pressed', 'true');
@@ -118,15 +148,104 @@ describe('/attack-plan, the Sales Attack Plan (P14-T8)', () => {
       await screen.findByRole('heading', { level: 2, name: 'Who are we talking to?' });
       await userEvent.click(within(group('Primary need')).getByRole('button', { name: 'Health' }));
       await userEvent.click(within(group('Age band')).getByRole('button', { name: '65+' }));
-      await userEvent.click(within(group('Monthly premium budget')).getByRole('button', { name: 'Lump-sum' }));
+      await userEvent.click(within(group('Or pay once')).getByRole('button', { name: 'Lump-sum' }));
       await userEvent.click(screen.getByRole('button', { name: 'Build attack plan' }));
       expect(nav.push).toHaveBeenCalledWith('/attack-plan?need=health&age=5&budget=7', { scroll: false });
+    });
+
+    it('P18.95-T6 AC-3 the lump-sum option and its encoding: its own group, one answer across the two, band 7', async () => {
+      show();
+      await screen.findByRole('heading', { level: 2, name: 'Who are we talking to?' });
+      const lumpSum = () => within(group('Or pay once')).getByRole('button', { name: 'Lump-sum' });
+      const monthly = () => within(group('Monthly premium budget')).getByRole('button', { name: '> IDR 20M' });
+      // Not under the monthly question: a group of its own, after it.
+      expect(within(group('Monthly premium budget')).queryByRole('button', { name: 'Lump-sum' })).not.toBeInTheDocument();
+      expect(group('Monthly premium budget').compareDocumentPosition(group('Or pay once')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      // One answer: Lump-sum releases a monthly band, and a band releases Lump-sum.
+      await userEvent.click(monthly());
+      await userEvent.click(lumpSum());
+      expect([monthly(), lumpSum()].map((b) => b.getAttribute('aria-pressed'))).toEqual(['false', 'true']);
+      await userEvent.click(monthly());
+      expect([monthly(), lumpSum()].map((b) => b.getAttribute('aria-pressed'))).toEqual(['true', 'false']);
+      await userEvent.click(lumpSum());
+      await userEvent.click(within(group('Primary need')).getByRole('button', { name: 'Investment' }));
+      await userEvent.click(within(group('Age band')).getByRole('button', { name: '35–49' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Build attack plan' }));
+      expect(nav.push).toHaveBeenCalledWith('/attack-plan?need=investment&age=3&budget=7', { scroll: false });
+    });
+
+    it('P18.95-T6 AC-3 a saved address with budget=7 still resolves: Lump-sum chosen on the brief, and named in the summary', async () => {
+      const view = show({ need: 'investment', age: '3', budget: '7' });
+      expect(await screen.findByText('Lump-sum')).toBeInTheDocument();
+      await result();
+      navigate(view, {});
+      await screen.findByRole('heading', { level: 2, name: 'Who are we talking to?' });
+      expect(within(group('Or pay once')).getByRole('button', { name: 'Lump-sum' })).toHaveAttribute('aria-pressed', 'true');
+      expect(within(group('Monthly premium budget')).getAllByRole('button').every((b) => b.getAttribute('aria-pressed') === 'false')).toBe(true);
+      expect(screen.getByRole('button', { name: 'Build attack plan' })).toBeEnabled();
+    });
+
+    it('UI-107 on a phone the button sits under the last question, in the flow — never a fixed bar — the note not drawn', async () => {
+      show();
+      await screen.findByRole('heading', { level: 2, name: 'Who are we talking to?' });
+      for (const name of ['Primary need', 'Age band', 'Monthly premium budget', 'Or pay once']) {
+        const box = within(group(name)).getAllByRole('button')[0].parentElement!;
+        expect(box).toHaveClass('flex', 'flex-wrap', 'max-md:gap-1.5');
+        expect(box).not.toHaveClass('max-md:grid');
+        for (const chip of within(group(name)).getAllByRole('button')) {
+          expect(chip).toHaveClass('max-md:h-[2.375rem]', 'max-md:rounded-pill');
+          expect(desktopOnly(chip)).not.toContain('w-full');
+        }
+      }
+      const build = screen.getByRole('button', { name: 'Build attack plan' });
+      expect(document.querySelector('.max-md\\:fixed')).toBeNull();
+      expect(build).toHaveClass('max-md:w-full', 'max-md:rounded-pill', 'max-md:min-h-[3.25rem]');
+      // Under the brief's card, the next thing after it.
+      expect(build.parentElement!.previousElementSibling).toContainElement(group('Or pay once'));
+      expect(screen.getByText('Pick a need, age band, and budget to continue.')).toHaveClass('max-md:hidden');
+      // From 768px: disabled until the brief is complete, as before.
+      expect(build).toBeDisabled();
+      expect(desktopOnly(build.parentElement!)).toEqual(['flex', 'flex-wrap', 'items-center', 'justify-end', 'gap-3.5']);
+    });
+
+    it('UI-107 on a phone the button is always active: with a question open it shows that question and focuses it', async () => {
+      atWidth(375);
+      const scrolled = vi.fn();
+      Element.prototype.scrollIntoView = scrolled;
+      show();
+      await screen.findByRole('heading', { level: 2, name: 'Who are we talking to?' });
+      const build = await screen.findByRole('button', { name: 'Build attack plan' });
+      await waitFor(() => expect(build).toBeEnabled());
+      await userEvent.click(within(group('Primary need')).getByRole('button', { name: 'Retirement income' }));
+      await userEvent.click(build);
+      // Age band is the first question still open: brought into view and focused; nothing is asked of the server.
+      expect(group('Age band')).toHaveFocus();
+      expect(scrolled).toHaveBeenCalled();
+      expect(nav.push).not.toHaveBeenCalled();
+      await userEvent.click(within(group('Age band')).getByRole('button', { name: '25–34' }));
+      await userEvent.click(build);
+      expect(group('Monthly premium budget')).toHaveFocus();
+      await userEvent.click(within(group('Monthly premium budget')).getAllByRole('button')[1]);
+      await userEvent.click(build);
+      expect(nav.push).toHaveBeenCalledWith('/attack-plan?need=retirement&age=2&budget=2', { scroll: false });
+      delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+    });
+
+    it('P18.95-T6 AC-1 no bar on the plan, nor beside the empty shelf', async () => {
+      const view = show(BRIEF);
+      await result();
+      expect(document.querySelector('.max-md\\:fixed')).toBeNull();
+      view.unmount();
+      show({}, { 'GET /product-catalog': { body: { products: [] } } });
+      await screen.findByText('There are no products on your shelf yet.');
+      expect(document.querySelector('.max-md\\:fixed')).toBeNull();
+      expect(document.querySelector('.max-md\\:pb-24')).toBeNull();
     });
 
     it('P14-T8 AC-7 a brief address with a band out of range opens the brief with nothing chosen', async () => {
       const { calls } = show({ need: 'health', age: '9', budget: '2' });
       await screen.findByRole('heading', { level: 2, name: 'Who are we talking to?' });
-      for (const name of ['Primary need', 'Age band', 'Monthly premium budget']) {
+      for (const name of ['Primary need', 'Age band', 'Monthly premium budget', 'Or pay once']) {
         expect(within(group(name)).getAllByRole('button').every((b) => b.getAttribute('aria-pressed') === 'false')).toBe(true);
       }
       expect(calls.filter((c) => c.url.includes('/attack-plan'))).toEqual([]);
@@ -146,7 +265,7 @@ describe('/attack-plan, the Sales Attack Plan (P14-T8)', () => {
     it('P14-T8 AC-3 the summary, the result card — tag, the office’s name, tagline, pill — the blocks and the alternative', async () => {
       show(BRIEF);
       await result();
-      expect(screen.getByLabelText('Customer brief').textContent).toBe('Need: Retirement incomeAge: 25–34Budget: Rp500K–Rp2M');
+      expect(screen.getByLabelText('Customer brief').textContent).toBe('Need: Retirement incomeAge: 25–34Budget: IDR 500K–IDR 2M');
       expect(screen.getByText('Retirement income · Conventional')).toBeInTheDocument();
       expect(screen.getByText('Dana pensiun yang cair rutin dari usia 55.')).toBeInTheDocument();
       expect(screen.getByText('Good fit')).toHaveAttribute('data-tone', 'success');
@@ -156,7 +275,7 @@ describe('/attack-plan, the Sales Attack Plan (P14-T8)', () => {
         '44 If they push back', '55 Next action',
       ]);
       expect(screen.getByText(SCRIPT.fullScript)).toBeInTheDocument();
-      expect(screen.getByText('Also matches this need — click to switch the plan above:')).toBeInTheDocument();
+      expect(screen.getByText('Also matches this need — tap to switch the plan above:')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'PRUAnugerah' })).toBeInTheDocument();
       expect(screen.queryByText(/more also match/)).not.toBeInTheDocument();
     });
@@ -170,7 +289,7 @@ describe('/attack-plan, the Sales Attack Plan (P14-T8)', () => {
       expect(screen.getByText(
         'Outside the typical age band for this product — still workable, but check eligibility and premium sizing before quoting.',
       )).toBeInTheDocument();
-      expect(screen.queryByText('Also matches this need — click to switch the plan above:')).not.toBeInTheDocument();
+      expect(screen.queryByText('Also matches this need — tap to switch the plan above:')).not.toBeInTheDocument();
     });
 
     it('P14-T8 AC-3 four chips and the more line past them', async () => {
@@ -209,7 +328,7 @@ describe('/attack-plan, the Sales Attack Plan (P14-T8)', () => {
       const stub = stubFetch({
         ...SHELL_STUBS, 'GET /attack-plan': { body: plan({ product: null, verdict: null, alternatives: [], shelfEmpty: true }) },
       });
-      const view = renderInLayout(AgentLayout, <AttackPlanPage searchParams={searchParams(BRIEF)} />, { me: RINA_ME });
+      const view = renderInLayout(AgentLayout, at(BRIEF), { me: RINA_ME });
       await screen.findByText('There are no products on your shelf yet.');
       navigate(view, {});
       await waitFor(() => expect(screen.queryByLabelText('Customer brief')).not.toBeInTheDocument());
@@ -241,11 +360,11 @@ describe('/attack-plan, the Sales Attack Plan (P14-T8)', () => {
 
     it('P14 exit review: Back from a plan this screen built goes back — the brief’s own entry, not a new one', async () => {
       stubFetch({ ...SHELL_STUBS, 'GET /attack-plan': { body: plan() }, 'GET /product-catalog': { body: { products: SHELF } } });
-      const view = renderInLayout(AgentLayout, <AttackPlanPage searchParams={searchParams({})} />, { me: RINA_ME });
+      const view = renderInLayout(AgentLayout, at({}), { me: RINA_ME });
       await screen.findByRole('heading', { level: 2, name: 'Who are we talking to?' });
       await userEvent.click(within(group('Primary need')).getByRole('button', { name: 'Retirement income' }));
       await userEvent.click(within(group('Age band')).getByRole('button', { name: '25–34' }));
-      await userEvent.click(within(group('Monthly premium budget')).getByRole('button', { name: 'Rp500K–Rp2M' }));
+      await userEvent.click(within(group('Monthly premium budget')).getByRole('button', { name: 'IDR 500K–IDR 2M' }));
       await userEvent.click(screen.getByRole('button', { name: 'Build attack plan' }));
       navigate(view, BRIEF);
       await result();
@@ -258,12 +377,12 @@ describe('/attack-plan, the Sales Attack Plan (P14-T8)', () => {
 
     it('P14-T8 AC-3 back on the brief, it is as it was', async () => {
       stubFetch({ ...SHELL_STUBS, 'GET /attack-plan': { body: plan() }, 'GET /product-catalog': { body: { products: SHELF } } });
-      const view = renderInLayout(AgentLayout, <AttackPlanPage searchParams={searchParams(BRIEF)} />, { me: RINA_ME });
+      const view = renderInLayout(AgentLayout, at(BRIEF), { me: RINA_ME });
       await result();
       navigate(view, {});
       await screen.findByRole('heading', { level: 2, name: 'Who are we talking to?' });
       expect(within(group('Primary need')).getByRole('button', { name: 'Retirement income' })).toHaveAttribute('aria-pressed', 'true');
-      expect(within(group('Monthly premium budget')).getByRole('button', { name: 'Rp500K–Rp2M' })).toHaveAttribute('aria-pressed', 'true');
+      expect(within(group('Monthly premium budget')).getByRole('button', { name: 'IDR 500K–IDR 2M' })).toHaveAttribute('aria-pressed', 'true');
       expect(screen.getByRole('button', { name: 'Build attack plan' })).toBeEnabled();
     });
 
@@ -317,7 +436,7 @@ describe('/attack-plan, the Sales Attack Plan (P14-T8)', () => {
         'GET /attack-plan': {
           body: plan({
             product: product({ code: 'PRUANUGERAH', name: 'PRUAnugerah' }), verdict: 'check_fit', outside: ['age', 'budget'],
-            alternatives: [{ code: 'PRUMAPAN', name: 'PRUMapan (nama kami)' }],
+            alternatives: [{ code: 'PRUMAPAN', name: 'PRUMapan' }],
           }),
         },
       });
@@ -326,7 +445,7 @@ describe('/attack-plan, the Sales Attack Plan (P14-T8)', () => {
         .toEqual(['http://api.test/api/v1/attack-plan?need=retirement&age=2&budget=2&product=PRUANUGERAH']);
       expect(screen.getByLabelText('Customer brief')).toBeInTheDocument();
       expect(screen.getByText(/Outside the typical age band and budget band/)).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'PRUMapan (nama kami)' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'PRUMapan' })).toBeInTheDocument();
     });
 
     it('P14-T8 AC-11 after a switch the result’s heading takes the focus', async () => {
@@ -335,7 +454,7 @@ describe('/attack-plan, the Sales Attack Plan (P14-T8)', () => {
         'GET /attack-plan': [{ body: plan() }, { body: plan({ product: product({ code: 'PRUANUGERAH', name: 'PRUAnugerah' }) }) }],
         'GET /product-catalog': { body: { products: SHELF } },
       });
-      const view = renderInLayout(AgentLayout, <AttackPlanPage searchParams={searchParams(BRIEF)} />, { me: RINA_ME });
+      const view = renderInLayout(AgentLayout, at(BRIEF), { me: RINA_ME });
       await result();
       await userEvent.click(screen.getByRole('button', { name: 'PRUAnugerah' }));
       navigate(view, { ...BRIEF, product: 'PRUANUGERAH' });
@@ -349,11 +468,11 @@ describe('/attack-plan, the Sales Attack Plan (P14-T8)', () => {
       ['an error', serverError, 'Something went wrong.'],
     ] as const)('P14 exit review: after Build attack plan with no heading to land on, %s takes the focus', async (_name, reply, words) => {
       stubFetch({ ...SHELL_STUBS, 'GET /attack-plan': reply, 'GET /product-catalog': { body: { products: SHELF } } });
-      const view = renderInLayout(AgentLayout, <AttackPlanPage searchParams={searchParams({})} />, { me: RINA_ME });
+      const view = renderInLayout(AgentLayout, at({}), { me: RINA_ME });
       await screen.findByRole('heading', { level: 2, name: 'Who are we talking to?' });
       await userEvent.click(within(group('Primary need')).getByRole('button', { name: 'Retirement income' }));
       await userEvent.click(within(group('Age band')).getByRole('button', { name: '25–34' }));
-      await userEvent.click(within(group('Monthly premium budget')).getByRole('button', { name: 'Rp500K–Rp2M' }));
+      await userEvent.click(within(group('Monthly premium budget')).getByRole('button', { name: 'IDR 500K–IDR 2M' }));
       await userEvent.click(screen.getByRole('button', { name: 'Build attack plan' }));
       navigate(view, BRIEF);
       const shown = await screen.findByText(words);
@@ -364,7 +483,7 @@ describe('/attack-plan, the Sales Attack Plan (P14-T8)', () => {
 
     it('P14 exit review: after a switch to a product that is not found, the not-found state takes the focus', async () => {
       stubFetch({ ...SHELL_STUBS, 'GET /attack-plan': [{ body: plan() }, notFound], 'GET /product-catalog': { body: { products: SHELF } } });
-      const view = renderInLayout(AgentLayout, <AttackPlanPage searchParams={searchParams(BRIEF)} />, { me: RINA_ME });
+      const view = renderInLayout(AgentLayout, at(BRIEF), { me: RINA_ME });
       await result();
       await userEvent.click(screen.getByRole('button', { name: 'PRUAnugerah' }));
       navigate(view, { ...BRIEF, product: 'PRUANUGERAH' });
@@ -375,11 +494,11 @@ describe('/attack-plan, the Sales Attack Plan (P14-T8)', () => {
 
     it('P14-T8 AC-11 after Build attack plan the result’s heading takes the focus', async () => {
       stubFetch({ ...SHELL_STUBS, 'GET /attack-plan': { body: plan() }, 'GET /product-catalog': { body: { products: SHELF } } });
-      const view = renderInLayout(AgentLayout, <AttackPlanPage searchParams={searchParams({})} />, { me: RINA_ME });
+      const view = renderInLayout(AgentLayout, at({}), { me: RINA_ME });
       await screen.findByRole('heading', { level: 2, name: 'Who are we talking to?' });
       await userEvent.click(within(group('Primary need')).getByRole('button', { name: 'Retirement income' }));
       await userEvent.click(within(group('Age band')).getByRole('button', { name: '25–34' }));
-      await userEvent.click(within(group('Monthly premium budget')).getByRole('button', { name: 'Rp500K–Rp2M' }));
+      await userEvent.click(within(group('Monthly premium budget')).getByRole('button', { name: 'IDR 500K–IDR 2M' }));
       await userEvent.click(screen.getByRole('button', { name: 'Build attack plan' }));
       navigate(view, BRIEF);
       const heading = await result();
@@ -396,7 +515,7 @@ describe('/attack-plan, the Sales Attack Plan (P14-T8)', () => {
         .toBe('Opened from the Product Catalog — no customer profile set yet, so fit isn\'t checked.');
       expect(screen.getByText('From catalog')).toHaveAttribute('data-tone', 'neutral');
       expect(screen.queryByLabelText('Customer brief')).not.toBeInTheDocument();
-      expect(screen.queryByText('Also matches this need — click to switch the plan above:')).not.toBeInTheDocument();
+      expect(screen.queryByText('Also matches this need — tap to switch the plan above:')).not.toBeInTheDocument();
       await userEvent.click(screen.getByRole('button', { name: 'Add age & budget' }));
       expect(nav.push).toHaveBeenCalledWith('/attack-plan', { scroll: false });
     });
@@ -422,5 +541,75 @@ describe('/attack-plan, the Sales Attack Plan (P14-T8)', () => {
       show({ ...BRIEF, product: 'PRUSEHAT' }, { 'GET /attack-plan': notFound });
       expect(await screen.findByText('This product isn\'t on your shelf.')).toBeInTheDocument();
     });
+  });
+});
+
+/**
+ * **UI V1 on a phone** (UI-107; `attack-plan-mobile` 3): the plan's second step as the phone draws it — the answers as
+ * chips with *Ubah*, the product in a navy card, five numbered sections, the long parts folded, the push-back as two
+ * bubbles, the alternatives as chips with the catalog's link. 375px.
+ */
+describe('UI-107 /attack-plan on a phone', () => {
+  beforeEach(() => {
+    nav.push.mockReset();
+    nav.replace.mockReset();
+    nav.back.mockReset();
+    atWidth(375);
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('UI-107 step 2: the answers with Ubah, the navy card, five numbered sections, the alternatives with the catalog’s link', async () => {
+    const benefits = ['One.', 'Two.', 'Three.', 'Four.', 'Five.', 'Six.'];
+    show(BRIEF, { 'GET /attack-plan': { body: plan({ product: product({ script: { ...SCRIPT, benefits } }) }) } });
+    const heading = await result();
+    await waitFor(() => expect(document.querySelector('[data-layout="phone-plan"]')).not.toBeNull());
+    expect(within(screen.getByRole('list', { name: 'Customer brief' })).getAllByRole('listitem').map((li) => li.textContent))
+      .toEqual(['Retirement income', '25–34', 'IDR 500K–IDR 2M']);
+    // *Ubah* goes back to the brief; the wider *‹ Back* is not drawn.
+    expect(screen.queryByRole('button', { name: 'Back' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Change' }));
+    expect(nav.replace).toHaveBeenCalledWith('/attack-plan', { scroll: false });
+    // The navy card: the need and the channel, the verdict, the name, the line and *Good fit for*.
+    const card = heading.closest('article')!;
+    expect(card).toHaveClass('bg-navy');
+    expect(card).toHaveTextContent('Retirement incomeConventionalGood fitPRUMapan');
+    expect(card).toHaveTextContent('Good fit for Sandwich-generation milenial.');
+    const sections = [...document.querySelectorAll('[data-layout="phone-plan"] section[data-block]')];
+    expect(sections.map((sec) => sec.querySelector('h3')!.textContent)).toEqual([
+      '11 Opening line', '22 Lead with these benefits', '33 Full script', '44 If they push back', '55 Next action',
+    ]);
+    // Four benefits, then *See 2 more benefits*, which unfolds the rest.
+    const list = within(sections[1] as HTMLElement).getByRole('list');
+    expect(within(list).getAllByRole('listitem')).toHaveLength(4);
+    await userEvent.click(screen.getByRole('button', { name: 'See 2 more benefits' }));
+    expect(within(list).getAllByRole('listitem')).toHaveLength(6);
+    // The full script folded until *Read all*; the push-back as two bubbles.
+    const readAll = within(sections[2] as HTMLElement).getByRole('button', { name: 'Read all' });
+    expect(readAll).toHaveAttribute('aria-expanded', 'false');
+    await userEvent.click(readAll);
+    expect(within(sections[2] as HTMLElement).getByRole('button', { name: 'Show less' })).toHaveAttribute('aria-expanded', 'true');
+    expect(sections[3]).toHaveTextContent('They say“Retirement is too far away to think about right now.”You say“I hear that a lot');
+    // The alternatives, and the catalog's link.
+    await userEvent.click(screen.getByRole('button', { name: 'PRUAnugerah' }));
+    expect(nav.replace).toHaveBeenCalledWith('/attack-plan?need=retirement&age=2&budget=2&product=PRUANUGERAH', { scroll: false });
+    expect(screen.getByRole('link', { name: 'See in Product Catalog' })).toHaveAttribute('href', '/product-catalog');
+  });
+
+  it('UI-107 the tabs are one segmented control on a phone: the same links, the current half navy', async () => {
+    show();
+    await screen.findByRole('heading', { level: 2, name: 'Who are we talking to?' });
+    const tabs = screen.getByRole('navigation', { name: 'Sales tools' });
+    expect(tabs).toHaveClass('max-md:rounded-pill', 'max-md:bg-card');
+    const current = within(tabs).getByRole('link', { name: 'Sales Attack Plan' });
+    expect(current).toHaveClass('max-md:flex-1', 'max-md:min-h-11');
+    expect(current.firstElementChild).toHaveClass('max-md:bg-navy', 'max-md:text-white');
+  });
+
+  it('UI-107 the step line never wraps on a phone, and a step done is a ✓', async () => {
+    show(BRIEF);
+    await result();
+    const steps = screen.getByRole('list', { name: 'Steps' });
+    expect(steps).toHaveClass('max-md:flex-nowrap', 'max-md:whitespace-nowrap');
+    expect(within(steps).getAllByRole('listitem')[0].querySelector('svg')).not.toBeNull();
   });
 });

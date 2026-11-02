@@ -180,78 +180,39 @@ export const MY_COACHING_TRAINING_HREF = '/coaching/me/training';
 
 /*
  * ── The words ─────────────────────────────────────────────────────────────────────────────────────
+ * The screens' words are the catalogue's (`i18n/messages/training.ts`, P18.98-T4), in the reader's language: the
+ * prototype's verbatim (`Overall.html:3708-3778`, `:7625-7918`) and the module's own. Only the order is here.
  */
 
-/**
- * **The prototype's own words, verbatim** (`Overall.html:3708-3778`, `:7625-7918`). *"{label} Training"* is
- * Sales's title drawn for every category (contradiction 14, a Fill). **Not shipped** (OD-150): the two
- * footers that promise *"…your Skill Tracker"* (`:3730`, `:3763`).
- */
-export const PROTOTYPE_COPY = {
-  skillsList: 'Skills List',
-  columns: { no: 'No.', skill: 'Skill', module: 'Module', format: 'Format', status: 'Status' },
-  categoryTitle: (label: string) => `${label} Training`,
-  comingSoon: 'Modules for this category are coming soon.',
-  moduleSubtitle: 'Structured training module.',
-  back: (title: string) => `Back to ${title}`,
-  skillTag: (label: string) => `Skill: ${label}`,
-  opened: 'Opened',
-  markedOpened: 'Marked as opened.',
-  marked: (title: string, status: TrainingStatus) => `Marked "${title}" as ${STATUS_LABEL[status].toLowerCase()}.`,
-  tab: 'Training',
-} as const;
-
-/** The status words (`:7657-7661`), on the pills and on the three buttons. */
-export const STATUS_LABEL: Record<TrainingStatus, string> = {
-  not_started: 'Not started',
-  in_progress: 'In progress',
-  done: 'Done',
-};
-
-/** The order the toggle draws them in (`:3757-3761`). */
+/** The order the toggle draws the statuses in (`:3757-3761`). */
 export const TRAINING_STATUSES: readonly TrainingStatus[] = ['not_started', 'in_progress', 'done'];
 
-/** The *Format* chip's word (`:7652-7656`). */
-export const FORMAT_LABEL: Record<TrainingItemKind, string> = { file: 'File', video: 'Video', link: 'Link' };
-
-/** A tile's caption and button (`RESOURCE_TYPE_META`, `:7812-7816`). */
-export const TILE: Record<TrainingItemKind, { caption: string; button: string }> = {
-  file: { caption: 'Uploaded by admin', button: 'Open File' },
-  video: { caption: 'Uploaded by admin', button: 'Play Video' },
-  link: { caption: 'External resource', button: 'Open Link' },
-};
+/*
+ * ── UI V1 (Phase 18.99 T10) ───────────────────────────────────────────────────────────────────────
+ */
 
 /**
- * **Ours** (L-01's states, and D-history's word): none of OD-39's six words, no phase, no code. Each is
- * registered with its parity row in `functional/training.md`.
+ * **A module's place in its skill** — *1/3* on the lesson card (UI-067): its position among the skill's offered
+ * modules in the office's order, and how many there are. Read from the catalog the layout already holds; `null` while
+ * it is not read, or when the module is not in it (a module page opened before the list answered).
  */
-export const OWN_COPY = {
-  /** A module that holds no content yet (contradiction 5, a Fill). */
-  nothingToOpen: 'Nothing to open in this module yet.',
-  /** D-history: a module done and since withdrawn, after its pill on a person's tab. */
-  archived: 'Archived',
-  /** No category offered at all (0701 *Empty*): the list, and a person's tab. */
-  noTraining: 'No training to show yet.',
-  noTrainingSub: 'Modules appear here once they are published for you.',
-  categoryNotFound: 'This category can’t be found.',
-  moduleNotFound: 'This module can’t be found.',
-  notFoundSub: 'It may have been withdrawn, or the address may be mistyped.',
-  /** The not-found card's way back: the nav item's own words, to `/training`. */
-  trainingModules: 'Training modules',
-  loadingCatalog: 'Loading training…',
-  loadingModule: 'Loading this module…',
-  tryAgain: 'Try again',
-  /** The table's caption, for a screen reader: which skill's modules these are. */
-  tableCaption: (skill: string) => `${skill} modules`,
-  /** The status buttons' group, for a screen reader. */
-  statusGroup: (title: string) => `Status of ${title}`,
-  /** A tile's button, named for a screen reader: its words first (WCAG 2.5.3), the item, and that it leaves. */
-  openName: (button: string, label: string) => `${button}: ${label} (opens in a new tab)`,
-  /** An open that failed, under its tile. */
-  openFailed: (label: string) => `Couldn’t open ${label}. Try again.`,
-  /** A status the server refused, under the toggle. */
-  notSaved: (why: string) => `Not saved. ${why}`,
-  /** No content in a module: the *Format* cell's dash, named. */
-  noFormat: '—',
-  noFormatName: 'No material yet',
-} as const;
+export function trainingModulePosition(
+  view: TrainingProgressView | null, skillCode: string, moduleCode: string,
+): { n: number; of: number } | null {
+  for (const category of view?.categories ?? []) {
+    const skill = category.skills.find((s) => s.code === skillCode);
+    const at = skill?.modules.findIndex((m) => m.code === moduleCode) ?? -1;
+    if (skill && at >= 0) return { n: at + 1, of: skill.modules.length };
+  }
+  return null;
+}
+
+/** A link's site, as the lesson card names it under the link's label (UI-067): *prudential.co.id*. `null` if unreadable. */
+export function linkDomain(url: string | null): string | null {
+  if (!url) return null;
+  try {
+    return new URL(url).hostname.replace(/^www\./, '') || null;
+  } catch {
+    return null;
+  }
+}

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { stubFetch } from '@test/harness';
-import { goalInputsOf, producedFrom, saveGoal, type Goal } from './goals';
+import { goalBodyOf, goalInputsOf, groupDigits, monthsLeftInWords, producedFrom, saveGoal, type Goal } from './goals';
 
 /**
  * The provenance marker's words (ADR-0063 §5, P10.1-T6 AC-1): where the APE produced came from, and
@@ -8,25 +8,27 @@ import { goalInputsOf, producedFrom, saveGoal, type Goal } from './goals';
  */
 describe('producedFrom', () => {
   it('names the office’s upload and the month it is for', () => {
-    expect(producedFrom({ provenance: 'imported', month: '2026-09' }, 'month')).toBe('From your office’s upload, September 2026');
+    expect(producedFrom({ provenance: 'imported', month: '2026-09' }, 'month')).toBe('From your office’s upload, Sep 2026');
   });
 
   it('names a correction by hand, and who made it when the payload says (ADR-0121, F-156)', () => {
-    expect(producedFrom({ provenance: 'corrected', month: '2026-09' }, 'month')).toBe('Corrected by hand, September 2026');
+    expect(producedFrom({ provenance: 'corrected', month: '2026-09' }, 'month')).toBe('Corrected by hand, Sep 2026');
     expect(producedFrom({ provenance: 'corrected', month: '2026-09', correctedBy: { name: 'Sari Puspita' } }, 'month'))
-      .toBe('Corrected by Sari Puspita, September 2026');
+      .toBe('Corrected by Sari Puspita, Sep 2026');
     expect(producedFrom({ provenance: 'corrected', month: '2026-09', correctedBy: null }, 'month'))
-      .toBe('Corrected by hand, September 2026');
+      .toBe('Corrected by hand, Sep 2026');
     // A name rides on a correction only: the file's own figure names nobody.
     expect(producedFrom({ provenance: 'imported', month: '2026-09', correctedBy: { name: 'Sari Puspita' } }, 'month'))
-      .toBe('From your office’s upload, September 2026');
+      .toBe('From your office’s upload, Sep 2026');
   });
 
-  it('says a year’s figure is the year to date as of its month', () => {
-    expect(producedFrom({ provenance: 'imported', month: '2026-08' }, 'year'))
-      .toBe('From your office’s upload, year to date as of August 2026');
+  it('P18.95-T7 AC-1 says the office’s year to date in the client’s words, As of its month (grey text row 18)', () => {
+    expect(producedFrom({ provenance: 'imported', month: '2026-08' }, 'year')).toBe('As of Agu 2026');
+    expect(producedFrom({ provenance: 'imported', month: '2026-10' }, 'year')).toBe('As of Okt 2026');
+    // The month's own figure, a correction and a coachee's keep their words.
+    expect(producedFrom({ provenance: 'imported', month: '2026-08' }, 'month')).toBe('From your office’s upload, Agu 2026');
     expect(producedFrom({ provenance: 'corrected', month: '2026-08' }, 'year'))
-      .toBe('Corrected by hand, year to date as of August 2026');
+      .toBe('Corrected by hand, year to date as of Agu 2026');
   });
 
   it('names the agent’s own figure, which has no month — and whose it is when a leader reads it', () => {
@@ -38,6 +40,17 @@ describe('producedFrom', () => {
 
   it('names the source alone when the payload carries no month for it', () => {
     expect(producedFrom({ provenance: 'imported', month: null }, 'month')).toBe('From your office’s upload');
+  });
+
+  /* S2 (the T17–T20 permission review): a figure a coach typed is never called the member's own. */
+  it('S2 names who typed it when it was not the member — on the member’s own page and a coachee’s tab alike', () => {
+    const typed = { provenance: 'self_reported' as const, month: null, typedBy: { name: 'Agus Salim' } };
+    expect(producedFrom(typed, 'year')).toBe('Entered by Agus Salim, not uploaded');
+    expect(producedFrom(typed, 'year', 'she')).toBe('Entered by Agus Salim, not uploaded');
+    expect(producedFrom(typed, 'year', undefined, 'id', 'id')).toBe('Diisi oleh Agus Salim, bukan dari unggahan');
+    // Somebody the office can no longer name is still not the member.
+    expect(producedFrom({ ...typed, typedBy: { name: null } }, 'year')).toBe('Entered by a leader, not uploaded');
+    expect(producedFrom({ ...typed, typedBy: { name: null } }, 'year', undefined, 'id', 'id')).toBe('Diisi oleh leader, bukan dari unggahan');
   });
 });
 
@@ -60,12 +73,12 @@ describe('producedFrom, about a coachee', () => {
       producedFrom({ provenance: 'imported', month: null }, 'year', 'they'),
     ];
     expect(words).toEqual([
-      'From the production upload, September 2026',
-      'Corrected after the production upload, year to date as of August 2026',
+      'From the production upload, Sep 2026',
+      'Corrected after the production upload, year to date as of Agu 2026',
       'From the production upload',
     ]);
     expect(producedFrom({ provenance: 'corrected', month: '2026-08', correctedBy: { name: 'Sari Puspita' } }, 'year', 'they'))
-      .toBe('Corrected after the production upload, year to date as of August 2026, by Sari Puspita');
+      .toBe('Corrected after the production upload, year to date as of Agu 2026, by Sari Puspita');
     for (const w of words) expect(w).not.toMatch(/office|KPM|reports to|tagged to|untagged|unassigned/i);
   });
 });
@@ -90,11 +103,61 @@ describe('saving a plan from a coaching session (P11-T8 AC-4)', () => {
     ]);
   });
 
+  it('S1 a body carries the APE produced only when this edit changed it: left out, the server keeps the stored figure', () => {
+    const read = { ...inputs, apeAchievedMinor: 120_000_000_00 } as typeof inputs;
+    const { apeAchievedMinor: _left, ...rest } = read;
+    expect(goalBodyOf({ ...read, annualApeTargetMinor: 900_000_000_00 }, read))
+      .toEqual({ ...rest, annualApeTargetMinor: 900_000_000_00 });
+    expect(goalBodyOf({ ...read, apeAchievedMinor: 150_000_000_00 }, read)).toEqual({ ...read, apeAchievedMinor: 150_000_000_00 });
+    // Nothing read to compare with: sent whole.
+    expect(goalBodyOf(read, null)).toEqual(read);
+  });
+
   it('P11-T8 AC-4 sends back the six inputs a goal holds, its months left only when they were typed over', () => {
     const goal = {
       ...inputs, mode: 'from_savings', monthsLeft: 2.9, monthsLeftIsOverride: false, period: '2026',
     } as unknown as Goal;
     expect(goalInputsOf(goal)).toEqual({ ...inputs, mode: 'from_savings', monthsLeft: null });
     expect(goalInputsOf({ ...goal, monthsLeftIsOverride: true }).monthsLeft).toBe(2.9);
+  });
+});
+
+/**
+ * Months left in words (P18.95-T5 AC-5; the client's UI review, UI-018): the nearest whole month, a half rounding
+ * up, and *less than a month* below half of one (`metrics-and-definitions.md`, `MONTHS_LEFT_IN_YEAR`, *Display*).
+ */
+describe('P18.95-T5 AC-5: monthsLeftInWords', () => {
+  it.each([
+    [2.2, 'about 2 months'],
+    [2.5, 'about 3 months'],
+    [2.49, 'about 2 months'],
+    [1.4, 'about 1 month'],
+    [1.5, 'about 2 months'],
+    [0.5, 'about 1 month'],
+    [11.9, 'about 12 months'],
+    [12, 'about 12 months'],
+  ])('P18.95-T5 AC-5: %s months reads %s', (months, words) => {
+    expect(monthsLeftInWords(months)).toBe(words);
+  });
+
+  it.each([0.49, 0.1, 0, -1, Number.NaN])('P18.95-T5 AC-5: %s months — below half a month — reads less than a month', (months) => {
+    expect(monthsLeftInWords(months)).toBe('less than a month');
+  });
+});
+
+/**
+ * **P18.98-T3: a goal's figures in the reader's language** (AC-1, AC-3): the provenance marker's month and a money
+ * field's grouping. Indonesian when nothing is passed, as every case above; the words move with the screen (T4).
+ */
+describe('P18.98-T3 a goal in each language', () => {
+  it('P18.98-T3 AC-1 writes the marker’s month in the reader’s language', () => {
+    expect(producedFrom({ provenance: 'imported', month: '2026-10' }, 'year', undefined, 'en')).toBe('As of Oct 2026');
+    expect(producedFrom({ provenance: 'imported', month: '2026-08' }, 'month', undefined, 'en')).toBe('From your office’s upload, Aug 2026');
+    expect(producedFrom({ provenance: 'imported', month: '2026-10' }, 'year', undefined, 'id')).toBe('As of Okt 2026');
+  });
+
+  it('P18.98-T3 AC-3 groups a money field’s digits in the reader’s marks', () => {
+    expect(groupDigits(500_000_000)).toBe('500.000.000');
+    expect(groupDigits(500_000_000, 'en')).toBe('500,000,000');
   });
 });

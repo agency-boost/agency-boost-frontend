@@ -1,14 +1,29 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import { usePathname } from 'next/navigation';
 import { useEffect, useId, useRef, useState } from 'react';
-import { INBOX_EMPTY, NotificationList } from '@/components/notification-list';
+import { inModal } from '@/components/ui/modal';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button, ButtonLink, ErrorBanner } from '@/components/ui/field';
+import { TAP_TARGET } from '@/components/ui/phone';
 import { Skeleton, SkeletonBar } from '@/components/ui/skeleton';
+import { messagesIn } from '@/i18n/catalogue';
+import { kept } from '@/i18n/kept';
+import { SOURCE_LANGUAGE, type Language } from '@/i18n/language';
+import { useLanguage, useMessages } from '@/i18n/language-provider';
+import { notificationMessages } from '@/i18n/messages/notifications';
+import { shellMessages } from '@/i18n/messages/shell';
 import { cn } from '@/lib/cn';
 import { POPOVER_PAGE_SIZE } from '@/lib/notifications';
 import { useCanMark, useInbox } from '@/lib/use-inbox';
+
+/**
+ * **The popover's rows, downloaded when it first has some to draw** (P18.99-T16, the bundle): the bell is on every page
+ * from 768px and the rows only after a tap and a read, so the list — its rows, its notice dialog — was in every route's
+ * first load for nothing. `/notifications` draws the same list, imported as before.
+ */
+const NotificationList = dynamic(() => import('@/components/notification-list').then((m) => m.NotificationList), { ssr: false });
 
 /**
  * The bell at the foot of the sidebar, and the short list it opens (P12.1-T2).
@@ -39,6 +54,11 @@ import { useCanMark, useInbox } from '@/lib/use-inbox';
  *
  * **A read-only support session marks nothing** (roles-and-permissions §7.2; the Phase 12.1 exit
  * review, N2): no *Mark all read*, no toggle, and a row opens without reading itself (`useCanMark`).
+ *
+ * **Not on a phone's bar since 2026-10-27** (P18.95-T12, the product owner's request): below 768px the bar holds
+ * the avatar alone, which wears this bell's `UnreadBadge` and whose menu holds *Notifications* (`SidebarUserMenu`).
+ * The bell and its popover are the sidebar's, from 768px, exactly as before; the placement under the bar stays in
+ * its classes for a shell with no account to hold the notices, which has no avatar menu.
  */
 export function NotificationBell({ href, unread }: { href: string; unread: number }) {
   const pathname = usePathname();
@@ -51,6 +71,9 @@ export function NotificationBell({ href, unread }: { href: string; unread: numbe
   const canMark = useCanMark();
   const list = useInbox(POPOVER_PAGE_SIZE, { listen: open });
   const { inbox, error, load } = list;
+  const t = useMessages(shellMessages);
+  const language = useLanguage();
+  const inboxWords = useMessages(notificationMessages);
 
   // Read each time it opens (T2 AC-2), and take the focus in with it (AC-4).
   useEffect(() => {
@@ -67,7 +90,8 @@ export function NotificationBell({ href, unread }: { href: string; unread: numbe
       trigger.current?.focus();
     }
     function onPointerDown(event: MouseEvent) {
-      if (!wrapper.current?.contains(event.target as Node)) setOpen(false);
+      // A row's modal is drawn at the end of the page (`Modal`'s portal), and is the popover's own.
+      if (!wrapper.current?.contains(event.target as Node) && !inModal(event.target)) setOpen(false);
     }
     // Capture, so a click that also does something else still closes the popover first.
     document.addEventListener('keydown', onKeyDown);
@@ -81,7 +105,7 @@ export function NotificationBell({ href, unread }: { href: string; unread: numbe
   /** Tab past its last control closes it, rather than leaving it open over a page the focus is on. */
   function onBlur(event: React.FocusEvent) {
     const next = event.relatedTarget as Node | null;
-    if (next && !wrapper.current?.contains(next)) setOpen(false);
+    if (next && !wrapper.current?.contains(next) && !inModal(next)) setOpen(false);
   }
 
   /** The button goes once nothing is unread; the focus stays in the popover rather than on nothing. */
@@ -100,10 +124,11 @@ export function NotificationBell({ href, unread }: { href: string; unread: numbe
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={panelId}
-        aria-label={unread > 0 ? `Notifications, ${unread} unread` : 'Notifications'}
+        aria-label={withUnread(kept('Notifications'), unread, language)}
         onClick={() => setOpen((was) => !was)}
         className={cn(
-          'relative flex h-9 w-9 shrink-0 items-center justify-center rounded-md',
+          // 44 × 44 on a phone (P18.95-T1 AC-10); 36 × 36 from 768 px, as before.
+          'relative flex h-9 w-9 shrink-0 items-center justify-center rounded-md', TAP_TARGET,
           active ? 'bg-amber/15 text-white' : 'text-white/[0.78] hover:bg-white/[0.06]',
         )}
       >
@@ -120,14 +145,7 @@ export function NotificationBell({ href, unread }: { href: string; unread: numbe
           <path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
           <path d="M13.73 21a2 2 0 0 1-3.46 0" />
         </svg>
-        {unread > 0 && (
-          <span
-            aria-hidden
-            className="absolute -right-0.5 -top-0.5 inline-flex h-[17px] min-w-[17px] items-center justify-center rounded-pill bg-alert px-1 text-2xs font-bold text-white"
-          >
-            {unread > 9 ? '9+' : unread}
-          </span>
-        )}
+        <UnreadBadge unread={unread} />
       </button>
 
       {open && (
@@ -143,9 +161,10 @@ export function NotificationBell({ href, unread }: { href: string; unread: numbe
           )}
         >
           <div className="flex items-center justify-between gap-3 border-b border-hairline px-4 py-3">
-            <h2 id={headingId} className="font-display text-lg font-bold text-navy">Notifications</h2>
+            {/* The inbox's own title, kept English (§A.2). */}
+            <h2 id={headingId} className="font-display text-lg font-bold text-navy">{kept('Notifications')}</h2>
             {canMark && inbox && inbox.unread > 0 && (
-              <Button variant="inline" onClick={markAllRead}>Mark all read</Button>
+              <Button variant="inline" onClick={markAllRead}>{t.markAllRead}</Button>
             )}
           </div>
 
@@ -154,12 +173,12 @@ export function NotificationBell({ href, unread }: { href: string; unread: numbe
               <div className="p-1.5">
                 <ErrorBanner {...error} />
                 {inbox === null && (
-                  <Button variant="secondary" className="mt-2" onClick={() => void load(1)}>Try again</Button>
+                  <Button variant="secondary" className="mt-2" onClick={() => void load(1)}>{t.tryAgain}</Button>
                 )}
               </div>
             )}
             {inbox === null && !error && (
-              <Skeleton label="Loading your notifications…">
+              <Skeleton label={t.loadingNotifications}>
                 <div className="space-y-3 p-2.5">
                   {Array.from({ length: 3 }, (_, i) => (
                     <div key={i}>
@@ -170,7 +189,7 @@ export function NotificationBell({ href, unread }: { href: string; unread: numbe
                 </div>
               </Skeleton>
             )}
-            {inbox && inbox.items.length === 0 && <EmptyState title={INBOX_EMPTY} className="py-8" />}
+            {inbox && inbox.items.length === 0 && <EmptyState title={inboxWords.empty} className="py-8" />}
             {inbox && inbox.items.length > 0 && (
               <NotificationList
                 items={inbox.items}
@@ -182,11 +201,44 @@ export function NotificationBell({ href, unread }: { href: string; unread: numbe
 
           <div className="border-t border-hairline p-2">
             <ButtonLink href={href} variant="secondary" className="w-full" onClick={() => setOpen(false)}>
-              See all notifications
+              {t.seeAllNotifications}
             </ButtonLink>
           </div>
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * **What the badge says**: the count, and `9+` past nine (L-13) — past that the number stops being one somebody acts
+ * on, and a wider badge would move what is beside it. The accessible name carries the exact count (`withUnread`).
+ */
+export function unreadBadgeText(unread: number): string {
+  return unread > 9 ? '9+' : String(unread);
+}
+
+/**
+ * A control's name with the count in it, *Notifications, 3 unread*; the name alone at none. In the reader's
+ * `language` (`shellMessages`' `withUnread`): *Notifications, 3 belum dibaca* in ID mode.
+ */
+export function withUnread(name: string, unread: number, language: Language = SOURCE_LANGUAGE): string {
+  return messagesIn(shellMessages, language).withUnread({ name, unread });
+}
+
+/**
+ * **The red count on the bell's corner** — and, on a phone's bar, on the avatar's (P18.95-T12 AC-2), so the two are
+ * one badge: its classes, its tokens and its `9+`. Nothing at all while nothing is unread. Placed against its
+ * control's box, which is `relative`; hidden from a screen reader, which hears the count in the control's name.
+ */
+export function UnreadBadge({ unread }: { unread: number }) {
+  if (unread <= 0) return null;
+  return (
+    <span
+      aria-hidden
+      className="absolute -right-0.5 -top-0.5 inline-flex h-[17px] min-w-[17px] items-center justify-center rounded-pill bg-alert px-1 text-2xs font-bold text-white"
+    >
+      {unreadBadgeText(unread)}
+    </span>
   );
 }

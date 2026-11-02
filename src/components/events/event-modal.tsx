@@ -2,12 +2,17 @@
 
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { Button, ErrorBanner } from '@/components/ui/field';
+import { TAP_AREA } from '@/components/ui/phone';
 import { Skeleton, SkeletonBar, SkeletonText } from '@/components/ui/skeleton';
+import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
+import { eventsMessages } from '@/i18n/messages/events';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
+import { cn } from '@/lib/cn';
 import {
-  audienceLine, cancelledToast, cancelRsvp, dayOf, goingToast, isGoing, OWN_COPY, pastBlockOf, PROTOTYPE_COPY,
+  audienceLine, cancelledToast, cancelRsvp, canJoin, dayOf, goingToast, isGoing, pastBlockOf,
   readEvent, refusalOf, rsvpEvent, timeOf, type EventsMeta, type GuestEvent,
 } from '@/lib/events';
+import { useScrollLock } from '@/lib/use-scroll-lock';
 import { EventLocation, EventPosterFrame, EventStatePill, EventTagLabel } from './event-card';
 import { drawsPastBlock, PastEventBlock } from './event-feedback';
 import { useEventsHost } from './events-screen';
@@ -32,8 +37,16 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), texta
  * Its own states are Fills (L-01): a skeleton, an error with a retry, and the not-found state for an event
  * the reader is not invited to, an archived one, or none at all — one answer for all three, as the server
  * gives one (404).
+ *
+ * **Never taller than the screen** (P18.96-T1 AC-1; the client's findings, UI-043): from 640px the box is at most
+ * the dynamic viewport less its margins and scrolls inside itself, the poster with its ✕ held at the top and
+ * *Submit feedback* at the foot; below 640px it is the whole screen, `100dvh`, the same way. While the feedback
+ * form shows, the poster is the card's size, not the 190px banner. The page behind does not scroll while it is
+ * open. Where it fits, it is drawn as before.
  */
 export function EventModal({ id }: { id: string }) {
+  const t = useMessages(eventsMessages);
+  const language = useLanguage();
   const { meta, metaError, reload, close, toast, replace } = useEventsHost();
   const [event, setEvent] = useState<GuestEvent | null>(null);
   const [missing, setMissing] = useState(false);
@@ -43,6 +56,9 @@ export function EventModal({ id }: { id: string }) {
   const [attempt, setAttempt] = useState(0);
   const box = useRef<HTMLDivElement>(null);
   const titleId = useId();
+
+  // The list behind holds still while the event is open (P18.96-T1 AC-1).
+  useScrollLock(true);
 
   useEffect(() => {
     let live = true;
@@ -101,17 +117,17 @@ export function EventModal({ id }: { id: string }) {
 
   /** A refusal said beside the control; a 409 means the event moved on, so it is read again. */
   const refused = (err: unknown) => {
-    setWriteError(refusalOf(err));
+    setWriteError(refusalOf(err, language));
     if (err instanceof ApiRequestError && err.status === 409) setAttempt((n) => n + 1);
   };
 
-  const rsvp = async (call: (id: string) => Promise<GuestEvent>, said: (title: string) => string) => {
+  const rsvp = async (call: (id: string) => Promise<GuestEvent>, said: (title: string, words: typeof language) => string) => {
     if (busy || !event) return;
     setBusy(true);
     setWriteError(null);
     try {
       const next = await call(event.id);
-      answered(next, said(next.title));
+      answered(next, said(next.title, language));
     } catch (err) {
       refused(err);
     } finally {
@@ -121,25 +137,40 @@ export function EventModal({ id }: { id: string }) {
 
   const failed = error ?? (event ? metaError : null);
   const ready = event && meta;
+  // The feedback form is the tall block: while it shows, the poster gives it the room (UI-043).
+  const form = Boolean(event && meta && event.ended && pastBlockOf(event) === 'form' && drawsPastBlock(event, meta));
 
   return (
     <>
       <div aria-hidden="true" className="fixed inset-0 z-40 bg-navy/35" onClick={close} data-scrim />
-      <div className="pointer-events-none fixed inset-0 z-50 flex items-start justify-center overflow-y-auto sm:items-center sm:p-5">
+      {/*
+        * Below the top inset, never under a Home Screen app's clock (staging review, 2026-10-31): the whole screen less
+        * the inset below 640px, the band above it the card's white; from 640px the inset where it is more than 20px.
+        */}
+      <div className="pointer-events-none fixed inset-0 z-50 flex items-start justify-center pt-[env(safe-area-inset-top)] max-sm:bg-card sm:items-center sm:p-5 sm:pt-[max(1.25rem,env(safe-area-inset-top))]">
         <div
           ref={box}
           role="dialog"
           aria-modal="true"
           aria-labelledby={ready ? titleId : undefined}
-          aria-label={ready ? undefined : PROTOTYPE_COPY.title}
+          aria-label={ready ? undefined : t.title}
           tabIndex={-1}
           onKeyDown={keys}
-          className="pointer-events-auto relative min-h-full w-full overflow-hidden bg-card shadow-modal sm:min-h-0 sm:max-w-[560px] sm:rounded-lg"
+          /*
+            * **The box scrolls, never the page** (UI-043): the whole screen below 640px, and from 640px at most the
+            * dynamic viewport less the 1.25rem margins, so its top can no longer be centred off the screen. The
+            * poster and *Submit feedback* are sticky inside it; a field tabbed to stops clear of both.
+            */
+          className={cn(
+            'pointer-events-auto relative h-[calc(100dvh-env(safe-area-inset-top))] w-full overflow-y-auto overscroll-contain bg-card shadow-modal',
+            'sm:h-auto sm:max-h-[calc(100dvh-1.25rem-max(1.25rem,env(safe-area-inset-top)))] sm:max-w-[560px] sm:rounded-lg',
+            form ? 'scroll-pb-24 scroll-pt-[126px]' : 'scroll-pt-[206px]',
+          )}
         >
-          <CloseButton onClose={close} onPoster={!!ready} />
+          {!ready && <CloseButton onClose={close} onPoster={false} />}
 
           {!ready && !missing && !failed && (
-            <Skeleton label={OWN_COPY.loadingEvent}>
+            <Skeleton label={t.loadingEvent}>
               <div className="h-[190px] bg-hairline" />
               <div className="px-5 pb-6 pt-5 sm:px-[26px]">
                 <SkeletonBar className="w-20" />
@@ -156,16 +187,16 @@ export function EventModal({ id }: { id: string }) {
                 className="mt-3"
                 onClick={() => { if (error) setAttempt((n) => n + 1); else reload(); }}
               >
-                {OWN_COPY.tryAgain}
+                {t.tryAgain}
               </Button>
             </div>
           )}
           {missing && (
             <div data-state="not-found" className="px-5 pb-6 pt-14 sm:px-[26px]">
-              <p className="m-0 text-md font-semibold text-navy">{OWN_COPY.notFound}</p>
-              <p className="m-0 mt-1 text-base text-muted">{OWN_COPY.notFoundHint}</p>
+              <p className="m-0 text-md font-semibold text-navy">{t.notFound}</p>
+              <p className="m-0 mt-1 text-base text-muted">{t.notFoundHint}</p>
               <button type="button" onClick={close} className="mt-3 rounded-sm text-base font-semibold text-amber-ink hover:underline">
-                {OWN_COPY.backToEvents}
+                {t.backToEvents}
               </button>
             </div>
           )}
@@ -174,6 +205,8 @@ export function EventModal({ id }: { id: string }) {
             <EventDetail
               event={event}
               meta={meta}
+              form={form}
+              onClose={close}
               titleId={titleId}
               busy={busy}
               writeError={writeError}
@@ -189,9 +222,12 @@ export function EventModal({ id }: { id: string }) {
   );
 }
 
-function EventDetail({ event, meta, titleId, busy, writeError, onJoin, onCancel, onAnswer, onStale }: {
+function EventDetail({ event, meta, form, onClose, titleId, busy, writeError, onJoin, onCancel, onAnswer, onStale }: {
   event: GuestEvent;
   meta: EventsMeta;
+  /** The feedback form shows: the poster at the card's size. */
+  form: boolean;
+  onClose: () => void;
   titleId: string;
   busy: boolean;
   writeError: ApiError | null;
@@ -200,15 +236,29 @@ function EventDetail({ event, meta, titleId, busy, writeError, onJoin, onCancel,
   onAnswer: (next: GuestEvent, message: string) => void;
   onStale: () => void;
 }) {
+  const t = useMessages(eventsMessages);
+  const language = useLanguage();
+  const figures = useFigureLanguage();
   return (
     <>
-      <EventPosterFrame event={event} past={false} className="h-[190px] text-[58px]" />
+      {/*
+        * The head: held at the top of the box as the rest scrolls, its ✕ with it (UI-043). 190px as drawn
+        * (`:2112`); while the form shows, the card's 110px and 36px glyph (`:2067-2068`), so the form has the room.
+        */}
+      <EventPosterFrame
+        event={event}
+        past={false}
+        className={cn('sticky top-0 z-10 shrink-0', form ? 'h-[110px] text-[36px]' : 'h-[190px] text-[58px]')}
+      >
+        <CloseButton onClose={onClose} onPoster />
+      </EventPosterFrame>
       <div className="px-5 pb-[26px] pt-[22px] sm:px-[26px]">
-        <div className="mb-2"><EventTagLabel event={event} inline /></div>
-        <p className="mb-1 text-2xs font-semibold uppercase tracking-wide text-muted">{audienceLine(event.audience, meta.companyName)}</p>
+        <div className="mb-2"><EventTagLabel event={event} /></div>
+        <p className="mb-1 text-2xs font-semibold uppercase tracking-wide text-muted">{audienceLine(event.audience, meta.companyName, language)}</p>
         <h2 id={titleId} className="mb-1.5 break-words text-2xl font-extrabold text-navy">{event.title}</h2>
         <div className="mb-3.5 flex flex-col gap-[3px] text-md text-muted">
-          <span><span aria-hidden="true">📅 </span><strong className="text-navy">{dayOf(event)}</strong> · {timeOf(event)}</span>
+          {/* One date and time, written as every screen writes one: *24 Okt 2026, 18.00* (ADR-0167 §1). */}
+          <span><span aria-hidden="true">📅 </span><strong className="text-navy">{dayOf(event, figures)}</strong>, {timeOf(event, figures)}</span>
           <span><span aria-hidden="true">📍 </span><EventLocation event={event} /></span>
         </div>
         {event.description && (
@@ -219,16 +269,17 @@ function EventDetail({ event, meta, titleId, busy, writeError, onJoin, onCancel,
           <div className="mb-5 flex flex-wrap items-center gap-2.5" data-block="rsvp">
             {isGoing(event) ? (
               <>
-                <EventStatePill pill="going" label={PROTOTYPE_COPY.youreGoing} />
+                <EventStatePill pill="going" label={t.youreGoing} />
                 {meta.can.cancelRsvp && (
                   <Button variant="secondary" className="h-8 px-3.5 text-base" aria-disabled={busy || undefined} onClick={onCancel}>
-                    {PROTOTYPE_COPY.cancelRsvp}
+                    {t.cancelRsvp}
                   </Button>
                 )}
               </>
             ) : (
-              meta.can.rsvp && (
-                <Button aria-disabled={busy || undefined} onClick={onJoin}>{PROTOTYPE_COPY.joinEvent}</Button>
+              // One rule for the modal's *Join event* and the card's *Join* (P18.95-T10 AC-1).
+              canJoin(event, meta.can) && (
+                <Button aria-disabled={busy || undefined} onClick={onJoin}>{t.joinEvent}</Button>
               )
             )}
           </div>
@@ -254,18 +305,21 @@ function EventDetail({ event, meta, titleId, busy, writeError, onJoin, onCancel,
 
 /** The poster's ✕ (`.event-modal-close`, `:2113-2117`), named *Close* — the prototype's has no name. */
 function CloseButton({ onClose, onPoster }: { onClose: () => void; onPoster: boolean }) {
+  const t = useMessages(eventsMessages);
   return (
     <button
       type="button"
-      aria-label={OWN_COPY.closeModal}
+      aria-label={t.closeModal}
       onClick={onClose}
-      className={
+      className={cn(
         onPoster
           ? 'absolute right-3 top-3 z-10 flex h-[30px] w-[30px] items-center justify-center rounded-full bg-navy/[0.28] text-lg text-white hover:bg-navy/[0.42]'
-          : 'absolute right-3 top-3 z-10 flex h-[30px] w-[30px] items-center justify-center rounded-full border border-hairline bg-base text-lg text-navy'
-      }
+          : 'absolute right-3 top-3 z-10 flex h-[30px] w-[30px] items-center justify-center rounded-full border border-hairline bg-base text-lg text-navy',
+        // A 44px square on a phone, the 30px circle as drawn (ADR-0167; UI-029).
+        TAP_AREA,
+      )}
     >
-      <span aria-hidden="true">{PROTOTYPE_COPY.close}</span>
+      <span aria-hidden="true">✕</span>
     </button>
   );
 }

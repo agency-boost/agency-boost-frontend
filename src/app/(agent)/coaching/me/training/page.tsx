@@ -2,6 +2,7 @@
 
 import { MyCoachingHeader } from '@/components/coaching-record';
 import { Page } from '@/components/page';
+import { kept } from '@/i18n/kept';
 import { MyTrainingRecord } from '@/components/training/person-training';
 
 /**
@@ -12,7 +13,7 @@ import { MyTrainingRecord } from '@/components/training/person-training';
  */
 export default function MyCoachingTrainingPage() {
   return (
-    <Page title="Coaching Session" permission="coaching_session:read">
+    <Page title={kept('Coaching Session')} permission="coaching_session:read">
       <MyCoachingHeader current="training" />
       <MyTrainingRecord />
     </Page>

@@ -1,12 +1,111 @@
-import { render, type RenderResult } from '@testing-library/react';
+import { act, render, type RenderResult } from '@testing-library/react';
+import { createHash } from 'node:crypto';
 import { Suspense } from 'react';
 import { vi } from 'vitest';
+import { LANGUAGE_COOKIE, LANGUAGE_PENDING, LANGUAGE_UNCHOSEN, type Language } from '@/i18n/language';
+import { FigureLanguageContext, LanguageContext, LanguageProvider } from '@/i18n/language-provider';
+import { setRequestLanguage } from '@/lib/api-client';
 import { SessionContext, type Me, type SessionValue } from '@/lib/session';
 
 /**
- * Test doubles for the two things every screen depends on: who is signed in, and what
- * the API answered.
+ * Test doubles for the things every screen depends on: who is signed in, what the API answered, and — for a
+ * screen that changes by size — how wide the screen is.
  */
+
+/**
+ * Whether a media query holds at a width, read the way a browser reads the ones this app asks:
+ * `(min-width: Npx)` and `(max-width: Npx)` joined by `and`, a comma list of them, and Tailwind's
+ * `not all and (min-width: Npx)`, which is what a `max-lg:` class compiles to. Anything else — a pointer, a
+ * colour scheme — does not hold, as the phone-only stubs before this answered it.
+ */
+export function matchesAt(query: string, px: number): boolean {
+  return query.split(',').some((part) => {
+    let rest = part.trim();
+    const negated = /^not\s+all\s+and\s+/.exec(rest);
+    if (negated) rest = rest.slice(negated[0].length);
+    const features = rest.split(/\s+and\s+/);
+    const read = features.map((feature) => /^\((min|max)-width:\s*([\d.]+)px\)$/.exec(feature.trim()));
+    if (read.some((m) => m === null)) return false;
+    const holds = read.every((m) => (m![1] === 'min' ? px >= Number(m![2]) : px <= Number(m![2])));
+    return negated ? !holds : holds;
+  });
+}
+
+/**
+ * **A screen of a given width, as far as a component can ask** — `matchMedia`, which jsdom does not have —
+ * answering every query by `matchesAt`, so the three ranges of `useMediaQuery` (`lib/use-media-query.ts`) are each
+ * the width's: 767 is a phone, 768 and 1023 a tablet, 1024 a desktop (P18.97-T6 AC-2). `resize` moves the width
+ * afterwards and tells whoever is listening, as a tablet turned on its side does.
+ *
+ * A spec about the phone alone may still stub `matches: query === PHONE_QUERY`; a spec about a tablet must use
+ * this, since a phone-only stub reads every tablet query as false and draws the desktop at 768.
+ */
+export function atWidth(px: number) {
+  let width = px;
+  const listeners = new Set<() => void>();
+  vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
+    media: query,
+    get matches() { return matchesAt(query, width); },
+    addEventListener: (_: string, fn: () => void) => listeners.add(fn),
+    removeEventListener: (_: string, fn: () => void) => listeners.delete(fn),
+  })));
+  return {
+    resize(next: number) {
+      width = next;
+      act(() => listeners.forEach((fn) => fn()));
+    },
+  };
+}
+
+/** Tailwind's screens, as `tailwind.config.ts` leaves them: its defaults. */
+const SCREENS: Record<string, number> = { sm: 640, md: 768, lg: 1024, xl: 1280, '2xl': 1536 };
+
+/**
+ * **What an element wears at a width**: its classes whose screen variants hold there, each with those variants
+ * taken off — `max-lg:flex-nowrap` is `flex-nowrap` at 1023 and nothing at 1024, `md:w-sidebar` is `w-sidebar` from
+ * 768. jsdom applies no stylesheet, so this is how a spec reads a size that CSS decides; the order is the class
+ * attribute's, and the stylesheet still decides between two that conflict. A state variant (`focus-visible:`) stays.
+ */
+export function wears(el: Element, px: number): string {
+  /*
+   * **The field shell's condition** (UI V1, UI-010; `components/ui/touch.ts`): a class under
+   * `[:root:has([data-surface=v1])_&]` holds while the field shell's frame is in the document, as the browser reads it.
+   */
+  const inField = el.ownerDocument.querySelector('[data-surface="v1"]') !== null;
+  return (el.getAttribute('class') ?? '').split(/\s+/).filter(Boolean).flatMap((token) => {
+    const variants: string[] = [];
+    let rest = token;
+    for (let m = /^([a-z0-9-]+|\[:root:has\(\[data-surface=v1\]\)_&\]):/.exec(rest); m;
+      m = /^([a-z0-9-]+|\[:root:has\(\[data-surface=v1\]\)_&\]):/.exec(rest)) {
+      variants.push(m[1]);
+      rest = rest.slice(m[0].length);
+    }
+    const field = variants.filter((v) => v.startsWith('[:root:has('));
+    if (field.length > 0 && !inField) return [];
+    const screens = variants.filter((v) => v.replace(/^max-/, '') in SCREENS);
+    const holds = screens.every((v) => (v.startsWith('max-') ? px < SCREENS[v.slice(4)] : px >= SCREENS[v]));
+    return holds ? [[...variants.filter((v) => !screens.includes(v) && !field.includes(v)), rest].join(':')] : [];
+  }).join(' ');
+}
+
+/**
+ * **An element as it is printed at a width** (P18.97-T7): every element's classes those that hold there (`wears`), and
+ * React's generated ids made one, so a screen's markup at 768px or 1280px can be pinned to a digest taken before a
+ * phone-only change and compared after it — a `max-md:` class added for a phone wears nothing from 768px, and a
+ * component that renders something else on a phone renders what it did.
+ */
+export function drawnAt(el: Element, px: number): string {
+  const copy = el.cloneNode(true) as Element;
+  for (const node of [copy, ...Array.from(copy.querySelectorAll('*'))]) {
+    if (node.hasAttribute('class')) node.setAttribute('class', wears(node, px));
+  }
+  return copy.outerHTML.replace(/_r_[0-9a-z]+_/g, '_id_');
+}
+
+/** `drawnAt`'s markup as a SHA-256 digest, the form a spec records it in. */
+export function digestAt(el: Element, px: number): string {
+  return createHash('sha256').update(drawnAt(el, px)).digest('hex');
+}
 
 export function makeMe(overrides: Partial<Me> = {}): Me {
   return {
@@ -48,6 +147,7 @@ export function makeSession(overrides: Partial<SessionValue> = {}): SessionValue
     me,
     loading: false,
     signedOut: false,
+    expired: false,
     signIn: vi.fn(async () => me),
     signOut: vi.fn(async () => undefined),
     reload: vi.fn(async () => undefined),
@@ -74,6 +174,115 @@ export function renderWithSession(
     ),
     session: value,
   };
+}
+
+/**
+ * **A screen in a language** (P18.98-T1 AC-5; ADR-0179 §9). Every spec reads **English** unless it asks — outside a
+ * `LanguageProvider` the catalogue answers in its source language — so the suites written before the catalogue keep
+ * their assertions. Wrap what a spec renders in this to read it in Indonesian: for `render`, `renderInLayout` or
+ * anything `renderWithSession` does not cover.
+ *
+ * **Its words and its figures** (P18.98-T3): a language a spec asks for is one the reader chose, so a figure is written
+ * in it too (`useFigureLanguage`) — inside the app's provider as well, where it stands for a reader's choice. To read a
+ * screen as a reader who chose nothing reads it, render the app's provider instead: `renderWithLanguage`.
+ */
+export function InLanguage({ language, children }: { language: Language; children: React.ReactNode }) {
+  return (
+    <LanguageContext.Provider value={language}>
+      <FigureLanguageContext.Provider value={language}>{children}</FigureLanguageContext.Provider>
+    </LanguageContext.Provider>
+  );
+}
+
+/**
+ * **An element in a language, for a helper that builds what it renders without JSX** (`renderTab`): a language a spec
+ * asks for (`InLanguage`), or `{ live }`, the app's own `LanguageProvider`, where nothing is chosen but what the browser
+ * chose (`browserChose`); the element as it is when neither is given — English, every spec's default.
+ */
+export function withLanguage(ui: React.ReactElement, language?: Language | { live: boolean }): React.ReactElement {
+  if (language === undefined) return ui;
+  return typeof language === 'string'
+    ? <InLanguage language={language}>{ui}</InLanguage>
+    : <LanguageProvider live={language.live}>{ui}</LanguageProvider>;
+}
+
+/**
+ * **`renderWithSession`, in Indonesian**: how a spec proves a moved module's ID mode — its words the approved
+ * glossary's, and each kept term still English.
+ */
+export function renderInIndonesian(
+  ui: React.ReactElement,
+  session: Partial<SessionValue> = {},
+): RenderResult & { session: SessionValue } {
+  return renderWithSession(<InLanguage language="id">{ui}</InLanguage>, session);
+}
+
+/**
+ * **A screen with the language switch live** (P18.98-T2): `LANGUAGE_LIVE` overridden for one render, as the release at
+ * P18.98-T4's exit will turn it on for everybody. The app's own `LanguageProvider`, `live`, around `renderWithSession`'s
+ * session: the switch and *Language* on *Your account* are drawn, a reader who has chosen nothing reads Indonesian
+ * (`DEFAULT_LANGUAGE`), a choice writes the cookie and `<html lang>`, and the API client is told it.
+ *
+ * Every spec renders **not live** unless it asks — no switch, English — as every screen does until the release, so no
+ * suite written before it changes. Pair with `resetLanguage` in an `afterEach`.
+ */
+export function renderLive(
+  ui: React.ReactElement,
+  session: Partial<SessionValue> = {},
+): RenderResult & { session: SessionValue } {
+  return renderWithLanguage(ui, session, { live: true });
+}
+
+/**
+ * **A screen as a reader reads it, under the app's own `LanguageProvider`** (P18.98-T3), with `LANGUAGE_LIVE` set for
+ * the render — `live: true` as `renderLive`, `live: false` as the product is shipped until P18.98-T4's exit — around
+ * `renderWithSession`'s session. Nothing is chosen but what the browser chose (`browserChose`, before it) or the
+ * screen chooses: so not live, a reader with no choice reads **English words and Indonesian figures**
+ * (`useFigureLanguage`), the product before the phase; live, Indonesian both. Pair with `resetLanguage`.
+ */
+export function renderWithLanguage(
+  ui: React.ReactElement,
+  session: Partial<SessionValue> = {},
+  { live }: { live: boolean },
+): RenderResult & { session: SessionValue } {
+  const value = makeSession(session);
+  return {
+    ...render(
+      <LanguageProvider live={live}>
+        <SessionContext.Provider value={value}>
+          <Suspense fallback={null}>{ui}</Suspense>
+        </SessionContext.Provider>
+      </LanguageProvider>,
+    ),
+    session: value,
+  };
+}
+
+/**
+ * **A browser that chose `language` on an earlier visit**, for the app's provider to find on its first commit: the
+ * `ab_lang` cookie, and `<html lang>` as the page then carries it — the pre-paint script's where the page was
+ * prerendered in the other language, the prerender's own where the two agree. Pair with `resetLanguage`.
+ */
+export function browserChose(language: Language): void {
+  document.cookie = `${LANGUAGE_COOKIE}=${language}; Path=/`;
+  document.documentElement.lang = language;
+}
+
+/**
+ * **A browser that has chosen no language**, for a spec that chose one: no `ab_lang` cookie, no `<html lang>`, nothing
+ * held back, and the API client back on the language the pages are prerendered in. `test/setup.ts` clears the first
+ * three after every test as well.
+ */
+export function resetLanguage(): void {
+  document.cookie = `${LANGUAGE_COOKIE}=; Max-Age=0; Path=/`;
+  document.documentElement.lang = '';
+  document.documentElement.removeAttribute(LANGUAGE_PENDING);
+  setRequestLanguage(LANGUAGE_UNCHOSEN);
+}
+
+/** The `ab_lang` cookie as the browser holds it: `id`, `en`, or `null` for none. */
+export function languageCookie(): string | null {
+  return new RegExp(`(?:^|;\\s*)${LANGUAGE_COOKIE}=([^;]*)`).exec(document.cookie)?.[1] ?? null;
 }
 
 /**
@@ -144,6 +353,8 @@ export function stubFetch(routes: Record<string, StubReply | StubReply[]>) {
       ok: status >= 200 && status < 300,
       status,
       json: async () => stub.body,
+      // A file the API answers as itself — a template asked for as `.xlsx` or `.csv` (ADR-0184): a `Blob` body as it is.
+      blob: async () => (stub.body instanceof Blob ? stub.body : new Blob([JSON.stringify(stub.body ?? null)])),
     } as Response;
   });
 

@@ -1,11 +1,12 @@
 import type {
-  CalendarBusy, CalendarDownlinePerson, CalendarEntry, CalendarPeopleItem, CalendarRead,
+  CalendarBusy, CalendarDownlinePerson, CalendarEntry, CalendarJoinedEvent, CalendarPeopleItem, CalendarRead,
+  CalendarTask,
 } from '@/lib/calendar';
 import { makeMe } from './harness';
 
 /**
  * The calendar's doubles, shared by its page spec and the screens' axe pass. The week is the
- * prototype's own — Monday, Sep 28 to Sunday, Oct 4, 2026, today the Monday — and the people are the
+ * prototype's own — Monday, 28 Sep to Minggu, 4 Okt 2026, today the Monday — and the people are the
  * seed's (`functional/calendar.md`, *Seed*): Agus the AB, Sari the AAB, Rina and Indah his and her
  * agents.
  */
@@ -108,17 +109,92 @@ export function weekRead(over: Partial<CalendarRead> = {}): CalendarRead {
     next: '2026-10-05',
     today: '2026-09-28',
     now: { at: '2026-09-28T02:45:00.000Z', minute: 585 },
-    subject: { membershipId: 'mem-agus', name: 'Agus Santoso', rung: AB_RUNG },
+    subject: { membershipId: 'mem-agus', name: 'Agus Santoso', rung: AB_RUNG, phone: null },
     entries: [
       entry(),
       entry({ entryId: 'e-prospecting', type: 'task', title: 'Prospecting call block', notes: '', date: '2026-09-29', start: '10:00', end: '11:30' }),
       trip(),
     ],
+    tasks: [],
+    events: [],
     ...over,
   };
 }
 
-/** September 2026 as the office's month: Monday Aug 31 to Sunday Oct 4, five rows. */
+/**
+ * **A lead's next action as a *Tugas*** (UI-104): Ibu Wiwik's *Invite BOP*, due today — the mockup's first lead row —
+ * with her number on file, version 3.
+ */
+export function leadTask(over: Partial<CalendarTask> = {}): CalendarTask {
+  return {
+    taskId: 'lead:lead-wiwik',
+    source: 'lead',
+    date: '2026-09-28',
+    ownerMembershipId: 'mem-agus',
+    name: 'Ibu Wiwik Setyaningsih',
+    note: 'Invite BOP',
+    phone: '+6281234567890',
+    lead: { leadId: 'lead-wiwik', version: 3 },
+    coaching: null,
+    ...over,
+  };
+}
+
+/** **An open coaching action item as a *Tugas***: from Wilson, the coach — *Dari: WILSON TANOTO* — due today. */
+export function coachingTask(over: Partial<CalendarTask> = {}): CalendarTask {
+  return {
+    taskId: 'coaching:sess-1:item-1',
+    source: 'coaching',
+    date: '2026-09-28',
+    ownerMembershipId: 'mem-agus',
+    name: 'Wilson Tanoto',
+    note: 'Siapkan daftar 20 prospek baru',
+    phone: '+6281111111111',
+    lead: null,
+    coaching: { sessionId: 'sess-1', itemId: 'item-1', coachMembershipId: 'mem-wilson' },
+    ...over,
+  };
+}
+
+/** **An event joined**: *BOP Surabaya* on Wednesday 13.00–15.00, the office's own type. */
+export function joinedEvent(over: Partial<CalendarJoinedEvent> = {}): CalendarJoinedEvent {
+  return {
+    eventId: 'ev-bop',
+    title: 'BOP Surabaya',
+    type: { code: 'BOP', label: 'Business Opportunity Presentation' },
+    location: 'Kantor KPM',
+    allDay: false,
+    date: '2026-09-30',
+    start: '13:00',
+    end: '15:00',
+    startsOn: null,
+    endsOn: null,
+    startsAt: '2026-09-30T06:00:00.000Z',
+    endsAt: '2026-09-30T08:00:00.000Z',
+    ...over,
+  };
+}
+
+/** **The Agenda** (UI-104 point 10): seven days from today, Monday 28 Sep, ‹ and › a week either side. */
+export function agendaRead(over: Partial<CalendarRead> = {}): CalendarRead {
+  return { ...weekRead(), view: 'agenda', previous: '2026-09-21', next: '2026-10-05', ...over };
+}
+
+/** **3 Hari** (UI-104 point 5): Monday to Wednesday, ‹ and › three days either side. */
+export function threeDayRead(over: Partial<CalendarRead> = {}): CalendarRead {
+  return {
+    ...weekRead(),
+    view: 'three_days',
+    from: WEEK[0],
+    to: WEEK[2],
+    days: WEEK.slice(0, 3).map((date) => ({ date, inPeriod: true })),
+    previous: '2026-09-25',
+    next: '2026-10-01',
+    ...over,
+  };
+}
+
+/** Sep 2026 as the office's month: Monday 31 Agu to Sunday 4 Okt, five rows. */
 export const MONTH_DAYS = (() => {
   const days = ['2026-08-31'];
   for (let d = 1; d <= 30; d += 1) days.push(`2026-09-${String(d).padStart(2, '0')}`);

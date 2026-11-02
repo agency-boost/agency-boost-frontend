@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { sequenceVersions, signedUploadForm, stageChange, type ConfigChange } from '@/lib/tenant-config';
+import { gcsSignedUpload } from '@test/storage-fixtures';
 
 describe('sequenceVersions — the version a batch finds each row at', () => {
   it('leaves one op per row exactly as the screen read it', () => {
@@ -50,21 +51,32 @@ describe('sequenceVersions — the version a batch finds each row at', () => {
 
 describe('signedUploadForm — the form a signed upload is sent as', () => {
   const file = new Blob(['%PDF-1.4'], { type: 'application/pdf' });
-  const base = { uploadUrl: 'https://store.test/upload', storageKey: 'k/1', signature: 'sig', expiresAt: '2026-10-09T00:00:00Z' };
+  const signed = gcsSignedUpload('dev/kpm-1/products/01DOC');
 
-  it('sends every field the server signed, then the file', () => {
-    const form = signedUploadForm(
-      { ...base, fields: { api_key: '123', timestamp: '1760000000', public_id: 'k/1', type: 'authenticated', signature: 'sig' } },
-      file,
-    );
-    expect([...form.keys()]).toEqual(['api_key', 'timestamp', 'public_id', 'type', 'signature', 'file']);
-    expect(form.get('api_key')).toBe('123');
-    expect(form.get('type')).toBe('authenticated');
+  it('P18.7-T2 sends every field of the signed POST policy, in the server’s order, then the file last', () => {
+    const form = signedUploadForm(signed, file);
+
+    expect([...form.keys()]).toEqual([
+      'Content-Type', 'key', 'x-goog-date', 'x-goog-credential', 'x-goog-algorithm', 'policy',
+      'x-goog-signature', 'file',
+    ]);
+    // Each as the server signed it: a value changed on the way is a policy condition storage fails.
+    for (const [name, value] of Object.entries(signed.fields)) expect(form.get(name)).toBe(value);
+    expect(form.get('key')).toBe('dev/kpm-1/products/01DOC');
+    expect(form.get('file')).toBeInstanceOf(Blob);
   });
 
-  it('falls back to the public id and the signature when the server sends no fields', () => {
-    const form = signedUploadForm(base, file);
-    expect([...form.keys()]).toEqual(['public_id', 'signature', 'file']);
-    expect(form.get('public_id')).toBe('k/1');
+  it('P18.7-T2 adds nothing the server did not sign — no public id, no signature of its own', () => {
+    const form = signedUploadForm(signed, file);
+
+    expect(form.has('public_id')).toBe(false);
+    expect(form.has('signature')).toBe(false);
+    expect(form.getAll('file')).toHaveLength(1);
+  });
+
+  it('P18.7-T2 sends the server’s fields whatever they are named, so a vendor change stays on the server', () => {
+    const form = signedUploadForm({ ...signed, fields: { b: '2', a: '1' } }, file);
+
+    expect([...form.keys()]).toEqual(['b', 'a', 'file']);
   });
 });

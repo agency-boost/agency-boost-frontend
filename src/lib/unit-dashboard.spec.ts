@@ -4,10 +4,13 @@ import {
   AGUS_ROW, BUDI, dashboard, DIMAS, goalCell, rp, SARI, SARI_UNIT, TONO, unitRow, WULAN, YANTI,
 } from '@test/unit-dashboard-fixtures';
 import {
-  candidates, countWords, dialogGroups, everyRow, gapWords, goalWords, inputsOf, lockedWords, missingWords,
-  periodFrom, prefill, productionChanges, productionToast, provenanceWords, readUnitDashboard, readerName,
-  recruitLine, regroup, rowName, salesLine, totalRecruitLine, touchesWords, updateUnitProduction,
+  candidates, countWords, dialogGroups, everyRow, gapWords, goalBar, goalWords, inputsOf, lockedWords, missingWords,
+  namesMissing, namesNewHires, newHireWords, onPaceWords, OWN_COPY, periodFrom, prefill, productionChanges, productionToast,
+  PROTOTYPE_COPY, provenanceWords, readUnitDashboard, readerName, recruitLine, regroup, rowName, salesLine, STATUS_TOOLTIP,
+  totalNote, totalRecruitLine, touchesWords, UNIT_PERIODS, unitPeriods, updateUnitProduction,
+  goalMet, heatStep, matchesFilter, readUnitActivities, rowHref, splitMoney, statusTally, tabFrom, type UnitRow,
 } from './unit-dashboard';
+import { formatMonthLong } from './format';
 
 describe('the Unit Dashboard’s client', () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -50,24 +53,52 @@ describe('the words a row is drawn in', () => {
     expect(rowName(DIMAS)).toBe('Dimas Pratama');
   });
 
-  it('P15-T2 AC-3 writes the goal line over or short, over its achieved-of-target', () => {
-    expect(goalWords(goalCell())).toEqual({ tone: 'short', line: '82% · Rp 14.400.000 short', sub: 'Rp 65.600.000 of Rp 80.000.000' });
+  it('P15-T2 AC-3, P18.97-T3 AC-1 writes the goal line over or short — the percentage whole — over its achieved-of-target, compact, one Rp (UI-030)', () => {
+    expect(goalWords(goalCell())).toEqual({ tone: 'short', line: '82% · Rp 14,4 jt short', sub: 'Rp 65,6 jt of 80 jt' });
     expect(goalWords(goalCell({ actualMinor: rp(108), attainmentPct: 135, targetMet: true, overMinor: rp(28) })))
-      .toEqual({ tone: 'over', line: '135% · +Rp 28.000.000 over', sub: 'Rp 108.000.000 of Rp 80.000.000' });
+      .toEqual({ tone: 'over', line: '135% · +Rp 28 jt over', sub: 'Rp 108 jt of 80 jt' });
+    // The client's own example (UI-030): it wrapped as *Rp 357.500.000 of Rp 712.666.667*.
+    expect(goalWords({ targetMinor: rp(712.666667), actualMinor: rp(357.5), attainmentPct: 50 }).sub).toBe('Rp 357,5 jt of 712,7 jt');
   });
 
   it('P15-T2 AC-3 never shows a missing figure as 0: Not uploaded yet, and No goal set', () => {
     expect(goalWords(goalCell({ actualMinor: null, attainmentPct: null })))
-      .toEqual({ tone: 'missing', line: 'Not uploaded yet', sub: 'of Rp 80.000.000 target' });
+      .toEqual({ tone: 'missing', line: 'Not uploaded yet', sub: 'of Rp 80 jt target' });
+    // The figure alone is labelled (P18.95-T3 AC-2; UI-030), which it was not until 2026-10-26.
     expect(goalWords(goalCell({ set: false, targetMinor: null, attainmentPct: null })))
-      .toEqual({ tone: 'none', line: 'No goal set', sub: 'Rp 65.600.000' });
+      .toEqual({ tone: 'none', line: 'No goal set', sub: 'produced Rp 65,6 jt' });
     expect(goalWords({ targetMinor: null, actualMinor: null, attainmentPct: null }))
       .toEqual({ tone: 'none', line: 'No goal set', sub: null });
   });
 
+  it('P18.95-T3 AC-2 labels a figure that stands without a target: produced Rp 29 jt, on every row and total', () => {
+    // The client's own row (UI-030): *"You (Agus): No goal set · Rp 29.000.000"*, an unlabelled number.
+    const agus = goalWords({ set: false, targetMinor: null, actualMinor: rp(29), attainmentPct: null });
+    expect(agus).toEqual({ tone: 'none', line: 'No goal set', sub: 'produced Rp 29 jt' });
+    expect(OWN_COPY.produced('Rp 29 jt')).toBe('produced Rp 29 jt');
+    // A total of nobody's targets says it the same way, and a figure beside its target needs no label.
+    expect(goalWords({ targetMinor: null, actualMinor: rp(131.2), attainmentPct: null }).sub).toBe('produced Rp 131,2 jt');
+    expect(goalWords(goalCell()).sub).toBe('Rp 65,6 jt of 80 jt');
+    expect(goalWords(goalCell({ actualMinor: null, attainmentPct: null })).sub).toBe('of Rp 80 jt target');
+  });
+
+  it('P18.95-T3 AC-1 draws a phone card’s goal bar from the server’s percentage, capped, and none without a figure or a target', () => {
+    expect(goalBar(goalCell())).toBe(82);
+    expect(goalBar(goalCell({ attainmentPct: 135 }))).toBe(100);
+    expect(goalBar(goalCell({ attainmentPct: 45.6 }))).toBe(46);
+    expect(goalBar(goalCell({ attainmentPct: -3 }))).toBe(0);
+    // A percentage with nothing to show is the cell's own zero (the line's *0%*), drawn as an empty bar.
+    expect(goalBar({ targetMinor: rp(100), actualMinor: rp(0), attainmentPct: null })).toBe(0);
+    // No target, a month made already, no figure: nothing to draw — an empty track would read as zero.
+    expect(goalBar(goalCell({ set: false, targetMinor: null, attainmentPct: null }))).toBeNull();
+    expect(goalBar({ targetMinor: null, actualMinor: rp(29), attainmentPct: null })).toBeNull();
+    expect(goalBar(goalCell({ targetMinor: 0, attainmentPct: null }))).toBeNull();
+    expect(goalBar(goalCell({ actualMinor: null, attainmentPct: null }))).toBeNull();
+  });
+
   it('P15-T2 AC-3 says a month made before it began is made, never 0% of Rp 0 (ADR-0047)', () => {
     const made = goalCell({ targetMinor: 0, actualMinor: rp(12), attainmentPct: null, gapMinor: 0, overMinor: rp(12), policiesNeeded: 0, targetMet: true });
-    expect(goalWords(made)).toEqual({ tone: 'over', line: 'Year’s target made', sub: 'Rp 12.000.000' });
+    expect(goalWords(made)).toEqual({ tone: 'over', line: 'Year’s target made', sub: 'produced Rp 12 jt' });
     expect(goalWords({ ...made, actualMinor: null })).toEqual({ tone: 'over', line: 'Year’s target made', sub: 'Not uploaded yet' });
     // A total whose target-holding rows were all made sums to a target of 0, and says the same.
     expect(goalWords({ targetMinor: 0, actualMinor: rp(30), attainmentPct: null }).line).toBe('Year’s target made');
@@ -78,10 +109,10 @@ describe('the words a row is drawn in', () => {
   });
 
   it('P15-T2 AC-4 works a total’s over and short from its two sums, when the server sends no gap', () => {
-    expect(goalWords({ targetMinor: rp(100), actualMinor: rp(120), attainmentPct: 120 }).line).toBe('120% · +Rp 20.000.000 over');
-    expect(goalWords({ targetMinor: rp(100), actualMinor: rp(40), attainmentPct: 40 }).line).toBe('40% · Rp 60.000.000 short');
+    expect(goalWords({ targetMinor: rp(100), actualMinor: rp(120), attainmentPct: 120 }).line).toBe('120% · +Rp 20 jt over');
+    expect(goalWords({ targetMinor: rp(100), actualMinor: rp(40), attainmentPct: 40 }).line).toBe('40% · Rp 60 jt short');
     // A percentage with nothing to show is the cell's own zero, not a missing one.
-    expect(goalWords({ targetMinor: rp(100), actualMinor: rp(40), attainmentPct: null }).line).toBe('0% · Rp 60.000.000 short');
+    expect(goalWords({ targetMinor: rp(100), actualMinor: rp(40), attainmentPct: null }).line).toBe('0% · Rp 60 jt short');
   });
 
   it('P15-T2 AC-3 writes the leads lines, the recruit line a dash when there is nothing to recruit', () => {
@@ -99,12 +130,22 @@ describe('the words a row is drawn in', () => {
     expect(totalRecruitLine({ ...counts, recruitNominated: 0 })).toBeNull();
   });
 
-  it('P15-T2 AC-3 writes touches against their target, pro-rated under Last 7 days, and no bar without a target', () => {
-    expect(touchesWords({ logged: 85, target: 95 }, 'month')).toEqual({ logged: 85, rest: '/ 95 touches', pct: 89 });
-    expect(touchesWords({ logged: 20, target: 22 }, '7d')).toEqual({ logged: 20, rest: '/ 22 pro-rated touches', pct: 91 });
+  it('P15-T2 AC-3 writes goal activities against their target, pro-rated under Last 7 days, and no bar without a target', () => {
+    // *Goal activities*, not *touches*, since ADR-0165 §2 (P18.8-T15 AC-5).
+    expect(touchesWords({ logged: 85, target: 95 }, 'month')).toEqual({ logged: 85, rest: '/ 95 goal activities', pct: 89 });
+    expect(touchesWords({ logged: 20, target: 22 }, '7d')).toEqual({ logged: 20, rest: '/ 22 pro-rated goal activities', pct: 91 });
     expect(touchesWords({ logged: 140, target: 95 }, 'year').pct).toBe(100);
     expect(touchesWords({ logged: 0, target: 0 }, 'month').pct).toBe(100);
-    expect(touchesWords({ logged: 7, target: null }, 'month')).toEqual({ logged: 7, rest: 'touches', pct: null });
+    expect(touchesWords({ logged: 7, target: null }, 'month')).toEqual({ logged: 7, rest: 'goal activities', pct: null });
+  });
+
+  it('P18.8-T15 AC-5 never calls the figure touches, singular at one, and names the three types it counts', () => {
+    expect(touchesWords({ logged: 1, target: null }, 'month').rest).toBe('goal activity');
+    expect(touchesWords({ logged: 0, target: 1 }, 'month').rest).toBe('/ 1 goal activity');
+    expect(touchesWords({ logged: 2, target: null }, 'month').rest).not.toContain('touch');
+    expect(OWN_COPY.activityRule).toBe(
+      'The activities a goal is built from: Set appointment, Sales meeting, Submission polis. Not every activity logged.',
+    );
   });
 
   it('P15-T2 AC-5 writes the breakdown’s counts, pro-rated under Last 7 days', () => {
@@ -115,9 +156,9 @@ describe('the words a row is drawn in', () => {
 
   it('P15-T2 AC-5 writes the gap and the policies it needs, singular at one', () => {
     expect(gapWords(goalCell())).toEqual({
-      value: 'Rp 14.400.000 remaining', note: '≈ 1 policy needed at their avg case size of Rp 18.000.000.',
+      value: 'Rp 14,4 jt remaining', note: '≈ 1 policy needed at their avg case size of Rp 18 jt.',
     });
-    expect(gapWords(goalCell({ policiesNeeded: 3 })).note).toBe('≈ 3 policies needed at their avg case size of Rp 18.000.000.');
+    expect(gapWords(goalCell({ policiesNeeded: 3 })).note).toBe('≈ 3 policies needed at their avg case size of Rp 18 jt.');
     expect(gapWords(goalCell({ policiesNeeded: null })).note).toBeNull();
     expect(gapWords(goalCell({ set: false }))).toEqual({ value: 'No goal set', note: null });
     expect(gapWords(goalCell({ gapMinor: null }))).toEqual({ value: 'Not uploaded yet', note: null });
@@ -129,11 +170,11 @@ describe('the words a row is drawn in', () => {
       correctedBy: { membershipId: 'mem-owner', name: 'Ibu Ratna' }, correctedAt: '2026-10-05T18:00:00.000Z',
     };
     // 18:00 UTC is the next morning in Jakarta: the day is the office's.
-    expect(provenanceWords(corrected, 'month', false)).toBe('Corrected after the production upload, October 2026, by Ibu Ratna on Oct 6, 2026');
+    expect(provenanceWords(corrected, 'month', false)).toBe('Corrected after the production upload, Okt 2026, by Ibu Ratna on 6 Okt 2026');
     expect(provenanceWords(corrected, 'year', true))
-      .toBe('Corrected after the production upload, year to date as of October 2026, by Ibu Ratna on Oct 6, 2026');
-    expect(provenanceWords({ ...corrected, correctedAt: null }, 'month', false)).toBe('Corrected after the production upload, October 2026, by Ibu Ratna');
-    expect(provenanceWords({ ...corrected, correctedBy: null }, 'month', false)).toBe('Corrected after the production upload, October 2026');
+      .toBe('Corrected after the production upload, year to date as of Okt 2026, by Ibu Ratna on 6 Okt 2026');
+    expect(provenanceWords({ ...corrected, correctedAt: null }, 'month', false)).toBe('Corrected after the production upload, Okt 2026, by Ibu Ratna');
+    expect(provenanceWords({ ...corrected, correctedBy: null }, 'month', false)).toBe('Corrected after the production upload, Okt 2026');
     const own = { provenance: 'self_reported' as const, month: null, correctedBy: null, correctedAt: null };
     expect(provenanceWords(own, 'month', true)).toBe('Your own figure, entered in Goal Settings');
     expect(provenanceWords(own, 'month', false)).toBe('Their own figure, entered in Goal Settings');
@@ -141,11 +182,53 @@ describe('the words a row is drawn in', () => {
     expect(provenanceWords(null, 'month', false)).toBeNull();
   });
 
+  it('S2 a figure a coach typed is never called the member’s own: it names who typed it', () => {
+    const typed = {
+      provenance: 'self_reported' as const, month: null, correctedBy: null, correctedAt: null,
+      typedBy: { membershipId: 'mem-agus', name: 'Agus Salim' },
+    };
+    expect(provenanceWords(typed, 'year', false)).toBe('Entered by Agus Salim, not uploaded');
+    expect(provenanceWords(typed, 'year', true)).toBe('Entered by Agus Salim, not uploaded');
+    expect(provenanceWords(typed, 'year', false, 'id')).toBe('Diisi oleh Agus Salim, bukan dari unggahan');
+    expect(provenanceWords({ ...typed, typedBy: { membershipId: 'mem-x', name: null } }, 'year', false))
+      .toBe('Entered by a leader, not uploaded');
+  });
+
   it('P15-T2 AC-4 names who a total leaves out, by name where the rows say, else by count', () => {
     expect(missingWords(0, [])).toBeNull();
     expect(missingWords(1, ['Yanti Puspita'])).toBe('Not uploaded yet for Yanti Puspita, so not counted in this total.');
     expect(missingWords(2, ['Yanti Puspita'])).toBe('Not uploaded yet for 2 people, so not counted in this total.');
     expect(missingWords(1, [])).toBe('Not uploaded yet for 1 person, so not counted in this total.');
+  });
+
+  it('P18.96-T5 AC-4 names the new hires a total leaves out, by name where the rows say, else by count', () => {
+    expect(newHireWords(0, [])).toBeNull();
+    expect(newHireWords(1, ['Yanti Puspita'])).toBe('No first sale yet for Yanti Puspita, a new hire, so not counted in this total.');
+    expect(newHireWords(2, ['Yanti Puspita', 'Tono Saputra']))
+      .toBe('No first sale yet for Yanti Puspita, Tono Saputra, new hires, so not counted in this total.');
+    expect(newHireWords(2, ['Yanti Puspita'])).toBe('No first sale yet for 2 new hires, so not counted in this total.');
+    expect(newHireWords(1, [])).toBe('No first sale yet for 1 new hire, so not counted in this total.');
+  });
+
+  it('P18.96-T5 AC-4 a new hire before a first sale is named as one, never as missing, though their figure is not held', () => {
+    const yanti = { ...YANTI, newHireBeforeFirstSale: true };
+    expect(YANTI.goal.actualMinor).toBeNull();
+    expect(namesMissing([BUDI, YANTI])).toEqual(['Yanti Puspita']);
+    expect(namesMissing([BUDI, yanti])).toEqual([]);
+    expect(namesNewHires([BUDI, yanti, DIMAS])).toEqual(['Yanti Puspita']);
+    expect(namesNewHires([{ ...AGUS_ROW, newHireBeforeFirstSale: true }])).toEqual(['You (Agus)']);
+  });
+
+  it('P18.96-T5 AC-4 a total’s marks together, missing first; none when neither applies', () => {
+    expect(totalNote(null, null)).toBeNull();
+    expect(totalNote('A.', null)).toBe('A.');
+    expect(totalNote(null, 'B.')).toBe('B.');
+    expect(totalNote('A.', 'B.')).toBe('A. B.');
+  });
+
+  it('P18.96-T5 AC-3 the tag is the client’s word, and its screen-reader words say why', () => {
+    expect(PROTOTYPE_COPY.newHire).toBe('New hire');
+    expect(`${PROTOTYPE_COPY.newHire}${OWN_COPY.newHireMark}`).toBe('New hire, no first sale yet');
   });
 
   it('P15-T2 AC-2 counts candidates and the toast’s agents, singular at one', () => {
@@ -157,7 +240,7 @@ describe('the words a row is drawn in', () => {
 
   it('P15-T3 says the month is locked and who reopens it, with none of the six words', () => {
     const words = lockedWords('2026-10');
-    expect(words).toBe('Production for October 2026 is locked. The Owner or Admin can reopen it.');
+    expect(words).toBe('Production for Okt 2026 is locked. The Owner or Admin can reopen it.');
     expect(words).not.toMatch(/office|KPM|reports to|tagged to|untagged|unassigned/i);
   });
 });
@@ -235,5 +318,146 @@ describe('the dialog’s figures', () => {
     const inputs = inputsOf([YANTI]);
     inputs['mem-yanti'].monthly = '0';
     expect(productionChanges([YANTI], inputs)).toEqual([{ membershipId: 'mem-yanti', apeMonthlyMinor: 0 }]);
+  });
+});
+
+/**
+ * **P18.98-T4 (coaching and unit): the words in Indonesian, the figures in theirs.** Each function takes the words'
+ * language — English when passed none, every case above — and one that writes a figure takes the figures' after it,
+ * Indonesian when passed none, as before T3. Asked for Indonesian, the words are the approved glossary's: one form for
+ * one and many (§B.0 rule 8), the kept terms English, names as typed.
+ */
+describe('P18.98-T4 the Unit Dashboard’s words in Indonesian', () => {
+  it('names the reader’s row, counts agents and candidates, and toasts the rows changed', () => {
+    expect(readerName('Agus Santoso', 'id')).toBe('Anda (Agus)');
+    expect(rowName(AGUS_ROW, 'id')).toBe('Anda (Agus)');
+    expect(rowName(DIMAS, 'id')).toBe('Dimas Pratama');
+    expect(candidates(1, 'id')).toBe('1 kandidat');
+    expect(candidates(3, 'id')).toBe('3 kandidat');
+    expect(productionToast(1, 'id')).toBe('Produksi diperbarui untuk 1 agent.');
+    expect(productionToast(3, 'id')).toBe('Produksi diperbarui untuk 3 agent.');
+  });
+
+  it('writes the goal line over and short, Not uploaded yet and No goal set, the figures in theirs', () => {
+    expect(goalWords(goalCell(), 'id')).toEqual({ tone: 'short', line: '82% · kurang Rp 14,4 jt', sub: 'Rp 65,6 jt dari 80 jt' });
+    expect(goalWords(goalCell({ actualMinor: rp(108), attainmentPct: 135, targetMet: true, overMinor: rp(28) }), 'id').line)
+      .toBe('135% · lebih Rp 28 jt');
+    expect(goalWords(goalCell({ actualMinor: null, attainmentPct: null }), 'id'))
+      .toEqual({ tone: 'missing', line: 'Belum diunggah', sub: 'dari target Rp 80 jt' });
+    expect(goalWords(goalCell({ set: false, targetMinor: null, attainmentPct: null }), 'id'))
+      .toEqual({ tone: 'none', line: 'Goal belum diatur', sub: 'produksi Rp 65,6 jt' });
+    expect(goalWords({ targetMinor: 0, actualMinor: rp(12), attainmentPct: null }, 'id').line).toBe('Target tahun ini tercapai');
+    // The words' language and the figures' are apart: English words, Indonesian figures, as a reader with no choice reads.
+    expect(goalWords(goalCell())).toEqual({ tone: 'short', line: '82% · Rp 14,4 jt short', sub: 'Rp 65,6 jt of 80 jt' });
+    expect(goalWords(goalCell(), 'en', 'en')).toEqual({ tone: 'short', line: '82% · IDR 14.4M short', sub: 'IDR 65.6M of 80M' });
+  });
+
+  it('writes the leads lines, the goal activities and the breakdown, pro-rated', () => {
+    const counts = { salesOpen: 12, salesClosing: 3, recruitOpen: 2, recruitNominated: 1 };
+    expect(salesLine(counts, 'id')).toEqual({ count: 12, rest: '· 3 closing' });
+    expect(recruitLine(counts, 'id')).toEqual({ count: 2, rest: '· 1 dinominasikan' });
+    expect(totalRecruitLine({ ...counts, recruitNominated: 3 }, 'id')).toEqual({ count: 3, rest: 'rekrut potensial' });
+    expect(touchesWords({ logged: 20, target: 22 }, '7d', 'id')).toEqual({ logged: 20, rest: '/ 22 prorata aktivitas goal', pct: 91 });
+    expect(touchesWords({ logged: 1, target: null }, 'month', 'id').rest).toBe('aktivitas goal');
+    expect(countWords({ logged: 14, target: 16 }, '7d', 'id')).toBe('14/16 prorata');
+  });
+
+  it('writes the gap, the provenance, the totals’ marks and the lock', () => {
+    expect(gapWords(goalCell(), 'id')).toEqual({ value: 'Sisa Rp 14,4 jt', note: '≈ perlu 1 polis lagi, dengan rata-rata ukuran case-nya Rp 18 jt.' });
+    const corrected = {
+      provenance: 'corrected' as const, month: '2026-10',
+      correctedBy: { membershipId: 'mem-owner', name: 'Ibu Ratna' }, correctedAt: '2026-10-05T18:00:00.000Z',
+    };
+    expect(provenanceWords(corrected, 'month', false, 'id')).toBe('Dikoreksi setelah unggahan produksi, Okt 2026, oleh Ibu Ratna pada 6 Okt 2026');
+    expect(provenanceWords(corrected, 'year', false, 'id'))
+      .toBe('Dikoreksi setelah unggahan produksi, sejak awal tahun per Okt 2026, oleh Ibu Ratna pada 6 Okt 2026');
+    expect(provenanceWords(corrected, 'month', false, 'en', 'en')).toBe('Corrected after the production upload, Oct 2026, by Ibu Ratna on 6 Oct 2026');
+    const own = { provenance: 'self_reported' as const, month: null, correctedBy: null, correctedAt: null };
+    expect(provenanceWords(own, 'month', true, 'id')).toBe('Angka Anda sendiri, diisi di Goal Settings');
+    expect(provenanceWords(own, 'month', false, 'id')).toBe('Angkanya sendiri, diisi di Goal Settings');
+    expect(missingWords(1, ['Yanti Puspita'], 'id')).toBe('Belum diunggah untuk Yanti Puspita, jadi tidak dihitung dalam total ini.');
+    expect(missingWords(2, ['Yanti Puspita'], 'id')).toBe('Belum diunggah untuk 2 orang, jadi tidak dihitung dalam total ini.');
+    expect(newHireWords(2, ['Yanti Puspita', 'Tono Saputra'], 'id'))
+      .toBe('Belum ada penjualan pertama untuk Yanti Puspita, Tono Saputra, new hire, jadi tidak dihitung dalam total ini.');
+    expect(newHireWords(2, [], 'id')).toBe('Belum ada penjualan pertama untuk 2 new hire, jadi tidak dihitung dalam total ini.');
+    expect(namesNewHires([{ ...AGUS_ROW, newHireBeforeFirstSale: true }], 'id')).toEqual(['Anda (Agus)']);
+    expect(lockedWords('2026-10', 'id')).toBe('Produksi untuk Okt 2026 dikunci. Owner atau Admin dapat membukanya kembali.');
+    expect(lockedWords('2026-10', 'en', 'en')).toBe('Production for Oct 2026 is locked. The Owner or Admin can reopen it.');
+    // UI V1 (UI-006): translated, *Berpotensi aktif* (proposed in §B.10, P18.99).
+    expect(onPaceWords({ count: 6, of: 12 }, 'id')).toBe('Berpotensi aktif: 6/12');
+  });
+
+  it('names the dialog’s groups, a unit below the reader for its head', () => {
+    expect(dialogGroups(dashboard(), 'id').map((g) => g.label)).toEqual([
+      'Agen langsung Anda', 'Unit Arief Wibowo', 'Unit Dewi Kartika', 'Unit Sari Wulandari',
+    ]);
+    expect(dialogGroups(SARI_UNIT, 'id')[0].label).toBe('Agen langsung Sari Wulandari');
+  });
+
+  it('keeps the old shapes as the catalogue’s English', () => {
+    expect(unitPeriods('id').map((p) => p.label)).toEqual(['7 hari terakhir', 'Bulan ini', 'Tahun ini']);
+    expect(UNIT_PERIODS.map((p) => p.label)).toEqual(['Last 7 days', 'This month', 'This year']);
+    expect(PROTOTYPE_COPY.title).toBe('Unit Dashboard');
+    expect(STATUS_TOOLTIP.on_track).toBe('Pacing to qualify as a Monthly Active Agent, at or above 90% of expected goal pace.');
+  });
+});
+
+describe('UI V1 (Phase 18.99 T4): the page’s small rules', () => {
+  it('UI-001 the tab is the address’s, Overview when it names none or another', () => {
+    expect(tabFrom('activities')).toBe('activities');
+    expect(tabFrom(['activities', 'overview'])).toBe('activities');
+    for (const value of [undefined, null, '', 'overview', 'ACTIVITIES', 'ratios']) expect(tabFrom(value)).toBe('overview');
+  });
+
+  it('UI-001 the heat map’s steps: 0 for nothing, then a third, two thirds, more of the largest cell', () => {
+    expect([0, 1, 3, 4, 6, 7, 9].map((n) => heatStep(n, 9))).toEqual([0, 1, 1, 2, 2, 3, 3]);
+    expect(heatStep(1, 1)).toBe(3);
+    expect(heatStep(0, 0)).toBe(0);
+  });
+
+  it('UI-002 the chips’ counts are the rows’ statuses, and a chip keeps the rows it names', () => {
+    const rows = [
+      { status: 'needs_attention' }, { status: 'watch_closely' }, { status: 'needs_attention' }, { status: 'on_track' },
+    ] as UnitRow[];
+    expect(statusTally(rows)).toEqual({ all: 4, needs_attention: 2, watch_closely: 1 });
+    expect(rows.filter((r) => matchesFilter(r, 'needs_attention'))).toHaveLength(2);
+    expect(rows.filter((r) => matchesFilter(r, 'all'))).toHaveLength(4);
+  });
+
+  it('UI-011 a row opens the reader’s own Summary, a coachee’s Personal Summary tab with ‹ back here, or nothing', () => {
+    expect(rowHref({ membershipId: 'mem-agus', isReader: true, coached: true }, '/unit/dashboard')).toBe('/summary');
+    expect(rowHref({ membershipId: 'mem-indah', isReader: false, coached: true }, '/unit/dashboard?period=7d'))
+      .toBe('/coaching/mem-indah/summary?from=%2Funit%2Fdashboard%3Fperiod%3D7d');
+    expect(rowHref({ membershipId: 'mem-x', isReader: false, coached: false }, '/unit/dashboard')).toBeNull();
+  });
+
+  it('UI-003 a tile’s sum splits into its figure and its unit, in either language', () => {
+    expect(splitMoney('Rp 333,5 jt')).toEqual({ value: 'Rp 333,5', unit: 'jt' });
+    expect(splitMoney('IDR 333.5M')).toEqual({ value: 'IDR 333.5', unit: 'M' });
+    expect(splitMoney('Rp 750')).toEqual({ value: 'Rp 750', unit: null });
+  });
+
+  it('UI-005 a goal’s % is green from 100 and red under it, on the unrounded figure', () => {
+    expect([goalMet(99.6), goalMet(100), goalMet(135)]).toEqual([false, true, true]);
+  });
+
+  it('UI-003 the month in full for a label, in each language, from its number', () => {
+    expect(formatMonthLong('2026-10', 'id')).toBe('Oktober');
+    expect(formatMonthLong('2026-10', 'en')).toBe('October');
+    expect(formatMonthLong('2026-13', 'en')).toBe('');
+  });
+});
+
+describe('UI-001 the Activities read', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('UI-001 asks for the span, the day and the unit, each only when given', async () => {
+    const { calls } = stubFetch({ 'GET /unit/dashboard/activities': { body: {} } });
+    await readUnitActivities();
+    await readUnitActivities({ span: 'month', date: '2026-10-21', for: 'mem-sari' });
+    expect(calls.map((c) => c.url)).toEqual([
+      'http://api.test/api/v1/unit/dashboard/activities',
+      'http://api.test/api/v1/unit/dashboard/activities?span=month&date=2026-10-21&for=mem-sari',
+    ]);
   });
 });

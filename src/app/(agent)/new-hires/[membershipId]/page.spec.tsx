@@ -38,16 +38,16 @@ describe('/new-hires/[membershipId], one hire as a leader reads it (P13-T5, P13-
     vi.useRealTimers();
   });
 
-  it('P13-T5 AC-5 is titled with the hire’s name, the subtitle and heading verbatim, and the way back', async () => {
+  it('P13-T5 AC-5, UI-027 is titled with the hire’s name and the heading, the way back — and no subtitle at any size', async () => {
     const { calls } = show();
     await ready();
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Rina Wijaya$/);
-    expect(screen.getByText('You can update their 90-Day Activation status, plus your coaching note.')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Back to Your New Hires' })).toHaveAttribute('href', '/new-hires');
+    expect(screen.queryByText('You can update their 90-Day Activation status, plus your coaching note.')).toBeNull();
+    expect(screen.getByRole('link', { name: 'Back to New Hires' })).toHaveAttribute('href', '/new-hires');
     expect(calls.filter((c) => c.url.includes('/new-hires/')).map((c) => c.url)).toEqual(['http://api.test/api/v1/new-hires/mem-rina']);
   });
 
-  it('P13-T5 AC-5 the tiles, bar, table and five cards are the hire’s page’s, and the Day tile turns red when overdue', async () => {
+  it('P13-T5 AC-5, UI-027 the tiles, bar and five cards — no ASPEK table, each card its count — and the Day tile red when overdue', async () => {
     show({ 'GET /new-hires/mem-rina': { body: leaderView({ day: 95, overdue: true }) } });
     await ready();
     const day = screen.getByText('Day').parentElement!;
@@ -55,11 +55,11 @@ describe('/new-hires/[membershipId], one hire as a leader reads it (P13-T5, P13-
     expect(day).toHaveAttribute('data-variant', 'overdue');
     expect(screen.getByText('Completed').parentElement).toHaveTextContent('Completed5/16');
     expect(screen.getByText('31% complete')).toBeInTheDocument();
-    expect(screen.getByRole('table', { name: 'Activation progress' })).toBeInTheDocument();
+    expect(screen.queryByRole('table')).toBeNull();
     expect(screen.getByRole('progressbar', { name: 'Activation progress' })).toHaveAttribute('aria-valuenow', '31');
     expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
-      'Activation progress', '1Introduction', '2Initial Setup', '3Training & Certification', '4First Sale', '5Ongoing Habits',
-      'Coaching note',
+      'Activation progress', '1Introduction · 2/4', '2Initial Setup · 2/4', '3Training & Certification · 0/3', '4First Sale · 1/2',
+      '5Ongoing Habits · 0/3', 'Coaching note',
     ]);
   });
 
@@ -78,7 +78,56 @@ describe('/new-hires/[membershipId], one hire as a leader reads it (P13-T5, P13-
     expect(box).toBeChecked();
     expect(await screen.findByText('Activation status updated.')).toBeInTheDocument();
     expect(writes(calls)).toEqual([['PUT', '/new-hires/mem-rina/items/CRM_SETUP', { done: true }]]);
-    expect(within(row('CRM_SETUP')).getByRole('button', { name: 'Ticked by you · Oct 3, 2026' })).toBeInTheDocument();
+    expect(within(row('CRM_SETUP')).getByRole('button', { name: 'Ticked by you · 3 Oct 2026' })).toBeInTheDocument();
+  });
+
+  it('P18.95-T1 AC-5: a leader’s tick says Saved ✓ beside its box, and keeps the prototype’s toast', async () => {
+    show({ 'PUT /new-hires/mem-rina/items/': () => ({ body: crmTickedBySari() }) });
+    await ready();
+    await userEvent.click(within(row('CRM_SETUP')).getByRole('checkbox', { name: 'Set up company CRM system' }));
+
+    expect(await within(row('CRM_SETUP')).findByText('Saved ✓')).toHaveAttribute('role', 'status');
+    expect(screen.getByText('Activation status updated.')).toBeInTheDocument();
+  });
+
+  it('P18.95-T1 AC-5: a refused tick offers the retry, which sends the same state again', async () => {
+    const { calls } = show({
+      'PUT /new-hires/mem-rina/items/': [
+        { status: 500, body: { error: { code: 'INTERNAL_ERROR', message: 'Something went wrong.', requestId: 'r-1' } } },
+        { body: crmTickedBySari() },
+      ],
+    });
+    await ready();
+    await userEvent.click(within(row('CRM_SETUP')).getByRole('checkbox'));
+    await userEvent.click(await within(row('CRM_SETUP')).findByRole('button', { name: "Couldn't save — retry: Set up company CRM system" }));
+
+    await waitFor(() => expect(writes(calls)).toEqual([
+      ['PUT', '/new-hires/mem-rina/items/CRM_SETUP', { done: true }],
+      ['PUT', '/new-hires/mem-rina/items/CRM_SETUP', { done: true }],
+    ]));
+    expect(await within(row('CRM_SETUP')).findByText('Saved ✓')).toBeInTheDocument();
+  });
+
+  it('P18.95-T1 AC-5, P18.96-T2 AC-5: a corrected join date says Saved ✓ under the field, and a refused one offers the retry', async () => {
+    const corrected = leaderView({ startDate: '2026-08-01', day: 64, startCorrected: { by: SARI, at: '2026-10-03T02:00:00.000Z' } });
+    const { calls } = show({
+      'PUT /new-hires/mem-rina/start-date': [
+        { status: 500, body: { error: { code: 'INTERNAL_ERROR', message: 'Something went wrong.', requestId: 'r-1' } } },
+        { body: corrected },
+      ],
+    });
+    await ready();
+    const field = screen.getByLabelText('Join date');
+    fireEvent.change(field, { target: { value: '2026-08-01' } });
+    fireEvent.blur(field);
+
+    await userEvent.click(await screen.findByRole('button', { name: "Couldn't save — retry: Join date" }));
+
+    await waitFor(() => expect(writes(calls)).toEqual([
+      ['PUT', '/new-hires/mem-rina/start-date', { startDate: '2026-08-01' }],
+      ['PUT', '/new-hires/mem-rina/start-date', { startDate: '2026-08-01' }],
+    ]));
+    expect(await screen.findByText('Saved ✓')).toHaveAttribute('role', 'status');
   });
 
   it('P13-T5 AC-6 a leader unticks too, sending the state', async () => {
@@ -88,14 +137,16 @@ describe('/new-hires/[membershipId], one hire as a leader reads it (P13-T5, P13-
     await waitFor(() => expect(writes(calls)).toEqual([['PUT', '/new-hires/mem-rina/items/CAREER_MINDSET', { done: false }]]));
   });
 
-  it('P13-T5 AC-6 the linked items are disabled with Auto, as on the hire’s page (contradiction 1)', async () => {
+  it('P13-T5 AC-6, UI-027 the linked items are disabled with a small ⚡ and their rule behind ⓘ — no uppercase Auto text', async () => {
     show();
     await ready();
     for (const code of ['GOAL_SETTING', 'ADD_PROSPECTS', 'ACTIVITY_TRACKER_WEEKLY']) {
       const linked = within(row(code));
       expect(linked.getByRole('checkbox')).toBeDisabled();
-      expect(linked.getByRole('button', { name: /^Auto — completes when / })).toBeInTheDocument();
+      expect(row(code).querySelector('[data-auto-marker]')).not.toBeNull();
+      expect(linked.queryByRole('button', { name: /^Auto — completes when / })).toBeNull();
     }
+    expect(within(row('ADD_PROSPECTS')).getByRole('button', { name: 'Why Add prospects in Leads Management is automatic' })).toBeInTheDocument();
     // No *Go to* on a leader's detail: it would open the leader's own screens.
     expect(screen.queryByRole('link', { name: /^Go to / })).not.toBeInTheDocument();
   });
@@ -110,9 +161,10 @@ describe('/new-hires/[membershipId], one hire as a leader reads it (P13-T5, P13-
   it('P13-T5 AC-6 each done row says who ticked it: the hire by name, the reader as you', async () => {
     show();
     await ready();
-    expect(within(row('INSURANCE_BASICS')).getByRole('button', { name: 'Ticked by Rina Wijaya · Aug 10, 2026' })).toBeInTheDocument();
-    expect(within(row('CAREER_MINDSET')).getByRole('button', { name: 'Ticked by you · Aug 12, 2026' })).toBeInTheDocument();
-    expect(within(row('ADD_PROSPECTS')).getByRole('button', { name: 'Completed from Leads Management by you · Aug 16, 2026' })).toBeInTheDocument();
+    expect(within(row('INSURANCE_BASICS')).getByRole('button', { name: 'Ticked by Rina Wijaya · 10 Aug 2026' })).toBeInTheDocument();
+    expect(within(row('CAREER_MINDSET')).getByRole('button', { name: 'Ticked by you · 12 Aug 2026' })).toBeInTheDocument();
+    // An automatic one says who or what completed it behind its ⓘ, after its rule (UI-027).
+    expect(row('ADD_PROSPECTS').querySelector('[data-auto-marker]')).not.toBeNull();
   });
 
   it('P13-T4 AC-7 a refused tick puts the box back and says why', async () => {
@@ -129,36 +181,38 @@ describe('/new-hires/[membershipId], one hire as a leader reads it (P13-T5, P13-
     expect(screen.queryByText('Activation status updated.')).not.toBeInTheDocument();
   });
 
-  it('P13-T5 AC-5 the start date is the leader’s to correct, within the bounds, written once it is whole', async () => {
+  it('P13-T5 AC-5, P18.96-T2 AC-3 AC-4 the join date is the leader’s to correct, in the shared field, within the bounds, written once it is whole', async () => {
     const corrected = leaderView({ startDate: '2026-08-01', day: 64, startCorrected: { by: SARI, at: '2026-10-03T02:00:00.000Z' } });
     const { calls } = show({ 'PUT /new-hires/mem-rina/start-date': { body: corrected } });
     await ready();
-    const field = screen.getByLabelText('Start date');
+    const field = screen.getByLabelText('Join date');
     expect(field).toHaveValue('2026-08-06');
     expect(field).toHaveAttribute('max', '2026-10-03');
     expect(field).toHaveAttribute('min', '2025-10-03');
+    // P18.96-T2 AC-4: the date as the app writes it, on the shared field's face — never the browser's mm/dd/yyyy.
+    expect(field.nextElementSibling).toHaveTextContent('6 Aug 2026');
 
     vi.useFakeTimers();
     fireEvent.change(field, { target: { value: '2026-08-01' } });
     await act(async () => { vi.advanceTimersByTime(DATE_SETTLE_MS); });
     vi.useRealTimers();
     await waitFor(() => expect(writes(calls)).toEqual([['PUT', '/new-hires/mem-rina/start-date', { startDate: '2026-08-01' }]]));
-    expect(await screen.findByText('Start date updated.')).toBeInTheDocument();
+    expect(await screen.findByText('Join date updated.')).toBeInTheDocument();
     expect(screen.getByText('Day').parentElement).toHaveTextContent('Day64/90');
-    expect(screen.getByRole('button', { name: 'Start date corrected by you · Oct 3, 2026' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Join date corrected by you · 3 Oct 2026' })).toBeInTheDocument();
   });
 
   it('P13-T5 AC-5 a date after today, or more than a year back, is refused before it is sent', async () => {
     const { calls } = show();
     await ready();
-    const field = screen.getByLabelText('Start date');
+    const field = screen.getByLabelText('Join date');
     fireEvent.change(field, { target: { value: '2026-10-04' } });
     fireEvent.blur(field);
-    expect(await screen.findByText('Choose a date from Oct 3, 2025 to today.')).toBeInTheDocument();
+    expect(await screen.findByText('Choose a date from 3 Oct 2025 to today.')).toBeInTheDocument();
     expect(field).toHaveAttribute('aria-invalid', 'true');
     fireEvent.change(field, { target: { value: '2025-10-02' } });
     fireEvent.blur(field);
-    expect(await screen.findByText('Choose a date from Oct 3, 2025 to today.')).toBeInTheDocument();
+    expect(await screen.findByText('Choose a date from 3 Oct 2025 to today.')).toBeInTheDocument();
     expect(writes(calls)).toEqual([]);
   });
 
@@ -169,7 +223,7 @@ describe('/new-hires/[membershipId], one hire as a leader reads it (P13-T5, P13-
       },
     });
     await ready();
-    const field = screen.getByLabelText('Start date');
+    const field = screen.getByLabelText('Join date');
     fireEvent.change(field, { target: { value: '2026-08-01' } });
     fireEvent.blur(field);
     expect(await screen.findByText('Not saved. That date is out of range.')).toBeInTheDocument();
@@ -182,10 +236,10 @@ describe('/new-hires/[membershipId], one hire as a leader reads it (P13-T5, P13-
     const card = screen.getByRole('region', { name: 'Coaching note' });
     expect(within(card).getByText('Visible to this agent on their own 90-Day Activation page.')).toBeInTheDocument();
     const box = within(card).getByRole('textbox', { name: 'Coaching note' });
-    expect(box).toHaveAttribute('placeholder', 'e.g. Great pace on prospecting — let\'s focus on booking your first JFW this week.');
+    expect(box).toHaveAttribute('placeholder', 'e.g. Great pace on prospecting — let\'s focus on booking your first joint field work this week.');
     expect(box).toHaveValue('Great pace on prospecting — let’s book your first JFW this week.');
     expect(box).toHaveAttribute('maxLength', '1000');
-    expect(within(card).getByRole('button', { name: 'Last saved by you · Sep 30, 2026' })).toBeInTheDocument();
+    expect(within(card).getByRole('button', { name: 'Last saved by you · 30 Sep 2026' })).toBeInTheDocument();
     expect(within(card).getByRole('button', { name: 'Save note' })).toBeEnabled();
   });
 
@@ -202,7 +256,7 @@ describe('/new-hires/[membershipId], one hire as a leader reads it (P13-T5, P13-
     expect(await screen.findByText('Coaching note saved — visible to Rina Wijaya.')).toBeInTheDocument();
     expect(writes(calls)).toEqual([['PUT', '/new-hires/mem-rina/note', { text: 'Book the JFW with Pak Hendra.' }]]);
     const saved = within(screen.getByRole('region', { name: 'Coaching note' }));
-    expect(saved.getByRole('button', { name: 'Last saved by you · Oct 3, 2026' })).toBeInTheDocument();
+    expect(saved.getByRole('button', { name: 'Last saved by you · 3 Oct 2026' })).toBeInTheDocument();
     expect(saved.getByRole('textbox')).toHaveValue('Book the JFW with Pak Hendra.');
   });
 
@@ -220,7 +274,7 @@ describe('/new-hires/[membershipId], one hire as a leader reads it (P13-T5, P13-
   it('P13-T6 AC-2 a note another leader saved names them', async () => {
     show({ 'GET /new-hires/mem-rina': { body: leaderView({ note: { text: 'Keep going.', by: ARIEF, at: '2026-09-28T03:00:00.000Z' } }) } });
     await ready();
-    expect(screen.getByRole('button', { name: 'Last saved by Arief Hidayat · Sep 28, 2026' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Last saved by Arief Hidayat · 28 Sep 2026' })).toBeInTheDocument();
   });
 
   it('P13-T6 AC-6 a refused note says why and keeps what was typed', async () => {
@@ -239,8 +293,8 @@ describe('/new-hires/[membershipId], one hire as a leader reads it (P13-T5, P13-
     const { calls } = show({}, readOnlySession(SARI_ME));
     await ready();
     for (const box of screen.getAllByRole('checkbox')) expect(box).toBeDisabled();
-    expect(screen.queryByLabelText('Start date')).not.toBeInTheDocument();
-    expect(screen.getByText('Start date').nextElementSibling).toHaveTextContent('Aug 6, 2026');
+    expect(screen.queryByLabelText('Join date')).not.toBeInTheDocument();
+    expect(screen.getByText('Join date').nextElementSibling).toHaveTextContent('6 Aug 2026');
     expect(screen.getByRole('textbox', { name: 'Coaching note' })).toHaveAttribute('readonly');
     expect(screen.queryByRole('button', { name: 'Save note' })).not.toBeInTheDocument();
     expect(writes(calls)).toEqual([]);
@@ -250,7 +304,7 @@ describe('/new-hires/[membershipId], one hire as a leader reads it (P13-T5, P13-
     show({ 'GET /new-hires/mem-rina': notFound });
     expect(await screen.findByRole('heading', { level: 2, name: 'This person isn’t one of your new hires.' })).toBeInTheDocument();
     expect(screen.getByText('They may have moved to another leader, or the address may be mistyped.')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Back to Your New Hires' })).toHaveAttribute('href', '/new-hires');
+    expect(screen.getByRole('link', { name: 'Back to New Hires' })).toHaveAttribute('href', '/new-hires');
     expect(document.body.textContent).not.toMatch(/mem-rina|NOT_FOUND|Rina/);
   });
 
@@ -266,13 +320,13 @@ describe('/new-hires/[membershipId], one hire as a leader reads it (P13-T5, P13-
       'GET /new-hires/mem-rina': { body: leaderView({ state: 'graduated', graduatedAt: '2026-10-01T03:00:00.000Z', graduatedBy: RINA }) },
     });
     await ready();
-    expect(screen.getByText('Marked complete by Rina Wijaya on Oct 1, 2026.')).toBeInTheDocument();
+    expect(screen.getByText('Marked complete by Rina Wijaya on 1 Oct 2026.')).toBeInTheDocument();
     // Phase 13's docs audit (parity L-89): the line takes the subtitle's place, which would otherwise
     // say the leader can still update it.
     expect(screen.queryByText('You can update their 90-Day Activation status, plus your coaching note.')).not.toBeInTheDocument();
     for (const box of screen.getAllByRole('checkbox')) expect(box).toBeDisabled();
-    expect(screen.queryByLabelText('Start date')).not.toBeInTheDocument();
-    expect(screen.getByText('Start date').nextElementSibling).toHaveTextContent('Aug 6, 2026');
+    expect(screen.queryByLabelText('Join date')).not.toBeInTheDocument();
+    expect(screen.getByText('Join date').nextElementSibling).toHaveTextContent('6 Aug 2026');
     // The server refuses the note on a closed activation too (409 ACTIVATION_CLOSED), so it is not offered.
     expect(screen.getByRole('textbox', { name: 'Coaching note' })).toHaveAttribute('readonly');
     expect(screen.queryByRole('button', { name: 'Save note' })).not.toBeInTheDocument();
@@ -295,7 +349,7 @@ describe('/new-hires/[membershipId], one hire as a leader reads it (P13-T5, P13-
   it('P13-T7 AC-4 an expired activation says when it ended, read-only as a graduated one is', async () => {
     show({ 'GET /new-hires/mem-rina': { body: leaderView({ state: 'expired', endsOn: '2026-09-30' }) } });
     await ready();
-    expect(screen.getByText('Ended on Sep 30, 2026, six months after it started.')).toBeInTheDocument();
+    expect(screen.getByText('Ended on 30 Sep 2026, six months after it started.')).toBeInTheDocument();
     for (const box of screen.getAllByRole('checkbox')) expect(box).toBeDisabled();
     expect(screen.queryByRole('button', { name: 'Save note' })).not.toBeInTheDocument();
   });
@@ -321,7 +375,7 @@ describe('/new-hires/[membershipId], one hire as a leader reads it (P13-T5, P13-
   it('Phase 13 exit review: an expired activation’s date is the short one every other date on these pages uses', async () => {
     show({ 'GET /new-hires/mem-rina': { body: leaderView({ state: 'expired', endsOn: '2027-01-06' }) } });
     await ready();
-    expect(screen.getByText('Ended on Jan 6, 2027, six months after it started.')).toBeInTheDocument();
+    expect(screen.getByText('Ended on 6 Jan 2027, six months after it started.')).toBeInTheDocument();
     expect(document.body).not.toHaveTextContent(/January/);
   });
 

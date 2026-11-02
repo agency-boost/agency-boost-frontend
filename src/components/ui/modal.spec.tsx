@@ -1,9 +1,10 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useRef, useState } from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { axe } from 'vitest-axe';
-import { Modal } from './modal';
+import { Dialog } from './dialog';
+import { inModal, Modal } from './modal';
 
 function Harness({ onClose = vi.fn(), focusLast = false, focusDialog = false }: { onClose?: () => void; focusLast?: boolean; focusDialog?: boolean }) {
   const [open, setOpen] = useState(false);
@@ -100,5 +101,187 @@ describe('Modal (P11-T8)', () => {
     const [badge, title] = [screen.getByText('Meeting'), screen.getByRole('heading', { name: 'Weekly unit standup' })];
     expect(dialog).toContainElement(badge);
     expect(badge.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('P18.95-T4 AC-1: rises from the foot of the screen as a sheet, with the same manners as the dialog', async () => {
+    const onClose = vi.fn();
+    render(
+      <Modal open placement="sheet" title="Edit Pak Budi" focusDialog onClose={onClose}>
+        <input aria-label="Remarks" />
+      </Modal>,
+    );
+    const dialog = screen.getByRole('dialog', { name: 'Edit Pak Budi' });
+
+    // The full width, anchored to the foot, its top corners rounded and clear of the home indicator.
+    expect(dialog.parentElement).toHaveAttribute('data-placement', 'sheet');
+    expect(dialog.parentElement!.className).toContain('items-end');
+    expect(dialog.className).toContain('rounded-t-lg');
+    expect(dialog.className).toContain('max-h-[90dvh]');
+    expect(dialog.className).not.toContain('max-w-[26rem]');
+    expect(dialog).toHaveFocus();
+
+    await userEvent.keyboard('{Escape}');
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('P18.95-T4: keeps the centred box by default', () => {
+    render(<Modal open title="Edit again" onClose={() => {}}><p>Why</p></Modal>);
+    const dialog = screen.getByRole('dialog', { name: 'Edit again' });
+    expect(dialog.parentElement).toHaveAttribute('data-placement', 'center');
+    expect(dialog.className).toContain('max-w-[26rem]');
+    expect(dialog.className).toContain('rounded-lg');
+  });
+
+  describe('its height, its foot and the page behind (P18.96-T1 AC-2)', () => {
+    afterEach(() => {
+      document.body.style.overflow = '';
+    });
+
+    it('P18.96-T1 AC-2 never taller than the dynamic viewport: the box scrolls inside, and hands nothing on to the page', () => {
+      render(<Modal open title="Edit subscription" onClose={() => {}}><p>Fields</p></Modal>);
+      const dialog = screen.getByRole('dialog', { name: 'Edit subscription' });
+      expect(dialog).toHaveClass('max-h-[calc(100dvh-1.25rem-max(1.25rem,env(safe-area-inset-top)))]', 'overflow-y-auto', 'overscroll-contain');
+      // `vh` is the large viewport on a phone, taller than what shows while the browser's bar is out.
+      expect(dialog.className).not.toContain('100vh');
+    });
+
+    /*
+     * **Never under the clock** (the product owner's staging review, 2026-10-31): a Home Screen app on an iPhone draws the
+     * page under the status bar (UI-103), so a tall centred box's top would sit in its frosted band. Its 20px above
+     * becomes the top inset where that is more, and the box's cap is the screen less both.
+     */
+    it('a centred box keeps its top below the top inset, its cap the screen less that and its 20px foot', () => {
+      render(<Modal open title="Edit subscription" onClose={() => {}}><p>Fields</p></Modal>);
+      const dialog = screen.getByRole('dialog', { name: 'Edit subscription' });
+      expect(dialog.parentElement).toHaveClass('p-5', 'pt-[max(1.25rem,env(safe-area-inset-top))]');
+      expect(dialog.className).toContain('env(safe-area-inset-top)');
+    });
+
+    it('a responsive box does the same from 1024px, and stays a sheet from the bottom below it', () => {
+      render(<Modal open placement="responsive" title="Lead" onClose={() => {}}><p>Fields</p></Modal>);
+      const dialog = screen.getByRole('dialog', { name: 'Lead' });
+      expect(dialog.parentElement).toHaveClass('lg:pt-[max(1.25rem,env(safe-area-inset-top))]', 'max-lg:items-end');
+      expect(dialog).toHaveClass('lg:max-h-[calc(100dvh-1.25rem-max(1.25rem,env(safe-area-inset-top)))]', 'max-lg:max-h-[90dvh]');
+    });
+
+    it('P18.96-T1 AC-2 the title stays at the top as the content scrolls under it', () => {
+      render(
+        <Modal open title="Edit subscription" description="KPM 0417 · BSD" eyebrow={<span>Badge</span>} onClose={() => {}}>
+          <p>Fields</p>
+        </Modal>,
+      );
+      const head = screen.getByRole('heading', { name: 'Edit subscription' }).parentElement!;
+      expect(head).toHaveAttribute('data-modal-head');
+      expect(head).toHaveClass('sticky', 'top-0', 'bg-card');
+      expect(head).toContainElement(screen.getByText('KPM 0417 · BSD'));
+      expect(head).toContainElement(screen.getByText('Badge'));
+      expect(head).not.toContainElement(screen.getByText('Fields'));
+    });
+
+    it('P18.96-T1 AC-2 a footer is held at the foot, after the content, on the card colour; a form’s submit still submits', async () => {
+      const onSubmit = vi.fn((e: React.FormEvent) => e.preventDefault());
+      render(
+        <Modal
+          open
+          title="Edit subscription"
+          onClose={() => {}}
+          footer={<button type="submit" form="the-form">Save</button>}
+        >
+          <form id="the-form" onSubmit={onSubmit}><input aria-label="Price" /></form>
+        </Modal>,
+      );
+      const dialog = screen.getByRole('dialog', { name: 'Edit subscription' });
+      const save = screen.getByRole('button', { name: 'Save' });
+      const foot = save.parentElement!;
+      expect(foot).toHaveAttribute('data-modal-foot');
+      expect(foot).toHaveClass('sticky', 'bottom-0', 'bg-card');
+      expect(foot.parentElement).toBe(dialog);
+      expect(dialog.lastElementChild).toBe(foot);
+      // The foot holds the bottom padding, so nothing sits under it; the box itself has none.
+      expect(foot).toHaveClass('pb-6');
+      expect(dialog.className).not.toMatch(/(^|\s)pb-/);
+
+      await userEvent.click(save);
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+      const results = await axe(document.body, { rules: { 'color-contrast': { enabled: false } } });
+      expect(results.violations).toEqual([]);
+    });
+
+    it('P18.96-T1 AC-2 a sheet’s footer clears the home indicator; without one, the box keeps the padding', () => {
+      const { unmount } = render(
+        <Modal open placement="sheet" title="Edit Pak Budi" onClose={() => {}} footer={<button type="button">Close</button>}>
+          <p>Remarks</p>
+        </Modal>,
+      );
+      const foot = screen.getByRole('button', { name: 'Close' }).parentElement!;
+      expect(foot.className).toContain('pb-[max(1.5rem,env(safe-area-inset-bottom))]');
+      unmount();
+
+      render(<Modal open placement="sheet" title="Edit Pak Budi" onClose={() => {}}><p>Remarks</p></Modal>);
+      expect(screen.getByRole('dialog').className).toContain('pb-[max(1.5rem,env(safe-area-inset-bottom))]');
+      expect(document.querySelector('[data-modal-foot]')).toBeNull();
+    });
+
+    it('P18.96-T1 AC-2 the page behind holds still while it is open, and gets its scroll back as it was', async () => {
+      document.body.style.overflow = 'auto';
+      render(<Harness />);
+      expect(document.body.style.overflow).toBe('auto');
+      await userEvent.click(screen.getByRole('button', { name: 'open it' }));
+      expect(document.body.style.overflow).toBe('hidden');
+      await userEvent.keyboard('{Escape}');
+      expect(document.body.style.overflow).toBe('auto');
+    });
+
+    it('P18.96-T1 AC-2 a confirmation over an open Modal nests the lock: closing it leaves the page held', async () => {
+      function Stack() {
+        const [asking, setAsking] = useState(false);
+        const [open, setOpen] = useState(true);
+        return (
+          <>
+            <Modal open={open} title="Meeting details" onClose={() => setOpen(false)}>
+              <button type="button" onClick={() => setAsking(true)}>Delete</button>
+            </Modal>
+            <Dialog
+              open={asking}
+              message="Delete this meeting?"
+              confirmLabel="Delete meeting"
+              onConfirm={() => setAsking(false)}
+              onCancel={() => setAsking(false)}
+            />
+            <button type="button" onClick={() => setOpen(false)}>shut the modal</button>
+          </>
+        );
+      }
+      render(<Stack />);
+      expect(document.body.style.overflow).toBe('hidden');
+      await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+      expect(screen.getByRole('dialog', { name: 'Delete this meeting?' })).toBeInTheDocument();
+      await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+      expect(screen.queryByRole('dialog', { name: 'Delete this meeting?' })).not.toBeInTheDocument();
+      expect(document.body.style.overflow).toBe('hidden');
+      await userEvent.keyboard('{Escape}');
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(document.body.style.overflow).toBe('');
+    });
+  });
+  it('P18.98-T4: draws at the end of the page, so its h2 never breaks the outline it opens in, and says what is inside it', async () => {
+    const { container } = render(
+      <main>
+        <h1>Compliance</h1>
+        <h2>Agents</h2>
+        <h3>Wilson Tanoto</h3>
+        <h4>Agus</h4>
+        <Modal open title="Override a status" onClose={() => {}}><p>Why</p></Modal>
+        <h4>Yanti</h4>
+      </main>,
+    );
+    const dialog = screen.getByRole('dialog', { name: 'Override a status' });
+    expect(container.contains(dialog)).toBe(false);
+    expect(document.body.lastElementChild?.contains(dialog)).toBe(true);
+    expect(inModal(screen.getByText('Why'))).toBe(true);
+    expect(inModal(screen.getByRole('heading', { name: 'Yanti' }))).toBe(false);
+    expect(inModal(null)).toBe(false);
+    const results = await axe(document.body, { rules: { region: { enabled: false }, 'color-contrast': { enabled: false } } });
+    expect(results.violations.map((v) => v.id)).toEqual([]);
   });
 });

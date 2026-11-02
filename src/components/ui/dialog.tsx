@@ -1,6 +1,10 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
+import { useMessages } from '@/i18n/language-provider';
+import { uiMessages } from '@/i18n/messages/ui';
+import { useScrollLock } from '@/lib/use-scroll-lock';
 import { Button } from './field';
 
 /**
@@ -26,7 +30,7 @@ export function Dialog({
   open,
   message,
   confirmLabel,
-  cancelLabel = 'Cancel',
+  cancelLabel,
   tone = 'primary',
   onConfirm,
   onCancel,
@@ -35,15 +39,20 @@ export function Dialog({
   message: string;
   /** Says what will happen — *Delete lead*, *Discard counts* — never *OK*. */
   confirmLabel: string;
+  /** *Cancel* in the reader's language where a caller names nothing else (P18.98-T4). */
   cancelLabel?: string;
   /** `danger` for something that destroys, which the prototype paints quieter, not louder. */
   tone?: 'primary' | 'danger';
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  const t = useMessages(uiMessages);
   const confirm = useRef<HTMLButtonElement>(null);
   const cancel = useRef<HTMLButtonElement>(null);
   const returnTo = useRef<Element | null>(null);
+
+  // The page behind holds still while the question is asked — over a drawer or a dialog too, counted.
+  useScrollLock(open);
 
   useEffect(() => {
     if (!open) return;
@@ -69,11 +78,22 @@ export function Dialog({
     }
   };
 
-  return (
+  return createPortal(
     // The backdrop cancels; a click inside the box must not, or dragging to select the message
     // dismisses the question you were reading.
+    // Its 20px above becomes the top inset where that is more, so the box never sits under a Home Screen app's clock
+    // (staging review, 2026-10-31); its cap is the screen less both.
+    //
+    // **Over the dialog that asked** (staging review, 2026-10-31: *"di calendar tidak bisa hapus"*): a question asked
+    // from a `Modal` — a calendar entry's *Hapus*, a lead sheet's *Hapus tugas* — was drawn where its caller sits in
+    // the page, under the modal, which `Modal` draws at the end of `<body>` at the same `z-50`: the backdrop dimmed, the
+    // question never showed, and the tap did nothing. So it is drawn at the end of `<body>` too, one step above
+    // (`z-[55]`, under the toast's `z-[60]`), and marked a modal root, so a popover that asks `inModal` treats it as
+    // its own and not as a click outside.
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-navy/35 p-5"
+      data-modal-root=""
+      data-dialog-root=""
+      className="fixed inset-0 z-[55] flex items-center justify-center bg-navy/35 p-5 pt-[max(1.25rem,env(safe-area-inset-top))]"
       onClick={onCancel}
     >
       <div
@@ -82,18 +102,20 @@ export function Dialog({
         aria-label={message}
         onClick={(e) => e.stopPropagation()}
         onKeyDown={trap}
-        className="w-full max-w-[22.5rem] rounded-lg bg-card p-6 shadow-modal"
+        // Never taller than the screen (P18.96-T1 AC-2): a long question scrolls inside, and the two buttons stay.
+        className="flex max-h-[calc(100dvh-1.25rem-max(1.25rem,env(safe-area-inset-top)))] w-full max-w-[22.5rem] flex-col rounded-lg bg-card p-6 shadow-modal"
       >
-        <p className="mb-4 text-md leading-relaxed text-navy">{message}</p>
-        <div className="flex justify-end gap-2.5">
+        <p className="mb-4 min-h-0 overflow-y-auto overscroll-contain text-md leading-relaxed text-navy">{message}</p>
+        <div className="flex shrink-0 justify-end gap-2.5">
           <Button ref={cancel} variant="secondary" onClick={onCancel}>
-            {cancelLabel}
+            {cancelLabel ?? t.cancel}
           </Button>
           <Button ref={confirm} variant={tone} onClick={onConfirm}>
             {confirmLabel}
           </Button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

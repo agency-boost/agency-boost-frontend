@@ -1,5 +1,7 @@
 'use client';
 
+import { LANGUAGE_UNCHOSEN, type Language } from '@/i18n/language';
+import { uiMessages } from '@/i18n/messages/ui';
 import { ApiConfigError, apiUrl } from './api';
 
 /**
@@ -31,8 +33,13 @@ export interface ApiError {
  * That last one was not hypothetical. The activation checklist dereferenced a version an office
  * did not have, threw a `TypeError`, and this function reported it as *"Could not reach the
  * server"* — which is what the office's Owner saw, and what they went looking for.
+ *
+ * **The browser's own sentences are the catalogue's English** (`uiMessages.errors`, P18.98-T4): composed here, outside
+ * React and with no language to hand, and written in the reader's language where `ErrorBanner` shows them
+ * (`ErrorWords`), so no caller changes. A server's sentence arrives in the reader's language already (P18.98-T5).
  */
 export function toDisplayError(err: unknown): ApiError {
+  const BROWSER_SAID = uiMessages.en.errors;
   if (err instanceof ApiRequestError) return err.error;
   if (err instanceof ApiConfigError) {
     return { code: 'CONFIG', message: err.message, requestId: 'unknown' };
@@ -51,7 +58,7 @@ export function toDisplayError(err: unknown): ApiError {
   if (failedToFetch) {
     return {
       code: 'NETWORK',
-      message: 'Could not reach the server. Check your connection and try again.',
+      message: BROWSER_SAID.network,
       requestId: 'unknown',
     };
   }
@@ -65,8 +72,7 @@ export function toDisplayError(err: unknown): ApiError {
   console.error('Unexpected error on this screen:', err);
   return {
     code: 'UNEXPECTED',
-    message: 'Something went wrong on this screen. Reload the page — if it keeps happening, tell '
-      + 'your administrator, and quote this screen’s address.',
+    message: BROWSER_SAID.unexpected,
     requestId: 'unknown',
   };
 }
@@ -83,6 +89,25 @@ export class ApiRequestError extends Error {
 
 let accessToken: string | null = null;
 let impersonating = false;
+
+/**
+ * **The language the screen is written in, told to the API on every request** (ADR-0179 §7; P18.98-T2 AC-6):
+ * `Accept-Language: id` or `en`. Held here, beside the token, and set by `LanguageProvider` whenever the screen's
+ * language changes — before the request that follows a choice, so the choice's own save carries it. From P18.98-T5 the
+ * API writes its refusals, notices and validation messages in it; until then it reads nothing from it.
+ *
+ * Starts as the language the pages are prerendered in (`LANGUAGE_UNCHOSEN`): what a request made before the provider
+ * has run — none is, today — would be written in.
+ */
+let requestLanguage: Language = LANGUAGE_UNCHOSEN;
+
+export function setRequestLanguage(language: Language): void {
+  requestLanguage = language;
+}
+
+export function getRequestLanguage(): Language {
+  return requestLanguage;
+}
 
 export function setAccessToken(token: string | null): void {
   accessToken = token;
@@ -129,6 +154,8 @@ async function raw(path: string, options: RequestOptions = {}): Promise<Response
     headers: {
       ...(form ? {} : { 'Content-Type': 'application/json' }),
       ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      // The screen's language (AC-6). CORS-safelisted for these two values: the API's allowed headers need not name it.
+      'Accept-Language': requestLanguage,
     },
     // Sends and receives the httpOnly refresh cookie.
     credentials: 'include',
@@ -137,6 +164,34 @@ async function raw(path: string, options: RequestOptions = {}): Promise<Response
 }
 
 export async function api<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const response = await send(path, options);
+  if (response.status === 204) return undefined as T;
+
+  const payload = (await response.json().catch(() => null)) as
+    | { error?: ApiError }
+    | T
+    | null;
+
+  if (!response.ok) throw refusal(response, payload);
+  return payload as T;
+}
+
+/**
+ * **A file the API answers as itself**, as a `Blob` (ADR-0184): a template asked for as `.xlsx` or `.csv`.
+ *
+ * **Through here, never a link.** The access token lives in this module's memory and nowhere else, so an `<a href>` to
+ * the API would arrive with no token and be refused; this sends it, retries once on a 401 as `api` does, and a refusal
+ * is the same `ApiRequestError` — the API answers one as JSON whatever was asked for. The screen saves the blob
+ * (`saveFile`, `lib/save-file.ts`).
+ */
+export async function apiBlob(path: string, options: RequestOptions = {}): Promise<Blob> {
+  const response = await send(path, options);
+  if (!response.ok) throw refusal(response, await response.json().catch(() => null));
+  return response.blob();
+}
+
+/** The request, with the one transparent retry a 401 earns. */
+async function send(path: string, options: RequestOptions): Promise<Response> {
   const sentWith = accessToken;
   let response = await raw(path, options);
 
@@ -146,28 +201,27 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
     // A refresh that finished while this request was out has already replaced the token it
     // carried: replay with that one, rather than spend the cookie it was issued with again.
     const replaced = accessToken !== null && accessToken !== sentWith;
-    const refreshed = replaced || (await tryRefresh());
-    if (refreshed) response = await raw(path, options);
+    const outcome: RefreshOutcome = replaced ? 'refreshed' : await refreshSession();
+    if (outcome === 'refreshed') response = await raw(path, options);
+    // The server refused the refresh — the cookie gone, or presented and dead: whatever session this tab had is
+    // over, and the session decides what that means for the screen (ADR-0168 §1). A refresh that never arrived is
+    // not an ended session.
+    else if (outcome === 'ended' || outcome === 'none') sessionLostListener?.();
   }
+  return response;
+}
 
-  if (response.status === 204) return undefined as T;
-
-  const payload = (await response.json().catch(() => null)) as
-    | { error?: ApiError }
-    | T
-    | null;
-
-  if (!response.ok) {
-    const error = (payload as { error?: ApiError } | null)?.error ?? {
-      code: 'INTERNAL_ERROR',
-      message: 'Something went wrong. Please try again.',
-      requestId: 'unknown',
-    };
-    // The office cannot be used at all (ADR-0112 §4): the app is replaced, whichever request met it.
-    if (response.status === 403 && isOfficeUnavailable(error)) officeUnavailableListener?.(error);
-    throw new ApiRequestError(response.status, error);
-  }
-  return payload as T;
+/** A refusal's envelope as the error a screen shows, telling the session first when the office cannot be used. */
+function refusal(response: Response, payload: unknown): ApiRequestError {
+  const error = (payload as { error?: ApiError } | null)?.error ?? {
+    code: 'INTERNAL_ERROR',
+    // The catalogue's English, written in the reader's language where it is shown (`ErrorWords`, P18.98-T4).
+    message: uiMessages.en.errors.noAnswer,
+    requestId: 'unknown',
+  };
+  // The office cannot be used at all (ADR-0112 §4): the app is replaced, whichever request met it.
+  if (response.status === 403 && isOfficeUnavailable(error)) officeUnavailableListener?.(error);
+  return new ApiRequestError(response.status, error);
 }
 
 /**
@@ -216,27 +270,71 @@ export function onOfficeUnavailable(listener: (error: ApiError) => void): () => 
  * could sign the reader out. Concurrent callers now wait on the same request, and each replays once
  * it has settled.
  */
-let refreshing: Promise<boolean> | null = null;
+let refreshing: Promise<RefreshOutcome> | null = null;
 
-export function tryRefresh(): Promise<boolean> {
+/**
+ * How a refresh ended (ADR-0168 §1):
+ *
+ * - **`refreshed`** — a new access token;
+ * - **`ended`** — `401 AUTH_SESSION_ENDED`: a refresh cookie was presented and no longer works (expired, revoked,
+ *   already spent, unknown). This browser had a session, and it ended;
+ * - **`none`** — any other `401`, `AUTH_TOKEN_INVALID` for no cookie at all: there was no session to refresh — never
+ *   signed in here, or the cookie a sign-out cleared;
+ * - **`unreachable`** — anything else: the request never arrived, or was answered with something that is not about
+ *   the session (a rate limit, a refused origin, a server error).
+ */
+export type RefreshOutcome = 'refreshed' | 'ended' | 'none' | 'unreachable';
+
+/** The code `/auth/refresh` answers a presented refresh token that no longer works with (ADR-0168 §1). */
+export const SESSION_ENDED_CODE = 'AUTH_SESSION_ENDED';
+
+/**
+ * Refresh, and say how it went — for the session's first read, which tells a reader whose session ended from one
+ * who never had one. One request however many ask, as `tryRefresh`.
+ */
+export function refreshSession(): Promise<RefreshOutcome> {
   refreshing ??= refreshOnce().finally(() => {
     refreshing = null;
   });
   return refreshing;
 }
 
-async function refreshOnce(): Promise<boolean> {
+export async function tryRefresh(): Promise<boolean> {
+  return (await refreshSession()) === 'refreshed';
+}
+
+async function refreshOnce(): Promise<RefreshOutcome> {
   try {
     const response = await raw('/auth/refresh', { method: 'POST', skipRefresh: true });
-    if (!response.ok) return false;
+    if (response.status === 401) {
+      const body = (await response.json().catch(() => null)) as { error?: { code?: string } } | null;
+      return body?.error?.code === SESSION_ENDED_CODE ? 'ended' : 'none';
+    }
+    if (!response.ok) return 'unreachable';
     const { accessToken: token } = (await response.json()) as { accessToken: string };
     setAccessToken(token);
-    return true;
+    return 'refreshed';
   } catch (err) {
     // "Not refreshed" is the right answer to a network failure or a rejected cookie.
     // It is the wrong answer to a misconfigured origin: the app would show a signed-out
     // shell and never say why, on every screen at once.
     if (err instanceof ApiConfigError) throw err;
-    return false;
+    return 'unreachable';
   }
+}
+
+let sessionLostListener: (() => void) | null = null;
+
+/**
+ * **Be told when a request finds the session gone** (ADR-0168 §1): it was answered `401`, and the refresh it
+ * tried was refused by the server (`ended` or `none`). One listener, the session's, which decides whether that ends a session this
+ * tab had — the reader is sent to sign in with `reason=expired` — or whether there was none to end (a request
+ * made signed out, a wrong password at sign-in). Not told while impersonating: a support session never refreshes,
+ * because the cookie is the Super Admin's own. The returned function removes it.
+ */
+export function onSessionLost(listener: () => void): () => void {
+  sessionLostListener = listener;
+  return () => {
+    if (sessionLostListener === listener) sessionLostListener = null;
+  };
 }

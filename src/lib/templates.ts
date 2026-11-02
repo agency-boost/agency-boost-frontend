@@ -1,3 +1,6 @@
+import { messagesIn } from '@/i18n/catalogue';
+import { SOURCE_LANGUAGE, type Language } from '@/i18n/language';
+import { adminTemplateMessages } from '@/i18n/messages/admin-template';
 import type { SavedOfficeTemplate } from './admin';
 
 /**
@@ -16,11 +19,19 @@ export const TEMPLATE_NAME_MAX = 80;
  * archived — each thing the template left out or changed, in the API's own sentences. Data honesty: the
  * Super Admin is about to start offices from it, and a ratio quietly missing is the thing they would not
  * think to look for.
+ *
+ * **In the reader's `language`** (P18.98-T6): the words `admin-template.tsx`'s, its caller passing `useLanguage()` —
+ * English when none is passed, as before. The template's and the company's names are as stored, and each reason is
+ * the API's sentence, in the language the API wrote it in (P18.98-T5).
  */
-export function savedTemplateSentence(template: SavedOfficeTemplate, companyName: string): string {
-  const saved = `Saved as ${template.name}, a template of ${companyName}.`;
+export function savedTemplateSentence(
+  template: SavedOfficeTemplate,
+  companyName: string,
+  language: Language = SOURCE_LANGUAGE,
+): string {
+  const t = messagesIn(adminTemplateMessages, language).saveAs;
+  const saved = t.saved({ name: template.name, company: companyName });
   const dropped = template.dropped ?? [];
   if (dropped.length === 0) return saved;
-  return `${saved} Left out or changed, because ${dropped.length === 1 ? 'it names' : 'they name'} something `
-    + `archived: ${dropped.map((d) => d.reason).join(' ')}`;
+  return `${saved} ${t.leftOut({ n: dropped.length, reasons: dropped.map((d) => d.reason).join(' ') })}`;
 }

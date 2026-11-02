@@ -1,3 +1,6 @@
+import { messagesIn } from '@/i18n/catalogue';
+import { SOURCE_LANGUAGE } from '@/i18n/language';
+import { kpmComplianceMessages } from '@/i18n/messages/kpm-compliance';
 import { api } from './api-client';
 
 /**
@@ -66,21 +69,26 @@ export const clearOverride = (code: string, membershipId: string, body: { reason
     { method: 'DELETE', body },
   );
 
+/** The override's words in English, the catalogue's source (`i18n/messages/kpm-compliance.ts`, `override`). */
+const EN = messagesIn(kpmComplianceMessages, SOURCE_LANGUAGE).override;
+
 /**
- * Our words: the prototype draws no override (contradiction 11). Plain, and none of OD-39's six words.
- * `campaign` is the campaign's title, `name` the member's.
+ * **Our words, in English**: the prototype draws no override (contradiction 11). Plain, and none of OD-39's six words.
+ * `campaign` is the campaign's title, `name` the member's. The catalogue's source, in the shapes this module's callers
+ * and spec have always read; **the cell reads the reader's language** (`useMessages(kpmComplianceMessages).override`,
+ * P18.98-T4).
  */
 export const OVERRIDE_COPY = {
   /** The cell's button, after the pill's own word (WCAG 2.5.3), and the dialog's title. */
-  overrideFor: (name: string, campaign: string) => `Override ${name}’s result for ${campaign}`,
+  overrideFor: (name: string, campaign: string) => EN.overrideFor({ name, campaign }),
   /** The icon's name and tooltip: who, on which day of the office's calendar, and why. */
-  overriddenBy: (name: string, day: string, reason: string) => `Overridden by ${name} on ${day}: ${reason}`,
-  resultNow: 'Result now',
-  newResult: 'New result',
-  reason: 'Reason',
-  save: 'Save',
-  clear: 'Clear override',
-  close: 'Close',
-  saved: 'Result overridden',
-  cleared: 'Override cleared',
+  overriddenBy: (name: string, day: string, reason: string) => EN.overriddenBy({ name, day, reason }),
+  resultNow: EN.resultNow,
+  newResult: EN.newResult,
+  reason: EN.reason,
+  save: EN.save,
+  clear: EN.clear,
+  close: EN.close,
+  saved: EN.saved,
+  cleared: EN.cleared,
 } as const;

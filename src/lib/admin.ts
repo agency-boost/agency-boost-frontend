@@ -1,6 +1,9 @@
 'use client';
 
-import { api } from './api-client';
+import { messagesIn } from '@/i18n/catalogue';
+import { DEFAULT_LANGUAGE, SOURCE_LANGUAGE, type Language } from '@/i18n/language';
+import { officeSubscriptionMessages } from '@/i18n/messages/office-subscription';
+import { api, apiBlob } from './api-client';
 import { formatCalendarDay } from './format';
 
 /**
@@ -25,7 +28,20 @@ export interface Company {
    * every Company template tab starts empty rather than from the platform's presets.
    */
   usesPlatformDefaults: boolean;
+  /**
+   * **An insurer, or the Template library** (ADR-0164): the one `template` company holds the templates a
+   * new company and a new office copy. Nobody registers under it and it holds no office, so the screens
+   * that mean *the insurers* leave it out (`insurersOf`).
+   */
+  kind: 'insurer' | 'template';
 }
+
+/** Whether this is the Template library rather than an insurer (ADR-0164). */
+export const isTemplateLibrary = (company: Pick<Company, 'kind'>) => company.kind === 'template';
+
+/** The insurers: every company but the Template library, for a screen that offers a company to work in. */
+export const insurersOf = <T extends Pick<Company, 'kind'>>(companies: T[]): T[] =>
+  companies.filter((c) => !isTemplateLibrary(c));
 
 /**
  * A KPM as the console reads it.
@@ -99,6 +115,13 @@ export interface CompanyCard {
   ladder: string[];
 }
 
+/**
+ * Whether a rung leads, and how (ADR-0156): *Senior Leader* (what AB is), *Associate Leader* (what AAB
+ * is), or `null` — *Not a leader*. The class a member is given on the rung follows it, and the server
+ * refuses a change while anybody stands on the rung (`ORG_LEVEL_TIER_IN_USE`).
+ */
+export type LeaderTier = 'senior' | 'associate';
+
 /** A rung on a company's role ladder (P3.5-T7, ADR-0012). */
 export interface OrgLevel {
   orgLevelId: string;
@@ -107,6 +130,7 @@ export interface OrgLevel {
   code: string;
   label: string;
   displayOrder: number;
+  leaderTier: LeaderTier | null;
   status: 'active' | 'archived';
   archivedAt: string | null;
 }
@@ -118,12 +142,18 @@ export const createOrgLevel = (body: {
   code: string;
   label: string;
   displayOrder: number;
+  leaderTier: LeaderTier | null;
 }) => api<OrgLevel[]>('/admin/org-levels', { method: 'POST', body });
 
 /** No `code`: it is the identity every membership holds and is never updatable. */
 export const updateOrgLevel = (
   orgLevelId: string,
-  body: { label?: string; displayOrder?: number; status?: 'active' | 'archived' },
+  body: {
+    label?: string;
+    displayOrder?: number;
+    leaderTier?: LeaderTier | null;
+    status?: 'active' | 'archived';
+  },
 ) => api<OrgLevel[]>(`/admin/org-levels/${orgLevelId}`, { method: 'PATCH', body });
 
 export interface PlatformOverview {
@@ -179,6 +209,10 @@ export const declineKpmRequest = (requestId: string, reason?: string) =>
 
 export const listCompanies = () => api<Company[]>('/admin/companies');
 
+/**
+ * `usesPlatformDefaults` true, the default, copies the Template library — its ladder, products, carrier
+ * rules, playbook and Default template; false starts the company *Empty* (ADR-0164 §4).
+ */
 export const createCompany = (
   body: { name: string; slug: string; usesPlatformDefaults?: boolean },
 ) => api<Company>('/admin/companies', { method: 'POST', body });
@@ -241,12 +275,14 @@ export const updateSubscription = (kpmId: string, body: SubscriptionInput) =>
   api<TenantRow>(`/admin/tenants/${kpmId}/subscription`, { method: 'PATCH', body });
 
 /**
- * **Start from** (ADR-0115 §4): one of the company's active templates, the AgencyBoost defaults, or
- * *Empty*. Left out, the company's default template — what approving a KPM request uses.
+ * **Start from** (ADR-0115 §4): one of the company's active templates, one of the Template library's
+ * (`templateLibrary`, ADR-0164 §5), or *Empty*. Left out, the company's default template — what approving a
+ * KPM request uses. The AgencyBoost defaults are not a choice: the Template's Default template holds them, and
+ * the API refuses `{ kind: 'defaults' }` (ADR-0168 §2).
  */
 export type StartFrom =
   | { kind: 'template'; templateId: string }
-  | { kind: 'defaults' }
+  | { kind: 'template'; templateLibrary: true; templateId?: string }
   | { kind: 'empty' };
 
 export interface CreateKpmInput {
@@ -272,37 +308,55 @@ export const setTenantStatus = (id: string, status: TenantStatus, reason?: strin
 export const readAudit = (kpmId?: string) =>
   api<AuditEntry[]>(kpmId ? `/admin/audit?kpmId=${encodeURIComponent(kpmId)}` : '/admin/audit');
 
-export const startImpersonation = (userId: string, reason: string, durationMinutes?: number) =>
+/** Why a support session is started (ADR-0162): to look, or to set an office up as its Owner or Admin. */
+export type ImpersonationPurpose = 'support' | 'setup';
+
+export const startImpersonation = (
+  userId: string,
+  reason: string,
+  durationMinutes?: number,
+  purpose: ImpersonationPurpose = 'support',
+) =>
   api<{
     accessToken: string;
     expiresAt: string;
     sessionId: string;
-    /** True until a second Super Admin approves writing (§3.13). */
+    /** True until a second Super Admin approves writing (§3.13) — a setup session's too. */
     readOnly: boolean;
+    purpose: ImpersonationPurpose;
+    /** What a setup session may write besides reading. Empty for a support session. */
+    writeScope: string[];
   }>(`/admin/impersonate/${userId}`, {
     method: 'POST',
-    body: { reason, ...(durationMinutes ? { durationMinutes } : {}) },
+    body: { reason, ...(durationMinutes ? { durationMinutes } : {}), purpose },
   });
 
 export const endImpersonation = () =>
   api<{ status: string }>('/admin/impersonate/end', { method: 'POST' });
 
-/** Tenant status is a lifecycle, not a health signal — so it gets its own labels. */
-export const TENANT_STATUS_LABEL: Record<TenantStatus, string> = {
-  active: 'Active',
-  suspended: 'Suspended',
-  archived: 'Archived',
-};
+/**
+ * Tenant status is a lifecycle, not a health signal — so it gets its own labels. The catalogue's English
+ * (`i18n/messages/office-subscription.ts`); a screen reads its reader's with `tenantStatusLabels(language)`.
+ */
+export const TENANT_STATUS_LABEL: Readonly<Record<TenantStatus, string>> = officeSubscriptionMessages.en.status;
+
+/** The three lifecycle words in the reader's `language` (P18.98-T6), English, the source, when given none. */
+export const tenantStatusLabels = (language: Language = SOURCE_LANGUAGE): Readonly<Record<TenantStatus, string>> =>
+  messagesIn(officeSubscriptionMessages, language).status;
 
 /**
  * **What the Status column reads** (ADR-0112 §2, P13.2-T3 AC-7): *Ended* or *Ended — kept active* in
  * place of *Active* when the subscription's end has passed. A suspended or archived office keeps its own
- * word, which says more: its members meet that refusal first.
+ * word, which says more: its members meet that refusal first. In the reader's `language` (P18.98-T6).
  */
-export function tenantStatusWord(row: Pick<TenantRow, 'status' | 'subscriptionState'>): string {
-  if (row.status === 'active' && row.subscriptionState === 'ended') return 'Ended';
-  if (row.status === 'active' && row.subscriptionState === 'ended_kept_active') return 'Ended — kept active';
-  return TENANT_STATUS_LABEL[row.status];
+export function tenantStatusWord(
+  row: Pick<TenantRow, 'status' | 'subscriptionState'>,
+  language: Language = SOURCE_LANGUAGE,
+): string {
+  const t = messagesIn(officeSubscriptionMessages, language);
+  if (row.status === 'active' && row.subscriptionState === 'ended') return t.ended;
+  if (row.status === 'active' && row.subscriptionState === 'ended_kept_active') return t.endedKeptActive;
+  return t.status[row.status];
 }
 
 /** The pill's tone for the same: an office its members cannot use reads as alert. */
@@ -319,21 +373,46 @@ export function tenantStatusTone(
 
 /**
  * The subscription in one line, for the detail page's *Lifecycle* card (P13.2-T3 AC-8): *No end date*,
- * *Active until January 5, 2027*, *Ended September 25, 2026*, or *Ended October 2, 2026 — kept active*.
+ * *Active until 5 Jan 2027*, *Ended 25 Sep 2026*, or *Ended 2 Oct 2026 — kept active*. The date in the
+ * figures' language, the words in the words' (P18.98-T6): Indonesian figures and English words when given neither.
  */
-export function subscriptionLine(row: Pick<TenantRow, 'subscription' | 'subscriptionState'>): string {
+export function subscriptionLine(
+  row: Pick<TenantRow, 'subscription' | 'subscriptionState'>,
+  figures: Language = DEFAULT_LANGUAGE,
+  language: Language = SOURCE_LANGUAGE,
+): string {
+  const t = messagesIn(officeSubscriptionMessages, language);
   const end = row.subscription?.endDate;
-  if (!end || row.subscriptionState === 'none') return 'No end date';
-  const day = formatCalendarDay(end);
-  if (row.subscriptionState === 'ended') return `Ended ${day}`;
-  if (row.subscriptionState === 'ended_kept_active') return `Ended ${day} — kept active`;
-  return `Active until ${day}`;
+  if (!end || row.subscriptionState === 'none') return t.noEndDate;
+  const day = formatCalendarDay(end, figures);
+  if (row.subscriptionState === 'ended') return t.endedOn({ day });
+  if (row.subscriptionState === 'ended_kept_active') return t.endedOnKeptActive({ day });
+  return t.activeUntil({ day });
 }
 
 /** *Leaders* (ADR-0112 §2): `"{used} / {max}"`, or the count alone when the office has no limit. */
 export function leadersWord(row: Pick<TenantRow, 'leadersUsed' | 'subscription'>): string {
   const max = row.subscription?.maxLeaders ?? null;
   return max === null ? String(row.leadersUsed) : `${row.leadersUsed} / ${max}`;
+}
+
+/**
+ * **How far past its limit an office is** (ADR-0157 §4): AgencyBoost approved leaders beyond it, and the quota did
+ * not move — so `13 / 10` is a normal state, and the list says *3 over*. `0` at or under the limit, or with none.
+ */
+export function leadersOver(row: Pick<TenantRow, 'leadersUsed' | 'subscription'>): number {
+  const max = row.subscription?.maxLeaders ?? null;
+  return max === null ? 0 : Math.max(0, row.leadersUsed - max);
+}
+
+/** The *Leaders* cell in words, for a screen reader: *13 leaders of a limit of 10, 3 over* — in the reader's `language`. */
+export function leadersSaid(
+  row: Pick<TenantRow, 'leadersUsed' | 'subscription'>,
+  language: Language = SOURCE_LANGUAGE,
+): string {
+  return messagesIn(officeSubscriptionMessages, language).leadersSaid({
+    used: row.leadersUsed, max: row.subscription?.maxLeaders ?? null, over: leadersOver(row),
+  });
 }
 
 /** Filling a new office from a spreadsheet (P3.6-T4). */
@@ -374,7 +453,7 @@ export const rosterTemplate = () =>
   api<{
     header: string;
     columns: string[];
-    /** The whole file, with worked examples commented out so they never import. */
+    /** The CSV template: the header and nothing else since ADR-0184. */
     template: string;
     /**
      * The same three example rows, as cells — what the paste box shows, joined with tabs.
@@ -395,6 +474,38 @@ export const importRoster = (kpmId: string, rows: string) =>
     method: 'POST',
     body: { rows },
   });
+
+/** The two files the roster template comes in (ADR-0184): Excel, the recommended one, and CSV. */
+export type RosterTemplateFormat = 'xlsx' | 'csv';
+
+/** What each is saved as. */
+export const ROSTER_TEMPLATE_FILENAME: Record<RosterTemplateFormat, string> = {
+  xlsx: 'roster-template.xlsx',
+  csv: 'roster-template.csv',
+};
+
+/**
+ * **The template as a file** (ADR-0184), fetched with the token and saved by the screen (`saveFile`). `kpmId` names the
+ * office whose company ladder fills the workbook's *role* dropdown.
+ */
+export const downloadRosterTemplate = (format: RosterTemplateFormat, kpmId: string) =>
+  apiBlob(`/admin/tenants/roster-template?format=${format}&kpmId=${encodeURIComponent(kpmId)}`);
+
+/**
+ * **A roster file — an Excel workbook or a CSV — sent as it is** (ADR-0184): bytes in a form, read on the server by
+ * the same parser as a paste. The browser opens nothing, so no spreadsheet code is in the bundle.
+ */
+const rosterForm = (file: File) => {
+  const form = new FormData();
+  form.append('file', file);
+  return form;
+};
+
+export const previewRosterFile = (kpmId: string, file: File) =>
+  api<RosterPreview>(`/admin/tenants/${kpmId}/roster/file/preview`, { method: 'POST', body: rosterForm(file) });
+
+export const importRosterFile = (kpmId: string, file: File) =>
+  api<{ created: ImportedPerson[] }>(`/admin/tenants/${kpmId}/roster/file`, { method: 'POST', body: rosterForm(file) });
 
 export type TemplateKind =
   | 'activity_taxonomy'
@@ -494,6 +605,15 @@ export interface TemplateOrigin {
   companyId?: string | null;
 }
 
+/**
+ * **Where one kind of a template stands** (ADR-0185 §3): its newest published version, `null` where none is, and
+ * whether a draft waits — what the card's *x/6 bagian terbit* and the checklist's *Terbit vN · Draf · Kosong* read.
+ */
+export interface TemplateSectionState {
+  publishedVersion: number | null;
+  hasDraft: boolean;
+}
+
 /** One of a company's named templates (ADR-0115 §3). */
 export interface NamedTemplate {
   id: string;
@@ -506,6 +626,8 @@ export interface NamedTemplate {
   origin: TemplateOrigin;
   /** Each kind's newest published version; `null` where none is, which its offices get empty. */
   publishedVersions: Record<OfficeTemplateKind, number | null>;
+  /** Each kind: its newest published version and whether a draft waits (ADR-0185 §3). */
+  sections: Record<OfficeTemplateKind, TemplateSectionState>;
   /** The live offices it answers for. */
   officeCount: number;
   createdAt: string;
@@ -516,9 +638,39 @@ export interface NamedTemplate {
 export const listTemplates = (companyId: string) =>
   api<NamedTemplate[]>(`/admin/companies/${companyId}/templates`);
 
+/** What *Terbitkan semua* did with one kind (ADR-0185 §3). */
+export type PublishAllOutcome =
+  | { kind: OfficeTemplateKind; outcome: 'published'; version: number }
+  | { kind: OfficeTemplateKind; outcome: 'skipped'; reason: 'no_changes' }
+  /** Refused as its own publish would refuse it, in the reader's language. Still a draft. */
+  | { kind: OfficeTemplateKind; outcome: 'refused'; error: { code: string; message: string } };
+
 /**
- * *New template*: empty, each kind a published version 1 of the AgencyBoost defaults, or **a copy** of one
- * of the company's templates — each kind's newest published version as the copy's version 1 (P13.2-T7).
+ * **Terbitkan semua** (ADR-0185 §3): every kind of the template holding a draft, published in the API's order —
+ * a refusal stops only its own kind. Reaches no office that already exists.
+ */
+export const publishAllTemplate = (companyId: string, templateId: string) =>
+  api<{ template: NamedTemplate; results: PublishAllOutcome[] }>(
+    `/admin/companies/${companyId}/templates/${templateId}/publish`, { method: 'POST' },
+  );
+
+/** One office a template answers for, and the kinds it is behind on and has no record of (ADR-0185 §4). */
+export interface TemplateOffice {
+  id: string;
+  code: string;
+  branchName: string;
+  behind: OfficeTemplateKind[];
+  unrecorded: OfficeTemplateKind[];
+}
+
+/** The offices a template answers for, by code, each with what it is behind on — information only (ADR-0185 §4). */
+export const listTemplateOffices = (companyId: string, templateId: string) =>
+  api<TemplateOffice[]>(`/admin/companies/${companyId}/templates/${templateId}/offices`);
+
+/**
+ * *New template*: empty, or **a copy** of one of the company's templates — each kind's newest published version as the
+ * copy's version 1 (P13.2-T7). The API still admits `from: 'defaults'`; no screen sends it since ADR-0185 §5 — the
+ * built-in templates hold the defaults, copied through *Salin dari…* (`importTemplate`).
  */
 export const createTemplate = (
   companyId: string,

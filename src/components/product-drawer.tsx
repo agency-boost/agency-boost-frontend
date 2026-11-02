@@ -5,22 +5,27 @@ import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode 
 import { ProductTags, useCatalogDrawerHost } from '@/components/product-catalog';
 import { ProductScript } from '@/components/product-script';
 import { Button, ButtonLink, ErrorBanner } from '@/components/ui/field';
+import { TAP_AREA, TEXT_TAP } from '@/components/ui/phone';
 import { Skeleton, SkeletonBar, SkeletonText } from '@/components/ui/skeleton';
+import { TermText } from '@/components/ui/term-tip';
+import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
+import { productCatalogMessages } from '@/i18n/messages/product-catalog';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
+import { useScrollLock } from '@/lib/use-scroll-lock';
+import { CONTENT_TERM_KEYS, firstMentions, type TermKey } from '@/lib/terms';
 import {
-  formatRate, OWN_COPY, openDocumentLink, productPlanHref, PROTOTYPE_COPY, readCatalogProduct,
-  type CatalogDocument, type CatalogProduct,
+  formatRate, openDocumentLink, productPlanHref, readCatalogProduct, type CatalogDocument, type CatalogProduct,
 } from '@/lib/product-catalog';
 
 const FOCUSABLE = 'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
+/** ✕, as drawn (`Overall.html:4739`): a glyph, named for a screen reader by the catalogue's *Close*. */
+const CLOSE_GLYPH = '✕';
+
+/** The drawer's three tabs, in order; each named by its §A.3 label (`messages/product-catalog.ts`). */
 type DrawerTab = 'details' | 'plan' | 'documents';
-const TABS: readonly { id: DrawerTab; label: string }[] = [
-  { id: 'details', label: PROTOTYPE_COPY.tabDetails },
-  { id: 'plan', label: PROTOTYPE_COPY.tabPlan },
-  { id: 'documents', label: PROTOTYPE_COPY.tabDocuments },
-];
+const TABS: readonly DrawerTab[] = ['details', 'plan', 'documents'];
 
 /**
  * **The catalog's drawer** (`/product-catalog/[productCode]`; `Overall.html:4737-4743`, logic
@@ -40,8 +45,13 @@ const TABS: readonly { id: DrawerTab; label: string }[] = [
  *
  * The drawer's own states are Fills (P14-T7 AC-10): a skeleton while the product loads, an error with a
  * retry, and the not-found state for a product the office does not keep on, or that does not exist.
+ *
+ * **Its words are the catalogue's** (P18.98-T4; ADR-0179 §4), `messages/product-catalog.ts`, in the reader's language;
+ * the tabs and *Commission rate* stay English (§A.3, §A.4). A commission rate is the reader's figures
+ * (`useFigureLanguage()`, P18.98-T3). Everything the server answers is shown as served.
  */
 export function ProductDrawer({ code }: { code: string }) {
+  const t = useMessages(productCatalogMessages);
   const { close } = useCatalogDrawerHost();
   const [product, setProduct] = useState<CatalogProduct | null>(null);
   const [missing, setMissing] = useState(false);
@@ -50,6 +60,9 @@ export function ProductDrawer({ code }: { code: string }) {
   const [tab, setTab] = useState<DrawerTab>('details');
   const box = useRef<HTMLDivElement>(null);
   const titleId = useId();
+
+  // The catalog behind holds still while the drawer is open (P18.96-T1 AC-2); a dialog over it nests the lock.
+  useScrollLock(true);
 
   useEffect(() => {
     let live = true;
@@ -96,6 +109,15 @@ export function ProductDrawer({ code }: { code: string }) {
     }
   };
 
+  /*
+   * **Which of the company's words first names each term** (P18.95-T9 AC-3; UI-028: *CI premium waiver*, *as-billed*):
+   * the tagline, then *Details*' benefits, what stands out and the best fit, in reading order. The card on the
+   * catalog is one button, so the ⓘ is here, on the product's own page.
+   */
+  const terms = product
+    ? firstMentions([product.tagline, ...product.benefits, product.differentiator, product.bestFit], CONTENT_TERM_KEYS)
+    : [];
+
   return (
     <>
       <div aria-hidden="true" className="fixed inset-0 z-40 bg-navy/35" onClick={close} data-scrim />
@@ -104,25 +126,26 @@ export function ProductDrawer({ code }: { code: string }) {
         role="dialog"
         aria-modal="true"
         aria-labelledby={product ? titleId : undefined}
-        aria-label={product ? undefined : PROTOTYPE_COPY.catalogTitle}
+        aria-label={product ? undefined : t.title}
         tabIndex={-1}
         onKeyDown={keys}
-        className="fixed right-0 top-0 z-50 h-full w-full overflow-y-auto bg-card shadow-modal sm:w-[460px] sm:max-w-[92vw]"
+        className="fixed right-0 top-0 z-50 h-[100dvh] w-full overflow-y-auto overscroll-contain bg-card shadow-modal sm:w-[460px] sm:max-w-[92vw]"
       >
-        <div className="px-5 pb-10 pt-[26px] sm:px-7">
+        {/* Its first line below the top inset: ✕ never under a Home Screen app's clock (staging review, 2026-10-31). */}
+        <div className="px-5 pb-10 pt-[calc(26px+env(safe-area-inset-top))] sm:px-7">
           <div className="mb-1.5 flex justify-end">
             <button
               type="button"
-              aria-label={OWN_COPY.closeDrawer}
+              aria-label={t.drawer.close}
               onClick={close}
-              className="flex h-[30px] w-[30px] items-center justify-center rounded-full border border-hairline bg-base text-md text-navy"
+              className={cn('flex h-[30px] w-[30px] items-center justify-center rounded-full border border-hairline bg-base text-md text-navy', 'max-md:relative', TAP_AREA)}
             >
-              <span aria-hidden="true">{PROTOTYPE_COPY.close}</span>
+              <span aria-hidden="true">{CLOSE_GLYPH}</span>
             </button>
           </div>
 
           {!product && !missing && !error && (
-            <Skeleton label={OWN_COPY.loadingProduct}>
+            <Skeleton label={t.drawer.loading}>
               <SkeletonBar className="w-24" />
               <SkeletonBar className="mt-3 h-6 w-2/3" />
               <SkeletonText lines={3} className="mt-4" />
@@ -131,15 +154,15 @@ export function ProductDrawer({ code }: { code: string }) {
           {error && (
             <div>
               <ErrorBanner {...error} />
-              <Button variant="secondary" className="mt-3" onClick={() => setAttempt((n) => n + 1)}>{OWN_COPY.tryAgain}</Button>
+              <Button variant="secondary" className="mt-3" onClick={() => setAttempt((n) => n + 1)}>{t.tryAgain}</Button>
             </div>
           )}
           {missing && (
             <div data-state="not-found">
-              <p className="m-0 text-md font-semibold text-navy">{OWN_COPY.notFound}</p>
-              <p className="m-0 mt-1 text-base text-muted">{OWN_COPY.notFoundHint}</p>
-              <button type="button" onClick={close} className="mt-3 rounded-sm text-base font-semibold text-amber-ink hover:underline">
-                {OWN_COPY.backToCatalog}
+              <p className="m-0 text-md font-semibold text-navy">{t.drawer.notFound}</p>
+              <p className="m-0 mt-1 text-base text-muted">{t.drawer.notFoundHint}</p>
+              <button type="button" onClick={close} className={cn('mt-3 rounded-sm text-base font-semibold text-amber-ink hover:underline', TEXT_TAP)}>
+                {t.drawer.backToCatalog}
               </button>
             </div>
           )}
@@ -148,11 +171,12 @@ export function ProductDrawer({ code }: { code: string }) {
             <>
               <ProductTags channel={product.channel} runOff={product.lifecycle === 'closed_to_new_business'} />
               <h2 id={titleId} className="mb-1.5 mt-3 break-words text-2xl font-bold text-navy">{product.name}</h2>
-              <p className="mb-[22px] text-md text-muted">{product.tagline}</p>
+              {/* An ⓘ after a term the company's copy uses (*CI premium waiver*, *as-billed*), the first time (AC-3). */}
+              <p className="mb-[22px] text-md text-muted"><TermText text={product.tagline} terms={terms[0]} /></p>
               <DrawerTabs active={tab} onSelect={setTab}>
                 {(active) => (
                   <>
-                    {active === 'details' && <DetailsTab product={product} />}
+                    {active === 'details' && <DetailsTab product={product} terms={terms.slice(1)} />}
                     {active === 'plan' && <PlanTab product={product} />}
                     {active === 'documents' && <DocumentsTab product={product} />}
                   </>
@@ -175,29 +199,30 @@ function DrawerTabs({ active, onSelect, children }: {
   onSelect: (tab: DrawerTab) => void;
   children: (active: DrawerTab) => ReactNode;
 }) {
+  const t = useMessages(productCatalogMessages);
   const group = useId();
   const refs = useRef<Record<string, HTMLButtonElement | null>>({});
   const go = (to: number) => {
     const next = TABS[(to + TABS.length) % TABS.length];
-    onSelect(next.id);
-    refs.current[next.id]?.focus();
+    onSelect(next);
+    refs.current[next]?.focus();
   };
   return (
     <>
-      <div role="tablist" aria-label={OWN_COPY.productTabs} className="mb-[18px] flex gap-1.5 border-b border-hairline">
-        {TABS.map((t, i) => {
-          const on = t.id === active;
+      <div role="tablist" aria-label={t.drawer.tabs} className="mb-[18px] flex gap-1.5 border-b border-hairline">
+        {TABS.map((tab, i) => {
+          const on = tab === active;
           return (
             <button
-              key={t.id}
-              ref={(el) => { refs.current[t.id] = el; }}
+              key={tab}
+              ref={(el) => { refs.current[tab] = el; }}
               type="button"
               role="tab"
-              id={`${group}-${t.id}`}
+              id={`${group}-${tab}`}
               aria-selected={on}
               aria-controls={on ? `${group}-panel` : undefined}
               tabIndex={on ? 0 : -1}
-              onClick={() => onSelect(t.id)}
+              onClick={() => onSelect(tab)}
               onKeyDown={(e) => {
                 if (e.key === 'ArrowRight') go(i + 1);
                 else if (e.key === 'ArrowLeft') go(i - 1);
@@ -211,7 +236,7 @@ function DrawerTabs({ active, onSelect, children }: {
                 on ? 'border-amber text-navy' : 'border-transparent text-muted hover:text-navy',
               )}
             >
-              {t.label}
+              {t.drawer[tab]}
             </button>
           );
         })}
@@ -233,29 +258,34 @@ function DetailBlock({ label, children }: { label: string; children: ReactNode }
 }
 
 /** *Details* (`:10238-10280`). */
-function DetailsTab({ product }: { product: CatalogProduct }) {
+function DetailsTab({ product, terms }: { product: CatalogProduct; terms: TermKey[][] }) {
+  const t = useMessages(productCatalogMessages);
+  const figures = useFigureLanguage();
+  // `terms` in the order `firstMentions` read them: each benefit, then what stands out, then the best fit.
+  const benefitTerms = (i: number) => terms[i] ?? [];
+  const [standsOut, bestFit] = [terms[product.benefits.length] ?? [], terms[product.benefits.length + 1] ?? []];
   const runOff = product.lifecycle === 'closed_to_new_business';
   return (
     <div>
       {runOff && product.runOffNote && <RunOffNote>{product.runOffNote}</RunOffNote>}
       {product.commissionSchedule !== undefined && (
-        <DetailBlock label={PROTOTYPE_COPY.commissionRate}>
+        <DetailBlock label={t.drawer.commissionRate}>
           {product.commissionSchedule.length === 0 ? (
-            <p className="m-0 text-base text-muted">{OWN_COPY.commissionNotSet}</p>
+            <p className="m-0 text-base text-muted">{t.drawer.commissionNotSet}</p>
           ) : (
-            <table className="w-full max-w-[260px] border-collapse">
-              <caption className="sr-only">{PROTOTYPE_COPY.commissionRate}</caption>
+            <table className="relative w-full max-w-[260px] border-collapse">
+              <caption className="sr-only">{t.drawer.commissionRate}</caption>
               <thead>
                 <tr>
-                  <th scope="col" className="pb-1.5 text-left text-2xs font-bold uppercase tracking-wide text-muted">{PROTOTYPE_COPY.year}</th>
-                  <th scope="col" className="pb-1.5 text-left text-2xs font-bold uppercase tracking-wide text-muted">{PROTOTYPE_COPY.rate}</th>
+                  <th scope="col" className="pb-1.5 text-left text-2xs font-bold uppercase tracking-wide text-muted">{t.drawer.year}</th>
+                  <th scope="col" className="pb-1.5 text-left text-2xs font-bold uppercase tracking-wide text-muted">{t.drawer.rate}</th>
                 </tr>
               </thead>
               <tbody>
                 {product.commissionSchedule.map((row) => (
                   <tr key={row.year}>
-                    <th scope="row" className="w-[60px] border-t border-hairline py-[7px] text-left text-base font-medium text-muted">Y{row.year}</th>
-                    <td className="border-t border-hairline py-[7px] text-base font-semibold text-navy">{formatRate(row.rate)}</td>
+                    <th scope="row" className="w-[60px] border-t border-hairline py-[7px] text-left text-base font-medium text-muted">{t.drawer.yearRow({ year: row.year })}</th>
+                    <td className="border-t border-hairline py-[7px] text-base font-semibold text-navy">{formatRate(row.rate, figures)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -263,27 +293,27 @@ function DetailsTab({ product }: { product: CatalogProduct }) {
           )}
         </DetailBlock>
       )}
-      <DetailBlock label={PROTOTYPE_COPY.benefits}>
+      <DetailBlock label={t.drawer.benefits}>
         <ul className="m-0 flex list-none flex-col gap-[9px] p-0">
           {product.benefits.map((b, i) => (
             <li key={`${i}-${b}`} className="flex items-start gap-[9px] text-base text-navy">
               <span aria-hidden="true" className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber" />
-              <span className="min-w-0">{b}</span>
+              <span className="min-w-0"><TermText text={b} terms={benefitTerms(i)} /></span>
             </li>
           ))}
         </ul>
       </DetailBlock>
-      <DetailBlock label={PROTOTYPE_COPY.standsOut}>
-        <p className="m-0 text-base leading-normal text-navy">{product.differentiator}</p>
+      <DetailBlock label={t.drawer.standsOut}>
+        <p className="m-0 text-base leading-normal text-navy"><TermText text={product.differentiator} terms={standsOut} /></p>
       </DetailBlock>
-      <DetailBlock label={PROTOTYPE_COPY.bestFit}>
-        <p className="m-0 text-base leading-normal text-navy">{product.bestFit}</p>
+      <DetailBlock label={t.drawer.bestFit}>
+        <p className="m-0 text-base leading-normal text-navy"><TermText text={product.bestFit} terms={bestFit} /></p>
       </DetailBlock>
       <div className="mt-[22px]">
         {runOff ? (
-          <Button className="w-full" disabled>{PROTOTYPE_COPY.noActiveScript}</Button>
+          <Button className="w-full" disabled>{t.drawer.noActiveScript}</Button>
         ) : (
-          <ButtonLink href={productPlanHref(product.code)} className="w-full">{PROTOTYPE_COPY.openFullPlan}</ButtonLink>
+          <ButtonLink href={productPlanHref(product.code)} className="w-full">{t.drawer.openFullPlan}</ButtonLink>
         )}
       </div>
     </div>
@@ -298,17 +328,18 @@ function RunOffNote({ children }: { children: ReactNode }) {
 
 /** *Attack Plan* (`:10282-10357`): the words, or the run-off note; and the plan page's deep link. */
 function PlanTab({ product }: { product: CatalogProduct }) {
+  const t = useMessages(productCatalogMessages);
   if (product.lifecycle === 'closed_to_new_business') {
-    return <p className="text-base italic text-muted">{PROTOTYPE_COPY.drawerRunOff}</p>;
+    return <p className="text-base italic text-muted">{t.drawer.runOff}</p>;
   }
   return (
     <div>
       <ProductScript script={product.script} place="drawer" />
       <Link
         href={productPlanHref(product.code)}
-        className="mt-4 inline-block rounded-sm text-sm font-semibold text-amber-ink hover:underline"
+        className={cn('mt-4 inline-block rounded-sm text-sm font-semibold text-amber-ink hover:underline', TEXT_TAP)}
       >
-        {PROTOTYPE_COPY.openInPlan}
+        {t.drawer.openInPlan}
       </Link>
     </div>
   );
@@ -329,6 +360,7 @@ function DocumentsTab({ product }: { product: CatalogProduct }) {
  * that blocks windows opened later lets it through, and it is cut from this page before it navigates.
  */
 function DocumentRow({ code, doc }: { code: string; doc: CatalogDocument }) {
+  const t = useMessages(productCatalogMessages);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const labelId = useId();
@@ -356,23 +388,23 @@ function DocumentRow({ code, doc }: { code: string; doc: CatalogDocument }) {
     <div className="border-b border-hairline py-3.5 last:border-b-0" data-slot={doc.slot}>
       <p className="mb-1.5 text-base font-semibold text-navy">{doc.label}</p>
       {/* The link's description: which document, and that it leaves this page. Its name stays the visible words. */}
-      {doc.available && <span id={labelId} className="sr-only">{OWN_COPY.opensInNewTab(doc.label)}</span>}
+      {doc.available && <span id={labelId} className="sr-only">{t.drawer.opensInNewTab({ label: doc.label })}</span>}
       {doc.available ? (
         <button
           type="button"
           onClick={() => void open()}
           aria-disabled={busy || undefined}
           aria-describedby={labelId}
-          className="rounded-sm text-base font-semibold text-amber-ink hover:underline aria-disabled:opacity-60"
+          className={cn('rounded-sm text-base font-semibold text-amber-ink hover:underline aria-disabled:opacity-60', TEXT_TAP)}
         >
-          {busy ? OWN_COPY.openingDocument : PROTOTYPE_COPY.openLink}
+          {busy ? t.drawer.opening : t.drawer.openLink}
         </button>
       ) : (
-        <p className="m-0 text-sm italic text-muted">{PROTOTYPE_COPY.notUploaded}</p>
+        <p className="m-0 text-sm italic text-muted">{t.drawer.notUploaded}</p>
       )}
       {error && (
         <div className="mt-2">
-          <p className="m-0 mb-1.5 text-base text-alert">{OWN_COPY.documentFailed}</p>
+          <p className="m-0 mb-1.5 text-base text-alert">{t.drawer.documentFailed}</p>
           <ErrorBanner {...error} />
         </div>
       )}

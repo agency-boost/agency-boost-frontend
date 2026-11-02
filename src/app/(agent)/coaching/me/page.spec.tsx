@@ -1,14 +1,19 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AgentLayout from '@/app/(agent)/layout';
-import { makeMe, renderInLayout, routeParams, stubFetch, type StubReply } from '@test/harness';
+import { makeMe, renderInLayout, stubFetch, type StubReply } from '@test/harness';
 import MyCoachingPage from './page';
 
+const nav = vi.hoisted(() => ({ search: '' }));
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
   usePathname: () => '/coaching/me',
+  useSearchParams: () => new URLSearchParams(nav.search),
 }));
+
+/** The address's query (`useQuery`, `lib/use-query.ts`): each test names its own, and starts from none. */
+beforeEach(() => { nav.search = ''; });
 
 const JORDAN = makeMe({
   user: {
@@ -90,7 +95,8 @@ const show = (routes: Record<string, StubReply | StubReply[]> = {}, me = JORDAN,
     '/coaching/sessions/s-0924/print': { body: PRINT },
     ...routes,
   });
-  const view = renderInLayout(AgentLayout, <MyCoachingPage searchParams={routeParams(query)} />, { me });
+  nav.search = new URLSearchParams(query).toString();
+  const view = renderInLayout(AgentLayout, <MyCoachingPage />, { me });
   return { ...stub, ...view };
 };
 
@@ -104,7 +110,7 @@ describe('/coaching/me, the reader’s own coaching (P11-T10 AC-4)', () => {
     show();
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Coaching Session$/);
     expect(await screen.findByRole('heading', { level: 2, name: 'Jordan Reyes' })).toBeInTheDocument();
-    expect(screen.getByText('Agency Builder · Your own coaching')).toBeInTheDocument();
+    expect(screen.getByText('AB · Your own coaching')).toBeInTheDocument();
     expect(within(screen.getByRole('main')).getByText('JR')).toHaveAttribute('aria-hidden', 'true');
   });
 
@@ -134,19 +140,19 @@ describe('/coaching/me, the reader’s own coaching (P11-T10 AC-4)', () => {
     const tips = await card('Coaching tips from Wilson');
     expect(tips).toHaveTextContent('Delegate more of the AAB check-ins to free up prospecting time.');
     expect(screen.getByText((_, el) => el?.tagName === 'P' && /^Session — /.test(el.textContent ?? '')))
-      .toHaveTextContent('Session — Thursday, September 24, 2026 Finalized');
+      .toHaveTextContent('Session — Thursday, 24 Sep 2026 Finalized');
     expect(screen.getByText('Coached by Wilson Tanoto', { selector: 'p' })).toBeInTheDocument();
 
     const lastWeek = await card("Last week's action items");
     // Who led last week's session, as the prototype tags it (`Overall.html:4463`).
-    expect(within(lastWeek).getByText('From Sep 17 session · Dewi Kartika')).toBeInTheDocument();
+    expect(within(lastWeek).getByText('From 17 Sep session · Dewi Kartika')).toBeInTheDocument();
     expect(within(lastWeek).getByRole('checkbox', { name: 'Review Q3 recruitment pitch with Dimas' })).toBeDisabled();
 
     const goal = await card('Goal');
-    expect(goal).toHaveTextContent('Rp 108.000.000 / Rp 100.000.000');
-    expect(goal).toHaveTextContent('Rp 850.000.000 / Rp 1.200.000.000');
-    expect(await card('Ratios')).toHaveTextContent('Selling success rate20.0%');
-    expect(await card('Next action items')).toHaveTextContent('Sep 26Leads · Hendra WibowoSend proposal');
+    expect(goal).toHaveTextContent('IDR 108M / IDR 100M');
+    expect(goal).toHaveTextContent('IDR 850M / IDR 1.2B');
+    expect(await card('Ratios')).toHaveTextContent('Selling success rate20%');
+    expect(await card('Next action items')).toHaveTextContent('26 SepLeads · Hendra WibowoSend proposal');
 
     // Read-only: nothing to start, finalize, reopen or edit, and no Leads or Activity card.
     for (const name of ['Start coaching session', 'Finalize this session', 'Edit again', 'Add tip', 'Add action', '+ Add lead']) {
@@ -155,7 +161,7 @@ describe('/coaching/me, the reader’s own coaching (P11-T10 AC-4)', () => {
     expect(screen.queryByRole('region', { name: 'Leads' })).not.toBeInTheDocument();
     expect(screen.queryByRole('region', { name: /^Activity/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
-    expect(screen.getByText('✓ Finalized Thursday, September 24, 2026')).toBeInTheDocument();
+    expect(screen.getByText('✓ Finalized Thursday, 24 Sep 2026')).toBeInTheDocument();
     // Its own record: no note is asked for, and nothing about anybody's figures as they are now.
     expect(calls.some((c) => /leader-notes|profile|\/summary|\/activity\/|\/leads|\/goals\//.test(c.url))).toBe(false);
   });
@@ -167,8 +173,8 @@ describe('/coaching/me, the reader’s own coaching (P11-T10 AC-4)', () => {
 
     const list = document.getElementById(toggle.getAttribute('aria-controls')!)!;
     expect(within(list).getAllByRole('link').map((a) => [a.textContent, a.getAttribute('href'), a.getAttribute('aria-current')])).toEqual([
-      ['Sep 24, 2026 — 2 action items · 1 completedCoached by Wilson Tanoto', '/coaching/me?session=s-0924', 'true'],
-      ['Sep 17, 2026 — 3 action items · 3 completedCoached by Dewi Kartika', '/coaching/me?session=s-0917', null],
+      ['24 Sep 2026 — 2 action items · 1 completedCoached by Wilson Tanoto', '/coaching/me?session=s-0924', 'true'],
+      ['17 Sep 2026 — 3 action items · 3 completedCoached by Dewi Kartika', '/coaching/me?session=s-0917', null],
     ]);
     expect(within(list).queryByText('Sessions you led')).not.toBeInTheDocument();
   });
@@ -214,7 +220,7 @@ describe('/coaching/me, the reader’s own coaching (P11-T10 AC-4)', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Download as PDF' }));
     await waitFor(() => expect(print).toHaveBeenCalledTimes(1));
     expect(calls.some((c) => c.url.endsWith('/coaching/sessions/s-0924/print'))).toBe(true);
-    expect(document.querySelector('[data-print-view] p')).toHaveTextContent('Thursday, September 24, 2026 · Coached by Wilson Tanoto · Finalized');
+    expect(document.querySelector('[data-print-view] p')).toHaveTextContent('Thursday, 24 Sep 2026 · Coached by Wilson Tanoto · Finalized');
   });
 
   it('P11-T10 AC-4 offers a leader the way back to the roster, and an Agent, who leads nobody, none', async () => {
@@ -276,8 +282,8 @@ describe('/coaching/me, the sessions the reader led with somebody they no longer
     const lists = within(list).getAllByRole('list');
     expect(lists).toHaveLength(2);
     expect(within(lists[1]).getAllByRole('link').map((a) => [a.textContent, a.getAttribute('href')])).toEqual([
-      ['Aug 20, 2026 — Bayu Pratama · 2 action items · 1 completedView →', '/coaching/mem-bayu/archive/s-led-1'],
-      ['Aug 13, 2026 — Bayu Pratama · 1 action item · 0 completedView →', '/coaching/mem-bayu/archive/s-led-2'],
+      ['20 Aug 2026 — Bayu Pratama · 2 action items · 1 completedView →', '/coaching/mem-bayu/archive/s-led-1'],
+      ['13 Aug 2026 — Bayu Pratama · 1 action item · 0 completedView →', '/coaching/mem-bayu/archive/s-led-2'],
     ]);
     expect(list.textContent).not.toMatch(SIX_WORDS);
   });
@@ -287,6 +293,6 @@ describe('/coaching/me, the sessions the reader led with somebody they no longer
     expect(await screen.findByText('No coaching sessions yet.')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'View past sessions' }));
     expect(screen.getByRole('heading', { name: 'Sessions you led' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Aug 20, 2026 — Bayu Pratama/ })).toHaveAttribute('href', '/coaching/mem-bayu/archive/s-led-1');
+    expect(screen.getByRole('link', { name: /20 Aug 2026 — Bayu Pratama/ })).toHaveAttribute('href', '/coaching/mem-bayu/archive/s-led-1');
   });
 });

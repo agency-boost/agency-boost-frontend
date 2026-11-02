@@ -1,10 +1,10 @@
-import { screen, within } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeMe, renderWithSession, stubFetch } from '@test/harness';
 import { INBOX_CHANGED, type InboxChange } from '@/lib/notifications';
 import { useUnreadCount } from '@/lib/use-unread-count';
-import { NotificationBell } from './notification-bell';
+import { NotificationBell, UnreadBadge, unreadBadgeText, withUnread } from './notification-bell';
 
 const nav = vi.hoisted(() => ({ pathname: '/activity/log', push: vi.fn() }));
 vi.mock('next/navigation', () => ({
@@ -95,6 +95,13 @@ describe('the bell’s popover (P12.1-T2)', () => {
     expect(popover()).toBeNull();
   });
 
+  it('P18.95-T1 AC-10 is a 44 × 44 target on a phone and 36 × 36 from 768 px', async () => {
+    stubFetch({ '/notifications': { body: page([item()]) } });
+    renderBell();
+    const trigger = await screen.findByRole('button', { name: 'Notifications, 1 unread' });
+    expect(trigger).toHaveClass('h-9', 'w-9', 'max-md:min-h-11', 'max-md:min-w-11');
+  });
+
   it('AC-2 reads the latest eight each time it opens, newest first as the server sends them', async () => {
     const eight = Array.from({ length: 8 }, (_, i) => item({ notificationId: `n-${i}`, title: `Notice ${i + 1}` }));
     const { calls } = stubFetch({ '/notifications': { body: page(eight, { total: 30, unread: 8 }) } });
@@ -102,7 +109,8 @@ describe('the bell’s popover (P12.1-T2)', () => {
 
     await userEvent.click(await screen.findByRole('button', { name: 'Notifications, 8 unread' }));
     const rows = await within(popover()!).findAllByRole('button', { name: /^Unread: Notice / });
-    expect(rows.map((r) => r.textContent?.match(/Notice \d+/)?.[0])).toEqual(eight.map((i) => i.title));
+    // The day after each title (`1 Sep`, ADR-0167 §1) starts with a digit, so the title stops where the date begins.
+    expect(rows.map((r) => r.textContent?.match(/Notice \d+(?= ?\d{1,2} [A-Z]| ?\d{2}\.\d{2})/)?.[0])).toEqual(eight.map((i) => i.title));
     const reads = () => calls.filter((c) => c.url.endsWith('/notifications?page=1&pageSize=8')).length;
     expect(reads()).toBe(1);
 
@@ -173,7 +181,12 @@ describe('the bell’s popover (P12.1-T2)', () => {
       await userEvent.click(await within(popover()!).findByRole('button', { name: 'Mark all read' }));
 
       expect(await screen.findByRole('button', { name: 'Notifications' })).toBeInTheDocument();
-      expect(heard).toEqual([expect.objectContaining({ unread: 0 })]);
+      // The badge's move as it is clicked (P18.95-T1 AC-7), then the answer's count.
+      expect(heard).toEqual([
+        expect.objectContaining({ unread: 0, local: true }),
+        expect.objectContaining({ unread: 0 }),
+      ]);
+      expect(heard[1].local).toBeUndefined();
       expect(within(popover()!).queryByRole('button', { name: 'Mark all read' })).toBeNull();
       expect(within(popover()!).getByRole('button', { name: 'You are in' })).toBeInTheDocument();
       // The focus stays in the popover rather than going with the button.
@@ -288,6 +301,113 @@ describe('the bell’s popover (P12.1-T2)', () => {
     expect(await screen.findByRole('button', { name: 'Notifications' })).toBeInTheDocument();
   });
 
+  describe('P18.95-T1 AC-7 — the bell’s count changes at once (the client’s UI review, 2026-10-26)', () => {
+    /** An answer that waits until the test gives it: the badge is read while the write is still out. */
+    function later<T>() {
+      let give!: (value: T) => void;
+      const promise = new Promise<T>((resolve) => { give = resolve; });
+      return { promise, give };
+    }
+    const READ_AT = '2026-10-26T03:00:00.000Z';
+    const refused = { error: { code: 'INTERNAL_ERROR', message: 'Something went wrong.', requestId: 'r' } };
+
+    it('P18.95-T1 AC-7: marking one read drops the count before the answer, and the answer settles it', async () => {
+      const answer = later<unknown>();
+      stubFetch({
+        'POST /notifications/n-2/read': { body: answer.promise },
+        '/notifications': { body: page([COACHING, item()]) },
+      });
+      renderBell();
+      await userEvent.click(await screen.findByRole('button', { name: 'Notifications, 2 unread' }));
+      await within(popover()!).findByRole('link', { name: /Your coaching session/ });
+
+      await userEvent.click(within(popover()!).getAllByRole('button', { name: 'Mark as read' })[0]);
+
+      // No reload, no round trip: the badge has moved while the write is still out.
+      expect(bell()).toHaveAccessibleName('Notifications, 1 unread');
+      answer.give({ notificationId: 'n-2', readAt: READ_AT, unread: 1 });
+      expect(await screen.findByRole('button', { name: 'Notifications, 1 unread' })).toBeInTheDocument();
+    });
+
+    it('P18.95-T1 AC-7: marking one unread raises the count at once', async () => {
+      const answer = later<unknown>();
+      stubFetch({
+        'POST /notifications/n-2/unread': { body: answer.promise },
+        '/notifications': { body: page([{ ...COACHING, readAt: READ_AT }, item()]) },
+      });
+      renderBell();
+      await userEvent.click(await screen.findByRole('button', { name: 'Notifications, 1 unread' }));
+      await within(popover()!).findByRole('link', { name: /Your coaching session/ });
+
+      await userEvent.click(within(popover()!).getByRole('button', { name: 'Mark as unread' }));
+
+      expect(bell()).toHaveAccessibleName('Notifications, 2 unread');
+      answer.give({ notificationId: 'n-2', readAt: null, unread: 2 });
+      expect(await screen.findByRole('button', { name: 'Notifications, 2 unread' })).toBeInTheDocument();
+    });
+
+    it('P18.95-T1 AC-7: a refused mark puts the count back where it was, and says why', async () => {
+      const answer = later<unknown>();
+      stubFetch({
+        'POST /notifications/n-2/read': { status: 500, body: answer.promise },
+        '/notifications': { body: page([COACHING, item()]) },
+      });
+      renderBell();
+      await userEvent.click(await screen.findByRole('button', { name: 'Notifications, 2 unread' }));
+      await within(popover()!).findByRole('link', { name: /Your coaching session/ });
+
+      await userEvent.click(within(popover()!).getAllByRole('button', { name: 'Mark as read' })[0]);
+      expect(bell()).toHaveAccessibleName('Notifications, 1 unread');
+      answer.give(refused);
+
+      expect(await within(popover()!).findByText('Something went wrong.')).toBeInTheDocument();
+      expect(bell()).toHaveAccessibleName('Notifications, 2 unread');
+    });
+
+    it('P18.95-T1 AC-7: Mark all read empties the badge at once, and a refusal puts the count back', async () => {
+      const first = later<unknown>();
+      const second = later<unknown>();
+      stubFetch({
+        'POST /notifications/read-all': [{ body: first.promise }, { status: 500, body: second.promise }],
+        '/notifications': { body: page([COACHING, item()]) },
+      });
+      renderBell();
+      await userEvent.click(await screen.findByRole('button', { name: 'Notifications, 2 unread' }));
+      await userEvent.click(await within(popover()!).findByRole('button', { name: 'Mark all read' }));
+
+      expect(bell()).toHaveAccessibleName('Notifications');
+      expect(screen.queryByText('2')).toBeNull();
+      // The server, as it happens, still holds them: its answer is the count that stands.
+      first.give({ unread: 2 });
+      expect(await screen.findByRole('button', { name: 'Notifications, 2 unread' })).toBeInTheDocument();
+
+      await userEvent.click(await within(popover()!).findByRole('button', { name: 'Mark all read' }));
+      expect(bell()).toHaveAccessibleName('Notifications');
+      second.give(refused);
+      expect(await screen.findByRole('button', { name: 'Notifications, 2 unread' })).toBeInTheDocument();
+    });
+
+    it('P18.95-T1 AC-7: shows 9+ past nine, and the number itself once a mark brings it to nine', async () => {
+      const answer = later<unknown>();
+      const many = Array.from({ length: 10 }, (_, i) => item({ notificationId: `n-${i + 10}`, title: `Notice ${i + 10}` }));
+      stubFetch({
+        'POST /notifications/n-10/read': { body: answer.promise },
+        '/notifications': { body: page(many) },
+      });
+      renderBell();
+      expect((await screen.findByRole('button', { name: 'Notifications, 10 unread' })).textContent).toContain('9+');
+      await userEvent.click(bell());
+      await within(popover()!).findByRole('button', { name: /Notice 10$/ });
+
+      await userEvent.click(within(popover()!).getAllByRole('button', { name: 'Mark as read' })[0]);
+
+      expect(bell()).toHaveAccessibleName('Notifications, 9 unread');
+      expect(bell().textContent).toContain('9');
+      expect(bell().textContent).not.toContain('9+');
+      answer.give({ notificationId: 'n-10', readAt: READ_AT, unread: 9 });
+    });
+  });
+
   it('the Phase 12.1 exit review’s N2: a read-only support session gets no toggle and no Mark all read, and a row it opens sends no mark', async () => {
     const { calls } = stubFetch({ '/notifications': { body: page([COACHING, item()]) } });
     renderBell(SUPPORT);
@@ -337,5 +457,42 @@ describe('the bell’s popover (P12.1-T2)', () => {
     stubFetch({ '/notifications': { body: page([]) } });
     renderBell();
     expect(await screen.findByRole('button', { name: 'Notifications' })).toHaveClass('bg-amber/15');
+  });
+});
+
+/**
+ * **The badge is one component** (P18.95-T12 AC-2): the bell's corner, and on a phone's bar the avatar's, draw
+ * `UnreadBadge`, so the two cannot drift in classes, tokens or the `9+` cap (L-13).
+ */
+describe('UnreadBadge, the bell’s and the phone avatar’s count (P18.95-T12 AC-2)', () => {
+  it.each([[1, '1'], [9, '9'], [10, '9+'], [42, '9+']])('P18.95-T12 AC-2 reads %i as %s', (unread, text) => {
+    expect(unreadBadgeText(unread)).toBe(text);
+    const { container } = render(<UnreadBadge unread={unread} />);
+    const badge = container.firstElementChild!;
+    expect(badge).toHaveTextContent(text);
+    expect(badge).toHaveAttribute('aria-hidden', 'true');
+    // The bell's classes and tokens, as it drew them before P18.95-T12.
+    expect(badge.className).toBe(
+      'absolute -right-0.5 -top-0.5 inline-flex h-[17px] min-w-[17px] items-center justify-center rounded-pill bg-alert px-1 text-2xs font-bold text-white',
+    );
+  });
+
+  it.each([0, -1])('P18.95-T12 AC-2 draws nothing at %i', (unread) => {
+    const { container } = render(<UnreadBadge unread={unread} />);
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it('P18.95-T12 AC-2 names a control with the exact count, and alone at none', () => {
+    expect(withUnread('Notifications', 3)).toBe('Notifications, 3 unread');
+    expect(withUnread('Account and notifications', 42)).toBe('Account and notifications, 42 unread');
+    expect(withUnread('Account and notifications', 0)).toBe('Account and notifications');
+  });
+
+  it('P18.95-T12 AC-2 is the badge the bell wears', async () => {
+    stubFetch({ '/notifications': { body: page([item()], { unread: 12 }) } });
+    renderWithSession(<NotificationBell href="/notifications" unread={12} />, { me: READER });
+    const bell = screen.getByRole('button', { name: 'Notifications, 12 unread' });
+    const { container } = render(<UnreadBadge unread={12} />);
+    expect(within(bell).getByText('9+').outerHTML).toBe(container.innerHTML);
   });
 });

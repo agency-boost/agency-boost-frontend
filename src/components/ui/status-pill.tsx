@@ -1,3 +1,7 @@
+'use client';
+
+import { useMessages } from '@/i18n/language-provider';
+import { uiMessages } from '@/i18n/messages/ui';
 import { cn } from '@/lib/cn';
 
 /**
@@ -24,11 +28,11 @@ export type Status = 'success' | 'alert' | 'neutral';
  */
 export type PillTone = Status | 'watch';
 
-export const STATUS_LABEL: Record<Status, string> = {
-  success: 'On track',
-  alert: 'Below benchmark',
-  neutral: 'Not enough data',
-};
+/**
+ * The three states' words in English, the catalogue's source (`uiMessages.status`); a pill writes them in the reader's
+ * language, and a screen that names a state outside a pill reads `useMessages(uiMessages).status` (P18.98-T4).
+ */
+export const STATUS_LABEL: Readonly<Record<Status, string>> = uiMessages.en.status;
 
 const STATUS_CLASS: Record<PillTone, string> = {
   success: 'bg-success/10 text-success',
@@ -50,6 +54,7 @@ export function StatusPill({
   // `watch` has no words of its own, so it cannot be drawn without them.
   | { status: 'watch'; label: string }
 ) & { className?: string }) {
+  const words = useMessages(uiMessages).status;
   return (
     <span
       className={cn(
@@ -58,7 +63,7 @@ export function StatusPill({
         className,
       )}
     >
-      {status === 'watch' ? label : (label ?? STATUS_LABEL[status])}
+      {status === 'watch' ? label : (label ?? words[status])}
     </span>
   );
 }

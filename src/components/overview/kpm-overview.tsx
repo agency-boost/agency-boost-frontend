@@ -4,8 +4,10 @@ import { useEffect, useState } from 'react';
 import { PageHeader } from '@/components/app-shell';
 import { Button, ErrorBanner } from '@/components/ui/field';
 import { Skeleton, SkeletonBar } from '@/components/ui/skeleton';
+import { useMessages } from '@/i18n/language-provider';
+import { kpmOverviewMessages } from '@/i18n/messages/kpm-overview';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
-import { officeLine, OWN_COPY, PROTOTYPE_COPY, readKpmOverview, type KpmOverviewView } from '@/lib/kpm-overview';
+import { officeLine, readKpmOverview, type KpmOverviewView } from '@/lib/kpm-overview';
 import { CoachingCoverage } from './coaching-coverage';
 import { Composition } from './composition';
 import { Engagement } from './engagement';
@@ -22,8 +24,12 @@ import { Recruitment } from './recruitment';
  *
  * The states the prototype lacks are Fills (L-01): the five sections in outline while the read is on its
  * way, an error with a retry, and each section's own words where it has nothing to draw.
+ *
+ * **Its words are the reader's** (P18.98-T4; `kpmOverviewMessages`): the title, the sections' and the cards' names kept
+ * English, the rest the approved glossary's; its figures the figures' language (`useFigureLanguage()`).
  */
 export function KpmOverview() {
+  const t = useMessages(kpmOverviewMessages);
   const [view, setView] = useState<KpmOverviewView | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   /** A retry: the same read, again. */
@@ -41,30 +47,30 @@ export function KpmOverview() {
   return (
     <div className="min-w-0">
       {/* The sub-line is the office's, so it arrives with the read (`:932-933`). */}
-      <PageHeader title={PROTOTYPE_COPY.title} subtitle={view ? officeLine(view.office) : undefined} />
+      <PageHeader title={t.title} subtitle={view ? officeLine(view.office) : undefined} />
 
       {error && (
         <div>
           <ErrorBanner {...error} />
-          <Button variant="secondary" className="mt-3" onClick={() => setAttempt((n) => n + 1)}>{OWN_COPY.tryAgain}</Button>
+          <Button variant="secondary" className="mt-3" onClick={() => setAttempt((n) => n + 1)}>{t.tryAgain}</Button>
         </div>
       )}
       {!view && !error && <OverviewSkeleton />}
       {view && (
         <SplitContext.Provider value={view.thresholds.statusSplitPct}>
-          <Section title={PROTOTYPE_COPY.composition}>
+          <Section title={t.composition}>
             <Composition composition={view.composition} />
           </Section>
-          <Section title={PROTOTYPE_COPY.engagement} sub={PROTOTYPE_COPY.engagementSub}>
+          <Section title={t.engagement} sub={t.engagementSub}>
             <Engagement engagement={view.engagement} />
           </Section>
-          <Section title={PROTOTYPE_COPY.coaching}>
+          <Section title={t.coaching}>
             <CoachingCoverage coaching={view.coaching} />
           </Section>
-          <Section title={PROTOTYPE_COPY.recruitment}>
+          <Section title={t.recruitment}>
             <Recruitment recruitment={view.recruitment} month={view.month} />
           </Section>
-          <Section title={PROTOTYPE_COPY.production}>
+          <Section title={t.production}>
             <Production production={view.production} />
           </Section>
         </SplitContext.Provider>
@@ -78,13 +84,14 @@ export function KpmOverview() {
  * live region, so a screen reader hears one sentence for the wait rather than five.
  */
 function OverviewSkeleton() {
+  const t = useMessages(kpmOverviewMessages);
   return (
-    <Skeleton label={OWN_COPY.loading}>
+    <Skeleton label={t.loading}>
       {/* Team composition: four tiles. */}
       <SkeletonBar className="mb-3.5 h-4 w-40" />
       <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4">
         {[0, 1, 2, 3].map((i) => (
-          <div key={i} className="rounded-lg border border-hairline bg-card px-[18px] py-4">
+          <div key={i} className="rounded-lg border border-card-edge bg-card px-[18px] py-4">
             <SkeletonBar className="h-2.5 w-1/2" />
             <SkeletonBar className="mt-3 h-6 w-1/3" />
           </div>
@@ -94,7 +101,7 @@ function OverviewSkeleton() {
       <SkeletonBar className="mb-3.5 mt-[34px] h-4 w-32" />
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {[0, 1].map((i) => (
-          <div key={i} className="rounded-lg border border-hairline bg-card p-[18px]">
+          <div key={i} className="rounded-lg border border-card-edge bg-card p-[18px]">
             <SkeletonBar className="h-3.5 w-2/3" />
             <SkeletonBar className="mt-2 w-1/2" />
             <SkeletonBar className="mt-4 h-7 w-1/3" />
@@ -106,7 +113,7 @@ function OverviewSkeleton() {
       {['h-40', 'h-28', 'h-48'].map((height) => (
         <div key={height}>
           <SkeletonBar className="mb-3.5 mt-[34px] h-4 w-44" />
-          <div className={`rounded-lg border border-hairline bg-card p-5 ${height}`}>
+          <div className={`rounded-lg border border-card-edge bg-card p-5 ${height}`}>
             <SkeletonBar className="w-1/3" />
             <SkeletonBar className="mt-3 w-2/3" />
             <SkeletonBar className="mt-3 w-1/2" />

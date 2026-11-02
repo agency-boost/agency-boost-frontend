@@ -1,11 +1,11 @@
 import { Suspense } from 'react';
-import { screen, waitFor, within } from '@testing-library/react';
+import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AgentLayout from '@/app/(agent)/layout';
-import { renderInLayout, routeParams, stubFetch, type StubReply } from '@test/harness';
+import { atWidth, renderInLayout, routeParams, stubFetch, type StubReply } from '@test/harness';
 import {
-  APE, CHALLENGE, campaign, detail, LIST, notFound, notOpen, PROMO_AGENT, PUSH, READ_ONLY_RINA,
+  APE, CHALLENGE, campaign, detail, LIST, NEW_HIRE, notFound, notOpen, PROMO_AGENT, PUSH, READ_ONLY_RINA,
   RINA_ME, serverError, SHELL_STUBS, SPRINT,
 } from '@test/campaigns-fixtures';
 import type { CampaignList } from '@/lib/campaigns';
@@ -65,7 +65,8 @@ describe('/campaigns, the list (P18.5-T7)', () => {
     it('P18.5-T7 AC-2 the nav item is live and current, its Upcoming pill gone', async () => {
       list();
       await listReady();
-      const item = screen.getByRole('link', { name: 'Campaign list' });
+      // The field shell's sidebar since UI V1 (UI-004): *Campaign*, under *Program*.
+      const item = within(screen.getByRole('navigation', { name: 'Main' })).getByRole('link', { name: 'Campaign' });
       expect(item).toHaveAttribute('href', '/campaigns');
       expect(item).toHaveAttribute('aria-current', 'page');
       expect(within(item).queryByText('Upcoming')).not.toBeInTheDocument();
@@ -74,15 +75,18 @@ describe('/campaigns, the list (P18.5-T7)', () => {
     it('P18.5-T7 AC-2 the nav item stays current over a campaign’s dialog', async () => {
       dialogAt('APE_SPRINT');
       await dialog();
-      expect(screen.getByRole('link', { name: 'Campaign list' })).toHaveAttribute('aria-current', 'page');
+      expect(within(screen.getByRole('navigation', { name: 'Main' })).getByRole('link', { name: 'Campaign' }))
+        .toHaveAttribute('aria-current', 'page');
     });
 
-    it('P18.5-T7 AC-2 is titled and sub-titled as drawn, and reads the list once', async () => {
+    it('P18.5-T7 AC-2, P18.95-T9 AC-2 and AC-5 is titled as its nav item, sub-titled as drawn, and reads the list once', async () => {
       const { calls } = list();
       await listReady();
-      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Campaigns$/);
+      // P18.95-T9 AC-2: the nav item's words, *Campaign list* — the prototype titled the page *Campaigns*.
+      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Campaign List$/);
+      // P18.95-T9 AC-5: *tap*, where the prototype said *click into*.
       expect(screen.getByText(
-        "Company and KPM campaigns — mark the ones you're chasing, click into any card for full requirements.",
+        "Company and KPM campaigns — mark the ones you're chasing, tap any card for full requirements.",
       )).toBeInTheDocument();
       expect(calls.filter((c) => /\/campaigns$/.test(c.url))).toHaveLength(1);
     });
@@ -171,15 +175,26 @@ describe('/campaigns, the list (P18.5-T7)', () => {
       expect(within(cardOf('MDRT Qualification')).getAllByText('🏆')[0].parentElement).toHaveClass('bg-gold');
     });
 
-    it('P18.5-T7 AC-3 the title and its window, the blurb, 🏆 the prize, the requirements in rupiah joined by " | "', async () => {
+    it('P18.5-T7 AC-3, P18.95-T10 AC-3 the title and its window, the blurb, 🏆 the prize, Needs: in rupiah joined by " + "', async () => {
       list();
       await listReady();
       const card = cardOf('Q4 APE Sprint');
       expect(within(card).getByRole('heading', { level: 3 })).toHaveTextContent(/^Q4 APE Sprint$/);
-      expect(within(card).getByText('Oct 1 – Dec 31, 2026')).toBeInTheDocument();
+      expect(within(card).getByText('1 Okt – 31 Des 2026')).toBeInTheDocument();
       expect(within(card).getByText('Push for APE this quarter — top 10 unit-wide win a trip.')).toBeInTheDocument();
       expect(card).toHaveTextContent('🏆Top 10 unit-wide: 3D2N Bali trip · All qualifiers: Rp 5.000.000 cash bonus');
-      expect(card).toHaveTextContent('Requirements: APE achieved Rp 500.000.000 | New Hire 1');
+      expect(card).toHaveTextContent('Needs: IDR 500M APE + 1 new hire');
+      expect(card).not.toHaveTextContent('Requirements:');
+    });
+
+    it('P18.95-T10 AC-3 the client’s example: Needs: Rp 16 jt APE + 3 new hires; a promotion’s Rp 1,2 M APE + 3 new active agents', async () => {
+      const sixteen = campaign({ code: 'SIXTEEN', title: 'Sixteen', requirements: [APE(16), NEW_HIRE(3)] });
+      list({ 'GET /campaigns': { body: { campaigns: [sixteen, PROMO_AGENT], can: { chase: true } } } });
+      await listReady();
+      // *APE*'s first appearance on the list carries its ⓘ (P18.95-T9 AC-3): its name and bubble sit after the word.
+      expect(cardOf('Sixteen')).toHaveTextContent(/Needs: IDR 16M APE ⓘWhat is APE\?.+ \+ 3 new hires/);
+      await userEvent.click(screen.getByRole('tab', { name: 'Structural' }));
+      expect(cardOf('Promotion: Agent → AAB')).toHaveTextContent(/Needs: IDR 1.2B APE ⓘWhat is APE\?.+ \+ 3 new active agents/);
     });
 
     it('P18.5-T7 AC-3 Promotion path over a promotion’s title, and nowhere else', async () => {
@@ -206,15 +221,20 @@ describe('/campaigns, the list (P18.5-T7)', () => {
       expect(within(cardOf('October New Hire Blitz')).getByRole('button', { name: 'View details' })).toBeInTheDocument();
     });
 
-    it('P18.5-T7 AC-3 an ended card is grey, its chase disabled and its reason named', async () => {
+    it('P18.5-T7 AC-3, P18.95-T10 AC-2 an ended card is grey and draws no chase — not even disabled; its tag says Ended', async () => {
       list();
       await listReady();
       const card = cardOf('Mid-Year Persistency Push');
       expect(card).toHaveClass('grayscale-[45%]');
-      const chase = within(card).getByRole('button', { name: 'Chasing' });
-      expect(chase).toBeDisabled();
-      expect(within(card).getByRole('button', { name: 'This campaign has ended.' })).toHaveTextContent('ⓘ');
+      expect(within(card).queryByRole('button', { name: /^Chas/ })).not.toBeInTheDocument();
+      expect(card.querySelector('[data-chase]')).toBeNull();
+      expect(within(card).queryByRole('button', { name: 'This campaign has ended.' })).not.toBeInTheDocument();
+      expect(within(card).getByText('Ended')).toBeInTheDocument();
+      // View details stays on the right, where the chase is not.
+      expect(within(card).getByRole('button', { name: 'View details' })).toBeInTheDocument();
       expect(cardOf('Q4 APE Sprint')).not.toHaveClass('grayscale-[45%]');
+      expect(within(cardOf('Q4 APE Sprint')).getByRole('button', { name: 'Chasing' })).toBeEnabled();
+      expect(within(cardOf('Q1 APE Challenge')).getByRole('button', { name: 'Chase' })).toBeEnabled();
     });
 
     it('P18.5-T7 AC-3 a campaign not for the reader’s rung draws its chase disabled, saying why', async () => {
@@ -298,7 +318,9 @@ describe('/campaigns, the list (P18.5-T7)', () => {
       await userEvent.click(within(cardOf('October New Hire Blitz')).getByRole('button', { name: 'Chase' }));
       expect(await screen.findByRole('alert')).toHaveTextContent('This campaign has ended, so it can no longer be chased or dropped.');
       await waitFor(() => expect(calls.filter((c) => /\/campaigns$/.test(c.url))).toHaveLength(2));
-      await waitFor(() => expect(within(cardOf('October New Hire Blitz')).getByRole('button', { name: 'Chase' })).toBeDisabled());
+      // P18.95-T10 AC-2: read again, the ended card draws no chase at all; the refusal stays said on it.
+      await waitFor(() => expect(within(cardOf('October New Hire Blitz')).queryByRole('button', { name: 'Chase' })).not.toBeInTheDocument());
+      expect(within(cardOf('October New Hire Blitz')).getByRole('alert')).toBeInTheDocument();
       expect(screen.queryByText(/^Now chasing/)).not.toBeInTheDocument();
     });
   });
@@ -365,9 +387,26 @@ describe('/campaigns/[campaignCode], the dialog (P18.5-T7 AC-4, P18.5-T8 AC-6)',
     expect(within(box).getByText('KPM')).toBeInTheDocument();
     expect(within(box).getByText('Running')).toBeInTheDocument();
     expect(within(box).getByRole('heading', { level: 2, name: 'Q4 APE Sprint' })).toBeInTheDocument();
-    expect(box).toHaveTextContent('📅 Oct 1 – Dec 31, 2026');
+    expect(box).toHaveTextContent('📅 1 Okt – 31 Des 2026');
     expect(within(box).getByText(/^Office-wide APE sprint for Q4\./)).toHaveClass('whitespace-pre-line');
     expect(box).toHaveTextContent('PrizeTop 10 unit-wide: 3D2N Bali trip · All qualifiers: Rp 5.000.000 cash bonus');
+  });
+
+  it('P18.96-T1 AC-2 the dialog is capped at the dynamic viewport and scrolls inside, and the page behind holds still', async () => {
+    document.body.style.overflow = 'auto';
+    try {
+      dialogAt('APE_SPRINT');
+      const box = await dialog();
+      // Below the top inset as well, never under a Home Screen app's clock (staging review, 2026-10-31).
+      expect(box).toHaveClass('max-h-[calc(100dvh-1rem-max(1rem,env(safe-area-inset-top)))]', 'overflow-y-auto', 'overscroll-contain');
+      expect(box.parentElement).toHaveClass('pt-[max(1rem,env(safe-area-inset-top))]');
+      expect(box.className).not.toContain('100vh');
+      expect(document.body.style.overflow).toBe('hidden');
+      cleanup();
+      expect(document.body.style.overflow).toBe('auto');
+    } finally {
+      document.body.style.overflow = '';
+    }
   });
 
   it('P18.5-T7 AC-4 Promotion path in a promotion’s dialog', async () => {
@@ -381,10 +420,10 @@ describe('/campaigns/[campaignCode], the dialog (P18.5-T7 AC-4, P18.5-T8 AC-6)',
     dialogAt('APE_SPRINT');
     const box = await dialog();
     const requirements = within(box).getByRole('region', { name: /^Requirements/ });
-    expect(within(requirements).getByRole('heading', { level: 3 })).toHaveTextContent('RequirementsOct – Dec 2026');
+    expect(within(requirements).getByRole('heading', { level: 3 })).toHaveTextContent('RequirementsOkt – Des 2026');
     const rows = within(requirements).getAllByRole('listitem');
     expect(rows.map((r) => r.textContent)).toEqual([
-      'APE achievedRp 620.000.000 of Rp 500.000.000 ✓, met',
+      'APE achievedIDR 620M of IDR 500M ✓, met',
       'New Hire1Not uploaded yet',
     ]);
     expect(within(rows[0]).getByText('✓')).toHaveAttribute('aria-hidden', 'true');
@@ -397,7 +436,7 @@ describe('/campaigns/[campaignCode], the dialog (P18.5-T7 AC-4, P18.5-T8 AC-6)',
         body: detail({
           requirements: [APE(500), { ...APE(1), metricKey: 'OLD_METRIC', metricName: 'Old metric', unit: 'count', value: 3, measured: false }],
           progress: {
-            windowLabel: 'Oct – Dec 2026', final: false,
+            windowLabel: 'Okt – Des 2026', final: false,
             rows: [
               { metricKey: 'APE_ACHIEVED', current: 32_000_000_000, target: 50_000_000_000, unit: 'idr_minor', state: 'in_progress' },
               { metricKey: 'OLD_METRIC', current: null, target: 3, unit: 'count', state: 'not_measured' },
@@ -408,7 +447,7 @@ describe('/campaigns/[campaignCode], the dialog (P18.5-T7 AC-4, P18.5-T8 AC-6)',
     });
     const rows = within(await dialog()).getAllByRole('listitem');
     expect(rows.map((r) => r.textContent)).toEqual([
-      'APE achievedRp 320.000.000 of Rp 500.000.000',
+      'APE achievedIDR 320M of IDR 500M',
       'Old metric3Not measured yet',
     ]);
   });
@@ -422,7 +461,7 @@ describe('/campaigns/[campaignCode], the dialog (P18.5-T7 AC-4, P18.5-T8 AC-6)',
         body: detail({
           requirements: [ratio],
           progress: {
-            windowLabel: 'Oct 1 – Oct 10, 2026', final: false,
+            windowLabel: '1 Okt – 10 Okt 2026', final: false,
             rows: [{ metricKey: 'SELLING_SUCCESS_RATE', current: null, target: 0.15, unit: 'ratio', state: 'nothing_logged' }],
           },
         }),
@@ -436,7 +475,7 @@ describe('/campaigns/[campaignCode], the dialog (P18.5-T7 AC-4, P18.5-T8 AC-6)',
   it('P18.5-T8 AC-6 an upcoming campaign’s rows are their targets alone, as drawn', async () => {
     dialogAt('APE_CHALLENGE_NEXT', { 'GET /campaigns/APE_CHALLENGE_NEXT': { body: detail({ ...CHALLENGE, progress: null }) } });
     const box = await dialog('Q1 APE Challenge');
-    expect(within(box).getAllByRole('listitem').map((r) => r.textContent)).toEqual(['APE achievedRp 300.000.000']);
+    expect(within(box).getAllByRole('listitem').map((r) => r.textContent)).toEqual(['APE achievedIDR 300M']);
     expect(within(box).getByRole('heading', { level: 3 })).toHaveTextContent(/^Requirements$/);
   });
 
@@ -512,7 +551,7 @@ describe('/campaigns/[campaignCode], the dialog (P18.5-T7 AC-4, P18.5-T8 AC-6)',
     dialogAt('GADING_PUSH', { 'GET /campaigns/GADING_PUSH': notFound });
     expect(await screen.findByText('This campaign isn’t on your list.')).toBeInTheDocument();
     expect(screen.getByText('It may have been withdrawn, or the address may be mistyped.')).toBeInTheDocument();
-    expect(screen.getByRole('dialog', { name: 'Campaigns' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Campaign List' })).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Close' }));
     expect(nav.replace).toHaveBeenCalledWith('/campaigns', { scroll: false });
   });
@@ -529,7 +568,7 @@ describe('/campaigns/[campaignCode], the dialog (P18.5-T7 AC-4, P18.5-T8 AC-6)',
         body: detail({
           requirements: [APE(500), APE(1000)],
           progress: {
-            windowLabel: 'Oct – Dec 2026', final: false,
+            windowLabel: 'Okt – Des 2026', final: false,
             rows: [
               { metricKey: 'APE_ACHIEVED', current: 62_000_000_000, target: 50_000_000_000, unit: 'idr_minor', state: 'met' },
               { metricKey: 'APE_ACHIEVED', current: 62_000_000_000, target: 100_000_000_000, unit: 'idr_minor', state: 'in_progress' },
@@ -540,15 +579,15 @@ describe('/campaigns/[campaignCode], the dialog (P18.5-T7 AC-4, P18.5-T8 AC-6)',
     });
     const rows = within(await dialog()).getAllByRole('listitem');
     expect(rows.map((r) => r.textContent)).toEqual([
-      'APE achievedRp 620.000.000 of Rp 500.000.000 ✓, met',
-      'APE achievedRp 620.000.000 of Rp 1.000.000.000',
+      'APE achievedIDR 620M of IDR 500M ✓, met',
+      'APE achievedIDR 620M of IDR 1B',
     ]);
   });
 
   it('a skeleton while the campaign loads, and an error with a retry', async () => {
     dialogAt('APE_SPRINT', { 'GET /campaigns/APE_SPRINT': [serverError, { body: detail() }] });
     expect((await screen.findByText('Loading the campaign…')).closest('[role="status"]')).not.toBeNull();
-    const box = screen.getByRole('dialog', { name: 'Campaigns' });
+    const box = screen.getByRole('dialog', { name: 'Campaign List' });
     expect(await within(box).findByRole('alert')).toHaveTextContent('Something went wrong.');
     await userEvent.click(within(box).getByRole('button', { name: 'Try again' }));
     await dialog();
@@ -561,10 +600,126 @@ describe('/campaigns/[campaignCode], the dialog (P18.5-T7 AC-4, P18.5-T8 AC-6)',
     expect(box.querySelector('script, b')).toBeNull();
   });
 
-  it('the dialog of an ended campaign the reader chased draws its chase disabled and why', async () => {
+  it('P18.95-T10 AC-2 the dialog of an ended campaign the reader chased draws no chase; its tag says Ended', async () => {
     dialogAt('PERSISTENCY_PUSH', { 'GET /campaigns/PERSISTENCY_PUSH': { body: detail({ ...PUSH, progress: null }) } });
     const box = await dialog('Mid-Year Persistency Push');
-    expect(within(box).getByRole('button', { name: 'Chasing' })).toBeDisabled();
-    expect(within(box).getByRole('button', { name: 'This campaign has ended.' })).toBeInTheDocument();
+    expect(within(box).queryByRole('button', { name: /^Chas/ })).not.toBeInTheDocument();
+    expect(within(box).queryByRole('button', { name: 'This campaign has ended.' })).not.toBeInTheDocument();
+    expect(within(box).getByText('Ended')).toBeInTheDocument();
+  });
+});
+
+/**
+ * **A ratio requirement in the office's unit for it** (P18.97-T7; ADR-0174 §2, *one way of writing a percentage*): the
+ * card's *Needs:* line and the dialog's rows read *30%* where the office writes the ratio as a percentage, as its
+ * settings have since P18.97-T4 AC-8 — where the card read *0,30*.
+ */
+describe('P18.97-T7 a ratio requirement on the agents’ cards and dialog', () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  const RATE = {
+    metricKey: 'RECRUIT_SUCCESS_RATE', metricName: 'Recruitment success rate', comparator: 'gte' as const, value: 0.3, unit: 'ratio', measured: true,
+  };
+  const RECRUIT = campaign({ code: 'RECRUIT_DRIVE', title: 'Recruitment Drive', requirements: [RATE] });
+  const config = (displayUnit: 'percent' | 'decimal') => ({
+    '/kpm/config': {
+      body: {
+        activity: [], leadPipelines: [], version: 1,
+        ratios: [{
+          id: 'r1', code: 'RECRUIT_SUCCESS_RATE', label: 'Recruitment success rate', numerator: [], denominator: [], benchmark: 0.3,
+          comparison: 'gte', displayUnit, displayOrder: 1, version: 1, status: 'active', origin: 'platform',
+        }],
+      },
+    },
+  });
+
+  it('P18.97-T7 writes the card’s Needs: line in the office’s unit for the ratio: 30%', async () => {
+    list({ ...config('percent'), 'GET /campaigns': { body: { ...LIST, campaigns: [RECRUIT] } } });
+    await listReady();
+    await waitFor(() => expect(cardOf('Recruitment Drive')).toHaveTextContent('Needs: Recruitment success rate 30%'));
+    expect(cardOf('Recruitment Drive')).not.toHaveTextContent('0.30');
+  });
+
+  it('P18.97-T7 keeps a ratio the office writes as a number a number: 0,30', async () => {
+    list({ ...config('decimal'), 'GET /campaigns': { body: { ...LIST, campaigns: [RECRUIT] } } });
+    await listReady();
+    expect(cardOf('Recruitment Drive')).toHaveTextContent('Needs: Recruitment success rate 0.30');
+  });
+
+  it('P18.97-T7 writes the dialog’s row in the same unit: the figure to its tenth, of the target as typed', async () => {
+    dialogAt('RECRUIT_DRIVE', {
+      ...config('percent'),
+      'GET /campaigns': { body: { ...LIST, campaigns: [RECRUIT] } },
+      'GET /campaigns/RECRUIT_DRIVE': {
+        body: detail({
+          ...RECRUIT,
+          progress: {
+            windowLabel: 'Okt – Des 2026', final: false,
+            rows: [{ metricKey: 'RECRUIT_SUCCESS_RATE', current: 2 / 7, target: 0.3, unit: 'ratio', state: 'in_progress' }],
+          },
+        }),
+      },
+    });
+    const box = await dialog('Recruitment Drive');
+    await waitFor(() => expect(within(box).getAllByRole('listitem').map((r) => r.textContent))
+      .toEqual(['Recruitment success rate29% of 30%']));
+  });
+});
+
+/**
+ * **UI V1 on a phone** (UI-108; `campaign-event-mobile` 1): no sub-line; *Seasonal | Structural* as one segmented
+ * control; the groups with their counts and no status row; a card with a line icon in a tinted tile — no emoji — the
+ * name on one line, the office's tag and the period, a round star for *Chase*, and *Prize* and *Requirements* aligned; an
+ * ended campaign a short row. 375px.
+ */
+describe('UI-108 /campaigns on a phone', () => {
+  beforeEach(() => atWidth(375));
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('UI-108 the groups with their counts, no status row; a card with its icon, tag, period, star and the two rows', async () => {
+    list();
+    await listReady();
+    await waitFor(() => expect(screen.queryByRole('group', { name: 'Show campaigns' })).not.toBeInTheDocument());
+    expect(screen.getByRole('region', { name: 'Running' })).toHaveTextContent(/^Running2/);
+    const sprint = cardOf('Q4 APE Sprint');
+    expect(within(sprint).getByRole('heading', { level: 3 })).toHaveClass('truncate');
+    expect(sprint).toHaveTextContent('KPM');
+    // A line icon where the poster's emoji was: no emoji on a phone's card (UI-108, UI-102).
+    expect(sprint.textContent).not.toMatch(/\p{Extended_Pictographic}/u);
+    expect(sprint.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
+    const rows = [...sprint.querySelectorAll('dt')].map((dt) => [dt.textContent, dt.nextElementSibling!.textContent]);
+    expect(rows[0]).toEqual(['Prize', 'Top 10 unit-wide: 3D2N Bali trip · All qualifiers: Rp 5.000.000 cash bonus']);
+    expect(rows[1][0]).toBe('Requirements');
+    // The round star: its state its `aria-pressed`, its name the campaign's.
+    expect(within(sprint).getByRole('button', { name: 'Chase Q4 APE Sprint' })).toHaveAttribute('aria-pressed', 'true');
+    expect(within(cardOf('October New Hire Blitz')).getByRole('button', { name: 'Chase October New Hire Blitz' }))
+      .toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('UI-108 the star chases; the card opens the detail; an ended campaign is a short row that opens it too', async () => {
+    const { calls } = list({ 'PUT /campaigns/NEW_HIRE_BLITZ/chase': { body: { ...LIST.campaigns[1], chasing: true } } });
+    await listReady();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Chase October New Hire Blitz' })).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('button', { name: 'Chase October New Hire Blitz' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Chase October New Hire Blitz' })).toHaveAttribute('aria-pressed', 'true'));
+    expect(calls.some((c) => c.init.method === 'PUT' && c.url.endsWith('/campaigns/NEW_HIRE_BLITZ/chase'))).toBe(true);
+    await userEvent.click(within(cardOf('Q4 APE Sprint')).getByRole('button', { name: 'Q4 APE Sprint' }));
+    expect(nav.push).toHaveBeenCalledWith('/campaigns/APE_SPRINT', { scroll: false });
+    const ended = screen.getByRole('button', { name: /Mid-Year Persistency Push/ });
+    expect(ended.querySelector('[data-chase]')).toBeNull();
+    await userEvent.click(ended);
+    expect(nav.push).toHaveBeenCalledWith('/campaigns/PERSISTENCY_PUSH', { scroll: false });
+  });
+
+  it('UI-108 the two kinds are one segmented control on a phone, and no sub-line is drawn there', async () => {
+    list();
+    await listReady();
+    const tabs = screen.getByRole('tablist');
+    expect(tabs).toHaveClass('max-md:rounded-pill', 'max-md:bg-card');
+    expect(within(tabs).getByRole('tab', { name: 'Seasonal' }).firstElementChild).toHaveClass('max-md:bg-navy');
+    expect(screen.getByRole('heading', { level: 1 }).nextElementSibling).toHaveClass('max-md:hidden');
   });
 });

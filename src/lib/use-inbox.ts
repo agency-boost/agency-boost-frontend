@@ -22,8 +22,11 @@ export interface InboxList {
   /** A read is in flight. The rows already shown stay shown while it is. */
   loading: boolean;
   load: (page: number) => Promise<void>;
-  /** Marks one read (`true`) or unread. Answers whether the server took it. */
-  setRead: (item: InboxItem, read: boolean) => Promise<boolean>;
+  /**
+   * Marks one read (`true`) or unread — or **every item of a run of repeats at once** (P18.95-T7 AC-4), which the
+   * list draws as one line. Answers whether the server took all of them.
+   */
+  setRead: (items: InboxItem | readonly InboxItem[], read: boolean) => Promise<boolean>;
   readAll: () => Promise<void>;
 }
 
@@ -48,12 +51,12 @@ export function useCanMark(): boolean {
   return me.permissions.includes('notification:mark_read') && !readOnly;
 }
 
-/** One row's read state, and the count it moves, written into a page. */
-function withRead(page: InboxPage, notificationId: string, readAt: string | null, unread: number): InboxPage {
+/** Rows' read states, by id, and the count they leave, written into a page. */
+function withRead(page: InboxPage, readAt: ReadonlyMap<string, string | null>, unread: number): InboxPage {
   return {
     ...page,
     unread: Math.max(0, unread),
-    items: page.items.map((item) => (item.notificationId === notificationId ? { ...item, readAt } : item)),
+    items: page.items.map((item) => (readAt.has(item.notificationId) ? { ...item, readAt: readAt.get(item.notificationId)! } : item)),
   };
 }
 
@@ -66,6 +69,10 @@ function withRead(page: InboxPage, notificationId: string, readAt: string | null
  * reader never waits on a round trip to see what they did; the answer then sets the row's `readAt` and
  * the whole inbox's count, and the count goes to the badge with the announcement (T2 AC-6). A write
  * that fails puts the row back (T3 AC-2: *leaves the row unread*) and says why.
+ *
+ * **The bell's count moves with the row** (P18.95-T1 AC-7): a mark announces its move as it is clicked —
+ * one fewer, one more, or none at all for *Mark all read* — marked `local`, so no list reads again on it;
+ * the answer's count settles it, and a refusal moves it back to what it was.
  *
  * **`listen`**: read the page again when the inbox changes somewhere else — the popover over
  * `/notifications`, the calendar's answer reading its notice. A list never re-reads on its own
@@ -81,6 +88,11 @@ export function useInbox(pageSize: number, { listen = false }: { listen?: boolea
   const [loading, setLoading] = useState(false);
   const page = useRef(1);
   const ticket = useRef(0);
+  /** The count as this list last held it: what *Mark all read* puts the badge back to if it is refused. */
+  const held = useRef<number | null>(null);
+  useEffect(() => {
+    held.current = inbox?.unread ?? null;
+  }, [inbox]);
 
   const load = useCallback(async (target: number) => {
     page.current = target;
@@ -99,39 +111,70 @@ export function useInbox(pageSize: number, { listen = false }: { listen?: boolea
     }
   }, [pageSize]);
 
-  const setRead = useCallback(async (item: InboxItem, read: boolean) => {
+  /*
+   * **One item, or a run of repeats** (P18.95-T7 AC-4): every item the mark changes moves at once, and the badge with
+   * them; the marks then go one after another, so the last answer's count is the inbox's own — each answer counts
+   * the writes before it — and is what the page and the badge settle on. An item the server refuses goes back as it
+   * was, and the count with it; the first refusal is said.
+   */
+  const setRead = useCallback(async (target: InboxItem | readonly InboxItem[], read: boolean) => {
     // Already so: nothing to send, and nothing for the count to move by.
-    if ((item.readAt !== null) === read) return true;
-    const id = item.notificationId;
+    const items = (Array.isArray(target) ? target : [target] as readonly InboxItem[])
+      .filter((item) => (item.readAt !== null) !== read);
+    if (items.length === 0) return true;
     const step = read ? -1 : 1;
+    const at = read ? new Date().toISOString() : null;
     setError(null);
-    setInbox((now) => now && withRead(now, id, read ? new Date().toISOString() : null, now.unread + step));
-    try {
-      const answer = read ? await markNotificationRead(id) : await markNotificationUnread(id);
-      setInbox((now) => now && withRead(now, id, answer.readAt, answer.unread));
-      announceInboxChanged({ unread: answer.unread, origin });
-      return true;
-    } catch (err) {
-      setInbox((now) => now && withRead(now, id, item.readAt, now.unread - step));
-      setError(toDisplayError(err));
-      return false;
+    setInbox((now) => now && withRead(now, new Map(items.map((item) => [item.notificationId, at])), now.unread + step * items.length));
+    // The badge moves now, not after the round trip (AC-7).
+    announceInboxChanged({ delta: step * items.length, origin, local: true });
+    const settled = new Map<string, string | null>();
+    let unread: number | null = null;
+    const refused: InboxItem[] = [];
+    let failure: ApiError | null = null;
+    for (const item of items) {
+      try {
+        const id = item.notificationId;
+        const answer = read ? await markNotificationRead(id) : await markNotificationUnread(id);
+        settled.set(id, answer.readAt);
+        unread = answer.unread;
+      } catch (err) {
+        refused.push(item);
+        failure ??= toDisplayError(err);
+      }
     }
+    for (const item of refused) settled.set(item.notificationId, item.readAt);
+    if (unread !== null) {
+      // The server's count after the last write it took, which no refusal changed.
+      const count = unread;
+      setInbox((now) => now && withRead(now, settled, count));
+      announceInboxChanged({ unread: count, origin });
+    } else {
+      setInbox((now) => now && withRead(now, settled, now.unread - step * refused.length));
+      announceInboxChanged({ delta: -step * refused.length, origin, local: true });
+    }
+    if (failure) setError(failure);
+    return refused.length === 0;
   }, [origin]);
 
   const readAll = useCallback(async () => {
     const at = new Date().toISOString();
+    const before = held.current;
     setError(null);
     setInbox((now) => now && {
       ...now,
       unread: 0,
       items: now.items.map((item) => (item.readAt === null ? { ...item, readAt: at } : item)),
     });
+    announceInboxChanged({ unread: 0, origin, local: true });
     let failure: ApiError | null = null;
     try {
       const answer = await markAllNotificationsRead();
       announceInboxChanged({ unread: answer.unread, origin });
     } catch (err) {
       failure = toDisplayError(err);
+      // Back to the count this list held; with none, the badge reads its own again.
+      announceInboxChanged(before === null ? { origin } : { unread: before, origin, local: true });
     }
     // The server's own times, and — after a failure — the rows as they really are (T4 AC-4). The
     // failure is said after the read, which would otherwise clear it.
@@ -142,7 +185,9 @@ export function useInbox(pageSize: number, { listen = false }: { listen?: boolea
   useEffect(() => {
     if (!listen) return;
     const changed = (event: Event) => {
-      if (inboxChangeOf(event).origin === origin) return;
+      const change = inboxChangeOf(event);
+      // Its own announcement, or the badge moving ahead of an answer: nothing new to read (AC-7).
+      if (change.origin === origin || change.local) return;
       void load(page.current);
     };
     window.addEventListener(INBOX_CHANGED, changed);

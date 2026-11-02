@@ -66,7 +66,7 @@ describe('demo accounts', () => {
 
   it('covers every role the product has, not only the ones with screens', () => {
     const roles = DEMO_ACCOUNTS.map((a) => a.role).join(' | ');
-    for (const role of ['Super Admin', 'KPM Owner', 'KPM Admin', 'Agency Builder', 'Associate AB', 'Agent']) {
+    for (const role of ['Super Admin', 'KPM Owner', 'KPM Admin', 'AB', 'AAB', 'Agent']) {
       expect(roles).toContain(role);
     }
   });
@@ -75,7 +75,7 @@ describe('demo accounts', () => {
     // Each of these exists because some behaviour is only visible through it. A cast
     // that is only one account per role cannot demonstrate any of them.
     const roles = DEMO_ACCOUNTS.map((a) => a.role);
-    expect(roles).toContain('Associate AB · leads nobody'); // OD-23
+    expect(roles).toContain('AAB · leads nobody'); // OD-23; the badge's name since P18.95-T9 AC-1
     expect(roles).toContain('Waiting on a leader'); // the join gate
     expect(roles).toContain('Registered, asked nobody'); // the untagged pool
     expect(roles).toContain('Removed'); // what survives leaving

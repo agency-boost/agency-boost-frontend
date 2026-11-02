@@ -3,9 +3,11 @@
 import { useId } from 'react';
 import { Skeleton, SkeletonBar } from '@/components/ui/skeleton';
 import { TippedGlyph } from '@/components/ui/tipped-glyph';
+import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
+import { kpmComplianceMessages } from '@/i18n/messages/kpm-compliance';
 import { cn } from '@/lib/cn';
 import {
-  COMPLIANCE_LABELS, dayWords, OWN_COPY, pillOf, PROTOTYPE_COPY, sortRows,
+  complianceLabels, dayWords, pillOf, sortRows,
   type ComplianceCategory, type ComplianceRow, type ComplianceSection, type ComplianceUnit, type PillWords,
   type SortDirection, type TreeKind,
 } from '@/lib/kpm-compliance';
@@ -31,7 +33,8 @@ export interface TreeContext {
  * the order chosen. Events count *joined*, campaigns *chasing* (`:3735`, `:3911`).
  *
  * Each section is a `section` named by its heading and each card's title a heading under it, so a screen reader
- * can move between agencies and units; every name is a link (D-drill, `PersonLink`).
+ * can move between agencies and units; every name is a link (D-drill, `PersonLink`). Its words are the reader's
+ * (P18.98-T4; `kpmComplianceMessages`), its days the figures' language; every name is as the office has it.
  */
 export function ComplianceTree({ sections, direction, context }: {
   sections: readonly ComplianceSection[];
@@ -49,12 +52,13 @@ export function ComplianceTree({ sections, direction, context }: {
 
 /** The figure a card or section header shows: *"{n} / {m}"* strong, then its verb (`:3698`). */
 function Total({ done, of, verb, className }: { done: number; of: number; verb: string; className?: string }) {
+  const t = useMessages(kpmComplianceMessages);
   // Over nobody — a card whose people the item does not apply to — never *0 / 0*: the chips' dash, named the same way.
   if (of === 0) {
     return (
       <span className={cn('ml-auto whitespace-nowrap text-sm text-muted', className)}>
         <span aria-hidden="true"><strong className="font-bold text-navy">—</strong> {verb}</span>
-        <span className="sr-only">{OWN_COPY.noRate}</span>
+        <span className="sr-only">{t.noRate}</span>
       </span>
     );
   }
@@ -66,8 +70,8 @@ function Total({ done, of, verb, className }: { done: number; of: number; verb: 
 }
 
 function AgencySection({ section, direction, context }: { section: ComplianceSection; direction: SortDirection; context: TreeContext }) {
+  const t = useMessages(kpmComplianceMessages);
   const headingId = useId();
-  const verb = PROTOTYPE_COPY.verb[context.kind];
   return (
     <section aria-labelledby={headingId} className="mb-6 last:mb-0" data-section={section.head.membershipId}>
       {/* `.ab-section-header` (`:144`): the name, its AB tag, the agency's total, on the navy rule. */}
@@ -75,8 +79,8 @@ function AgencySection({ section, direction, context }: { section: ComplianceSec
         <h3 id={headingId} className="min-w-0 break-words font-display text-md font-bold text-navy">
           <PersonLink person={section.head} />
         </h3>
-        <RoleTag kind="AB">{PROTOTYPE_COPY.tagAb}</RoleTag>
-        <Total done={section.done} of={section.of} verb={`${verb} ${PROTOTYPE_COPY.overall}`} />
+        <RoleTag kind="AB">{t.tagAb}</RoleTag>
+        <Total done={section.done} of={section.of} verb={t.verbOverall({ kind: context.kind })} />
       </div>
       {section.units.map((unit) => (
         <UnitCard key={unit.head.membershipId} unit={unit} direction={direction} context={context} />
@@ -86,8 +90,9 @@ function AgencySection({ section, direction, context }: { section: ComplianceSec
 }
 
 function UnitCard({ unit, direction, context }: { unit: ComplianceUnit; direction: SortDirection; context: TreeContext }) {
+  const t = useMessages(kpmComplianceMessages);
   const rows = sortRows(unit.rows, context.kind, direction);
-  const columns = context.kind === 'status' ? null : PROTOTYPE_COPY.columns[context.kind];
+  const columns = context.kind === 'status' ? null : t.columns[context.kind];
   return (
     // No `overflow-hidden` (the prototype's `.unit-card`, `:153`): it would clip a tooltip's bubble opened from a cell —
     // the override's marker, an expired activation's end — so the header rounds its own top corners instead, and no
@@ -97,17 +102,17 @@ function UnitCard({ unit, direction, context }: { unit: ComplianceUnit; directio
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-t-[9px] border-b border-hairline bg-base px-4 py-2.5">
         {/* The link holds *'s Unit* too, so its new-tab hint follows the whole title rather than splitting it. */}
         <h4 className="min-w-0 break-words text-base font-bold text-navy">
-          <PersonLink person={unit.head}>{`${unit.head.name}${PROTOTYPE_COPY.unitOf}`}</PersonLink>
+          <PersonLink person={unit.head}>{t.unitOf({ name: unit.head.name })}</PersonLink>
         </h4>
         <RoleTag kind={unit.rung}>{unit.rung}</RoleTag>
-        <Total done={unit.done} of={unit.of} verb={PROTOTYPE_COPY.verb[context.kind]} />
+        <Total done={unit.done} of={unit.of} verb={t.verb({ kind: context.kind })} />
       </div>
       {columns && (
         // `.unit-columns-label` (`:165-166`): drawn for the eye; each cell names its own column for a screen reader.
         <div aria-hidden="true" className={cn(ROW, 'bg-base py-1.5')}>
           <div className={NAME} />
-          <div className={cn(COLUMN, LABEL)}>{columns[0]}</div>
-          <div className={cn(COLUMN, LABEL)}>{columns[1]}</div>
+          <div className={cn(COLUMN, LABEL)}>{columns.first}</div>
+          <div className={cn(COLUMN, LABEL)}>{columns.second}</div>
         </div>
       )}
       <ul className="m-0 list-none p-0">
@@ -116,7 +121,7 @@ function UnitCard({ unit, direction, context }: { unit: ComplianceUnit; directio
             <div className={cn(NAME, 'text-base text-navy')}>
               <PersonLink person={row} className="break-words" />
               {/* The space the prototype writes between the name and its tag (`:3681`). */}
-              {row.personal && <>{' '}<RoleTag kind="personal">{PROTOTYPE_COPY.personal}</RoleTag></>}
+              {row.personal && <>{' '}<RoleTag kind="personal">{t.personal}</RoleTag></>}
             </div>
             {context.kind === 'status' ? <StatusCells row={row} context={context} /> : <TwoColumns row={row} context={context} />}
           </li>
@@ -139,15 +144,16 @@ const LABEL = 'text-2xs font-bold uppercase tracking-wide text-muted';
 
 /** The single-column categories: the pill, and the day it was done — only when done (`:3027-3028`). */
 function StatusCells({ row, context }: { row: ComplianceRow; context: TreeContext }) {
+  const figures = useFigureLanguage();
   const { cell } = row;
-  const map = COMPLIANCE_LABELS[context.category as 'training' | 'goals' | 'activity' | 'activation'];
+  const map = complianceLabels(useLanguage())[context.category as 'training' | 'goals' | 'activity' | 'activation'];
   const words = pillOf(map, cell.status);
-  const day = cell.done === true && cell.on ? dayWords(cell.on, context.today) : null;
+  const day = cell.done === true && cell.on ? dayWords(cell.on, context.today, figures) : null;
   return (
     <>
       <div className="sm:ml-auto">
         {context.category === 'activation' && cell.status === 'overdue' && cell.endedOn
-          ? <ExpiredPill words={words} ended={dayWords(cell.endedOn, context.today)} />
+          ? <ExpiredPill words={words} ended={dayWords(cell.endedOn, context.today, figures)} />
           : <CompliancePill words={words} />}
       </div>
       {/*
@@ -167,7 +173,8 @@ function StatusCells({ row, context }: { row: ComplianceRow; context: TreeContex
  * both**, so the bubble is not read again as a description.
  */
 function ExpiredPill({ words, ended }: { words: PillWords; ended: string }) {
-  const sentence = OWN_COPY.expiredName(ended);
+  const t = useMessages(kpmComplianceMessages);
+  const sentence = t.expiredName({ date: ended });
   return (
     <TippedGlyph
       glyph={words.label}
@@ -185,28 +192,30 @@ function ExpiredPill({ words, ended }: { words: PillWords; ended: string }) {
  * control (D-override), and by nothing else.
  */
 function TwoColumns({ row, context }: { row: ComplianceRow; context: TreeContext }) {
-  const columns = PROTOTYPE_COPY.columns[context.kind as 'events' | 'campaigns'];
+  const t = useMessages(kpmComplianceMessages);
+  const labels = complianceLabels(useLanguage());
+  const columns = t.columns[context.kind as 'events' | 'campaigns'];
   const first = context.kind === 'events'
-    ? pillOf(COMPLIANCE_LABELS.events.joined, row.cell.status)
-    : pillOf(COMPLIANCE_LABELS.campaigns.chasing, row.cell.status);
+    ? pillOf(labels.events.joined, row.cell.status)
+    : pillOf(labels.campaigns.chasing, row.cell.status);
   // A past event's *—* for a member nobody has confirmed yet is not the *—* of somebody outside the audience: a
   // screen reader hears which (ADR-0062 §2, form 4); the eye sees the prototype's dash.
   const awaiting = context.kind === 'events' && row.cell.status === 'unconfirmed';
   return (
     <>
       <div className={COLUMN}>
-        <span className="sr-only">{columns[0]}: </span>
+        <span className="sr-only">{columns.first}: </span>
         {awaiting ? (
           <>
             <span aria-hidden="true"><CompliancePill words={first} /></span>
-            <span className="sr-only">{OWN_COPY.awaitingConfirmation}</span>
+            <span className="sr-only">{t.awaitingConfirmation}</span>
           </>
         ) : <CompliancePill words={first} />}
       </div>
       <div className={COLUMN}>
-        <span className="sr-only">{columns[1]}: </span>
+        <span className="sr-only">{columns.second}: </span>
         {context.kind === 'events' ? (
-          <CompliancePill words={pillOf(COMPLIANCE_LABELS.events.feedback, row.cell.second)} />
+          <CompliancePill words={pillOf(labels.events.feedback, row.cell.second)} />
         ) : context.campaign ? (
           <AchievedCell
             row={{ membershipId: row.membershipId, name: row.name, cell: row.cell }}
@@ -215,7 +224,7 @@ function TwoColumns({ row, context }: { row: ComplianceRow; context: TreeContext
             onChanged={context.onChanged}
           />
         ) : (
-          <CompliancePill words={pillOf(COMPLIANCE_LABELS.campaigns.achieved, null)} />
+          <CompliancePill words={pillOf(labels.campaigns.achieved, null)} />
         )}
       </div>
     </>
@@ -227,8 +236,9 @@ function TwoColumns({ row, context }: { row: ComplianceRow; context: TreeContext
  * above it: a shape, not figures. One live region, so a screen reader hears one sentence.
  */
 export function TreeSkeleton({ withChips = false }: { withChips?: boolean }) {
+  const t = useMessages(kpmComplianceMessages);
   return (
-    <Skeleton label={OWN_COPY.loading}>
+    <Skeleton label={t.loading}>
       {withChips && (
         <div className="mb-4 flex flex-wrap gap-2.5">
           {[0, 1, 2, 3, 4, 5].map((i) => (

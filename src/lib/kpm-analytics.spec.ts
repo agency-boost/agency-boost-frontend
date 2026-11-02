@@ -2,10 +2,15 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { stubFetch } from '@test/harness';
 import { MOC_MET, MOC_NOT_MET, MOC_UNKNOWN, analyticsView, rp } from '@test/kpm-analytics-fixtures';
 import {
-  activeWords, agentsSub, analyticsPeriodFrom, chartBars, criterionValue, criterionVerdict,
-  headName, leadsWords, manpowerSub, mocButtonName, moneyWords, orgTreeHref, OWN_COPY, periodWords, PROTOTYPE_COPY,
-  rateWords, readKpmAnalytics, shortMonth, unitDashboardHref,
+  activeWords, agentsSub, analyticsPeriodFrom, chartBars, CLUB_TERM_KEYS, clubTermFirsts, criterionValue, criterionVerdict,
+  headName, leadsWords, manpowerSub, mocButtonName, mocTermName, mocTip, moneyWords, orgTreeHref, OWN_COPY, periodWords,
+  PROTOTYPE_COPY, rateWords, readKpmAnalytics, shortMonth, unitDashboardHref,
 } from './kpm-analytics';
+import { TERMS } from './terms';
+
+/** A row's *Producing* figures as the server serves them: the count, its share, and the manpower beside it. */
+const producing = (activeAgents: number | null, activePct: number | null, total: number) =>
+  ({ activeAgents, activePct, manpower: { aab: 0, agents: total, total } });
 
 describe('KPM analytics’ client (P18-T2)', () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -31,12 +36,18 @@ describe('KPM analytics’ client (P18-T2)', () => {
     ]);
   });
 
-  it('P18-T2 AC-3 writes an APE cell as the prototype does: the figure, "of {target} target" and the pill', () => {
+  it('P18-T2 AC-3, P18.97-T3 AC-1, AC-3 writes an APE cell: the figure and "of {target} target" compact, the pill whole', () => {
     expect(moneyWords({ achievedMinor: rp(620), targetMinor: rp(1500), pct: 41 }, 70)).toEqual({
-      actual: 'Rp 620.000.000',
+      actual: 'Rp 620 jt',
       uploaded: true,
-      of: 'of Rp 1.500.000.000 target',
+      of: 'of Rp 1,5 M target',
       pill: { text: '41%', tone: 'alert' },
+    });
+  });
+
+  it('P18.97-T3 AC-3 writes the table’s Rp 5.672.500.000 as Rp 5,7 M (UI-019): compact in a table too', () => {
+    expect(moneyWords({ achievedMinor: rp(5_672.5), targetMinor: rp(6_000), pct: 95 }, 70)).toMatchObject({
+      actual: 'Rp 5,7 M', of: 'of Rp 6 M target', pill: { text: '95%', tone: 'success' },
     });
   });
 
@@ -51,17 +62,17 @@ describe('KPM analytics’ client (P18-T2)', () => {
 
   it('P18-T2 AC-3 never writes 0 for want of data: Not uploaded yet, No goal set, and no pill', () => {
     expect(moneyWords({ achievedMinor: null, targetMinor: rp(75), pct: null }, 70)).toEqual({
-      actual: 'Not uploaded yet', uploaded: false, of: 'of Rp 75.000.000 target', pill: null,
+      actual: 'Not uploaded yet', uploaded: false, of: 'of Rp 75 jt target', pill: null,
     });
     expect(moneyWords({ achievedMinor: rp(10), targetMinor: null, pct: null }, 70).of).toBe('No goal set');
     expect(rateWords({ count: 0, of: 0, pct: null })).toEqual({ main: '0 / 0', pct: '—' });
-    expect(activeWords(null, 31)).toEqual({ main: 'Not uploaded yet', pct: null });
-    expect(activeWords(0, 0)).toEqual({ main: '0 / 0', pct: '—' });
+    expect(activeWords(producing(null, null, 31))).toEqual({ main: 'Not uploaded yet', pct: null });
+    expect(activeWords(producing(0, null, 0))).toEqual({ main: '0 / 0', pct: '—' });
   });
 
   it('P18-T2 AC-3 writes Coached, Active, Total leads and Manpower as the prototype does (:3240, :3341-3343)', () => {
     expect(rateWords({ count: 6, of: 31, pct: 19 })).toEqual({ main: '6 / 31', pct: '19%' });
-    expect(activeWords(21, 31)).toEqual({ main: '21 / 31', pct: '68%' });
+    expect(activeWords(producing(21, 68, 31))).toEqual({ main: '21 / 31', pct: '68%' });
     expect(leadsWords({ sales: 15, salesPotential: 9, recruit: 8, recruitPotential: 5 })).toEqual({
       total: 23,
       sub: '15 sales (9 potential) · 8 recruit (5 potential)',
@@ -74,8 +85,48 @@ describe('KPM analytics’ client (P18-T2)', () => {
     expect(PROTOTYPE_COPY.unitComparisonSub(8)).toBe('All 8 ABs, this year — peer benchmark, always shown at group level');
     expect(PROTOTYPE_COPY.total(8)).toBe('Total — all 8 ABs');
     expect(PROTOTYPE_COPY.total(1)).toBe('Total — all 1 AB');
-    expect(PROTOTYPE_COPY.headActive('this_month')).toBe('Active this month');
-    expect(PROTOTYPE_COPY.headActive('previous_month')).toBe('Active last month');
+  });
+
+  it('P18.97-T3 AC-9 names the column for what it counts — Producing this month, Producing last month (UI-021)', () => {
+    expect(PROTOTYPE_COPY.headActive('this_month')).toBe('Producing this month');
+    expect(PROTOTYPE_COPY.headActive('previous_month')).toBe('Producing last month');
+    // Never the Overview's logging card's word, nor the prototype's *Active* (ADR-0127, ADR-0176 §3).
+    for (const period of ['this_month', 'previous_month'] as const) expect(PROTOTYPE_COPY.headActive(period)).not.toMatch(/Active|logged/);
+  });
+
+  it('P18.97-T3 AC-10 writes the server’s share and divides nothing: 23 of 40 served as 58 reads 58%, never 57%', () => {
+    expect(activeWords(producing(23, 58, 40))).toEqual({ main: '23 / 40', pct: '58%' });
+    // Whatever the screen could divide, it writes what it was served (invariant §7).
+    expect(activeWords(producing(23, 41, 40)).pct).toBe('41%');
+    expect(activeWords(producing(5, null, 0)).pct).toBe('—');
+  });
+
+  it('P18.97-T3 AC-4 the total’s APE says what it counts: Current members only', () => {
+    expect(OWN_COPY.currentMembersOnly).toBe('Current members only');
+    // Its ⓘ still names the sum it leaves out.
+    expect(OWN_COPY.leaversLeftOut('Rp 98 jt')).toBe('Leaves out Rp 98 jt produced this year by members who have since left; the Overview’s year counts it.');
+  });
+
+  it('P18.97-T3 AC-8 the MOC ⓘ says what MOC is — the glossary’s line — above the company’s rules', () => {
+    expect(mocTermName).toBe('What is MOC?');
+    expect(mocTip('AAB: Net APE ≥ Rp 200 jt.')).toBe(`${TERMS.MOC.definition}\n\nAAB: Net APE ≥ Rp 200 jt.`);
+    // A company with no MOC rule still has the term explained.
+    expect(mocTip('')).toBe(TERMS.MOC.definition);
+  });
+
+  it('P18.97-T3 AC-8 each club’s ⓘ goes on the first badge that shows it, read from the badge’s own words', () => {
+    const row = (id: string, club: { code: string; label: string } | null) =>
+      ({ head: { membershipId: id, name: id, isReader: false, leads: true }, club });
+    const firsts = clubTermFirsts([
+      row('a', null),
+      row('b', { code: 'STAR_CLUB', label: 'Star Club' }),
+      row('c', { code: 'STAR_CLUB', label: 'Star Club' }),
+      row('d', { code: 'CHAIRMANS_CLUB', label: "Chairman's Club" }),
+      row('e', { code: 'GOLD', label: 'Gold Circle' }),
+      row('f', { code: 'ELITE_CLUB', label: 'Elite Club' }),
+    ]);
+    expect([...firsts]).toEqual([['b', 'STAR_CLUB'], ['d', 'CHAIRMANS_CLUB'], ['f', 'ELITE_CLUB']]);
+    expect(CLUB_TERM_KEYS).toEqual(['STAR_CLUB', 'ELITE_CLUB', 'CHAIRMANS_CLUB']);
   });
 
   it('D-units marks the reader’s own agency (you), as :3108 does', () => {
@@ -106,8 +157,13 @@ describe('KPM analytics’ client (P18-T2)', () => {
   });
 
   it('P18-T2 AC-4 writes each criterion in its own unit, and never Gap for a figure nobody has', () => {
-    expect(criterionValue('NET_APE', rp(600))).toBe('Rp 600.000.000');
+    expect(criterionValue('NET_APE', rp(600))).toBe('Rp 600 jt');
+    // Compact only where that loses nothing: a figure it would round is written in full (ADR-0167 §1).
+    expect(criterionValue('NET_APE', rp(599.96))).toBe('Rp 599.960.000');
+    // A persistency keeps the places it has and no ,0 (P18.97-T3 AC-2): the rule's 75%, the carrier's 74,96%.
     expect(criterionValue('MOC_PERSISTENCY', 75)).toBe('75%');
+    expect(criterionValue('MOC_PERSISTENCY', 75.55)).toBe('75,55%');
+    expect(criterionValue('MOC_PERSISTENCY', 74.96)).toBe('74,96%');
     expect(criterionValue('MONTHLY2_AA_DU', 4)).toBe('4');
     expect(criterionValue('DIRECT_AB_COUNT', 0)).toBe('0');
     expect(criterionValue('MOC_PERSISTENCY', null)).toBe('—');
@@ -117,10 +173,10 @@ describe('KPM analytics’ client (P18-T2)', () => {
   });
 
   it('P18-T2 AC-4 says the period a criterion was read over as a sentence would', () => {
-    expect(periodWords('2026-09')).toBe('September 2026');
-    expect(periodWords('2026-08..2026-09')).toBe('August – September 2026');
-    expect(periodWords('2025-12/2026-01')).toBe('December 2025 – January 2026');
-    expect(periodWords('2026-09..2026-09')).toBe('September 2026');
+    expect(periodWords('2026-09')).toBe('Sep 2026');
+    expect(periodWords('2026-08..2026-09')).toBe('Agu – Sep 2026');
+    expect(periodWords('2025-12/2026-01')).toBe('Des 2025 – Jan 2026');
+    expect(periodWords('2026-09..2026-09')).toBe('Sep 2026');
     expect(periodWords('Year to date')).toBe('Year to date');
   });
 
@@ -132,10 +188,11 @@ describe('KPM analytics’ client (P18-T2)', () => {
       { month: '2026-10', apeMinor: 0 },
     ]);
     expect(bars.map((b) => b.height)).toEqual([50, null, 100, 0]);
-    expect(bars.map((b) => b.value)).toEqual(['Rp 400.000.000', 'Not uploaded yet', 'Rp 800.000.000', 'Rp 0']);
+    expect(bars.map((b) => b.value)).toEqual(['Rp 400 jt', 'Not uploaded yet', 'Rp 800 jt', 'Rp 0']);
     expect(chartBars([{ month: '2026-08', apeMinor: null }])[0].height).toBeNull();
     expect(shortMonth('2026-03')).toBe('Mar');
-    expect(shortMonth('2025-12')).toBe('Dec');
+    expect(shortMonth('2025-12')).toBe('Des');
+    expect(shortMonth('2026-10')).toBe('Okt');
   });
 
   it('D-copy: the strings this module writes itself use none of OD-39’s six words and name no phase', () => {
@@ -143,5 +200,74 @@ describe('KPM analytics’ client (P18-T2)', () => {
     for (const text of own) {
       expect(text).not.toMatch(/\boffice\b|\bKPM\b|reports? to|tagged to|untagged|unassigned|phase/i);
     }
+  });
+});
+
+/**
+ * **OD-235, clarified 2026-10-29**: *Producing*'s count is over the same members as its percent — the share's base the
+ * server serves beside it (`activeOf`): a past month's members, a leaver since included — so *4 / 5 · 80%*, never
+ * *4 / 3 · 80%*. *Manpower* beside it stays today's.
+ */
+describe('OD-235 the Producing cell over the share’s own base', () => {
+  const based = (activeAgents: number | null, activePct: number | null, activeOf: number, total: number) =>
+    ({ activeAgents, activePct, activeOf, manpower: { aab: 0, agents: total, total } });
+
+  it('OD-235 writes a past month’s count over the base it was served, never over today’s manpower', () => {
+    expect(activeWords(based(4, 80, 5, 3))).toEqual({ main: '4 / 5', pct: '80%' });
+    expect(activeWords(based(4, 80, 5, 3)).main).not.toBe('4 / 3');
+  });
+
+  it('OD-235 writes this month’s over today’s manpower, which is its base', () => {
+    expect(activeWords(based(21, 68, 31, 31))).toEqual({ main: '21 / 31', pct: '68%' });
+  });
+
+  it('OD-235 keeps Not uploaded yet and the dash over nobody as they were', () => {
+    expect(activeWords(based(null, null, 5, 3))).toEqual({ main: 'Not uploaded yet', pct: null });
+    expect(activeWords(based(0, null, 0, 0))).toEqual({ main: '0 / 0', pct: '—' });
+  });
+});
+
+/**
+ * **P18.98-T4 the module's words in Indonesian** (`i18n/messages/kpm-analytics.ts`): the functions outside React write
+ * the reader's words, and their figures in the figures' language — each passed apart, as the screen passes them.
+ */
+describe('P18.98-T4 KPM analytics’ words, language by language', () => {
+  it('P18.98-T4 writes an APE cell in Indonesian words and figures: dari target Rp 1,5 M, Belum diunggah, Goal belum diatur', () => {
+    expect(moneyWords({ achievedMinor: rp(620), targetMinor: rp(1500), pct: 41 }, 70, 'id', 'id')).toEqual({
+      actual: 'Rp 620 jt', uploaded: true, of: 'dari target Rp 1,5 M', pill: { text: '41%', tone: 'alert' },
+    });
+    expect(moneyWords({ achievedMinor: null, targetMinor: null, pct: null }, 70, 'id', 'id'))
+      .toMatchObject({ actual: 'Belum diunggah', of: 'Goal belum diatur' });
+  });
+
+  it('P18.98-T4 keeps words and figures apart: English words with Indonesian figures, as an unchosen reader reads them', () => {
+    expect(moneyWords({ achievedMinor: rp(620), targetMinor: rp(1500), pct: 41 }, 70, 'en', 'id').of).toBe('of Rp 1,5 M target');
+    expect(moneyWords({ achievedMinor: rp(620), targetMinor: rp(1500), pct: 41 }, 70, 'en', 'en').of).toBe('of IDR 1.5B target');
+  });
+
+  it('P18.98-T4 writes the lines and names in Indonesian, the roles kept and a kept noun in its English plural', () => {
+    expect(leadsWords({ sales: 15, salesPotential: 9, recruit: 8, recruitPotential: 5 }, 'id').sub)
+      .toBe('15 penjualan (9 potensial) · 8 rekrut (5 potensial)');
+    expect(manpowerSub({ aab: 2, agents: 29, total: 31 }, 'id')).toBe('2 AAB · 29 Agents');
+    expect(agentsSub({ aab: 0, agents: 1, total: 1 }, 'id')).toBe('1 Agent');
+    expect(headName({ membershipId: 'm', name: 'Wilson Tanoto', isReader: true, leads: true }, 'id')).toBe('Wilson Tanoto (Anda)');
+    expect(activeWords(producing(null, null, 31), 'id')).toEqual({ main: 'Belum diunggah', pct: null });
+  });
+
+  it('P18.98-T4 names MOC’s button and its verdicts in Indonesian, the server’s sentence as it came', () => {
+    expect(mocButtonName(MOC_MET, 'Hendra Wibowo', 'id')).toBe('Syarat MOC terpenuhi untuk Hendra Wibowo');
+    expect(mocButtonName(MOC_NOT_MET, 'Budi Santoso', 'id')).toBe('Syarat MOC belum terpenuhi untuk Budi Santoso');
+    expect(mocButtonName(MOC_UNKNOWN, 'Wilson Tanoto', 'id')).toBe('MOC untuk Wilson Tanoto — Not uploaded yet: Rolling Persistency — DU/DG.');
+    expect([criterionVerdict(true, 'id'), criterionVerdict(false, 'id'), criterionVerdict(null, 'id')])
+      .toEqual(['Terpenuhi', 'Gap', 'Belum diunggah']);
+  });
+
+  it('P18.98-T4 writes a criterion, a period and a bar in the figures’ language alone', () => {
+    expect(criterionValue('NET_APE', rp(600), 'en')).toBe('IDR 600M');
+    expect(criterionValue('MOC_PERSISTENCY', 74.96, 'en')).toBe('74.96%');
+    expect(periodWords('2026-08..2026-09', 'en')).toBe('Aug – Sep 2026');
+    expect(shortMonth('2026-10', 'en')).toBe('Oct');
+    expect(chartBars([{ month: '2026-08', apeMinor: null }, { month: '2026-09', apeMinor: rp(800) }], 'id', 'en')
+      .map((b) => b.value)).toEqual(['Belum diunggah', 'IDR 800M']);
   });
 });

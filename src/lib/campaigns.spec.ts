@@ -5,23 +5,85 @@ import { describe, expect, it } from 'vitest';
 import { parse, renderable, sourceFiles, SRC } from '@test/copy-scan';
 import { APE, campaign, CHALLENGE, chased, LIST, MDRT, NEW_HIRE, PERSISTENCY, PROMO_AGENT, PUSH, SPRINT } from '@test/campaigns-fixtures';
 import {
-  chasedToast, figureWords, kindLabel, POSTER_COLORS, progressWords, requirementsLine, requirementWords, rowSubline,
-  seasonalSections, statusWords, structuralSections, unchasedToast,
+  chasedToast, figureWords, kindLabel, OWN_COPY, POSTER_COLORS, progressWords, ratioUnitsOf, requirementsLine, requirementWords, rowSubline,
+  seasonalSections, showsChase, statusWords, structuralSections, unchasedToast,
 } from './campaigns';
 
 describe('a campaign in words (P18.5-T7 AC-3, P18.5-T8 AC-6)', () => {
   it('P18.5-T7 AC-3 money is rupiah from sen, never raw sen (invariant §9, X-68’s rule)', () => {
-    expect(figureWords(50_000_000_000, 'idr_minor')).toBe('Rp 500.000.000');
+    expect(figureWords(50_000_000_000, 'idr_minor')).toBe('Rp 500 jt');
     expect(figureWords(90, 'percentage')).toBe('90%');
     expect(figureWords(3, 'count')).toBe('3');
-    expect(figureWords(0.15, 'ratio')).toBe('0.15');
+    expect(figureWords(0.15, 'ratio')).toBe('0,15');
   });
 
-  it('P18.5-T7 AC-3 the card’s line is each requirement in words, joined by " | " (`:8031-8034`)', () => {
-    expect(requirementsLine([APE(500), NEW_HIRE(1)])).toBe('APE achieved Rp 500.000.000 | New Hire 1');
-    expect(requirementWords(PERSISTENCY)).toBe('Rolling persistency 90%');
-    expect(requirementWords({ ...NEW_HIRE(2), comparator: 'lt' })).toBe('New Hire under 2');
+  it('P18.95-T1 AC-2, AC-3 a requirement is compact, never rounded into another rule, and in id-ID', () => {
+    // Rp 2,45 M would round to Rp 2,5 M: a different requirement. It is written in full instead.
+    expect(figureWords(245_000_000_000, 'idr_minor')).toBe('Rp 2.450.000.000');
+    expect(figureWords(240_000_000_000, 'idr_minor')).toBe('Rp 2,4 M');
+    expect(figureWords(92.5, 'percentage')).toBe('92,5%');
+    expect(figureWords(1_250, 'count')).toBe('1.250');
+  });
+
+  it('P18.97-T3 AC-2 a threshold keeps the places it was set with, and no ,0: 90%, 92,5%, 75,55%', () => {
+    expect(figureWords(90, 'percentage')).toBe('90%');
+    expect(figureWords(92.5, 'percentage')).toBe('92,5%');
+    expect(figureWords(75.55, 'percentage')).toBe('75,55%');
+    // A ratio's threshold is written as the ratio is, two places; a balance's in points.
+    expect(figureWords(0.3, 'ratio')).toBe('0,30');
+    expect(figureWords(30, 'percentage_points')).toBe('±30 points');
+  });
+
+  it('P18.95-T10 AC-3 the client’s line: Needs: Rp 16 jt APE + 3 new hires', () => {
+    expect(OWN_COPY.needs).toBe('Needs:');
+    expect(`${OWN_COPY.needs} ${requirementsLine([APE(16), NEW_HIRE(3)])}`).toBe('Needs: Rp 16 jt APE + 3 new hires');
+  });
+
+  it('P18.95-T10 AC-3 APE only, new hires only, both: each its own words, the figure first, joined by " + "', () => {
+    expect(requirementsLine([APE(500)])).toBe('Rp 500 jt APE');
+    expect(requirementsLine([NEW_HIRE(3)])).toBe('3 new hires');
+    expect(requirementsLine([NEW_HIRE(1)])).toBe('1 new hire');
+    expect(requirementsLine([APE(1200), NEW_HIRE(6)])).toBe('Rp 1,2 M APE + 6 new hires');
     expect(requirementsLine([])).toBe('');
+  });
+
+  it('P18.95-T10 AC-3 a threshold compact writing would round is written in full, never as another rule', () => {
+    // Rp 16,25 jt would read Rp 16,3 jt — a different requirement.
+    expect(requirementsLine([APE(16.25), NEW_HIRE(3)])).toBe('Rp 16.250.000 APE + 3 new hires');
+    expect(requirementWords(APE(2450))).toBe('Rp 2.450.000.000 APE');
+  });
+
+  it('P18.95-T10 AC-3 every campaign-evaluable count has its noun; a comparison other than at least is said', () => {
+    const count = (metricKey: string, value: number) => ({ ...NEW_HIRE(value), metricKey, metricName: metricKey });
+    expect(requirementWords(count('NEW_ACTIVE_AGENTS', 2))).toBe('2 new active agents');
+    expect(requirementWords(count('MAA_COUNT_IN_UNIT', 5))).toBe('5 active agents in unit');
+    expect(requirementWords(count('MAA_COUNT_IN_UNIT', 1))).toBe('1 active agent in unit');
+    expect(requirementWords(count('CASCADE_ACTIVITY_TOUCHES', 40))).toBe('40 goal activities');
+    expect(requirementWords(PERSISTENCY)).toBe('90% rolling persistency');
+    expect(requirementWords({ ...NEW_HIRE(2), comparator: 'lt' })).toBe('under 2 new hires');
+    expect(requirementWords({ ...NEW_HIRE(2), comparator: 'gt' })).toBe('more than 2 new hires');
+    expect(requirementWords({ ...APE(500), comparator: 'lte' })).toBe('at most Rp 500 jt APE');
+    expect(requirementWords({ ...NEW_HIRE(3), comparator: 'eq' })).toBe('exactly 3 new hires');
+  });
+
+  it('P18.95-T10 AC-3 a ratio, the balance and a metric with no noun keep "{name} {target}"', () => {
+    const ratio = { ...PERSISTENCY, metricKey: 'SELLING_SUCCESS_RATE', metricName: 'Selling success rate', value: 0.15, unit: 'ratio' };
+    const balance = {
+      ...PERSISTENCY, metricKey: 'SELLING_RECRUITMENT_BALANCE', metricName: 'Selling vs Recruitment balance', comparator: 'lte' as const,
+      value: 30, unit: 'percentage_points',
+    };
+    expect(requirementWords(ratio)).toBe('Selling success rate 0,15');
+    expect(requirementWords(balance)).toBe('Selling vs Recruitment balance at most ±30 points');
+    expect(requirementWords(APE(600, { metricKey: 'NET_APE', metricName: 'Net APE', measured: false }))).toBe('Net APE Rp 600 jt');
+    expect(requirementsLine([APE(16), ratio])).toBe('Rp 16 jt APE + Selling success rate 0,15');
+  });
+
+  it('P18.95-T10 AC-2 the chase is drawn only while the campaign has not ended, and only where the reader may chase', () => {
+    expect(showsChase(SPRINT, { chase: true })).toBe(true);
+    expect(showsChase(CHALLENGE, { chase: true })).toBe(true);
+    expect(showsChase(PUSH, { chase: true })).toBe(false);
+    expect(showsChase({ chaseBlocked: 'not_eligible' }, { chase: true })).toBe(true);
+    expect(showsChase(SPRINT, { chase: false })).toBe(false);
   });
 
   it('P18.5-T7 AC-3 the status tag: the phase for a seasonal campaign, Ongoing for a structural one', () => {
@@ -31,12 +93,18 @@ describe('a campaign in words (P18.5-T7 AC-3, P18.5-T8 AC-6)', () => {
     expect(statusWords(MDRT)).toBe('Ongoing');
   });
 
-  it('P18.5-T7 AC-6 the Summary row’s kindLabel and sub-line (`:6233-6243`)', () => {
+  it('P18.5-T7 AC-6 the Summary row’s kindLabel (`:6233-6235`)', () => {
     expect(kindLabel(SPRINT)).toBe('Running');
     expect(kindLabel(CHALLENGE)).toBe('Upcoming');
     expect(kindLabel(PROMO_AGENT)).toBe('Promotion path');
     expect(kindLabel(MDRT)).toBe('Ongoing incentive');
-    expect(rowSubline(chased(SPRINT))).toBe('Running · Oct 1 – Dec 31, 2026');
+  });
+
+  it('P18.95-T7 AC-1 the Summary row’s sub-line is the months it runs, as the server composes them (grey text row 23)', () => {
+    expect(rowSubline(chased(SPRINT))).toBe('Runs Okt – Des 2026');
+    expect(rowSubline(chased(MDRT))).toBe('Runs Jan – Des');
+    expect(rowSubline(chased(PROMO_AGENT))).toBe('Runs over the last 12 months');
+    expect(rowSubline({ ...chased(MDRT), runs: 'Runs Feb – Mar 2027' })).toBe('Runs Feb – Mar 2027');
   });
 
   it('P18.5-T7 AC-5 the two toasts, verbatim (`:8144`)', () => {
@@ -46,8 +114,10 @@ describe('a campaign in words (P18.5-T7 AC-3, P18.5-T8 AC-6)', () => {
 
   it('P18.5-T8 AC-6 progress: "{current} of {target}", met only when met, and never ✕ for a month not held', () => {
     const row = { metricKey: 'APE_ACHIEVED', current: 62_000_000_000, target: 50_000_000_000, unit: 'idr_minor' };
-    expect(progressWords({ ...row, state: 'met' })).toEqual({ text: 'Rp 620.000.000 of Rp 500.000.000', met: true, figure: true });
-    expect(progressWords({ ...row, state: 'in_progress' })).toEqual({ text: 'Rp 620.000.000 of Rp 500.000.000', met: false, figure: true });
+    expect(progressWords({ ...row, state: 'met' })).toEqual({ text: 'Rp 620 jt of Rp 500 jt', met: true, figure: true });
+    expect(progressWords({ ...row, state: 'in_progress' })).toEqual({ text: 'Rp 620 jt of Rp 500 jt', met: false, figure: true });
+    // A current figure compact writing would round is written in full, so it never reads as the target it misses.
+    expect(progressWords({ ...row, current: 49_996_000_000, state: 'in_progress' })?.text).toBe('Rp 499.960.000 of Rp 500 jt');
     expect(progressWords({ ...row, state: 'not_met' })?.met).toBe(false);
     expect(progressWords({ ...row, current: null, state: 'not_uploaded' })).toEqual({ text: 'Not uploaded yet', met: false, figure: false });
     expect(progressWords({ ...row, current: null, state: 'not_measured' })).toEqual({ text: 'Not measured yet', met: false, figure: false });
@@ -100,7 +170,8 @@ describe('the list’s sections (P18.5-T7 AC-2, D-lists)', () => {
  */
 const SIX_WORDS = /\boffice\b|\bKPM\b|reports to|tagged to|untagged|unassigned/i;
 const VERBATIM = new Set([
-  JSON.stringify("Company and KPM campaigns — mark the ones you're chasing, click into any card for full requirements."),
+  // The prototype's sub-line, saying *tap any card* where it said *click into any card* (P18.95-T9 AC-5).
+  JSON.stringify("Company and KPM campaigns — mark the ones you're chasing, tap any card for full requirements."),
 ]);
 const MINE = ['components/campaigns/', 'lib/campaigns.ts', 'app/(agent)/campaigns/'];
 
@@ -134,12 +205,65 @@ describe('the campaigns module’s own copy', () => {
 
   it('catches a sentence that names one, and lets the verbatim sub-line through', () => {
     expect(sixWords('x.tsx', 'export const X = () => <p>Ask your office</p>;')).toHaveLength(1);
-    expect(sixWords('x.ts', 'export const a = "Company and KPM campaigns — mark the ones you\'re chasing, click into any card for full requirements.";')).toEqual([]);
+    expect(sixWords('x.ts', 'export const a = "Company and KPM campaigns — mark the ones you\'re chasing, tap any card for full requirements.";')).toEqual([]);
     expect(sixWords('x.ts', "export const a = 'KPM';")).toEqual([]);
   });
 
   it('writes none of OD-39’s six words beyond the prototype’s own', () => {
     const offenders = files.flatMap((f) => sixWords(f, readFileSync(join(SRC, f), 'utf8')).map((hit) => `src/${f}: ${hit}`));
     expect(offenders).toEqual([]);
+  });
+});
+
+/** P18.97-T4 AC-8 (ADR-0176 §8; UI-030): a requirement on a ratio in the unit the office writes that ratio in. */
+describe('P18.97-T4 AC-8 figureWords writes a ratio in its own unit', () => {
+  it('P18.97-T4 AC-8 a success rate as a percentage, as typed; a count of a count as the number; unknown as before', () => {
+    expect(figureWords(0.3, 'ratio', 'percent')).toBe('30%');
+    expect(figureWords(0.155, 'ratio', 'percent')).toBe('15,5%');
+    expect(figureWords(1.5, 'ratio', 'decimal')).toBe('1,50');
+    expect(figureWords(0.3, 'ratio')).toBe('0,30');
+    // Only a ratio reads its unit: every other figure is written as it was.
+    expect(figureWords(90, 'percentage', 'decimal')).toBe('90%');
+  });
+});
+
+/**
+ * **A ratio requirement in the office's unit for it, on the agents' cards and dialog** (P18.97-T7; ADR-0174 §2, *one way
+ * of writing a percentage*): the settings read *Recruitment success rate at least 30%* since P18.97-T4 AC-8, and the
+ * card read *0,30*.
+ */
+describe('P18.97-T7 a ratio requirement in the office’s unit', () => {
+  const ratio = { code: 'RECRUIT_SUCCESS_RATE', comparison: 'gte' as const, displayUnit: 'percent' as const };
+  const units = ratioUnitsOf([ratio, { code: 'LEADS_PER_ACTIVITY', comparison: 'gte', displayUnit: 'decimal' }, { code: 'BALANCE', comparison: 'band' }]);
+  const requirement = {
+    metricKey: 'RECRUIT_SUCCESS_RATE', metricName: 'Recruitment success rate', comparator: 'gte' as const, value: 0.3, unit: 'ratio',
+    measured: true,
+  };
+
+  it('P18.97-T7 reads each ratio’s unit from the office’s configuration, by its code', () => {
+    expect([...units]).toEqual([['RECRUIT_SUCCESS_RATE', 'percent'], ['LEADS_PER_ACTIVITY', 'decimal'], ['BALANCE', 'decimal']]);
+    expect([...ratioUnitsOf(undefined)]).toEqual([]);
+    // A snapshot published before units existed carries none: a number, as the ratio card falls back.
+    expect(ratioUnitsOf([{ code: 'OLD', comparison: 'gte' }]).get('OLD')).toBe('decimal');
+  });
+
+  it('P18.97-T7 writes the card’s requirement as the settings do: 30%, and a number where the office writes one', () => {
+    expect(requirementWords(requirement, units)).toBe('Recruitment success rate 30%');
+    expect(requirementsLine([requirement, { ...requirement, metricKey: 'LEADS_PER_ACTIVITY', metricName: 'Leads per activity', value: 1.5 }], units))
+      .toBe('Recruitment success rate 30% + Leads per activity 1,50');
+    // With no configuration read yet, a number, as before.
+    expect(requirementWords(requirement)).toBe('Recruitment success rate 0,30');
+  });
+
+  it('P18.97-T7 writes a ratio’s progress in its unit: the target as typed, the figure whole (UI-080), the state the server’s', () => {
+    const row = (current: number | null, state: 'met' | 'not_met' | 'in_progress') => ({
+      metricKey: 'RECRUIT_SUCCESS_RATE', current, target: 0.3, unit: 'ratio', state,
+    });
+    expect(progressWords(row(0.2857, 'in_progress'), 'percent')?.text).toBe('29% of 30%');
+    // UI-080: 29,96% reads 30% and is still not met — the state is judged on the unrounded value.
+    expect(progressWords(row(0.2996, 'not_met'), 'percent')).toEqual({ text: '30% of 30%', met: false, figure: true });
+    expect(progressWords(row(0.3125, 'met'), 'percent')).toEqual({ text: '31% of 30%', met: true, figure: true });
+    expect(progressWords(row(0.2857, 'in_progress'), 'decimal')?.text).toBe('0,29 of 0,30');
+    expect(progressWords(row(0.2857, 'in_progress'))?.text).toBe('0,29 of 0,30');
   });
 });

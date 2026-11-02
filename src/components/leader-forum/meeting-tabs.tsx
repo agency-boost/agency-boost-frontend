@@ -1,11 +1,15 @@
 'use client';
 
 import { useId, useRef } from 'react';
+import { useMessages } from '@/i18n/language-provider';
+import { forumMessages } from '@/i18n/messages/forum';
 import { cn } from '@/lib/cn';
-import { FORUM_COPY, type MeetingView } from '@/lib/leader-meetings';
+import type { MeetingView } from '@/lib/leader-meetings';
 import { ActionItems } from './action-items';
 import { Agenda } from './agenda';
 import { Scorecard } from './scorecard';
+import { V1Overview } from './v1-meeting';
+import { V1Actions, V1Agenda } from './v1-minutes';
 
 export type MeetingTab = 'overview' | 'agenda' | 'actions';
 const TABS: readonly MeetingTab[] = ['overview', 'agenda', 'actions'];
@@ -27,11 +31,18 @@ export function MeetingTabs({
   meeting,
   active,
   onSelect,
+  v1 = false,
 }: {
   meeting: MeetingView;
   active: MeetingTab;
   onSelect: (tab: MeetingTab) => void;
+  /**
+   * **UI V1 on a phone in the field shell** (UI-110; `kpm-mobile` 4–6): *Overview | Agenda | Action Items* as one
+   * segmented control, and the three panels as the owner drew them (`v1-meeting.tsx`, `v1-minutes.tsx`).
+   */
+  v1?: boolean;
 }) {
+  const t = useMessages(forumMessages);
   const group = useId();
   const refs = useRef<Partial<Record<MeetingTab, HTMLButtonElement | null>>>({});
   const go = (to: number) => {
@@ -43,8 +54,12 @@ export function MeetingTabs({
   return (
     <div className="min-w-0 print:hidden">
       {/* The hairline is the box's; the strip sits over it, so the selected tab's amber covers it as `:675` draws it. */}
-      <div className="mb-5 border-b border-hairline">
-        <div role="tablist" aria-label={meeting.title} className="-mb-px flex gap-x-[26px] overflow-x-auto whitespace-nowrap">
+      <div className={v1 ? 'mt-3' : 'mb-5 border-b border-hairline'}>
+        <div
+          role="tablist"
+          aria-label={meeting.title}
+          className={v1 ? 'flex h-11 rounded-pill bg-card p-[3px]' : '-mb-px flex gap-x-[26px] overflow-x-auto whitespace-nowrap'}
+        >
           {TABS.map((tab, i) => {
             const on = tab === active;
             return (
@@ -66,12 +81,17 @@ export function MeetingTabs({
                   else return;
                   e.preventDefault();
                 }}
-                className={cn(
-                  'shrink-0 border-b-2 px-1 py-2.5 text-md font-semibold',
-                  on ? 'border-amber text-navy' : 'border-transparent text-muted hover:text-navy',
-                )}
+                className={v1
+                  ? cn(
+                    'flex min-w-0 flex-1 items-center justify-center whitespace-nowrap rounded-pill px-2 text-base font-semibold',
+                    on ? 'bg-navy text-white' : 'text-muted hover:text-navy',
+                  )
+                  : cn(
+                    'shrink-0 border-b-2 px-1 py-2.5 text-md font-semibold',
+                    on ? 'border-amber text-navy' : 'border-transparent text-muted hover:text-navy',
+                  )}
               >
-                {FORUM_COPY.tabs[tab]}
+                {v1 && tab === 'overview' ? t.v1.overviewTab : t.tabs[tab]}
               </button>
             );
           })}
@@ -86,9 +106,9 @@ export function MeetingTabs({
           hidden={tab !== active}
           className="min-w-0"
         >
-          {tab === 'overview' && <Scorecard meeting={meeting} />}
-          {tab === 'agenda' && <Agenda meeting={meeting} />}
-          {tab === 'actions' && <ActionItems meeting={meeting} />}
+          {tab === 'overview' && (v1 ? <V1Overview meeting={meeting} /> : <Scorecard meeting={meeting} />)}
+          {tab === 'agenda' && (v1 ? <V1Agenda meeting={meeting} /> : <Agenda meeting={meeting} />)}
+          {tab === 'actions' && (v1 ? <V1Actions meeting={meeting} /> : <ActionItems meeting={meeting} />)}
         </div>
       ))}
     </div>

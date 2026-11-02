@@ -6,9 +6,12 @@ import { EmptyCard } from '@/components/training/training-catalog';
 import { SkillCards } from '@/components/training/training-parts';
 import { Button, ErrorBanner } from '@/components/ui/field';
 import { Skeleton, SkeletonBar, SkeletonText } from '@/components/ui/skeleton';
+import { useMessages } from '@/i18n/language-provider';
+import { trainingMessages } from '@/i18n/messages/training';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
+import { useMediaQuery } from '@/lib/use-media-query';
 import {
-  OWN_COPY, readCoacheeTraining, readTrainingProgress, type TrainingProgressView,
+  readCoacheeTraining, readTrainingProgress, type TrainingProgressView,
 } from '@/lib/training';
 
 /**
@@ -16,8 +19,9 @@ import {
  * `:4331-4335`, and the reader's own `:4400`, `:4569-4572`; P18.5-T4).
  *
  * Every category in the office's order, each under *"{Label} ({done}/{total})"* with the counts muted
- * (`:7749`), then its skill cards, numbered from 1 again, with the learner's five columns — **read-only**:
- * no link, no pointer, no hover (contradiction 13). A category with nothing offered is its heading at
+ * (`:7749`), then its skills, numbered from 1 again, **by the learner's list rules** (Phase 18.99 T10; UI-065, UI-066):
+ * one card of rows below 1024px, two columns of cards with *Module · Format · Status* from 1024px — **read-only**: no
+ * link, no ›, no hover (contradiction 13). A category with nothing offered is its heading at
  * *(0/0)* and nothing under it, which is what the prototype's renderer draws over an empty list. A module
  * done and since withdrawn stays under its skill with *Archived* after its pill, outside the counts
  * (D-history).
@@ -27,8 +31,16 @@ import {
  * the learner and `/coaching/me/training` cannot disagree. The prototype's tab drew a 24-module constant
  * over two hand-made maps (F-12).
  */
-export function PersonTraining({ view }: { view: TrainingProgressView }) {
-  if (view.categories.length === 0) return <EmptyCard title={OWN_COPY.noTraining} />;
+export function PersonTraining({ view, compact }: {
+  view: TrainingProgressView;
+  /**
+   * Below 1024px, the one-card list the learner's list draws (UI-065, UI-066 — the same list rules): asked by the tab
+   * before its read answers, so the desktop's cards never draw first.
+   */
+  compact?: boolean;
+}) {
+  const t = useMessages(trainingMessages);
+  if (view.categories.length === 0) return <EmptyCard title={t.noTraining} />;
   return (
     <div className="flex flex-col">
       {view.categories.map((category) => (
@@ -37,7 +49,7 @@ export function PersonTraining({ view }: { view: TrainingProgressView }) {
             {category.label}{' '}
             <span className="text-sm font-medium text-muted">({category.done}/{category.total})</span>
           </h2>
-          <SkillCards skills={category.skills} />
+          <SkillCards skills={category.skills} compact={compact} />
         </section>
       ))}
     </div>
@@ -49,13 +61,13 @@ export function CoacheeTraining() {
   const coachee = useCoachee();
   const gone = useCoacheeNotFound();
   const read = useTrainingRead(() => readCoacheeTraining(coachee.membershipId), coachee.membershipId, gone);
-  return <ReadState read={read} label={OWN_COPY.loadingCatalog} />;
+  return <ReadState read={read} />;
 }
 
 /** The reader's own, on `/coaching/me/training` (T4 AC-3): the read their own `/training` makes. */
 export function MyTrainingRecord() {
   const read = useTrainingRead(readTrainingProgress, 'me');
-  return <ReadState read={read} label={OWN_COPY.loadingCatalog} />;
+  return <ReadState read={read} />;
 }
 
 function useTrainingRead(read: () => Promise<TrainingProgressView>, key: string, onNotFound?: () => void) {
@@ -83,25 +95,27 @@ function useTrainingRead(read: () => Promise<TrainingProgressView>, key: string,
   return { view, error, retry: () => setAttempt((n) => n + 1) };
 }
 
-function ReadState({ read, label }: { read: ReturnType<typeof useTrainingRead>; label: string }) {
+function ReadState({ read }: { read: ReturnType<typeof useTrainingRead> }) {
+  const t = useMessages(trainingMessages);
+  const compact = useMediaQuery(['phone', 'tablet']);
   if (read.error) {
     return (
       <div>
         <ErrorBanner {...read.error} />
-        <Button variant="secondary" className="mt-3" onClick={read.retry}>{OWN_COPY.tryAgain}</Button>
+        <Button variant="secondary" className="mt-3" onClick={read.retry}>{t.tryAgain}</Button>
       </div>
     );
   }
   if (!read.view) {
     return (
-      <Skeleton label={label}>
+      <Skeleton label={t.loadingCatalog}>
         <SkeletonBar className="h-5 w-32" />
-        <div className="mt-3 rounded-lg border border-hairline bg-card p-6">
+        <div className="mt-3 rounded-lg border border-card-edge bg-card px-5 py-4">
           <SkeletonBar className="h-5 w-40" />
           <SkeletonText lines={4} className="mt-4" />
         </div>
       </Skeleton>
     );
   }
-  return <PersonTraining view={read.view} />;
+  return <PersonTraining view={read.view} compact={compact} />;
 }

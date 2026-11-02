@@ -14,7 +14,7 @@ export function BriefSummary({ label, items }: {
   return (
     <dl
       aria-label={label}
-      className="mb-5 flex flex-wrap items-center gap-x-[22px] gap-y-2.5 rounded-lg border border-hairline bg-card px-5 py-3.5"
+      className="mb-5 flex flex-wrap items-center gap-x-[22px] gap-y-2.5 rounded-lg border border-card-edge bg-card px-5 py-3.5"
     >
       {items.map((item) => (
         <div key={item.label} className="flex text-base text-muted">

@@ -7,7 +7,7 @@ const slot = { date: '2026-09-28', start: '10:00', end: '10:30' };
 describe('every open starts from its seed (P12-T2 AC-4, contradiction 18)', () => {
   it('opens a new entry as an untitled Internal meeting, Travel’s dates that day and the next', () => {
     expect(blankForm(slot)).toEqual({
-      type: 'meeting', title: '', notes: '', date: '2026-09-28', start: '10:00', end: '10:30',
+      type: 'meeting', title: '', notes: '', allDay: true, date: '2026-09-28', start: '10:00', end: '10:30',
       startsOn: '2026-09-28', endsOn: '2026-09-29',
     });
     expect(blankForm({ ...slot, date: '2026-12-31' }).endsOn).toBe('2027-01-01');
@@ -53,11 +53,11 @@ describe('the rules (P12-T2 AC-5)', () => {
     expect(validateForm({ ...travel, endsOn: '' }, 0)).toEqual({ endsOn: 'Choose a return date on or after the departure date.' });
   });
 
-  it('holds the title to 120 characters, the notes to 1,000 and the invitees to 50', () => {
+  it('holds the title to 120 characters, the notes to 1.000 and the invitees to 50', () => {
     expect(validateForm({ ...form, title: 'x'.repeat(120) }, 50)).toEqual({});
     expect(validateForm({ ...form, title: 'x'.repeat(121), notes: 'y'.repeat(1001) }, 51)).toEqual({
       title: 'Keep the title to 120 characters.',
-      notes: 'Keep the notes to 1,000 characters.',
+      notes: 'Keep the notes to 1.000 characters.',
       invitees: 'You can invite at most 50 people.',
     });
   });
@@ -69,8 +69,24 @@ describe('what a save sends', () => {
       type: 'meeting', title: '', notes: '', date: '2026-09-28', start: '10:00', end: '10:30', inviteeIds: ['mem-1'],
     });
     expect(toInput({ ...blankForm(slot), type: 'travel' }, [])).toEqual({
-      type: 'travel', title: '', notes: '', startsOn: '2026-09-28', endsOn: '2026-09-29', inviteeIds: [],
+      type: 'travel', title: '', notes: '', allDay: true, startsOn: '2026-09-28', endsOn: '2026-09-29', inviteeIds: [],
     });
+  });
+
+  it('UI-104 Sepanjang hari is on by default; off, a trip sends a date and a time at each end', () => {
+    expect(blankForm(slot).allDay).toBe(true);
+    expect(toInput({ ...blankForm(slot), type: 'travel', allDay: false, start: '07:30', end: '18:00' }, [])).toEqual({
+      type: 'travel', title: '', notes: '', allDay: false, startsOn: '2026-09-28', start: '07:30', endsOn: '2026-09-29', end: '18:00',
+      inviteeIds: [],
+    });
+  });
+
+  it('UI-104 holds a trip with times to an end after its start, and places the API’s sentence under End', () => {
+    const sameDay = { ...blankForm(slot), type: 'travel' as const, allDay: false, endsOn: '2026-09-28', start: '18:00', end: '07:00' };
+    expect(validateForm(sameDay, 0).end).toBe('Choose an end after the start.');
+    expect(validateForm({ ...sameDay, endsOn: '2026-09-29' }, 0).end).toBeUndefined();
+    expect(violationsToErrors({ violations: ['endsOn and end must come after startsOn and start.'] }))
+      .toEqual({ end: 'Choose an end after the start.' });
   });
 });
 
@@ -85,7 +101,7 @@ describe('a server refusal, under its fields', () => {
     });
     expect(violationsToErrors({ violations: ['notes is too long', 'inviteeIds must have at most 50', 'date must be a date', 'startsOn is required.'] }))
       .toEqual({
-        notes: 'Keep the notes to 1,000 characters.',
+        notes: 'Keep the notes to 1.000 characters.',
         invitees: 'You can invite at most 50 people.',
         date: 'Choose a date.',
         startsOn: 'Choose a date.',

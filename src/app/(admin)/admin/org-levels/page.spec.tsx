@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import AdminLayout from '@/app/(admin)/layout';
@@ -27,13 +27,13 @@ const COMPANIES = [
 
 const rung = (over: Record<string, unknown> = {}) => ({
   orgLevelId: 'lvl-1', companyId: 'co-1', code: 'AGENT', label: 'Agent',
-  displayOrder: 1, status: 'active', archivedAt: null, ...over,
+  displayOrder: 1, leaderTier: null, status: 'active', archivedAt: null, ...over,
 });
 
 const LADDER = [
   rung(),
-  rung({ orgLevelId: 'lvl-2', code: 'AAB', label: 'AAB', displayOrder: 2 }),
-  rung({ orgLevelId: 'lvl-3', code: 'AB', label: 'AB', displayOrder: 3 }),
+  rung({ orgLevelId: 'lvl-2', code: 'AAB', label: 'AAB', displayOrder: 2, leaderTier: 'associate' }),
+  rung({ orgLevelId: 'lvl-3', code: 'AB', label: 'AB', displayOrder: 3, leaderTier: 'senior' }),
 ];
 
 describe('org role ladder (P3.5-T7)', () => {
@@ -109,7 +109,7 @@ describe('org role ladder (P3.5-T7)', () => {
 
     const post = calls.find((c) => c.init.method === 'POST');
     expect(JSON.parse(String(post?.init.body))).toEqual({
-      companyId: 'co-1', code: 'SAB', label: 'Senior AB', displayOrder: 4,
+      companyId: 'co-1', code: 'SAB', label: 'Senior AB', displayOrder: 4, leaderTier: null,
     });
   });
 
@@ -162,11 +162,274 @@ describe('org role ladder (P3.5-T7)', () => {
     expect(screen.getByRole('alert')).toHaveAttribute('data-permission', 'org_level:crud');
   });
 
+  describe('P18.8-T1 the leader tier (ADR-0156)', () => {
+    const tierOf = async (label: string) => screen.findByRole('combobox', { name: `Leader tier of ${label}` });
+
+    it('AC-6 shows each rung’s tier in its own column, in the client’s words', async () => {
+      stubFetch({ '/admin/org-levels': { body: LADDER }, '/admin/companies': { body: COMPANIES } });
+      renderInLayout(AdminLayout, <OrgLevelsPage />, { me: SUPER_ADMIN });
+
+      expect(await screen.findByRole('columnheader', { name: 'Leader tier' })).toBeInTheDocument();
+      expect(await tierOf('Agent')).toHaveDisplayValue('Not a leader');
+      expect(await tierOf('AAB')).toHaveDisplayValue('Associate Leader');
+      expect(await tierOf('AB')).toHaveDisplayValue('Senior Leader');
+      const options = within(await tierOf('Agent')).getAllByRole('option').map((o) => o.textContent);
+      expect(options).toEqual(['Senior Leader', 'Associate Leader', 'Not a leader']);
+    });
+
+    it('AC-6 saves a change of tier at once, Not a leader as null', async () => {
+      const custom = [...LADDER, rung({ orgLevelId: 'lvl-4', code: 'SM', label: 'Senior Manager', displayOrder: 4 })];
+      const { calls } = stubFetch({
+        '/admin/org-levels/lvl-4': [
+          { body: [...LADDER, { ...custom[3], leaderTier: 'senior' }] },
+          { body: custom },
+        ],
+        '/admin/org-levels': { body: custom },
+        '/admin/companies': { body: COMPANIES },
+      });
+      renderInLayout(AdminLayout, <OrgLevelsPage />, { me: SUPER_ADMIN });
+
+      await userEvent.selectOptions(await tierOf('Senior Manager'), 'Senior Leader');
+      expect(await tierOf('Senior Manager')).toHaveDisplayValue('Senior Leader');
+      await userEvent.selectOptions(await tierOf('Senior Manager'), 'Not a leader');
+      expect(await tierOf('Senior Manager')).toHaveDisplayValue('Not a leader');
+
+      const patches = calls.filter((c) => c.init.method === 'PATCH');
+      expect(patches.map((c) => [c.url.split('/api/v1')[1] ?? c.url, JSON.parse(String(c.init.body))])).toEqual([
+        [expect.stringContaining('/admin/org-levels/lvl-4'), { leaderTier: 'senior' }],
+        [expect.stringContaining('/admin/org-levels/lvl-4'), { leaderTier: null }],
+      ]);
+    });
+
+    it('AC-6 says how many stand on a rung whose tier cannot change, and keeps the stored tier', async () => {
+      stubFetch({
+        '/admin/org-levels/lvl-3': {
+          status: 409,
+          body: {
+            error: {
+              code: 'ORG_LEVEL_TIER_IN_USE',
+              message: 'The API’s sentence.',
+              details: { orgLevelId: 'lvl-3', code: 'AB', members: 12 },
+              requestId: 'req-2',
+            },
+          },
+        },
+        '/admin/org-levels': { body: LADDER },
+        '/admin/companies': { body: COMPANIES },
+      });
+      renderInLayout(AdminLayout, <OrgLevelsPage />, { me: SUPER_ADMIN });
+
+      await userEvent.selectOptions(await tierOf('AB'), 'Associate Leader');
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        '12 people stand on AB, so its leader tier cannot change. Move them to another rung first, or add a new rung.',
+      );
+      expect(await tierOf('AB')).toHaveDisplayValue('Senior Leader');
+    });
+
+    it('AC-6 falls back to the API’s sentence when the refusal carries no count', async () => {
+      stubFetch({
+        '/admin/org-levels/lvl-3': {
+          status: 409,
+          body: { error: { code: 'ORG_LEVEL_TIER_IN_USE', message: 'Somebody stands on it.', requestId: 'req-3' } },
+        },
+        '/admin/org-levels': { body: LADDER },
+        '/admin/companies': { body: COMPANIES },
+      });
+      renderInLayout(AdminLayout, <OrgLevelsPage />, { me: SUPER_ADMIN });
+
+      await userEvent.selectOptions(await tierOf('AB'), 'Not a leader');
+      expect(await screen.findByRole('alert')).toHaveTextContent('Somebody stands on it.');
+    });
+
+    it('AC-6 adds a rung with the tier chosen on Add a rung', async () => {
+      const { calls } = stubFetch({
+        '/admin/org-levels': [{ body: LADDER }, { body: LADDER }],
+        '/admin/companies': { body: COMPANIES },
+      });
+      renderInLayout(AdminLayout, <OrgLevelsPage />, { me: SUPER_ADMIN });
+
+      expect(await screen.findByLabelText('Leader tier')).toHaveDisplayValue('Not a leader');
+      await userEvent.type(screen.getByLabelText('Code'), 'UM');
+      await userEvent.type(screen.getByLabelText('Label'), 'Unit Manager');
+      await userEvent.selectOptions(screen.getByLabelText('Leader tier'), 'Associate Leader');
+      await userEvent.click(screen.getByRole('button', { name: 'Add rung' }));
+
+      const post = calls.find((c) => c.init.method === 'POST');
+      expect(JSON.parse(String(post?.init.body))).toMatchObject({ code: 'UM', leaderTier: 'associate' });
+      // The form resets to the default, so the next rung is not marked a leader by accident.
+      expect(await screen.findByLabelText('Leader tier')).toHaveDisplayValue('Not a leader');
+    });
+
+    describe('P18.95-T1 AC-5 — the tier says it is saved, beside its select', () => {
+      /** The save confirmation in the select's own cell: the nearest ancestor with a status for a child. */
+      const besides = (el: HTMLElement) => {
+        for (let box = el.parentElement; box; box = box.parentElement) {
+          const own = [...box.children].find((c) => c.getAttribute('role') === 'status');
+          if (own) return own as HTMLElement;
+          if (box.tagName === 'TD') break;
+        }
+        return null;
+      };
+      const RETAGGED = [LADDER[0], LADDER[1], { ...LADDER[2], leaderTier: 'associate' }];
+      const patches = (calls: { url: string; init: RequestInit }[]) =>
+        calls.filter((c) => c.init.method === 'PATCH').map((c) => [c.url.split('/admin/org-levels/')[1], JSON.parse(String(c.init.body))]);
+
+      it('P18.95-T1 AC-5: says Saved ✓ under the select once the tier is kept, inside its own cell', async () => {
+        stubFetch({
+          '/admin/org-levels/lvl-3': { body: RETAGGED },
+          '/admin/org-levels': { body: LADDER },
+          '/admin/companies': { body: COMPANIES },
+        });
+        renderInLayout(AdminLayout, <OrgLevelsPage />, { me: SUPER_ADMIN });
+
+        await userEvent.selectOptions(await tierOf('AB'), 'Associate Leader');
+
+        await waitFor(() => expect(besides(screen.getByRole('combobox', { name: 'Leader tier of AB' }))).toHaveTextContent('Saved ✓'));
+        expect(besides(screen.getByRole('combobox', { name: 'Leader tier of AB' }))).toHaveClass('text-success');
+        expect(await tierOf('AB')).toHaveDisplayValue('Associate Leader');
+        expect(besides(await tierOf('AAB'))).toBeNull();
+        expect(screen.getAllByText('Saved ✓')).toHaveLength(1);
+      });
+
+      it('P18.95-T1 AC-5: a failed tier says Couldn’t save — retry, and the retry sends the same tier again', async () => {
+        const { calls } = stubFetch({
+          '/admin/org-levels/lvl-3': [
+            { status: 500, body: { error: { code: 'INTERNAL_ERROR', message: 'Something went wrong.', requestId: 'req-9' } } },
+            { body: RETAGGED },
+          ],
+          '/admin/org-levels': { body: LADDER },
+          '/admin/companies': { body: COMPANIES },
+        });
+        renderInLayout(AdminLayout, <OrgLevelsPage />, { me: SUPER_ADMIN });
+        await userEvent.selectOptions(await tierOf('AB'), 'Associate Leader');
+
+        const retry = await screen.findByRole('button', { name: "Couldn't save — retry: Leader tier, AB" });
+        expect(besides(await tierOf('AB'))).toContainElement(retry);
+        // The reason stays in the banner at the top, where it always was; the select still shows the stored tier.
+        expect(screen.getByRole('alert')).toHaveTextContent('Something went wrong.');
+        expect(await tierOf('AB')).toHaveDisplayValue('Senior Leader');
+
+        await userEvent.click(retry);
+
+        await waitFor(() => expect(patches(calls)).toEqual([
+          ['lvl-3', { leaderTier: 'associate' }],
+          ['lvl-3', { leaderTier: 'associate' }],
+        ]));
+        await waitFor(() => expect(besides(screen.getByRole('combobox', { name: 'Leader tier of AB' }))).toHaveTextContent('Saved ✓'));
+        expect(await tierOf('AB')).toHaveDisplayValue('Associate Leader');
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /^Couldn't save/ })).not.toBeInTheDocument();
+      });
+
+      it('P18.95-T1 AC-5: a tier refused while people stand on the rung (409) leaves no retry, the banner saying why', async () => {
+        const { calls } = stubFetch({
+          '/admin/org-levels/lvl-3': {
+            status: 409,
+            body: {
+              error: {
+                code: 'ORG_LEVEL_TIER_IN_USE', message: 'The API’s sentence.',
+                details: { orgLevelId: 'lvl-3', code: 'AB', members: 12 }, requestId: 'req-10',
+              },
+            },
+          },
+          '/admin/org-levels': { body: LADDER },
+          '/admin/companies': { body: COMPANIES },
+        });
+        renderInLayout(AdminLayout, <OrgLevelsPage />, { me: SUPER_ADMIN });
+        await userEvent.selectOptions(await tierOf('AB'), 'Associate Leader');
+
+        expect(await screen.findByRole('alert')).toHaveTextContent('12 people stand on AB, so its leader tier cannot change.');
+        await waitFor(() => expect(besides(screen.getByRole('combobox', { name: 'Leader tier of AB' }))).toBeNull());
+        expect(screen.queryByRole('button', { name: /^Couldn't save/ })).not.toBeInTheDocument();
+        expect(patches(calls)).toHaveLength(1);
+      });
+    });
+  });
+
   it('tells a company with no ladder what to do first', async () => {
     stubFetch({ '/admin/org-levels': { body: [] }, '/admin/companies': { body: COMPANIES } });
     renderInLayout(AdminLayout, <OrgLevelsPage />, { me: SUPER_ADMIN });
     expect(
       await screen.findByText('Prudential has no ladder yet. Add the most junior rung first.'),
     ).toBeInTheDocument();
+  });
+
+  /*
+   * **ADR-0168 §3 — the Template library's ladder is edited here** (amending P18.9-T3 AC-3, which left it out): it
+   * is listed under *Company* by its name, an insurer still chosen first, and while it is chosen the *Template
+   * library* badge of `/admin/companies` sits beside the select; its rungs take every write the insurers' do.
+   */
+  describe('the Template library (ADR-0168 §3)', () => {
+    const LIBRARY = {
+      _id: 'co-lib', name: 'Template', slug: 'template', defaultCurrency: 'IDR', defaultTimezone: 'Asia/Jakarta',
+      status: 'active', kind: 'template',
+    };
+    const LIBRARY_LADDER = [
+      rung({ orgLevelId: 'lib-1', companyId: 'co-lib' }),
+      rung({ orgLevelId: 'lib-2', companyId: 'co-lib', code: 'AAB', label: 'AAB', displayOrder: 2, leaderTier: 'associate' }),
+      rung({ orgLevelId: 'lib-3', companyId: 'co-lib', code: 'AB', label: 'Agency Builder', displayOrder: 3, leaderTier: 'senior' }),
+    ];
+    const routes = (extra: Parameters<typeof stubFetch>[0] = {}) => stubFetch({
+      ...extra,
+      '/admin/org-levels': { body: [...LADDER, ...LIBRARY_LADDER] },
+      '/admin/companies': { body: [{ ...COMPANIES[0], kind: 'insurer' }, LIBRARY] },
+    });
+
+    it('lists it under Company, an insurer still chosen first, and no badge while an insurer is', async () => {
+      routes();
+      renderInLayout(AdminLayout, <OrgLevelsPage />, { me: SUPER_ADMIN });
+
+      const company = await screen.findByRole('combobox', { name: 'Company' });
+      expect([...(company as HTMLSelectElement).options].map((o) => o.textContent)).toEqual(['Prudential', 'Template']);
+      expect(company).toHaveDisplayValue('Prudential');
+      expect(await screen.findByText('Agent → AAB → AB')).toBeInTheDocument();
+      expect(screen.queryByText('AgencyBoost built-in templates')).not.toBeInTheDocument();
+    });
+
+    it('ADR-0185 §1 labels it AgencyBoost built-in templates while it is chosen, the badge describing the select, and shows its ladder', async () => {
+      routes();
+      renderInLayout(AdminLayout, <OrgLevelsPage />, { me: SUPER_ADMIN });
+
+      const company = await screen.findByRole('combobox', { name: 'Company' });
+      // The companies arrive after the select does: choose the library once it is an option.
+      await screen.findByRole('option', { name: 'Template' });
+      await userEvent.selectOptions(company, 'co-lib');
+      const badge = await screen.findByText('AgencyBoost built-in templates');
+      expect(company).toHaveAccessibleDescription('AgencyBoost built-in templates');
+      // The same chip `/admin/companies` puts on the library's row: the component, its tone and its words.
+      expect(badge).toHaveAttribute('data-tone', 'navy');
+      expect(await screen.findByText('Agent → AAB → Agency Builder')).toBeInTheDocument();
+    });
+
+    it('takes a rung, a tier and an archive on its ladder, as on any company’s', async () => {
+      const { calls } = routes({
+        '/admin/org-levels/lib-2': { body: [LIBRARY_LADDER[0], { ...LIBRARY_LADDER[1], leaderTier: null }, LIBRARY_LADDER[2]] },
+      });
+      renderInLayout(AdminLayout, <OrgLevelsPage />, { me: SUPER_ADMIN });
+
+      const company = await screen.findByRole('combobox', { name: 'Company' });
+      await screen.findByRole('option', { name: 'Template' });
+      await userEvent.selectOptions(company, 'co-lib');
+      await userEvent.selectOptions(await screen.findByRole('combobox', { name: 'Leader tier of AAB' }), 'Not a leader');
+      const patch = calls.find((c) => c.init.method === 'PATCH');
+      expect(patch?.url).toContain('/admin/org-levels/lib-2');
+      expect(JSON.parse(String(patch?.init.body))).toEqual({ leaderTier: null });
+      expect(await screen.findByRole('combobox', { name: 'Leader tier of AAB' })).toHaveDisplayValue('Not a leader');
+
+      await userEvent.type(screen.getByLabelText('Code'), 'SM');
+      await userEvent.type(screen.getByLabelText('Label'), 'Senior Manager');
+      await userEvent.click(screen.getByRole('button', { name: 'Add rung' }));
+      const post = calls.find((c) => c.init.method === 'POST');
+      expect(JSON.parse(String(post?.init.body))).toMatchObject({ companyId: 'co-lib', code: 'SM', displayOrder: 4 });
+    });
+
+    it('is chosen where it is the only company', async () => {
+      stubFetch({ '/admin/org-levels': { body: LIBRARY_LADDER }, '/admin/companies': { body: [LIBRARY] } });
+      renderInLayout(AdminLayout, <OrgLevelsPage />, { me: SUPER_ADMIN });
+
+      expect(await screen.findByRole('combobox', { name: 'Company' })).toHaveDisplayValue('Template');
+      expect(await screen.findByText('Agent → AAB → Agency Builder')).toBeInTheDocument();
+      expect(screen.getByText('AgencyBoost built-in templates')).toBeInTheDocument();
+    });
   });
 });

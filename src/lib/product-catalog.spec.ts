@@ -3,8 +3,8 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   AGE_CHOICES, briefFromQuery, BUDGET_CHOICES, CATEGORY_TABS, CHANNEL_LABELS, catalogHref, drawerHref, filtersFrom,
-  fitNote, formatRate, moreLine, NEED_CHOICES, OWN_COPY, planHref, productCount, productFromQuery, productPlanHref,
-  resultTag,
+  fitNote, formatRate, LUMP_SUM_BUDGET, LUMP_SUM_CHOICES, matchesSearch, MONTHLY_BUDGET_CHOICES, moreLine, NEED_CHOICES,
+  OWN_COPY, planHref, productCount, productFromQuery, productPlanHref, resultTag,
 } from './product-catalog';
 
 const BACKEND = join(__dirname, '..', '..', '..', 'backend', 'src', 'domain', 'constants');
@@ -33,6 +33,18 @@ describe('sales tools: the words and the addresses (Phase 14)', () => {
       expect(AGE_CHOICES.map((c) => [String(c.value), c.label])).toEqual(Object.entries(record(catalogConstants, 'PRODUCT_AGE_BAND_LABELS')));
       expect(BUDGET_CHOICES.map((c) => [String(c.value), c.label]))
         .toEqual(Object.entries(record(catalogConstants, 'PRODUCT_BUDGET_BAND_LABELS')));
+    });
+
+    it('P18.95-T6 AC-3 the lump-sum option and its encoding: the backend’s band, asked apart from the six monthly ones', () => {
+      const backend = /export const PRODUCT_LUMP_SUM_BUDGET_BAND = (\d+);/.exec(catalogConstants);
+      expect(Number(backend?.[1])).toBe(LUMP_SUM_BUDGET);
+      expect(MONTHLY_BUDGET_CHOICES.map((c) => c.value)).toEqual([1, 2, 3, 4, 5, 6]);
+      expect(LUMP_SUM_CHOICES).toEqual([{ value: 7, label: 'Lump-sum' }]);
+      // Together they are the seven bands, in order: nothing added, nothing renumbered.
+      expect([...MONTHLY_BUDGET_CHOICES, ...LUMP_SUM_CHOICES]).toEqual(BUDGET_CHOICES);
+      // An address that carries it still reads as a brief.
+      expect(briefFromQuery({ need: 'investment', age: '3', budget: '7' })).toEqual({ need: 'investment', age: 3, budget: 7 });
+      expect(OWN_COPY.lumpSum).toBe('Or pay once');
     });
 
     it('P14-T7 AC-2 the category tabs and the channels, as the backend names them', () => {
@@ -84,6 +96,32 @@ describe('sales tools: the words and the addresses (Phase 14)', () => {
     });
   });
 
+  describe('P18.95-T6 AC-4 catalog search, by product name (UI-023)', () => {
+    it.each([
+      ['PRUMapan', 'mapan', true],
+      ['PRUMapan', 'MAPAN', true],
+      ['PRUMapan', '  mapan  ', true],
+      ['PRULink Generasi Baru (PGB)', 'generasi baru', true],
+      ['PRUMapan', '', true],
+      ['PRUMapan', '   ', true],
+      ['PRUMapan', 'future', false],
+      ['PRUMapan', 'pru mapan', false],
+    ])('P18.95-T6 AC-4 %s, searched for %o: %s', (name, term, found) => {
+      expect(matchesSearch(name, term)).toBe(found);
+    });
+
+    it('P18.95-T6 AC-4 ignores accents either side, so a name typed without them is found', () => {
+      expect(matchesSearch('PRUCinta Syariah', 'cinta')).toBe(true);
+      expect(matchesSearch('Café Plan', 'cafe')).toBe(true);
+      expect(matchesSearch('Cafe Plan', 'café')).toBe(true);
+    });
+
+    it('P18.95-T6 AC-4 catalog search and empty result: the line names what was searched for, trimmed', () => {
+      expect(OWN_COPY.noSearchMatch('  zzz ')).toBe('No products match “zzz”.');
+      expect([OWN_COPY.searchName, OWN_COPY.searchPlaceholder]).toEqual(['Search products by name', 'Search products…']);
+    });
+  });
+
   describe('the words, verbatim (D-copy)', () => {
     it('P14-T8 AC-3 the fit note names the age band, the budget band, or both (`:9669-9675`)', () => {
       const tail = ' for this product — still workable, but check eligibility and premium sizing before quoting.';
@@ -99,8 +137,10 @@ describe('sales tools: the words and the addresses (Phase 14)', () => {
         .toBe('Retirement income · Conventional');
     });
 
-    it('P14-T7 AC-5 prints a stored proportion as the percentage (OD-135)', () => {
-      expect([formatRate(0.4), formatRate(0.125), formatRate(0.025), formatRate(0)]).toEqual(['40%', '12.5%', '2.5%', '0%']);
+    it('P14-T7 AC-5, P18.97-T3 AC-2 prints a stored proportion as the percentage, with the places it was stored with (OD-135)', () => {
+      expect([formatRate(0.4), formatRate(0.125), formatRate(0.025), formatRate(0)]).toEqual(['40%', '12,5%', '2,5%', '0%']);
+      // A commission rate is a rule: the places it was stored with and no ,0 (ADR-0174 §3) — the rate read is the rate stored.
+      expect(formatRate(0.0725)).toBe('7,25%');
     });
 
     it('D-copy: the strings these screens write themselves use none of the six words (ADR-0084)', () => {

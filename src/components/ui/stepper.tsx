@@ -1,5 +1,7 @@
 'use client';
 
+import { useMessages } from '@/i18n/language-provider';
+import { uiMessages } from '@/i18n/messages/ui';
 import { cn } from '@/lib/cn';
 
 /**
@@ -38,6 +40,7 @@ export function Stepper({
   max?: number;
   disabled?: boolean;
 }) {
+  const t = useMessages(uiMessages).stepper;
   const clamp = (n: number) => Math.max(min, Math.min(max, n));
   const set = (n: number) => onChange(clamp(Number.isFinite(n) ? Math.trunc(n) : 0));
 
@@ -69,7 +72,7 @@ export function Stepper({
     >
       <button
         type="button"
-        aria-label={`Decrease ${label}`}
+        aria-label={t.decrease({ label })}
         disabled={disabled || value <= min}
         onClick={() => set(value - 1)}
         className={BUTTON}
@@ -79,7 +82,7 @@ export function Stepper({
       <input
         type="number"
         inputMode="numeric"
-        aria-label={`Count for ${label}`}
+        aria-label={t.count({ label })}
         value={value}
         min={min}
         max={max}
@@ -102,7 +105,7 @@ export function Stepper({
       />
       <button
         type="button"
-        aria-label={`Increase ${label}`}
+        aria-label={t.increase({ label })}
         disabled={disabled || value >= max}
         onClick={() => set(value + 1)}
         /* The prototype tints `+` amber-dark rather than filling it (`:137`) — a counter you press

@@ -1,229 +1,204 @@
 'use client';
 
-import type { Column } from '@/components/ui/data-table';
-import { ButtonLink } from '@/components/ui/field';
-import { RoleBadge, useLadder } from '@/components/ui/role-badge';
-import { StatusPill } from '@/components/ui/status-pill';
+import { useId, type ReactNode } from 'react';
+import { PersonRow, TreeIndent, TreeNode } from '@/components/ui/person-row';
+import { shortOfRung, useLadder } from '@/components/ui/role-badge';
+import { TonePill, type PillTone } from '@/components/ui/tone-pill';
+import { useLanguage, useMessages } from '@/i18n/language-provider';
+import { coachingMessages } from '@/i18n/messages/coaching';
 import { cn } from '@/lib/cn';
 import {
-  coachingSessionHref, lastOneOnOneOverdue, lastOneOnOneText, ROSTER_STATUS_LABEL,
+  coachingSessionHref, firstName, lastOneOnOneLine, rosterStatusLabel,
   type Roster, type RosterRow, type RosterStatus,
 } from '@/lib/coaching';
 
 /**
- * The roster's table (`Overall.html:3961-3966`, rows `:10625-10657`, CSS `:1436-1462`).
+ * **The roster: one row per person, at every size** (UI V1, UI-033, UI-034; D-09, D-23, D-27).
  *
- * The prototype's own table, not `DataTable`: it groups its rows under full-width divider rows and
- * nests each unit beneath its head, and neither has a place in a one-`<tbody>` table. The markup keeps
- * what `DataTable` exists for — a real `<th scope>` on every heading and a caption a screen reader
- * hears — and adds the two groupings as `<tbody>` row groups, so the visual nesting is a structure a
- * screen reader can follow too: each divider and each unit head is a `rowgroup` header.
+ * - **A 60px row** (`PersonRow`): the avatar, the NAME in capitals, and **the whole row opens their *Coaching Session***
+ *   with a › — no orange *Coaching →* per row (UI-034).
+ * - **Below 768px** the row's line is *1 hari lalu · oleh Agus*: *Last 1:1* and the first name of who held it, 12px
+ *   grey — *Belum ada 1:1* grey too, never red; **red only for *terlambat***, which the words say as well (P18.8-T15
+ *   AC-7). Then the status pill and the ›. **From 768px** the same facts in columns under a 40px header — *Nama · 1:1
+ *   terakhir · Terakhir di-coaching oleh · Status* — every word 12px or more.
+ * - **Groups under 36px bands**: *Agen langsung Anda · 3*, then *AAB units*, each AAB's people **as a tree** at every
+ *   size (`TreeIndent`, the Group Tree's and New Hires'): indented 36px, a grey line down from the AAB, an elbow into
+ *   each — the subtree as the server sends it, a nested AAB's people a level further in. No *↳*.
+ * - **The status pill** is `GOAL_PACE_STATUS` in UI-005's tones — green *Sesuai target*, amber *Perlu dipantau*, red
+ *   *Perlu perhatian*, grey *Goal belum diatur* — a tinted pill, never a dot.
+ *
+ * Everyone the reader coaches, which is their whole downline (ADR-0074): the server decides who. *Last 1:1* and the
+ * status are the server's, worked out in the office's day; nothing here counts days.
  */
 
-/** The prototype's five headings (`:3963`); the last is empty on screen, and named for a screen reader. */
-export const ROSTER_COLUMNS: readonly Column[] = [
-  'Name', 'Last 1:1', 'Last Coached By', 'Status', { label: 'Actions', visuallyHidden: true },
-];
-
-/** Read by a screen reader before the table; the prototype's table has no caption to copy. */
-export const ROSTER_CAPTION = 'Everyone you coach';
-
-/** `GOAL_PACE_STATUS` in the pill's tones: `Watch closely` is the prototype's amber-yellow (`:1445`). */
+/** `GOAL_PACE_STATUS` as UI-005's pill tones. */
 const TONE = {
-  on_track: 'success',
-  needs_attention: 'alert',
-  watch_closely: 'watch',
-  no_goal_set: 'neutral',
-} as const satisfies Record<RosterStatus, string>;
+  on_track: 'green',
+  watch_closely: 'amber',
+  needs_attention: 'red',
+  no_goal_set: 'grey',
+} as const satisfies Record<RosterStatus, PillTone>;
 
-/** `table.roster-table thead th` and `tr.roster-row td`: 13px by 20px (`:1449`, `:1452`). */
-const CELL = 'px-5 py-[13px] align-middle';
+/** The columns from 768px: their widths, so the header and every row line up (UI-034). */
+const COL = {
+  last: 'md:w-[132px] lg:w-[184px]',
+  coach: 'md:w-[132px] lg:w-[184px]',
+  status: 'md:w-[132px] lg:w-[150px]',
+} as const;
 
-/** One step of nesting: `.roster-name-cell.nested{padding-left:26px}` (`:1457`). */
-const INDENT = 26;
+/** A 60px row's elbow, at the middle of its avatar (`TreeNode`'s `--elbow`). */
+const ELBOW_60 = '[--elbow:1.875rem]';
 
-function GroupDivider({ label, count }: { label: string; count?: number }) {
-  return (
-    <tr>
-      {/* `tr.group-divider td` (`:1440-1441`): a full-width band naming the group beneath it. */}
-      <th
-        scope="rowgroup"
-        colSpan={ROSTER_COLUMNS.length}
-        className="border-y border-hairline bg-navy/[0.045] px-5 py-2.5 text-left font-display text-base font-bold text-navy"
-      >
-        {label}
-        {count !== undefined && (
-          <>
-            {' '}
-            <span className="ml-1.5 font-body font-semibold text-muted">· {count}</span>
-          </>
-        )}
-      </th>
-    </tr>
-  );
+/** One person and the people under them, as the flat subtree the server sends (`depth`) nests. */
+interface Branch {
+  row: RosterRow;
+  children: Branch[];
 }
 
-function PersonRow({
-  row,
-  head = false,
-  nested = false,
-  badged = head,
-}: {
-  row: RosterRow;
-  /** A unit's head: the tinted row with the navy-soft rule (`tr.roster-row.aab-row`, `:1453-1454`). */
-  head?: boolean;
-  /** Beneath a head, indented by its depth behind `↳` (`tr.roster-row.nested`, `:1455-1458`). */
-  nested?: boolean;
-  /** Carries its rung's badge (`:10634`): a unit's head, and a head nested inside another unit. */
-  badged?: boolean;
-}) {
-  const last = row.lastOneOnOne;
-  const overdue = lastOneOnOneOverdue(last);
-  // A unit's head stands at depth 1, so its members start one step in, as the prototype draws them.
-  const steps = nested ? Math.max(1, row.depth - 1) : 0;
-  const tone = TONE[row.status];
-  const label = ROSTER_STATUS_LABEL[row.status];
+/**
+ * **The subtree as a tree**: each row's children are the rows after it that sit deeper, up to the next row that does
+ * not. The server sends a unit depth-first, so this is its order kept, nested.
+ */
+export function branchesOf(rows: readonly RosterRow[]): Branch[] {
+  const out: Branch[] = [];
+  let i = 0;
+  while (i < rows.length) {
+    const row = rows[i];
+    let j = i + 1;
+    while (j < rows.length && rows[j].depth > row.depth) j += 1;
+    out.push({ row, children: branchesOf(rows.slice(i + 1, j)) });
+    i = j;
+  }
+  return out;
+}
+
+export function CoachingRoster({ roster }: { roster: Roster }) {
+  const t = useMessages(coachingMessages).roster;
+  // The junior rung: a member on any other rung heads a unit of their own, nested or not, and carries its badge.
+  const ladder = useLadder();
+  const agentRung = [...ladder].sort((a, b) => a.displayOrder - b.displayOrder)[0]?.code;
+  const badged = (row: RosterRow) => agentRung !== undefined && row.rung.code.toUpperCase() !== agentRung.toUpperCase();
+  const { directAgents, units } = roster;
+  const directId = useId();
+  const unitsId = useId();
 
   return (
-    <tr
-      className={cn(
-        'border-b border-hairline',
-        // The table's row hover, laid **over** a head's tint rather than painting it away (data-table.tsx).
-        'hover:[background-image:linear-gradient(var(--row-hover),var(--row-hover))]',
-        head && 'bg-navy-soft/[0.045]',
-      )}
-    >
-      {/*
-        * A unit's head names its row **group** — its members are the rest of the `<tbody>` — so a
-        * screen reader moving down a unit hears whose unit it is, which the indent says on screen.
-        */}
-      <th
-        scope={head ? 'rowgroup' : 'row'}
-        className={cn(
-          CELL,
-          'text-left font-normal',
-          head && 'shadow-[inset_3px_0_0_var(--color-navy-soft)]',
-          nested && 'shadow-[inset_3px_0_0_color-mix(in_srgb,var(--color-navy-soft)_22%,transparent)]',
-        )}
+    <div data-roster="" className="overflow-hidden rounded-lg border border-card-edge bg-card">
+      <h2 className="sr-only">{t.caption}</h2>
+      {/* The columns' header from 768px (UI-034): drawn for the eye; each row's cells say what they are. */}
+      <div
+        aria-hidden="true"
+        className="flex h-10 items-center gap-3 bg-hover-row px-3 text-xs font-semibold text-muted max-md:hidden"
       >
-        <div className="relative flex items-center gap-2" style={steps ? { paddingLeft: steps * INDENT } : undefined}>
-          {steps > 0 && (
-            <span
-              aria-hidden="true"
-              className="absolute text-md font-bold leading-none text-hairline"
-              style={{ left: (steps - 1) * INDENT + 6 }}
-            >
-              ↳
-            </span>
-          )}
-          <span className="text-base font-semibold text-navy">{row.name}</span>
-          {badged && <RoleBadge role={row.rung.code} />}
-        </div>
-      </th>
-      <td className={CELL}>
-        <span className={cn('text-sm font-semibold', overdue ? 'text-alert' : 'text-success')}>
-          {lastOneOnOneText(last)}
-          {/* Red is the only mark of an overdue 1:1 on screen; a screen reader is told in words. */}
-          {last !== null && last.overdue && <span className="sr-only">, overdue</span>}
-        </span>
-      </td>
-      <td className={CELL}>
-        {last?.coach ? (
-          <span className="text-xs text-muted">{last.coach.name}</span>
-        ) : (
-          // The prototype's em dash in hairline grey (`:1718`), in muted here: it is the cell's answer,
-          // and hairline is not a colour anybody can read.
-          <span className="text-sm text-muted">—</span>
-        )}
-      </td>
-      <td className={CELL}>
-        <StatusPill
-          status={tone}
-          label={label}
-          // `table.roster-table .status-pill` (`:1447`): one width for every verdict, centred, in the
-          // pill's own case rather than shouted.
-          className="w-[126px] justify-center px-2.5 py-1 text-xs font-semibold normal-case tracking-normal"
-        />
-      </td>
-      <td className={cn(CELL, 'text-right')}>
-        {/* `.btn-coach.built` (`:1460-1461`): every row is built now (ADR-0074, contradiction #9). */}
-        <ButtonLink
-          href={coachingSessionHref(row.membershipId)}
-          className="h-auto whitespace-nowrap px-3.5 py-2 text-base"
-        >
-          {/*
-            * One span round the label, so *Coaching →* is one line of text, as the prototype's button
-            * is (`:10642`). The link is `inline-flex`: left loose, *Coaching* and the arrow become two
-            * flex items, the space between them is dropped, and the button reads *Coaching→*.
-            */}
-          <span>
-            Coaching <span aria-hidden="true">→</span>
-          </span>
-        </ButtonLink>
-      </td>
-    </tr>
+        <span className="min-w-0 flex-1 pl-12">{t.columns.name}</span>
+        <span className={cn('shrink-0', COL.last)}>{t.columns.last}</span>
+        <span className={cn('shrink-0', COL.coach)}>{t.columns.coachedBy}</span>
+        <span className={cn('shrink-0', COL.status)}>{t.columns.status}</span>
+        <span className="w-5 shrink-0" />
+      </div>
+
+      {directAgents.length > 0 && (
+        <section aria-labelledby={directId}>
+          <GroupBand id={directId} label={t.directAgents} count={directAgents.length} />
+          <ul role="list" className="divide-y divide-divider">
+            {directAgents.map((row) => (
+              <li key={row.membershipId}><RosterPerson row={row} badged={badged(row)} /></li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {units.length > 0 && (
+        <section aria-labelledby={unitsId}>
+          <GroupBand id={unitsId} label={t.aabUnits} />
+          <ul role="list" className="divide-y divide-divider">
+            {units.map((unit) => (
+              <li key={unit.head.membershipId}>
+                <RosterPerson row={unit.head} badged />
+                <Branches branches={branchesOf(unit.members)} label={t.unitOf({ name: unit.head.name })} badged={badged} />
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+    </div>
   );
 }
 
 /**
- * *Your direct agents · n*, then *AAB units*, each head followed by their whole subtree in the order
- * the server sends it (`:10648-10657`). A group with nobody in it is left out rather than drawn as a
- * heading over nothing; a roster with nobody at all is the page's empty state, not this table.
+ * A leader's people, one level in, each with their own beneath them. The line drops from the leader's avatar — 30px in
+ * on a head's row (its 12px padding and half the avatar), 18px on a child's, which has no padding — and each child's
+ * avatar starts 36px right of its leader's (UI-033).
  */
-export function CoachingRoster({ roster }: { roster: Roster }) {
-  // The junior rung: a member on any other rung heads a unit of their own, nested or not.
-  const ladder = useLadder();
-  const agentRung = [...ladder].sort((a, b) => a.displayOrder - b.displayOrder)[0]?.code;
-  const { directAgents, units } = roster;
+function Branches({
+  branches, label, badged, nested = false,
+}: { branches: readonly Branch[]; label: string; badged: (row: RosterRow) => boolean; nested?: boolean }) {
+  const t = useMessages(coachingMessages).roster;
+  if (branches.length === 0) return null;
+  return (
+    <TreeIndent label={label} className={cn('mt-0 gap-0 pl-[19px]', nested ? 'ml-[17px]' : 'mb-1.5 ml-[29px]')}>
+      {branches.map(({ row, children }) => (
+        <TreeNode key={row.membershipId} className={ELBOW_60}>
+          <RosterPerson row={row} badged={badged(row)} className="pl-0" />
+          <Branches branches={children} label={t.unitOf({ name: row.name })} badged={badged} nested />
+        </TreeNode>
+      ))}
+    </TreeIndent>
+  );
+}
+
+/** A group's 36px band, its heading: *Agen langsung Anda · 3*. */
+function GroupBand({ id, label, count }: { id: string; label: string; count?: number }) {
+  return (
+    <h3 id={id} className="flex min-h-9 items-center border-t border-divider bg-hover-row px-3.5 text-base font-bold text-navy">
+      {label}
+      {count !== undefined && <span className="ml-1 font-semibold text-muted">· {count}</span>}
+    </h3>
+  );
+}
+
+/**
+ * One person: the row opens their *Coaching Session* (`coachingSessionHref`). Below 768px *Last 1:1* and who held it
+ * are the row's line; from 768px they are its columns.
+ */
+function RosterPerson({ row, badged, className }: { row: RosterRow; badged: boolean; className?: string }) {
+  const language = useLanguage();
+  const t = useMessages(coachingMessages).roster;
+  const last = row.lastOneOnOne;
+  const late = last?.overdue ?? false;
+  const when = lastOneOnOneLine(last, language);
+  const status: ReactNode = <TonePill tone={TONE[row.status]}>{rosterStatusLabel(row.status, language)}</TonePill>;
 
   return (
-    // `.list-table-card` (`:1437`), scrolling inside itself on a phone rather than widening the page.
-    <div className="overflow-x-auto rounded-lg border border-hairline bg-card">
-      <table className="relative w-full border-collapse text-left">
-        <caption className="sr-only">{ROSTER_CAPTION}</caption>
-        <thead>
-          <tr className="border-b border-hairline">
-            {ROSTER_COLUMNS.map((column) => {
-              const name = typeof column === 'string' ? column : column.label;
-              return (
-                <th
-                  key={name}
-                  scope="col"
-                  className={cn(CELL, 'bg-card text-xs font-semibold uppercase tracking-wide text-muted')}
-                >
-                  {typeof column === 'string' ? name : <span className="sr-only">{name}</span>}
-                </th>
-              );
-            })}
-          </tr>
-        </thead>
-
-        {directAgents.length > 0 && (
-          <tbody>
-            <GroupDivider label="Your direct agents" count={directAgents.length} />
-            {directAgents.map((row) => <PersonRow key={row.membershipId} row={row} />)}
-          </tbody>
-        )}
-
-        {units.length > 0 && (
-          <tbody>
-            <GroupDivider label="AAB units" />
-          </tbody>
-        )}
-        {units.map((unit) => (
-          <tbody key={unit.head.membershipId}>
-            <PersonRow row={unit.head} head />
-            {unit.members.map((member) => (
-              <PersonRow
-                key={member.membershipId}
-                row={member}
-                nested
-                badged={agentRung !== undefined && member.rung.code.toUpperCase() !== agentRung.toUpperCase()}
-              />
-            ))}
-          </tbody>
-        ))}
-      </table>
-    </div>
+    <PersonRow
+      name={row.name}
+      photoUrl={row.photoUrl ?? null}
+      seed={row.membershipId}
+      href={coachingSessionHref(row.membershipId)}
+      chevron
+      height={60}
+      className={cn('rounded-none', className)}
+      nameClassName="text-md md:max-lg:text-md"
+      badge={badged ? <TonePill tone="grey" className="px-1.5 py-0 leading-[18px]">{shortOfRung(row.rung)}</TonePill> : undefined}
+      meta={(
+        // The phone's line (UI-033): *1 hari lalu · oleh Agus*, red only when late.
+        <span data-roster-line="" className={cn('truncate md:hidden', late ? 'text-signal-red' : 'text-signal-grey')}>
+          {when}
+          {last?.coach && <> · {t.by({ name: firstName(last.coach.name) })}</>}
+        </span>
+      )}
+      trailing={(
+        <>
+          <span className={cn('shrink-0 text-base max-md:hidden', COL.last, late ? 'text-signal-red' : 'text-signal-grey')}>
+            {when}
+          </span>
+          <span className={cn('shrink-0 truncate text-base text-ink max-md:hidden', COL.coach)}>
+            <span className="sr-only">{t.columns.coachedBy}: </span>
+            {last?.coach?.name ?? '—'}
+          </span>
+          <span className={cn('shrink-0', COL.status)}>{status}</span>
+        </>
+      )}
+    />
   );
 }

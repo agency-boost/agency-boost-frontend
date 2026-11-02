@@ -1,29 +1,41 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { useFieldChrome } from '@/components/field-nav';
 import { Button } from '@/components/ui/field';
+import { useLanguage, useMessages } from '@/i18n/language-provider';
+import { forumMessages } from '@/i18n/messages/forum';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import {
-  defaultMeetingTitle, filterMeetings, FORUM_COPY, readMeetings, type MeetingFilter, type MeetingListView,
+  defaultMeetingTitle, filterMeetings, readMeetings, signInAndReturn, type MeetingFilter, type MeetingListView,
 } from '@/lib/leader-meetings';
 import { useSession } from '@/lib/session';
+import { useOpenedOnce } from '@/lib/use-opened-once';
+import { usePhone } from '@/lib/use-phone';
 import { ListSkeleton, LoadError, NotFound } from './forum-states';
 import { MeetingCardRow } from './meeting-card';
-import { MeetingDialog } from './meeting-dialog';
-import { signInAndReturn } from './meeting-screen';
+import { V1ForumList } from './v1-list';
+
+/** *+ New meeting*'s dialog, downloaded when it is first opened and mounted from then on (`useOpenedOnce`; P18.99-T16). */
+const MeetingDialog = dynamic(() => import('./meeting-dialog').then((m) => m.MeetingDialog), { ssr: false });
 
 const FILTERS: readonly MeetingFilter[] = ['all', 'upcoming', 'past'];
 
 /**
- * **The list** (`/leader-meetings`, `:2002-2013`, `:2588-2630`; *The list*): the list's own line, the filter
- * *All* · *Upcoming* · *Past* over the one read, *+ New meeting* beside it for whoever may make one, and a
- * card per meeting, newest first. A member the server does not let read the forum is answered `404`, and
- * meets the not-found state.
+ * **The list** (`/leader-meetings`, `:2002-2013`, `:2588-2630`; *The list*): the filter *All* · *Upcoming* · *Past*
+ * over the one read, *+ New meeting* beside it for whoever may make one, and a card per meeting, newest first. A member
+ * the server does not let read the forum is answered `404`, and meets the not-found state.
+ *
+ * **One subtitle** (P18.97-T2 AC-1, I-496; the client's grey-text row for UI-015): the page's, from the shell. The list's
+ * own line (`:2004`) said it again and is gone at every size.
  */
 export function ForumList() {
-  const { me, loading, signedOut } = useSession();
+  const t = useMessages(forumMessages);
+  const language = useLanguage();
+  const { me, loading, signedOut, expired } = useSession();
   const router = useRouter();
   const pathname = usePathname();
   const signedIn = !loading && me !== null;
@@ -33,10 +45,14 @@ export function ForumList() {
   const [attempt, setAttempt] = useState(0);
   const [filter, setFilter] = useState<MeetingFilter>('all');
   const [creating, setCreating] = useState(false);
+  const createOpened = useOpenedOnce(creating);
+  // UI V1 (UI-110): a phone in the field shell reads the Event-like cards; the console and wider screens as before.
+  const phone = usePhone();
+  const field = useFieldChrome() !== null;
 
   useEffect(() => {
-    if (!loading && !me) router.replace(signInAndReturn(pathname, signedOut));
-  }, [loading, me, signedOut, router, pathname]);
+    if (!loading && !me) router.replace(signInAndReturn(pathname, { signedOut, expired }));
+  }, [loading, me, signedOut, expired, router, pathname]);
 
   useEffect(() => {
     if (!signedIn) return undefined;
@@ -59,10 +75,32 @@ export function ForumList() {
 
   const shown = filterMeetings(view.meetings, filter);
 
+  const dialog = view.can.create && createOpened && (
+    <MeetingDialog
+      open={creating}
+      onClose={() => setCreating(false)}
+      limits={view.limits}
+      defaultTitle={defaultMeetingTitle(view.meetings, language)}
+      onCreated={(card) => router.push(`/leader-meetings/${encodeURIComponent(card.id)}`)}
+    />
+  );
+
+  if (phone && field) {
+    return (
+      <>
+        <V1ForumList
+          meetings={view.meetings}
+          filter={filter}
+          onFilter={setFilter}
+          create={view.can.create ? <Button onClick={() => setCreating(true)}>{t.newMeeting}</Button> : null}
+        />
+        {dialog}
+      </>
+    );
+  }
+
   return (
     <>
-      <p className="mb-[18px] text-md text-muted">{FORUM_COPY.listLine}</p>
-
       <div className="mb-[22px] flex flex-wrap items-center gap-3">
         {/* `#meeting-segmented` (`:596-601`): each button says whether it is the one on (I-255). */}
         <div className="inline-flex rounded-[9px] border border-hairline bg-card p-[3px]">
@@ -77,36 +115,28 @@ export function ForumList() {
                 filter === f ? 'bg-navy text-white' : 'text-muted hover:text-navy',
               )}
             >
-              {FORUM_COPY.filters[f]}
+              {t.filters[f]}
             </button>
           ))}
         </div>
         {view.can.create && (
-          <Button onClick={() => setCreating(true)}>{FORUM_COPY.newMeeting}</Button>
+          <Button onClick={() => setCreating(true)}>{t.newMeeting}</Button>
         )}
       </div>
 
       {view.meetings.length === 0 ? (
-        <p className="rounded-lg border border-hairline bg-card px-[18px] py-10 text-center text-base text-muted">
-          {FORUM_COPY.noMeetings}
+        <p className="rounded-lg border border-card-edge bg-card px-[18px] py-10 text-center text-base text-muted">
+          {t.noMeetings}
         </p>
       ) : shown.length === 0 ? (
-        <p className="px-[18px] py-10 text-center text-base text-muted">{FORUM_COPY.noMatch}</p>
+        <p className="px-[18px] py-10 text-center text-base text-muted">{t.noMatch}</p>
       ) : (
         <ul className="mb-8 flex flex-col gap-3">
           {shown.map((meeting) => <MeetingCardRow key={meeting.id} meeting={meeting} />)}
         </ul>
       )}
 
-      {view.can.create && (
-        <MeetingDialog
-          open={creating}
-          onClose={() => setCreating(false)}
-          limits={view.limits}
-          defaultTitle={defaultMeetingTitle(view.meetings)}
-          onCreated={(card) => router.push(`/leader-meetings/${encodeURIComponent(card.id)}`)}
-        />
-      )}
+      {dialog}
     </>
   );
 }

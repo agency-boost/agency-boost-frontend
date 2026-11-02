@@ -1,6 +1,7 @@
+import { DEFAULT_LANGUAGE, SOURCE_LANGUAGE, type Language } from '@/i18n/language';
 import { clockMinutes, endMinutes } from './format';
 import {
-  NOTES_MAX, OWN_COPY, TITLE_MAX, TRIP_DAYS_MAX, INVITEES_MAX, addDays, daysInclusive, readableDate,
+  NOTES_MAX, TITLE_MAX, TRIP_DAYS_MAX, INVITEES_MAX, addDays, calendarWordsIn, daysInclusive, limitWords, readableDate,
   type CalendarEntry, type EntryInput, type EntryType,
 } from './calendar';
 
@@ -16,6 +17,8 @@ export interface EntryForm {
   type: EntryType;
   title: string;
   notes: string;
+  /** Travel's *Sepanjang hari* (UI V1, UI-104 point 8): on by default; off, the trip takes a time on each date. */
+  allDay: boolean;
   date: string;
   start: string;
   end: string;
@@ -40,6 +43,7 @@ export function blankForm(slot: Slot, type: EntryType = 'meeting', title = ''): 
     type,
     title,
     notes: '',
+    allDay: true,
     date: slot.date,
     start: slot.start,
     end: slot.end,
@@ -59,6 +63,8 @@ export function formFromEntry(entry: CalendarEntry): EntryForm {
     type: entry.type,
     title: entry.title,
     notes: entry.notes,
+    // A trip says whether it is all-day (UI-104 point 8); any other type opens as a trip all-day, should it change.
+    allDay: entry.type === 'travel' ? entry.allDay : true,
     date: entry.date ?? first,
     start: entry.start ?? DEFAULT_START,
     end: entry.end ?? DEFAULT_END,
@@ -70,58 +76,87 @@ export function formFromEntry(entry: CalendarEntry): EntryForm {
 export type FormField = 'date' | 'end' | 'startsOn' | 'endsOn' | 'title' | 'notes' | 'invitees';
 export type FormErrors = Partial<Record<FormField, string>>;
 
+/** The rules' sentences, each said under its field. */
+export type FormWords = ReturnType<typeof formWords>;
+
+/**
+ * **The rules' sentences in a language** (P18.98-T4): their words in `language` (English when none is passed), a
+ * limit's figure in `figures` (Indonesian when none is passed, as before). The dialog passes the reader's.
+ */
+export function formWords(language: Language = SOURCE_LANGUAGE, figures: Language = DEFAULT_LANGUAGE) {
+  const t = calendarWordsIn(language);
+  return {
+    chooseDate: t.chooseDate,
+    endAfterStart: t.endAfterStart,
+    returnAfterDeparture: t.returnAfterDeparture,
+    tripEndAfterStart: t.tripEndAfterStart,
+    ...limitWords(language, figures),
+  };
+}
+
 /**
  * The rules, each a message under its own field (a Fill, in the calendar's own words, ADR-0096). The
  * server holds the same rules and refuses whatever this misses with 400 `VALIDATION_FAILED`.
  */
-export function validateForm(form: EntryForm, inviteeCount: number): FormErrors {
+export function validateForm(form: EntryForm, inviteeCount: number, words: FormWords = formWords()): FormErrors {
   const errors: FormErrors = {};
   if (form.type === 'travel') {
-    if (!readableDate(form.startsOn)) errors.startsOn = OWN_COPY.chooseDate;
+    if (!readableDate(form.startsOn)) errors.startsOn = words.chooseDate;
     if (!readableDate(form.endsOn) || (readableDate(form.startsOn) && form.endsOn < form.startsOn)) {
-      errors.endsOn = OWN_COPY.returnAfterDeparture;
+      errors.endsOn = words.returnAfterDeparture;
     } else if (readableDate(form.startsOn) && daysInclusive(form.startsOn, form.endsOn) > TRIP_DAYS_MAX) {
-      errors.endsOn = OWN_COPY.tripTooLong;
+      errors.endsOn = words.tripTooLong;
+    } else if (!form.allDay) {
+      // A trip with times (UI-104 point 8): its end, on the return date, after its start on the departure date.
+      const start = clockMinutes(form.start);
+      const end = clockMinutes(form.end);
+      if (start === null || end === null || (form.endsOn === form.startsOn && end <= start)) errors.end = words.tripEndAfterStart;
     }
   } else {
-    if (!readableDate(form.date)) errors.date = OWN_COPY.chooseDate;
+    if (!readableDate(form.date)) errors.date = words.chooseDate;
     const start = clockMinutes(form.start);
     const end = endMinutes(form.end);
     // Nothing but Travel crosses midnight: an end of 00:00 is the end of this date.
-    if (start === null || end === null || end <= start) errors.end = OWN_COPY.endAfterStart;
+    if (start === null || end === null || end <= start) errors.end = words.endAfterStart;
   }
-  if (form.title.length > TITLE_MAX) errors.title = OWN_COPY.titleTooLong;
-  if (form.notes.length > NOTES_MAX) errors.notes = OWN_COPY.notesTooLong;
-  if (inviteeCount > INVITEES_MAX) errors.invitees = OWN_COPY.tooManyInvitees;
+  if (form.title.length > TITLE_MAX) errors.title = words.titleTooLong;
+  if (form.notes.length > NOTES_MAX) errors.notes = words.notesTooLong;
+  if (inviteeCount > INVITEES_MAX) errors.invitees = words.tooManyInvitees;
   return errors;
 }
 
 /** What a save sends: the timing its type needs, and nothing of the other's. */
 export function toInput(form: EntryForm, inviteeIds: string[]): EntryInput {
   const common = { type: form.type, title: form.title, notes: form.notes, inviteeIds };
-  return form.type === 'travel'
-    ? { ...common, startsOn: form.startsOn, endsOn: form.endsOn }
-    : { ...common, date: form.date, start: form.start, end: form.end };
+  if (form.type !== 'travel') return { ...common, date: form.date, start: form.start, end: form.end };
+  return form.allDay
+    ? { ...common, allDay: true, startsOn: form.startsOn, endsOn: form.endsOn }
+    : { ...common, allDay: false, startsOn: form.startsOn, start: form.start, endsOn: form.endsOn, end: form.end };
 }
 
 /**
  * A server refusal's `details.violations`, put under the fields they name. The server words each
- * violation as a sentence beginning with its field (`error-catalog.md`, `VALIDATION_FAILED`); one this
- * cannot place is left to the dialog's banner, so nothing is lost.
+ * violation as a sentence beginning with its field (`error-catalog.md`, `VALIDATION_FAILED`), in either language; one
+ * this cannot place is left to the dialog's banner, so nothing is lost. `words` are the sentences put in its place.
  */
-export function violationsToErrors(details: Record<string, unknown> | undefined): FormErrors | null {
+export function violationsToErrors(
+  details: Record<string, unknown> | undefined, words: FormWords = formWords(),
+): FormErrors | null {
   const violations = Array.isArray(details?.violations) ? (details.violations as unknown[]) : [];
   const errors: FormErrors = {};
   const place: [RegExp, FormField, string][] = [
-    [/^title\b/i, 'title', OWN_COPY.titleTooLong],
-    [/^notes\b/i, 'notes', OWN_COPY.notesTooLong],
+    [/^title\b/i, 'title', words.titleTooLong],
+    [/^notes\b/i, 'notes', words.notesTooLong],
     // Only the limit: an invitee refused for who they are is the 404 the dialog marks on their chip.
-    [new RegExp(`^inviteeIds\\b.*(more than|at most|\\b${INVITEES_MAX}\\b)`, 'i'), 'invitees', OWN_COPY.tooManyInvitees],
-    [/^(startsOn|departure)\b/i, 'startsOn', OWN_COPY.chooseDate],
-    [/^endsOn must be at most\b/i, 'endsOn', OWN_COPY.tripTooLong],
-    [/^endsOn\b/i, 'endsOn', OWN_COPY.returnAfterDeparture],
-    [/^date\b/i, 'date', OWN_COPY.chooseDate],
-    [/^(start|end)\b/i, 'end', OWN_COPY.endAfterStart],
+    [new RegExp(`^inviteeIds\\b.*(more than|at most|\\b${INVITEES_MAX}\\b)`, 'i'), 'invitees', words.tooManyInvitees],
+    [/^(startsOn|departure)\b/i, 'startsOn', words.chooseDate],
+    // The API's sentence in the reader's language (P18.98-T5): *"endsOn paling lambat 31 hari …"* in Indonesian.
+    // A trip with times (UI-104 point 8): *"endsOn and end must come after startsOn and start."*
+    [/^endsOn (?:and|dan) end\b/i, 'end', words.tripEndAfterStart],
+    [/^endsOn (?:must be at most|paling lambat)\b/i, 'endsOn', words.tripTooLong],
+    [/^endsOn\b/i, 'endsOn', words.returnAfterDeparture],
+    [/^date\b/i, 'date', words.chooseDate],
+    [/^(start|end)\b/i, 'end', words.endAfterStart],
   ];
   for (const violation of violations) {
     if (typeof violation !== 'string') continue;

@@ -1,19 +1,31 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { useCallback, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Suspense, useCallback, useState } from 'react';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { useSession } from '@/lib/session';
 import { type DemoAccount } from '@/lib/demo-accounts';
 import { DemoAccountsPanel } from '@/components/demo-accounts-panel';
-import { Button, Card, ErrorBanner, Field, TextInput } from '@/components/ui/field';
+import { SignInWelcome, SIGN_IN_PAGE } from '@/components/sign-in-welcome';
+import { Button, ErrorBanner, Field, TextInput } from '@/components/ui/field';
 import { resendVerification } from '@/lib/sessions';
-import { destinationAfterSignIn } from '@/lib/return-path';
+import { destinationAfterSignIn, sessionEndedIn } from '@/lib/return-path';
 import { PasswordInput } from '@/components/ui/password-input';
+import { PublicTitle } from '@/components/public-title';
+import { useMessages } from '@/i18n/language-provider';
+import { authMessages } from '@/i18n/messages/auth';
 
+/**
+ * **Sign in** (`/login`; UI V1, UI-102, D-11 and D-12; Phase 18.99 T11): **a welcome screen, not a form card** — soft
+ * warm-grey and peach shapes behind, Boost pointing on his peach circle in the middle with the three icon cards floating
+ * around him, the app's name and one short line under it, then the form, and **one big pill *Sign in*** (52px) near the
+ * thumb. **Today's method and today's words**: email and password, *Forgot your password?*, *Create an account*, the
+ * verification resend and the development accounts — only the look changes (`SignInWelcome`).
+ */
 export default function LoginPage() {
   const { signIn } = useSession();
+  const t = useMessages(authMessages).signIn;
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -31,7 +43,8 @@ export default function LoginPage() {
         // open it; otherwise their own landing — a Super Admin to the console, a tenant admin to their
         // office, everyone else to their field landing. Whoever signed out before them on this device
         // left their page in `next`, and it was honoured for anybody (the product owner's report,
-        // 2026-10-11).
+        // 2026-10-11). After an expired session (`reason=expired`) `next` is not read at all: every
+        // sign-in again starts on the landing (staging review, 2026-10-31).
         router.push(destinationAfterSignIn(window.location.search, signedIn));
       } catch (err) {
         setError(toDisplayError(err));
@@ -66,11 +79,17 @@ export default function LoginPage() {
   const notVerified = error?.code === 'AUTH_EMAIL_NOT_VERIFIED';
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-5 py-10">
-      <h1 className="font-display text-3xl font-bold text-navy">AgencyBoost</h1>
-      <p className="mb-6 mt-1 text-md text-muted">Sign in to continue.</p>
+    <main className={SIGN_IN_PAGE}>
+      <SignInWelcome />
+      <PublicTitle>
+        <h1 className="w-full text-center font-display text-3xl font-bold text-navy">{t.title}</h1>
+      </PublicTitle>
+      {/* `useSearchParams` needs a boundary; until the address is read, the sentence everybody else reads. */}
+      <Suspense fallback={<Lede ended={false} />}>
+        <LedeFromAddress />
+      </Suspense>
 
-      <Card>
+      <div className="relative">
         <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
           {error && <ErrorBanner {...error} />}
           {notVerified && (
@@ -87,17 +106,17 @@ export default function LoginPage() {
                   }
                 }}
               >
-                Send the verification email again
+                {t.resend}
               </Button>
               {resent && (
                 <p role="status" className="text-md text-muted">
-                  On its way, if that address has an account waiting.
+                  {t.resent}
                 </p>
               )}
             </div>
           )}
 
-          <Field label="Email" htmlFor="email">
+          <Field label={t.email} htmlFor="email">
             <TextInput
               id="email"
               name="email"
@@ -110,7 +129,7 @@ export default function LoginPage() {
             />
           </Field>
 
-          <Field label="Password" htmlFor="password">
+          <Field label={t.password} htmlFor="password">
             <PasswordInput
               id="password"
               name="password"
@@ -122,21 +141,40 @@ export default function LoginPage() {
             />
           </Field>
 
-          <Button type="submit" disabled={busy}>
-            {busy ? 'Signing in…' : 'Sign in'}
+          {/* UI-102: one big pill, 52px, near the thumb. */}
+          <Button type="submit" disabled={busy} data-sign-in="" className="mt-1 h-[3.25rem] w-full rounded-pill text-base">
+            {busy ? t.signingIn : t.signIn}
           </Button>
 
           <Link href="/forgot-password" className="text-center text-sm text-muted underline">
-            Forgot your password?
+            {t.forgot}
           </Link>
 
           <Link href="/register" className="text-center text-sm text-muted underline">
-            Create an account
+            {t.createAccount}
           </Link>
         </form>
-      </Card>
+      </div>
 
       <DemoAccountsPanel onChoose={chooseDemo} disabled={busy} />
     </main>
+  );
+}
+
+/**
+ * **The line under the title** (ADR-0168 §1): *Your session ended. Sign in again.* when a page found the reader's
+ * session gone and said so in the address (`reason=expired`, `signInPathFrom`), *Sign in to continue.* for anybody
+ * else — a link opened signed out, a deliberate sign-out, or any other `reason`.
+ */
+function LedeFromAddress() {
+  return <Lede ended={sessionEndedIn(useSearchParams())} />;
+}
+
+function Lede({ ended }: { ended: boolean }) {
+  const t = useMessages(authMessages).signIn;
+  return (
+    <p className="mb-6 mt-1 text-center text-md text-muted">
+      {ended ? t.sessionEnded : t.toContinue}
+    </p>
   );
 }

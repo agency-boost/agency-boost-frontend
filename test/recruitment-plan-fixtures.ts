@@ -6,7 +6,7 @@ import type { Me } from '@/lib/session';
  * **Recruitment › Attack Plan, as the plan's read answers it** (Phase 17, P17-T3): the vocabulary and a plan,
  * shaped as the contract documents `GET /recruitment/attack-plan`, with the prototype's own words
  * (`AgencyBoost_Recruitment_Section.html:305-330`, `:394-510`) — the seed's for a company started from the
- * defaults.
+ * defaults — and the chips in the client's shorter words where it gave them (P18.95-T6 AC-2).
  */
 
 const c = (code: string, label: string): Choice => ({ code, label });
@@ -15,13 +15,14 @@ export const TYPES = [
   c('fresh-grad', 'Fresh grad'), c('career-switch', 'Career switcher'), c('business-owner', 'Business owner'),
   c('retiree', 'Retiree'), c('other-insurer', 'Agent (other insurer)'),
 ];
+/** In the client's shorter words since 2026-10-26 (P18.95-T6 AC-2; UI-015), as the API serves them. */
 export const MOTIVATIONS = [
-  c('side-income', 'Extra income on the side'), c('full-career', 'Full career change'),
-  c('flexibility', 'Flexibility / time freedom'), c('leadership', 'Building a team / leadership'),
+  c('side-income', 'Side income'), c('full-career', 'Career change'),
+  c('flexibility', 'Flexibility'), c('leadership', 'Lead a team'),
 ];
 export const HESITATIONS = [
-  c('no-experience', 'No sales experience'), c('stable-job', 'Already has a stable job'),
-  c('reputation', 'Insurance has a bad reputation'), c('no-network', 'No network to sell to'),
+  c('no-experience', 'No sales exp.'), c('stable-job', 'Already has a stable job'),
+  c('reputation', 'Bad reputation'), c('no-network', 'No network'),
   c('time', 'Worried about time commitment'),
 ];
 export const VOCABULARY = { types: TYPES, motivations: MOTIVATIONS, hesitations: HESITATIONS };
@@ -32,8 +33,8 @@ export const NEXT_ACTION =
   'Send them the Opportunity Overview from Pitch Materials, and set a specific date for their licensing or first shadow session — don\'t leave it open-ended.';
 
 /**
- * *Fresh grad*, driven by *Extra income on the side* and *Building a team / leadership*, hesitant about *No
- * sales experience* and *Worried about time commitment*: two openings, so tagged; two push-backs, the base's.
+ * *Fresh grad*, driven by *Side income* and *Lead a team*, hesitant about *No sales exp.* and *Worried about
+ * time commitment*: two openings, so tagged; two push-backs, the base's.
  */
 export function plan(over: Partial<RecruitmentPlan> = {}): RecruitmentPlan {
   return {

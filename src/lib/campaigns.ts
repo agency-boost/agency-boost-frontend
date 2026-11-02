@@ -1,7 +1,12 @@
+import { messagesIn } from '@/i18n/catalogue';
+import { DEFAULT_LANGUAGE, SOURCE_LANGUAGE, type Language } from '@/i18n/language';
+import { campaignChasingMessages } from '@/i18n/messages/campaign-chasing';
+import { campaignsMessages } from '@/i18n/messages/campaigns';
 import { api } from './api-client';
-import { dayInZone, OFFICE_TIME_ZONE, zoneOffsetMs } from './format';
-import { formatRupiah } from './goals';
-import { formatBenchmark } from './ratio-format';
+import {
+  dayInZone, formatNumber, formatPercent, formatRupiahCompact, OFFICE_TIME_ZONE, zoneOffsetMs,
+} from './format';
+import { formatBenchmark, formatRatioForStatus, unitFor, type RatioDisplayUnit } from './ratio-format';
 
 /**
  * **Campaigns** (`docs/02-specs/functional/campaigns.md`, P18.5-T7 to T9): the shapes the field reads answer,
@@ -64,7 +69,7 @@ export interface CampaignCard {
   phase: CampaignPhase;
   startsAt: string;
   endsAt: string | null;
-  /** The window in words, composed by the server in the office's calendar: *Jul 1 – Sep 30, 2026*. */
+  /** The window in words, composed by the server in the office's calendar: *1 Jul – 30 Sep 2026*. */
   duration: string;
   poster: CampaignPoster;
   blurb: string;
@@ -127,6 +132,11 @@ export interface ChasedCampaign {
   /** Never `ended`: an ended campaign leaves every chasing list (D-lists). */
   phase: 'upcoming' | 'running';
   duration: string;
+  /**
+   * The months it runs, composed by the server in the office's calendar: *Runs Jan – Des*, *Runs Agu – Okt 2026*,
+   * *Runs over the last 12 months* — the Summary row's line (P18.95-T7 AC-1, grey text row 23).
+   */
+  runs: string;
   poster: CampaignPoster;
 }
 
@@ -160,129 +170,243 @@ export const readChasing = (forMembershipId?: string) =>
   api<ChasingList>('/campaigns/chasing' + (forMembershipId ? `?for=${encodeURIComponent(forMembershipId)}` : ''));
 
 /*
- * ── The prototype's words ───────────────────────────────────────────────────────────────────────
+ * ── The words ───────────────────────────────────────────────────────────────────────────────────
+ *
+ * **In the catalogue** (`i18n/messages/campaigns.ts`, and what a person is chasing in `campaign-chasing.ts`; P18.98-T4):
+ * a screen reads the reader's language, `useMessages(campaignsMessages)`; a function here takes the words' language
+ * (English when none is passed) and then the figures' (Indonesian when none is passed, as before), and its caller passes
+ * `useLanguage()` and `useFigureLanguage()`. The objects below are the catalogue's English in the shapes this module
+ * has always handed its spec.
  */
 
-/** The strings `Overall.html` draws, verbatim. Those saying *KPM* go to the client with OD-39. */
+/** The campaigns' words in a language. */
+export const campaignWordsIn = (language: Language = SOURCE_LANGUAGE) => messagesIn(campaignsMessages, language);
+
+const EN = campaignWordsIn(SOURCE_LANGUAGE);
+const CHASING = messagesIn(campaignChasingMessages, SOURCE_LANGUAGE);
+
+/** The strings `Overall.html` draws, verbatim, in English. Those saying *KPM* go to the client with OD-39. */
 export const PROTOTYPE_COPY = {
-  title: 'Campaigns',
-  subtitle: "Company and KPM campaigns — mark the ones you're chasing, click into any card for full requirements.",
-  seasonal: 'Seasonal',
-  structural: 'Structural',
-  all: 'All',
-  running: 'Running',
-  upcoming: 'Upcoming',
-  ended: 'Ended',
-  ongoing: 'Ongoing',
-  promotionCriteria: 'Promotion Criteria',
-  productionClubs: 'Production Clubs',
-  noRunning: 'No running campaigns right now.',
-  noUpcoming: 'No upcoming campaigns.',
-  noEnded: 'No ended campaigns to show.',
-  noPromotion: 'No promotion criteria published yet.',
-  noOngoing: 'No ongoing incentives right now.',
+  /**
+   * The prototype's *Campaigns*, **the nav item's words since P18.95-T9 AC-2** (ADR-0167 §10, OD-205; UI-027, *menu
+   * labels = page titles*): the nav reads *Campaign list* (`:2669`).
+   */
+  title: EN.title,
+  // *Tap*, not *click* (P18.95-T9 AC-5; UI-027): the prototype's *click into any card*.
+  subtitle: EN.subtitle,
+  seasonal: EN.seasonal,
+  structural: EN.structural,
+  all: EN.all,
+  running: EN.running,
+  upcoming: EN.upcoming,
+  ended: EN.ended,
+  ongoing: EN.ongoing,
+  promotionCriteria: EN.promotionCriteria,
+  productionClubs: EN.productionClubs,
+  noRunning: EN.noRunning,
+  noUpcoming: EN.noUpcoming,
+  noEnded: EN.noEnded,
+  noPromotion: EN.noPromotion,
+  noOngoing: EN.noOngoing,
   /** Every campaign is the office's (OD-156, ADR-0146): the source tag reads *KPM* (`tagLabel`, `:8029`). */
-  sourceTag: 'KPM',
-  promotionPath: 'Promotion path',
-  ongoingIncentive: 'Ongoing incentive',
-  requirements: 'Requirements:',
-  requirementsTitle: 'Requirements',
-  prize: 'Prize',
-  chase: 'Chase',
-  chasing: 'Chasing',
-  viewDetails: 'View details',
-  /** The Summary card (`:3228-3229`, `:6229`, `:6245`). */
-  chasingTitle: "Campaigns you're chasing",
-  fromList: 'From the Campaign list',
-  noneChased: "You're not chasing any campaigns yet — check the Campaign list to opt in.",
-  view: 'View →',
+  sourceTag: EN.sourceTag,
+  promotionPath: EN.promotionPath,
+  ongoingIncentive: EN.ongoingIncentive,
+  requirementsTitle: EN.requirementsTitle,
+  prize: EN.prize,
+  chase: EN.chase,
+  chasing: EN.chasing,
+  viewDetails: EN.viewDetails,
+  /** The Summary card (`:3228-3229`, `:6229`, `:6245`): `campaign-chasing.ts`. */
+  fromList: CHASING.fromList,
+  noneChased: CHASING.noneChased,
+  view: CHASING.view,
   /** The Unit Dashboard detail's tile (`:7280`, `:7283`), whose empty words the coachee's card reuses (L-01). */
-  theyreChasing: 'Campaigns they’re chasing',
-  notChasingAny: 'Not currently chasing any campaigns.',
+  theyreChasing: CHASING.theyreChasing,
+  notChasingAny: CHASING.notChasingAny,
   /** The roster's row tooltips (`:7396`). */
-  mdrtChasing: (name: string) => `${name} is chasing MDRT this year.`,
-  mdrtNot: 'Not currently chasing MDRT.',
-  chasingMdrt: 'Chasing MDRT',
+  mdrtChasing: (name: string) => CHASING.mdrtChasing({ name }),
+  mdrtNot: CHASING.mdrtNot,
+  chasingMdrt: CHASING.chasingMdrt,
 } as const;
 
-/** The two toasts (`toggleChase`, `:8144`). */
-export const chasedToast = (title: string) => `Now chasing "${title}"`;
-export const unchasedToast = (title: string) => `Removed "${title}" from your chase list`;
+/** The two toasts (`toggleChase`, `:8144`), in `language`. */
+export const chasedToast = (title: string, language: Language = SOURCE_LANGUAGE) => campaignWordsIn(language).chased({ title });
+export const unchasedToast = (title: string, language: Language = SOURCE_LANGUAGE) => campaignWordsIn(language).unchased({ title });
 
 /**
- * The module's own words — the states the prototype lacks, the reasons it never gives. None of OD-39's six
+ * The toast a chase answer says (`:8144`), from what the server answered, not from what was asked — in `language`. Here,
+ * not in `campaign-list.tsx`, so the Summary's chasing card says it without loading the campaigns list (P18.99-T16).
+ */
+export const chaseToast = (card: Pick<CampaignCard, 'title' | 'chasing'>, language?: Language) =>
+  (card.chasing ? chasedToast(card.title, language) : unchasedToast(card.title, language));
+
+/**
+ * The module's own words, in English — the states the prototype lacks, the reasons it never gives. None of OD-39's six
  * words (*office*, *KPM*, *reports to*, *tagged to*, *untagged*, *unassigned*), no phase, no code.
  */
 export const OWN_COPY = {
-  types: 'Campaign types',
-  statusFilter: 'Show campaigns',
-  loading: 'Loading the campaigns…',
-  loadingOne: 'Loading the campaign…',
-  loadingChasing: 'Loading the campaigns being chased…',
-  tryAgain: 'Try again',
-  close: 'Close',
-  notFound: 'This campaign isn’t on your list.',
-  notFoundHint: 'It may have been withdrawn, or the address may be mistyped.',
+  types: EN.types,
+  statusFilter: EN.statusFilter,
+  loading: EN.loading,
+  loadingOne: EN.loadingOne,
+  loadingChasing: CHASING.loading,
+  tryAgain: EN.tryAgain,
+  close: EN.close,
+  notFound: EN.notFound,
+  notFoundHint: EN.notFoundHint,
   /** Why a chase control is not live: the server's reason, in words (D-lists; AC-5). */
-  blocked: {
-    ended: 'This campaign has ended.',
-    not_eligible: 'This campaign is not open to your role.',
-  } satisfies Record<ChaseBlock, string>,
-  notUploaded: 'Not uploaded yet',
+  blocked: EN.blocked satisfies Record<ChaseBlock, string>,
+  notUploaded: EN.notUploaded,
   /** An activity requirement with nothing logged in its window: no file is awaited, so not *Not uploaded yet*. */
-  nothingLogged: 'Nothing logged yet',
-  notMeasured: 'Not measured yet',
-  met: 'Met',
+  nothingLogged: EN.nothingLogged,
+  notMeasured: EN.notMeasured,
+  met: EN.met,
+  /**
+   * The card's requirements, ***Needs:*** — the client's word (P18.95-T10 AC-3; UI-024, ADR-0167), where the
+   * prototype wrote *Requirements:* (`:8032`). The dialog's heading stays *Requirements*.
+   */
+  needs: EN.needs,
 } as const;
-
-const COMPARATOR: Record<Comparator, string> = { gte: '', gt: 'more than ', lte: 'at most ', lt: 'under ', eq: '' };
 
 /**
  * A figure in its unit: rupiah from sen (X-68's rule, invariant §9), a percentage, a ratio as the ratio card
- * writes it, or a count.
+ * writes it, or a count — in `figures`, the reader's figures (Indonesian when none is passed); a balance's *points* in
+ * `words`, the words' language (English when none is passed).
+ *
+ * **Compact and lossless** (ADR-0167 §1, ADR-0174 §3, §4): *Rp 500 jt*; but a requirement is a rule, and *Rp 2,5
+ * M* for 2.450.000.000 would state a different one — so a figure that compact writing would round is written in
+ * full. A percentage with the places a threshold was set to and no *,0* — *30%*, *75,55%* — and a figure read
+ * against it with every place it has, so *74,96% / 75%* can never read *75% / 75%*. **A ratio in `ratioUnit`**, the
+ * unit the office writes that ratio in (P18.97-T4 AC-8, ADR-0176 §8; UI-030: *"Recruitment success rate at least
+ * 0,30"* on the campaigns settings): a success rate *30%*, leads per activity *1,50*; a caller that does not know it
+ * gets the number, as before.
  */
-export function figureWords(value: number, unit: string): string {
-  if (unit === 'idr_minor') return formatRupiah(value);
-  if (unit === 'percentage') return `${value.toLocaleString('id-ID')}%`;
-  if (unit === 'ratio') return formatBenchmark(value, 'decimal');
-  if (unit === 'percentage_points') return formatBenchmark(value, 'points');
-  return value.toLocaleString('id-ID');
+export function figureWords(
+  value: number, unit: string, ratioUnit: 'percent' | 'decimal' = 'decimal',
+  figures: Language = DEFAULT_LANGUAGE, words: Language = SOURCE_LANGUAGE,
+): string {
+  if (unit === 'idr_minor') return formatRupiahCompact(value, { lossless: true }, figures);
+  if (unit === 'percentage') return formatPercent(value, { lossless: true }, figures);
+  // A rate in the office's own unit for that ratio when the caller knows it — *30%* — else as a number, *0,30*.
+  if (unit === 'ratio') return formatBenchmark(value, ratioUnit, figures, words);
+  if (unit === 'percentage_points') return formatBenchmark(value, 'points', figures, words);
+  return formatNumber(value, { maxDecimals: 2 }, figures);
 }
 
-/** *APE achieved Rp 500.000.000*, as the card's line prints `{label} {target}` (`reqRowHtml`, `:8031-8034`). */
-export const requirementWords = (r: Pick<CampaignRequirement, 'metricName' | 'comparator' | 'value' | 'unit'>) =>
-  `${r.metricName} ${COMPARATOR[r.comparator] ?? ''}${figureWords(r.value, r.unit)}`;
+/**
+ * **How the office writes each of its ratios, by its code** — a ratio's code is its metric's key — so a requirement on
+ * one reads as the ratio card and the settings do: *30%* for a success rate the office writes as a percentage, *1,50*
+ * for one it writes as a number (P18.97-T4 AC-8 on the settings; P18.97-T7 on the agents' cards and dialog, ADR-0174 §2,
+ * *one way of writing a percentage*). From the office's published configuration (`useTenantConfig`), whose read every
+ * shell holds; with none yet, nothing — and a ratio reads as a number, as before.
+ */
+export type RatioUnits = ReadonlyMap<string, 'percent' | 'decimal'>;
 
-/** The card's line: every requirement in words, joined by *" | "* (`:8032`). */
-export const requirementsLine = (requirements: readonly CampaignRequirement[]) =>
-  requirements.map(requirementWords).join(' | ');
+export function ratioUnitsOf(
+  ratios: readonly { code: string; displayUnit?: RatioDisplayUnit | null; comparison: 'gte' | 'band' }[] | null | undefined,
+): RatioUnits {
+  return new Map((ratios ?? []).map((ratio) => [ratio.code, unitFor(ratio) === 'percent' ? 'percent' : 'decimal'] as const));
+}
+
+/**
+ * One requirement in the card's words: ***Rp 16 jt APE***, ***3 new hires***, *more than 2 new active agents* — the
+ * target compact only where that loses nothing (`figureWords`), then what it counts (P18.95-T10 AC-3; the client's
+ * UI-024), one and many as the figure is one or not, keyed by the metric's code, never its name (invariant §4). The
+ * campaign-evaluable set (`CAMPAIGN_METRICS`, D-evaluable) less the ratios, whose name is the rate itself: those, the
+ * balance's points and a stored requirement outside the set keep the prototype's `{name} {target}` (`reqRowHtml`,
+ * `:8031-8034`): *Selling success rate 15%* — **a ratio in the office's unit for it** (`ratioUnits`, P18.97-T7), where it
+ * read *0,15* while the settings read *15%*. Its words in `language`, its figure in `figures`.
+ */
+export function requirementWords(
+  r: Pick<CampaignRequirement, 'metricKey' | 'metricName' | 'comparator' | 'value' | 'unit'>,
+  ratioUnits?: RatioUnits,
+  language: Language = SOURCE_LANGUAGE,
+  figures: Language = DEFAULT_LANGUAGE,
+): string {
+  return campaignWordsIn(language).requirement({
+    comparator: r.comparator,
+    target: figureWords(r.value, r.unit, ratioUnits?.get(r.metricKey), figures, language),
+    noun: r.metricKey in NOUN_KEYS ? r.metricKey : null,
+    one: r.value === 1,
+    name: r.metricName,
+  });
+}
+
+/** The metrics a requirement names by what it counts (`requirement` in the catalogue): the rest keep their name. */
+const NOUN_KEYS: Readonly<Record<string, true>> = {
+  APE_ACHIEVED: true, NEW_HIRES: true, NEW_ACTIVE_AGENTS: true, MAA_COUNT_IN_UNIT: true, CASCADE_ACTIVITY_TOUCHES: true,
+  ROLLING_PERSISTENCY: true,
+};
+
+/**
+ * The card's line after *Needs:*, every requirement in its words **joined by *" + "*** (P18.95-T10 AC-3), where the
+ * prototype joined them by *" | "* (`:8032`): *Rp 16 jt APE + 3 new hires*.
+ */
+export const requirementsLine = (
+  requirements: readonly CampaignRequirement[], ratioUnits?: RatioUnits,
+  language: Language = SOURCE_LANGUAGE, figures: Language = DEFAULT_LANGUAGE,
+) => requirements.map((r) => requirementWords(r, ratioUnits, language, figures)).join(' + ');
+
+/**
+ * Whether the chase is drawn at all: the server lets the reader chase here (`can.chase`), and **the campaign has
+ * not ended** (P18.95-T10 AC-2; UI-024) — the server's `chaseBlocked: 'ended'`, where it was drawn disabled with an
+ * ⓘ. The server refuses a chase or a drop of an ended one all the same (`409 CAMPAIGN_NOT_OPEN`).
+ */
+export const showsChase = (c: Pick<CampaignCard, 'chaseBlocked'>, can: CampaignCan) =>
+  can.chase && c.chaseBlocked !== 'ended';
 
 /** The status tag (`:8047-8051`): the phase for a seasonal campaign, *Ongoing* for a structural one. */
-export const statusWords = (c: Pick<CampaignCard, 'kind' | 'phase'>) =>
-  (c.kind === 'structural' ? PROTOTYPE_COPY.ongoing : PROTOTYPE_COPY[c.phase]);
+export const statusWords = (c: Pick<CampaignCard, 'kind' | 'phase'>, language: Language = SOURCE_LANGUAGE) => {
+  const t = campaignWordsIn(language);
+  return c.kind === 'structural' ? t.ongoing : t[c.phase];
+};
 
 /** The Summary row's `kindLabel` (`:6233-6235`). */
-export const kindLabel = (c: Pick<CampaignCard, 'kind' | 'subtype' | 'phase'>) =>
-  (c.kind === 'seasonal'
-    ? PROTOTYPE_COPY[c.phase]
-    : c.subtype === 'promotion' ? PROTOTYPE_COPY.promotionPath : PROTOTYPE_COPY.ongoingIncentive);
+export const kindLabel = (c: Pick<CampaignCard, 'kind' | 'subtype' | 'phase'>, language: Language = SOURCE_LANGUAGE) => {
+  const t = campaignWordsIn(language);
+  return c.kind === 'seasonal' ? t[c.phase] : c.subtype === 'promotion' ? t.promotionPath : t.ongoingIncentive;
+};
 
-/** The Summary row's sub-line, *"{kindLabel} · {duration}"* (`:6243`). */
-export const rowSubline = (c: ChasedCampaign) => `${kindLabel(c)} · ${c.duration}`;
+/**
+ * **The Summary row's sub-line: the months it runs** (P18.95-T7 AC-1, grey text row 23; ADR-0167 §7), at every size —
+ * *Runs Jan – Des*, where the prototype's *"{kindLabel} · {duration}"* (`:6243`) read *"Ongoing incentive · Standing
+ * — evaluated per calendar year (1 Jan – 31 Des)"*. The server composes it (`runs`), in the reader's language
+ * (P18.98-T5); the dialog the row opens keeps the campaign's kind and its dates.
+ */
+export const rowSubline = (c: ChasedCampaign) => c.runs;
 
 /**
  * A requirement row's progress in the dialog (OD-157): *"{current} of {target}"* while there is a figure to
- * read, and why not where there is none — `null` where the row shows its target alone (upcoming).
+ * read, and why not where there is none — `null` where the row shows its target alone (upcoming). Its words in
+ * `language`, its figures in `figures`.
+ *
+ * **A ratio in the office's unit for it** (`ratioUnit`, P18.97-T7; ADR-0174 §2): its target as typed — *30%* — and the
+ * reader's figure as a ratio beside its benchmark is written (`formatRatioForStatus`): a percentage **whole** (UI-080) —
+ * *29% of 30%*, and *30% of 30%* for an unmet 29,96%, its state the server's, judged on the unrounded value — and a
+ * number to two places, with a place more where the rounding would reach a target it falls short of.
  */
-export function progressWords(row: ProgressRow | undefined): { text: string; met: boolean; figure: boolean } | null {
+export function progressWords(
+  row: ProgressRow | undefined,
+  ratioUnit?: 'percent' | 'decimal',
+  language: Language = SOURCE_LANGUAGE,
+  figures: Language = DEFAULT_LANGUAGE,
+): { text: string; met: boolean; figure: boolean } | null {
   if (!row) return null;
-  if (row.state === 'not_uploaded') return { text: OWN_COPY.notUploaded, met: false, figure: false };
-  if (row.state === 'nothing_logged') return { text: OWN_COPY.nothingLogged, met: false, figure: false };
-  if (row.state === 'not_measured') return { text: OWN_COPY.notMeasured, met: false, figure: false };
-  if (row.current === null) return { text: OWN_COPY.notUploaded, met: false, figure: false };
+  const t = campaignWordsIn(language);
+  if (row.state === 'not_uploaded') return { text: t.notUploaded, met: false, figure: false };
+  if (row.state === 'nothing_logged') return { text: t.nothingLogged, met: false, figure: false };
+  if (row.state === 'not_measured') return { text: t.notMeasured, met: false, figure: false };
+  if (row.current === null) return { text: t.notUploaded, met: false, figure: false };
+  const met = row.state === 'met';
+  // Short of a target it must reach: the place more is written; met, or over a ceiling it must stay under, it is not.
+  const short = !met && row.current < row.target;
+  const current = row.unit === 'ratio' && ratioUnit
+    ? formatRatioForStatus(row.current, ratioUnit, row.target, short ? 'alert' : 'neutral', figures, language)
+    : figureWords(row.current, row.unit, undefined, figures, language);
   return {
-    text: `${figureWords(row.current, row.unit)} of ${figureWords(row.target, row.unit)}`,
-    met: row.state === 'met',
+    text: t.progress({ current, target: figureWords(row.target, row.unit, ratioUnit, figures, language) }),
+    met,
     figure: true,
   };
 }
@@ -293,12 +417,19 @@ export function progressWords(row: ProgressRow | undefined): { text: string; met
 
 export type SeasonalFilter = 'all' | CampaignPhase;
 
-export const SEASONAL_FILTERS: readonly { id: SeasonalFilter; label: string }[] = [
-  { id: 'all', label: PROTOTYPE_COPY.all },
-  { id: 'running', label: PROTOTYPE_COPY.running },
-  { id: 'upcoming', label: PROTOTYPE_COPY.upcoming },
-  { id: 'ended', label: PROTOTYPE_COPY.ended },
-];
+/** The seasonal view's filter, in `language` (`#seasonal-segmented`, `:3674-3679`). */
+export const seasonalFilters = (language: Language = SOURCE_LANGUAGE): readonly { id: SeasonalFilter; label: string }[] => {
+  const t = campaignWordsIn(language);
+  return [
+    { id: 'all', label: t.all },
+    { id: 'running', label: t.running },
+    { id: 'upcoming', label: t.upcoming },
+    { id: 'ended', label: t.ended },
+  ];
+};
+
+/** The filter in English, the catalogue's source. */
+export const SEASONAL_FILTERS = seasonalFilters(SOURCE_LANGUAGE);
 
 export interface CampaignSection {
   id: 'running' | 'upcoming' | 'ended' | 'promotion' | 'ongoing';
@@ -311,26 +442,30 @@ export interface CampaignSection {
  * The seasonal view's three sections (`renderSeasonal`, `:8078-8100`), each shown or hidden whole by the
  * filter. In the server's order (D-lists): nothing here sorts.
  */
-export function seasonalSections(campaigns: readonly CampaignCard[], filter: SeasonalFilter): CampaignSection[] {
+export function seasonalSections(
+  campaigns: readonly CampaignCard[], filter: SeasonalFilter, language: Language = SOURCE_LANGUAGE,
+): CampaignSection[] {
+  const t = campaignWordsIn(language);
   const of = (phase: CampaignPhase) => campaigns.filter((c) => c.kind === 'seasonal' && c.phase === phase);
   const sections: CampaignSection[] = [
-    { id: 'running', heading: PROTOTYPE_COPY.running, empty: PROTOTYPE_COPY.noRunning, items: of('running') },
-    { id: 'upcoming', heading: PROTOTYPE_COPY.upcoming, empty: PROTOTYPE_COPY.noUpcoming, items: of('upcoming') },
-    { id: 'ended', heading: PROTOTYPE_COPY.ended, empty: PROTOTYPE_COPY.noEnded, items: of('ended') },
+    { id: 'running', heading: t.running, empty: t.noRunning, items: of('running') },
+    { id: 'upcoming', heading: t.upcoming, empty: t.noUpcoming, items: of('upcoming') },
+    { id: 'ended', heading: t.ended, empty: t.noEnded, items: of('ended') },
   ];
   return sections.filter((s) => filter === 'all' || s.id === filter);
 }
 
 /** The structural view's two sections (`renderStructural`, `:8102-8111`), in the server's order. */
-export function structuralSections(campaigns: readonly CampaignCard[]): CampaignSection[] {
+export function structuralSections(campaigns: readonly CampaignCard[], language: Language = SOURCE_LANGUAGE): CampaignSection[] {
+  const t = campaignWordsIn(language);
   const structural = campaigns.filter((c) => c.kind === 'structural');
   return [
     {
-      id: 'promotion', heading: PROTOTYPE_COPY.promotionCriteria, empty: PROTOTYPE_COPY.noPromotion,
+      id: 'promotion', heading: t.promotionCriteria, empty: t.noPromotion,
       items: structural.filter((c) => c.subtype === 'promotion'),
     },
     {
-      id: 'ongoing', heading: PROTOTYPE_COPY.productionClubs, empty: PROTOTYPE_COPY.noOngoing,
+      id: 'ongoing', heading: t.productionClubs, empty: t.noOngoing,
       items: structural.filter((c) => c.subtype !== 'promotion'),
     },
   ];

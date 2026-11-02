@@ -1,5 +1,8 @@
 'use client';
 
+import { useMessages } from '@/i18n/language-provider';
+import { uiMessages } from '@/i18n/messages/ui';
+
 /**
  * The grab affordance on a reorderable row — the prototype's `⠿` (`KPM_Owner.html:1506`).
  *
@@ -13,8 +16,16 @@
  * the handle — six dots floating over a list, while the row itself only dimmed. Pointing
  * `setDragImage` at the row is what makes the thing you are moving look like the thing you
  * are moving.
+ *
+ * **On a phone a drag never starts** (HTML5 drag does not fire on touch), so a list reordered by drag offers ↑ and ↓
+ * beside it there, `ReorderArrows` (P18.97-T7 AC-6, ADR-0178 §5); a screen whose handles are 44 × 44px targets on a
+ * phone passes `cn(DRAG_HANDLE_CLASS, TAP_TARGET)`.
  */
+/** The handle's look where its caller names none: the prototype's grey `⠿`, a grab cursor. */
+export const DRAG_HANDLE_CLASS = 'cursor-grab select-none text-md text-muted disabled:cursor-not-allowed';
+
 export function DragHandle({
+  id,
   label,
   onPick,
   onDrop,
@@ -22,6 +33,8 @@ export function DragHandle({
   disabled,
   className,
 }: {
+  /** For a caller that puts the focus back on it once its row has moved (the leads table, P18.8-T7). */
+  id?: string;
   /** What is being moved, for the accessible name. */
   label: string;
   onPick: () => void;
@@ -31,13 +44,15 @@ export function DragHandle({
   disabled?: boolean;
   className?: string;
 }) {
+  const t = useMessages(uiMessages);
   return (
     <button
+      id={id}
       type="button"
       draggable={!disabled}
       disabled={disabled}
-      aria-label={`Reorder ${label}. Press the up or down arrow to move it.`}
-      className={className ?? 'cursor-grab select-none text-md text-muted disabled:cursor-not-allowed'}
+      aria-label={t.reorder({ label })}
+      className={className ?? DRAG_HANDLE_CLASS}
       onDragStart={(e) => {
         const row = e.currentTarget.closest('li, [data-row]');
         if (row) e.dataTransfer.setDragImage(row as Element, 12, 12);

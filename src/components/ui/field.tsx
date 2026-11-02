@@ -1,6 +1,11 @@
 import React from 'react';
 import Link from 'next/link';
 import { cn } from '@/lib/cn';
+import { REMOVED_ON_PHONE, SWITCH_LINE_PHONE, SWITCH_TAP_PHONE, TAP_TARGET } from '@/components/ui/phone';
+import { BUTTON_TOUCH, FIELD_TOUCH, TAP_TARGET_TABLET } from '@/components/ui/touch';
+import { ConsoleCode } from '@/components/ui/console-code';
+import { CodeWord, ErrorWords } from '@/components/ui/ui-words';
+import { errorReference } from '@/lib/browser-errors';
 
 /** One place, so `FieldRow.Actions`'s spacer is the same height as a label by construction. */
 const LABEL_CLASS = 'text-sm font-semibold text-navy';
@@ -43,7 +48,7 @@ FieldRow.Actions = function FieldRowActions({
 }) {
   return (
     <div className={cn('flex flex-col gap-1', className)}>
-      <span aria-hidden="true" className={LABEL_CLASS}>&nbsp;</span>
+      <span aria-hidden="true" className={LABEL_CLASS}>{'\u00a0'}</span>
       <div className="flex flex-wrap items-center gap-2">{children}</div>
     </div>
   );
@@ -52,6 +57,7 @@ FieldRow.Actions = function FieldRowActions({
 export function Field({
   label,
   hint,
+  hintOnPhone = true,
   error,
   htmlFor,
   children,
@@ -64,6 +70,12 @@ export function Field({
    */
   label: React.ReactNode;
   hint?: string;
+  /**
+   * `false`: **the hint is not drawn below 768px** — the client's *Remove* verdict on a grey sentence (P18.95-T7
+   * AC-1; ADR-0167 §7). It still describes the control there, as it does at every width: a screen reader reads a
+   * description it is not shown.
+   */
+  hintOnPhone?: boolean;
   error?: string;
   htmlFor: string;
   children: React.ReactNode;
@@ -104,7 +116,7 @@ export function Field({
        * `aria-describedby` is id-based, so nothing announced changes. Hint before error keeps
        * the visual order matching the `describedBy` string built above.
        */}
-      {hint && <p id={hintId} className="text-xs text-muted">{hint}</p>}
+      {hint && <p id={hintId} className={cn('text-xs text-muted', !hintOnPhone && REMOVED_ON_PHONE)}>{hint}</p>}
       {/* Announced to assistive technology, not just coloured red. */}
       {error && (
         <p id={errorId} role="alert" className="text-xs font-semibold text-alert">
@@ -132,16 +144,19 @@ export function CodeField({
   value,
   reason,
   className,
+  inputClassName,
 }: {
   id: string;
   value: string;
   /** Why it cannot change. Not optional: a greyed field with no explanation reads as broken. */
   reason: string;
   className?: string;
+  /** The box's own classes beside its look — `CONTROL_PHONE`, where a screen's fields are 44px on a phone (P18.97-T7). */
+  inputClassName?: string;
 }) {
   return (
-    <Field label="Code" htmlFor={id} hint={reason} className={className}>
-      <TextInput id={id} value={value} readOnly className="bg-base text-muted" />
+    <Field label={<CodeWord />} htmlFor={id} hint={reason} className={className}>
+      <TextInput id={id} value={value} readOnly className={cn('bg-base text-muted', inputClassName)} />
     </Field>
   );
 }
@@ -215,7 +230,8 @@ export function ReadOnlyField({
  * cell is hovered — a transparent border that becomes visible costs no layout, one that appears does.
  */
 const DENSITY = {
-  default: 'h-10 rounded-md border bg-card px-3 text-base',
+  // 48px below 1024px (UI V1, UI-010: *fields 48px*).
+  default: `h-10 ${FIELD_TOUCH} rounded-md border bg-card px-3 text-base`,
   cell:
     'w-full rounded-sm border bg-transparent px-1.5 py-[3px] text-base leading-tight '
     + 'hover:border-hairline focus:border-amber focus:bg-card focus:ring-1 focus:ring-amber',
@@ -298,6 +314,7 @@ export function TextInput({
     <span
       className={cn(
         'inline-flex h-10 items-center overflow-hidden rounded-md border-[1.5px] bg-card',
+        FIELD_TOUCH,
         invalid ? 'border-alert' : 'border-hairline',
         // The same weight the global rule gives a bare input — 2px amber, offset by one — so nothing
         // is lost by moving the indicator out here.
@@ -323,8 +340,12 @@ export function TextInput({
  * `aria-hidden`, because the label already names the field and the unit is either implied by it or
  * carried by the hint. A screen reader announcing "Rp" as a second unnamed thing beside the input is
  * noise.
+ *
+ * **On a phone the unit is 16px, as the number beside it is** (`globals.css` raises a field's text there
+ * so iOS does not zoom, UI-014): the prototype's affix is the input's own size, and a 13px *Rp* beside a
+ * 16px figure read as a footnote.
  */
-const AFFIX = 'shrink-0 select-none px-3 text-base font-semibold text-muted';
+const AFFIX = 'shrink-0 select-none px-3 text-base font-semibold text-muted max-md:text-lg';
 /**
  * Inside the group the input owns no border, no ground and **no focus ring of its own**.
  *
@@ -437,6 +458,10 @@ export function ColorInput({
  *
  * **The label never changes with the state.** *Published* stays *Published* whether it is on or
  * off; a name that flipped to *Draft* would announce as a different control appearing.
+ *
+ * **`phoneTarget`: a 44 × 44px target below 768px** (P18.97-T7 AC-6, ADR-0178 §5; UI-040): the transparent input a
+ * square centred on the track and the line as tall, the track drawn as before (`SWITCH_TAP_PHONE`, `phone.ts`). On the
+ * screens the client's UI-040 names; from 768px it changes nothing.
  */
 export function Switch({
   id,
@@ -446,6 +471,7 @@ export function Switch({
   onChange,
   describedBy,
   className,
+  phoneTarget = false,
 }: {
   id: string;
   /** Stays the same in both states — it names the control, not the state. */
@@ -455,9 +481,11 @@ export function Switch({
   onChange: (next: boolean) => void;
   describedBy?: string;
   className?: string;
+  /** Below 768px, a 44 × 44px target (P18.97-T7 AC-6). */
+  phoneTarget?: boolean;
 }) {
   return (
-    <span className={cn('inline-flex items-center gap-2', className)}>
+    <span className={cn('inline-flex items-center gap-2', phoneTarget && SWITCH_LINE_PHONE, className)}>
       <span className="relative inline-flex h-[22px] w-[38px] shrink-0 items-center">
         <input
           id={id}
@@ -467,7 +495,10 @@ export function Switch({
           disabled={disabled}
           aria-describedby={describedBy}
           onChange={(e) => onChange(e.target.checked)}
-          className="peer absolute inset-0 z-10 m-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
+          className={cn(
+            'peer absolute inset-0 z-10 m-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed',
+            phoneTarget && SWITCH_TAP_PHONE,
+          )}
         />
         <span
           aria-hidden="true"
@@ -520,7 +551,7 @@ export function Textarea({
 
 /** A button shaped like a button. Not for the two inline variants, which are text. */
 const BUTTON_BASE =
-  'inline-flex h-10 items-center justify-center rounded-md px-4 text-md font-semibold';
+  `inline-flex h-10 ${BUTTON_TOUCH} items-center justify-center rounded-md px-4 text-md font-semibold`;
 /**
  * A row's own action: text, not a box (`KPM_Owner.html:289-292`).
  *
@@ -528,7 +559,17 @@ const BUTTON_BASE =
  * accessible role all stay. `inline-flex` with no height or padding so it sits on the text
  * baseline of the row it belongs to.
  */
-const INLINE_BASE = 'inline-flex items-center rounded-sm text-sm font-semibold';
+const INLINE_BASE = cn(
+  'inline-flex items-center rounded-sm text-sm font-semibold',
+  /*
+   * **44 × 44px on a phone, its words centred in it** (ADR-0167; UI-029: the text links were 17–20px
+   * tall). Below 768px only; wider, it sits on the row's baseline as it always did.
+   */
+  TAP_TARGET,
+  'max-md:justify-center',
+  // And on a tablet (UI V1, UI-010).
+  TAP_TARGET_TABLET,
+);
 const BUTTON_VARIANT = {
   /*
    * **Orange is an action; navy is where you are** (ADR-0137, the client's request of 2026-10-10).
@@ -597,9 +638,17 @@ export function buttonClass(
     className,
   );
 }
-/** 19×19 in the prototype; 28px here, because 19px is not a tap target on a phone. */
-const ICON_BASE =
-  'inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-sm text-sm leading-none';
+/**
+ * 19×19 in the prototype; 28px here, because 19px is not a tap target on a phone — **and 44px on one**
+ * (ADR-0167; UI-029: the ⌄ and ⋮ were 28px), the glyph the same size in the middle of it. Below 768px
+ * only. A glyph inside a line of words keeps its box and grows an area instead (`TippedGlyph`).
+ */
+const ICON_BASE = cn(
+  'inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-sm text-sm leading-none',
+  TAP_TARGET,
+  // And on a tablet (UI V1, UI-010).
+  TAP_TARGET_TABLET,
+);
 
 /**
  * `type="button"` by default, which is **not** what a bare `<button>` does.
@@ -700,22 +749,30 @@ export function Card({
   return (
     <div
       {...props}
-      className={cn('rounded-lg border border-hairline bg-card', CARD_PADDING[density], className)}
+      className={cn('rounded-lg border border-card-edge bg-card', CARD_PADDING[density], className)}
     >
       {children}
     </div>
   );
 }
 
-/** The standard way to render an ApiRequestError. Always shows the request id. */
+/**
+ * The standard way to render an ApiRequestError.
+ *
+ * **A server's answer shows its code and request id** under its sentence — *PERM_OWNER_ONLY · r-1* — which is what
+ * support asks for. **A failure the browser detected** — *NETWORK*, *UNEXPECTED*, *CONFIG*, which no server answered
+ * and which carry no request id (`lib/browser-errors.ts`) — **shows its sentence alone**, and its code goes to the
+ * console (P18.97-T4 AC-10, ADR-0176 §10; the client's UI-032: a raw *NETWORK* under the sign-in error). `/login` first,
+ * and every screen through this one component.
+ */
 export function ErrorBanner({ code, message, requestId }: { code: string; message: string; requestId?: string }) {
+  const reference = errorReference({ code, requestId });
   return (
     <div role="alert" className="rounded-md border border-alert/30 bg-alert/5 p-3">
-      <p className="text-md font-semibold text-alert">{message}</p>
-      <p className="mt-1 text-2xs text-muted">
-        {code}
-        {requestId && requestId !== 'unknown' ? ` · ${requestId}` : ''}
-      </p>
+      <p className="text-md font-semibold text-alert"><ErrorWords code={code} message={message} /></p>
+      {reference === null
+        ? <ConsoleCode code={code} message={message} />
+        : <p className="mt-1 text-2xs text-muted">{reference}</p>}
     </div>
   );
 }

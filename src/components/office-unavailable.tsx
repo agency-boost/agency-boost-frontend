@@ -2,6 +2,9 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Button, Card } from '@/components/ui/field';
+import { kept } from '@/i18n/kept';
+import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
+import { pageFrameMessages } from '@/i18n/messages/page-frame';
 import type { ApiError } from '@/lib/api-client';
 import { formatCalendarDay } from '@/lib/format';
 
@@ -34,6 +37,8 @@ export function OfficeUnavailable({
   /** Set only inside a support session: the button ends the session instead of signing out. */
   onEndSupportSession?: () => Promise<void> | void;
 }) {
+  const t = useMessages(pageFrameMessages).office;
+  const figures = useFigureLanguage();
   const heading = useRef<HTMLHeadingElement>(null);
   const [leaving, setLeaving] = useState(false);
 
@@ -43,16 +48,14 @@ export function OfficeUnavailable({
 
   const details = (error.details ?? {}) as { endDate?: string | null; kpmCode?: string; branch?: string };
   const office = details.kpmCode
-    ? `KPM ${details.kpmCode}${details.branch ? ` · ${details.branch}` : ''}`
+    ? `${kept('KPM')} ${details.kpmCode}${details.branch ? ` · ${details.branch}` : ''}`
     : null;
   const ended = error.code === 'TENANT_SUBSCRIPTION_ENDED';
   const support = Boolean(onEndSupportSession);
-  const whose = support ? 'This office' : 'Your office';
-  const title = ended
-    ? `${whose}’s subscription has ended`
-    : error.code === 'TENANT_SUSPENDED'
-      ? `${whose} is suspended`
-      : `${whose} is archived`;
+  const title = t.title({
+    kind: ended ? 'ended' : error.code === 'TENANT_SUSPENDED' ? 'suspended' : 'archived',
+    support,
+  });
 
   async function leave() {
     setLeaving(true);
@@ -65,7 +68,7 @@ export function OfficeUnavailable({
 
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-5 py-10">
-      <p className="font-display text-3xl font-bold text-navy">AgencyBoost</p>
+      <p className="font-display text-3xl font-bold text-navy">{kept('AgencyBoost')}</p>
       <Card className="mt-6">
         <h1
           ref={heading}
@@ -78,21 +81,18 @@ export function OfficeUnavailable({
         {office && <p className="mt-1 text-md font-semibold text-navy">{office}</p>}
         {ended ? (
           <p className="mt-3 text-md text-navy">
-            {details.endDate
-              ? `Its subscription ended on ${formatCalendarDay(details.endDate)}. `
-              : 'Its subscription has ended. '}
-            Nobody in the office can use AgencyBoost until it is renewed. Contact AgencyBoost to renew it.
+            {details.endDate ? t.endedOn({ date: formatCalendarDay(details.endDate, figures) }) : t.ended}
           </p>
         ) : (
           <p className="mt-3 text-md text-navy">{error.message}</p>
         )}
         <p className="mt-3 text-sm text-muted">
-          Nothing in the office has been deleted. Everything is here again the moment it can be used.
+          {t.nothingDeleted}
         </p>
         <Button className="mt-5 w-full" onClick={() => void leave()} disabled={leaving}>
           {support
-            ? (leaving ? 'Ending…' : 'End support session')
-            : (leaving ? 'Signing out…' : 'Sign out')}
+            ? (leaving ? t.ending : t.endSupport)
+            : (leaving ? t.signingOut : t.signOut)}
         </Button>
       </Card>
     </main>

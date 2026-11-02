@@ -1,8 +1,10 @@
-import { screen, within } from '@testing-library/react';
+import { fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { createHash } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import TenantLayout from '@/app/(tenant)/layout';
-import { makeMe, renderInLayout, stubFetch } from '@test/harness';
+import { atWidth, digestAt, makeMe, renderInLayout, stubFetch, wears } from '@test/harness';
+import { dayInZone, OFFICE_TIME_ZONE } from '@/lib/format';
 import MembersPage from './page';
 
 vi.mock('next/navigation', () => ({
@@ -58,7 +60,8 @@ describe('members directory (P3-T1 AC-3)', () => {
     renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
 
     const table = await screen.findByRole('table');
-    expect(within(table).getByRole('row', { name: /Childless AAB/ })).toHaveTextContent('Leads nobody');
+    // *Leads nobody* until P18.97-T4 AC-3 (UI-024): the glossary's *No team*, as the Overview's AB list reads it.
+    expect(within(table).getByRole('row', { name: /Childless AAB/ })).toHaveTextContent('No team');
     expect(within(table).getByRole('row', { name: /Leads Someone/ })).toHaveTextContent(
       '2 direct · 5 in unit',
     );
@@ -208,7 +211,7 @@ describe('members directory (P3-T1 AC-3)', () => {
     const table = await screen.findByRole('table');
     expect(within(table).getByRole('columnheader', { name: 'Removed' })).toBeInTheDocument();
     expect(within(table).queryByRole('columnheader', { name: 'Status' })).not.toBeInTheDocument();
-    expect(within(table).getByRole('row', { name: /Rina/ })).toHaveTextContent('19/07/2026');
+    expect(within(table).getByRole('row', { name: /Rina/ })).toHaveTextContent('19 Jul 2026');
 
     // Their code and their leader are still there — the row is kept, not blanked.
     expect(within(table).getByRole('row', { name: /Rina/ })).toHaveTextContent('KPM0417-001');
@@ -280,6 +283,74 @@ describe('members directory (P3-T1 AC-3)', () => {
     });
   });
 
+  describe('the Core Leader chip and control (P18.8-T5 AC-3, ADR-0159 §1)', () => {
+    const page = (members: Record<string, unknown>[]) => ({
+      body: { members, nextCursor: null, counts: { directory: members.length, pending: 0, removed: 0 } },
+    });
+    const AGUS = member({
+      membershipId: 'mem-agus', role: 'ab', fullName: 'Agus Salim', preferredName: null, isCoreLeader: true, canTagCoreLeader: true,
+    });
+    const SARI = member({
+      membershipId: 'mem-sari', agentCode: 'KPM0417-002', role: 'aab', fullName: 'Sari Puspita', preferredName: null,
+      isCoreLeader: false, canTagCoreLeader: true,
+    });
+    const RINA = member({ membershipId: 'mem-rina', agentCode: 'KPM0417-003', isCoreLeader: false, canTagCoreLeader: false });
+
+    it('draws the chip on a Core Leader’s row, and the control on a leader’s row alone', async () => {
+      stubFetch({ '/members': page([AGUS, SARI, RINA]) });
+      renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
+      const table = await screen.findByRole('table');
+      const agus = within(table).getByRole('row', { name: /Agus Salim/ });
+      expect(within(agus).getByText('Core Leader')).toBeInTheDocument();
+      expect(within(agus).getByRole('button', { name: 'Remove the Core Leader tag from Agus Salim' })).toBeEnabled();
+      const sari = within(table).getByRole('row', { name: /Sari Puspita/ });
+      expect(within(sari).queryByText('Core Leader')).not.toBeInTheDocument();
+      expect(within(sari).getByRole('button', { name: 'Tag Sari Puspita Core Leader' })).toHaveTextContent('+ Core Leader');
+      const rina = within(table).getByRole('row', { name: /Rina/ });
+      expect(within(rina).queryByRole('button', { name: /Core Leader/ })).not.toBeInTheDocument();
+    });
+
+    it('tags from the row with the flag alone, and draws what the server stored', async () => {
+      const { calls } = stubFetch({
+        '/members': page([SARI]),
+        'PUT /members/mem-sari/core-leader': ({ body }) => ({
+          body: { membershipId: 'mem-sari', fullName: 'Sari Puspita', groupIds: ['grp-1'], ...(body as object), canBeCoreLeader: true },
+        }),
+      });
+      renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
+      await userEvent.click(await screen.findByRole('button', { name: 'Tag Sari Puspita Core Leader' }));
+      const sent = calls.find((c) => c.init.method === 'PUT')!;
+      expect(sent.url).toContain('/members/mem-sari/core-leader');
+      expect(JSON.parse(sent.init.body as string)).toEqual({ isCoreLeader: true });
+      const row = within(screen.getByRole('table')).getByRole('row', { name: /Sari Puspita/ });
+      expect(await within(row).findByText('Core Leader')).toBeInTheDocument();
+      expect(within(row).getByRole('button', { name: 'Remove the Core Leader tag from Sari Puspita' })).toBeInTheDocument();
+    });
+
+    it('says the server’s refusal, and leaves the row as it was', async () => {
+      stubFetch({
+        '/members': page([SARI]),
+        'PUT /members/mem-sari/core-leader': {
+          status: 400,
+          body: { error: { code: 'CORE_LEADER_NOT_A_LEADER', message: 'Only a leader can be a Core Leader. Move them to a leader rung first.', requestId: 'r' } },
+        },
+      });
+      renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
+      await userEvent.click(await screen.findByRole('button', { name: 'Tag Sari Puspita Core Leader' }));
+      expect(await screen.findByText(/Only a leader can be a Core Leader/)).toBeInTheDocument();
+      const row = within(screen.getByRole('table')).getByRole('row', { name: /Sari Puspita/ });
+      expect(within(row).queryByText('Core Leader')).not.toBeInTheDocument();
+    });
+
+    it('offers no control on the Removed tab', async () => {
+      stubFetch({ '/members': page([{ ...AGUS, status: 'removed', removedAt: '2026-09-01T00:00:00.000Z' }]) });
+      renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
+      await userEvent.click(await screen.findByRole('button', { name: /^Removed/ }));
+      const table = await screen.findByRole('table', { name: 'Removed members' });
+      expect(within(table).queryByRole('button', { name: /Core Leader/ })).not.toBeInTheDocument();
+    });
+  });
+
   it('draws every tab as one that opens, with none waiting on a later build', async () => {
     // This used to loop over the unbuilt tabs, and the list had been empty since the last one
     // shipped, so it asserted nothing. The disabled branch it guarded went with it (P10.1-T2).
@@ -328,7 +399,7 @@ describe('members directory (P3-T1 AC-3)', () => {
       expect(row).toHaveTextContent('Agent→AAB');
       // The badge abbreviates; the full name has to stay reachable, because "AAB"
       // means nothing to somebody reading their first role change.
-      expect(within(row).getByTitle('Associate Agency Builder')).toBeInTheDocument();
+      expect(within(row).getByTitle('AAB')).toBeInTheDocument();
       expect(row).toHaveTextContent('Ready to lead a unit');
       expect(row).toHaveTextContent('Wilson Tanoto');
       expect(within(row).getByRole('link', { name: 'Rina Wijaya' })).toHaveAttribute(
@@ -407,6 +478,12 @@ describe('members directory (P3-T1 AC-3)', () => {
       return stub;
     }
 
+    /** *Approve*, which opens the row's *Join date* (P18.96-T7 G1), and *Approve* again, which sends it. */
+    async function approve() {
+      await userEvent.click(screen.getByRole('button', { name: 'Approve' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Approve' }));
+    }
+
     it('lists everybody registered but not yet in a unit, not only those who asked', async () => {
       // The bug this closes: the tab counted pending memberships and rendered open
       // requests. Somebody who registered and asked nobody was counted and never shown —
@@ -444,8 +521,46 @@ describe('members directory (P3-T1 AC-3)', () => {
       const { calls } = await openTab([asked], [request()], {
         '/join/requests/req-1/approve': { body: [] },
       });
-      await userEvent.click(screen.getByRole('button', { name: 'Approve' }));
+      await approve();
       expect(calls.find((c) => c.init.method === 'POST')!.url).toContain('/req-1/approve');
+    });
+
+    it('P18.96-T7 G1 Approve asks for the join date — the shared field, today by default — and sends it', async () => {
+      const today = dayInZone(OFFICE_TIME_ZONE, new Date());
+      const { calls } = await openTab([asked], [request()], {
+        '/join/requests/req-1/approve': { body: [] },
+      });
+      const putri = within(screen.getByRole('table')).getByRole('row', { name: /Putri/ });
+      await userEvent.click(within(putri).getByRole('button', { name: 'Approve' }));
+      // Nothing is sent yet: the first press opens the row's *Join date*.
+      expect(calls.filter((c) => c.init.method === 'POST')).toEqual([]);
+      const field = within(putri).getByLabelText('Join date');
+      expect(field).toHaveAttribute('type', 'date');
+      expect(field).toHaveValue(today);
+      expect(field).toHaveAttribute('max', today);
+      expect(within(putri).getByText('The day they joined. Today unless they joined earlier.')).toBeInTheDocument();
+
+      // An earlier day, as a leader corrects it: the face writes it the app's way, and the second press sends it.
+      fireEvent.change(field, { target: { value: '2026-09-01' } });
+      expect(field.nextElementSibling).toHaveTextContent('1 Sep 2026');
+      await userEvent.click(within(putri).getByRole('button', { name: 'Approve' }));
+      const post = calls.find((c) => c.init.method === 'POST')!;
+      expect(post.url).toContain('/join/requests/req-1/approve');
+      expect(JSON.parse(String(post.init.body))).toEqual({ joinDate: '2026-09-01' });
+    });
+
+    it('P18.96-T7 G1 a join date after today is refused before it is sent, and Cancel puts the row back', async () => {
+      const { calls } = await openTab([asked], [request()]);
+      const putri = within(screen.getByRole('table')).getByRole('row', { name: /Putri/ });
+      await userEvent.click(within(putri).getByRole('button', { name: 'Approve' }));
+      fireEvent.change(within(putri).getByLabelText('Join date'), { target: { value: '2999-01-01' } });
+      expect(within(putri).getByText(/^The join date cannot be after today, /)).toBeInTheDocument();
+      expect(within(putri).getByRole('button', { name: 'Approve' })).toBeDisabled();
+
+      await userEvent.click(within(putri).getByRole('button', { name: 'Cancel' }));
+      expect(within(putri).queryByLabelText('Join date')).not.toBeInTheDocument();
+      expect(within(putri).getByRole('button', { name: 'Decline' })).toBeInTheDocument();
+      expect(calls.filter((c) => c.init.method === 'POST')).toEqual([]);
     });
 
     it('has an empty state that says the office is clear', async () => {
@@ -467,7 +582,7 @@ describe('members directory (P3-T1 AC-3)', () => {
           },
         },
       });
-      await userEvent.click(screen.getByRole('button', { name: 'Approve' }));
+      await approve();
       expect(await screen.findByRole('alert')).toHaveTextContent('already approved');
     });
 
@@ -485,10 +600,40 @@ describe('members directory (P3-T1 AC-3)', () => {
           },
         },
       });
-      await userEvent.click(screen.getByRole('button', { name: 'Approve' }));
+      await approve();
       const alert = await screen.findByRole('alert');
       expect(alert).toHaveTextContent('This office has reached its limit of 3 leaders, so nobody else can be made an AB or an AAB.');
       expect(alert).not.toHaveTextContent('LEADER_LIMIT_REACHED');
+    });
+
+    it('P18.8-T2 AC-6: asks AgencyBoost to let the joiner in, and the row then waits with Cancel request', async () => {
+      const waitingRow = {
+        requestId: 'llr-1', kpmId: 'kpm-1', kpmCode: '0603', kpmBranchName: 'Tangerang Branch',
+        subjectMembershipId: 'mem-asked', subjectName: 'Putri Anggraini', subjectAgentCode: '88008', action: 'activate',
+        fromOrgLevelCode: 'AAB', toOrgLevelCode: null, reason: null, requestedByMembershipId: 'mem-owner',
+        requestedByName: 'Wilson', status: 'pending', requestedAt: '2026-10-25T00:00:00.000Z', decidedAt: null,
+        declineReason: null, maxLeaders: 3, leadersUsed: 3,
+      };
+      await openTab([asked], [request({ role: 'aab' })], {
+        '/join/requests/req-1/approve': {
+          status: 409,
+          body: {
+            error: {
+              code: 'LEADER_LIMIT_REACHED', message: 'x', requestId: 'r-2',
+              details: { maxLeaders: 3, leadersUsed: 3, canRequest: true },
+            },
+          },
+        },
+        '/members/leader-limit-requests': [{ body: [] }, { body: [waitingRow] }],
+        'POST /members/mem-asked/leader-limit-request': { status: 201, body: waitingRow },
+      });
+      await approve();
+      const alert = await screen.findByRole('alert');
+      await userEvent.click(within(alert).getByRole('button', { name: 'Ask AgencyBoost to approve' }));
+      expect(await screen.findByText("Waiting for AgencyBoost's approval")).toBeInTheDocument();
+      expect(screen.getByText('Let in as AAB')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Cancel request' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument();
     });
   });
 
@@ -716,5 +861,351 @@ describe('members directory (P3-T1 AC-3)', () => {
     });
     renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
     expect(await screen.findByRole('alert')).toHaveTextContent('Nope.');
+  });
+});
+
+/**
+ * **Below 1024px the five tabs are one row that scrolls sideways** (P18.97-T6 AC-4, ADR-0178 §2; the client's KPM Owner
+ * review of 2026-10-27, UI-038: *Directory (28) · Pending (2) · Removed (2) · Role change log · Groups* on two rows at
+ * 768px and at 375px). The shared tab row every strip has on a phone — `useTabRow` and the row's classes, a range wider
+ * (`tablet.ts`) — so the side that has more fades and the current tab is brought into view. The tabs stay this row's
+ * own buttons, with their names and `aria-current`; a row that fits reads as it did, and from 1024px it wraps as before.
+ */
+/**
+ * **Who came back, codes on one line, and *No team*** (P18.97-T4 AC-3, ADR-0176 §2, §5; the client's KPM Owner review
+ * of 2026-10-27, UI-024: *Yanti Kusuma … in Directory with status ACTIVE while a "Removed (2)" tab exists*, *"PRU- /
+ * 80003"*, *"Leads nobody"*). Yanti left and came back — two memberships, one removed and one active (invariant §2) —
+ * and `GET /members` marks both (`rejoinedOn`, the server's): *Rejoined* beside her status, *Rejoined {date}* under
+ * *Removed*.
+ */
+describe('P18.97-T4 AC-3 the directory says who came back, on one line each', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const YANTI = member({
+    membershipId: 'mem-yanti-2', agentCode: 'PRU-80003', fullName: 'Yanti Kusuma', preferredName: null,
+    email: 'removed@kpm0417.test', rejoinedOn: '2026-09-30',
+  });
+  const RINA = member({ agentCode: 'PRU-80001', rejoinedOn: null });
+  const COUNTS = { directory: 28, pending: 2, removed: 2 };
+
+  it('P18.97-T4 AC-3 marks a member who came back Rejoined beside her status, and nobody else', async () => {
+    stubFetch({ '/members': { body: { members: [RINA, YANTI], nextCursor: null, counts: COUNTS } } });
+    renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
+    const table = await screen.findByRole('table');
+    const yanti = within(table).getByRole('row', { name: /Yanti Kusuma/ });
+    const status = within(yanti).getAllByRole('cell').at(-1)!;
+    expect(status).toHaveTextContent(/^ActiveRejoined$/i);
+    expect(within(table).getByRole('row', { name: /Rina/ })).not.toHaveTextContent(/Rejoined/i);
+  });
+
+  it('P18.97-T4 AC-3 reads Rejoined {date} under Removed on the membership she left', async () => {
+    const { calls } = stubFetch({
+      '/members': {
+        body: {
+          members: [member({
+            membershipId: 'mem-yanti-1', agentCode: 'PRU-80003', fullName: 'Yanti Kusuma', preferredName: null,
+            status: 'removed', removedAt: '2026-09-10T04:00:00.000Z', rejoinedOn: '2026-09-30',
+          })],
+          nextCursor: null,
+          counts: COUNTS,
+        },
+      },
+    });
+    renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
+    await userEvent.click(await screen.findByRole('button', { name: /^Removed/ }));
+    await vi.waitFor(() => expect(calls[calls.length - 1].url).toContain('status=removed'));
+    const row = within(await screen.findByRole('table')).getByRole('row', { name: /Yanti Kusuma/ });
+    const removed = within(row).getAllByRole('cell').at(-1)!;
+    expect(removed).toHaveTextContent('10 Sep 2026Rejoined 30 Sep 2026');
+    expect(within(removed).getByText('30 Sep 2026')).toHaveAttribute('dateTime', '2026-09-30');
+  });
+
+  it('P18.97-T4 AC-3 keeps an agent code on one line, and says No team for one who leads nobody', async () => {
+    stubFetch({ '/members': { body: { members: [YANTI], nextCursor: null, counts: COUNTS } } });
+    renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
+    const row = within(await screen.findByRole('table')).getByRole('row', { name: /Yanti Kusuma/ });
+    const code = within(row).getByText('PRU-80003');
+    for (const px of [375, 768, 1280]) expect(wears(code.closest('td')!, px).split(' ')).toContain('whitespace-nowrap');
+    expect(row).toHaveTextContent('No team');
+    expect(row).not.toHaveTextContent('Leads nobody');
+  });
+
+  it('P18.97-T4 AC-3 marks nothing for a read older than the mark', async () => {
+    const { rejoinedOn: _gone, ...older } = YANTI as Record<string, unknown>;
+    stubFetch({ '/members': { body: { members: [older], nextCursor: null, counts: COUNTS } } });
+    renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
+    const row = within(await screen.findByRole('table')).getByRole('row', { name: /Yanti Kusuma/ });
+    expect(row).not.toHaveTextContent(/Rejoined/i);
+  });
+});
+
+describe('P18.97-T6 AC-4 below 1024px the members’ tabs are one row that scrolls sideways', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const NAMES = ['Directory (28)', 'Pending (2)', 'Removed (2)', 'Role change log', 'Groups'];
+  const COUNTS = { directory: 28, pending: 2, removed: 2 };
+  const empty = { body: { members: [], nextCursor: null, counts: COUNTS } };
+  async function open(px: number) {
+    atWidth(px);
+    stubFetch({
+      '/members/role-changes': { body: [] },
+      '/members/groups': { body: [] },
+      '/members/tree': { body: { nodes: [], leader: null, rootIds: [], selfId: null, counts: { ab: 0, aab: 0, agent: 0, total: 0 } } },
+      '/join/inbox': { body: [] },
+      '/leader-limit-requests': { body: [] },
+      '/members': empty,
+    });
+    renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
+    const first = await screen.findByRole('button', { name: 'Directory (28)' });
+    return { row: first.parentElement!, tabs: () => NAMES.map((name) => screen.getByRole('button', { name })) };
+  }
+  /** The row's widths, which jsdom never lays out: `content` wide inside `visible`, a tab every 100px, 90 wide. */
+  function layOut(row: HTMLElement, { content, visible }: { content: number; visible: number }) {
+    let left = 0;
+    Object.defineProperty(row, 'scrollWidth', { configurable: true, get: () => content });
+    Object.defineProperty(row, 'clientWidth', { configurable: true, get: () => visible });
+    Object.defineProperty(row, 'scrollLeft', {
+      configurable: true,
+      get: () => left,
+      set: (v: number) => { left = Math.max(0, Math.min(content - visible, v)); },
+    });
+    row.getBoundingClientRect = () => DOMRect.fromRect({ x: 0, y: 0, width: visible, height: 44 });
+    Array.from(row.children).forEach((tab, i) => {
+      (tab as HTMLElement).getBoundingClientRect = () => DOMRect.fromRect({ x: i * 100 - left, y: 0, width: 90, height: 44 });
+    });
+    return { get left() { return left; } };
+  }
+  /** The row as it would be printed at a width: each element's classes those that hold there, the row's own mark gone. */
+  function drawnAt(row: HTMLElement, px: number) {
+    const copy = row.cloneNode(true) as HTMLElement;
+    for (const el of [copy, ...Array.from(copy.querySelectorAll('*'))]) el.setAttribute('class', wears(el, px));
+    copy.removeAttribute('data-tab-row');
+    return copy.outerHTML;
+  }
+  /** The row's markup on the build before P18.97-T6 (frontend `68d8d61`), rendered from this fixture on 2026-10-28. */
+  const BEFORE_T6 = '51f635406879ce0477d17fb36ddcb693d849a183cc6c9dcdfc52d907db15cc7d';
+
+  it.each([767, 768, 1023])('P18.97-T6 AC-4 at %ipx the row does not wrap: it scrolls inside its own box, the hairline painted in it', async (px) => {
+    const { row, tabs } = await open(px);
+    const worn = wears(row, px).split(' ');
+    expect(worn).toEqual(expect.arrayContaining(['flex-nowrap', 'overflow-x-auto', 'overflow-y-hidden', 'border-b-0']));
+    expect(worn).toContain('shadow-[inset_0_-1px_0_var(--color-hairline)]');
+    expect(row).toHaveAttribute('data-tab-row', 'below-desktop');
+    for (const tab of tabs()) {
+      // One line each, never squeezed, the rule lying on the painted hairline, the ring inside the tab's edge.
+      expect(wears(tab, px).split(' ')).toEqual(expect.arrayContaining(['mb-0', 'shrink-0', 'whitespace-nowrap']));
+      expect(wears(tab, px)).toContain('focus-visible:[outline-offset:-2px]');
+    }
+  });
+
+  it.each([1024, 1280])('P18.97-T6 AC-4 at %ipx the row is drawn as it was, to the byte, and wraps', async (px) => {
+    const { row } = await open(px);
+    expect(createHash('sha256').update(drawnAt(row, px)).digest('hex')).toBe(BEFORE_T6);
+    expect(wears(row, px)).toBe('mb-6 flex flex-wrap gap-6 border-b border-hairline');
+    expect(row).not.toHaveAttribute('data-fade');
+  });
+
+  it('P18.97-T6 AC-4 keeps the five tabs this row’s own buttons — their names, order, the current one marked', async () => {
+    const { row, tabs } = await open(768);
+    expect(within(row).getAllByRole('button').map((b) => b.textContent)).toEqual(NAMES);
+    expect(tabs()[0]).toHaveAttribute('aria-current', 'page');
+    expect(screen.queryByRole('tablist')).toBeNull();
+    await userEvent.click(tabs()[3]);
+    expect(screen.getByRole('button', { name: 'Role change log' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('button', { name: 'Directory (28)' })).not.toHaveAttribute('aria-current');
+  });
+
+  it('P18.97-T6 AC-4 says nothing about a fade while the row fits — a tablet on the rail', async () => {
+    const { row } = await open(1023);
+    layOut(row, { content: 480, visible: 632 });
+    fireEvent.scroll(row);
+    expect(row).not.toHaveAttribute('data-fade');
+  });
+
+  it('P18.97-T6 AC-4 fades the side that has more, and follows the reader scrolling', async () => {
+    const { row } = await open(768);
+    const box = layOut(row, { content: 500, visible: 436 });
+    fireEvent.scroll(row);
+    expect(row).toHaveAttribute('data-fade', 'end');
+    row.scrollLeft = 30;
+    fireEvent.scroll(row);
+    expect(box.left).toBe(30);
+    expect(row).toHaveAttribute('data-fade', 'both');
+    row.scrollLeft = 64;
+    fireEvent.scroll(row);
+    expect(row).toHaveAttribute('data-fade', 'start');
+  });
+
+  it('P18.97-T6 AC-4 brings the chosen tab into view by scrolling the row alone — never the page', async () => {
+    const { row, tabs } = await open(767);
+    const box = layOut(row, { content: 520, visible: 335 });
+    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+    try {
+      await userEvent.click(tabs()[4]);
+      // *Groups*, 400–490, is brought clear of the 24px fade at the row's right edge, 335: 490 − (335 − 24).
+      expect(box.left).toBe(179);
+      expect(row).toHaveAttribute('data-fade', 'both');
+      expect(scrollTo).not.toHaveBeenCalled();
+    } finally {
+      scrollTo.mockRestore();
+    }
+  });
+});
+
+/**
+ * **The directory as cards on a phone** (P18.97-T7 AC-1, ADR-0178 §4; the client's KPM Owner review of 2026-10-27,
+ * UI-034: *All members*, 839px). Below 768px a card per member — on *Directory* and on *Removed*, which draw the same
+ * roster — each label above its value, through the shared card pieces (`components/ui/row-cards.tsx`), keeping what
+ * P18.97-T4 put on the row: *No team*, *Rejoined*, a code on one line. At 768px and wider the table it was, to the byte.
+ */
+describe('P18.97-T7 AC-1 the directory as cards on a phone (UI-034)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const COUNTS = { directory: 28, pending: 2, removed: 2 };
+  const WILSON = member({
+    membershipId: 'mem-wilson', agentCode: 'PRU-80000', role: 'ab', fullName: 'Wilson Tanoto', preferredName: null,
+    email: 'wilson@kpm0417.test', isKpmOwner: true, isLeader: true, directCount: 3, subtreeCount: 27,
+    isCoreLeader: true, canTagCoreLeader: true, lastActivityDays: 0, lastActivityOn: '2026-10-27', lastCoachedDays: null,
+  });
+  const MAYA = member({
+    membershipId: 'mem-maya', agentCode: 'PRU-80002', role: 'ab', fullName: 'Maya Halim', preferredName: null,
+    email: 'maya@kpm0417.test', isKpmAdmin: true, leaderName: 'Wilson Tanoto', canTagCoreLeader: true,
+    lastActivityDays: 3, lastActivityOn: '2026-10-24', lastCoachedDays: 12,
+  });
+  const YANTI = member({
+    membershipId: 'mem-yanti-2', agentCode: 'PRU-80003', fullName: 'Yanti Kusuma', preferredName: null, role: 'agent',
+    email: 'yanti@kpm0417.test', leaderName: 'Maya Halim', rejoinedOn: '2026-09-30', lastActivityDays: null, lastCoachedDays: null,
+  });
+  const LEFT = member({
+    membershipId: 'mem-yanti-1', agentCode: 'PRU-80003', fullName: 'Yanti Kusuma', preferredName: null, role: 'agent',
+    email: 'yanti@kpm0417.test', leaderName: 'Maya Halim', status: 'removed', removedAt: '2026-09-10T04:00:00.000Z',
+    rejoinedOn: '2026-09-30',
+  });
+  const page = (members: unknown[]) => ({ body: { members, nextCursor: null, counts: COUNTS } });
+  const routes = (removed = false) => ({
+    '/members/role-changes': { body: [] },
+    '/members/groups': { body: [] },
+    '/join/inbox': { body: [] },
+    '/leader-limit-requests': { body: [] },
+    '/members': removed ? [page([WILSON, MAYA, YANTI]), page([LEFT])] : page([WILSON, MAYA, YANTI]),
+  });
+
+  /** The roster's markup on the build before P18.97-T7, each tab, rendered from this fixture on 2026-10-28. */
+  const BEFORE_T7: Record<'directory' | 'removed', Record<768 | 1280, string>> = {
+    directory: {
+      // Re-recorded 2026-10-30 (UI V1): UI-008's card edge (`border-card-edge`) and UI-010's 44px/48px targets below 1024px.
+      768: 'daa24fa71b9693598ea70e30984c277bbfbe13f253d15538122d7e42946c0086',
+      1280: 'daa24fa71b9693598ea70e30984c277bbfbe13f253d15538122d7e42946c0086',
+    },
+    removed: {
+      768: '60bf1f0f29ca54a76de75db39811a32cb7f24c0e8a4351f8e765f49898586ef6',
+      1280: '60bf1f0f29ca54a76de75db39811a32cb7f24c0e8a4351f8e765f49898586ef6',
+    },
+  };
+
+  it.each([768, 1280] as const)('P18.97-T7 AC-1 at %ipx draws the directory’s and Removed’s tables as they were, to the byte', async (px) => {
+    atWidth(px);
+    stubFetch(routes(true));
+    renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
+    const directory = await screen.findByRole('table', { name: 'Office roster' });
+    expect(digestAt(directory.parentElement!, px)).toBe(BEFORE_T7.directory[px]);
+    await userEvent.click(screen.getByRole('button', { name: /^Removed/ }));
+    const removed = await screen.findByRole('table', { name: 'Removed members' });
+    expect(digestAt(removed.parentElement!, px)).toBe(BEFORE_T7.removed[px]);
+  });
+  const cardOf = (name: string) => screen.getByRole('link', { name }).closest('li')!;
+  const fields = (card: HTMLElement) => Object.fromEntries([...card.querySelectorAll('dl > div')]
+    .map((field) => [field.querySelector('dt')!.textContent, field.querySelector('dd')!.textContent]));
+
+  it.each([375, 767])('P18.97-T7 AC-1 at %ipx draws a card per member and no table, each value under its heading', async (px) => {
+    atWidth(px);
+    stubFetch(routes());
+    renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
+    const list = await screen.findByRole('list', { name: 'Office roster' });
+    expect(screen.queryByRole('table', { name: 'Office roster' })).not.toBeInTheDocument();
+    expect(within(list).getAllByRole('listitem')).toHaveLength(3);
+
+    const wilson = cardOf('Wilson Tanoto');
+    // The name, the person page's link, with the rung's badge and the tags on its line; the email under it.
+    expect(within(wilson).getByRole('link', { name: 'Wilson Tanoto' })).toHaveAttribute('href', '/people/members/mem-wilson');
+    expect(within(wilson).getByTitle('AB')).toBeInTheDocument();
+    expect(within(wilson).getByText('Owner')).toBeInTheDocument();
+    expect(within(wilson).getByText('Core Leader')).toBeInTheDocument();
+    expect(wilson).toHaveTextContent('wilson@kpm0417.test');
+    expect(fields(wilson)).toEqual({ 'Agent code': 'PRU-80000', 'Last activity': 'Today', 'Last coached': 'Never', Unit: '3 direct · 27 in unit' });
+    expect(fields(cardOf('Maya Halim'))).toEqual({
+      'Agent code': 'PRU-80002', 'Reports to': 'Wilson Tanoto', 'Last activity': '3 days ago', 'Last coached': '12 days ago', Unit: 'No team',
+    });
+    expect(within(cardOf('Maya Halim')).getByText('Admin')).toBeInTheDocument();
+  });
+
+  it('P18.97-T7 AC-1 keeps what P18.97-T4 put on the row: Rejoined beside her status, a code on one line, No team', async () => {
+    atWidth(375);
+    stubFetch(routes());
+    renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
+    await screen.findByRole('list', { name: 'Office roster' });
+    const yanti = cardOf('Yanti Kusuma');
+    expect(within(yanti).getByText('Active')).toBeInTheDocument();
+    expect(within(yanti).getByText('Rejoined')).toBeInTheDocument();
+    expect(within(cardOf('Maya Halim')).queryByText('Rejoined')).not.toBeInTheDocument();
+    const code = within(yanti).getByText('PRU-80003');
+    expect(code.className).toContain('whitespace-nowrap');
+    expect(fields(yanti)).toMatchObject({ Unit: 'No team', 'Reports to': 'Maya Halim', 'Last activity': 'Never', 'Last coached': 'Never' });
+    // A value the table writes as — is not drawn: Wilson reports to nobody (the first card's fields have no *Reports to*).
+    expect(fields(cardOf('Wilson Tanoto'))).not.toHaveProperty('Reports to');
+  });
+
+  it('P18.97-T7 AC-1 draws Removed as cards too: the day she left, and Rejoined {date}', async () => {
+    atWidth(375);
+    stubFetch(routes(true));
+    renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
+    await screen.findByRole('list', { name: 'Office roster' });
+    await userEvent.click(screen.getByRole('button', { name: /^Removed/ }));
+    const list = await screen.findByRole('list', { name: 'Removed members' });
+    const left = within(list).getAllByRole('listitem')[0];
+    expect(fields(left)).toEqual({
+      'Agent code': 'PRU-80003', 'Reports to': 'Maya Halim', Unit: 'No team', Removed: '10 Sep 2026Rejoined 30 Sep 2026',
+    });
+    expect(within(left).getByText('30 Sep 2026')).toHaveAttribute('dateTime', '2026-09-30');
+    // No status pill and no activity on a membership that has ended, as on the Removed table.
+    expect(within(left).queryByText('Active')).not.toBeInTheDocument();
+    expect(within(left).queryByRole('button', { name: /Core Leader/ })).not.toBeInTheDocument();
+  });
+
+  it('P18.97-T7 AC-1 tags and untags a Core Leader from the card, a 44px target on a phone', async () => {
+    atWidth(375);
+    const { calls } = stubFetch({
+      ...routes(),
+      'PUT /members/mem-maya/core-leader': ({ body }) => ({
+        body: { membershipId: 'mem-maya', fullName: 'Maya Halim', groupIds: [], ...(body as object), canBeCoreLeader: true },
+      }),
+    });
+    renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
+    await screen.findByRole('list', { name: 'Office roster' });
+    const tag = within(cardOf('Maya Halim')).getByRole('button', { name: 'Tag Maya Halim Core Leader' });
+    expect(wears(tag, 375).split(' ')).toEqual(expect.arrayContaining(['min-h-11', 'min-w-11']));
+    expect(wears(within(cardOf('Maya Halim')).getByRole('link', { name: 'Maya Halim' }), 375).split(' ')).toContain('min-h-11');
+    await userEvent.click(tag);
+    await vi.waitFor(() => expect(calls.some((c) => c.url.includes('/members/mem-maya/core-leader') && c.init.method === 'PUT')).toBe(true));
+    expect(await within(cardOf('Maya Halim')).findByText('Core Leader')).toBeInTheDocument();
+  });
+
+  it('P18.97-T7 AC-1 never draws the roster’s table first on a phone: the width is asked before the roster answers', async () => {
+    atWidth(375);
+    stubFetch(routes());
+    let drew = false;
+    // The roster's table, that is: the frame before the width answers is a skeleton (`role="status"`).
+    const roster = (el: Element) => [el, ...el.querySelectorAll('table')]
+      .some((t) => t.matches('table') && t.closest('[role="status"]') === null);
+    const observer = new MutationObserver((records) => {
+      for (const record of records) {
+        for (const node of record.addedNodes) if (node instanceof Element && roster(node)) drew = true;
+      }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
+    await screen.findByRole('list', { name: 'Office roster' });
+    observer.disconnect();
+    expect(drew).toBe(false);
   });
 });

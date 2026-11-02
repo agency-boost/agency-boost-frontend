@@ -2,21 +2,19 @@
 
 import { useRef, useState, type ReactNode } from 'react';
 import { ErrorBanner } from '@/components/ui/field';
+import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
+import { recruitmentPitchMessages } from '@/i18n/messages/recruitment-pitch';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
+import { formatNumber } from '@/lib/format';
 import { formatFileSize, PDF_MAX_BYTES } from '@/lib/recruitment-pitch';
 import { signedUploadForm, type SignedUpload } from '@/lib/tenant-config';
 
 const PDF = 'application/pdf';
 
-/** The control's own words (D-copy): none of OD-39's six words. */
-export const PDF_UPLOAD_COPY = {
-  uploading: (name: string) => `Uploading “${name}”…`,
-  tooLarge: (name: string, size: string) =>
-    `“${name}” is ${size}. A PDF can be ${PDF_MAX_BYTES / 1024 / 1024} MB at most.`,
-  notPdf: (name: string) => `“${name}” is not a PDF. Only a PDF can be uploaded here.`,
-  sendFailed: (name: string) =>
-    `“${name}” did not finish uploading. Check your connection and try again.`,
-} as const;
+/*
+ * The control's own words (D-copy): none of OD-39's six words — the catalogue's since P18.98-T4
+ * (`messages/recruitment-pitch.ts`: `uploading`, `tooLarge`, `notPdf`, `sendFailed`), the sizes in the reader's figures.
+ */
 
 /**
  * A refusal this control made, shaped like one the server makes. `requestId` is empty because no
@@ -58,6 +56,8 @@ export function usePdfUpload<T>({
   attach: (storageKey: string, file: File) => Promise<T>;
   onAttached: (result: T) => void;
 }): PdfUploadState {
+  const t = useMessages(recruitmentPitchMessages);
+  const figures = useFigureLanguage();
   const input = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState<string | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
@@ -70,11 +70,15 @@ export function usePdfUpload<T>({
     // Some desktops report no type at all for a PDF: its name decides then, and storage still checks
     // what actually arrived before anything is attached (ADR-0040).
     if (file.type !== PDF && !(file.type === '' && /\.pdf$/i.test(file.name))) {
-      setError(refusal('ASSET_TYPE_NOT_ALLOWED', PDF_UPLOAD_COPY.notPdf(file.name)));
+      setError(refusal('ASSET_TYPE_NOT_ALLOWED', t.notPdf({ name: file.name })));
       return;
     }
     if (file.size > PDF_MAX_BYTES) {
-      setError(refusal('ASSET_TOO_LARGE', PDF_UPLOAD_COPY.tooLarge(file.name, formatFileSize(file.size))));
+      setError(refusal('ASSET_TOO_LARGE', t.tooLarge({
+        name: file.name,
+        size: formatFileSize(file.size, figures),
+        max: formatNumber(PDF_MAX_BYTES / 1024 / 1024, {}, figures),
+      })));
       return;
     }
 
@@ -88,7 +92,7 @@ export function usePdfUpload<T>({
         sent = { ok: false } as Response;
       }
       if (!sent.ok) {
-        setError(refusal('UPLOAD_FAILED', PDF_UPLOAD_COPY.sendFailed(file.name)));
+        setError(refusal('UPLOAD_FAILED', t.sendFailed({ name: file.name })));
         return;
       }
       onAttached(await attach(signed.storageKey, file));
@@ -123,11 +127,12 @@ export function usePdfUpload<T>({
 
 /** What the upload is doing, or why it stopped: under the control it belongs to. */
 export function PdfUploadNotice({ state, className }: { state: PdfUploadState; className?: string }) {
+  const t = useMessages(recruitmentPitchMessages);
   if (!state.uploading && !state.error) return null;
   return (
     <div className={className}>
       {state.uploading && (
-        <p role="status" className="m-0 text-base text-muted">{PDF_UPLOAD_COPY.uploading(state.uploading)}</p>
+        <p role="status" className="m-0 text-base text-muted">{t.uploading({ name: state.uploading })}</p>
       )}
       {state.error && <ErrorBanner {...state.error} />}
     </div>

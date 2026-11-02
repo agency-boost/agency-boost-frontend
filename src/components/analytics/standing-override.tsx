@@ -5,11 +5,15 @@ import { Button, ErrorBanner, Textarea } from '@/components/ui/field';
 import { Modal } from '@/components/ui/modal';
 import { ToastHost, useHostToast } from '@/components/ui/toast';
 import { TippedGlyph } from '@/components/ui/tipped-glyph';
+import { messagesIn } from '@/i18n/catalogue';
+import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
+import type { Language } from '@/i18n/language';
+import { kpmComplianceMessages } from '@/i18n/messages/kpm-compliance';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
-import { formatOfficeDay } from '@/lib/format';
-import { COMPLIANCE_LABELS, NO_STATUS, pillOf } from '@/lib/kpm-compliance';
+import { formatOfficeDay, OFFICE_TIME_ZONE } from '@/lib/format';
+import { complianceLabels, NO_STATUS, pillOf } from '@/lib/kpm-compliance';
 import {
-  clearOverride, OVERRIDE_COPY, OVERRIDE_REASON_MAX, setOverride, type OverrideStatus, type StandingOverride,
+  clearOverride, OVERRIDE_REASON_MAX, setOverride, type OverrideStatus, type StandingOverride,
 } from '@/lib/standing-override';
 import { CompliancePill } from './compliance-parts';
 
@@ -31,7 +35,8 @@ export interface AchievedCellProps {
   onChanged(): void;
 }
 
-const ACHIEVED = COMPLIANCE_LABELS.campaigns.achieved;
+/** The *Achieved* column's pills, in a language. */
+const achievedIn = (language: Language) => complianceLabels(language).campaigns.achieved;
 
 /** The two results an override may set, in the column's order. */
 const CHOICES: readonly OverrideStatus[] = ['qualified', 'not_met'];
@@ -52,6 +57,9 @@ const CHOICES: readonly OverrideStatus[] = ['qualified', 'not_met'];
  *
  * **The toast is the cell's own**, mounted with the first one (`ToastHost`), so a page whose shell holds none
  * gains a live region only when a cell has something to say.
+ *
+ * **Its words are the reader's** (P18.98-T4; `kpmComplianceMessages.override`), the day it was set in the figures'
+ * language; the campaign's title, the member's name and the reason are shown as typed.
  */
 export function AchievedCell(props: AchievedCellProps) {
   return (
@@ -62,16 +70,19 @@ export function AchievedCell(props: AchievedCellProps) {
 }
 
 function Cell({ row, campaign, canOverride, onChanged }: AchievedCellProps) {
+  const t = useMessages(kpmComplianceMessages).override;
+  const language = useLanguage();
+  const figures = useFigureLanguage();
   const raise = useHostToast();
   const [open, setOpen] = useState(false);
-  const pill = pillOf(ACHIEVED, row.cell.second);
+  const pill = pillOf(achievedIn(language), row.cell.second);
   const override = row.cell.override ?? null;
   const control = canOverride && row.cell.overridable === true;
   /** *—*: nothing drawn a voice could say, so the button is named by what it opens alone. */
   const dash = pill.label === NO_STATUS.label;
 
   const face = <CompliancePill words={pill} />;
-  const marker = override && overriddenBy(override);
+  const marker = override && overriddenBy(override, language, figures);
 
   return (
     <>
@@ -90,7 +101,7 @@ function Cell({ row, campaign, canOverride, onChanged }: AchievedCellProps) {
             {dash ? <span aria-hidden="true">{face}</span> : face}
             <span className="sr-only">
               {dash ? '' : ' — '}
-              {OVERRIDE_COPY.overrideFor(row.name, campaign.title)}
+              {t.overrideFor({ name: row.name, campaign: campaign.title })}
             </span>
           </button>
         ) : face}
@@ -113,10 +124,14 @@ function Cell({ row, campaign, canOverride, onChanged }: AchievedCellProps) {
   );
 }
 
-/** Who, on which day of the office's calendar, and why — the reason as typed, rendered as text. */
-function overriddenBy(override: StandingOverride): string {
-  return OVERRIDE_COPY.overriddenBy(override.by.name, formatOfficeDay(override.at), override.reason);
+/** Who, on which day of the office's calendar, and why — the reason as typed, rendered as text; the day a figure. */
+function overriddenBy(override: StandingOverride, language: Language, figures: Language): string {
+  const day = formatOfficeDay(override.at, OFFICE_TIME_ZONE, figures);
+  return messagesOf(language).overriddenBy({ name: override.by.name, day, reason: override.reason });
 }
+
+/** The override's words in a language, for a function outside a component. */
+const messagesOf = (language: Language) => messagesIn(kpmComplianceMessages, language).override;
 
 /** The results an override may ask for: never the one the standing already reads. */
 function offeredFor(current: string | null): OverrideStatus[] {
@@ -162,6 +177,10 @@ function OverrideDialog({
   onStale: () => void;
   onDone: (toast: string) => void;
 }) {
+  const t = useMessages(kpmComplianceMessages).override;
+  const language = useLanguage();
+  const figures = useFigureLanguage();
+  const achieved = achievedIn(language);
   const current = row.cell.second ?? null;
   const override = row.cell.override ?? null;
   const offered = offeredFor(current);
@@ -175,7 +194,7 @@ function OverrideDialog({
   const [error, setError] = useState<ApiError | null>(null);
   const reasonId = useId();
   const name = `override-${useId()}`;
-  const pill = pillOf(ACHIEVED, current);
+  const pill = pillOf(achieved, current);
   const typed = reason.trim();
 
   async function write(send: () => Promise<unknown>, toast: string) {
@@ -198,24 +217,24 @@ function OverrideDialog({
   const save = (e: React.FormEvent) => {
     e.preventDefault();
     if (!status || !sendable) return;
-    void write(() => setOverride(campaign.code, row.membershipId, { status, reason: typed }), OVERRIDE_COPY.saved);
+    void write(() => setOverride(campaign.code, row.membershipId, { status, reason: typed }), t.saved);
   };
   const clear = () =>
-    void write(() => clearOverride(campaign.code, row.membershipId, { reason: typed }), OVERRIDE_COPY.cleared);
+    void write(() => clearOverride(campaign.code, row.membershipId, { reason: typed }), t.cleared);
 
   return (
-    <Modal open title={OVERRIDE_COPY.overrideFor(row.name, campaign.title)} onClose={onClose} className="text-left">
+    <Modal open title={t.overrideFor({ name: row.name, campaign: campaign.title })} onClose={onClose} className="text-left">
       <form onSubmit={save} className="flex flex-col gap-4">
         <div>
           <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-navy">
-            {OVERRIDE_COPY.resultNow}
+            {t.resultNow}
             <CompliancePill words={pill} />
           </p>
-          {override && <p className="mt-1 break-words text-sm text-muted">{overriddenBy(override)}</p>}
+          {override && <p className="mt-1 break-words text-sm text-muted">{overriddenBy(override, language, figures)}</p>}
         </div>
 
         <fieldset>
-          <legend className="text-sm font-semibold text-navy">{OVERRIDE_COPY.newResult}</legend>
+          <legend className="text-sm font-semibold text-navy">{t.newResult}</legend>
           <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2">
             {CHOICES.map((code) => (
               <label
@@ -232,14 +251,14 @@ function OverrideDialog({
                   onChange={() => setStatus(code)}
                   className="accent-navy"
                 />
-                {ACHIEVED[code].label}
+                {achieved[code].label}
               </label>
             ))}
           </div>
         </fieldset>
 
         <div className="flex flex-col gap-1">
-          <label htmlFor={reasonId} className="text-sm font-semibold text-navy">{OVERRIDE_COPY.reason}</label>
+          <label htmlFor={reasonId} className="text-sm font-semibold text-navy">{t.reason}</label>
           <Textarea
             id={reasonId}
             value={reason}
@@ -259,12 +278,12 @@ function OverrideDialog({
         <div className="flex flex-wrap items-center gap-2.5">
           {override && (
             <Button variant="secondary" disabled={busy || !typed} onClick={clear}>
-              {OVERRIDE_COPY.clear}
+              {t.clear}
             </Button>
           )}
           <div className="ml-auto flex gap-2.5">
-            <Button variant="secondary" onClick={onClose}>{OVERRIDE_COPY.close}</Button>
-            <Button type="submit" disabled={busy || !typed || !sendable}>{OVERRIDE_COPY.save}</Button>
+            <Button variant="secondary" onClick={onClose}>{t.close}</Button>
+            <Button type="submit" disabled={busy || !typed || !sendable}>{t.save}</Button>
           </div>
         </div>
       </form>

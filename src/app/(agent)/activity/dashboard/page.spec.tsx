@@ -1,8 +1,9 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { makeMe, renderWithSession, stubFetch } from '@test/harness';
 import { TenantConfigProvider } from '@/lib/tenant-config-cache';
+import { PHONE_QUERY } from '@/lib/use-phone';
 import ActivityDashboardPage from './page';
 
 vi.mock('next/navigation', () => ({
@@ -88,8 +89,9 @@ const render = () => renderWithSession(
 
 /** The strip's tiles, label and value each. */
 function strip() {
-  const row = screen.getByText('Total touches').closest('[data-total]')!.parentElement!;
-  return [...row.children].map((tile) => [tile.children[0].textContent, tile.children[1].textContent]);
+  const row = screen.getByText('Total activities').closest('[data-total]')!.parentElement!;
+  // A tile's label without the ⓘ the total carries (P18.95-T9 AC-3), which `touchTip` asserts on its own.
+  return [...row.children].map((tile) => [tile.children[0].textContent!.replace(/ ⓘ.*$/, ''), tile.children[1].textContent]);
 }
 
 describe('the Activity Dashboard (P10-T1)', () => {
@@ -101,7 +103,7 @@ describe('the Activity Dashboard (P10-T1)', () => {
 
     // After the table: while it loads, the skeleton is the screen's one live region.
     await screen.findByText('Menghubungi prospek');
-    expect(screen.getByRole('status')).toHaveTextContent('7 days · Sep 22 – Sep 28, 2026');
+    expect(screen.getByRole('status')).toHaveTextContent('7 days · 22 Sep – 28 Sep 2026');
     expect(dashboardCalls(calls)[0].url).toContain('range=ROLLING_7D');
     // The reader's own days: no subject is named (P13.1-T9 — `for` is coaching's Activity tab's).
     expect(dashboardCalls(calls)[0].url).not.toContain('for=');
@@ -127,8 +129,8 @@ describe('the Activity Dashboard (P10-T1)', () => {
 
     await userEvent.click(screen.getByRole('tab', { name: 'Last 30 days' }));
 
-    expect(await screen.findByRole('columnheader', { name: 'Week 1 Sep 22–Sep 28' })).toBeInTheDocument();
-    expect(screen.getByRole('columnheader', { name: 'Remaining 2 days Aug 30–Aug 31' })).toBeInTheDocument();
+    expect(await screen.findByRole('columnheader', { name: 'Week 1 22 Sep–28 Sep' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Remaining 2 days 30 Aug–31 Aug' })).toBeInTheDocument();
     expect(dashboardCalls(calls).at(-1)!.url).toContain('range=ROLLING_30D');
   });
 
@@ -145,8 +147,8 @@ describe('the Activity Dashboard (P10-T1)', () => {
 
     await userEvent.click(screen.getByRole('tab', { name: 'Last 30 days' }));
 
-    await screen.findByRole('columnheader', { name: 'Week 1 Sep 22–Sep 28' });
-    expect(screen.getByRole('status')).toHaveTextContent(/^30 days · Aug 30 – Sep 28, 2026$/);
+    await screen.findByRole('columnheader', { name: 'Week 1 22 Sep–28 Sep' });
+    expect(screen.getByRole('status')).toHaveTextContent(/^30 days · 30 Aug – 28 Sep 2026$/);
     expect(screen.queryByText(/corrected/)).toBeNull();
   });
 
@@ -159,7 +161,7 @@ describe('the Activity Dashboard (P10-T1)', () => {
     // have their tiles: the grouping is the office's, not the answer's.
     await waitFor(() => expect(strip()).toEqual([
       ['Leads Generation', '12'], ['Selling', '7'], ['Recruitment', '0'], ['Development', '0'],
-      ['Total touches', '19'],
+      ['Total activities', '19'],
     ]));
   });
 
@@ -178,7 +180,7 @@ describe('the Activity Dashboard (P10-T1)', () => {
 
     await waitFor(() => expect(strip()).toEqual([
       ['Leads Generation', '0'], ['Selling', '0'], ['Recruitment', '0'], ['Development', '5'],
-      ['Total touches', '5'],
+      ['Total activities', '5'],
     ]));
   });
 
@@ -195,7 +197,7 @@ describe('the Activity Dashboard (P10-T1)', () => {
     expect(within(week).queryByText('Total — all categories')).toBeNull();
 
     await userEvent.click(screen.getByRole('tab', { name: 'Last 30 days' }));
-    await screen.findByRole('columnheader', { name: 'Week 1 Sep 22–Sep 28' });
+    await screen.findByRole('columnheader', { name: 'Week 1 22 Sep–28 Sep' });
 
     const month = screen.getByRole('table', { name: 'Your activity' });
     expect(within(month).getAllByRole('row')[1]).toHaveTextContent('Total — all categories4');
@@ -320,7 +322,7 @@ describe('the Activity Dashboard (P10-T1)', () => {
     // A section no longer shown adds to no tile; its history is in the table and the total.
     await waitFor(() => expect(strip()).toEqual([
       ['Leads Generation', '0'], ['Selling', '1'], ['Recruitment', '0'], ['Development', '0'],
-      ['Total touches', '19'],
+      ['Total activities', '19'],
     ]));
   });
 
@@ -352,3 +354,181 @@ describe('the Activity Dashboard (P10-T1)', () => {
     expect(screen.queryByRole('table', { name: 'Your activity' })).not.toBeInTheDocument();
   });
 });
+
+/*
+ * **Totals on a phone, and a tap for the days** (P18.95-T3 AC-6, ADR-0167 §6; the client's UI review of 2026-10-26,
+ * UI-012: *Total* and every day off the screen to the right). The phone is `matchMedia` answering `usePhone`'s
+ * query; every spec above is the table a tablet and a desktop keep.
+ */
+/*
+ * **Was P18.95-T3 AC-6's phone list** — each item's total, a tap for its days. UI V1 keeps the tap and redraws the rest
+ * (UI-106): chips for the range, the days on one line, the navy total, the group totals as one strip, then the log's
+ * group cards with each item's count on the right.
+ */
+describe('UI-106 — the Activity Dashboard on a phone', () => {
+  const onPhone = (matches = true) => vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
+    media: query, matches: matches && query === PHONE_QUERY, addEventListener: () => {}, removeEventListener: () => {},
+  })));
+  const cards = () => screen.findByRole('region', { name: 'Your activity' });
+  /** A line's button, by the item it names. */
+  const lineOf = (label: string) => [...document.querySelectorAll<HTMLButtonElement>('button[aria-expanded]')]
+    .find((b) => b.querySelector('span > span')?.textContent === label)!;
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('UI-106 puts the range in chips — 7 days, 30 days, Custom — and the days alone on the line under them', async () => {
+    onPhone();
+    stubFetch({ ...config(), '/activity/dashboard': { body: WEEK } });
+    render();
+    await cards();
+    const chips = screen.getByRole('group', { name: 'Range' });
+    expect(within(chips).getAllByRole('button').map((b) => b.textContent)).toEqual(['7 days', '30 days', 'Custom']);
+    expect(within(chips).getByRole('button', { name: '7 days' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('status')).toHaveTextContent(/^22 Sep – 28 Sep 2026$/);
+    expect(screen.queryByRole('tab')).not.toBeInTheDocument();
+  });
+
+  it('UI-106 says Total activities ⓘ in a navy bar — never sentuhan — then the group totals as one strip', async () => {
+    onPhone();
+    stubFetch({ ...config(), '/activity/dashboard': { body: WEEK } });
+    render();
+    await cards();
+    const total = screen.getByText('Total activities').parentElement!;
+    expect(total).toHaveClass('bg-navy');
+    expect(total).toHaveTextContent(/19$/);
+    expect(within(total).getByRole('button', { name: 'What is an activity?' })).toBeInTheDocument();
+    const groups = screen.getByRole('group', { name: 'Totals by group' });
+    expect(within(groups).getAllByRole('term').map((t) => t.textContent))
+      .toEqual(['Leads Generation', 'Selling', 'Recruitment', 'Development']);
+    expect(within(groups).getAllByRole('definition').map((d) => d.textContent)).toEqual(['12', '7', '0', '0']);
+    expect(screen.queryByText(/touch/i)).not.toBeInTheDocument();
+  });
+
+  it('UI-106 draws the log’s group cards, each item’s count on the right, a zero in grey, no item numbers and no ⌄', async () => {
+    onPhone();
+    const withZero = {
+      ...WEEK,
+      sections: [...WEEK.sections, section('RECRUITMENT', 'Recruitment', [type('RECRUIT_NBO', 'Presentasi recruitment', 7, [0, 0, 0, 0, 0, 0, 0])])],
+    };
+    stubFetch({ ...config(), '/activity/dashboard': { body: withZero } });
+    render();
+    const region = await cards();
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    expect(within(region).getAllByRole('heading', { level: 2 }).map((h) => h.textContent))
+      .toEqual(['Leads Generation12', 'Selling7', 'Recruitment0']);
+    expect(within(region).getAllByRole('button').map((b) => b.textContent)).toEqual([
+      'Menghubungi prospek12', 'Presentasi penjualan6', 'Submission polis1', 'Presentasi recruitment0',
+    ]);
+    expect(lineOf('Presentasi recruitment').lastElementChild).toHaveClass('text-signal-grey');
+    expect(region).not.toHaveTextContent('⌄');
+    expect(region).not.toHaveTextContent(/total/);
+  });
+
+  it('P18.95-T3 AC-6, UI-106 opens an item’s days from a tap or the keyboard, each day above its count, the table’s figures', async () => {
+    // The table's row for an item, as a tablet draws it …
+    stubFetch({ ...config(), '/activity/dashboard': { body: WEEK } });
+    render();
+    const table = await screen.findByRole('table', { name: 'Your activity' });
+    const row = within(table).getAllByRole('row').find((r) => within(r).queryByText('Presentasi penjualan'))!;
+    const tableCounts = within(row).getAllByRole('cell').slice(2).map((c) => c.textContent);
+    const headings = within(table).getAllByRole('columnheader').slice(2).map((h) => h.textContent);
+    cleanup();
+
+    // … and the same on the phone, once the line is opened.
+    onPhone();
+    stubFetch({ ...config(), '/activity/dashboard': { body: WEEK } });
+    render();
+    await cards();
+    const line = lineOf('Presentasi penjualan');
+    expect(line).toHaveAttribute('aria-expanded', 'false');
+    await userEvent.click(line);
+    expect(line).toHaveAttribute('aria-expanded', 'true');
+    const days = document.getElementById(line.getAttribute('aria-controls')!)!;
+    const terms = within(days).getAllByRole('term').map((t) => t.textContent);
+    const counts = within(days).getAllByRole('definition').map((d) => d.textContent);
+    expect(terms).toEqual(headings.map((h) => h!.replace(/^(\D+)(\d+)$/, '$1 $2')));
+    expect(counts).toEqual(tableCounts);
+    expect(counts).toEqual(['2', '3', '1', '0', '0', '0', '0']);
+
+    line.focus();
+    await userEvent.keyboard('{Enter}');
+    expect(line).toHaveAttribute('aria-expanded', 'false');
+    await userEvent.keyboard(' ');
+    expect(line).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('UI-106 in 30-day mode opens each week and the days left over, with no Total — all categories row', async () => {
+    onPhone();
+    stubFetch({
+      ...config(),
+      '/activity/dashboard': { body: WEEK },
+      '/activity/dashboard?range=ROLLING_30D': { body: MONTH },
+    });
+    render();
+    await cards();
+    await userEvent.click(screen.getByRole('button', { name: '30 days' }));
+    await waitFor(() => expect(screen.getByText('Total activities').parentElement).toHaveTextContent(/4$/));
+    expect(screen.queryByText('Total — all categories')).not.toBeInTheDocument();
+    const line = lineOf('Submission polis');
+    await userEvent.click(line);
+    const weeks = document.getElementById(line.getAttribute('aria-controls')!)!;
+    expect(within(weeks).getAllByRole('term').map((t) => t.textContent)).toEqual([
+      'Week 122 Sep–28 Sep', 'Week 215 Sep–21 Sep', 'Week 38 Sep–14 Sep', 'Week 41 Sep–7 Sep', 'Remaining 2 days30 Aug–31 Aug',
+    ]);
+    expect(within(weeks).getAllByRole('definition').map((d) => d.textContent)).toEqual(['1', '2', '0', '0', '1']);
+  });
+
+  it('P18.95-T3 AC-6 marks history the office has since hidden on its card, as the table does', async () => {
+    onPhone();
+    const archived = {
+      ...WEEK,
+      sections: [
+        section('SELLING', 'Selling', [
+          type('SELL_SUBMISSION', 'Submission polis', 6, [1, 0, 0, 0, 0, 0, 0], { standing: 'archived' }),
+        ]),
+        section('TEAM_DEVELOPMENT', 'Team Development', [
+          type('DEV_TEAM_ACTIVITY', 'Team development', 12, [2, 0, 0, 0, 0, 0, 0], { standing: 'not_shown' }),
+        ], { standing: 'not_shown' }),
+      ],
+    };
+    stubFetch({ ...config(), '/activity/dashboard': { body: archived } });
+    render();
+    const items = within(await cards());
+    expect(items.getByText('Archived')).toBeInTheDocument();
+    expect(items.getByText('No longer in your sections')).toBeInTheDocument();
+  });
+
+  it('P18.95-T3 AC-6 never draws the table first on a phone: the width is asked before the first answer', async () => {
+    onPhone();
+    stubFetch({ ...config(), '/activity/dashboard': { body: WEEK } });
+    expect(await drewATable(async () => {
+      render();
+      await cards();
+    })).toBe(false);
+  });
+
+  it('P18.95-T3 AC-6 keeps the table at 768px and wider', async () => {
+    onPhone(false);
+    stubFetch({ ...config(), '/activity/dashboard': { body: WEEK } });
+    render();
+    expect(await screen.findByRole('table', { name: 'Your activity' })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Your activity' })).not.toBeInTheDocument();
+  });
+});
+
+/** Whether a `<table>` was ever put on the page while `run` waited: a phone's first paint must already be its cards. */
+async function drewATable(run: () => Promise<unknown>) {
+  let seen = false;
+  const observer = new MutationObserver((records) => {
+    for (const record of records) {
+      for (const node of record.addedNodes) {
+        if (node instanceof Element && (node.matches('table') || node.querySelector('table'))) seen = true;
+      }
+    }
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
+  await run();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  observer.disconnect();
+  return seen;
+}

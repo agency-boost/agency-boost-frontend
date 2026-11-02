@@ -77,7 +77,7 @@ export function ScriptText({ children }: { children: ReactNode }) {
 export function OpeningLine({ text, size = 'page' }: { text: string; size?: ScriptSize }) {
   return (
     <p className={cn('m-0 font-display font-bold leading-snug text-navy', size === 'page' ? 'text-lg' : 'text-md')}>
-      &ldquo;{text}&rdquo;
+      “{text}”
     </p>
   );
 }

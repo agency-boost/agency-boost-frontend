@@ -6,6 +6,8 @@ import { PublishBar } from '@/components/publish-bar';
 import { SettingsTabs } from '@/components/settings-tabs';
 import { StagedChangesBar } from '@/components/staged-changes-bar';
 import { ErrorBanner } from '@/components/ui/field';
+import { useMessages } from '@/i18n/language-provider';
+import { settingsMessages } from '@/i18n/messages/settings';
 import type { ApiError } from '@/lib/api-client';
 
 /**
@@ -74,6 +76,7 @@ export function SettingsScreen({
   toolbar?: { hint?: ReactNode; actions?: ReactNode };
   children: ReactNode;
 }) {
+  const t = useMessages(settingsMessages);
   return (
     <Page title={title} subtitle={subtitle} permission={permission} actions={actions}>
       {tabs && (
@@ -95,7 +98,7 @@ export function SettingsScreen({
           tabs={subtabs}
           activeHref={activeSubtab}
           onSelect={onSelectSubtab}
-          label={subtabsLabel ?? `${title} sections`}
+          label={subtabsLabel ?? t.sections({ title })}
           variant="subtabs"
         />
       )}

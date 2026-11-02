@@ -2,6 +2,7 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { makeMe, renderWithSession, stubFetch, type StubReply } from '@test/harness';
+import { GCS_UPLOAD_URL, gcsSignedUpload } from '@test/storage-fixtures';
 import type { PitchMaterialsView, PitchSlot } from '@/lib/recruitment-pitch';
 import RecruitmentPitchPage from './page';
 
@@ -24,23 +25,30 @@ const file = (name: string, bytes = 2.4 * 1024 * 1024, uploadedOn = '2026-09-12'
 
 const opportunity = (over: Partial<PitchSlot> = {}): PitchSlot => ({
   slot: 'opportunity', title: 'Opportunity Overview',
-  line: 'The core pitch: the role, what it pays, and what it takes.',
+  line: 'The core pitch: the role, what it pays, and what it takes.', required: true,
   state: 'missing', file: null, checklist: checklist(), version: 0, ...over,
 });
 const plain = (slot: PitchSlot['slot'], title: string, over: Partial<PitchSlot> = {}): PitchSlot => ({
-  slot, title, line: `${title}'s line`, state: 'missing', file: null, checklist: [], version: 0, ...over,
+  slot, title, line: `${title}'s line`, required: true, state: 'missing', file: null, checklist: [], version: 0, ...over,
 });
+/** *Company Profile* and *Agency Profile*: optional, as the server says in `required` (ADR-0177 §2). */
+const company = (over: Partial<PitchSlot> = {}) => plain('company', 'Company Profile', { required: false, ...over });
+const agency = (over: Partial<PitchSlot> = {}) => plain('agency', 'Agency Profile', { required: false, ...over });
 
-/** The server's counts, worked out here only to keep each fixture consistent with its slots. */
+/** The server's counts, worked out here only to keep each fixture consistent with its slots: the required alone. */
 function view(slots: PitchSlot[]): PitchMaterialsView {
-  const count = (...s: PitchSlot['state'][]) => slots.filter((x) => s.includes(x.state)).length;
+  const required = slots.filter((x) => x.required);
+  const count = (...s: PitchSlot['state'][]) => required.filter((x) => s.includes(x.state)).length;
   return {
     slots,
     summary: { done: count('complete', 'uploaded'), total: 4, missing: count('missing'), unconfirmed: count('partial') },
   };
 }
 
-/** The prototype's own demonstration state (`:626-661`): one partly confirmed, one uploaded, two missing. */
+/**
+ * The prototype's own demonstration state (`:626-661`): one partly confirmed, one uploaded, two missing — and, as
+ * the seed holds 0417's, its Company Profile, a one-page PDF, with the Agency Profile empty.
+ */
 const DEMO = view([
   opportunity({
     state: 'partial', file: file('Opportunity_Overview_v3.pdf'), checklist: checklist(['career-path', 'support']), version: 1,
@@ -48,14 +56,20 @@ const DEMO = view([
   plain('proof', 'Proof & Credibility', { state: 'uploaded', file: file('Proof_and_Credibility_2026.pdf', 1.1 * 1024 * 1024, '2026-08-30'), version: 1 }),
   plain('faq', 'FAQ'),
   plain('howtojoin', 'How to Join'),
+  company({ state: 'uploaded', file: file('Company_Profile_2026.pdf', 712, '2026-09-26'), version: 1 }),
+  agency(),
 ]);
-const EMPTY = view([opportunity(), plain('proof', 'Proof & Credibility'), plain('faq', 'FAQ'), plain('howtojoin', 'How to Join')]);
+const EMPTY = view([
+  opportunity(), plain('proof', 'Proof & Credibility'), plain('faq', 'FAQ'), plain('howtojoin', 'How to Join'), company(), agency(),
+]);
 const COMPLETE = view([
   opportunity({ state: 'complete', file: file('o.pdf'), checklist: checklist(Object.keys(LABELS)), version: 2 }),
   plain('proof', 'Proof & Credibility', { state: 'uploaded', file: file('p.pdf'), version: 1 }),
   plain('faq', 'FAQ', { state: 'uploaded', file: file('f.pdf'), version: 1 }),
   plain('howtojoin', 'How to Join', { state: 'uploaded', file: file('h.pdf'), version: 1 }),
+  company(), agency(),
 ]);
+const SIX_TITLES = ['Opportunity Overview', 'Proof & Credibility', 'FAQ', 'How to Join', 'Company Profile', 'Agency Profile'];
 
 const member = (over: Record<string, unknown> = {}) => ({
   membershipId: 'mem-1', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab' as const,
@@ -74,10 +88,8 @@ const field = (orgLevelCode: string, hierarchyRole: 'ab' | 'aab' | 'agent') => m
   permissions: ['member:read_profile', 'tenant_config:read', 'recruitment:read'],
 });
 
-const SIGNED = {
-  uploadUrl: 'https://storage.test/upload', storageKey: 'dev/kpm-1/recruitment-pitch/01NEW',
-  signature: 'sig', expiresAt: '2026-10-09T03:10:00.000Z',
-};
+/** A GCS signed POST policy, as the API answers since Phase 18.7 (ADR-0153). */
+const SIGNED = gcsSignedUpload('dev/kpm-1/recruitment-pitch/01NEW');
 
 function render(read: StubReply | StubReply[] = { body: DEMO }, me = OWNER, extra: Record<string, StubReply | StubReply[]> = {}) {
   const stub = stubFetch({ 'GET /recruitment/pitch-materials': read, ...extra });
@@ -115,7 +127,7 @@ describe('Settings › Recruitment pitch (P17-T5)', () => {
       expect(ring).toHaveTextContent('1/4');
       expect(screen.getByText('Recruitment Pitch is incomplete')).toBeInTheDocument();
       expect(screen.getByText(
-        '2 not uploaded, 1 uploaded but not fully confirmed — not yet ready to rely on for candidates.',
+        '2 missing, 1 needs checking.',
       )).toBeInTheDocument();
     });
 
@@ -129,24 +141,53 @@ describe('Settings › Recruitment pitch (P17-T5)', () => {
       expect(within(card('Opportunity Overview')).getByText('Complete')).toBeInTheDocument();
     });
 
-    it('draws the four cards in the server’s order, each with its badge in words', async () => {
+    it('P18.97-T5 AC-1, AC-2 draws the six cards in the server’s order, each with its badge in words, the optional two tagged', async () => {
       render();
       await screen.findByRole('article', { name: 'FAQ' });
-      expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent))
-        .toEqual(['Opportunity Overview', 'Proof & Credibility', 'FAQ', 'How to Join']);
-      expect(within(card('Opportunity Overview')).getByText('2/4 confirmed')).toBeInTheDocument();
+      expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(SIX_TITLES);
+      // UI-029: the office's partial document reads as the agents' does, where it read "2/4 confirmed".
+      expect(within(card('Opportunity Overview')).getByText('Uploaded · needs confirmation')).toBeInTheDocument();
+      expect(screen.queryByText(/\d\/\d confirmed/)).not.toBeInTheDocument();
       expect(within(card('Proof & Credibility')).getByText('Uploaded')).toBeInTheDocument();
       expect(within(card('FAQ')).getByText('Missing')).toBeInTheDocument();
       expect(within(card('How to Join')).getByText('Missing')).toBeInTheDocument();
+      expect(within(card('Company Profile')).getByText('Optional')).toBeInTheDocument();
+      expect(within(card('Company Profile')).getByText('Uploaded')).toBeInTheDocument();
+      expect(within(card('Agency Profile')).getByText('Optional')).toBeInTheDocument();
+      expect(within(card('Agency Profile')).getByText('Not uploaded yet')).toBeInTheDocument();
+      expect(within(card('Agency Profile')).queryByText('Missing')).not.toBeInTheDocument();
     });
 
-    it('shows a file’s own name, size and day, and the missing line on a dashed card', async () => {
+    it('P18.97-T5 AC-1 the partial document’s checklist still shows which items are ticked, under the amber badge', async () => {
+      render();
+      const opp = await screen.findByRole('article', { name: 'Opportunity Overview' });
+      expect(within(opp).getByText('Uploaded · needs confirmation')).toBeInTheDocument();
+      expect(Object.values(LABELS).map((label) => (within(opp).getByRole('checkbox', { name: label }) as HTMLInputElement).checked))
+        .toEqual([true, false, true, false]);
+    });
+
+    it('P18.97-T5 AC-3 the ring and the banner read the four: complete at 4/4 with neither optional document', async () => {
+      render({ body: COMPLETE });
+      expect(await screen.findByRole('img', { name: '4 of 4 documents complete' })).toHaveTextContent('4/4');
+      expect(within(card('Company Profile')).getByText('Not uploaded yet')).toBeInTheDocument();
+      expect(within(card('Agency Profile')).getByText('Not uploaded yet')).toBeInTheDocument();
+      expect(screen.queryByText('Missing')).not.toBeInTheDocument();
+    });
+
+    it('P18.97-T5 AC-4 a file under 1 KB reads “< 1 KB”', async () => {
+      render();
+      const profile = await screen.findByRole('article', { name: 'Company Profile' });
+      expect(within(profile).getByText('< 1 KB · updated 26 Sep 2026')).toBeInTheDocument();
+    });
+
+    it('P18.95-T7 AC-1 shows a file’s own name, size and day, and the missing line in the client’s words on a dashed card', async () => {
       render();
       const opp = await screen.findByRole('article', { name: 'Opportunity Overview' });
       expect(within(opp).getByText('Opportunity_Overview_v3.pdf')).toBeInTheDocument();
-      expect(within(opp).getByText('2.4 MB · updated Sep 12, 2026')).toBeInTheDocument();
-      expect(within(card('Proof & Credibility')).getByText('1.1 MB · updated Aug 30, 2026')).toBeInTheDocument();
-      expect(within(card('FAQ')).getByText('No PDF uploaded yet — candidates can\'t be shown this document.')).toBeInTheDocument();
+      // The size and the day in the spec's language since P18.98-T4 wired them (the harness's English is a chosen English).
+      expect(within(opp).getByText('2.4 MB · updated 12 Sep 2026')).toBeInTheDocument();
+      expect(within(card('Proof & Credibility')).getByText('1.1 MB · updated 30 Aug 2026')).toBeInTheDocument();
+      expect(within(card('FAQ')).getByText('Not uploaded yet')).toBeInTheDocument();
       expect(card('FAQ').className).toContain('border-dashed');
       expect(opp.className).not.toContain('border-dashed');
     });
@@ -179,7 +220,7 @@ describe('Settings › Recruitment pitch (P17-T5)', () => {
   });
 
   describe('who reaches it, and who writes (AC-5, AC-8)', () => {
-    it.each([['the Owner', OWNER], ['the Admin', ADMIN]])('gives %s every control', async (_who, me) => {
+    it.each([['the Owner', OWNER], ['the Admin', ADMIN]])('P18.97-T5 AC-2 gives %s every control, on the optional documents too', async (_who, me) => {
       render({ body: DEMO }, me);
       const opp = await screen.findByRole('article', { name: 'Opportunity Overview' });
       expect(within(opp).getByRole('group', { name: 'Confirm this PDF actually includes' })).toBeInTheDocument();
@@ -188,6 +229,11 @@ describe('Settings › Recruitment pitch (P17-T5)', () => {
       expect(within(opp).getByRole('button', { name: 'Replace, Opportunity Overview' })).toBeInTheDocument();
       expect(within(card('FAQ')).getByRole('button', { name: 'Upload PDF, FAQ' })).toBeInTheDocument();
       expect(within(card('FAQ')).queryByRole('button', { name: /View PDF/ })).not.toBeInTheDocument();
+      expect(within(card('Company Profile')).getByRole('button', { name: 'View PDF, Company Profile — opens in a new tab' })).toBeInTheDocument();
+      expect(within(card('Company Profile')).getByRole('button', { name: 'Replace, Company Profile' })).toBeInTheDocument();
+      expect(within(card('Agency Profile')).getByRole('button', { name: 'Upload PDF, Agency Profile' })).toBeInTheDocument();
+      // The optional documents have no checklist: the only boxes are Opportunity Overview's.
+      expect(screen.getAllByRole('checkbox')).toHaveLength(4);
     });
 
     it('draws a read-only support session with nothing to change, the boxes disabled', async () => {
@@ -195,6 +241,7 @@ describe('Settings › Recruitment pitch (P17-T5)', () => {
       const opp = await screen.findByRole('article', { name: 'Opportunity Overview' });
       for (const box of within(opp).getAllByRole('checkbox')) expect(box).toBeDisabled();
       expect(within(opp).getByRole('button', { name: /^View PDF/ })).toBeInTheDocument();
+      expect(within(card('Company Profile')).getByRole('button', { name: /^View PDF/ })).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: /^Replace/ })).not.toBeInTheDocument();
       expect(screen.queryByRole('button', { name: /^Upload PDF/ })).not.toBeInTheDocument();
       expect(document.querySelector('input[type=file]')).toBeNull();
@@ -288,6 +335,83 @@ describe('Settings › Recruitment pitch (P17-T5)', () => {
       expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
       expect(screen.queryByText('Confirm this PDF actually includes')).not.toBeInTheDocument();
     });
+
+    describe('P18.95-T1 AC-5 — each tick says it is saved, beside its box', () => {
+      /** The save confirmation in the box's own row: the nearest ancestor with a status for a child. */
+      const besides = (el: HTMLElement) => {
+        for (let box = el.parentElement; box; box = box.parentElement) {
+          const own = [...box.children].find((c) => c.getAttribute('role') === 'status');
+          if (own) return own as HTMLElement;
+          if (box.tagName === 'FIELDSET') break;
+        }
+        return null;
+      };
+      const ticked = opportunity({
+        state: 'partial', file: file('Opportunity_Overview_v3.pdf'), checklist: checklist(['career-path', 'support', 'income']), version: 1,
+      });
+      const RETRY = `Couldn't save — retry: ${LABELS.income}, Opportunity Overview`;
+
+      it('P18.95-T1 AC-5: a tick says Saved ✓ beside its box once it is kept, and nowhere else', async () => {
+        render([{ body: DEMO }, { body: view([ticked, ...DEMO.slots.slice(1)]) }], OWNER, {
+          'PUT /confirmations/income': { body: ticked },
+        });
+        const opp = await screen.findByRole('article', { name: 'Opportunity Overview' });
+        const box = within(opp).getByRole('checkbox', { name: LABELS.income });
+
+        await userEvent.click(box);
+
+        await waitFor(() => expect(besides(box)).toHaveTextContent('Saved ✓'));
+        expect(besides(box)).toHaveClass('text-success');
+        expect(screen.getAllByText('Saved ✓')).toHaveLength(1);
+        expect(besides(within(opp).getByRole('checkbox', { name: LABELS.support }))).toBeNull();
+      });
+
+      it('P18.95-T1 AC-5: a tick that fails says Couldn’t save — retry, and the retry sends the same tick again', async () => {
+        const stub = render([{ body: DEMO }, { body: view([ticked, ...DEMO.slots.slice(1)]) }], OWNER, {
+          'PUT /confirmations/income': [
+            { status: 500, body: { error: { code: 'INTERNAL_ERROR', message: 'Something broke.', requestId: 'r-3' } } },
+            { body: ticked },
+          ],
+        });
+        const opp = await screen.findByRole('article', { name: 'Opportunity Overview' });
+        const box = within(opp).getByRole('checkbox', { name: LABELS.income });
+        await userEvent.click(box);
+
+        const retry = await within(opp).findByRole('button', { name: RETRY });
+        expect(besides(box)).toContainElement(retry);
+        // What the card said before still stands where it did, and the box still goes back.
+        expect(within(opp).getByText('Could not save that tick.')).toBeInTheDocument();
+        expect(box).not.toBeChecked();
+
+        await userEvent.click(retry);
+
+        await waitFor(() => expect(calls(stub, '/confirmations/income', 'PUT')).toHaveLength(2));
+        const [first, again] = calls(stub, '/confirmations/income', 'PUT');
+        expect(JSON.parse(again.init.body as string)).toEqual({ ticked: true, version: 1 });
+        expect(again.init.body).toBe(first.init.body);
+        await waitFor(() => expect(besides(box)).toHaveTextContent('Saved ✓'));
+        expect(box).toBeChecked();
+        expect(box).toHaveFocus();
+        expect(within(opp).queryByText('Could not save that tick.')).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /^Couldn't save/ })).not.toBeInTheDocument();
+      });
+
+      it('P18.95-T1 AC-5: a tick refused because the file was replaced (409) leaves nothing to retry', async () => {
+        const replaced = opportunity({ state: 'partial', file: file('Opportunity_Overview_v4.pdf'), version: 2 });
+        render([{ body: DEMO }, { body: view([replaced, ...DEMO.slots.slice(1)]) }], OWNER, {
+          'PUT /confirmations/income': {
+            status: 409, body: { error: { code: 'VERSION_CONFLICT', message: 'The slot changed.', requestId: 'r-4' } },
+          },
+        });
+        const opp = await screen.findByRole('article', { name: 'Opportunity Overview' });
+        await userEvent.click(within(opp).getByRole('checkbox', { name: LABELS.income }));
+
+        expect(await within(opp).findByText(/This PDF was replaced while the page was open/)).toBeInTheDocument();
+        expect(await within(opp).findByText('Opportunity_Overview_v4.pdf')).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /^Couldn't save/ })).not.toBeInTheDocument();
+        expect(besides(within(opp).getByRole('checkbox', { name: LABELS.income }))).toBeNull();
+      });
+    });
   });
 
   describe('uploading and replacing (AC-4)', () => {
@@ -296,6 +420,7 @@ describe('Settings › Recruitment pitch (P17-T5)', () => {
       await screen.findByRole('article', { name: 'FAQ' });
       await userEvent.upload(picker('FAQ'), pdf('huge.pdf', 26 * 1024 * 1024));
 
+      // The size in the spec's language since P18.98-T4 wired it (the harness's English is a chosen English).
       expect(await within(card('FAQ')).findByText('“huge.pdf” is 26.0 MB. A PDF can be 25 MB at most.')).toBeInTheDocument();
       expect(calls(stub, '/uploads', 'POST')).toEqual([]);
     });
@@ -313,19 +438,21 @@ describe('Settings › Recruitment pitch (P17-T5)', () => {
       const faq = plain('faq', 'FAQ', { state: 'uploaded', file: file('faq.pdf', 14_336, '2026-10-09'), version: 1 });
       const stub = render([{ body: DEMO }, { body: view([DEMO.slots[0], DEMO.slots[1], faq, DEMO.slots[3]]) }], OWNER, {
         'POST /kpm/settings/recruitment-pitch/uploads': { body: SIGNED },
-        'https://storage.test/upload': { body: {} },
+        [GCS_UPLOAD_URL]: { status: 204 },
         'PUT /kpm/settings/recruitment-pitch/faq': { body: faq },
       });
       await screen.findByRole('article', { name: 'FAQ' });
       await userEvent.upload(picker('FAQ'), pdf('faq.pdf', 14_336));
 
       expect(await within(card('FAQ')).findByText('faq.pdf')).toBeInTheDocument();
-      expect(within(card('FAQ')).getByText('14 KB · updated Oct 9, 2026')).toBeInTheDocument();
+      expect(within(card('FAQ')).getByText('14 KB · updated 9 Oct 2026')).toBeInTheDocument();
       expect(JSON.parse(calls(stub, '/recruitment-pitch/uploads', 'POST')[0].init.body as string))
         .toEqual({ filename: 'faq.pdf', mimeType: 'application/pdf', bytes: 14_336 });
-      const sent = calls(stub, 'https://storage.test/upload', 'POST')[0].init.body as FormData;
-      expect(sent.get('public_id')).toBe(SIGNED.storageKey);
-      expect(sent.get('signature')).toBe('sig');
+      // The signed policy's own fields, then the file — what storage checks the upload against.
+      const sent = calls(stub, GCS_UPLOAD_URL, 'POST')[0].init.body as FormData;
+      expect(sent.get('key')).toBe(SIGNED.storageKey);
+      expect(sent.get('x-goog-signature')).toBe(SIGNED.fields['x-goog-signature']);
+      expect([...sent.keys()].at(-1)).toBe('file');
       expect(JSON.parse(calls(stub, '/recruitment-pitch/faq', 'PUT')[0].init.body as string))
         .toEqual({ storageKey: SIGNED.storageKey });
       expect(await screen.findByRole('img', { name: '2 of 4 documents complete' })).toBeInTheDocument();
@@ -342,7 +469,7 @@ describe('Settings › Recruitment pitch (P17-T5)', () => {
       });
       const base = globalThis.fetch;
       vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
-        if (url.startsWith('https://storage.test')) { await held; return { ok: true, status: 200, json: async () => ({}) } as Response; }
+        if (url.startsWith(GCS_UPLOAD_URL)) { await held; return { ok: true, status: 204 } as Response; }
         return base(url, init);
       }));
       renderWithSession(<RecruitmentPitchPage />, { me: OWNER });
@@ -368,7 +495,27 @@ describe('Settings › Recruitment pitch (P17-T5)', () => {
       expect(calls(stub, '/recruitment-pitch/faq', 'PUT')).toEqual([]);
     });
 
-    it('the walk: upload, tick two, replace — every box clear, 0/4 confirmed, the banner recounted (exit criterion 1)', async () => {
+    it('P18.97-T5 AC-2, AC-3 uploads an optional document through the same three calls, and the banner does not move', async () => {
+      const filled = agency({ state: 'uploaded', file: file('Agency_Profile.pdf', 30_720, '2026-10-09'), version: 1 });
+      const stub = render([{ body: DEMO }, { body: view([...DEMO.slots.slice(0, 5), filled]) }], OWNER, {
+        'POST /kpm/settings/recruitment-pitch/uploads': { body: SIGNED },
+        [GCS_UPLOAD_URL]: { status: 204 },
+        'PUT /kpm/settings/recruitment-pitch/agency': { body: filled },
+      });
+      await screen.findByRole('article', { name: 'Agency Profile' });
+      await userEvent.upload(picker('Agency Profile'), pdf('Agency_Profile.pdf', 30_720));
+
+      expect(await within(card('Agency Profile')).findByText('Agency_Profile.pdf')).toBeInTheDocument();
+      expect(within(card('Agency Profile')).getByText('30 KB · updated 9 Oct 2026')).toBeInTheDocument();
+      expect(within(card('Agency Profile')).getByText('Uploaded')).toBeInTheDocument();
+      expect(JSON.parse(calls(stub, '/recruitment-pitch/agency', 'PUT')[0].init.body as string)).toEqual({ storageKey: SIGNED.storageKey });
+      await waitFor(() => expect(calls(stub, '/recruitment/pitch-materials')).toHaveLength(2));
+      // Optional: the ring and the banner read the four, as before the upload.
+      expect(screen.getByRole('img', { name: '1 of 4 documents complete' })).toBeInTheDocument();
+      expect(screen.getByText('2 missing, 1 needs checking.')).toBeInTheDocument();
+    });
+
+    it('the walk: upload, tick two, replace — every box clear, the badge still needs confirmation, the banner recounted (exit criterion 1)', async () => {
       const v1 = file('Opportunity_Overview_v3.pdf');
       const v2 = file('Opportunity_Overview_v4.pdf', 3 * 1024 * 1024, '2026-10-09');
       const s = (state: PitchSlot['state'], f: typeof v1 | null, ticks: string[], version: number) =>
@@ -384,7 +531,7 @@ describe('Settings › Recruitment pitch (P17-T5)', () => {
         at(s('partial', v2, [], 2)),
       ], OWNER, {
         'POST /kpm/settings/recruitment-pitch/uploads': { body: SIGNED },
-        'https://storage.test/upload': { body: {} },
+        [GCS_UPLOAD_URL]: { status: 204 },
         'PUT /kpm/settings/recruitment-pitch/opportunity': [
           { body: s('partial', v1, [], 1) },
           { body: s('partial', v2, [], 2) },
@@ -396,21 +543,23 @@ describe('Settings › Recruitment pitch (P17-T5)', () => {
       await screen.findByRole('article', { name: 'Opportunity Overview' });
       await userEvent.upload(picker('Opportunity Overview'), pdf('Opportunity_Overview_v3.pdf'));
       const opp = () => card('Opportunity Overview');
-      expect(await within(opp()).findByText('0/4 confirmed')).toBeInTheDocument();
+      const box = (item: keyof typeof LABELS) => within(opp()).getByRole('checkbox', { name: LABELS[item] });
+      expect(await within(opp()).findByText('Uploaded · needs confirmation')).toBeInTheDocument();
+      expect(within(opp()).getAllByRole('checkbox').some((b) => (b as HTMLInputElement).checked)).toBe(false);
 
-      await userEvent.click(within(opp()).getByRole('checkbox', { name: LABELS['career-path'] }));
-      expect(await within(opp()).findByText('1/4 confirmed')).toBeInTheDocument();
-      await userEvent.click(within(opp()).getByRole('checkbox', { name: LABELS.income }));
-      expect(await within(opp()).findByText('2/4 confirmed')).toBeInTheDocument();
-      expect(within(opp()).getByRole('checkbox', { name: LABELS.income })).toBeChecked();
+      await userEvent.click(box('career-path'));
+      await waitFor(() => expect(box('career-path')).toBeChecked());
+      await userEvent.click(box('income'));
+      await waitFor(() => expect(box('income')).toBeChecked());
+      expect(within(opp()).getByText('Uploaded · needs confirmation')).toBeInTheDocument();
 
       await userEvent.upload(picker('Opportunity Overview'), pdf('Opportunity_Overview_v4.pdf'));
       expect(await within(opp()).findByText('Opportunity_Overview_v4.pdf')).toBeInTheDocument();
-      expect(within(opp()).getByText('0/4 confirmed')).toBeInTheDocument();
-      for (const box of within(opp()).getAllByRole('checkbox')) expect(box).not.toBeChecked();
+      expect(within(opp()).getByText('Uploaded · needs confirmation')).toBeInTheDocument();
+      for (const b of within(opp()).getAllByRole('checkbox')) expect(b).not.toBeChecked();
       await waitFor(() => expect(calls(stub, '/recruitment/pitch-materials')).toHaveLength(5));
       expect(screen.getByText(
-        '3 not uploaded, 1 uploaded but not fully confirmed — not yet ready to rely on for candidates.',
+        '3 missing, 1 needs checking.',
       )).toBeInTheDocument();
       expect(screen.getByText('“Opportunity_Overview_v4.pdf” attached. Its ticks are cleared.')).toBeInTheDocument();
     });

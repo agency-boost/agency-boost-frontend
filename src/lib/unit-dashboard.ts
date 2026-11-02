@@ -1,7 +1,11 @@
+import { messagesIn } from '@/i18n/catalogue';
+import { DEFAULT_LANGUAGE, SOURCE_LANGUAGE, type Language } from '@/i18n/language';
+import { unitDashboardMessages } from '@/i18n/messages/unit-dashboard';
 import { api } from './api-client';
+import type { ActivityRatio } from './activity';
 import type { LastOneOnOne, RosterStatus } from './coaching';
-import { formatMonth, formatOfficeDay } from './format';
-import { formatRupiah, groupDigits, parseDigits, producedFrom, toMajor, toMinor } from './goals';
+import { formatMonth, formatOfficeDay, formatPercent, formatRupiahCompact, formatRupiahCompactPair, OFFICE_TIME_ZONE } from './format';
+import { groupDigits, parseDigits, toMajor, toMinor } from './goals';
 import type { MonthState } from './production';
 
 /**
@@ -18,16 +22,28 @@ import type { MonthState } from './production';
  *
  * Each interface is spelled out with named nested types, so `contract.spec.ts` can read its fields
  * against `backend/openapi.json`: it reads an interface's body up to the first `}`.
+ *
+ * **Its words are the catalogue's** (`i18n/messages/unit-dashboard.ts`, P18.98-T4): each function that writes one takes
+ * the reader's `language` — English, the source, when passed none, which its spec reads — and one that writes a figure
+ * takes the figures' language after it (`figures`; Indonesian when passed none). A screen passes `useLanguage()` and
+ * `useFigureLanguage()`.
  */
+
+/** The module's words in a language. */
+const wordsIn = (language: Language) => messagesIn(unitDashboardMessages, language);
+/** The catalogue's English: what the specs read, and what the old shapes below hold. */
+const EN = wordsIn(SOURCE_LANGUAGE);
 
 /** *Last 7 days · This month · This year* (`Overall.html:3895-3897`), as the address carries them. */
 export type UnitPeriod = '7d' | 'month' | 'year';
 
-export const UNIT_PERIODS: readonly { id: UnitPeriod; label: string }[] = [
-  { id: '7d', label: 'Last 7 days' },
-  { id: 'month', label: 'This month' },
-  { id: 'year', label: 'This year' },
-];
+/** The three, in their order, each named in a language. */
+export const unitPeriods = (language: Language = SOURCE_LANGUAGE): readonly { id: UnitPeriod; label: string }[] => {
+  const t = wordsIn(language).periods;
+  return [{ id: '7d', label: t['7d'] }, { id: 'month', label: t.month }, { id: 'year', label: t.year }];
+};
+
+export const UNIT_PERIODS: readonly { id: UnitPeriod; label: string }[] = unitPeriods();
 
 /** *This month* is selected first (`:3896`), and an address with no period, or one it does not know, reads it. */
 export const DEFAULT_PERIOD: UnitPeriod = 'month';
@@ -60,6 +76,8 @@ export interface GoalSource {
   month: string | null;
   correctedBy: UnitPerson | null;
   correctedAt: string | null;
+  /** Who typed a `self_reported` figure, when it was not the member — a coach (S2). Absent otherwise. */
+  typedBy?: { membershipId: string; name: string | null };
 }
 
 /** The Summary's figures for the period: the month's under *Last 7 days* (D-period). */
@@ -121,6 +139,8 @@ export interface FollowUp {
 export interface UnitRow {
   membershipId: string;
   name: string;
+  /** Their profile photo as a signed link (UI V1, UI-111); `null` or absent for none: the avatar draws initials. */
+  photoUrl?: string | null;
   /** The reader's own row: *You ({first name})* ★, *Last 1:1* —, its drills to their own screens. */
   isReader: boolean;
   rung: UnitRung;
@@ -137,12 +157,20 @@ export interface UnitRow {
   goal: GoalCell;
   production: UnitProduction;
   leadsCounts: LeadsCounts;
+  /** *Closing* (UI V1, UI-028; O-4): their sales leads that reached *Paid and issued* in the period's window. */
+  closings: number;
   activity: UnitActivity;
   /** Coaching's own reading; `null` for *No 1:1 yet*, and on the reader's own row. */
   lastOneOnOne: LastOneOnOne | null;
   status: RosterStatus;
   /** `PACING_TO_MAA`: the ✓. `null` without a target. */
   pacingToMaa: boolean | null;
+  /**
+   * ***New hire*** (ADR-0172 §2–3, P18.96-T5 AC-3): a new hire with no first sale by today — the server's
+   * `COUNTS_FOR_PRODUCTION`, never worked out here. The row carries the tag; every total above it leaves the person out
+   * of its production and its *On pace to be active*. `false` from the first sale's day.
+   */
+  newHireBeforeFirstSale: boolean;
   followUp: FollowUp | null;
   /**
    * *Chasing MDRT* (ADR-0122, P18.5-T7 AC-7): chasing `MDRT_QUALIFICATION`, not ended. `null` where the
@@ -159,24 +187,41 @@ export interface ChasedRef {
   title: string;
 }
 
-/** A total's goal: sums of the figures held; `missing` counts the rows holding no actual. */
+/**
+ * A total's goal, **paired** (ADR-0165 §1, P18.8-T15 AC-6): the targets and the production of the rows whose
+ * production is held — every target when nobody's is, beside *Not uploaded yet*. `missing` counts the rows left
+ * out, which the tooltip names; the shortfall and the excess are the server's, from the same pairs.
+ */
 export interface UnitTotalGoal {
   targetMinor: number | null;
   actualMinor: number | null;
   attainmentPct: number | null;
   missing: number;
+  gapMinor: number | null;
+  overMinor: number | null;
 }
 
 export interface PotentialActive {
   count: number;
+  /** Manpower (UI-013): everybody the group holds, its head and every new hire included. */
   of: number;
+}
+
+/** *Active Agent*'s tile (UI-013): out of manpower, with its *Unit* (head + direct agents) and *AAB* split. */
+export interface ActiveAgentTile extends PotentialActive {
+  unit: PotentialActive;
+  aab: PotentialActive;
 }
 
 export interface UnitTotal {
   goal: UnitTotalGoal;
   leadsCounts: LeadsCounts;
+  /** The rows' *Closing* summed (UI-028). */
+  closings: number;
   touches: CountAgainst;
   potentialActive: PotentialActive;
+  /** The new hires before a first sale whom `goal` leaves out (ADR-0172 §2), named in its ⓘ — in `potentialActive.of`. */
+  newHires: number;
 }
 
 /** A unit below the head: its head, their direct reports who lead nobody, then the units nested in it. */
@@ -193,13 +238,12 @@ export interface TeamTile {
   direct: number;
   units: number;
   underUnits: number;
+  /** Of `total`, the new hires before a first sale: in the team, out of production, in *Active Agent*'s `of` (UI-013). */
+  newHires: number;
 }
 
-export interface GroupProductionTile {
-  targetMinor: number | null;
-  actualMinor: number | null;
-  attainmentPct: number | null;
-  missing: number;
+/** *Direct Group production*: every row's goal, paired as a unit's total is (ADR-0165 §1). */
+export interface GroupProductionTile extends UnitTotalGoal {
   period: 'month' | 'year';
 }
 
@@ -211,7 +255,7 @@ export interface RecruitsTile {
 export interface UnitTiles {
   team: TeamTile;
   directGroupProduction: GroupProductionTile;
-  potentialActive: PotentialActive;
+  potentialActive: ActiveAgentTile;
   potentialRecruits: RecruitsTile;
 }
 
@@ -261,6 +305,8 @@ export interface UnitDashboardView {
   units: UnitGroup[];
   production: UnitProductionState;
   mdrt: MdrtHeader;
+  /** *Last updated* (UI-028): the office's day of its newest standing production import; `null` while it has none. */
+  lastUpload: string | null;
 }
 
 /**
@@ -312,91 +358,41 @@ export const updateUnitProduction = (body: ProductionUpdate) =>
 
 /*
  * ── The prototype's words ───────────────────────────────────────────────────────────────────────
+ *
+ * The catalogue's English, in the shapes the screens and the specs read them by before P18.98-T4. A screen reads the
+ * reader's language instead: `useMessages(unitDashboardMessages)`.
  */
 
 /** The strings `Overall.html` draws, verbatim (D-copy). */
-export const PROTOTYPE_COPY = {
-  title: 'Unit Dashboard',
-  roster: 'Your team’s roster',
-  updateProduction: 'Update production',
-  yourTeam: 'Your team',
-  directGroupProduction: 'Direct Group production',
-  potentialActiveTile: 'Potential Monthly Active Agents (Group)',
-  potentialRecruitsTile: 'Potential Recruits (Group)',
-  yourUnitRecruits: 'Your unit',
-  yourAabs: 'Your AABs',
-  aabUnits: 'AAB units',
-  yourUnitGroup: 'Your Unit',
-  yourUnitTotal: 'Your Unit — Total',
-  /** A unit head's own row, apart from the unit's total (`:7384`). */
-  personal: 'Personal',
-  noOneOnOne: 'No 1:1 yet',
-  maa: 'Potential Monthly Active Agent — pacing to submit at least 1 policy this month.',
-  statusInfo: 'How is status decided?',
-  /** The *Status* header's tooltip (`:3929-3935`), its list kept as lines. */
-  statusRules: [
-    'Evaluated for the current calendar month, regardless of the period toggle above.',
-    '1. Not projected to submit ≥1 policy this month? → Needs attention, full stop.',
-    '2. Will qualify. Projected pace ≥90% of target? → On track.',
-    '3. Will qualify, but pace under 90%? → Watch closely.',
-  ].join('\n'),
-  gap: 'Gap',
-  activityBreakdown: 'Activity breakdown',
-  ratios: 'Ratios',
-  salesOnly: 'Sales-only',
-  followUp: 'Flagged follow-up (system-detected)',
-  dialogHint: 'Enter the latest figures from the company report — month and year are updated independently.',
-  dialogName: 'Name',
-  dialogMonth: 'Month achieved (Rp)',
-  dialogYear: 'Year achieved (Rp)',
-  yourDirectAgents: 'Your direct agents',
-  close: 'Close',
-  cancel: 'Cancel',
-  saveAll: 'Save all',
-} as const;
+export const PROTOTYPE_COPY = EN.prototype;
 
-/** The activity breakdown's three, verbatim (`:7334-7336`) — the Summary's chips' words. */
-export const ACTIVITY_LABEL = {
-  leads: 'Leads contacted',
-  appointments: 'Appointments',
-  closings: 'Closings',
-} as const;
+/**
+ * The activity breakdown's three, in the cascade's words (ADR-0160 §4; P18.9-T2's cleanup, 2026-10-26) — the
+ * Summary's chips'. The prototype reads *Leads contacted*, *Appointments* and *Closings* (`:7334-7336`). Kept in both
+ * languages (§A.6).
+ */
+export const ACTIVITY_LABEL = EN.activity;
 
 /** The pill's tooltip per status (`:7094-7098`), and ADR-0080's state, which the prototype never draws. */
-export const STATUS_TOOLTIP: Record<RosterStatus, string> = {
-  on_track: 'Pacing to qualify as a Monthly Active Agent, at or above 90% of expected goal pace.',
-  watch_closely: 'Still pacing to qualify as a Monthly Active Agent, but under 90% of expected goal pace — worth a check-in.',
-  needs_attention: 'Not projected to submit a policy this month — will not qualify as a Monthly Active Agent.',
-  no_goal_set: 'No goal saved for this year, so there is no pace to measure this month against.',
-};
+export const STATUS_TOOLTIP: Record<RosterStatus, string> = EN.statusTooltip;
 
 /**
  * The module's own strings — the states the prototype lacks, the marks it does not draw. None of OD-39's
  * six words (*office*, *KPM*, *reports to*, *tagged to*, *untagged*, *unassigned*), no phase, no code.
  */
 export const OWN_COPY = {
-  loading: 'Loading your team’s roster…',
-  tryAgain: 'Try again',
-  details: 'Details',
-  notUploaded: 'Not uploaded yet',
-  noGoal: 'No goal set',
-  /**
-   * A month whose target was **made before it began** (ADR-0047): the year's target reached, so the
-   * month's is 0 and needs nothing — never *0% · … of Rp 0*. The Summary's sentence, without its pronoun.
-   */
-  targetMade: 'Year’s target made',
-  targetMadeNote: 'The year’s target was made before this month began — this month needs nothing more.',
-  thisMonth: 'this month',
-  proRated: 'pro-rated',
-  ratiosEmpty: 'There are no ratios for this role yet.',
-  loadingRatios: 'Working out the ratios…',
-  emptyTitle: 'Nobody is in your unit yet.',
-  emptyLine: 'This page lists the people you lead, once somebody joins you. Your own figures are on these screens:',
-  notFoundTitle: 'This isn’t a unit you can open.',
-  notFoundLine: 'They may lead nobody yet, or sit outside your team, or the address may be mistyped.',
-  backToYours: 'Your Unit Dashboard',
-  saving: 'Saving…',
-} as const;
+  ...EN.own,
+  /** *produced Rp 29 jt*: `sum` written by the caller (P18.95-T3 AC-2). */
+  produced: (sum: string) => EN.own.produced({ sum }),
+};
+
+/**
+ * **A total's count of members on pace, in plain words** (P18.95-T9 AC-4; UI-028): *On pace to be active: 6/12*,
+ * where it read *6/12 potential active*. `POTENTIAL_MAA_COUNT_IN_UNIT`, a projection — not *Active this month*,
+ * which is the analytics' `MAA_COUNT_IN_UNIT` (invariant §8).
+ */
+export const onPaceWords = (p: PotentialActive, language: Language = SOURCE_LANGUAGE): string =>
+  wordsIn(language).onPace({ count: p.count, of: p.of });
 
 /*
  * ── Rows ────────────────────────────────────────────────────────────────────────────────────────
@@ -406,21 +402,22 @@ export const OWN_COPY = {
 export const firstName = (name: string) => name.trim().split(/\s+/)[0] ?? name;
 
 /** The reader's own row (`:6917`, *You (Jordan)*). */
-export const readerName = (name: string) => `You (${firstName(name)})`;
+export const readerName = (name: string, language: Language = SOURCE_LANGUAGE) =>
+  wordsIn(language).you({ first: firstName(name) });
 
 /** What a row is called on screen: the reader's own as *You ({first name})*, anybody else by name. */
-export const rowName = (row: Pick<UnitRow, 'name' | 'isReader'>) => (row.isReader ? readerName(row.name) : row.name);
-
-const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+export const rowName = (row: Pick<UnitRow, 'name' | 'isReader'>, language: Language = SOURCE_LANGUAGE) =>
+  (row.isReader ? readerName(row.name, language) : row.name);
 
 /** *agents* where the prototype counts people (`:7246`, `:7554`), singular at one. */
-export const agentsCount = (n: number) => plural(n, 'agent', 'agents');
+export const agentsCount = (n: number, language: Language = SOURCE_LANGUAGE) => wordsIn(language).agents({ n });
 
 /** *Potential Recruits*'s rows (`:7266-7270`). */
-export const candidates = (n: number) => plural(n, 'candidate', 'candidates');
+export const candidates = (n: number, language: Language = SOURCE_LANGUAGE) => wordsIn(language).candidates({ n });
 
 /** The toast after *Save all* (`:7554`), counting only the rows that changed (a Fix of every row counted). */
-export const productionToast = (updated: number) => `Production updated for ${agentsCount(updated)}.`;
+export const productionToast = (updated: number, language: Language = SOURCE_LANGUAGE) =>
+  wordsIn(language).productionToast({ n: updated });
 
 /** What a goal cell, a total or the production tile says, and how it is painted. */
 export interface GoalWords {
@@ -434,116 +431,168 @@ export interface GoalWords {
  * The goal line and its sub-line (`:7364-7367`, `:7383-7386`): *"{pct}% · +{over} over"* or *"{pct}% ·
  * {short} short"* over *"{achieved} of {target}"*. **No figure is shown as 0** (D-figures): no target is
  * *No goal set* (ADR-0080), and no actual *Not uploaded yet*.
+ *
+ * **Compact, by the client's own example** (UI-030, ADR-0167 §1): *"Rp 357,5 jt of 712,7 jt"*, one `Rp` for the
+ * pair, where *"Rp 357.500.000 of Rp 712.666.667"* wrapped in the cell — as every table's money is since ADR-0174
+ * §4; the percentage whole (§1), *50% · Rp 355,2 jt short*.
  */
-export function goalWords(figures: {
-  targetMinor: number | null;
-  actualMinor: number | null;
-  attainmentPct: number | null;
-  overMinor?: number | null;
-  gapMinor?: number | null;
-  targetMet?: boolean;
-  set?: boolean;
-}): GoalWords {
-  const { targetMinor: target, actualMinor: actual } = figures;
-  if (figures.set === false || target === null) {
-    return { tone: 'none', line: OWN_COPY.noGoal, sub: actual === null ? null : formatRupiah(actual) };
+export function goalWords(
+  cell: {
+    targetMinor: number | null;
+    actualMinor: number | null;
+    attainmentPct: number | null;
+    overMinor?: number | null;
+    gapMinor?: number | null;
+    targetMet?: boolean;
+    set?: boolean;
+  },
+  language: Language = SOURCE_LANGUAGE,
+  figures?: Language,
+): GoalWords {
+  const t = wordsIn(language);
+  const { targetMinor: target, actualMinor: actual } = cell;
+  const money = (minor: number) => formatRupiahCompact(minor, {}, figures);
+  // The production alone, with no target beside it, is labelled (P18.95-T3 AC-2): *produced Rp 29 jt*.
+  const produced = (sum: number) => t.own.produced({ sum: money(sum) });
+  if (cell.set === false || target === null) {
+    return { tone: 'none', line: t.own.noGoal, sub: actual === null ? null : produced(actual) };
   }
   // A target of 0 is only ever a month made already (ADR-0047; `periodFigures` answers `null` for no
   // target), on a row or on a total whose rows were all made: nothing to measure a percentage against.
   if (target === 0) {
-    return { tone: 'over', line: OWN_COPY.targetMade, sub: actual === null ? OWN_COPY.notUploaded : formatRupiah(actual) };
+    return { tone: 'over', line: t.own.targetMade, sub: actual === null ? t.own.notUploaded : produced(actual) };
   }
   if (actual === null) {
     // The Summary's own phrase beside its figure, *of {target} target*, under the missing one.
-    return { tone: 'missing', line: OWN_COPY.notUploaded, sub: `of ${formatRupiah(target)} target` };
+    return { tone: 'missing', line: t.own.notUploaded, sub: t.goal.ofTarget({ sum: money(target) }) };
   }
-  const pct = figures.attainmentPct ?? 0;
-  const met = figures.targetMet ?? actual >= target;
-  const over = figures.overMinor ?? Math.max(0, actual - target);
-  const short = figures.gapMinor ?? Math.max(0, target - actual);
+  const pct = formatPercent(cell.attainmentPct ?? 0, {}, figures);
+  const met = cell.targetMet ?? actual >= target;
+  const over = cell.overMinor ?? Math.max(0, actual - target);
+  const short = cell.gapMinor ?? Math.max(0, target - actual);
+  const sub = formatRupiahCompactPair(actual, target, t.goal.of, figures);
   return met
-    ? { tone: 'over', line: `${pct}% · +${formatRupiah(over)} over`, sub: `${formatRupiah(actual)} of ${formatRupiah(target)}` }
-    : { tone: 'short', line: `${pct}% · ${formatRupiah(short)} short`, sub: `${formatRupiah(actual)} of ${formatRupiah(target)}` };
+    ? { tone: 'over', line: t.goal.over({ pct, sum: money(over) }), sub }
+    : { tone: 'short', line: t.goal.short({ pct, sum: money(short) }), sub };
+}
+
+/**
+ * **A phone card's goal bar** (P18.95-T3 AC-1; the client's UI review, UI-010: *"one card per agent (name, status
+ * chip, goal bar, …)"*): how far along the target the figures are, 0–100, or `null` where there is nothing to draw
+ * — no target, none to measure against (a month made already), or no figure. An empty track would read as zero,
+ * which *Not uploaded yet* is not (D-figures). The percentage is the server's; the table draws no bar.
+ */
+export function goalBar(figures: { targetMinor: number | null; actualMinor: number | null; attainmentPct: number | null; set?: boolean }): number | null {
+  if (figures.set === false || figures.targetMinor === null || figures.targetMinor === 0 || figures.actualMinor === null) return null;
+  return Math.min(100, Math.max(0, Math.round(figures.attainmentPct ?? 0)));
 }
 
 /** *"Sales: {n} · {m} closing"* (`:7399`). */
-export const salesLine = (c: LeadsCounts) => ({ count: c.salesOpen, rest: `· ${c.salesClosing} closing` });
+export const salesLine = (c: LeadsCounts, language: Language = SOURCE_LANGUAGE) =>
+  ({ count: c.salesOpen, rest: wordsIn(language).leads.closing({ n: c.salesClosing }) });
 
 /** *"Recruit: {n} · {m} nominated"*, or `null` for the prototype's *—* (`:7371-7373`). */
-export const recruitLine = (c: LeadsCounts) =>
-  (c.recruitOpen > 0 || c.recruitNominated > 0 ? { count: c.recruitOpen, rest: `· ${c.recruitNominated} nominated` } : null);
+export const recruitLine = (c: LeadsCounts, language: Language = SOURCE_LANGUAGE) =>
+  (c.recruitOpen > 0 || c.recruitNominated > 0
+    ? { count: c.recruitOpen, rest: wordsIn(language).leads.nominated({ n: c.recruitNominated }) }
+    : null);
 
 /** A total's recruit line, *"{n} potential recruit"* or *"recruits"* (`:7443-7445`), or `null` for *—*. */
-export const totalRecruitLine = (c: LeadsCounts) =>
+export const totalRecruitLine = (c: LeadsCounts, language: Language = SOURCE_LANGUAGE) =>
   (c.recruitNominated > 0
-    ? { count: c.recruitNominated, rest: `potential recruit${c.recruitNominated === 1 ? '' : 's'}` }
+    ? { count: c.recruitNominated, rest: wordsIn(language).leads.potentialRecruits({ n: c.recruitNominated }) }
     : null);
 
 /**
- * *"{logged} / {target} touches"* (`:7404-7405`), its target labelled *pro-rated* under *Last 7 days*
- * (metrics §B.3); with no target the logged count alone, and no bar — an empty track reads as zero.
+ * *"{logged} / {target} goal activities"* (`:7404-7405`, whose word was *touches* until ADR-0165 §2), its target
+ * labelled *pro-rated* under *Last 7 days* (metrics §B.3); with no target the logged count alone, and no bar — an
+ * empty track reads as zero. Singular at one, by the figure the word follows.
  */
-export function touchesWords(touches: CountAgainst, period: UnitPeriod): { logged: number; rest: string; pct: number | null } {
-  if (touches.target === null) return { logged: touches.logged, rest: 'touches', pct: null };
+export function touchesWords(
+  touches: CountAgainst, period: UnitPeriod, language: Language = SOURCE_LANGUAGE,
+): { logged: number; rest: string; pct: number | null } {
+  const t = wordsIn(language);
+  if (touches.target === null) return { logged: touches.logged, rest: t.own.goalActivities({ n: touches.logged }), pct: null };
   const pct = touches.target > 0 ? Math.min(100, Math.round((touches.logged / touches.target) * 100)) : 100;
-  return {
-    logged: touches.logged,
-    rest: `/ ${touches.target}${period === '7d' ? ` ${OWN_COPY.proRated}` : ''} touches`,
-    pct,
-  };
+  return { logged: touches.logged, rest: t.touchesOf({ target: touches.target, proRated: period === '7d' }), pct };
 }
 
 /** The activity breakdown's *"{logged}/{target}"* (`:7334-7336`), *pro-rated* under *Last 7 days*. */
-export const countWords = (count: CountAgainst, period: UnitPeriod) =>
+export const countWords = (count: CountAgainst, period: UnitPeriod, language: Language = SOURCE_LANGUAGE) =>
   (count.target === null
     ? `${count.logged}`
-    : `${count.logged}/${count.target}${period === '7d' ? ` ${OWN_COPY.proRated}` : ''}`);
+    : wordsIn(language).countOf({ logged: count.logged, target: count.target, proRated: period === '7d' }));
 
 /** *Gap*'s value and note (`:7326-7328`), or the cell's own *No goal set* / *Not uploaded yet*. */
-export function gapWords(goal: GoalCell): { value: string; note: string | null } {
-  if (!goal.set || goal.targetMinor === null) return { value: OWN_COPY.noGoal, note: null };
-  if (goal.targetMinor === 0) return { value: OWN_COPY.targetMade, note: OWN_COPY.targetMadeNote };
-  if (goal.gapMinor === null) return { value: OWN_COPY.notUploaded, note: null };
+export function gapWords(
+  goal: GoalCell, language: Language = SOURCE_LANGUAGE, figures?: Language,
+): { value: string; note: string | null } {
+  const t = wordsIn(language);
+  if (!goal.set || goal.targetMinor === null) return { value: t.own.noGoal, note: null };
+  if (goal.targetMinor === 0) return { value: t.own.targetMade, note: t.own.targetMadeNote };
+  if (goal.gapMinor === null) return { value: t.own.notUploaded, note: null };
   const policies = goal.policiesNeeded;
   return {
-    value: `${formatRupiah(goal.gapMinor)} remaining`,
+    value: t.gap.remaining({ sum: formatRupiahCompact(goal.gapMinor, {}, figures) }),
     note: policies === null
       ? null
-      : `≈ ${policies} polic${policies === 1 ? 'y' : 'ies'} needed at their avg case size of ${formatRupiah(goal.caseSizeMinor)}.`,
+      : t.gap.policies({ n: policies, sum: formatRupiahCompact(goal.caseSizeMinor, {}, figures) }),
   };
 }
 
 /**
- * The provenance marker's words (T3 AC-1): the Summary's (`producedFrom`) in the coaching voice, which
- * names the upload without *office*, then **who corrected it and when**. The reader's own figure in
- * Goal Settings is theirs; anybody else's is *Their own figure*. The file's own figure has none.
+ * The provenance marker's words (T3 AC-1): the Summary's in the coaching voice, which names the upload without
+ * *office*, then **who corrected it and when**. The reader's own figure in Goal Settings is theirs; anybody else's is
+ * *Their own figure*. The file's own figure has none. Whole sentences of the catalogue's, in `language`; the month and
+ * the day in `figures`.
  */
-export function provenanceWords(source: GoalSource | null, span: 'month' | 'year', own: boolean): string | null {
+export function provenanceWords(
+  source: GoalSource | null, span: 'month' | 'year', own: boolean, language: Language = SOURCE_LANGUAGE, figures?: Language,
+): string | null {
   if (!source || source.provenance === 'imported') return null;
-  if (source.provenance === 'self_reported') return producedFrom(source, span, own ? undefined : 'they');
-  // The name and the day are added below, together; the shared words are asked for without them.
-  const words = producedFrom({ provenance: source.provenance, month: source.month }, span, 'they');
-  if (!source.correctedBy) return words;
-  const when = source.correctedAt ? formatOfficeDay(source.correctedAt) : '';
-  return `${words}, by ${source.correctedBy.name}${when ? ` on ${when}` : ''}`;
+  const t = wordsIn(language).provenance;
+  // A figure a coach typed is never called the member's own (S2): it names who typed it.
+  if (source.provenance === 'self_reported') return source.typedBy ? t.typedBy({ name: source.typedBy.name }) : own ? t.yours : t.theirs;
+  return t.corrected({
+    month: source.month ? formatMonth(source.month, figures) : null,
+    span,
+    by: source.correctedBy?.name ?? null,
+    day: source.correctedBy && source.correctedAt ? formatOfficeDay(source.correctedAt, OFFICE_TIME_ZONE, figures) || null : null,
+  });
 }
 
 /**
  * A total's mark when some of its rows hold no figure (D-figures): *"a total sums the figures held …
  * and names in its tooltip how many hold none"* — by name where the rows below say who.
  */
-export function missingWords(missing: number, names: readonly string[]): string | null {
+export function missingWords(missing: number, names: readonly string[], language: Language = SOURCE_LANGUAGE): string | null {
   if (missing <= 0) return null;
-  const who = names.length === missing ? names.join(', ') : plural(missing, 'person', 'people');
-  return `${OWN_COPY.notUploaded} for ${who}, so not counted in this total.`;
+  return wordsIn(language).marks.missing({ who: names.length === missing ? names.join(', ') : null, n: missing });
 }
 
-/** The month the lock names, in the tooltip of the disabled *Update production*. */
-export const lockedWords = (month: string) =>
-  `Production for ${formatMonth(month)} is locked. The Owner or Admin can reopen it.`;
+/**
+ * **A total's mark when it leaves out new hires before their first sale** (P18.96-T5 AC-4; ADR-0172 §2; UI-003, *"Unit
+ * totals and the 'ⓘ' explanations match the new rule"*): *"No first sale yet for Yanti Kusuma, a new hire, so not
+ * counted in this total."* — by name where the rows below say who, as `missingWords` does. On the goal's mark beside
+ * `missingWords`' own sentence, and alone beside *On pace to be active*. `null` when nobody is left out.
+ */
+export function newHireWords(newHires: number, names: readonly string[], language: Language = SOURCE_LANGUAGE): string | null {
+  if (newHires <= 0) return null;
+  return wordsIn(language).marks.newHires({ who: names.length === newHires ? names.join(', ') : null, n: newHires });
+}
+
+/** A total's marks, together: who holds no figure, then who has no first sale yet; `null` when neither applies. */
+export function totalNote(...notes: readonly (string | null)[]): string | null {
+  const said = notes.filter((n): n is string => n !== null);
+  return said.length === 0 ? null : said.join(' ');
+}
+
+/** The month the lock names, in the tooltip of the disabled *Update production*: its month in `figures`. */
+export const lockedWords = (month: string, language: Language = SOURCE_LANGUAGE, figures?: Language) =>
+  wordsIn(language).locked({ month: formatMonth(month, figures) });
 
 /** *Overdue {n}d* (`:7292`). */
-export const overdueTag = (days: number) => `Overdue ${days}d`;
+export const overdueTag = (days: number, language: Language = SOURCE_LANGUAGE) => wordsIn(language).overdue({ n: days });
 
 /*
  * ── The tree ────────────────────────────────────────────────────────────────────────────────────
@@ -559,9 +608,16 @@ export function everyRow(view: Pick<UnitDashboardView, 'yourUnit' | 'units'>): U
   return [...view.yourUnit.rows, ...view.units.flatMap(rowsOf)];
 }
 
-/** The names of the rows a total covers that hold no actual, for its mark. */
-export const namesMissing = (rows: readonly UnitRow[]) =>
-  rows.filter((r) => r.goal.actualMinor === null).map((r) => rowName(r));
+/**
+ * The names of the rows a total covers that hold no actual, for its mark — **not a new hire before a first sale**, whom
+ * the total leaves out for that reason and names in `newHireWords` instead (ADR-0172 §2).
+ */
+export const namesMissing = (rows: readonly UnitRow[], language: Language = SOURCE_LANGUAGE) =>
+  rows.filter((r) => r.goal.actualMinor === null && !r.newHireBeforeFirstSale).map((r) => rowName(r, language));
+
+/** The names of the new hires before a first sale a total covers, whom it leaves out (P18.96-T5 AC-4). */
+export const namesNewHires = (rows: readonly UnitRow[], language: Language = SOURCE_LANGUAGE) =>
+  rows.filter((r) => r.newHireBeforeFirstSale).map((r) => rowName(r, language));
 
 /** One group of the dialog (`:7524-7530`): a label, and its rows with how far each is indented. */
 export interface DialogGroup {
@@ -574,12 +630,15 @@ export interface DialogGroup {
  * its head first and everybody beneath them indented by how far below the head they stand (`:7524-7530`).
  * On a unit below the reader the first group is *"{name}'s direct agents"* (data honesty).
  */
-export function dialogGroups(view: Pick<UnitDashboardView, 'yourUnit' | 'units' | 'head'>): DialogGroup[] {
-  const first = view.head.isReader ? PROTOTYPE_COPY.yourDirectAgents : `${view.head.name}’s direct agents`;
+export function dialogGroups(
+  view: Pick<UnitDashboardView, 'yourUnit' | 'units' | 'head'>, language: Language = SOURCE_LANGUAGE,
+): DialogGroup[] {
+  const t = wordsIn(language);
+  const first = view.head.isReader ? t.prototype.yourDirectAgents : t.directAgentsOf({ name: view.head.name });
   return [
     { label: first, rows: view.yourUnit.rows.map((row) => ({ row, indent: 0 })) },
     ...view.units.map((unit) => ({
-      label: `${unit.head.name}’s unit`,
+      label: t.unitLower({ name: unit.head.name }),
       rows: rowsOf(unit).map((row) => ({ row, indent: Math.max(0, row.depth - unit.head.depth) })),
     })),
   ];
@@ -591,19 +650,24 @@ export function dialogGroups(view: Pick<UnitDashboardView, 'yourUnit' | 'units' 
 
 export type ProductionCadence = 'monthly' | 'ytd';
 
-/** A held figure as the dialog prefills it: whole rupiah, grouped; blank when nothing is held. */
-export const prefill = (cell: ProductionCell) => (cell.valueMinor === null ? '' : groupDigits(toMajor(cell.valueMinor)));
+/**
+ * A held figure as the dialog prefills it: whole rupiah, grouped in the reader's marks (P18.98-T3 AC-3) — `1.500.000`,
+ * `1,500,000`; blank when nothing is held.
+ */
+export const prefill = (cell: ProductionCell, language: Language = DEFAULT_LANGUAGE) =>
+  (cell.valueMinor === null ? '' : groupDigits(toMajor(cell.valueMinor), language));
 
-/** What was typed, regrouped as it is typed; blank stays blank. */
-export const regroup = (typed: string) => (/\d/.test(typed) ? groupDigits(parseDigits(typed)) : '');
+/** What was typed, regrouped as it is typed, in the reader's marks; blank stays blank. Digits are read in either. */
+export const regroup = (typed: string, language: Language = DEFAULT_LANGUAGE) =>
+  (/\d/.test(typed) ? groupDigits(parseDigits(typed), language) : '');
 
 /** The inputs, keyed by membership and cadence. */
 export type ProductionInputs = Record<string, Record<ProductionCadence, string>>;
 
-export function inputsOf(rows: readonly UnitRow[]): ProductionInputs {
+export function inputsOf(rows: readonly UnitRow[], language: Language = DEFAULT_LANGUAGE): ProductionInputs {
   return Object.fromEntries(rows.map((row) => [
     row.membershipId,
-    { monthly: prefill(row.production.monthly), ytd: prefill(row.production.ytd) },
+    { monthly: prefill(row.production.monthly, language), ytd: prefill(row.production.ytd, language) },
   ]));
 }
 
@@ -632,3 +696,167 @@ function changed(cell: ProductionCell, typed: string): number | null {
   const minor = toMinor(parseDigits(typed));
   return minor === cell.valueMinor ? null : minor;
 }
+
+/*
+ * ── UI V1 (Phase 18.99 T4, 2026-10-30) ───────────────────────────────────────────────────────────
+ *
+ * The owner's redesign of the page (`revisions/2026-10-30-ui-v1`, UI-001 to UI-012, UI-028): *Overview | Activities*,
+ * the stat tiles, the roster's filter chips, its accordion on a phone and its compact tables, the row that opens the
+ * person's Personal Summary, and the Activities tab's table and ratio card. Every figure is still the server's.
+ */
+
+/** *Overview | Activities* (UI-001), kept in the address as `?tab=activities`. */
+export type UnitTab = 'overview' | 'activities';
+
+export function tabFrom(value: string | string[] | null | undefined): UnitTab {
+  const one = Array.isArray(value) ? value[0] : value;
+  return one === 'activities' ? 'activities' : 'overview';
+}
+
+/** *Minggu | Bulan* (UI-001): a week Monday to Sunday, or a calendar month. */
+export type ActivitySpan = 'week' | 'month';
+
+/** One period of the Activities tab, and where ‹ and › go from it. */
+export interface ActivityPeriod {
+  span: ActivitySpan;
+  from: string;
+  to: string;
+  /** The period holds the office's today: › is disabled. */
+  current: boolean;
+  previous: string;
+  next: string | null;
+}
+
+/** A count against one activity code; codes above zero only. */
+export interface CodeCount {
+  code: string;
+  count: number;
+}
+
+/** One person's column. */
+export interface ActivitiesPerson {
+  membershipId: string;
+  name: string;
+  isReader: boolean;
+  /** In the *Unit*: the head and their direct agents who lead nobody. Everybody is in the *Group*. */
+  inUnit: boolean;
+  /** Their profile photo, signed, when they have one (UI-111); initials otherwise. */
+  photoUrl?: string | null;
+  counts: CodeCount[];
+  total: number;
+}
+
+/** A scope's *Total* column, summed by the server. */
+export interface ScopeTotals {
+  counts: CodeCount[];
+  total: number;
+}
+
+export interface ActivitiesType {
+  code: string;
+  label: string;
+  status: 'active' | 'archived';
+}
+
+/** A section, as the office named and ordered it: content, never translated. */
+export interface ActivitiesSection {
+  code: string;
+  label: string;
+  status: 'active' | 'archived';
+  types: ActivitiesType[];
+}
+
+export interface ActivitiesTotals {
+  unit: ScopeTotals;
+  group: ScopeTotals;
+}
+
+/** *Ratio · 30 hari terakhir* (UI-001): the Ratio page's ratios over the *Unit* and the *Group*, always the last 30 days. */
+export interface ActivitiesRatios {
+  from: string;
+  to: string;
+  days: number;
+  unit: ActivityRatio[];
+  group: ActivityRatio[];
+}
+
+/** `GET /unit/dashboard/activities` (UI-001). */
+export interface UnitActivitiesView {
+  today: string;
+  period: ActivityPeriod;
+  head: UnitHead;
+  empty: boolean;
+  sections: ActivitiesSection[];
+  people: ActivitiesPerson[];
+  totals: ActivitiesTotals;
+  ratios: ActivitiesRatios;
+}
+
+/**
+ * The Activities tab's read: the period holding `date` (the office's today when none), for the reader's unit or `for`
+ * a leader's below them — 404 outside the reach, as the dashboard's own read. Each read of somebody else's counts is
+ * audited.
+ */
+export const readUnitActivities = (params: { span?: ActivitySpan; date?: string; for?: string } = {}) =>
+  api<UnitActivitiesView>('/unit/dashboard/activities' + query({ span: params.span, date: params.date, for: params.for }));
+
+/** *Unit | Group* (UI-001; D-16). */
+export type UnitScope = 'unit' | 'group';
+
+/** A scope's people, in the roster's order. */
+export const scopePeople = (view: Pick<UnitActivitiesView, 'people'>, scope: UnitScope) =>
+  (scope === 'unit' ? view.people.filter((p) => p.inUnit) : view.people);
+
+/** A person's or a total's count for a code: 0 where the server listed none. */
+export const countOf = (counts: readonly CodeCount[], code: string) => counts.find((c) => c.code === code)?.count ?? 0;
+
+/**
+ * **The heat map's step** (UI-001, D-17): 0 for nothing (a light *·*), then 1 to 3 by the count's share of the
+ * largest cell on the table — a third or less, two thirds or less, more. A count of 1 on a table whose largest is 1 is 3.
+ */
+export function heatStep(count: number, largest: number): 0 | 1 | 2 | 3 {
+  if (count <= 0 || largest <= 0) return 0;
+  const share = count / largest;
+  return share <= 1 / 3 ? 1 : share <= 2 / 3 ? 2 : 3;
+}
+
+/** The status the roster's chips filter by (UI-002, UI-005): *Perlu perhatian*, *Perlu dipantau*. */
+export type RosterFilter = 'all' | 'needs_attention' | 'watch_closely';
+
+/** How many rows hold each status the chips name. */
+export function statusTally(rows: readonly UnitRow[]): Record<RosterFilter, number> {
+  return {
+    all: rows.length,
+    needs_attention: rows.filter((r) => r.status === 'needs_attention').length,
+    watch_closely: rows.filter((r) => r.status === 'watch_closely').length,
+  };
+}
+
+export const matchesFilter = (row: UnitRow, filter: RosterFilter) => filter === 'all' || row.status === filter;
+
+/**
+ * **Where a row goes** (UI-011, the owner, 30 Oct: no inline expansion): the reader's own row to their own *Personal
+ * Summary*; anybody the reader coaches to their agent page on the *Personal Summary* tab, with `from` — this page's
+ * address — so its *‹* comes back here; `null` for somebody whose coaching pages would not be found (an Owner or an
+ * Admin outside their own downline), whose row is read-only.
+ */
+export function rowHref(row: Pick<UnitRow, 'membershipId' | 'isReader' | 'coached'>, from: string): string | null {
+  if (row.isReader) return '/summary';
+  if (!row.coached) return null;
+  return `/coaching/${encodeURIComponent(row.membershipId)}/summary?from=${encodeURIComponent(from)}`;
+}
+
+/**
+ * A compact sum split into its figure and its unit, for a tile's big number with the unit small beside it (UI-003):
+ * *Rp 333,5* and *jt*; *IDR 333.5* and *M*. A sum with no unit (under a thousand) is all figure.
+ */
+export function splitMoney(text: string): { value: string; unit: string | null } {
+  const match = /^(.*\d)\s?([A-Za-z]+)$/.exec(text);
+  return match ? { value: match[1], unit: match[2] } : { value: text, unit: null };
+}
+
+/** A goal's share as a bar's width, 0–100, from the server's percentage, or `null` with nothing to draw (`goalBar`). */
+export const goalShare = goalBar;
+
+/** Green from 100%, red under it (UI-005: *% colour follows the 100% rule only*), judged on the unrounded value. */
+export const goalMet = (attainmentPct: number) => attainmentPct >= 100;

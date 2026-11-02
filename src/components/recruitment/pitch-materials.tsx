@@ -3,12 +3,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import { PitchBanner } from '@/components/recruitment/pitch-banner';
 import { PitchCard, type PitchAudience } from '@/components/recruitment/pitch-card';
+import { PhonePitch } from '@/components/recruitment/pitch-phone';
 import { Button, ErrorBanner } from '@/components/ui/field';
 import { Skeleton, SkeletonBar, SkeletonText } from '@/components/ui/skeleton';
+import { useMessages } from '@/i18n/language-provider';
+import { recruitmentPitchMessages } from '@/i18n/messages/recruitment-pitch';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
-import {
-  PITCH_OWN_COPY, readPitchMaterials, type PitchMaterialsView, type PitchSlot,
-} from '@/lib/recruitment-pitch';
+import { readPitchMaterials, type PitchMaterialsView, type PitchSlot } from '@/lib/recruitment-pitch';
+import { usePhone } from '@/lib/use-phone';
 
 /**
  * The prototype's `.card-grid` (`Recruitment_Section.html:180`): two columns of at least 430px where
@@ -17,17 +19,18 @@ import {
  */
 const GRID = 'grid gap-4 grid-cols-[repeat(auto-fit,minmax(min(100%,430px),1fr))]';
 
-/** Shaped like the banner and the four cards, so they arrive in place (L-01, a Fill). */
+/** Shaped like the banner and the six cards, so they arrive in place (L-01, a Fill). */
 function PitchSkeleton() {
+  const t = useMessages(recruitmentPitchMessages);
   return (
-    <Skeleton label={PITCH_OWN_COPY.loading}>
-      <div className="mb-6 flex items-center gap-4 rounded-lg border border-hairline bg-card px-5 py-4">
+    <Skeleton label={t.loading}>
+      <div className="mb-6 flex items-center gap-4 rounded-lg border border-card-edge bg-card px-5 py-4">
         <div className="h-11 w-11 shrink-0 rounded-full bg-hairline" />
         <SkeletonText lines={2} className="flex-1" />
       </div>
       <div className={GRID}>
-        {[0, 1, 2, 3].map((i) => (
-          <div key={i} className="flex flex-col gap-3.5 rounded-lg border border-hairline bg-card px-5 py-5 sm:px-6">
+        {[0, 1, 2, 3, 4, 5].map((i) => (
+          <div key={i} className="flex flex-col gap-3.5 rounded-lg border border-card-edge bg-card px-5 py-5 sm:px-6">
             <SkeletonBar className="h-4 w-1/2" />
             <SkeletonText lines={2} />
           </div>
@@ -39,17 +42,19 @@ function PitchSkeleton() {
 
 /** A read that failed, and the way to ask again (L-01, a Fill). */
 function ReadFailed({ error, onRetry }: { error: ApiError; onRetry: () => void }) {
+  const t = useMessages(recruitmentPitchMessages);
   return (
     <div className="mb-4 flex flex-col items-start gap-3">
-      <p className="m-0 text-md text-navy">{PITCH_OWN_COPY.readFailed}</p>
+      <p className="m-0 text-md text-navy">{t.readFailed}</p>
       <ErrorBanner {...error} />
-      <Button variant="secondary" onClick={onRetry}>{PITCH_OWN_COPY.tryAgain}</Button>
+      <Button variant="secondary" onClick={onRetry}>{t.tryAgain}</Button>
     </div>
   );
 }
 
 /**
- * The banner and the four cards, read from `GET /recruitment/pitch-materials` — the one read both the
+ * The banner and the six cards — the four the readiness counts, then the two optional ones, in the server's
+ * order (ADR-0177) — read from `GET /recruitment/pitch-materials`, the one read both the
  * office's page (`/kpm/settings/recruitment-pitch`, P17-T5) and the agents' tab
  * (`/recruitment/pitch-materials`, P17-T6) are drawn from.
  *
@@ -66,6 +71,7 @@ export function PitchMaterials({
 }) {
   const [view, setView] = useState<PitchMaterialsView | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
+  const phone = usePhone();
 
   const load = useCallback(async () => {
     try {
@@ -91,6 +97,16 @@ export function PitchMaterials({
       : now));
     void load();
   };
+
+  // The agents' tab on a phone (UI V1, UI-107): a ring, Wajib and Opsional, one row per document, no state pills.
+  if (phone && audience === 'agent') {
+    return (
+      <div>
+        {error && <ReadFailed error={error} onRetry={retry} />}
+        <PhonePitch view={view} />
+      </div>
+    );
+  }
 
   return (
     <div>

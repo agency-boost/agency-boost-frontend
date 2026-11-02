@@ -22,12 +22,14 @@ describe('P18.1-T2 AC-5 the agenda, as drawn (`:2800-2820`)', () => {
     expect(within(card('Post')).getAllByRole('textbox', { name: /^Post item/ })).toHaveLength(2);
   });
 
-  it('each text and each PIC a labelled input (I-255), *—* where there is no PIC', () => {
+  it('each text and each PIC a labelled input (I-255); P18.97-T2 AC-5 an empty PIC prompts its editor, Add a PIC', () => {
     renderTab(Agenda);
     expect(field('Preparation item 2')).toHaveValue('Prepare August performance data');
     expect(field('PIC for Preparation item 2')).toHaveValue('Wilson');
     expect(field('PIC for Post item 2')).toHaveValue('');
-    expect(field('PIC for Post item 2')).toHaveAttribute('placeholder', '—');
+    expect(field('PIC for Post item 2')).toHaveAttribute('placeholder', 'Add a PIC');
+    // A PIC that is typed shows itself; the prompt is a placeholder, no value.
+    expect(field('PIC for Preparation item 2')).toHaveAttribute('placeholder', 'Add a PIC');
     expect(field('Post item 2')).toHaveValue('Note feedback for RBDO/BDO');
     expect(field('During item 1')).toHaveAttribute('maxLength', '500');
     expect(field('PIC for During item 1')).toHaveAttribute('maxLength', '80');
@@ -111,7 +113,7 @@ describe('P18.1-T2 AC-5 writing the agenda', () => {
     expect(field('Preparation item 3')).toHaveValue('Review scorecard, draft talking points today');
   });
 
-  it('a PIC written on its own, *—* never written as a name', async () => {
+  it('a PIC written on its own, *—* never written as a name; P18.97-T2 AC-5 the prompt saves nothing', async () => {
     const user = userEvent.setup();
     const { calls } = renderTab(Agenda, makeMeetingView(), {
       'PATCH /leader-meetings/m14/agenda-items/ag-10': ({ body }) => ({
@@ -174,8 +176,10 @@ describe('P18.1-T2 AC-5 writing the agenda', () => {
 });
 
 describe('P18.1-T2 AC-1 read-only: text, and no control drawn', () => {
-  it('no input, no box, no *+ Add item*; *"PIC: {name}"*, *—* for none; a ticked item said to be done', () => {
+  it('no input, no box, no *+ Add item*; *"PIC: {name}"*, *—* for none — P18.97-T2 AC-5 never the prompt; a ticked item said to be done', () => {
     renderTab(Agenda, readOnlyMeeting());
+    expect(screen.queryByText('Add a PIC')).toBeNull();
+    expect(screen.queryByPlaceholderText('Add a PIC')).toBeNull();
     expect(screen.queryByRole('textbox')).toBeNull();
     expect(screen.queryByRole('checkbox')).toBeNull();
     expect(screen.queryByRole('button')).toBeNull();

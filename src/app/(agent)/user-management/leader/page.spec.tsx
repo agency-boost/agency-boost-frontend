@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import AgentLayout from '@/app/(agent)/layout';
@@ -55,6 +55,20 @@ describe('find your leader (P3-T3)', () => {
     expect(screen.getByText('4 in their unit')).toBeInTheDocument();
   });
 
+  /*
+   * P18.95-T7 AC-1 (ADR-0167 §7; the client's *Grey text* table, rows 1–3): the client's words at every size, and its
+   * *Remove* below 768px only — the sentence keeps its words from 768px, where the client has not reviewed it yet.
+   */
+  it('P18.95-T7 AC-1 heads the search Find a leader, says They’ll need to approve.', async () => {
+    stubFetch({ '/join/me': { body: REGISTERED }, '/join/leaders': { body: LEADERS } });
+    renderInLayout(AgentLayout, <FindLeaderPage />, { me: JOINER });
+
+    expect(await screen.findByRole('heading', { level: 2, name: 'Find a leader' })).toBeInTheDocument();
+    expect(screen.queryByText(/Find a leader in/)).not.toBeInTheDocument();
+    expect(screen.getByText("They'll need to approve.")).toBeInTheDocument();
+    expect(screen.queryByText(/Sending a request notifies them/)).not.toBeInTheDocument();
+  });
+
   it('says a leader with no unit can still take you on', async () => {
     // "0 people in unit" reads as a number they failed to reach. A new AAB has to be
     // askable or they could never get a first report.
@@ -82,6 +96,24 @@ describe('find your leader (P3-T3)', () => {
     expect(await screen.findByText('Request sent')).toBeInTheDocument();
   });
 
+  it('P18.95-T1 AC-6: says Request sent ✓ in the shell’s toast once the request is in', async () => {
+    stubFetch({
+      '/join/leader-request': { body: { ...REGISTERED, pendingRequestTo: 'mem-ab' } },
+      '/join/leaders': [
+        { body: LEADERS },
+        { body: [{ ...LEADERS[0], requestSent: true }, LEADERS[1]] },
+      ],
+      '/join/me': { body: REGISTERED },
+    });
+    renderInLayout(AgentLayout, <FindLeaderPage />, { me: JOINER });
+    await userEvent.click((await screen.findAllByRole('button', { name: 'Send request' }))[0]);
+
+    const toast = await screen.findByText('Request sent ✓');
+    expect(toast.closest('[role="status"]')).toHaveAttribute('aria-live', 'polite');
+    // The row keeps its own pill: the toast is added, nothing is taken away.
+    expect(await screen.findByText('Request sent')).toBeInTheDocument();
+  });
+
   it('explains that asking somebody else replaces the request', async () => {
     stubFetch({
       '/join/me': { body: { ...REGISTERED, pendingRequestTo: 'mem-ab' } },
@@ -104,15 +136,63 @@ describe('find your leader (P3-T3)', () => {
     expect(calls.some((c) => c.init.method === 'DELETE')).toBe(true);
   });
 
-  it('shows a current leader as such, with nothing to press', async () => {
-    stubFetch({
-      '/join/me': { body: { ...REGISTERED, status: 'active', leaderName: 'Wilson Tanoto' } },
-      '/join/leaders': { body: [{ ...LEADERS[0], isCurrentLeader: true }, LEADERS[1]] },
+  it('P18.96-T3 AC-6 a reader with a leader sees who it is and one line in place of the search, which is never asked', async () => {
+    const { calls } = stubFetch({
+      '/join/me': { body: { ...REGISTERED, status: 'active', leaderMembershipId: 'mem-ab', leaderName: 'Wilson Tanoto' } },
     });
     renderInLayout(AgentLayout, <FindLeaderPage />, { me: JOINER });
 
-    expect(await screen.findByText('Your leader')).toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: 'Send request' })).toHaveLength(1);
+    const card = await screen.findByTestId('reporting-to');
+    // UI-088: one card — whom they report to as its title, the note as 12px meta inside it, behind ⓘ on a phone.
+    expect(within(card).getByText('Currently reporting to').className).not.toContain('uppercase');
+    expect(within(card).getByText('Wilson Tanoto')).toBeInTheDocument();
+    const note = within(card).getAllByText('Changing leader goes through your office admin.').find((el) => el.tagName === 'P')!;
+    expect(note.className).toContain('text-sm');
+    expect(note.className).toContain('max-md:hidden');
+    expect(within(card).getByRole('button', { name: 'Changing leader goes through your office admin.' })).toBeInTheDocument();
+    expect(card.className).not.toMatch(/border-l-/);
+    expect(screen.queryByLabelText('Search by name')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Send request' })).not.toBeInTheDocument();
+    expect(calls.some((c) => c.url.includes('/join/leaders'))).toBe(false);
+  });
+
+  it('UI-086 offers no invite to somebody already in an office with a leader — it would lead to a refusal', async () => {
+    stubFetch({
+      '/join/me': { body: { ...REGISTERED, status: 'active', leaderMembershipId: 'mem-ab', leaderName: 'Wilson Tanoto' } },
+    });
+    renderInLayout(AgentLayout, <FindLeaderPage />, { me: JOINER });
+
+    await screen.findByTestId('reporting-to');
+    expect(screen.queryByText("Have a leader's code, link or QR?")).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Use an invite instead' })).not.toBeInTheDocument();
+  });
+
+  it('UI-086 offers no invite to somebody in an office with no leader either — /join refuses any member (T16)', async () => {
+    stubFetch({ '/join/me': { body: REGISTERED }, '/join/leaders': { body: LEADERS } });
+    renderInLayout(AgentLayout, <FindLeaderPage />, { me: JOINER });
+    await screen.findByRole('heading', { level: 2, name: 'Find a leader' });
+    expect(screen.queryByText("Have a leader's code, link or QR?")).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Use an invite instead' })).not.toBeInTheDocument();
+  });
+
+  it('UI-086 offers the invite to somebody with no office yet, its line behind ⓘ from 768px', async () => {
+    stubFetch({ '/join/me': { body: NO_OFFICE } });
+    renderInLayout(AgentLayout, <FindLeaderPage />, { me: makeMe({ membership: null }) });
+    expect(await screen.findByRole('link', { name: 'Use an invite instead' })).toHaveAttribute('href', '/join');
+    // Appendix A (UI-086): the invite's sentence behind ⓘ from 768px, and not on a phone at all.
+    const tip = screen.getByRole('button', {
+      name: 'Any of the three does the same thing: it joins you and tags you to them in one step, with no approval. Opening their link or scanning their QR takes you to the same place.',
+    });
+    expect(tip.closest('.max-md\\:hidden')).not.toBeNull();
+    expect(screen.queryAllByText(/^Any of the three does the same thing/).filter((el) => el.tagName === 'P')).toEqual([]);
+  });
+
+  it('P18.96-T3 AC-6 a reader with no leader still searches, and the list is the server’s — never the reader’s own unit', async () => {
+    // The exclusion is the server's (`GET /join/leaders`); the screen draws what it is served.
+    stubFetch({ '/join/me': { body: REGISTERED }, '/join/leaders': { body: LEADERS } });
+    renderInLayout(AgentLayout, <FindLeaderPage />, { me: JOINER });
+    expect(await screen.findByLabelText('Search by name')).toBeInTheDocument();
+    expect(screen.queryByText('Changing leader goes through your office admin.')).not.toBeInTheDocument();
   });
 
   it('searches by name, at the server', async () => {
@@ -128,7 +208,7 @@ describe('find your leader (P3-T3)', () => {
     renderInLayout(AgentLayout, <FindLeaderPage />, { me: JOINER });
 
     expect(
-      await screen.findByText('This office has no Agency Builders or Associate Agency Builders yet.'),
+      await screen.findByText('This office has no ABs or AABs yet.'),
     ).toBeInTheDocument();
 
     await userEvent.type(screen.getByLabelText('Search by name'), 'zzz');
@@ -148,5 +228,7 @@ describe('find your leader (P3-T3)', () => {
 
     await userEvent.click((await screen.findAllByRole('button', { name: 'Send request' }))[0]);
     expect(await screen.findByRole('alert')).toHaveTextContent('not available in this office');
+    // P18.95-T1 AC-6: a refusal toasts nothing.
+    expect(screen.queryByText('Request sent ✓')).not.toBeInTheDocument();
   });
 });

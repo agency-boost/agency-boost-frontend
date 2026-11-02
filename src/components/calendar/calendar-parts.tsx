@@ -1,6 +1,7 @@
 'use client';
 
-import { ENTRY_TYPES, TYPE_LABEL, type EntryType } from '@/lib/calendar';
+import type { ReactNode } from 'react';
+import type { EntryType } from '@/lib/calendar';
 import { cn } from '@/lib/cn';
 
 /**
@@ -89,19 +90,36 @@ export function Avatar({
   );
 }
 
-/** The five swatches, in the legend's order (`:309-315`). */
-export function TypeLegend() {
+/** Who a pane is: the reader, or a member compared beside them (`:320-324`, `:974-979`). */
+export interface PaneHead {
+  name: string;
+  initials: string;
+  role: string;
+  me: boolean;
+}
+
+/**
+ * A pane's head (`:320-324`, `:974-979`): the avatar, the name, the rung, and a compared pane's
+ * *"Drag to block"* pill. **One head for every view** — the week's pane, and since P18.95-T8 AC-2 a
+ * month and an agenda drawn beside somebody compared — so a person reads the same in all three.
+ */
+export function PaneHeadBar({ head, pill }: { head: PaneHead; pill?: ReactNode }) {
   return (
-    <ul className="mb-4 flex flex-wrap gap-4 text-sm text-muted">
-      {ENTRY_TYPES.map((type) => (
-        <li key={type} className="inline-flex items-center gap-1.5">
-          <span aria-hidden="true" className={cn('h-2.5 w-2.5 shrink-0 rounded-[3px]', TYPE_SWATCH[type])} />
-          {TYPE_LABEL[type]}
-        </li>
-      ))}
-    </ul>
+    <div className="flex items-center gap-[9px] border-b border-hairline bg-base px-3.5 py-[11px]">
+      <Avatar initials={head.initials} me={head.me} size="md" />
+      <div className="min-w-0">
+        <p className="truncate text-md font-bold text-navy">{head.name}</p>
+        <p className="truncate text-xs text-muted">{head.role}</p>
+      </div>
+      {pill}
+    </div>
   );
 }
+
+/*
+ * The legend (`:309-315`) is gone since UI V1 (UI-104 point 9, D-27): the *Jenis* tick chips replace its coloured dots,
+ * and filter as they name (`TypeChips`, `calendar-tasks.tsx`).
+ */
 
 /** A chip — the compare bar's, the invite field's, the detail's (`:68-72`, `:200-204`, `:229`). */
 export const CHIP = 'inline-flex items-center gap-1.5 rounded-pill border border-hairline bg-base py-1 pl-1 pr-2.5 text-sm font-semibold text-navy';

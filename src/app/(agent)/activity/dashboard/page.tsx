@@ -1,8 +1,10 @@
 'use client';
 
 import { ActivityDashboardPanel } from '@/components/activity-dashboard';
-import { ActivityTabs } from '@/components/activity-tabs';
+import { ActivityTabs, useActivityTitle } from '@/components/activity-tabs';
 import { Page } from '@/components/page';
+import { useMessages } from '@/i18n/language-provider';
+import { activityMessages } from '@/i18n/messages/activity';
 
 /**
  * The Activity Dashboard (P10-T1): your own days over a range, types down and time across
@@ -12,8 +14,11 @@ import { Page } from '@/components/page';
  * (P13.1-T9). Here it is the reader's own, under the screen's title and the activity tabs.
  */
 export default function ActivityDashboardPage() {
+  const t = useMessages(activityMessages);
+  const title = useActivityTitle();
   return (
-    <Page title="Activity Dashboard" subtitle="Your own activity, day by day.">
+    // UI-106 on a phone: *Activity* and the avatar, no sub-line; from 768px as before.
+    <Page title={title} subtitle={t.dashboard.subtitle} subtitleOnPhone={false}>
       <ActivityTabs />
       <ActivityDashboardPanel />
     </Page>

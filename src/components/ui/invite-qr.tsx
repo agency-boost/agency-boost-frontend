@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useMessages } from '@/i18n/language-provider';
+import { uiMessages } from '@/i18n/messages/ui';
 
 /**
  * The invite link as a QR, drawn from the same URL the link box shows.
@@ -17,6 +19,7 @@ import { useEffect, useState } from 'react';
  * link and the code are both right there and do the same job.
  */
 export function InviteQr({ url, size = 96 }: { url: string; size?: number }) {
+  const t = useMessages(uiMessages).qr;
   const [state, setState] = useState<{ src: string } | 'loading' | 'failed'>('loading');
 
   useEffect(() => {
@@ -46,11 +49,11 @@ export function InviteQr({ url, size = 96 }: { url: string; size?: number }) {
         // The alt text names what it is, not what it looks like: a screen-reader user
         // cannot scan it, and the link beside it is the thing they want.
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={state.src} alt="QR code for this invite link" width={size} height={size} />
+        <img src={state.src} alt={t.alt} width={size} height={size} />
       ) : state === 'loading' ? (
-        <span role="status">Drawing…</span>
+        <span role="status">{t.drawing}</span>
       ) : (
-        <span>Could not draw the QR — use the link or the code.</span>
+        <span>{t.failed}</span>
       )}
     </div>
   );

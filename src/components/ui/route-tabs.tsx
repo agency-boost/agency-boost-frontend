@@ -4,6 +4,9 @@ import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/cn';
+import { TAB_PHONE, TAB_ROW_PHONE, UNDERLINED_ROW_PHONE } from '@/components/ui/phone';
+import { TAB_TOUCH } from '@/components/ui/touch';
+import { useTabRow } from '@/components/ui/use-tab-row';
 
 export interface RouteTab {
   readonly href: string;
@@ -13,6 +16,11 @@ export interface RouteTab {
   readonly hint?: string;
   /** A count beside the label — an inbox with something in it. */
   readonly badge?: ReactNode;
+  /**
+   * Current on every address beneath its own as well — the catalog's tab over a product's drawer,
+   * `/product-catalog/{code}` (P18.8-T12). A prefix is not a parent: `/product-catalogs` is not beneath it.
+   */
+  readonly nested?: boolean;
 }
 
 /**
@@ -29,6 +37,10 @@ export interface RouteTab {
  * A locked tab **stays visible and says why**, rather than disappearing: the four User Management
  * screens are one journey, and a rung vanishing from a chain reads as a step you already missed
  * (`Overall.html:8824`).
+ *
+ * **On a phone it is one row that scrolls sideways** (ADR-0167; UI-013: User Management's four rungs on
+ * two lines), fading on the side that has more, with the current tab brought into view. Below 768px
+ * only; wider, it wraps exactly as it did (`phone.ts`, `use-tab-row.ts`).
  */
 export function RouteTabs({
   label,
@@ -41,10 +53,18 @@ export function RouteTabs({
   className?: string;
 }) {
   const pathname = usePathname();
-  const TAB = '-mb-px border-b-2 px-0.5 pb-3 text-md font-semibold';
+  const row = useTabRow<HTMLElement>(pathname);
+  // 44px tall below 1024px, its words at the foot as before (UI V1, UI-010).
+  const TAB = cn('-mb-px border-b-2 px-0.5 pb-3 text-md font-semibold', TAB_TOUCH, TAB_PHONE);
+  const current = (tab: RouteTab) => pathname === tab.href || (tab.nested === true && pathname.startsWith(`${tab.href}/`));
 
   return (
-    <nav aria-label={label} className={cn('mb-6 flex flex-wrap gap-6 border-b border-hairline', className)}>
+    <nav
+      ref={row.ref}
+      aria-label={label}
+      data-fade={row.fade}
+      className={cn('mb-6 flex flex-wrap gap-6 border-b border-hairline', TAB_ROW_PHONE, UNDERLINED_ROW_PHONE, className)}
+    >
       {tabs.map((tab) =>
         tab.locked ? (
           <span
@@ -59,10 +79,10 @@ export function RouteTabs({
           <Link
             key={tab.href}
             href={tab.href}
-            aria-current={pathname === tab.href ? 'page' : undefined}
+            aria-current={current(tab) ? 'page' : undefined}
             className={cn(
               TAB,
-              pathname === tab.href ? 'border-amber text-navy' : 'border-transparent text-muted',
+              current(tab) ? 'border-amber text-navy' : 'border-transparent text-muted',
             )}
           >
             <span className="flex items-center gap-1.5">

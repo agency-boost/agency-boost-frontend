@@ -6,14 +6,16 @@ import {
   Button, Card, Field, ReadOnlyField, Select, TextInput, Textarea,
 } from '@/components/ui/field';
 import { SkeletonText } from '@/components/ui/skeleton';
+import { kept } from '@/i18n/kept';
+import { useMessages } from '@/i18n/language-provider';
+import { settingsMessages } from '@/i18n/messages/settings';
+import { branchInfoMessages } from '@/i18n/messages/settings-branch-info';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { useCan } from '@/lib/session';
 import { readBranchInfo, updateBranchInfo, type BranchInfo } from '@/lib/tenant-config';
 
-const MONTHS = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
-];
+/** The financial year's first month, 1 to 12: the select's values, each named in the reader's language. */
+const MONTHS = Array.from({ length: 12 }, (_, at) => at + 1);
 
 /**
  * What this office is (P4-T5, `KPM_Owner.html:1807-1812`).
@@ -32,6 +34,8 @@ const MONTHS = [
  * disabled and no Save, and the API refuses them regardless.
  */
 export default function BranchInfoPage() {
+  const t = useMessages(branchInfoMessages);
+  const s = useMessages(settingsMessages);
   const canWrite = useCan('tenant_config:write');
   const [office, setOffice] = useState<BranchInfo | null>(null);
   const [form, setForm] = useState({
@@ -81,8 +85,8 @@ export default function BranchInfoPage() {
 
   return (
     <SettingsScreen
-      title="Branch info"
-      subtitle="What this office is called, and where it is."
+      title={kept('Branch info')}
+      subtitle={t.subtitle}
       permission="kpm:read_profile"
       error={error}
     >
@@ -93,12 +97,12 @@ export default function BranchInfoPage() {
         ) : (
           <form onSubmit={submit} className="flex max-w-xl flex-col gap-4" noValidate>
             <ReadOnlyField
-              label="KPM code"
+              label={t.kpmCode}
               value={office.code}
-              reason="Set when the office was created, and unique within your company."
+              reason={t.kpmCodeReason}
             />
 
-            <Field label="Branch name" htmlFor="branchName">
+            <Field label={t.branchName} htmlFor="branchName">
               <TextInput
                 id="branchName"
                 value={form.branchName}
@@ -110,12 +114,12 @@ export default function BranchInfoPage() {
             {/* Disabled and labelled, exactly as the prototype has it: the label is the
                 answer to "why can't I change this". */}
             <ReadOnlyField
-              label="Company (tagged by Superadmin)"
+              label={t.company}
               value={office.companyName}
-              reason="The insurer this office belongs to. Only the platform can change it."
+              reason={t.companyReason}
             />
 
-            <Field label="Address" htmlFor="address">
+            <Field label={t.address} htmlFor="address">
               <Textarea
                 id="address"
                 rows={2}
@@ -125,7 +129,7 @@ export default function BranchInfoPage() {
               />
             </Field>
 
-            <Field label="Contact phone" htmlFor="contactPhone">
+            <Field label={t.contactPhone} htmlFor="contactPhone">
               <TextInput
                 id="contactPhone"
                 value={form.contactPhone}
@@ -135,14 +139,14 @@ export default function BranchInfoPage() {
             </Field>
 
             <ReadOnlyField
-              label="KPM Owner"
-              value={office.ownerName ?? 'Nobody yet'}
-              reason="Assigned and transferred by the platform, not from inside the office."
+              label={kept('KPM Owner')}
+              value={office.ownerName ?? t.nobodyYet}
+              reason={t.ownerReason}
             />
 
             {/* No hint. It said "Used by the reporting periods that arrive in a later phase.": our
                 schedule, which a reader can do nothing with (ADR-0062 §3, P10.1-T2). */}
-            <Field label="Financial year starts" htmlFor="fiscalYearStartMonth">
+            <Field label={t.financialYear} htmlFor="fiscalYearStartMonth">
               <Select
                 id="fiscalYearStartMonth"
                 value={String(form.fiscalYearStartMonth)}
@@ -151,24 +155,24 @@ export default function BranchInfoPage() {
                   ...form, fiscalYearStartMonth: Number(e.target.value),
                 })}
               >
-                {MONTHS.map((month, index) => (
-                  <option key={month} value={index + 1}>{month}</option>
+                {MONTHS.map((month) => (
+                  <option key={month} value={month}>{t.month({ month })}</option>
                 ))}
               </Select>
             </Field>
 
             <ReadOnlyField
-              label="Time zone, language and currency"
+              label={t.timeLanguageCurrency}
               value={`${office.timezone} · ${office.locale} · ${office.currency}`}
-              reason="Every office runs on these in this version of AgencyBoost."
+              reason={t.timeLanguageCurrencyReason}
             />
 
             {canWrite && (
               <div className="flex items-center gap-3">
                 <Button type="submit" disabled={busy || !form.branchName.trim()}>
-                  {busy ? 'Saving…' : 'Save'}
+                  {busy ? s.saving : s.save}
                 </Button>
-                {saved && <p role="status" className="text-md text-muted">Saved.</p>}
+                {saved && <p role="status" className="text-md text-muted">{s.saved}</p>}
               </div>
             )}
           </form>

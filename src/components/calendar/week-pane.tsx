@@ -1,17 +1,26 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { LineIcon } from '@/components/ui/line-icon';
+import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
+import { calendarMessages } from '@/i18n/messages/calendar';
 import {
   allDayHeight, BAR_GAP_PX, BAR_PX, DAY_PX, HOUR_PX, layoutDay, OPEN_AT_HOUR, showsTime, slotFromSelection, stackBars,
-  timedOn,
+  tasksPerDay, timedOn,
 } from '@/lib/calendar-layout';
 import {
-  entryNameSuffix, isBusy, OWN_COPY, titleOf, TYPE_BADGE, type CalendarEntry, type CalendarItem, type CalendarRead,
+  entryName, isBusy, isHiddenTask, titleOf, type CalendarEntry, type CalendarItem, type CalendarJoinedItem, type CalendarRead,
 } from '@/lib/calendar';
 import type { Slot } from '@/lib/calendar-form';
 import { formatDayHeader, formatHour, formatTimeSpan, formatWeekdayDay } from '@/lib/format';
 import { cn } from '@/lib/cn';
-import { Avatar, ENTRY_TONE } from './calendar-parts';
+import { ENTRY_TONE, PaneHeadBar, type PaneHead } from './calendar-parts';
+import { CountPill, EVENT_TONE, useCalendarTasks } from './calendar-tasks';
+
+/** Anything on a day column: an entry, a busy block, or an event joined (UI-104 point 1). */
+type GridItem = CalendarItem | CalendarJoinedItem;
+const isJoined = (item: GridItem): item is Extract<CalendarJoinedItem, { eventId: string }> => 'eventId' in item;
 
 /** The scroll boxes of every pane on the page, moved as one (`syncScroll`, `:1001-1005`). */
 export interface ScrollGroup {
@@ -19,13 +28,7 @@ export interface ScrollGroup {
   sync: (source: HTMLElement) => void;
 }
 
-/** Who a pane is: the reader, or a member compared beside them (`:320-324`, `:974-979`). */
-export interface PaneHead {
-  name: string;
-  initials: string;
-  role: string;
-  me: boolean;
-}
+export type { PaneHead } from './calendar-parts';
 
 /**
  * The hour lines, every 56px (`.day-col`, `:131`), drawn in the hairline token rather than in boxes.
@@ -60,6 +63,7 @@ export function WeekPane({
   nowMinute,
   onOpen,
   onSlot,
+  onTasks,
   scroll,
   className,
 }: {
@@ -74,9 +78,14 @@ export function WeekPane({
   onOpen: (entry: CalendarEntry) => void;
   /** A drag or a tap on an empty slot. Absent, the grid takes none. */
   onSlot?: (slot: Slot) => void;
+  /** A day's *Tugas* count pill (UI-104 point 3): its popup. Absent — a hidden person — the counts open nothing. */
+  onTasks?: (day: string) => void;
   scroll: ScrollGroup;
   className?: string;
 }) {
+  const language = useFigureLanguage();
+  const t = useMessages(calendarMessages);
+  const { struck } = useCalendarTasks();
   const days = read.days.map((d) => d.date);
   const box = useRef<HTMLDivElement>(null);
   const hours = hoursWhenStacked ? 'hidden max-[979.98px]:block' : 'block';
@@ -91,24 +100,21 @@ export function WeekPane({
 
   const allDay = read.entries.filter((item) => item.allDay);
   const { bars, lanes } = stackBars(allDay, days);
+  // *Tugas* by day, a tick in this visit taken off at once (UI-104 point 4); a hidden person's are counts only.
+  const counts = tasksPerDay(read.tasks.filter((task) => isHiddenTask(task) || !struck.has(task.taskId)));
+  const hiddenTasks = read.tasks.some(isHiddenTask);
+  const timed: GridItem[] = [...read.entries, ...read.events];
 
   return (
     <section aria-label={head.name} className={cn('flex min-w-0 flex-1 flex-col bg-card', className)}>
-      <div className="flex items-center gap-[9px] border-b border-hairline bg-base px-3.5 py-[11px]">
-        <Avatar initials={head.initials} me={head.me} size="md" />
-        <div className="min-w-0">
-          <p className="truncate text-md font-bold text-navy">{head.name}</p>
-          <p className="truncate text-xs text-muted">{head.role}</p>
-        </div>
-        {pill}
-      </div>
+      <PaneHeadBar head={head} pill={pill} />
 
       <div className="overflow-x-auto">
         <div className={PHONE_MIN_WIDTH}>
           <div className="flex">
             <div aria-hidden="true" className={cn('w-[52px] shrink-0 border-r border-hairline', hours)} />
             {days.map((day) => {
-              const { weekday, number } = formatDayHeader(day);
+              const { weekday, number } = formatDayHeader(day, language);
               const today = day === read.today;
               return (
                 <div
@@ -127,8 +133,13 @@ export function WeekPane({
             })}
           </div>
 
-          <div className="flex border-b border-hairline" style={{ minHeight: allDayHeight(lanes) }}>
-            <div aria-hidden="true" className={cn('w-[52px] shrink-0 border-r border-hairline', hours)} />
+          {/* **The Trip row** (UI-104 point 8): only when a trip falls in the visible days; a bar with the plane line icon. */}
+          {bars.length > 0 && (
+          <div data-trip-row="" className="flex border-b border-hairline" style={{ minHeight: allDayHeight(lanes) }}>
+            <div className={cn('w-[52px] shrink-0 items-center justify-center border-r border-hairline text-signal-grey', hours === 'block' ? 'flex' : 'hidden max-[979.98px]:flex')}>
+              <LineIcon name="plane" className="h-4 w-4" />
+              <span className="sr-only">{t.types.travel}</span>
+            </div>
             <div className="relative flex flex-1">
               {days.map((day) => (
                 <div
@@ -151,6 +162,19 @@ export function WeekPane({
               ))}
             </div>
           </div>
+          )}
+
+          {/* **The Tugas row** (UI-104 point 2): one thin row above the hours, an orange count per day, *·* when none. */}
+          <div data-task-row="" className="flex h-11 border-b border-hairline md:h-8">
+            <div className={cn('w-[52px] shrink-0 items-center justify-center border-r border-hairline text-xs font-semibold text-signal-grey', hours === 'block' ? 'flex' : 'hidden max-[979.98px]:flex')}>
+              {t.tasks}
+            </div>
+            {days.map((day) => (
+              <div key={day} className="grid flex-1 place-items-center border-r border-hairline last:border-r-0">
+                <CountPill day={day} count={counts.get(day) ?? 0} onOpen={onTasks && !hiddenTasks ? () => onTasks(day) : undefined} />
+              </div>
+            ))}
+          </div>
 
           <div
             ref={box}
@@ -164,7 +188,7 @@ export function WeekPane({
               <div aria-hidden="true" className={cn('w-[52px] shrink-0 border-r border-hairline', hours)}>
                 {HOURS.map((h) => (
                   <div key={h} className="-translate-y-1.5 pr-[7px] text-right text-2xs text-muted" style={{ height: HOUR_PX }}>
-                    {formatHour(h)}
+                    {formatHour(h, language)}
                   </div>
                 ))}
               </div>
@@ -175,7 +199,7 @@ export function WeekPane({
                     day={day}
                     weekend={i >= 5}
                     today={day === read.today}
-                    items={timedOn(read.entries, day)}
+                    items={timedOn(timed, day)}
                     nowMinute={day === read.today ? nowMinute : null}
                     onOpen={onOpen}
                     onSlot={onSlot}
@@ -195,11 +219,13 @@ export function WeekPane({
  * detail** (contradiction 6: the prototype's bar had no handler, `:576`); a busy block opens nothing.
  */
 function AllDayBar({ item, style, onOpen }: { item: CalendarItem; style: React.CSSProperties; onOpen: (e: CalendarEntry) => void }) {
+  const t = useMessages(calendarMessages);
+  const words = useLanguage();
   const shape = 'absolute flex items-center overflow-hidden whitespace-nowrap rounded-[6px] border px-2 text-2xs font-bold';
   if (isBusy(item)) {
     return (
       <div data-busy="" style={style} className={cn(shape, 'border-hairline bg-navy/[0.06] text-navy')}>
-        <span className="truncate">{OWN_COPY.busy}</span>
+        <span className="truncate">{t.busy}</span>
       </div>
     );
   }
@@ -208,11 +234,12 @@ function AllDayBar({ item, style, onOpen }: { item: CalendarItem; style: React.C
       type="button"
       data-entry=""
       style={style}
-      aria-label={`${TYPE_BADGE[item.type]}: ${titleOf(item)}${entryNameSuffix(item)}`}
+      aria-label={entryName(item, '', words)}
       onClick={() => onOpen(item)}
       className={cn(shape, 'border-teal/30 bg-teal/[0.14] text-left text-teal-ink hover:brightness-[0.96]')}
     >
-      <span className="truncate">{titleOf(item)}</span>
+      <LineIcon name="plane" className="mr-1 h-3.5 w-3.5" />
+      <span className="truncate">{titleOf(item, words)}</span>
     </button>
   );
 }
@@ -245,11 +272,12 @@ function DayColumn({
   day: string;
   weekend: boolean;
   today: boolean;
-  items: CalendarItem[];
+  items: GridItem[];
   nowMinute: number | null;
   onOpen: (entry: CalendarEntry) => void;
   onSlot?: (slot: Slot) => void;
 }) {
+  const language = useFigureLanguage();
   const [selection, setSelection] = useState<Selection | null>(null);
   const drag = useRef<Selection | null>(null);
 
@@ -257,7 +285,7 @@ function DayColumn({
     Math.min(Math.max(e.clientY - e.currentTarget.getBoundingClientRect().top, 0), DAY_PX);
 
   const begin = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!onSlot || (e.target as HTMLElement).closest('[data-entry], [data-busy]')) return;
+    if (!onSlot || (e.target as HTMLElement).closest('[data-entry], [data-busy], [data-event]')) return;
     if (e.pointerType === 'mouse') {
       if (e.button !== 0) return;
       e.preventDefault();
@@ -290,7 +318,7 @@ function DayColumn({
   return (
     <div
       role="group"
-      aria-label={formatWeekdayDay(day)}
+      aria-label={formatWeekdayDay(day, language)}
       data-day={day}
       onPointerDown={begin}
       onPointerMove={move}
@@ -306,7 +334,7 @@ function DayColumn({
     >
       {layoutDay(items).map(({ item, top, height, lane, lanes }) => (
         <EntryBlock
-          key={isBusy(item) ? `busy-${item.startsAt}-${lane}` : item.entryId}
+          key={isBusy(item) ? `busy-${item.startsAt}-${lane}` : isJoined(item) ? `ev-${item.eventId}` : item.entryId}
           item={item}
           style={{
             top,
@@ -341,7 +369,7 @@ function DayColumn({
 }
 
 /**
- * An entry on the grid: its title and its time, `9:00 AM–9:30 AM` (`:611`). **A button**, named by its
+ * An entry on the grid: its title and its time, `09.00–09.30` (`:611`). **A button**, named by its
  * type, title and time, so colour is never the only thing that says what it is (H-18; P12-T2 AC-11).
  * A compared member's busy block reads *Busy* and its time, and opens nothing.
  *
@@ -352,10 +380,17 @@ function DayColumn({
  * a time. Nothing cut or left out is lost: the name holds the whole title and the time, and so does the
  * title's tooltip, for a pointer.
  */
-function EntryBlock({
-  item, style, withTime, onOpen,
-}: { item: CalendarItem; style: React.CSSProperties; withTime: boolean; onOpen: (e: CalendarEntry) => void }) {
-  const time = formatTimeSpan(item.start ?? '', item.end ?? '');
+export function EntryBlock({
+  item, style, withTime, onOpen, chip,
+}: {
+  item: GridItem; style: React.CSSProperties; withTime: boolean; onOpen: (e: CalendarEntry) => void;
+  /** Something small inside the block, after its words: 3 Hari's avatar of a compared person (UI-104 point 9). */
+  chip?: ReactNode;
+}) {
+  const t = useMessages(calendarMessages);
+  const words = useLanguage();
+  const language = useFigureLanguage();
+  const time = formatTimeSpan(item.start ?? '', item.end ?? '', language);
   const shape = 'absolute flex flex-col justify-start overflow-hidden rounded-[6px] border-l-[3px] px-1.5 py-1 text-left text-xs leading-tight text-navy';
   // `shrink-0`: a line in a column that is too short keeps its height and is never squeezed into itself.
   const line = 'block w-full shrink-0 truncate';
@@ -363,10 +398,27 @@ function EntryBlock({
   if (isBusy(item)) {
     return (
       <div data-busy="" style={style} className={cn(shape, 'cursor-default border-muted bg-navy/[0.06]')}>
-        <span title={`${OWN_COPY.busy}, ${time}`} className={cn(line, 'font-bold')}>{OWN_COPY.busy}</span>
+        <span title={t.busyAt({ time })} className={cn(line, 'font-bold')}>{t.busy}</span>
         <span className="sr-only">, </span>
         <span className={withTime ? timeLine : 'sr-only'}>{time}</span>
+        {chip}
       </div>
+    );
+  }
+  // An event joined (UI-104 point 1): read-only here, it opens its own page.
+  if (isJoined(item)) {
+    return (
+      <Link
+        href={`/events/${encodeURIComponent(item.eventId)}`}
+        data-event=""
+        style={style}
+        aria-label={t.joinedName({ title: item.title, type: item.type.label, time })}
+        className={cn(shape, 'z-[1] hover:brightness-[0.96]', EVENT_TONE)}
+      >
+        <span title={`${item.title}, ${time}`} className={cn(line, 'font-bold')}>{item.title}</span>
+        {withTime && <span className={timeLine}>{time}</span>}
+        {chip}
+      </Link>
     );
   }
   // Named in one string — *{badge}: {title}, {time}* and what the reader owes it — which holds the words
@@ -376,12 +428,17 @@ function EntryBlock({
       type="button"
       data-entry=""
       style={style}
-      aria-label={`${TYPE_BADGE[item.type]}: ${titleOf(item)}, ${time}${entryNameSuffix(item)}`}
+      aria-label={entryName(item, time, words)}
       onClick={() => onOpen(item)}
       className={cn(shape, 'z-[1] hover:brightness-[0.96]', ENTRY_TONE[item.type])}
     >
-      <span title={`${titleOf(item)}, ${time}`} className={cn(line, 'font-bold')}>{titleOf(item)}</span>
+      <span title={`${titleOf(item, words)}, ${time}`} className={cn(line, 'font-bold')}>
+        {/* A trip with times is a block like any other, with the plane line icon (UI-104 point 8). */}
+        {item.type === 'travel' && <LineIcon name="plane" className="mr-1 inline h-3 w-3 align-[-2px]" />}
+        {titleOf(item, words)}
+      </span>
       {withTime && <span className={timeLine}>{time}</span>}
+      {chip}
     </button>
   );
 }

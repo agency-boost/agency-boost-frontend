@@ -113,12 +113,25 @@ export interface UntaggedMember {
 
 export const readInbox = () => api<PendingRequest[]>('/join/requests');
 
+/**
+ * **How many requests are waiting on the reader** (UI V1, UI-085): the orange count on the *Pending Requests* tab, read
+ * on all four User Management screens — the requests `readInbox` lists, counted on the server without their names.
+ */
+export const readWaitingCount = () => api<{ count: number }>('/join/requests/count');
+
 export const readRoutingChoices = () => api<RoutingChoice[]>('/join/requests/routing');
 
-export const approveRequest = (requestId: string, routeToMembershipId?: string) =>
+/**
+ * Approve a request: into the leader's unit or `routeToMembershipId`'s, with the day they joined — `joinDate`, an
+ * office date (ADR-0169; P18.96-T3 AC-5). Omitted, the server gives them the office's today.
+ */
+export const approveRequest = (requestId: string, routeToMembershipId?: string, joinDate?: string) =>
   api<PendingRequest[]>(`/join/requests/${requestId}/approve`, {
     method: 'POST',
-    body: routeToMembershipId ? { routeToMembershipId } : {},
+    body: {
+      ...(routeToMembershipId ? { routeToMembershipId } : {}),
+      ...(joinDate ? { joinDate } : {}),
+    },
   });
 
 export const declineRequest = (requestId: string, reason?: string) =>

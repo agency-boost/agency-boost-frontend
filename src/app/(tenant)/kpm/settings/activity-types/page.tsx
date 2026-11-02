@@ -1,7 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { SettingsScreen, TenantConfigBars } from '@/components/settings-screen';
+import { ActionMenu, type ActionMenuItem } from '@/components/ui/action-menu';
+import { ConfigBadge } from '@/components/ui/config-badge';
 import { DragHandle } from '@/components/ui/drag-handle';
 import { ACTIVITY_SETTINGS_TABS } from '@/components/settings-tabs';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -9,13 +11,19 @@ import {
   Button, Card, CodeField, Field, FieldRow, TextInput,
 } from '@/components/ui/field';
 import { SkeletonCards } from '@/components/ui/skeleton';
+import { kept } from '@/i18n/kept';
+import { useLanguage, useMessages } from '@/i18n/language-provider';
+import { settingsMessages } from '@/i18n/messages/settings';
+import { activityTypesMessages } from '@/i18n/messages/settings-activity-types';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import { useCan } from '@/lib/session';
-import { projectStaged, unstageRow, STAGED_LABEL } from '@/lib/staged-projection';
+import { projectStaged, unstageRow } from '@/lib/staged-projection';
 import { planSummaryTile, summaryGroups, summaryTileName, tileRefusal } from '@/lib/summary-tiles';
 import { reservedRefusal } from '@/lib/reserved-types';
+import { BINDING_ROLE_LABEL, readOwnActivityBinding, rolesByCode, type BindingRole } from '@/lib/activity-binding';
 import { useTenantConfig } from '@/lib/tenant-config-cache';
+import { useMediaQuery } from '@/lib/use-media-query';
 import {
   applyConfigChanges,
   stageChange,
@@ -26,6 +34,29 @@ import {
   type ConfigChange,
   type ActivityTypeRow,
 } from '@/lib/tenant-config';
+
+/** The two section actions that open an editor in their line — the inline link and the ⋮ item, found by their words. */
+type Opener = 'rename' | 'scope';
+
+/*
+ * **The chip on a bound type: the stage it counts as** (P18.97-T4 AC-1, ADR-0176 §3; the client's UI-022: *"Set
+ * Appointment Set appointment"* read as a name and its alias run together). It is no name of the type but the cascade
+ * stage the office's activity binding counts it as (ADR-0163 §3), so it says so — *Counts as: Sales meeting* — on the
+ * quiet chip the prototype draws for the activity a cascade column counts (`.activity-tag`, `Overall.html:718-721`).
+ * Its words are the catalogue's (`countsAs`, `messages/settings-activity-types.ts`).
+ */
+
+/**
+ * Examples of a code, in the fields that take one: identifiers, the same in both languages, never words (the
+ * approved glossary's §D: *a code or key* is not a string to translate).
+ */
+const SECTION_CODE_EXAMPLE = 'REFERRALS';
+const TYPE_CODE_EXAMPLE = 'SELL_REFERRAL';
+/**
+ * The prototype's own example of a type's description (`KPM_Owner.html`), in the language the platform's activity
+ * items are written in (OD-238): an example of what an office types, shown as it is in both languages (ADR-0179 §5).
+ */
+const DESCRIPTION_EXAMPLE = 'telepon, WhatsApp, tatap muka, dll';
 
 /**
  * What this office counts (P4-T1, `KPM_Owner.html:1340-1440`).
@@ -41,7 +72,24 @@ import {
  * archived* is how somebody finds one to bring back.
  */
 export default function ActivityTypesPage() {
+  const t = useMessages(activityTypesMessages);
+  const s = useMessages(settingsMessages);
+  const language = useLanguage();
   const canWrite = useCan('tenant_config:write');
+  /*
+   * **Below 1024px a section's three actions sit behind one ⋮** (P18.97-T6 AC-3, ADR-0178 §2; the client's UI-037:
+   * *Rename*, *Change who it applies to* and *Archive the section* wrapped to two rows on a phone and three on a
+   * tablet). Asked where the page mounts, before its read, so the sections never draw one way and then the other;
+   * from 1024px the hook answers false and the row is the inline links it was, to the byte.
+   */
+  const belowDesktop = useMediaQuery(['phone', 'tablet']);
+  /*
+   * **Which types the office's activity binding names** (ADR-0163 §3, P18.9-T2 AC-3): the Owner and the Admin read
+   * it, the Super Admin keeps it. A bound type wears its role beside its name — the explicit request of the product
+   * owner, 2026-10-26 — and is the one an archive refuses. A failed read leaves the names unmarked.
+   */
+  const canReadBinding = useCan('activity_binding:read');
+  const [bound, setBound] = useState<Map<string, BindingRole>>(new Map());
   const [categories, setCategories] = useState<ActivityCategoryRow[] | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
@@ -65,6 +113,15 @@ export default function ActivityTypesPage() {
    * this — that is the identity, and invariant §4 is why.
    */
   const [renaming, setRenaming] = useState<string | null>(null);
+  /*
+   * **Where the focus goes when a section's editor opens and closes** (WCAG 2.4.3; P18.97-T4, parity F-255). *Rename*
+   * and *Change who it applies to* replace the line they sit on with an editor, so the control that opened it is gone
+   * the moment it is chosen — and the focus with it, to the top of the page. Each section's line is held here, so
+   * opening moves the focus to the editor's first control and closing gives it back to what opened it: the inline
+   * link from 1024px, the section's ⋮ below it. Refs, not attributes: the line's markup at 1024px is pinned.
+   */
+  const lines = useRef(new Map<string, HTMLDivElement>());
+  const editors = useRef<{ renaming: string | null; scoping: string | null }>({ renaming: null, scoping: null });
   /*
    * `tile` is the section's summary tile (ADR-0064): the name of the tile it counts toward on the
    * agents' strip, or empty for a tile of its own. One field in this edit, not a card of its own
@@ -116,6 +173,37 @@ export default function ActivityTypesPage() {
 
   useEffect(() => { void load(); }, [load]);
 
+  useEffect(() => {
+    const was = editors.current;
+    editors.current = { renaming, scoping };
+    /** The editor's first control, or what opened it — the link by its words from 1024px, the ⋮ below. */
+    const focusIn = (id: string, into: 'editor' | Opener) => {
+      const line = lines.current.get(id);
+      if (!line) return;
+      const target = into === 'editor'
+        ? line.querySelector<HTMLElement>('input, select, textarea, button')
+        : belowDesktop
+          ? line.querySelector<HTMLElement>('button[aria-haspopup="menu"]')
+          : [...line.querySelectorAll<HTMLElement>('button')]
+            .find((b) => b.textContent === (into === 'rename' ? s.rename : s.changeWhoItAppliesTo));
+      target?.focus();
+    };
+    // Closed first, then opened: moving straight from one section's editor to another's ends in the new one.
+    if (was.renaming && was.renaming !== renaming) focusIn(was.renaming, 'rename');
+    if (was.scoping && was.scoping !== scoping) focusIn(was.scoping, 'scope');
+    if (renaming && renaming !== was.renaming) focusIn(renaming, 'editor');
+    if (scoping && scoping !== was.scoping) focusIn(scoping, 'editor');
+  }, [renaming, scoping, belowDesktop, s]);
+
+  useEffect(() => {
+    if (!canReadBinding) return;
+    let live = true;
+    readOwnActivityBinding()
+      .then((binding) => { if (live) setBound(rolesByCode(binding)); })
+      .catch(() => { /* the names stay unmarked; the archive's refusal still says why */ });
+    return () => { live = false; };
+  }, [canReadBinding]);
+
   async function run(key: string, action: () => Promise<unknown>) {
     setBusy(key);
     setError(null);
@@ -125,8 +213,8 @@ export default function ActivityTypesPage() {
       setPublished((n) => n + 1);
     } catch (err) {
       const shown = toDisplayError(err);
-      // One of the three cascade types, or its section, refused archiving (ADR-0115 §2): said plainly.
-      setError(tileRefusal(shown) ?? reservedRefusal(shown) ?? shown);
+      // A bound type, or its section, refused archiving (ADR-0163 §5): said plainly.
+      setError(tileRefusal(shown, language) ?? reservedRefusal(shown) ?? shown);
     } finally {
       setBusy(null);
     }
@@ -224,7 +312,7 @@ export default function ActivityTypesPage() {
    */
   const appliesTo = (codes: string[]) =>
     (codes.length === 0
-      ? 'Everyone'
+      ? s.everyone
       : codes.map((c) => ladder.find((l) => l.code === c)?.label ?? c).join(' · '));
 
   /*
@@ -275,6 +363,49 @@ export default function ActivityTypesPage() {
     ).filter(({ row, staged: mark }) => showArchived || row.status === 'active' || mark),
   }));
 
+  /*
+   * **A section's actions, once** — the inline links from 1024px and the ⋮'s items below it do the same four things
+   * (P18.97-T6 AC-3), so the two cannot come to differ. Archiving and restoring are staged, as every edit here is.
+   */
+  type Section = (typeof shown)[number];
+  const startRename = (category: Section) => {
+    setTileError(null);
+    setRenaming(category.id);
+    setSectionDraft({
+      label: category.label,
+      description: category.description ?? '',
+      tile: summaryTileName(category),
+    });
+  };
+  const startScoping = (category: Section) => {
+    setScoping(category.id);
+    setRungs(category.appliesToOrgLevelCodes);
+  };
+  const archiveSection = (category: Section) => stage({
+    op: 'category.archive',
+    id: category.id,
+    expectedVersion: category.version,
+  });
+  const restoreSection = (category: Section) => stage({
+    op: 'category.restore',
+    id: category.id,
+    expectedVersion: category.version,
+  });
+  /** The ⋮'s items, in the inline links' order and words; archive and restore held while a write is out, as theirs. */
+  const sectionMenu = (category: Section): ActionMenuItem[] => [
+    { label: s.rename, onSelect: () => startRename(category) },
+    { label: s.changeWhoItAppliesTo, onSelect: () => startScoping(category) },
+    category.status === 'active'
+      ? {
+        label: t.archiveSection,
+        tone: 'alert',
+        hint: t.archiveSectionHint,
+        disabled: busy !== null,
+        onSelect: () => archiveSection(category),
+      }
+      : { label: t.restoreSection, disabled: busy !== null, onSelect: () => restoreSection(category) },
+  ];
+
   /**
    * The badge an agent sees beside a row, counted over the **live** rows only.
    *
@@ -300,8 +431,8 @@ export default function ActivityTypesPage() {
 
   return (
     <SettingsScreen
-      title="Activity types"
-      subtitle="What this office counts. Agents see these on Log Activity, in this order."
+      title={kept('Activity types')}
+      subtitle={t.subtitle}
       permission="tenant_config:read"
       tabs={ACTIVITY_SETTINGS_TABS}
       error={error}
@@ -324,8 +455,10 @@ export default function ActivityTypesPage() {
            screen showed the staged one. */
         hint: categories === null
           ? '\u00a0'
-          : `${shown.flatMap((c) => c.types).filter(({ row }) => row.status === 'active').length} `
-            + `activity types across ${shown.length} categories`,
+          : t.count({
+            types: shown.flatMap((c) => c.types).filter(({ row }) => row.status === 'active').length,
+            sections: shown.length,
+          }),
         /* Archiving is reversible by design (invariant §3) and Restore is one click away,
            so the controls are not red and there is no confirmation: a confirm on a
            reversible act teaches people to dismiss confirms. */
@@ -337,7 +470,7 @@ export default function ActivityTypesPage() {
                 checked={showArchived}
                 onChange={(e) => setShowArchived(e.target.checked)}
               />
-              Show archived
+              {s.showArchived}
             </label>
           </>
         ),
@@ -348,21 +481,18 @@ export default function ActivityTypesPage() {
         <Card className="mb-4">
           {addingSection ? (
             <div className="flex flex-col gap-3">
-              <h2 className="font-display text-lg font-bold text-navy">Add a section</h2>
-              <p className="text-sm text-muted">
-                A heading on the agent&rsquo;s Log Activity screen, with its own activity
-                types under it. You choose who it applies to after it exists.
-              </p>
+              <h2 className="font-display text-lg font-bold text-navy">{t.addSection}</h2>
+              <p className="text-sm text-muted">{t.addSectionLead}</p>
               <FieldRow>
-                <Field label="Code" htmlFor="new-section-code" hint="Permanent once saved." className="min-w-48">
+                <Field label={s.code} htmlFor="new-section-code" hint={t.permanentOnceSaved} className="min-w-48">
                   <TextInput
                     id="new-section-code"
                     value={section.code}
                     onChange={(e) => setSection({ ...section, code: e.target.value.toUpperCase() })}
-                    placeholder="REFERRALS"
+                    placeholder={SECTION_CODE_EXAMPLE}
                   />
                 </Field>
-                <Field label="Name" htmlFor="new-section-label" className="min-w-60 flex-1">
+                <Field label={s.name} htmlFor="new-section-label" className="min-w-60 flex-1">
                   <TextInput
                     id="new-section-label"
                     value={section.label}
@@ -370,9 +500,9 @@ export default function ActivityTypesPage() {
                   />
                 </Field>
                 <Field
-                  label="Description"
+                  label={s.description}
                   htmlFor="new-section-description"
-                  hint="Optional."
+                  hint={s.optional}
                   className="min-w-60 flex-1"
                 >
                   <TextInput
@@ -398,7 +528,7 @@ export default function ActivityTypesPage() {
                     setAddingSection(false);
                   }}
                 >
-                  Add the section
+                  {t.addTheSection}
                 </Button>
                 <Button
                   variant="secondary"
@@ -407,12 +537,12 @@ export default function ActivityTypesPage() {
                     setSection({ code: '', label: '', description: '' });
                   }}
                 >
-                  Cancel
+                  {s.cancel}
                 </Button>
               </div>
             </div>
           ) : (
-            <Button variant="secondary" onClick={() => setAddingSection(true)}>Add a section</Button>
+            <Button variant="secondary" onClick={() => setAddingSection(true)}>{t.addSection}</Button>
           )}
         </Card>
       )}
@@ -420,7 +550,7 @@ export default function ActivityTypesPage() {
       {categories === null ? (
         <SkeletonCards count={5} />
       ) : categories.length === 0 ? (
-        <EmptyState title="No activity types yet" />
+        <EmptyState title={t.none} />
       ) : (
         // `acttype-grid`: two columns, one per category, collapsing at the prototype's
         // own 760px. Five cards stacked made the screen a scroll where it is a glance.
@@ -469,19 +599,19 @@ export default function ActivityTypesPage() {
                   {category.staged && (
                     <>
                       <span className="whitespace-nowrap rounded-full bg-amber/20 px-2 py-0.5 text-sm text-navy">
-                        {STAGED_LABEL[category.staged]}
+                        {s.staged.mark[category.staged]}
                       </span>
                       <button
                         type="button"
                         className="text-sm font-semibold text-navy underline"
                         onClick={() => setStaged((now) => unstageRow(now, 'category', category.id))}
                       >
-                        Undo
+                        {s.undo}
                       </button>
                     </>
                   )}
                   <span className="whitespace-nowrap rounded-full border border-hairline bg-canvas px-2 py-0.5 text-sm font-semibold text-muted">
-                    {category.types.length} {category.types.length === 1 ? 'item' : 'items'}
+                    {s.items({ n: category.types.length })}
                   </span>
                 </span>
               </div>
@@ -490,11 +620,17 @@ export default function ActivityTypesPage() {
                 <p className="mt-1 text-sm text-muted">{category.description}</p>
               )}
 
-              <div className="mt-2 flex flex-wrap items-center gap-2 border-b border-hairline pb-3">
+              <div
+                ref={(line) => {
+                  if (line) lines.current.set(category.id, line);
+                  else lines.current.delete(category.id);
+                }}
+                className="mt-2 flex flex-wrap items-center gap-2 border-b border-hairline pb-3"
+              >
                 {scoping === category.id ? (
                   <>
                     <fieldset className="min-w-0 flex-1">
-                      <legend className="text-sm font-semibold text-navy">Applies to</legend>
+                      <legend className="text-sm font-semibold text-navy">{s.appliesTo}</legend>
                       <ul className="mt-1 flex flex-wrap gap-3">
                         {ladder.map((rung) => (
                           <li key={rung.code}>
@@ -511,10 +647,7 @@ export default function ActivityTypesPage() {
                           </li>
                         ))}
                       </ul>
-                      <p className="mt-1 text-sm text-muted">
-                        Tick none to ask everyone. Everything in this section is hidden from
-                        anybody on a rung you leave unticked.
-                      </p>
+                      <p className="mt-1 text-sm text-muted">{t.scopeHint}</p>
                     </fieldset>
                     <Button
                       disabled={busy !== null}
@@ -528,15 +661,15 @@ export default function ActivityTypesPage() {
                         setScoping(null);
                       }}
                     >
-                      Save
+                      {s.save}
                     </Button>
-                    <Button variant="secondary" onClick={() => setScoping(null)}>Cancel</Button>
+                    <Button variant="secondary" onClick={() => setScoping(null)}>{s.cancel}</Button>
                   </>
                 ) : renaming === category.id ? (
                   <>
                     <FieldRow className="min-w-0 flex-1">
                       <Field
-                        label="Name"
+                        label={s.name}
                         htmlFor={`rename-${category.id}`}
                         className="min-w-60 flex-1"
                       >
@@ -547,9 +680,9 @@ export default function ActivityTypesPage() {
                         />
                       </Field>
                       <Field
-                        label="Description"
+                        label={s.description}
                         htmlFor={`redescribe-${category.id}`}
-                        hint="Optional."
+                        hint={s.optional}
                         className="min-w-60 flex-1"
                       >
                         <TextInput
@@ -563,12 +696,13 @@ export default function ActivityTypesPage() {
                       {/*
                         * **The summary tile: one field, in the edit that already exists** (ADR-0064,
                         * ADR-0062 §2). A name, offering the tiles the office already has; sections
-                        * with the same one share a tile above Log Activity and the Dashboard.
+                        * with the same one share a tile above the Activity Dashboard (Log Activity draws
+                        * a tile per section since P18.95-T5 AC-2).
                         */}
                       <Field
-                        label="Summary tile"
+                        label={t.summaryTile}
                         htmlFor={`tile-${category.id}`}
-                        hint="Sections with the same tile are counted together. Empty gives it a tile of its own."
+                        hint={t.summaryTileHint}
                         error={tileError ?? undefined}
                         className="min-w-60 flex-1"
                       >
@@ -590,7 +724,7 @@ export default function ActivityTypesPage() {
                         // Against every section, archived included — they still render history —
                         // and under the name being saved, so typing it means a tile of its own.
                         const plan = planSummaryTile(
-                          sectionDraft.tile, { ...category, label: sectionDraft.label.trim() }, shown,
+                          sectionDraft.tile, { ...category, label: sectionDraft.label.trim() }, shown, language,
                         );
                         if ('refused' in plan) {
                           setTileError(plan.refused);
@@ -626,69 +760,48 @@ export default function ActivityTypesPage() {
                         setRenaming(null);
                       }}
                     >
-                      Save
+                      {s.save}
                     </Button>
-                    <Button variant="secondary" onClick={() => { setTileError(null); setRenaming(null); }}>Cancel</Button>
+                    <Button variant="secondary" onClick={() => { setTileError(null); setRenaming(null); }}>{s.cancel}</Button>
                   </>
                 ) : (
                   <>
                     <p className="flex-1 text-md text-navy">
-                      <span className="text-muted">Applies to </span>
+                      {/* The label, then who: a label and its value, in that order in both languages. */}
+                      <span className="text-muted">{s.appliesTo}{' '}</span>
                       <strong>{appliesTo(category.appliesToOrgLevelCodes)}</strong>
                     </p>
-                    {canWrite && (
+                    {canWrite && (belowDesktop ? (
+                      // One ⋮ at the line's end, named for its section, the menu's keys and words its own.
+                      <ActionMenu label={s.actionsFor({ name: category.label })} items={sectionMenu(category)} />
+                    ) : (
                       <>
-                        <Button
-                          variant="inline"
-                          onClick={() => {
-                            setTileError(null);
-                            setRenaming(category.id);
-                            setSectionDraft({
-                              label: category.label,
-                              description: category.description ?? '',
-                              tile: summaryTileName(category),
-                            });
-                          }}
-                        >
-                          Rename
+                        <Button variant="inline" onClick={() => startRename(category)}>
+                          {s.rename}
                         </Button>
-                        <Button
-                          variant="inline"
-                          onClick={() => {
-                            setScoping(category.id);
-                            setRungs(category.appliesToOrgLevelCodes);
-                          }}
-                        >
-                          Change who it applies to
+                        <Button variant="inline" onClick={() => startScoping(category)}>
+                          {s.changeWhoItAppliesTo}
                         </Button>
                         {category.status === 'active' ? (
                           <Button
                             variant="inlineDanger"
                             disabled={busy !== null}
-                            title="Archives the section and everything in it."
-                            onClick={() => stage({
-                              op: 'category.archive',
-                              id: category.id,
-                              expectedVersion: category.version,
-                            })}
+                            title={t.archiveSectionHint}
+                            onClick={() => archiveSection(category)}
                           >
-                            Archive the section
+                            {t.archiveSection}
                           </Button>
                         ) : (
                           <Button
                             variant="inline"
                             disabled={busy !== null}
-                            onClick={() => stage({
-                              op: 'category.restore',
-                              id: category.id,
-                              expectedVersion: category.version,
-                            })}
+                            onClick={() => restoreSection(category)}
                           >
-                            Restore the section
+                            {t.restoreSection}
                           </Button>
                         )}
                       </>
-                    )}
+                    ))}
                   </>
                 )}
               </div>
@@ -746,10 +859,10 @@ export default function ActivityTypesPage() {
                           <CodeField
                             id={`code-type-code-${type.code}`}
                             value={type.code}
-                            reason="Every activity logged, every ratio and every goal points at it."
+                            reason={t.codeReason}
                           />
                           <FieldRow>
-                            <Field label="Label" htmlFor={`label-${type.id}`} className="min-w-60 flex-1">
+                            <Field label={s.label} htmlFor={`label-${type.id}`} className="min-w-60 flex-1">
                               <TextInput
                                 id={`label-${type.id}`}
                                 value={editLabel}
@@ -757,9 +870,9 @@ export default function ActivityTypesPage() {
                               />
                             </Field>
                             <Field
-                              label="Description"
+                              label={s.description}
                               htmlFor={`description-${type.id}`}
-                              hint="Optional. Shown under the name on the agent's screen."
+                              hint={t.descriptionHint}
                               className="min-w-60 flex-1"
                             >
                               <TextInput
@@ -782,31 +895,44 @@ export default function ActivityTypesPage() {
                                 setEditing(null);
                               }}
                             >
-                              Save
+                              {s.save}
                             </Button>
-                            <Button variant="secondary" onClick={() => setEditing(null)}>Cancel</Button>
+                            <Button variant="secondary" onClick={() => setEditing(null)}>{s.cancel}</Button>
                           </div>
                         </div>
                       ) : (
                         <>
-                          <p className="text-md text-navy">{type.label}</p>
+                          <p className="text-md text-navy">
+                            {type.label}
+                            {/* The stage it counts as, said as one, and set apart from the name (P18.97-T4 AC-1). */}
+                            {bound.has(type.code) && (
+                              <ConfigBadge
+                                tone="navy"
+                                className="ml-2 align-middle normal-case tracking-normal"
+                              >
+                                <span title={t.countsAsTip({ stage: BINDING_ROLE_LABEL[bound.get(type.code)!] })}>
+                                  {t.countsAs({ stage: BINDING_ROLE_LABEL[bound.get(type.code)!] })}
+                                </span>
+                              </ConfigBadge>
+                            )}
+                          </p>
                           {type.description && (
                             <p className="text-sm text-muted">{type.description}</p>
                           )}
                           {type.status === 'archived' && (
-                            <p className="mt-0.5 text-sm text-muted">archived</p>
+                            <p className="mt-0.5 text-sm text-muted">{s.archivedLine}</p>
                           )}
                           {typeMark && (
                             <p className="mt-1 text-sm">
                               <span className="rounded-full bg-amber/20 px-2 py-0.5 text-navy">
-                                {STAGED_LABEL[typeMark]}
+                                {s.staged.mark[typeMark]}
                               </span>
                               <button
                                 type="button"
                                 className="ml-2 font-semibold text-navy underline"
                                 onClick={() => setStaged((now) => unstageRow(now, 'type', type.id))}
                               >
-                                Undo
+                                {s.undo}
                               </button>
                             </p>
                           )}
@@ -824,7 +950,7 @@ export default function ActivityTypesPage() {
                             setEditDescription(type.description ?? '');
                           }}
                         >
-                          Edit
+                          {s.edit}
                         </Button>
                         {type.status === 'active' ? (
                           <Button
@@ -834,7 +960,7 @@ export default function ActivityTypesPage() {
                               op: 'type.archive', id: type.id, expectedVersion: type.version,
                             })}
                           >
-                            Archive
+                            {s.archive}
                           </Button>
                         ) : (
                           <Button
@@ -844,7 +970,7 @@ export default function ActivityTypesPage() {
                               op: 'type.restore', id: type.id, expectedVersion: type.version,
                             })}
                           >
-                            Restore
+                            {s.restore}
                           </Button>
                         )}
                       </div>
@@ -856,19 +982,19 @@ export default function ActivityTypesPage() {
               {canWrite && (adding === category.code ? (
                 <FieldRow className="mt-3 border-t border-hairline pt-3">
                   <Field
-                    label="Code"
+                    label={s.code}
                     htmlFor={`code-${category.id}`}
-                    hint="Permanent. Ratios and goals bind to it."
+                    hint={t.typeCodeHint}
                     className="min-w-48"
                   >
                     <TextInput
                       id={`code-${category.id}`}
                       value={draft.code}
                       onChange={(e) => setDraft({ ...draft, code: e.target.value.toUpperCase() })}
-                      placeholder="SELL_REFERRAL"
+                      placeholder={TYPE_CODE_EXAMPLE}
                     />
                   </Field>
-                  <Field label="Label" htmlFor={`new-label-${category.id}`} className="min-w-60 flex-1">
+                  <Field label={s.label} htmlFor={`new-label-${category.id}`} className="min-w-60 flex-1">
                     <TextInput
                       id={`new-label-${category.id}`}
                       value={draft.label}
@@ -878,16 +1004,16 @@ export default function ActivityTypesPage() {
                   {/* `draft.description` was sent from the first day and no input was ever
                       bound to it, so it was always the empty string. */}
                   <Field
-                    label="Description"
+                    label={s.description}
                     htmlFor={`new-description-${category.id}`}
-                    hint="Optional. Shown under the name on the agent's screen."
+                    hint={t.descriptionHint}
                     className="min-w-60 flex-1"
                   >
                     <TextInput
                       id={`new-description-${category.id}`}
                       value={draft.description}
                       onChange={(e) => setDraft({ ...draft, description: e.target.value })}
-                      placeholder="telepon, WhatsApp, tatap muka, dll"
+                      placeholder={DESCRIPTION_EXAMPLE}
                     />
                   </Field>
                   <FieldRow.Actions>
@@ -907,9 +1033,9 @@ export default function ActivityTypesPage() {
                         setDraft({ code: '', label: '', description: '' });
                       }}
                     >
-                      Add
+                      {s.add}
                     </Button>
-                    <Button variant="secondary" onClick={() => setAdding(null)}>Cancel</Button>
+                    <Button variant="secondary" onClick={() => setAdding(null)}>{s.cancel}</Button>
                   </FieldRow.Actions>
                 </FieldRow>
               ) : (
@@ -918,7 +1044,7 @@ export default function ActivityTypesPage() {
                   className="mt-3"
                   onClick={() => { setAdding(category.code); setDraft({ code: '', label: '', description: '' }); }}
                 >
-                  Add to {category.label}
+                  {t.addTo({ name: category.label })}
                 </Button>
               ))}
             </Card>

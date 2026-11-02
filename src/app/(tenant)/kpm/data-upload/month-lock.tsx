@@ -3,6 +3,10 @@
 import { useState } from 'react';
 import { Dialog } from '@/components/ui/dialog';
 import { Button, ErrorBanner } from '@/components/ui/field';
+import { messagesIn } from '@/i18n/catalogue';
+import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
+import { SOURCE_LANGUAGE, type Language } from '@/i18n/language';
+import { dataUploadMessages } from '@/i18n/messages/data-upload';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import { formatCalendarDay, formatDayLong } from '@/lib/format';
@@ -10,19 +14,22 @@ import { lockMonth, reopenMonth, type MonthState } from '@/lib/production';
 import { useCan } from '@/lib/session';
 import { monthLabel } from './month-label';
 
-/** What the month's state means, in a sentence a reader can act on (ADR-0050). */
-export function describeLock(state: MonthState): string {
-  const who = state.changedBy ?? 'somebody';
-  const when = state.changedAt ? formatDayLong(state.changedAt) : '';
+/**
+ * What the month's state means, in a sentence a reader can act on (ADR-0050): its days in `figures`, its words in
+ * `language` (English when passed none, P18.98-T4).
+ */
+export function describeLock(state: MonthState, figures: Language, language: Language = SOURCE_LANGUAGE): string {
+  const t = messagesIn(dataUploadMessages, language);
+  const when = state.changedAt ? formatDayLong(state.changedAt, figures) : null;
   switch (state.reason) {
     case 'open':
-      return `Open for imports and corrections until ${formatCalendarDay(state.editableUntil)}, when it locks.`;
+      return t.openUntil({ day: formatCalendarDay(state.editableUntil, figures) });
     case 'schedule':
-      return `Locked — its window closed after ${formatCalendarDay(state.editableUntil)}. Reopen it to change its figures.`;
+      return t.lockedBySchedule({ day: formatCalendarDay(state.editableUntil, figures) });
     case 'locked_by_hand':
-      return `Locked by ${who}${when ? ` on ${when}` : ''}. Reopen it to change its figures.`;
+      return t.lockedBy({ who: state.changedBy, when });
     default:
-      return `Reopened by ${who}${when ? ` on ${when}` : ''}. It stays open until somebody locks it again.`;
+      return t.reopenedBy({ who: state.changedBy, when });
   }
 }
 
@@ -35,12 +42,15 @@ export function describeLock(state: MonthState): string {
  * in the office can do to the month.
  */
 export function MonthLock({ state, onChanged }: { state: MonthState; onChanged: (next: MonthState) => void }) {
+  const t = useMessages(dataUploadMessages);
+  const language = useLanguage();
+  const figures = useFigureLanguage();
   const canLock = useCan('data_upload:lock_month');
   const canReopen = useCan('data_upload:reopen_month');
   const [asking, setAsking] = useState<'lock' | 'reopen' | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
-  const label = monthLabel(state.month);
+  const label = monthLabel(state.month, figures);
 
   const act = async () => {
     const which = asking;
@@ -65,23 +75,22 @@ export function MonthLock({ state, onChanged }: { state: MonthState; onChanged: 
             state.locked ? 'bg-alert/10 text-alert' : 'bg-navy/[0.06] text-navy',
           )}
         >
-          {state.locked ? 'Locked' : 'Open'}
+          {state.locked ? t.locked : t.open}
         </span>
-        <span className="text-muted">{describeLock(state)}</span>
+        <span className="text-muted">{describeLock(state, figures, language)}</span>
         {!state.locked && canLock && (
-          <Button variant="inline" disabled={busy} onClick={() => setAsking('lock')}>Lock month</Button>
+          <Button variant="inline" disabled={busy} onClick={() => setAsking('lock')}>{t.lockMonth}</Button>
         )}
         {state.locked && canReopen && (
-          <Button variant="inline" disabled={busy} onClick={() => setAsking('reopen')}>Reopen month</Button>
+          <Button variant="inline" disabled={busy} onClick={() => setAsking('reopen')}>{t.reopenMonth}</Button>
         )}
       </div>
       {error && <div className="mt-2"><ErrorBanner {...error} /></div>}
       <Dialog
         open={asking !== null}
-        message={asking === 'lock'
-          ? `Lock ${label}? Imports, reverts and corrections to it will be refused until somebody reopens it.`
-          : `Reopen ${label}? Its figures can be imported, reverted and corrected again until somebody locks it.`}
-        confirmLabel={asking === 'lock' ? 'Lock month' : 'Reopen month'}
+        message={asking === 'lock' ? t.askLock({ month: label }) : t.askReopen({ month: label })}
+        confirmLabel={asking === 'lock' ? t.lockMonth : t.reopenMonth}
+        cancelLabel={t.cancel}
         onConfirm={act}
         onCancel={() => setAsking(null)}
       />

@@ -2,10 +2,13 @@
 
 import { useEffect, useId, useRef } from 'react';
 import { Button, ErrorBanner, Field, TextInput } from '@/components/ui/field';
+import { InlineSaveField, type InlineSaveStatusProps } from '@/components/ui/inline-save-status';
+import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
+import { leadsMessages } from '@/i18n/messages/leads';
 import type { ApiError } from '@/lib/api-client';
-import { cn } from '@/lib/cn';
 import { formatDay } from '@/lib/format';
-import { whatsAppLink, type Lead } from '@/lib/leads';
+import type { Lead } from '@/lib/leads';
+import { useScrollLock } from '@/lib/use-scroll-lock';
 
 /** What the table hands the dialog for the three text fields: its drafts, and its one-field write. */
 export interface DetailsEditor {
@@ -26,14 +29,13 @@ const FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabi
  *
  * **What the client asked for on 2026-10-07**, out of what was *Contact details for {name}*: the phone,
  * the email and where they came from as before; *Registered {date}*, moved here from the table's last
- * column; *Last changed by {name}*, moved here from a ✎ in the Actions column (ADR-0044 still decides
- * when it shows — the table works that out and hands it over); and a WhatsApp button. *Why you may hold
- * these* went, with the server rule it answered (ADR-0108 §1). Renamed *Lead details* for what it now
- * holds.
+ * column; and *Last changed by {name}*, moved here from a ✎ in the Actions column (ADR-0044 still
+ * decides when it shows — the table works that out and hands it over). *Why you may hold these* went,
+ * with the server rule it answered (ADR-0108 §1). Renamed *Lead details* for what it now holds.
  *
- * **WhatsApp opens a chat with the number in the box** — what the reader sees, typing included, read by
- * `whatsAppNumber`: digits only, Indonesia's `62` in front. A link, because it navigates, to a new tab,
- * and with no opener: the chat is somebody else's page. No number WhatsApp could open, no button.
+ * **No WhatsApp button since 2026-10-26** (ADR-0161 §2): the client moved it into the table, beside the
+ * row's ⋮, so a chat is one press from the list rather than two. The phone saved here is the number that
+ * link opens.
  *
  * **Its own component, not `ui/dialog.tsx` with a content slot.** That one is confirmations only,
  * deliberately (F-72): a `children` prop is how the two forms I-21 and I-25 moved *out* of modals get
@@ -41,9 +43,9 @@ const FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabi
  * stays inside, and Escape or the backdrop closes it.
  *
  * Every field saves as it is left, exactly as a cell of the table does, and whatever the server refuses
- * is shown here while the dialog is open and beneath the lead once it is closed. **Read-only** under a
- * finalized coaching session's lock: the boxes hold what is stored and save nothing, and the WhatsApp
- * button still opens the chat — reading a number is not writing one.
+ * is shown here while the dialog is open and beneath the lead once it is closed. **And says so under the
+ * box** — *Saving…*, *Saved ✓*, *Couldn't save — retry* — as a cell does (P18.95-T1 AC-5). **Read-only** under a
+ * finalized coaching session's lock: the boxes hold what is stored and save nothing.
  */
 export function LeadDetailsDialog({
   lead,
@@ -52,6 +54,7 @@ export function LeadDetailsDialog({
   editor,
   editedBy,
   readOnly = false,
+  status,
   onClose,
 }: {
   lead: Lead;
@@ -64,11 +67,18 @@ export function LeadDetailsDialog({
   editedBy: string | null;
   /** A finalized session's lock: nothing here writes. */
   readOnly?: boolean;
+  /** Each box's save confirmation, the table's own for this lead (AC-5). */
+  status?: (field: DetailsField) => InlineSaveStatusProps;
   onClose: () => void;
 }) {
+  const t = useMessages(leadsMessages);
+  const figures = useFigureLanguage();
   const box = useRef<HTMLDivElement>(null);
   const titleId = useId();
   const id = useId();
+
+  // The table behind holds still while it is open (P18.96-T1 AC-2).
+  useScrollLock(true);
 
   useEffect(() => {
     const returnTo = document.activeElement as HTMLElement | null;
@@ -103,15 +113,15 @@ export function LeadDetailsDialog({
   };
 
   const text = (field: DetailsField, label: string, stored: string | null, extra: {
-    type?: string; placeholder?: string; after?: React.ReactNode;
+    type?: string; placeholder?: string;
   } = {}) => (
     <Field label={label} htmlFor={`${id}-${field}`}>
-      <div className={cn(extra.after ? 'flex items-center gap-2' : undefined)}>
+      <InlineSaveField status={status?.(field) ?? { state: 'idle' }} label={label}>
         <TextInput
           id={`${id}-${field}`}
           type={extra.type}
           placeholder={readOnly ? undefined : extra.placeholder}
-          className={cn(extra.after ? 'min-w-0 flex-1' : 'w-full')}
+          className="w-full"
           value={readOnly ? stored ?? '' : editor.value(field, stored)}
           // `readOnly`, not `disabled`: a disabled field drops the focus it holds, and a focus that
           // falls out of a modal lands on the page behind it.
@@ -123,19 +133,17 @@ export function LeadDetailsDialog({
             if (!readOnly) editor.commit(field);
           }}
         />
-        {extra.after}
-      </div>
+      </InlineSaveField>
     </Field>
   );
 
-  const phone = readOnly ? lead.contact.phone : editor.value('phone', lead.contact.phone);
-  const chat = whatsAppLink(phone);
-  const name = lead.name || 'this lead';
+  const name = lead.name || t.thisLead;
 
   return (
     // The backdrop closes; a click inside the box must not, or selecting a number to copy it
     // would dismiss the dialog it is in.
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy/35 p-5" onClick={close}>
+    // The top inset where it is more than 20px: never under a Home Screen app's clock (staging review, 2026-10-31).
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy/35 p-5 pt-[max(1.25rem,env(safe-area-inset-top))]" onClick={close}>
       <div
         ref={box}
         role="dialog"
@@ -143,37 +151,23 @@ export function LeadDetailsDialog({
         aria-labelledby={titleId}
         onClick={(e) => e.stopPropagation()}
         onKeyDown={trap}
-        className="flex max-h-full w-full max-w-md flex-col gap-4 overflow-y-auto rounded-lg bg-card p-6 shadow-modal"
+        className="flex max-h-full w-full max-w-md flex-col gap-4 overflow-y-auto overscroll-contain rounded-lg bg-card p-6 shadow-modal"
       >
-        <h2 id={titleId} className="text-md font-bold text-navy">
-          Lead details for {name}
-        </h2>
+        <h2 id={titleId} className="text-md font-bold text-navy">{t.details.title({ who: name })}</h2>
 
-        {text('phone', 'Phone', lead.contact.phone, {
-          type: 'tel',
-          after: chat && (
-            <a
-              href={chat}
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label={`Chat with ${name} on WhatsApp (opens in a new tab)`}
-              className={cn(
-                'inline-flex h-10 shrink-0 items-center justify-center rounded-md border border-success/40',
-                'bg-card px-3 text-md font-semibold text-success hover:bg-success/[0.08]',
-              )}
-            >
-              WhatsApp
-            </a>
-          ),
-        })}
-        {text('email', 'Email', lead.contact.email, { type: 'email' })}
-        {text('source', 'Where they came from', lead.source, { placeholder: 'e.g. Referral from Desi' })}
+        {text('phone', t.details.phone, lead.contact.phone, { type: 'tel' })}
+        {text('email', t.details.email, lead.contact.email, { type: 'email' })}
+        {text('source', t.details.source, lead.source, { placeholder: t.details.sourcePlaceholder })}
 
         {/* Grey, as the table's `.registered-cell` had it (`Overall.html:501`): a fact, not a field. */}
         {(lead.dateRegistered || editedBy) && (
           <div className="flex flex-col gap-0.5 text-sm text-muted">
             {lead.dateRegistered && (
-              <p>Registered <time dateTime={lead.dateRegistered}>{formatDay(lead.dateRegistered)}</time></p>
+              <p>
+                {t.details.registered({
+                  day: <time dateTime={lead.dateRegistered}>{formatDay(lead.dateRegistered, figures)}</time>,
+                })}
+              </p>
             )}
             {editedBy && <p>{editedBy}</p>}
           </div>
@@ -182,7 +176,7 @@ export function LeadDetailsDialog({
         {errors.map((error) => <ErrorBanner key={`${error.code} ${error.message}`} {...error} />)}
 
         <div className="flex justify-end">
-          <Button variant="secondary" onClick={close}>Close</Button>
+          <Button variant="secondary" onClick={close}>{t.close}</Button>
         </div>
       </div>
     </div>

@@ -3,6 +3,8 @@
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { PageSkeleton } from '@/components/ui/skeleton';
+import { useMessages } from '@/i18n/language-provider';
+import { activityMessages } from '@/i18n/messages/activity';
 
 /**
  * `/activity` hands off to `/activity/log`, as the route registry has said since Phase 6
@@ -21,11 +23,12 @@ import { PageSkeleton } from '@/components/ui/skeleton';
  * names the log's chapters, which is where its reader ends up.
  */
 export default function ActivityIndex() {
+  const t = useMessages(activityMessages);
   const router = useRouter();
 
   useEffect(() => {
     router.replace('/activity/log');
   }, [router]);
 
-  return <PageSkeleton label="Taking you to Log Activity…" />;
+  return <PageSkeleton label={t.takingYou({ tab: t.dashboard.logActivity })} />;
 }

@@ -2,21 +2,31 @@
 
 import Link from 'next/link';
 import { use, useCallback, useEffect, useState } from 'react';
-import { LeaderLimitNotice, isLeaderLimit } from '@/components/leader-limit-notice';
+import { LeaderLimitNotice, LeaderLimitWaiting, isLeaderLimit } from '@/components/leader-limit-notice';
 import { Page } from '@/components/page';
 import { Cell, DataTable, Row } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button, Card, ErrorBanner, Field, Select, TextInput } from '@/components/ui/field';
-import { RoleBadge, rungLabel, useLadder } from '@/components/ui/role-badge';
+import { RoleBadge, classOfRung, rungLabel, rungShort, useLadder } from '@/components/ui/role-badge';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { StatusPill } from '@/components/ui/status-pill';
+import { kept } from '@/i18n/kept';
+import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
+import { memberMessages } from '@/i18n/messages/member';
+import { orgMessages } from '@/i18n/messages/org';
+import { displayName } from '@/lib/display-name';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
+import { formatCalendarDay } from '@/lib/format';
+import { personalLines, type PersonalDetails } from '@/lib/personal';
+import {
+  askLeaderLimitApproval, cancelLeaderLimitRequest, pendingFor, readLeaderLimitRequests, requestedChange,
+  type LeaderLimitRequestRow,
+} from '@/lib/leader-limit-requests';
 import {
   changeRole,
   isRemovalConfirmed,
   listGroups,
   listReports,
-  MEMBER_STATUS_LABEL,
   readMember,
   readTags,
   removeMember,
@@ -24,7 +34,6 @@ import {
   roleChangeExplanation,
   setTags,
   type GroupSummary,
-  type HierarchyRole,
   type Member,
   type MemberTags,
 } from '@/lib/org';
@@ -36,6 +45,10 @@ import {
  * is a thing an Owner says to an Admin, and a modal cannot be linked to.
  */
 export default function MemberPage({ params }: { params: Promise<{ membershipId: string }> }) {
+  const t = useMessages(memberMessages);
+  const status = useMessages(orgMessages).status;
+  const language = useLanguage();
+  const figures = useFigureLanguage();
   // The company's ladder, so a rung's label comes from it rather than a map (P4-T9).
   const ladder = useLadder();
   const { membershipId } = use(params);
@@ -48,7 +61,8 @@ export default function MemberPage({ params }: { params: Promise<{ membershipId:
   // P3.5-T13. Both controls live here rather than on a roster row, which is where the
   // prototype puts them (`KPM_Owner.html:4515-4522`) — a bare `onchange` and a `Remove`
   // link, no confirmation and no reason. There is no room on a row to ask why.
-  const [toRole, setToRole] = useState<HierarchyRole | ''>('');
+  // A rung of the company's ladder, by its code lower-cased — `aab`, or a rung the company added (OD-50).
+  const [toRole, setToRole] = useState('');
   const [roleReason, setRoleReason] = useState('');
   const [removing, setRemoving] = useState(false);
   const [removeWord, setRemoveWord] = useState('');
@@ -57,6 +71,9 @@ export default function MemberPage({ params }: { params: Promise<{ membershipId:
   const [error, setError] = useState<ApiError | null>(null);
   /** The office's leader limit refused the role change (P13.2-T4): said in the role card, not over the page. */
   const [limit, setLimit] = useState<ApiError | null>(null);
+  /** The office's leader-limit requests (ADR-0157), for whether one about this person waits. */
+  const [asks, setAsks] = useState<LeaderLimitRequestRow[] | null>(null);
+  const [asking, setAsking] = useState(false);
 
   /** P3.5-T13. A role change and a removal both alter this page, so both re-read it. */
   const load = useCallback(async () => {
@@ -71,10 +88,45 @@ export default function MemberPage({ params }: { params: Promise<{ membershipId:
       setReports(theirs);
       setLocalTags(mine);
       setGroups(all);
+      // Only for somebody whose role this reader may change: they are the ones who may have asked. A failed read
+      // shows no waiting line rather than a second error over the page.
+      if (one.canChangeRole) setAsks(await readLeaderLimitRequests().catch(() => []));
     } catch (err) {
       setError(toDisplayError(err));
     }
   }, [membershipId]);
+
+  /** ADR-0157 §1: the change the limit refused, asked of AgencyBoost instead — the same rung, the same reason. */
+  async function askApproval() {
+    if (!member || !toRole) return;
+    setAsking(true);
+    setError(null);
+    try {
+      await askLeaderLimitApproval(member.membershipId, {
+        action: 'promote', orgLevelCode: toRole, ...(roleReason.trim() ? { reason: roleReason.trim() } : {}),
+      });
+      setLimit(null);
+      setToRole('');
+      setRoleReason('');
+      setAsks(await readLeaderLimitRequests().catch(() => []));
+    } catch (err) {
+      setError(toDisplayError(err));
+    } finally {
+      setAsking(false);
+    }
+  }
+
+  async function cancelAsk(requestId: string) {
+    setAsking(true);
+    setError(null);
+    try {
+      setAsks(await cancelLeaderLimitRequest(requestId));
+    } catch (err) {
+      setError(toDisplayError(err));
+    } finally {
+      setAsking(false);
+    }
+  }
 
   useEffect(() => {
     void load();
@@ -82,7 +134,7 @@ export default function MemberPage({ params }: { params: Promise<{ membershipId:
 
   async function submitRoleChange(event: React.FormEvent) {
     event.preventDefault();
-    if (!member || !toRole || toRole === member.role) return;
+    if (!member || !toRole || toRole === currentRung(member)) return;
     setBusy(true);
     setError(null);
     setLimit(null);
@@ -144,14 +196,11 @@ export default function MemberPage({ params }: { params: Promise<{ membershipId:
 
   if (error) {
     return (
-      <Page title="Member">
+      <Page title={kept('Member')}>
         <ErrorBanner {...error} />
-        <p className="mt-3 text-md text-muted">
-          Someone outside what you can see reads the same as someone who does not exist —
-          a distinct message would confirm they are here.
-        </p>
+        <p className="mt-3 text-md text-muted">{t.hidden}</p>
         <Link href="/people/members" className="mt-3 inline-block text-md text-navy underline">
-          Back to the roster
+          {t.back}
         </Link>
       </Page>
     );
@@ -159,53 +208,54 @@ export default function MemberPage({ params }: { params: Promise<{ membershipId:
 
   if (!member) {
     return (
-      <Page title="Member">
-        <SkeletonCards count={3} label="Loading the member…" />
+      <Page title={kept('Member')}>
+        <SkeletonCards count={3} label={t.loading} />
       </Page>
     );
   }
 
   return (
     <Page
-      title={member.preferredName ?? member.fullName}
+      title={displayName(member)}
       subtitle={member.agentCode}
       actions={
         <StatusPill
           status={member.status === 'active' ? 'success' : member.status === 'pending' ? 'neutral' : 'alert'}
-          label={MEMBER_STATUS_LABEL[member.status]}
+          label={status[member.status]}
         />
       }
     >
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
-          <h2 className="font-display text-lg font-bold text-navy">Personal</h2>
+          <h2 className="font-display text-lg font-bold text-navy">{t.personal}</h2>
           <dl className="mt-3 grid grid-cols-[9rem_1fr] gap-y-2 text-md">
-            <Detail term="Full name" detail={member.fullName} />
-            <Detail term="Email" detail={member.email} />
-            <Detail term="Agent code" detail={<code className="text-sm">{member.agentCode}</code>} />
-            <Detail term="Role" detail={<RoleBadge role={member.role} short={false} />} />
-            <Detail term="Reports to" detail={member.leaderName ?? 'Nobody — top of the tree'} />
+            <Detail term={t.fullName} detail={member.fullName} />
+            <Detail term={t.email} detail={member.email} />
+            <Detail term={t.agentCode} detail={<code className="text-sm">{member.agentCode}</code>} />
+            <Detail term={t.role} detail={<RoleBadge role={member.role} short={false} />} />
+            <Detail term={t.reportsTo} detail={member.leaderName ?? t.topOfTree} />
+            {/* *Join date*, the one name for it (P18.96-T2 AC-5, ADR-0169 §7): the day their leader gave, an office
+                date — not `joinedAt`, the instant the system made them active. */}
             <Detail
-              term="Joined"
-              detail={member.joinedAt ? new Date(member.joinedAt).toLocaleDateString('en-GB') : '—'}
+              term={t.joinDate}
+              detail={member.joinDate ? formatCalendarDay(member.joinDate, figures) : '—'}
             />
+            {/* What the person records (ADR-0158, P18.8-T4 AC-6): the API serves it to the Owner and the
+                Admins on this read only, read-only here — the person's own to change, on their profile. */}
+            {member.personal && <PersonalDetailRows personal={member.personal} />}
           </dl>
         </Card>
 
         <Card>
-          <h2 className="font-display text-lg font-bold text-navy">Unit</h2>
+          <h2 className="font-display text-lg font-bold text-navy">{t.unit}</h2>
           {member.isLeader ? (
             <dl className="mt-3 grid grid-cols-[9rem_1fr] gap-y-2 text-md">
-              <Detail term="Direct reports" detail={String(member.directCount)} />
-              <Detail term="Whole unit" detail={String(member.subtreeCount)} />
-              <Detail term="Depth" detail={`${member.depth} below the root`} />
+              <Detail term={t.directReports} detail={String(member.directCount)} />
+              <Detail term={t.wholeUnit} detail={String(member.subtreeCount)} />
+              <Detail term={t.depth} detail={t.belowRoot({ n: member.depth })} />
             </dl>
           ) : (
-            <p className="mt-2 text-md text-muted">
-              {rungLabel(member.role, ladder)}, and leads nobody. Leadership follows the tree rather
-              than the role — an {rungLabel(member.role, ladder)} with no direct reports has no unit,
-              and the surfaces that need one stay closed until they do.
-            </p>
+            <p className="mt-2 text-md text-muted">{t.leadsNobody({ rung: rungShort(member.role, ladder) })}</p>
           )}
         </Card>
       </div>
@@ -213,18 +263,14 @@ export default function MemberPage({ params }: { params: Promise<{ membershipId:
       <Card className="mt-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className="font-display text-lg font-bold text-navy">Tags</h2>
-            <p className="mt-1 text-md text-muted">
-              Groups are labels this office defines for its own organising. A tag is{' '}
-              <strong>not</strong> hierarchy: it changes nothing about who reports to whom, and
-              grants nobody access to anything.
-            </p>
+            <h2 className="font-display text-lg font-bold text-navy">{t.tags}</h2>
+            <p className="mt-1 text-md text-muted">{t.tagsLine({ strong: (words) => <strong>{words}</strong> })}</p>
           </div>
           {draft === null && tags && (
             <Button
               onClick={() => setDraft({ groupIds: tags.groupIds, isCoreLeader: tags.isCoreLeader })}
             >
-              Edit tags
+              {t.editTags}
             </Button>
           )}
         </div>
@@ -233,7 +279,7 @@ export default function MemberPage({ params }: { params: Promise<{ membershipId:
           <div className="mt-3 flex flex-wrap items-center gap-2">
             {tags?.isCoreLeader && (
               <span className="rounded-full bg-amber px-2 py-0.5 text-sm font-semibold text-navy">
-                Core Leader
+                {kept('Core Leader')}
               </span>
             )}
             {(tags?.groupIds ?? []).map((id) => {
@@ -245,27 +291,29 @@ export default function MemberPage({ params }: { params: Promise<{ membershipId:
                 >
                   {/* A tag on a retired group is kept — it is the record that the cohort
                       existed — so it renders as itself rather than disappearing. */}
-                  {group ? group.name : 'A group since retired'}
+                  {group ? group.name : t.retiredGroup}
                 </span>
               );
             })}
             {!tags?.isCoreLeader && (tags?.groupIds.length ?? 0) === 0 && (
-              <p className="text-md text-muted">No tags.</p>
+              <p className="text-md text-muted">{t.noTags}</p>
             )}
           </div>
         ) : (
           <div className="mt-3">
             {groups.length === 0 ? (
               <p className="text-md text-muted">
-                No groups yet — create one on{' '}
-                <Link href="/people/members" className="underline">
-                  All members → Groups
-                </Link>{' '}
-                first.
+                {t.noGroups({
+                  where: (
+                    <Link href="/people/members" className="underline">
+                      {`${kept('All members')} → ${kept('Groups')}`}
+                    </Link>
+                  ),
+                })}
               </p>
             ) : (
               <fieldset>
-                <legend className="text-sm font-semibold text-navy">Groups</legend>
+                <legend className="text-sm font-semibold text-navy">{t.groups}</legend>
                 {groups.map((group) => (
                   <label
                     key={group.groupId}
@@ -289,19 +337,20 @@ export default function MemberPage({ params }: { params: Promise<{ membershipId:
               </fieldset>
             )}
 
+            {/* A leader's tag (ADR-0159 §1): on a member whose rung leads nobody the box cannot be ticked — the API
+                refuses it `CORE_LEADER_NOT_A_LEADER` — and a tag kept from before can still be cleared. */}
             <label className="mt-3 flex items-center gap-2 text-md text-navy">
               <input
                 type="checkbox"
                 checked={draft.isCoreLeader}
+                disabled={tags?.canBeCoreLeader === false && !draft.isCoreLeader}
                 aria-describedby="core-leader-hint"
                 onChange={(e) => setDraft({ ...draft, isCoreLeader: e.target.checked })}
               />
-              Core Leader
+              {kept('Core Leader')}
             </label>
             <p id="core-leader-hint" className="mt-1 text-sm text-muted">
-              Core Leader decides who, besides the Owner and the Admins, may open and write in the
-              Strategic Leader Forum&apos;s meetings, and nothing else. It is not a role, and it grants no
-              hierarchy, no unit and no access to anybody&apos;s data.
+              {t.coreLeaderLine({ notALeader: tags?.canBeCoreLeader === false })}
             </p>
 
             <div className="mt-3 flex flex-wrap gap-2">
@@ -319,10 +368,10 @@ export default function MemberPage({ params }: { params: Promise<{ membershipId:
                     .finally(() => setBusy(false));
                 }}
               >
-                {busy ? 'Saving…' : 'Save tags'}
+                {busy ? t.saving : t.saveTags}
               </Button>
               <Button variant="secondary" disabled={busy} onClick={() => setDraft(null)}>
-                Cancel
+                {t.cancel}
               </Button>
             </div>
           </div>
@@ -333,28 +382,43 @@ export default function MemberPage({ params }: { params: Promise<{ membershipId:
         <div className="mt-4 grid gap-4 lg:grid-cols-2">
           {member.canChangeRole && (
             <Card>
-              <h2 className="font-display text-lg font-bold text-navy">Change their role</h2>
+              <h2 className="font-display text-lg font-bold text-navy">{t.changeRole}</h2>
               <form onSubmit={submitRoleChange} className="mt-3 flex flex-col gap-4" noValidate>
-                {limit && <LeaderLimitNotice error={limit} audience="office" action="role" />}
+                {/* ADR-0157: a change past the limit, asked of AgencyBoost, waits here until it is decided. */}
+                {pendingFor(asks, member.membershipId) && (
+                  <LeaderLimitWaiting
+                    what={requestedChange(pendingFor(asks, member.membershipId)!, (code) => rungShort(code, ladder), language)}
+                    cancelling={asking}
+                    onCancel={() => void cancelAsk(pendingFor(asks, member.membershipId)!.requestId)}
+                  />
+                )}
+                {limit && (
+                  <LeaderLimitNotice
+                    error={limit}
+                    audience="office"
+                    action="role"
+                    asking={asking}
+                    onAsk={() => void askApproval()}
+                  />
+                )}
                 <Field
-                  label="New role"
+                  label={t.newRole}
                   htmlFor="to-role"
-                  hint={
-                    member.canPromoteToAb
-                      ? undefined
-                      : 'Only the office can make somebody an Agency Builder, or stop them being one.'
-                  }
+                  hint={member.canPromoteToAb ? undefined : t.onlyOfficeMakesAb({ ab: rungShort('AB', ladder) })}
                 >
-                  <Select id="to-role" value={toRole} onChange={(e) => setToRole(e.target.value as HierarchyRole | '')}>
-                    <option value="">{rungLabel(member.role, ladder)} — no change</option>
-                    {(['agent', 'aab', 'ab'] as const)
-                      .filter((r) => r !== member.role)
-                      // The two matrix rows, kept apart: Agent⇄AAB is a direct leader's
-                      // call, anything involving AB is the office's.
-                      .filter((r) => (r === 'ab' || member.role === 'ab' ? member.canPromoteToAb : true))
-                      .map((r) => (
-                        <option key={r} value={r}>
-                          {rungLabel(r, ladder)}
+                  <Select id="to-role" value={toRole} onChange={(e) => setToRole(e.target.value)}>
+                    {/* The ladder listed to choose from, so each rung by the ladder's own label (P18.95-T9 AC-1). */}
+                    <option value="">{t.noChange({ rung: rungLabel(currentRung(member), ladder) })}</option>
+                    {/* The company's ladder, junior first — a rung it added included (OD-50) — each by its
+                        label. The two matrix rows, kept apart: Agent⇄AAB is a direct leader's call, anything
+                        that makes or unmakes an AB (a *Senior Leader* rung, whatever its code) the office's. */}
+                    {[...ladder]
+                      .filter((l) => l.status === 'active' && l.code.toLowerCase() !== currentRung(member))
+                      .filter((l) => (classOfRung(l) === 'ab' || member.role === 'ab' ? member.canPromoteToAb : true))
+                      .sort((a, b) => a.displayOrder - b.displayOrder)
+                      .map((l) => (
+                        <option key={l.code} value={l.code.toLowerCase()}>
+                          {l.label}
                         </option>
                       ))}
                   </Select>
@@ -362,24 +426,22 @@ export default function MemberPage({ params }: { params: Promise<{ membershipId:
 
                 {/* The prototype changes a role on a bare `onchange` and says nothing
                     about what it means. This is its own sentence, verbatim. */}
-                {toRole && toRole !== member.role && (
+                {toRole && toRole !== currentRung(member) && (
                   <p className="rounded-md border border-hairline bg-base p-3 text-md text-navy">
                     {roleChangeExplanation(
-                      member.preferredName ?? member.fullName,
-                      member.role,
+                      displayName(member),
+                      currentRung(member),
                       toRole,
                       // The office may be acting on somebody who reports to a third
                       // person, so "they keep reporting to you" would be untrue.
                       'the-office',
+                      ladder,
+                      language,
                     )}
                   </p>
                 )}
 
-                <Field
-                  label="Why?"
-                  htmlFor="role-reason"
-                  hint="Optional, and worth writing: this is what the role change log shows months later."
-                >
+                <Field label={t.why} htmlFor="role-reason" hint={t.whyRole}>
                   <TextInput
                     id="role-reason"
                     maxLength={300}
@@ -388,8 +450,8 @@ export default function MemberPage({ params }: { params: Promise<{ membershipId:
                   />
                 </Field>
 
-                <Button type="submit" disabled={busy || !toRole || toRole === member.role}>
-                  {busy ? 'Saving…' : 'Change role'}
+                <Button type="submit" disabled={busy || !toRole || toRole === currentRung(member)}>
+                  {busy ? t.saving : t.changeRoleButton}
                 </Button>
               </form>
             </Card>
@@ -397,15 +459,12 @@ export default function MemberPage({ params }: { params: Promise<{ membershipId:
 
           {member.canRemove && (
             <Card>
-              <h2 className="font-display text-lg font-bold text-navy">Remove from the office</h2>
-              <p className="mt-1 text-md text-muted">
-                Nothing is deleted. Their record and everything they logged stays with the office,
-                on the Removed list.
-              </p>
+              <h2 className="font-display text-lg font-bold text-navy">{t.remove}</h2>
+              <p className="mt-1 text-md text-muted">{t.removeLine}</p>
 
               {!removing ? (
                 <Button variant="secondary" className="mt-3" onClick={() => setRemoving(true)}>
-                  Remove {member.preferredName ?? member.fullName}
+                  {t.removeName({ name: displayName(member) })}
                 </Button>
               ) : (
                 <form onSubmit={submitRemoval} className="mt-3 flex flex-col gap-4" noValidate>
@@ -414,11 +473,9 @@ export default function MemberPage({ params }: { params: Promise<{ membershipId:
                   {member.directCount > 0 && (
                     <fieldset className="rounded-md border border-hairline p-3">
                       <legend className="px-1 text-sm font-semibold text-navy">
-                        {member.directCount === 1
-                          ? '1 person reports to them'
-                          : `${member.directCount} people report to them`}
+                        {t.reportCount({ n: member.directCount })}
                       </legend>
-                      <p className="text-sm text-muted">Say where they go.</p>
+                      <p className="text-sm text-muted">{t.sayWhere}</p>
                       <label className="mt-2 flex items-center gap-2 text-md text-navy">
                         <input
                           type="radio"
@@ -427,7 +484,7 @@ export default function MemberPage({ params }: { params: Promise<{ membershipId:
                           checked={disposition === 'reassign'}
                           onChange={() => setDisposition('reassign')}
                         />
-                        Move them up to {member.leaderName ?? 'their leader\u2019s leader'}
+                        {t.moveUp({ to: member.leaderName ?? null })}
                       </label>
                       <label className="mt-1 flex items-center gap-2 text-md text-navy">
                         <input
@@ -437,16 +494,12 @@ export default function MemberPage({ params }: { params: Promise<{ membershipId:
                           checked={disposition === 'orphan'}
                           onChange={() => setDisposition('orphan')}
                         />
-                        Leave them unassigned, for another leader to pick up
+                        {t.leaveUnassigned}
                       </label>
                     </fieldset>
                   )}
 
-                  <Field
-                    label="Why?"
-                    htmlFor="remove-reason"
-                    hint="Kept on their record, and sent to them."
-                  >
+                  <Field label={t.why} htmlFor="remove-reason" hint={t.whyRemove}>
                     <TextInput
                       id="remove-reason"
                       maxLength={300}
@@ -456,9 +509,9 @@ export default function MemberPage({ params }: { params: Promise<{ membershipId:
                   </Field>
 
                   <Field
-                    label={`Type ${REMOVAL_CONFIRMATION} to confirm`}
+                    label={t.typeToConfirm({ word: REMOVAL_CONFIRMATION })}
                     htmlFor="remove-word"
-                    hint="The server checks this too. A confirmation only the screen enforces is not a confirmation."
+                    hint={t.confirmHint}
                   >
                     <TextInput
                       id="remove-word"
@@ -470,10 +523,10 @@ export default function MemberPage({ params }: { params: Promise<{ membershipId:
 
                   <div className="flex gap-2">
                     <Button type="submit" disabled={busy || !isRemovalConfirmed(removeWord)}>
-                      {busy ? 'Removing…' : 'Remove them'}
+                      {busy ? t.removing : t.removeThem}
                     </Button>
                     <Button variant="secondary" disabled={busy} onClick={() => setRemoving(false)}>
-                      Cancel
+                      {t.cancel}
                     </Button>
                   </div>
                 </form>
@@ -483,28 +536,29 @@ export default function MemberPage({ params }: { params: Promise<{ membershipId:
         </div>
       )}
 
-      <h2 className="mb-3 mt-6 font-display text-lg font-bold text-navy">Who reports to them</h2>
+      <h2 className="mb-3 mt-6 font-display text-lg font-bold text-navy">{t.reports}</h2>
       {reports.length === 0 ? (
-        <div className="rounded-lg border border-hairline bg-card">
-          <EmptyState title="Nobody reports to them." />
+        <div className="rounded-lg border border-card-edge bg-card">
+          <EmptyState title={t.noReports} />
         </div>
       ) : (
-        <DataTable caption="Who reports to them" columns={['Name', 'Agent code', 'Role', 'Unit']}>
+        <DataTable caption={t.reports} columns={[t.name, t.agentCode, t.role, t.unit]}>
           {reports.map((r) => (
             <Row key={r.membershipId}>
               <Cell className="font-semibold">
                 <Link href={`/people/members/${r.membershipId}`} className="underline">
-                  {r.preferredName ?? r.fullName}
+                  {displayName(r)}
                 </Link>
               </Cell>
-              <Cell>
+              <Cell className="whitespace-nowrap">
                 <code className="text-sm">{r.agentCode}</code>
               </Cell>
               <Cell>
                 <RoleBadge role={r.role} />
               </Cell>
+              {/* The directory's words for one who leads nobody (P18.97-T4 AC-3; UI-024): *No team*. */}
               <Cell className="text-muted">
-                {r.isLeader ? `${r.directCount} direct` : 'Leads nobody'}
+                {r.isLeader ? t.direct({ n: r.directCount }) : t.noTeam}
               </Cell>
             </Row>
           ))}
@@ -512,7 +566,7 @@ export default function MemberPage({ params }: { params: Promise<{ membershipId:
       )}
 
       <Link href="/people/members" className="mt-6 inline-block text-md text-navy underline">
-        Back to the roster
+        {t.back}
       </Link>
     </Page>
   );
@@ -525,4 +579,24 @@ function Detail({ term, detail }: { term: string; detail: React.ReactNode }) {
       <dd className="break-words text-navy">{detail}</dd>
     </>
   );
+}
+
+/** The four a person records, *Not recorded* for each they have not given (ADR-0158 §3). */
+function PersonalDetailRows({ personal }: { personal: PersonalDetails }) {
+  const t = useMessages(memberMessages);
+  // The values are the profile's (`lib/personal.ts`), as `/profile` writes them: words and figures each in theirs.
+  const lines = personalLines(personal, useLanguage(), useFigureLanguage());
+  return (
+    <>
+      <Detail term={t.dateOfBirth} detail={lines.dateOfBirth} />
+      <Detail term={t.gender} detail={lines.gender} />
+      <Detail term={t.companyJoinMonth} detail={lines.companyJoinMonth} />
+      <Detail term={t.workStatus} detail={lines.workStatus} />
+    </>
+  );
+}
+
+/** The rung they stand on, by its code lower-cased — the select's own spelling. The class's, for a row read before the field. */
+function currentRung(member: Pick<Member, 'orgLevelCode' | 'role'>): string {
+  return (member.orgLevelCode ?? member.role).toLowerCase();
 }

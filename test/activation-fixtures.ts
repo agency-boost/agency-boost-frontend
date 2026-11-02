@@ -13,24 +13,39 @@ export const RINA = { membershipId: 'mem-rina', name: 'Rina Wijaya' };
 export const SARI = { membershipId: 'mem-sari', name: 'Sari Puspita' };
 export const ARIEF = { membershipId: 'mem-arief', name: 'Arief Hidayat' };
 
-const LINKS = {
+export const LINKS = {
   'feature:goals': {
     kind: 'feature:goals', label: 'Goal Settings', route: '/goals',
-    completesWhen: 'the hire has saved any goal since joining', live: true,
+    completesWhen: 'the hire has saved any goal since joining', live: true, form: null,
   },
   'feature:leads': {
     kind: 'feature:leads', label: 'Leads Management', route: '/leads',
-    completesWhen: 'the hire has added at least one prospect', live: true,
+    completesWhen: 'the hire has added at least one prospect', live: true, form: null,
   },
   'feature:activity': {
     kind: 'feature:activity', label: 'Activity Management', route: '/activity/log',
-    completesWhen: 'the hire has logged activity in four consecutive weeks', live: true,
+    completesWhen: 'the hire has logged activity in four consecutive weeks', live: true, form: null,
+  },
+  // P18.96-T4 (ADR-0171 §3): the three data-backed items, bound by their codes on the server.
+  'sales:first': {
+    kind: 'sales:first', label: 'Sales data', route: null,
+    completesWhen: 'the hire has a first sale since joining: a sales lead paid and issued, or a policy in the production file',
+    live: true, form: 'closing',
+  },
+  'sales:closings:3': {
+    kind: 'sales:closings:3', label: 'Sales data', route: null,
+    completesWhen: 'the hire has 3 sales leads paid and issued since joining', live: true, form: 'closing',
+  },
+  'coaching:weekly:4': {
+    kind: 'coaching:weekly:4', label: 'Coaching sessions', route: null,
+    completesWhen: '4 1:1s with the hire are recorded in coaching sessions since joining', live: true, form: 'one_on_one',
   },
 } as const;
 
 export function item(code: string, label: string, over: Partial<ActivationItemProgress> = {}): ActivationItemProgress {
   return {
-    code, label, link: null, done: false, doneAt: null, source: null, doneBy: null, note: null, date: null, ...over,
+    code, label, link: null, done: false, doneAt: null, source: null, doneBy: null, note: null, date: null,
+    waiting: false, record: null, ...over,
   };
 }
 
@@ -64,14 +79,18 @@ export function rinaItems(): ActivationItemProgress[][] {
     ],
     [
       item('JOINT_FIELD_WORK', 'Joint Field Work with leader'),
+      // P18.96-T4: completed from her sales data, naming the lead.
       item('FIRST_CASE_CLOSED', 'Close first case independently', {
-        done: true, doneAt: '2026-09-20T03:00:00.000Z', source: 'hire', doneBy: RINA,
+        link: LINKS['sales:first'], done: true, doneAt: '2026-09-20T03:00:00.000Z', source: 'link', doneBy: RINA,
+        record: { collection: 'leads', id: 'lead-ratna' },
       }),
     ],
     [
       item('ACTIVITY_TRACKER_WEEKLY', 'Fill Activity Tracker weekly', { link: LINKS['feature:activity'] }),
-      item('WEEKLY_CHECK_IN', 'Weekly 1-on-1 check-in (4 weeks)'),
-      item('INDEPENDENT_AGENT_MILESTONE', 'Reach Independent Agent milestone (3 independent closings)'),
+      item('WEEKLY_CHECK_IN', 'Weekly 1-on-1 check-in (4 weeks)', { link: LINKS['coaching:weekly:4'] }),
+      item('INDEPENDENT_AGENT_MILESTONE', 'Reach Independent Agent milestone (3 independent closings)', {
+        link: LINKS['sales:closings:3'],
+      }),
     ],
   ];
 }
@@ -141,39 +160,70 @@ export function leaderView(over: Partial<ActivationView> = {}): ActivationView {
   return activationView(over, items);
 }
 
+const checklist = (pct: number, overdue = false) => ({ state: 'open' as const, done: Math.round((pct * 16) / 100), total: 16, pct, overdue });
+const DIRECT = { kind: 'direct' as const, leader: null };
+const SARI_UNIT = { kind: 'aab' as const, leader: SARI };
+const ARIEF_UNIT = { kind: 'aab' as const, leader: ARIEF };
+
 export function hireRow(name: string, membershipId: string, over: Partial<NewHireRow> = {}): NewHireRow {
   return {
-    hire: { membershipId, name }, startDate: '2026-08-06', day: 59, window: 90, overdue: false, pct: 38, firstCaseClosed: false, ...over,
+    hire: { membershipId, name }, unit: DIRECT, joinDate: '2026-08-30', day: 59, firstSaleDate: null, firstSaleDay: null,
+    firstSaleSource: null, status: 'not_yet', activation3M: 'in_progress', leftOn: null, checklist: checklist(38), ...over,
   };
 }
 
-/** Agus's roster on the seed: his own unit, then each AAB's. */
+/** A row with a first sale on `day` of its join date (UI-023): Teraktivasi by day 90, in amber after it. */
+const sold = (day: number, date: string): Partial<NewHireRow> => ({
+  firstSaleDate: date, firstSaleDay: day, firstSaleSource: 'sales',
+  status: day <= 90 ? 'activated' : 'activated_late', activation3M: day <= 90 ? 'activated' : 'not_activated',
+});
+
+const share = (activated: number, notActivated: number, inProgress: number, pct: number | null, late = 0) =>
+  ({ activated, notActivated, late, inProgress, pct });
+
+/**
+ * Agus's `/new-hires` on the seed (P18.96-T6; UI V1, UI-023): a year of new hires by their status — his own unit,
+ * Arief's and Sari's — with *Aktivasi 3M* at the top, overall and by join month, and each unit's. Rule A: Novi, Rina,
+ * Dimas and Indah activated by day 90; Kemal past day 90 with none; Lukman's day-96 sale in amber and in neither part;
+ * Tari (marked left — it decides nothing), Budi and Fikri inside their 90 days with none. 4 of 5 decided: 80%.
+ */
 export const ROSTER: NewHiresRoster = {
-  today: '2026-10-03',
-  groups: [
-    {
-      kind: 'direct',
-      leader: null,
-      hires: [
-        hireRow('Indah Permata', 'mem-indah', { startDate: '2026-06-28', day: 98, overdue: true, pct: 94, firstCaseClosed: true }),
-        hireRow('Dimas Saputra', 'mem-dimas', { startDate: '2026-07-01', day: 95, overdue: true, pct: 50 }),
-      ],
-    },
-    {
-      kind: 'aab',
-      leader: SARI,
-      hires: [
-        hireRow('Budi Hartono', 'mem-budi', { startDate: '2026-08-03', day: 62, pct: 25 }),
-        hireRow('Rina Wijaya', 'mem-rina', { firstCaseClosed: true }),
-        hireRow('Yanti Kusuma', 'mem-yanti', { startDate: '2026-09-05', day: 29, pct: 6 }),
-      ],
-    },
-    {
-      kind: 'aab',
-      leader: ARIEF,
-      hires: [hireRow('Novi Lestari', 'mem-novi', { startDate: '2026-07-11', day: 85, pct: 56 })],
-    },
+  today: '2026-10-27',
+  window: { from: '2025-10-28', to: '2026-10-27' },
+  days: 90,
+  activation3M: {
+    all: share(4, 1, 3, 80, 1),
+    byMonth: [
+      { month: '2026-09', ...share(0, 0, 2, null) },
+      { month: '2026-08', ...share(2, 0, 1, 100) },
+      { month: '2026-07', ...share(2, 1, 0, 67, 1) },
+    ],
+  },
+  units: [
+    { ...DIRECT, activation3M: { all: share(2, 1, 1, 67, 1), byMonth: [{ month: '2026-09', ...share(0, 0, 1, null) }, { month: '2026-07', ...share(2, 1, 0, 67, 1) }] } },
+    { ...ARIEF_UNIT, activation3M: { all: share(1, 0, 1, 100), byMonth: [{ month: '2026-09', ...share(0, 0, 1, null) }, { month: '2026-08', ...share(1, 0, 0, 100) }] } },
+    { ...SARI_UNIT, activation3M: { all: share(1, 0, 1, 100), byMonth: [{ month: '2026-08', ...share(1, 0, 1, 100) }] } },
   ],
+  sections: {
+    inProgress: [
+      hireRow('Budi Hartono', 'mem-budi', { unit: SARI_UNIT, joinDate: '2026-08-27', day: 62, checklist: checklist(25) }),
+      // Marked left on day 35, before any sale: kept as data, and deciding nothing (D-24).
+      hireRow('Tari Wulandari', 'mem-tari', { unit: ARIEF_UNIT, joinDate: '2026-09-17', day: 41, leftOn: '2026-10-21', checklist: checklist(19) }),
+      // An AAB placed as a new hire: no checklist (ADR-0103).
+      hireRow('Fikri Ramadhan', 'mem-fikri', { joinDate: '2026-09-20', day: 38, checklist: null }),
+    ],
+    activated: [
+      hireRow('Rina Wijaya', 'mem-rina', { unit: SARI_UNIT, joinDate: '2026-08-30', day: 59, ...sold(49, '2026-10-17'), checklist: checklist(69) }),
+      hireRow('Novi Lestari', 'mem-novi', { unit: ARIEF_UNIT, joinDate: '2026-08-04', day: 85, ...sold(20, '2026-08-23'), checklist: checklist(56) }),
+      hireRow('Dimas Saputra', 'mem-dimas', { joinDate: '2026-07-25', day: 95, ...sold(39, '2026-09-01'), checklist: checklist(50, true) }),
+      hireRow('Indah Permata', 'mem-indah', { joinDate: '2026-07-22', day: 98, ...sold(42, '2026-09-01'), checklist: checklist(94, true) }),
+      hireRow('Lukman Hakim', 'mem-lukman', { joinDate: '2026-07-20', day: 100, ...sold(96, '2026-10-23'), checklist: checklist(25, true) }),
+    ],
+    notActivated: [
+      // Past day 90 with no first sale: the one result that counts against the share.
+      hireRow('Kemal Pratama', 'mem-kemal', { joinDate: '2026-07-10', day: 110, activation3M: 'not_activated', checklist: checklist(31, true) }),
+    ],
+  },
 };
 
 export const AGENT_PERMISSIONS = [
@@ -208,7 +258,8 @@ export const SARI_ME = makeMe({
     membershipId: 'mem-sari', kpmId: 'kpm-1', orgLevelCode: 'AAB', hierarchyRole: 'aab', status: 'active',
     isKpmOwner: false, isKpmAdmin: false, directCount: 3,
   },
-  permissions: LEADER_PERMISSIONS,
+  // An AAB runs coaching sessions, so she logs a 1:1 and names a closing for her hires (P18.96-T4 AC-3).
+  permissions: [...LEADER_PERMISSIONS, 'coaching_session:create', 'coaching_session:finalize'],
   newHires: true,
 });
 
@@ -223,3 +274,16 @@ export const SHELL_STUBS = {
 };
 
 export const notFound = { status: 404, body: { error: { code: 'NOT_FOUND', message: 'Not found', requestId: 'r-404' } } };
+
+/**
+ * P18.96-T4 AC-4: *Weekly 1-on-1 check-in* ticked by Sari with a 1:1 she logged, waiting for the fourth — on `items`,
+ * Rina's own by default.
+ */
+export function withWaitingCheckIn(items = rinaItems()): ActivationItemProgress[][] {
+  return items.map((list) => list.map((it) => (it.code === 'WEEKLY_CHECK_IN'
+    ? {
+      ...it, done: true, doneAt: '2026-09-25T03:00:00.000Z', source: 'leader' as const, doneBy: SARI, waiting: true,
+      record: { collection: 'coachingSessions', id: 'session-0925' },
+    }
+    : it)));
+}

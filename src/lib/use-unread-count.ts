@@ -18,6 +18,10 @@ import { useSession } from './session';
  * passes it on; asking the server again for a number it has just given would be a second request for
  * every click. A change without one — the calendar's answer reading its notice — is read afresh.
  *
+ * **And moves before the answer** (P18.95-T1 AC-7). A mark announces how far it moves the count (`delta`) as
+ * it is clicked, so the badge changes at once, then the answer's count, which settles it; a refusal moves it
+ * back. *Mark all read* says `0` at once. Never below zero.
+ *
  * The read asks for a page of one: the count comes with any page, and the items are not wanted here.
  *
  * Returns `0` rather than throwing when the read fails. A badge is a convenience — an
@@ -41,8 +45,9 @@ export function useUnreadCount(): number {
         });
     };
     const changed = (event: Event) => {
-      const { unread: count } = inboxChangeOf(event);
-      if (typeof count === 'number') setUnread(count);
+      const { unread: count, delta } = inboxChangeOf(event);
+      if (typeof count === 'number') setUnread(Math.max(0, count));
+      else if (typeof delta === 'number') setUnread((now) => Math.max(0, now + delta));
       else read();
     };
     read();

@@ -67,19 +67,19 @@ const SEEDED: readonly DemoGroup[] = [
         lands: 'The same office. Also an AB — admin rights and hierarchy role are independent',
       },
       {
-        role: 'Agency Builder',
+        role: 'AB',
         email: 'agus@kpm0417.test',
         password: FIELD,
         lands: 'Their unit. Neither Owner nor Admin, so the office settings stay closed',
       },
       {
-        role: 'Associate AB · leads two',
+        role: 'AAB · leads two',
         email: 'sari@kpm0417.test',
         password: FIELD,
         lands: 'Their unit, and the approval inbox once it is built',
       },
       {
-        role: 'Associate AB · leads nobody',
+        role: 'AAB · leads nobody',
         email: 'dewi@kpm0417.test',
         password: FIELD,
         lands: 'Their own day — no unit, because leading is the graph and not the role',

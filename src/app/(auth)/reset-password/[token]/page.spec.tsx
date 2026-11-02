@@ -29,7 +29,7 @@ describe('reset password', () => {
     expect(submit).toBeDisabled();
 
     await userEvent.type(screen.getByLabelText('New password'), 'short');
-    expect(screen.getByText('Use at least 10 characters.')).toBeInTheDocument();
+    expect(screen.getByText('Use at least 8 characters.')).toBeInTheDocument();
 
     await userEvent.type(screen.getByLabelText('New password'), ' but longer');
     await userEvent.type(screen.getByLabelText('Confirm password'), 'something else');

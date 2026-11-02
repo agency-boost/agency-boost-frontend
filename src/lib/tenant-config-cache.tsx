@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from './api-client';
 import { SessionContext } from './session';
 import type {
@@ -14,6 +14,11 @@ export interface OrgLevel {
   code: string;
   label: string;
   displayOrder: number;
+  /**
+   * Whether the rung leads, and how (ADR-0156): *Senior Leader* gives AB's rights, *Associate Leader* AAB's,
+   * `null` none. Absent on a rung read before the field existed, which reads by its code (`classOfRung`).
+   */
+  leaderTier?: 'senior' | 'associate' | null;
   status: 'active' | 'archived';
 }
 
@@ -101,25 +106,53 @@ export function TenantConfigProvider({ children }: { children: React.ReactNode }
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
 
+  /*
+   * **A read that lands after the provider is gone is dropped.** A screen can be left — or a spec end — while
+   * the two requests are still out, and their answer then set state on a tree that no longer exists: on CI it
+   * arrived after the test environment was torn down, and `setLoading(false)` threw *"window is not defined"*
+   * as an unhandled rejection that failed a run whose every test had passed (2026-10-24). Set in the effect,
+   * not only at creation, so React's development remount leaves it true.
+   */
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
+
   const refresh = useCallback(async () => {
-    try {
-      /*
-       * Both in one place, for one reason (P4-T9): the ladder is what every role badge on
-       * every screen is drawn from, so fetching it per screen would be the thing this
-       * provider exists to prevent. It changes about once a year.
-       */
-      const [next, rungs] = await Promise.all([
-        api<TenantConfig>('/kpm/config'),
-        api<OrgLevel[]>('/kpm/org-levels'),
-      ]);
-      setConfig(next);
-      setLadder(rungs);
-      setError(null);
-    } catch (err) {
-      setError(err);
-    } finally {
-      setLoading(false);
-    }
+    /*
+     * Both in one place, for one reason (P4-T9): the ladder is what every role badge on
+     * every screen is drawn from, so fetching it per screen would be the thing this
+     * provider exists to prevent. It changes about once a year.
+     *
+     * **Each read settles on its own** (P18.95-T5 AC-3; the client's UI review, UI-030: Log Activity's
+     * skeleton still up after 2 s). They were one `Promise.all`, so `loading` — which only the screens
+     * that need the *configuration* read — waited for the ladder as well, which neither of them draws, and
+     * a ladder that failed threw a configuration that had arrived away with it. Now `loading` clears when
+     * the configuration has answered, whatever the ladder is doing, and `error` is the configuration's: a
+     * ladder that fails leaves the one it had, and a role badge reads its rung's code meanwhile, as it
+     * does before the ladder first arrives. `refresh()` still waits for both, for the settings screens
+     * that ask again after a write.
+     */
+    const config = api<TenantConfig>('/kpm/config').then(
+      (next) => {
+        if (!mounted.current) return;
+        setConfig(next);
+        setError(null);
+      },
+      (err: unknown) => {
+        if (mounted.current) setError(err);
+      },
+    ).finally(() => {
+      if (mounted.current) setLoading(false);
+    });
+    const ladder = api<OrgLevel[]>('/kpm/org-levels').then(
+      (rungs) => {
+        if (mounted.current) setLadder(rungs);
+      },
+      () => undefined,
+    );
+    await Promise.all([config, ladder]);
   }, []);
 
   /*

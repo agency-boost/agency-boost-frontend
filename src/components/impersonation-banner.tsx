@@ -1,8 +1,11 @@
 'use client';
 
 import { useState } from 'react';
+import { useMessages } from '@/i18n/language-provider';
+import { supportBannerMessages } from '@/i18n/messages/support-banner';
 import { endImpersonation } from '@/lib/admin';
 import { setAccessToken, setImpersonating, tryRefresh } from '@/lib/api-client';
+import { displayName } from '@/lib/display-name';
 import { useSession } from '@/lib/session';
 
 /**
@@ -14,6 +17,8 @@ import { useSession } from '@/lib/session';
  */
 export function ImpersonationBanner() {
   const { me, reload } = useSession();
+  // The Super Admin's own language: a support session never follows the person's (`LanguageProvider`'s `follow`).
+  const t = useMessages(supportBannerMessages);
   const [busy, setBusy] = useState(false);
 
   if (!me?.isImpersonating) return null;
@@ -40,17 +45,23 @@ export function ImpersonationBanner() {
       className="flex flex-wrap items-center justify-between gap-2 bg-alert px-4 py-2 text-md font-semibold text-card"
     >
       <span>
-        You are acting as {me.user.preferredName ?? me.user.fullName}.{' '}
+        {t.actingAs({ name: displayName(me.user) })}{' '}
         {/*
           * The half that matters most to the operator (P4-T10, §3.13). Discovering the
           * session is read-only from a 403 halfway through a fix is the worst moment to
           * find out — and a session that *can* write is the one worth saying so about
           * loudly, because a second person approved it and somebody is accountable.
           */}
-        {me.impersonationReadOnly
-          ? 'You can look but not change anything — a second Super Admin has to approve that.'
-          : 'This session can make changes. It was approved by a second Super Admin.'}{' '}
-        Everything you do is recorded against you as well.
+        {/*
+          * And a setup session says what it may change (ADR-0162): it is read-only for everything
+          * else, so neither of the other two sentences is true of it.
+          */}
+        {!me.impersonationReadOnly
+          ? t.canWrite
+          : me.impersonationPurpose === 'setup'
+            ? t.setup
+            : t.lookOnly}{' '}
+        {t.recorded}
       </span>
       <button
         type="button"
@@ -58,7 +69,7 @@ export function ImpersonationBanner() {
         disabled={busy}
         className="rounded-md border border-card/40 px-3 py-1 text-md font-semibold hover:bg-card/10 disabled:opacity-50"
       >
-        {busy ? 'Ending…' : 'Stop acting as them'}
+        {busy ? t.ending : t.stop}
       </button>
     </div>
   );

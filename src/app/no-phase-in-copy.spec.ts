@@ -30,8 +30,11 @@ import { parse, renderable, sourceFiles, SRC, startOf } from '@test/copy-scan';
  * JSX folds a line break into one space when it renders, so the pattern takes any run of whitespace
  * where the acceptance criterion writes one space, and none at all before a hole: `{' '}` is the
  * space, and it was folded into the text on the way.
+ *
+ * **In both languages** (P18.98-T1 AC-6): the catalogue's messages are in the scan (`@test/copy-scan`), and the
+ * Indonesian says *fase {n}*, *fase berikutnya*.
  */
-const PATTERN = /\bphase\s*\{|\bphase\s+\d|\blater\s+phase\b/i;
+const PATTERN = /\bphase\s*\{|\bphase\s+\d|\blater\s+phase\b|\bfase\s*\{|\bfase\s+\d|\bfase\s+(?:berikutnya|mendatang|selanjutnya)\b/i;
 
 /** Every phase in `source`'s renderable strings, as `line: text`. Comments are trivia, and never visited. */
 function phaseMentions(fileName: string, source: string): string[] {
@@ -68,6 +71,9 @@ describe('the phase scan itself', () => {
     ['a template literal', 'const eyebrow = `Arrives in phase ${phase}`;'],
     ['a template literal’s tail', 'const s = `${what}, from phase 14`;'],
     ['a concatenation', "const eyebrow = 'Arrives in phase ' + phase;"],
+    ['an Indonesian message', "const id = { eyebrow: 'Hadir di fase 13' };"],
+    ['an Indonesian message before its value', 'const id = { eyebrow: ({ n }) => `Hadir di fase ${n}` };'],
+    ['an Indonesian later phase', "const id = { hint: 'Dipakai oleh periode di fase berikutnya.' };"],
   ])('catches a phase in %s', (_, code) => {
     expect(phaseMentions('x.tsx', `export const X = () => { ${code} };`)).toHaveLength(1);
   });
@@ -98,6 +104,10 @@ describe('no screen tells a customer our schedule', () => {
   it('finds the screens at all, so a silent zero cannot pass', () => {
     expect(files.length).toBeGreaterThan(100);
     expect(files).toContain('components/coming-in-phase.tsx');
+  });
+
+  it('P18.98-T1 AC-6 reads the catalogue’s messages, both languages, where a moved module’s words are', () => {
+    expect(files).toContain('i18n/messages/shell.ts');
   });
 
   it('no rendered string names a phase', () => {

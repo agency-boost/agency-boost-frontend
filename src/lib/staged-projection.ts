@@ -1,3 +1,4 @@
+import { settingsMessages } from '@/i18n/messages/settings';
 import type { ConfigChange } from '@/lib/tenant-config';
 
 /** What a staged operation did to the row, from the reader's point of view. */
@@ -9,13 +10,12 @@ export interface StagedRow<T> {
   staged: StagedMark | null;
 }
 
-/** The sentence each mark puts on the row. */
-export const STAGED_LABEL: Record<StagedMark, string> = {
-  added: 'Added — not saved yet',
-  edited: 'Edited — not saved yet',
-  archived: 'Archived — not saved yet',
-  restored: 'Restored — not saved yet',
-};
+/**
+ * The sentence each mark puts on the row, **in English**: the catalogue's (`messages/settings.ts`, `staged.mark`), for
+ * a screen whose words have not moved yet. A screen that has reads the mark in the reader's language,
+ * `useMessages(settingsMessages).staged.mark[mark]` (P18.98-T4).
+ */
+export const STAGED_LABEL: Record<StagedMark, string> = settingsMessages.en.staged.mark;
 
 /**
  * The rows as they *will* be, given what is staged but not sent (P4-T19).

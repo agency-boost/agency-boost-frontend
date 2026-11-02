@@ -99,7 +99,7 @@ describe('choosing your own password (P3.6-T4)', () => {
 
     await userEvent.type(screen.getByLabelText('The password you were sent'), 'temporary-one');
     await userEvent.type(screen.getByLabelText('Your new password'), 'short');
-    expect(screen.getByText('Use at least 10 characters.')).toBeInTheDocument();
+    expect(screen.getByText('Use at least 8 characters.')).toBeInTheDocument();
     expect(submit).toBeDisabled();
 
     await userEvent.type(screen.getByLabelText('Your new password'), ' but now long enough');

@@ -131,11 +131,33 @@ describe('tenants list', () => {
       expect(within(table).getByRole('columnheader', { name: 'End date' })).toBeInTheDocument();
       expect(within(table).getByRole('columnheader', { name: 'Leaders' })).toBeInTheDocument();
       const limited = within(table).getByRole('row', { name: /^0417/ });
-      expect(within(limited).getByText('Jan 5, 2027')).toBeInTheDocument();
+      expect(within(limited).getByText('5 Jan 2027')).toBeInTheDocument();
       expect(within(limited).getByText('6 / 10')).toBeInTheDocument();
       const unlimited = within(table).getByRole('row', { name: /^0555/ });
       expect(within(unlimited).getByText('2')).toBeInTheDocument();
       expect(within(unlimited).getByText('—')).toBeInTheDocument();
+    });
+
+    it('P18.8-T2 AC-7 reads 13 / 10 and “3 over” past the limit, and says it whole to a screen reader', async () => {
+      stubFetch({
+        '/admin/tenants': {
+          body: [
+            { ...KPM, subscription: SUBSCRIPTION, subscriptionState: 'active', leadersUsed: 13 },
+            { ...KPM, _id: 'kpm-2', code: '0555', branchName: 'Kelapa Gading Branch', subscription: SUBSCRIPTION, subscriptionState: 'active', leadersUsed: 10 },
+          ],
+        },
+      });
+      renderInLayout(AdminLayout, <TenantsPage />, { me: SUPER_ADMIN });
+
+      const table = await screen.findByRole('table');
+      const over = within(table).getByRole('row', { name: /^0417/ });
+      expect(within(over).getByText('13 / 10')).toBeInTheDocument();
+      expect(within(over).getByText('3 over')).toBeInTheDocument();
+      expect(within(over).getByText('13 leaders of a limit of 10, 3 over')).toHaveClass('sr-only');
+      // At the limit, not past it: no overage.
+      const at = within(table).getByRole('row', { name: /^0555/ });
+      expect(within(at).getByText('10 / 10')).toBeInTheDocument();
+      expect(within(at).queryByText(/over/)).not.toBeInTheDocument();
     });
 
     it.each([
@@ -164,7 +186,7 @@ describe('tenants list', () => {
       const dialog = screen.getByRole('dialog', { name: 'Edit subscription' });
       expect(within(dialog).getByLabelText('Start date')).toHaveValue('2026-01-06');
       expect(within(dialog).getByLabelText('End date')).toHaveValue('2027-01-05');
-      expect(within(dialog).getByLabelText('Price per leader per month')).toHaveValue('350.000');
+      expect(within(dialog).getByLabelText('Price per leader per month')).toHaveValue('350,000');
       expect(within(dialog).getByLabelText('Maximum leaders')).toHaveValue('10');
       expect(within(dialog).getByRole('switch', { name: 'Keep active after the end date' })).not.toBeChecked();
       expect(dialog).toHaveTextContent('Leaders used now: 6');
@@ -197,7 +219,7 @@ describe('tenants list', () => {
       const end = within(dialog).getByLabelText('End date');
       await userEvent.clear(end);
       await userEvent.type(end, '2020-01-31');
-      expect(dialog).toHaveTextContent('This end date, January 31, 2020, has passed. Once you save, nobody in this office');
+      expect(dialog).toHaveTextContent('This end date, 31 Jan 2020, has passed. Once you save, nobody in this office');
       await userEvent.click(within(dialog).getByRole('switch', { name: 'Keep active after the end date' }));
       expect(dialog).toHaveTextContent('The office stays open because it is kept active.');
     });

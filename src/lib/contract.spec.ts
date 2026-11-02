@@ -8,6 +8,8 @@ import { PRODUCT_DESCRIPTION_MAX } from './tenant-config';
 import { PDF_MAX_BYTES } from './recruitment-pitch';
 import { COMMISSION_MAX_YEARS } from './admin';
 import { INBOX_PAGE_SIZE, POPOVER_PAGE_SIZE } from './notifications';
+import { INVITE_NAME_MAX } from './invites';
+import { DEFAULT_LANGUAGE, LANGUAGE_LIVE, LANGUAGES } from '@/i18n/language';
 
 /**
  * P3.5-T11 AC-4. The frontend declares its own copy of every response shape, and until
@@ -95,6 +97,8 @@ const PAIRS: ReadonlyArray<[file: string, ours: string, theirs: string]> = [
   ['admin.ts', 'CompanyCard', 'CompanyCardDto'],
   ['admin.ts', 'OrgLevel', 'OrgLevelRowDto'],
   ['admin.ts', 'KpmRequestRow', 'KpmRequestRowDto'],
+  // ADR-0157: a leader past the office's limit, read by the office and by AgencyBoost's queue alike.
+  ['leader-limit-requests.ts', 'LeaderLimitRequestRow', 'LeaderLimitRequestRowDto'],
   ['admin.ts', 'PlatformAdminRow', 'PlatformAdminRowDto'],
   ['admin.ts', 'AuditEntry', 'AuditEntryResponseDto'],
   ['org.ts', 'Member', 'DirectoryMemberDto'],
@@ -105,6 +109,15 @@ const PAIRS: ReadonlyArray<[file: string, ours: string, theirs: string]> = [
   ['join.ts', 'PendingRequest', 'PendingRequestDto'],
   ['join.ts', 'UntaggedMember', 'UntaggedMemberDto'],
   ['join.ts', 'MyLeaderCode', 'MyLeaderCodeDto'],
+  // P18.96-T3 (ADR-0170): + Add agent, its invites, its transfers, and the banner an invite link opens.
+  ['invites.ts', 'InviteView', 'InviteDto'],
+  ['invites.ts', 'InviteList', 'InviteListDto'],
+  ['invites.ts', 'SharedInvite', 'SharedInviteDto'],
+  ['invites.ts', 'TransferView', 'TransferDto'],
+  // The P18.96 exit review, M3: whoever asked is answered what they typed, a shape of its own.
+  ['invites.ts', 'RequestedTransferView', 'RequestedTransferDto'],
+  ['invites.ts', 'InviteBanner', 'InviteBannerDto'],
+  ['invites.ts', 'PersonRef', 'TransferPersonDto'],
   ['notifications.ts', 'InboxItem', 'InboxItemDto'],
   // P12.1-T4: the pager reads `total`, `page` and `pageSize` straight off the page, and every row and
   // the badge read `readAt` and `unread` straight off a mark's answer.
@@ -185,6 +198,8 @@ const PAIRS: ReadonlyArray<[file: string, ours: string, theirs: string]> = [
   ['leads.ts', 'Lead', 'LeadResponseDto'],
   ['leads.ts', 'LeadContact', 'LeadContactDto'],
   ['leads.ts', 'LeadPage', 'LeadPageDto'],
+  // UI V1, UI-105: one lead read by its id carries its moves, the lead sheet's *Riwayat*.
+  ['leads.ts', 'LeadMove', 'LeadMoveDto'],
   // Phase 14: the Product Catalog, its drawer and the Sales Attack Plan read every one of these straight
   // off the field reads; a field renamed on the server would draw a blank card, block or verdict.
   ['product-catalog.ts', 'CatalogList', 'CatalogListDto'],
@@ -271,6 +286,10 @@ const PAIRS: ReadonlyArray<[file: string, ours: string, theirs: string]> = [
   ['leader-meetings.ts', 'MeetingListView', 'MeetingListViewDto'],
   ['leader-meetings.ts', 'Scorecard', 'ScorecardDto'],
   ['leader-meetings.ts', 'ScorecardRow', 'ScorecardRowDto'],
+  // P18.97-T1 (ADR-0175): each column's months, a target as a rate and its value, and the (*) notes' periods.
+  ['leader-meetings.ts', 'ColumnPeriod', 'ColumnPeriodDto'],
+  ['leader-meetings.ts', 'MonthlyTarget', 'MonthlyTargetDto'],
+  ['leader-meetings.ts', 'PartialPeriod', 'PartialPeriodDto'],
   ['leader-meetings.ts', 'AgendaItem', 'AgendaItemDto'],
   ['leader-meetings.ts', 'ActionItem', 'LeaderActionItemDto'],
   ['leader-meetings.ts', 'ShareLink', 'ShareLinkDto'],
@@ -328,8 +347,12 @@ describe('the frontend types match the API document (P3.5-T11 AC-4)', () => {
     expect(doc.components.schemas.CommissionYearDto.properties?.year.maximum).toBe(COMMISSION_MAX_YEARS);
   });
 
+  it('P18.96-T3 AC-1 + Add agent’s Name stops where the API stops taking it', () => {
+    expect(doc.components.schemas.AddAgentDto.properties?.fullName.maxLength).toBe(INVITE_NAME_MAX);
+  });
+
   it('P11 exit review: the input limits a screen repeats are the ones the API validates', () => {
-    const coachingParts = readFileSync(join(__dirname, '..', 'components', 'coaching-parts.tsx'), 'utf8');
+    const coachingParts = readFileSync(join(__dirname, '..', 'components', 'coaching-reopen-dialog.tsx'), 'utf8'); // P18.99-T16: `ReopenDialog`'s own module
     const reasonMax = Number(/const REASON_MAX = (\d+);/.exec(coachingParts)?.[1]);
     expect(doc.components.schemas.SaveLeaderNoteDto.properties?.text.maxLength).toBe(LEADER_NOTE_MAX);
     expect(doc.components.schemas.ReopenCoachingSessionDto.properties?.reason.maxLength).toBe(reasonMax);
@@ -337,7 +360,9 @@ describe('the frontend types match the API document (P3.5-T11 AC-4)', () => {
 
   it('every path the client calls exists in the document', () => {
     const paths = new Set(Object.keys(doc.paths).map((p) => p.replace('/api/v1', '')));
-    const sources = ['admin.ts', 'org.ts', 'join.ts', 'notifications.ts', 'session.ts', 'api.ts', 'coaching.ts'];
+    const sources = [
+      'admin.ts', 'org.ts', 'join.ts', 'notifications.ts', 'session.ts', 'api.ts', 'coaching.ts', 'leader-limit-requests.ts',
+    ];
     const called = new Set<string>();
     for (const file of sources) {
       for (const path of callsIn(readFileSync(join(__dirname, file), 'utf8'))) called.add(path);
@@ -349,6 +374,71 @@ describe('the frontend types match the API document (P3.5-T11 AC-4)', () => {
   });
 });
 
+
+/**
+ * **P18.98-T1 AC-1: the two languages and the default are the backend's** (ADR-0179 §1, invariant §7). Read out of
+ * its constants module, as `format.spec.ts` reads the office's timezone, because no route documents them yet:
+ * P18.98-T2's `GET /auth/me` answers `user.locale`, and from then the document's values for it are held here as well.
+ */
+describe('the languages are the backend’s (P18.98-T1 AC-1)', () => {
+  const backend = readFileSync(
+    join(__dirname, '..', '..', '..', 'backend', 'src', 'domain', 'constants', 'language.ts'), 'utf8',
+  );
+
+  it('LANGUAGES is the backend’s list, in its order', () => {
+    const declared = /export const LANGUAGES = \[([^\]]*)\] as const;/.exec(backend);
+    expect(declared).not.toBeNull();
+    expect([...declared![1].matchAll(/'([^']+)'/g)].map((m) => m[1])).toEqual([...LANGUAGES]);
+  });
+
+  it('DEFAULT_LANGUAGE is the backend’s: Bahasa Indonesia', () => {
+    expect(/export const DEFAULT_LANGUAGE: Language = '([^']+)';/.exec(backend)?.[1]).toBe(DEFAULT_LANGUAGE);
+  });
+
+  /*
+   * **The two flip together** (ADR-0179's dated note of 2026-10-29). The backend's `language.spec.ts` reads this half
+   * only where the superproject puts the frontend beside it, which the backend's own CI does not; this suite always has
+   * the backend beside it, so here is where a flip in one repository and not the other fails.
+   */
+  it('P18.98-T5 AC-1 LANGUAGE_LIVE is the backend’s: both live, or neither', () => {
+    const declared = /export const LANGUAGE_LIVE: boolean = (true|false);/.exec(backend);
+    expect(declared).not.toBeNull();
+    expect(declared![1]).toBe(String(LANGUAGE_LIVE));
+  });
+});
+
+/**
+ * **P18.98-T2 AC-1: the account's language, as the document holds it** — from here the two languages are a route's
+ * values as well as a module's, and held to both (invariant §7).
+ */
+describe('the account’s language matches the API document (P18.98-T2 AC-1)', () => {
+  const user = doc.components.schemas.MeUserDto;
+
+  it('GET /auth/me answers user.locale — one of the two, never null — and localeChosen, always', () => {
+    expect(user.properties?.locale?.enum).toEqual([...LANGUAGES]);
+    expect(user.properties?.locale?.nullable).toBeFalsy();
+    expect(user.properties?.localeChosen?.type).toBe('boolean');
+    expect(user.required).toEqual(expect.arrayContaining(['locale', 'localeChosen']));
+  });
+
+  it('Me.user declares both as the document names them', () => {
+    const session = readFileSync(join(__dirname, 'session.ts'), 'utf8');
+    expect(session).toMatch(/^\s{4}locale\?: Language;$/m);
+    expect(session).toMatch(/^\s{4}localeChosen\?: boolean;$/m);
+  });
+
+  it('PATCH /auth/me takes locale, one of the two', () => {
+    expect(doc.components.schemas.UpdateProfileDto.properties?.locale?.enum).toEqual([...LANGUAGES]);
+  });
+
+  it('the switch and Your account save through a path the document has', () => {
+    const paths = new Set(Object.keys(doc.paths).map((p) => p.replace('/api/v1', '')));
+    const called = callsIn(readFileSync(join(__dirname, '..', 'i18n', 'choose-language.ts'), 'utf8'));
+    expect(called).toEqual(['/auth/me']);
+    expect(called.filter((p) => !matches(p, paths))).toEqual([]);
+    expect(doc.paths['/api/v1/auth/me'].patch).toBeDefined();
+  });
+});
 
 /**
  * P12.1: the inbox's shapes, held to their **shape** as the calendar's are (below): a field we read as
@@ -427,6 +517,13 @@ const CALENDAR_PAIRS: ReadonlyArray<[file: string, ours: string, theirs: string]
   // P13.1-T8: *Hide my personal activities* (ADR-0110), read and sent whole.
   ['calendar.ts', 'CalendarSettings', 'CalendarSettingsDto'],
   ['calendar.ts', 'CalendarSettings', 'SaveCalendarSettingsDto'],
+  // UI V1 (UI-104): what other features put on the calendar — its Tugas and the events joined.
+  ['calendar.ts', 'CalendarTask', 'CalendarTaskDto'],
+  ['calendar.ts', 'CalendarTaskLead', 'CalendarTaskLeadDto'],
+  ['calendar.ts', 'CalendarTaskCoaching', 'CalendarTaskCoachingDto'],
+  ['calendar.ts', 'CalendarHiddenTask', 'CalendarHiddenTaskDto'],
+  ['calendar.ts', 'CalendarJoinedEvent', 'CalendarJoinedEventDto'],
+  ['calendar.ts', 'CalendarEventType', 'CalendarEventTypeDto'],
 ];
 
 /** The three writes that send an `EntryInput`, and what each call adds to it (`calendar.ts`). */
@@ -620,9 +717,24 @@ const ACTIVATION_PAIRS: ReadonlyArray<[file: string, ours: string, theirs: strin
   ['activation.ts', 'ActivationCorrection', 'ActivationStartCorrectedDto'],
   ['activation.ts', 'ActivationNote', 'ActivationNoteDto'],
   ['activation.ts', 'ActivationNoteSaved', 'ActivationNoteSavedDto'],
+  // P18.96-T4: the source line's record and the closings *Which case?* offers.
+  ['activation.ts', 'ActivationItemRecord', 'ActivationItemRecordDto'],
+  ['activation.ts', 'ActivationClosing', 'ActivationClosingDto'],
+  ['activation.ts', 'ActivationClosings', 'ActivationClosingsDto'],
   ['activation.ts', 'NewHiresRoster', 'NewHiresRosterDto'],
-  ['activation.ts', 'NewHireGroup', 'NewHireGroupDto'],
+  // P18.96-T6: the year of new hires by their 3M result and its figures (*Mark left* retired with UI-025).
   ['activation.ts', 'NewHireRow', 'NewHireRowDto'],
+  ['activation.ts', 'NewHireUnitRef', 'NewHireUnitRefDto'],
+  ['activation.ts', 'NewHireUnit', 'NewHireUnitDto'],
+  ['activation.ts', 'NewHireChecklist', 'NewHireChecklistDto'],
+  ['activation.ts', 'NewHiresSections', 'NewHiresSectionsDto'],
+  ['activation.ts', 'NewHiresWindow', 'NewHiresWindowDto'],
+  ['activation.ts', 'Activation3MShare', 'Activation3MShareDto'],
+  ['activation.ts', 'Activation3MMonth', 'Activation3MMonthDto'],
+  ['activation.ts', 'Activation3MFigures', 'Activation3MFiguresDto'],
+  // UI V1 (UI-023, UI-027): the detail's strip, and the leader and number in its header.
+  ['activation.ts', 'NewHireStanding', 'NewHireStandingDto'],
+  ['activation.ts', 'NewHireLeader', 'NewHireLeaderDto'],
   ['session.ts', 'MeActivation', 'MeActivationDto'],
 ];
 
@@ -655,7 +767,10 @@ describe('the activation’s types match the API document (P13)', () => {
   it('the hire’s tick sends only what TickOwnActivationItemDto takes, and a leader’s only `done`', () => {
     const own = new Set(propertiesOf('TickOwnActivationItemDto'));
     expect(declaredFields('activation.ts', 'MyItemInput').filter((f) => !own.has(f))).toEqual([]);
-    expect(propertiesOf('TickHireActivationItemDto')).toEqual(['done']);
+    // P18.96-T4 AC-3: a leader's tick of a data-backed item carries its record.
+    expect(propertiesOf('TickHireActivationItemDto')).toEqual(['done', 'record']);
+    expect(declaredFields('activation.ts', 'ActivationRecordInput').filter((f) => !new Set(propertiesOf('ActivationItemRecordInputDto')).has(f)))
+      .toEqual([]);
   });
 
   it('the limits the screens repeat are the ones the API validates (invariant §7)', () => {
@@ -668,7 +783,8 @@ describe('the activation’s types match the API document (P13)', () => {
   it('every path the activation calls exists in the document', () => {
     const paths = new Set(Object.keys(doc.paths).map((p) => p.replace('/api/v1', '')));
     const called = callsIn(readFileSync(join(__dirname, 'activation.ts'), 'utf8'));
-    expect(called.length).toBe(8);
+    // P18.96-T4: the two closings reads. UI-025: *Mark left* retired, its call with it.
+    expect(called.length).toBe(10);
     expect(called.filter((p) => !matches(p, paths))).toEqual([]);
   });
 });
@@ -803,6 +919,21 @@ describe('campaigns’ types match the API document (P18.5-T7 to T9)', () => {
   it('the Unit Dashboard’s row and view carry the chases and the MDRT header', () => {
     expect(propertiesOf('UnitRowDto')).toEqual(expect.arrayContaining(['chasingMdrt', 'campaigns']));
     expect(propertiesOf('UnitDashboardDto')).toContain('mdrt');
+  });
+
+  it('P18.96-T5 the Unit Dashboard’s row, totals and team carry who counts for production (ADR-0172)', () => {
+    // `UnitRow`'s body holds a `}` in a comment before its end, so only the document's side is read for it.
+    expect(propertiesOf('UnitRowDto')).toContain('newHireBeforeFirstSale');
+    expect(propertiesOf('UnitTotalDto')).toContain('newHires');
+    expect(declaredFields('unit-dashboard.ts', 'UnitTotal')).toContain('newHires');
+    expect(propertiesOf('TeamTileDto')).toContain('newHires');
+    expect(declaredFields('unit-dashboard.ts', 'TeamTile')).toContain('newHires');
+  });
+
+  it('UI-105 LeadDetail’s own field is documented on LeadDetailResponseDto, and the lead’s it extends', () => {
+    const documented = new Set(propertiesOf('LeadDetailResponseDto'));
+    expect(documented.has('history')).toBe(true);
+    expect(declaredFields('leads.ts', 'Lead').filter((f) => !documented.has(f))).toEqual([]);
   });
 
   it('CampaignDetail’s own fields are documented on CampaignDetailDto, and the card’s it extends', () => {
@@ -984,7 +1115,7 @@ describe('the forum’s routes match the API document (P18.1-T2, P18.1-T3)', () 
       await forum.saveActionItem('m1', 'x1', { status: 'planned', version: 1 });
       await forum.removeActionItem('m1', 'x1', 1);
       await forum.reorderActionItems('m1', ['x1']);
-      await forum.saveMonthlyTarget('m1', 'ape', { value: 'TBD', version: 0 });
+      await forum.saveMonthlyTarget('m1', 'ape', { rate: null, version: 0 });
       await forum.createShareLink('m1');
       await forum.revokeShareLinks('m1');
       await forum.readSharedMeeting('tok');
@@ -1111,5 +1242,65 @@ describe('the override’s types and routes match the API document (P18.6-T2)', 
       return !routes.some((r) => r.method === method && matches(asCalled, new Set([r.path])));
     });
     expect(unknown).toEqual([]);
+  });
+});
+
+/**
+ * UI V1 (Phase 18.99 T4): the Unit Dashboard's Activities read and the fields UI-028 added, held to the document as the
+ * campaigns' shapes are.
+ */
+const UNIT_V1_PAIRS: ReadonlyArray<[file: string, ours: string, theirs: string]> = [
+  ['unit-dashboard.ts', 'UnitActivitiesView', 'UnitActivitiesDto'],
+  ['unit-dashboard.ts', 'ActivityPeriod', 'ActivityPeriodDto'],
+  ['unit-dashboard.ts', 'ActivitiesPerson', 'ActivitiesPersonDto'],
+  ['unit-dashboard.ts', 'ScopeTotals', 'ScopeTotalsDto'],
+  ['unit-dashboard.ts', 'ActivitiesSection', 'ActivitiesSectionDto'],
+  ['unit-dashboard.ts', 'ActivitiesRatios', 'ActivitiesRatiosDto'],
+];
+
+describe('UI V1 the Unit Dashboard’s Activities read matches the API document (Phase 18.99 T4)', () => {
+  it.each(UNIT_V1_PAIRS)('UI-001 %s › %s ⊆ %s', (file, ours, theirs) => {
+    const documented = new Set(propertiesOf(theirs));
+    expect(declaredFields(file, ours).filter((f) => !documented.has(f))).toEqual([]);
+  });
+
+  it('UI-028 the row and its totals carry Closing; the view Last updated', () => {
+    expect(propertiesOf('UnitRowDto')).toContain('closings');
+    expect(propertiesOf('UnitTotalDto')).toContain('closings');
+    expect(declaredFields('unit-dashboard.ts', 'UnitTotal')).toContain('closings');
+    expect(propertiesOf('UnitDashboardDto')).toContain('lastUpload');
+  });
+});
+
+/**
+ * UI V1 (Phase 18.99 T11): Home's one read, `GET /home`, held to the document as the Unit Dashboard's shapes are — every
+ * field the screen reads is one the API sends (UI-100, UI-101).
+ */
+const HOME_PAIRS: ReadonlyArray<[file: string, ours: string, theirs: string]> = [
+  ['home.ts', 'HomeView', 'HomeDto'],
+  ['home.ts', 'HomeNow', 'HomeNowDto'],
+  ['home.ts', 'HomeQuote', 'HomeQuoteDto'],
+  ['home.ts', 'HomeDay', 'HomeDayDto'],
+  ['home.ts', 'HomeActivity', 'HomeActivityDto'],
+  ['home.ts', 'HomeSchedule', 'HomeScheduleDto'],
+  ['home.ts', 'HomePerson', 'HomePersonDto'],
+  ['home.ts', 'HomeCoachingAction', 'HomeCoachingActionDto'],
+  ['home.ts', 'HomeLeadAction', 'HomeLeadActionDto'],
+  ['home.ts', 'HomeLeadContact', 'HomeLeadContactDto'],
+  ['home.ts', 'HomeAgendaAction', 'HomeAgendaActionDto'],
+  ['home.ts', 'HomeCountOf', 'HomeCountOfDto'],
+  ['home.ts', 'HomeSplit', 'HomeSplitDto'],
+  ['home.ts', 'HomeTeamPerson', 'HomeTeamPersonDto'],
+  ['home.ts', 'HomeLeader', 'HomeLeaderDto'],
+];
+
+describe('UI V1 Home’s read matches the API document (Phase 18.99 T11)', () => {
+  it.each(HOME_PAIRS)('UI-100 %s › %s ⊆ %s', (file, ours, theirs) => {
+    const documented = new Set(propertiesOf(theirs));
+    expect(declaredFields(file, ours).filter((f) => !documented.has(f))).toEqual([]);
+  });
+
+  it('UI-100 the client reads GET /home, which the document has', () => {
+    expect(doc.paths['/api/v1/home']?.get).toBeDefined();
   });
 });

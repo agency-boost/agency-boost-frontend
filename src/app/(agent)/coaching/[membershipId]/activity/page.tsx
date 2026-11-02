@@ -1,32 +1,23 @@
 'use client';
 
-import { ActivityDashboardPanel } from '@/components/activity-dashboard';
+import { CoacheeActivity } from '@/components/coaching-activity';
 import { useCoachee } from '@/components/coaching-person';
 import { Page } from '@/components/page';
 
 /**
- * A coachee's *Activity* tab (P13.1-T9): their Activity Dashboard — the range, the strip and the table
- * `/activity/dashboard` draws for the reader — between *Goal Setting* and *Training*, at the client's
- * request of 2026-10-07. The prototype's person view has no such tab (`Overall.html:3988-3995`); its
- * session tab opens the same days in a dialog, *{name} — Activity Dashboard*, which stays.
+ * A coachee's *Activity* tab (P13.1-T9; UI V1, UI-029): **their Log, Dashboard and Ratio** under the one agent header,
+ * as `/activity` draws them for the reader (`CoacheeActivity`) — opening on the Dashboard, which the tab drew alone
+ * before.
  *
- * Every read goes through `GET /activity/dashboard?for=`: answered only for somebody the reader coaches,
- * drawn on the coachee's rung (ADR-0020), and audited (roles §3.5). **No *Log Activity***: nobody logs
- * another person's day. No title of its own: the shell above names the person, as the other tabs leave
- * it to.
+ * Every read is the coachee's, answered only for somebody the reader coaches, on their rung (ADR-0020), and audited
+ * (roles §3.5): `GET /activity/log?membershipId=`, `GET /activity/dashboard?for=`, `GET /activity/ratios?for=`. **No
+ * *Log Activity* form**: nobody logs another person's day. No title of its own: the shell above names the person.
  */
 export default function CoacheeActivityTab() {
   const coachee = useCoachee();
   return (
     <Page permission="activity_log:read_raw">
-      <ActivityDashboardPanel
-        subject={{
-          membershipId: coachee.membershipId,
-          name: coachee.name,
-          pronoun: coachee.pronoun,
-          rungCode: coachee.rung.code,
-        }}
-      />
+      <CoacheeActivity coachee={coachee} />
     </Page>
   );
 }

@@ -1,15 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { stubFetch } from '@test/harness';
+import { LANGUAGE_UNCHOSEN } from '@/i18n/language';
 import { ApiConfigError } from './api';
 import {
   api,
+  apiBlob,
   ApiRequestError,
   getAccessToken,
+  getRequestLanguage,
   isImpersonating,
   isOfficeUnavailable,
   onOfficeUnavailable,
+  onSessionLost,
+  refreshSession,
   setAccessToken,
   setImpersonating,
+  setRequestLanguage,
   toDisplayError,
   tryRefresh,
 } from './api-client';
@@ -151,6 +157,79 @@ describe('api client', () => {
     expect(calls.filter((c) => c.url.includes('/auth/refresh'))).toHaveLength(1);
   });
 
+  /*
+   * ADR-0168 §1: **the session is told when a request finds it gone** — a 401 whose refresh the server refused — and
+   * decides itself what that ends. Not for a refresh that never arrived, nor one answered with anything else.
+   */
+  describe('telling the session it is gone (ADR-0168 §1)', () => {
+    it.each([
+      ['the server refused the refresh, 401', { status: 401, body: {} }, 1],
+      ['the server said the presented cookie no longer works, AUTH_SESSION_ENDED', {
+        status: 401, body: { error: { code: 'AUTH_SESSION_ENDED', message: 'Your session ended.', requestId: 'r' } },
+      }, 1],
+      ['the refresh was answered with something not about the session, 503', { status: 503, body: {} }, 0],
+      ['the refresh was rate limited, 429', { status: 429, body: {} }, 0],
+    ])('when %s: told %i time(s)', async (_what, refresh, times) => {
+      const lost = vi.fn();
+      const off = onSessionLost(lost);
+      try {
+        setAccessToken('stale');
+        stubFetch({ '/widgets': { status: 401, body: {} }, '/auth/refresh': refresh });
+        await expect(api('/widgets')).rejects.toMatchObject({ status: 401 });
+        expect(lost).toHaveBeenCalledTimes(times);
+      } finally {
+        off();
+      }
+    });
+
+    it('not when the refresh worked, nor while impersonating, nor once the listener is removed', async () => {
+      const lost = vi.fn();
+      const off = onSessionLost(lost);
+      stubFetch({ '/widgets': [{ status: 401, body: {} }, { body: { ok: true } }], '/auth/refresh': { body: { accessToken: 'new' } } });
+      await expect(api('/widgets')).resolves.toEqual({ ok: true });
+
+      setImpersonating(true);
+      stubFetch({ '/widgets': { status: 401, body: {} } });
+      await expect(api('/widgets')).rejects.toMatchObject({ status: 401 });
+      setImpersonating(false);
+
+      off();
+      stubFetch({ '/widgets': { status: 401, body: {} }, '/auth/refresh': { status: 401, body: {} } });
+      await expect(api('/widgets')).rejects.toMatchObject({ status: 401 });
+      expect(lost).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['refreshed', { body: { accessToken: 'new' } }],
+      ['ended', { status: 401, body: { error: { code: 'AUTH_SESSION_ENDED', message: 'Ended.', requestId: 'r' } } }],
+      ['none', { status: 401, body: { error: { code: 'AUTH_TOKEN_INVALID', message: 'No session.', requestId: 'r' } } }],
+      ['none', { status: 401, body: {} }],
+      ['unreachable', { status: 503, body: {} }],
+      ['unreachable', { status: 429, body: {} }],
+    ])('refreshSession tells the first read %s from the answer', async (outcome, answer) => {
+      stubFetch({ '/auth/refresh': answer });
+      await expect(refreshSession()).resolves.toBe(outcome);
+      // `tryRefresh` is the same request, answering only whether it worked.
+      await expect(tryRefresh()).resolves.toBe(outcome === 'refreshed');
+    });
+
+    it('a refresh that never arrived is not refused either, and tryRefresh still answers false', async () => {
+      const lost = vi.fn();
+      const off = onSessionLost(lost);
+      try {
+        vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+          if (url.includes('/auth/refresh')) throw new TypeError('Failed to fetch');
+          return { ok: false, status: 401, json: async () => ({}) } as Response;
+        }));
+        await expect(api('/widgets')).rejects.toMatchObject({ status: 401 });
+        await expect(tryRefresh()).resolves.toBe(false);
+        expect(lost).not.toHaveBeenCalled();
+      } finally {
+        off();
+      }
+    });
+  });
+
   it('refuses to refresh while impersonating, so a request is never replayed as the Super Admin', async () => {
     // The refresh cookie still belongs to the real Super Admin. Replaying here would
     // attribute the action to the wrong person — the precise thing impersonation exists
@@ -285,5 +364,116 @@ describe('api client', () => {
       expect(isOfficeUnavailable({ code: 'TENANT_ARCHIVED' })).toBe(true);
       expect(isOfficeUnavailable(null)).toBe(false);
     });
+  });
+});
+
+/**
+ * **A file the API answers as itself** (ADR-0184): a template asked for as `.xlsx` or `.csv`, fetched with the token —
+ * never a link, which would arrive without it — with the same retry and the same refusal as `api`.
+ */
+describe('apiBlob (ADR-0184)', () => {
+  beforeEach(() => {
+    setAccessToken(null);
+    setImpersonating(false);
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('answers the bytes as a Blob, the bearer token sent with the request', async () => {
+    setAccessToken('tok');
+    const file = new Blob(['PK']);
+    const { calls } = stubFetch({ '/admin/tenants/roster-template': { body: file } });
+    await expect(apiBlob('/admin/tenants/roster-template?format=xlsx')).resolves.toBe(file);
+    expect((calls[0].init.headers as Record<string, string>).Authorization).toBe('Bearer tok');
+  });
+
+  it('refreshes once and replays on a 401, as api does', async () => {
+    setAccessToken('stale');
+    const file = new Blob(['PK']);
+    const { calls } = stubFetch({
+      '/kpm/data-upload/template': [{ status: 401, body: {} }, { body: file }],
+      '/auth/refresh': { body: { accessToken: 'fresh' } },
+    });
+    await expect(apiBlob('/kpm/data-upload/template?month=2026-09&format=xlsx')).resolves.toBe(file);
+    expect(calls.map((c) => c.url.split('/api/v1')[1].split('?')[0])).toEqual([
+      '/kpm/data-upload/template', '/auth/refresh', '/kpm/data-upload/template',
+    ]);
+  });
+
+  it('refuses with the server’s envelope, which is JSON whatever was asked for', async () => {
+    stubFetch({
+      '/kpm/data-upload/template': {
+        status: 400,
+        body: { error: { code: 'VALIDATION_FAILED', message: 'Sep-2026 is not a month.', requestId: 'r-9' } },
+      },
+    });
+    await expect(apiBlob('/kpm/data-upload/template?month=Sep-2026&format=xlsx')).rejects.toMatchObject({
+      status: 400, error: { code: 'VALIDATION_FAILED', requestId: 'r-9' },
+    });
+  });
+
+  it('tells the session when the office cannot be used, as api does', async () => {
+    const heard = vi.fn();
+    const off = onOfficeUnavailable(heard);
+    stubFetch({
+      '/kpm/data-upload/template': {
+        status: 403,
+        body: { error: { code: 'TENANT_SUSPENDED', message: 'Suspended.', requestId: 'r-10' } },
+      },
+    });
+    await expect(apiBlob('/kpm/data-upload/template?month=2026-09&format=xlsx')).rejects.toBeInstanceOf(ApiRequestError);
+    expect(heard).toHaveBeenCalledWith(expect.objectContaining({ code: 'TENANT_SUSPENDED' }));
+    off();
+  });
+
+  it('falls back to a generic error when a refusal is not the envelope', async () => {
+    stubFetch({ '/widgets': { status: 502, body: null } });
+    await expect(apiBlob('/widgets')).rejects.toMatchObject({ error: { code: 'INTERNAL_ERROR', requestId: 'unknown' } });
+  });
+});
+
+/**
+ * **P18.98-T2 AC-6: the API is told the screen's language on every request** (ADR-0179 §7): `Accept-Language: id` or
+ * `en`, set by `LanguageProvider` through `setRequestLanguage` as the token is set through `setAccessToken`. T5's input.
+ */
+describe('P18.98-T2 AC-6 the language on every request', () => {
+  beforeEach(() => {
+    setAccessToken(null);
+    setImpersonating(false);
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    setRequestLanguage(LANGUAGE_UNCHOSEN);
+  });
+
+  const languageOf = (init: RequestInit) => (init.headers as Record<string, string>)['Accept-Language'];
+
+  it('AC-6 starts from the language the pages are prerendered in, before the provider has said anything', async () => {
+    const { calls } = stubFetch({ '/widgets': { body: {} } });
+    await api('/widgets');
+    expect(getRequestLanguage()).toBe(LANGUAGE_UNCHOSEN);
+    expect(languageOf(calls[0].init)).toBe(LANGUAGE_UNCHOSEN);
+  });
+
+  it.each(['id', 'en'] as const)('AC-6 sends Accept-Language: %s once the screen is in it, on a read and on a write', async (language) => {
+    setRequestLanguage(language);
+    const { calls } = stubFetch({ '/widgets': { body: {} } });
+
+    await api('/widgets');
+    await api('/widgets', { method: 'PATCH', body: { a: 1 } });
+
+    expect(calls.map((c) => languageOf(c.init))).toEqual([language, language]);
+  });
+
+  it('AC-6 sends it with a form too, and with the refresh and its replay', async () => {
+    setRequestLanguage('en');
+    setAccessToken('old');
+    const { calls } = stubFetch({
+      '/uploads': [{ status: 401, body: { error: { code: 'AUTH_TOKEN_EXPIRED' } } }, { body: {} }],
+      '/auth/refresh': { body: { accessToken: 'new' } },
+    });
+
+    await api('/uploads', { method: 'POST', body: new FormData() });
+
+    expect(calls.map((c) => languageOf(c.init))).toEqual(['en', 'en', 'en']);
   });
 });

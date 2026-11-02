@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import AgentLayout from '@/app/(agent)/layout';
@@ -48,6 +48,23 @@ const AGENT = makeMe({
  */
 const MY_CODE = { code: 'JOR417', url: 'https://agencyboost.app/join?code=JOR417' };
 
+/** The invite block's layouts (UI-084): below 768px, and from 768px. */
+const phoneShare = () => screen.getByTestId('invite-share-phone');
+const wideShare = () => screen.getByTestId('invite-share-wide');
+
+/** UI-083: a member's role pill (the first: the rows below 1024px), and the role sheet it opens. */
+const rolePillOf = (name: string) => screen.findAllByRole('button', { name: new RegExp(`^Change ${name}’s role, now `) });
+async function openRoleSheet(name = 'Rina Wijaya') {
+  await userEvent.click((await rolePillOf(name))[0]);
+  return screen.getByRole('dialog', { name });
+}
+/** Picks a rung in the role sheet, as the select used to. */
+async function pickRole(label: string, name = 'Rina Wijaya') {
+  const sheet = await openRoleSheet(name);
+  await userEvent.click(within(sheet).getByRole('radio', { name: label }));
+  return sheet;
+}
+
 describe('inviting people (P3-T4)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
@@ -80,7 +97,7 @@ describe('inviting people (P3-T4)', () => {
     );
 
     renderInLayout(AgentLayout, <AddAgentsPage />, { me: LEADER });
-    expect(await screen.findByText('Budi Santoso')).toBeInTheDocument();
+    expect((await screen.findAllByText('Budi Santoso')).length).toBeGreaterThan(0);
 
     await userEvent.type(screen.getByLabelText('Search by name'), 'z');
 
@@ -90,18 +107,19 @@ describe('inviting people (P3-T4)', () => {
     });
 
     release();
-    await screen.findByText('Budi Santoso');
+    await screen.findAllByText('Budi Santoso');
   });
 
-  it('says plainly that a code skips approval', async () => {
-    // It is the whole difference from asking a leader, and the reason the code is worth
-    // guarding at all.
+  it('P18.95-T7 AC-1 says what the invite is for in the client’s words, at every size (grey text row 4)', async () => {
     stubFetch({
       '/members/my-team': { body: [] },
       '/join/my-code': { body: MY_CODE }, '/join/untagged': { body: [] } });
     renderInLayout(AgentLayout, <AddAgentsPage />, { me: LEADER });
 
-    expect(await screen.findByText(/no approval needed/)).toBeInTheDocument();
+    const line = await screen.findByText('Share this so new agents join your team.');
+    // UI-084 (Appendix A): kept from 768px, gone on a phone.
+    expect(line.className.split(/\s+/).filter((c) => /hidden/.test(c))).toEqual(['max-md:hidden']);
+    expect(screen.queryByText(/Share your link, code, or QR/)).not.toBeInTheDocument();
   });
 
   it('AC-1: shows the code and the link as one artefact, not two', async () => {
@@ -110,9 +128,13 @@ describe('inviting people (P3-T4)', () => {
       '/join/my-code': { body: MY_CODE }, '/join/untagged': { body: [] } });
     renderInLayout(AgentLayout, <AddAgentsPage />, { me: LEADER });
 
-    // Once now, not twice: the list of what you have issued went with the lifecycle.
-    expect(await screen.findAllByText('JOR417')).toHaveLength(1);
-    expect(screen.getByText('https://agencyboost.app/join?code=JOR417')).toBeInTheDocument();
+    // Once per layout: the list of what you have issued went with the lifecycle (UI-084: a phone's and a wider one).
+    await screen.findAllByText('JOR417');
+    expect(within(phoneShare()).getAllByText('JOR417')).toHaveLength(1);
+    expect(within(wideShare()).getAllByText('JOR417')).toHaveLength(1);
+    // From 768px the link is shown; a phone copies it without showing it (UI-084).
+    expect(within(wideShare()).getByText('https://agencyboost.app/join?code=JOR417')).toBeInTheDocument();
+    expect(within(phoneShare()).queryByText('https://agencyboost.app/join?code=JOR417')).toBeNull();
   });
 
   it('AC-1: shows the whole link, and names what each button copies', async () => {
@@ -130,8 +152,77 @@ describe('inviting people (P3-T4)', () => {
 
     // Two artefacts, two buttons that say which is which (`:447`, `:452`). A bare
     // "Copy" twice is indistinguishable to anybody reading the buttons alone.
-    expect(screen.getByRole('button', { name: 'Copy link' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Copy code' })).toBeInTheDocument();
+    for (const layout of [phoneShare(), wideShare()]) {
+      expect(within(layout).getByRole('button', { name: 'Copy link' })).toBeInTheDocument();
+      expect(within(layout).getByRole('button', { name: 'Copy code' })).toBeInTheDocument();
+    }
+  });
+
+  it('UI-090: a copy that worked says Copied ✓ in the shell’s toast, within a second, and the clipboard holds it', async () => {
+    const writeText = vi.fn(async () => undefined);
+    vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } });
+    stubFetch({
+      '/members/my-team': { body: [] },
+      '/join/my-code': { body: MY_CODE }, '/join/untagged': { body: [] } });
+    renderInLayout(AgentLayout, <AddAgentsPage />, { me: LEADER });
+
+    await screen.findAllByText('JOR417');
+    await userEvent.click(within(phoneShare()).getByRole('button', { name: 'Copy link' }));
+    expect(writeText).toHaveBeenLastCalledWith('https://agencyboost.app/join?code=JOR417');
+    const toast = await screen.findByText('Copied ✓', {}, { timeout: 1000 });
+    expect(toast.closest('[role="status"]')).toHaveAttribute('aria-live', 'polite');
+
+    await userEvent.click(within(wideShare()).getByRole('button', { name: 'Copy code' }));
+    expect(writeText).toHaveBeenLastCalledWith('JOR417');
+    // One region, nothing stacked.
+    expect(await screen.findAllByText('Copied ✓')).toHaveLength(1);
+  });
+
+  it('UI-090: a copy that fails toasts nothing, and keeps the fallback, the value shown to copy by hand', async () => {
+    vi.stubGlobal('navigator', { ...navigator, clipboard: undefined });
+    stubFetch({
+      '/members/my-team': { body: [] },
+      '/join/my-code': { body: MY_CODE }, '/join/untagged': { body: [] } });
+    renderInLayout(AgentLayout, <AddAgentsPage />, { me: LEADER });
+
+    await screen.findAllByText('JOR417');
+    await userEvent.click(within(phoneShare()).getByRole('button', { name: 'Copy link' }));
+
+    const failed = await screen.findByText('Could not copy — select the text above and copy it yourself.');
+    // On a phone the link is not otherwise on the screen: the fallback shows it, selectable.
+    expect(failed.previousElementSibling).toHaveTextContent('https://agencyboost.app/join?code=JOR417');
+    expect(failed.previousElementSibling!.className).toContain('select-all');
+    expect(screen.queryByText('Copied ✓')).not.toBeInTheDocument();
+  });
+
+  it('UI-084: a phone’s card is the code, three pills and a round WhatsApp — all 44px — and QR opens a sheet', async () => {
+    stubFetch({
+      '/members/my-team': { body: [] },
+      '/join/my-code': { body: MY_CODE }, '/join/untagged': { body: [] } });
+    renderInLayout(AgentLayout, <AddAgentsPage />, { me: LEADER });
+
+    await screen.findAllByText('JOR417');
+    const phone = phoneShare();
+    expect(phone.className).toContain('md:hidden');
+    expect(wideShare().className).toContain('max-md:hidden');
+    for (const name of ['Copy link', 'Copy code', 'Show the QR code']) {
+      expect(within(phone).getByRole('button', { name }).className).toContain('h-11');
+    }
+    // No underlined text link: pill buttons.
+    expect(within(phone).getByRole('button', { name: 'Copy link' }).className).not.toContain('underline');
+    // WhatsApp opens with the invite link filled in.
+    const whatsApp = within(phone).getByRole('link', { name: 'Share the invite on WhatsApp' });
+    expect(whatsApp).toHaveAttribute('href', `https://wa.me/?text=${encodeURIComponent(MY_CODE.url)}`);
+    expect(whatsApp.className).toContain('h-11 w-11');
+    // Sentence-case labels, never the uppercase eyebrows.
+    expect(within(phone).getByText('Leader code').className).not.toContain('uppercase');
+    expect(within(wideShare()).getByText('Invite link').className).not.toContain('uppercase');
+
+    await userEvent.click(within(phone).getByRole('button', { name: 'Show the QR code' }));
+    const sheet = screen.getByRole('dialog', { name: 'Scan to join' });
+    expect(sheet).toHaveTextContent('Code JOR417');
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Close' }));
+    expect(screen.queryByRole('dialog', { name: 'Scan to join' })).not.toBeInTheDocument();
   });
 
   it('AC-2: hides the team card from somebody who cannot act on a team', async () => {
@@ -180,6 +271,22 @@ describe('inviting people (P3-T4)', () => {
     renderInLayout(AgentLayout, <AddAgentsPage />, { me: LEADER });
 
     expect(await screen.findByText('Your team')).toBeInTheDocument();
+  });
+
+  it('UI-083 puts the team card’s line behind ⓘ at every size (Appendix A; was grey text row 6)', async () => {
+    stubFetch({
+      '/members/my-team': { body: [] },
+      '/join/my-code': { body: MY_CODE }, '/join/untagged': { body: [] } });
+    renderInLayout(AgentLayout, <AddAgentsPage />, { me: LEADER });
+
+    await screen.findByText('Your team');
+    // UI-083 (Appendix A): the client's sentence behind the title's ⓘ at every size, never a line under it.
+    const tip = within(screen.getByTestId('team-card')).getByRole('button', {
+      name: "People who report to you. Only somebody's direct leader can change their role, and changing it moves nobody — they keep reporting to you either way.",
+    });
+    expect(tip).toBeInTheDocument();
+    // Only the ⓘ's own bubble holds it: no sentence of its own on the card.
+    expect(screen.queryAllByText(/^People who report to you\./).filter((el) => el.tagName === 'P')).toEqual([]);
   });
 
   it('AC-1: hides the Pending Requests tab from somebody with no inbox', async () => {
@@ -236,14 +343,13 @@ describe('inviting people (P3-T4)', () => {
     expect(screen.queryByText('Your invites')).toBeNull();
   });
 
-  it('says the code does not change, rather than that it can be withdrawn', async () => {
+  it('never offers to withdraw the invite: the code does not change', async () => {
     stubFetch({
       '/members/my-team': { body: [] },
       '/join/my-code': { body: MY_CODE }, '/join/untagged': { body: [] } });
     renderInLayout(AgentLayout, <AddAgentsPage />, { me: LEADER });
 
-    expect(await screen.findByText(/it came with your membership and it does not change/))
-      .toBeInTheDocument();
+    await screen.findByText('Share this so new agents join your team.');
     expect(screen.queryByText(/Withdrawing the invite/)).toBeNull();
   });
 
@@ -297,7 +403,8 @@ describe('inviting people (P3-T4)', () => {
     it('says a role change moves nobody, which is the thing people assume it does', async () => {
       stub([teamMember()]);
       renderInLayout(AgentLayout, <AddAgentsPage />, { me: LEADER });
-      expect(await screen.findByText(/changing it moves nobody/)).toBeInTheDocument();
+      // Behind the title's ⓘ (UI-083), and again beside *Role* in the sheet.
+      expect((await screen.findAllByRole('button', { name: /changing it moves nobody/ })).length).toBeGreaterThan(0);
     });
 
     it('AC-1: shows the control only where the server says it may', async () => {
@@ -309,16 +416,24 @@ describe('inviting people (P3-T4)', () => {
       ]);
       renderInLayout(AgentLayout, <AddAgentsPage />, { me: LEADER });
 
-      expect(await screen.findByLabelText('Role')).toBeInTheDocument();
-      expect(screen.getByTitle('Agency Builder')).toBeInTheDocument();
-      expect(screen.getAllByLabelText('Role')).toHaveLength(1);
+      // UI-083: no native select anywhere; the sheet offers the rungs only where the server says it may.
+      await rolePillOf('Rina Wijaya');
+      expect(document.querySelector('select')).toBeNull();
+      const sheet = await openRoleSheet();
+      expect(within(sheet).getAllByRole('radio')).toHaveLength(2);
+      await userEvent.click(within(sheet).getByRole('button', { name: 'Close' }));
+      const ab = await openRoleSheet('An AB');
+      // The AB's sheet draws the rung where the choices would be, and still offers *Remove*.
+      expect(within(ab).queryAllByRole('radio')).toHaveLength(0);
+      expect(within(ab).getByText('AB')).toBeInTheDocument();
+      expect(within(ab).getByRole('button', { name: 'Remove' })).toBeInTheDocument();
     });
 
     it('explains the change in the prototype own words before confirming', async () => {
       stub([teamMember()]);
       renderInLayout(AgentLayout, <AddAgentsPage />, { me: LEADER });
 
-      await userEvent.selectOptions(await screen.findByLabelText('Role'), 'aab');
+      await pickRole('AAB');
       // The card says it in general; the confirmation says it about this person, which
       // is the one somebody reads before pressing the button.
       const explanation = screen.getByText(/can now recruit and manage their own direct agents/);
@@ -330,7 +445,7 @@ describe('inviting people (P3-T4)', () => {
       stub([teamMember({ role: 'aab' })]);
       renderInLayout(AgentLayout, <AddAgentsPage />, { me: LEADER });
 
-      await userEvent.selectOptions(await screen.findByLabelText('Role'), 'agent');
+      await pickRole('Agent');
       expect(screen.getByText(/no longer manage their own direct agents/)).toBeInTheDocument();
     });
 
@@ -338,18 +453,20 @@ describe('inviting people (P3-T4)', () => {
       const { calls } = stub([teamMember()]);
       renderInLayout(AgentLayout, <AddAgentsPage />, { me: LEADER });
 
-      await userEvent.selectOptions(await screen.findByLabelText('Role'), 'aab');
+      await pickRole('AAB');
       expect(calls.some((c) => c.init.method === 'PATCH')).toBe(false);
 
-      await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+      // Closing the sheet forgets the pick.
+      await userEvent.click(screen.getByRole('button', { name: 'Close' }));
       expect(screen.queryByText(/can now recruit/)).not.toBeInTheDocument();
+      expect(calls.some((c) => c.init.method === 'PATCH')).toBe(false);
     });
 
     it('AC-2: sends the reason, because the log is the only place it can be read back', async () => {
       const { calls } = stub([teamMember()], { '/members/mem-t1/role': { body: [] } });
       renderInLayout(AgentLayout, <AddAgentsPage />, { me: LEADER });
 
-      await userEvent.selectOptions(await screen.findByLabelText('Role'), 'aab');
+      await pickRole('AAB');
       await userEvent.type(screen.getByLabelText('Why?'), '  Ready to lead  ');
       await userEvent.click(screen.getByRole('button', { name: 'Confirm change' }));
 
@@ -360,7 +477,20 @@ describe('inviting people (P3-T4)', () => {
       });
     });
 
-    it('AC-3: surfaces a refused demotion with the count, and puts the select back', async () => {
+    it('UI-083: a role saved from the sheet closes it and says Saved ✓ in the shell’s toast', async () => {
+      stub([teamMember()], { '/members/mem-t1/role': { body: [teamMember({ role: 'aab', orgLevelCode: 'AAB', directCount: 0 })] } });
+      renderInLayout(AgentLayout, <AddAgentsPage />, { me: LEADER });
+
+      const sheet = await pickRole('AAB');
+      // The chosen rung is drawn chosen: the accent's border and tint.
+      expect(within(sheet).getByRole('radio', { name: 'AAB' }).closest('label')!.className).toContain('border-amber');
+      await userEvent.click(screen.getByRole('button', { name: 'Confirm change' }));
+      expect(await screen.findByText('Saved ✓')).toBeInTheDocument();
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect((await rolePillOf('Rina Wijaya'))[0]).toHaveAccessibleName('Change Rina Wijaya’s role, now AAB');
+    });
+
+    it('AC-3: surfaces a refused demotion with the count, and puts the pill back', async () => {
       const { calls } = stub([teamMember({ role: 'aab', directCount: 2 })], {
         '/members/mem-t1/role': {
           status: 409,
@@ -375,11 +505,11 @@ describe('inviting people (P3-T4)', () => {
       });
       renderInLayout(AgentLayout, <AddAgentsPage />, { me: LEADER });
 
-      await userEvent.selectOptions(await screen.findByLabelText('Role'), 'agent');
+      await pickRole('Agent');
       await userEvent.click(screen.getByRole('button', { name: 'Confirm change' }));
 
       expect(await screen.findByRole('alert')).toHaveTextContent('2 people report to them');
-      // Reloaded, so the select shows what is true rather than what was picked.
+      // Reloaded, so the pill shows what is true rather than what was picked.
       expect(calls.filter((c) => c.url.endsWith('/members/my-team')).length).toBeGreaterThan(1);
       expect(screen.queryByRole('button', { name: 'Confirm change' })).not.toBeInTheDocument();
     });
@@ -397,7 +527,7 @@ describe('inviting people (P3-T4)', () => {
       });
       renderInLayout(AgentLayout, <AddAgentsPage />, { me: LEADER });
 
-      await userEvent.selectOptions(await screen.findByLabelText('Role'), 'aab');
+      await pickRole('AAB');
       await userEvent.click(screen.getByRole('button', { name: 'Confirm change' }));
 
       const alert = await screen.findByRole('alert');
@@ -409,7 +539,7 @@ describe('inviting people (P3-T4)', () => {
     it('says how many somebody leads, so a demotion is not a surprise', async () => {
       stub([teamMember({ role: 'aab', directCount: 3 })]);
       renderInLayout(AgentLayout, <AddAgentsPage />, { me: LEADER });
-      expect(await screen.findByText(/leads 3/)).toBeInTheDocument();
+      expect((await screen.findAllByText(/leads 3/)).length).toBeGreaterThan(0);
     });
 
     it('tells a leader with nobody under them', async () => {
@@ -434,10 +564,16 @@ describe('inviting people (P3-T4)', () => {
       });
     }
 
+    /** UI-083: *Remove* is last in the role sheet, red, and opens its confirmation. */
+    async function askToRemove() {
+      const sheet = await openRoleSheet();
+      await userEvent.click(within(sheet).getByRole('button', { name: 'Remove' }));
+    }
+
     async function open(team = [teamMember()], extra: Record<string, unknown> = {}) {
       const stubbed = stub(team, extra);
       renderInLayout(AgentLayout, <AddAgentsPage />, { me: LEADER });
-      await userEvent.click(await screen.findByRole('button', { name: 'Remove Rina Wijaya' }));
+      await askToRemove();
       return stubbed;
     }
 
@@ -487,8 +623,32 @@ describe('inviting people (P3-T4)', () => {
       expect(calls.some((c) => c.init.method === 'DELETE')).toBe(false);
 
       await userEvent.click(screen.getAllByRole('button', { name: 'Cancel' })[0]);
-      await userEvent.click(screen.getByRole('button', { name: 'Remove Rina Wijaya' }));
+      await askToRemove();
       expect(screen.getByRole('button', { name: 'Remove from team' })).toBeDisabled();
+    });
+
+    it('UI-083: no red button on any row; Remove is last in the sheet, red, and on a desktop in the row’s menu', async () => {
+      stub([teamMember()]);
+      renderInLayout(AgentLayout, <AddAgentsPage />, { me: LEADER });
+      await rolePillOf('Rina Wijaya');
+      const card = screen.getByTestId('team-card');
+      expect(within(card).queryByRole('button', { name: /^Remove/ })).toBeNull();
+      expect(card.querySelector('.bg-alert, [class*="variant-danger"]')).toBeNull();
+
+      const sheet = await openRoleSheet();
+      const remove = within(sheet).getByRole('button', { name: 'Remove' });
+      expect(remove.className).toContain('text-signal-red');
+      const buttons = within(sheet).getAllByRole('button').filter((b) => b.getAttribute('aria-label') !== 'Close');
+      expect(buttons[buttons.length - 1]).toBe(remove);
+      await userEvent.click(within(sheet).getByRole('button', { name: 'Close' }));
+
+      // From 1024px: Nama · Kode · Status · Peran · ⋮, *Remove* inside the ⋮.
+      const table = screen.getByTestId('team-table');
+      expect(table.className).toContain('max-lg:hidden');
+      expect(screen.getByTestId('team-rows').className).toContain('lg:hidden');
+      await userEvent.click(within(table).getByRole('button', { name: 'Actions for Rina Wijaya' }));
+      await userEvent.click(screen.getByRole('menuitem', { name: 'Remove' }));
+      expect(screen.getByRole('dialog', { name: 'Remove Rina Wijaya?' })).toBeInTheDocument();
     });
 
     describe('AC-3: when they lead people', () => {
@@ -567,10 +727,10 @@ describe('inviting people (P3-T4)', () => {
       stub([teamMember()]);
       renderInLayout(AgentLayout, <AddAgentsPage />, { me: LEADER });
 
-      await userEvent.selectOptions(await screen.findByLabelText('Role'), 'aab');
+      const sheet = await pickRole('AAB');
       expect(screen.getByText(/can now recruit/)).toBeInTheDocument();
 
-      await userEvent.click(screen.getByRole('button', { name: 'Remove Rina Wijaya' }));
+      await userEvent.click(within(sheet).getByRole('button', { name: 'Remove' }));
       expect(screen.queryByText(/can now recruit/)).not.toBeInTheDocument();
       expect(screen.getByText(/removes them from your team immediately/)).toBeInTheDocument();
     });
@@ -582,13 +742,16 @@ describe('inviting people (P3-T4)', () => {
       email: 'fajar@kpm0417.test', agentCode: 'KPM0417-011', role: 'agent', ...over,
     });
 
-    it('says plainly that they do not have to approve it', async () => {
+    it('UI-082 says who they are and what Add does, in the client’s words from 768px (was grey text row 5)', async () => {
       stubFetch({
       '/members/my-team': { body: [] },
       '/join/my-code': { body: MY_CODE }, '/join/untagged': { body: [untagged()] } });
       renderInLayout(AgentLayout, <AddAgentsPage />, { me: LEADER });
 
-      expect(await screen.findByText(/they do not have to approve it/)).toBeInTheDocument();
+      const line = await screen.findByText('Agents without a leader. Tap Add to join your unit.');
+      // UI-082 (Appendix A): kept from 768px, gone on a phone.
+      expect(line.className.split(/\s+/).filter((c) => /hidden/.test(c))).toEqual(['max-md:hidden']);
+      expect(screen.queryByText(/People registered in this office who report to nobody/)).not.toBeInTheDocument();
     });
 
     it('lists people who report to nobody', async () => {
@@ -597,8 +760,28 @@ describe('inviting people (P3-T4)', () => {
       '/join/my-code': { body: MY_CODE }, '/join/untagged': { body: [untagged()] } });
       renderInLayout(AgentLayout, <AddAgentsPage />, { me: LEADER });
 
-      expect(await screen.findByText('Fajar Nugroho')).toBeInTheDocument();
-      expect(screen.getByText(/reports to nobody/)).toBeInTheDocument();
+      expect((await screen.findAllByText('Fajar Nugroho')).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/reports to nobody/).length).toBeGreaterThan(0);
+    });
+
+    it('UI-082: on a phone each is a 64px divided row — NAME and meta one line each — and a 44px round + named Add to my unit', async () => {
+      stubFetch({
+      '/members/my-team': { body: [] },
+      '/join/my-code': { body: MY_CODE }, '/join/untagged': { body: [untagged()] } });
+      renderInLayout(AgentLayout, <AddAgentsPage />, { me: LEADER });
+
+      await screen.findAllByText('Fajar Nugroho');
+      const phone = screen.getByTestId('untagged-phone');
+      expect(phone.className).toContain('md:hidden');
+      const row = phone.querySelector<HTMLElement>('[data-person-row]')!;
+      expect(row.className).toContain('min-h-16');
+      expect(within(row).getByText('Fajar Nugroho').className).toContain('truncate');
+      expect(within(row).getByText('KPM0417-011 · reports to nobody').className).toContain('truncate');
+      const plus = within(row).getByRole('button', { name: 'Add to my unit' });
+      expect(plus.className).toContain('h-11 w-11');
+      expect(plus).not.toHaveTextContent('Add to my unit');
+      // From 768px the button says it in words, as before.
+      expect(screen.getAllByRole('button', { name: 'Add to my unit' }).filter((b) => b.textContent === 'Add to my unit')).toHaveLength(1);
     });
 
     it('confirms in the row rather than in a modal', async () => {
@@ -608,12 +791,13 @@ describe('inviting people (P3-T4)', () => {
       '/join/my-code': { body: MY_CODE }, '/join/untagged': { body: [untagged()] } });
       renderInLayout(AgentLayout, <AddAgentsPage />, { me: LEADER });
 
-      await userEvent.click(await screen.findByRole('button', { name: 'Add to my unit' }));
-      expect(screen.getByText('Add them to your unit?')).toBeInTheDocument();
+      await userEvent.click((await screen.findAllByRole('button', { name: 'Add to my unit' }))[0]);
+      // Both layouts ask it in the row (the phone's under its row, the wider one in it).
+      expect(screen.getAllByText('Add them to your unit?').length).toBeGreaterThan(0);
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 
-      await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-      expect(screen.getByRole('button', { name: 'Add to my unit' })).toBeInTheDocument();
+      await userEvent.click(screen.getAllByRole('button', { name: 'Cancel' })[0]);
+      expect(screen.getAllByRole('button', { name: 'Add to my unit' }).length).toBe(2);
     });
 
     it('adds them on confirm, and takes the pool the server returned', async () => {
@@ -625,8 +809,8 @@ describe('inviting people (P3-T4)', () => {
       });
       renderInLayout(AgentLayout, <AddAgentsPage />, { me: LEADER });
 
-      await userEvent.click(await screen.findByRole('button', { name: 'Add to my unit' }));
-      await userEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+      await userEvent.click((await screen.findAllByRole('button', { name: 'Add to my unit' }))[0]);
+      await userEvent.click(screen.getAllByRole('button', { name: 'Confirm' })[0]);
 
       expect(calls.some((c) => c.url.endsWith('/join/untagged/mem-un'))).toBe(true);
       expect(
@@ -675,8 +859,8 @@ describe('inviting people (P3-T4)', () => {
       });
       renderInLayout(AgentLayout, <AddAgentsPage />, { me: LEADER });
 
-      await userEvent.click(await screen.findByRole('button', { name: 'Add to my unit' }));
-      await userEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+      await userEvent.click((await screen.findAllByRole('button', { name: 'Add to my unit' }))[0]);
+      await userEvent.click(screen.getAllByRole('button', { name: 'Confirm' })[0]);
       expect(await screen.findByRole('alert')).toHaveTextContent('already report to somebody');
     });
   });
@@ -696,4 +880,108 @@ describe('inviting people (P3-T4)', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Nope.');
   });
+
+/*
+ * P18.8-T2 (ADR-0157): past the limit a leader's role change, or a pending leader tagged into their unit, may wait
+ * for AgencyBoost — *Ask AgencyBoost to approve* asks for exactly what was refused, and the row says it is waiting.
+ * And OD-50: the team's role select is the company's ladder, a rung it added included, none that makes an AB.
+ */
+describe('P18.8-T2 — a leader past the limit waits for AgencyBoost', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const ASKER = makeMe({
+    membership: LEADER.membership,
+    permissions: [...LEADER.permissions, 'leader_limit_request:create', 'leader_limit_request:read'],
+  });
+  const teamMember = (over: Record<string, unknown> = {}) => ({
+    membershipId: 'mem-t1', fullName: 'Rina Wijaya', initials: 'RW', agentCode: '88003', role: 'agent',
+    orgLevelCode: 'AGENT', directCount: 0, canChangeRole: true, ...over,
+  });
+  const LIMIT = {
+    status: 409,
+    body: {
+      error: {
+        code: 'LEADER_LIMIT_REACHED', message: 'x', requestId: 'r-1',
+        details: { maxLeaders: 10, leadersUsed: 10, canRequest: true },
+      },
+    },
+  };
+  const ask = (over: Record<string, unknown> = {}) => ({
+    requestId: 'llr-1', kpmId: 'kpm-1', kpmCode: '0603', kpmBranchName: 'Tangerang Branch',
+    subjectMembershipId: 'mem-t1', subjectName: 'Rina Wijaya', subjectAgentCode: '88003', action: 'promote',
+    fromOrgLevelCode: 'AGENT', toOrgLevelCode: 'AAB', reason: null, requestedByMembershipId: 'mem-ab',
+    requestedByName: 'Agus', status: 'pending', requestedAt: '2026-10-25T00:00:00.000Z', decidedAt: null,
+    declineReason: null, maxLeaders: 10, leadersUsed: 10, ...over,
+  });
+
+  it('AC-6 asks AgencyBoost for the role change the limit refused, with its reason', async () => {
+    const { calls } = stubFetch({
+      '/join/my-code': { body: MY_CODE },
+      '/join/untagged': { body: [] },
+      '/members/my-team': { body: [teamMember()] },
+      '/members/mem-t1/role': LIMIT,
+      'POST /members/mem-t1/leader-limit-request': { status: 201, body: ask() },
+      '/members/leader-limit-requests': [{ body: [] }, { body: [] }, { body: [ask()] }],
+    });
+    renderInLayout(AgentLayout, <AddAgentsPage />, { me: ASKER });
+
+    await pickRole('AAB');
+    await userEvent.type(screen.getByLabelText('Why?'), 'Ready to lead');
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm change' }));
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Ask AgencyBoost to approve this one past the limit');
+    await userEvent.click(screen.getByRole('button', { name: 'Ask AgencyBoost to approve' }));
+
+    const posted = calls.find((c) => c.init.method === 'POST');
+    expect(JSON.parse(String(posted?.init.body))).toEqual({ action: 'promote', orgLevelCode: 'aab', reason: 'Ready to lead' });
+    expect((await screen.findAllByText("Waiting for AgencyBoost's approval")).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('button', { name: 'Cancel request' }).length).toBeGreaterThan(0);
+  });
+
+  it('AC-6 asks to let in a pending leader the tag was refused for', async () => {
+    const { calls } = stubFetch({
+      '/join/my-code': { body: MY_CODE },
+      '/join/untagged/mem-un': LIMIT,
+      '/join/untagged': { body: [{ membershipId: 'mem-un', fullName: 'Tono', initials: 'T', email: 't@k.test', agentCode: '88009', role: 'aab' }] },
+      '/members/my-team': { body: [] },
+      'POST /members/mem-un/leader-limit-request': { status: 201, body: ask({ subjectMembershipId: 'mem-un', action: 'activate' }) },
+      '/members/leader-limit-requests': { body: [] },
+    });
+    renderInLayout(AgentLayout, <AddAgentsPage />, { me: ASKER });
+
+    await userEvent.click((await screen.findAllByRole('button', { name: 'Add to my unit' }))[0]);
+    await userEvent.click(screen.getAllByRole('button', { name: 'Confirm' })[0]);
+    await userEvent.click(await screen.findByRole('button', { name: 'Ask AgencyBoost to approve' }));
+    const posted = calls.find((c) => c.url.includes('/members/mem-un/leader-limit-request'));
+    expect(JSON.parse(String(posted?.init.body))).toEqual({ action: 'activate' });
+  });
+
+  it('OD-50 offers the company’s own rungs that a leader may place somebody on, never one that makes an AB', async () => {
+    const ladder = [
+      { orgLevelId: 'l1', companyId: 'c', code: 'AGENT', label: 'Agent', displayOrder: 1, leaderTier: null, status: 'active' },
+      { orgLevelId: 'l2', companyId: 'c', code: 'AAB', label: 'Associate Agency Builder', displayOrder: 2, leaderTier: 'associate', status: 'active' },
+      { orgLevelId: 'l3', companyId: 'c', code: 'AB', label: 'Agency Builder', displayOrder: 3, leaderTier: 'senior', status: 'active' },
+      { orgLevelId: 'l4', companyId: 'c', code: 'UM', label: 'Unit Manager', displayOrder: 4, leaderTier: 'associate', status: 'active' },
+      { orgLevelId: 'l5', companyId: 'c', code: 'SM', label: 'Senior Manager', displayOrder: 5, leaderTier: 'senior', status: 'active' },
+    ];
+    const { calls } = stubFetch({
+      '/join/my-code': { body: MY_CODE },
+      '/join/untagged': { body: [] },
+      '/members/my-team': { body: [teamMember()] },
+      '/members/mem-t1/role': { body: [] },
+      '/kpm/org-levels': { body: ladder },
+      '/kpm/config': { body: { activity: [], ratios: [], leadPipelines: [], training: [], activationChecklist: null, eventTypes: [], capability: null } },
+    });
+    renderInLayout(AgentLayout, <AddAgentsPage />, { me: LEADER });
+
+    const sheet = await openRoleSheet();
+    await vi.waitFor(() => expect(within(sheet).getByRole('radio', { name: 'Unit Manager' })).toBeInTheDocument());
+    const options = within(sheet).getAllByRole('radio').map((o) => o.closest('label')!.textContent);
+    expect(options).toEqual(['Agent', 'Associate Agency Builder', 'Unit Manager']);
+    await userEvent.click(within(sheet).getByRole('radio', { name: 'Unit Manager' }));
+    expect(screen.getByText(/will change from Agent to UM\./)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm change' }));
+    expect(JSON.parse(String(calls.find((c) => c.init.method === 'PATCH')?.init.body))).toEqual({ toRole: 'um' });
+  });
+});
 });

@@ -1,7 +1,12 @@
 'use client';
 
 import { api } from './api-client';
-import { rungLabel } from '@/components/ui/role-badge';
+import { rungShort } from '@/components/ui/role-badge';
+import { messagesIn } from '@/i18n/catalogue';
+import { SOURCE_LANGUAGE, type Language } from '@/i18n/language';
+import { orgMessages } from '@/i18n/messages/org';
+import type { OrgLevel } from './tenant-config-cache';
+import type { PersonalDetails } from './personal';
 
 /** The office roster. Mirrors `DirectoryMember` in the backend's directory service. */
 export type HierarchyRole = 'ab' | 'aab' | 'agent';
@@ -11,6 +16,8 @@ export interface Member {
   membershipId: string;
   agentCode: string;
   role: HierarchyRole;
+  /** The rung they stand on, by its ladder code; `role` is the class it gives (ADR-0156). */
+  orgLevelCode?: string;
   status: MemberStatus;
   fullName: string;
   preferredName: string | null;
@@ -25,9 +32,31 @@ export interface Member {
   isLeader: boolean;
   isKpmOwner: boolean;
   isKpmAdmin: boolean;
+  /**
+   * A Core Leader now (ADR-0159 §1): tagged, on a leader rung — the effective flag, which the row's chip says. Optional
+   * so a fixture that is about something else need not say it; absent is *not one*.
+   */
+  isCoreLeader?: boolean;
+  /**
+   * This viewer may tag or untag them *Core Leader* from the row (P18.8-T5 AC-3): they hold the permission, and the
+   * member leads by rung and has not left. An offer — `PUT /members/:id/core-leader` refuses regardless.
+   */
+  canTagCoreLeader?: boolean;
+  /** The system's stamp: when the membership was made active. Not the join date. */
   joinedAt: string | null;
+  /**
+   * The person's **join date** here, an office date their leader gave (ADR-0169; P18.96-T2): what *Join date*
+   * prints. `null` while pending. Optional, for a read older than it.
+   */
+  joinDate?: string | null;
   /** Set only on a removed row. */
   removedAt: string | null;
+  /**
+   * **The office date the person came back, if they did** (P18.97-T4 AC-3, ADR-0176 §5), the server's: on a live
+   * membership that follows a removed one, its own join date — *Rejoined* beside the status; on the removed one, the
+   * later membership's — *Rejoined {date}* under *Removed*. Optional, for a read older than it; absent is *never left*.
+   */
+  rejoinedOn?: string | null;
   /**
    * What **this viewer** may do to this person, decided by the server (P3.5-T13).
    *
@@ -48,6 +77,12 @@ export interface Member {
    */
   lastActivityOn?: string | null;
   lastActivityDays?: number | null;
+  /**
+   * What the person records (ADR-0158 §6, P18.8-T4): on one member's read only, and only to the office's
+   * Owner, an Admin or the person themselves — absent on the roster and on a leader's read. A `null`
+   * inside is *Not recorded*.
+   */
+  personal?: PersonalDetails;
   /** The directory's *Last coached*: `DAYS_SINCE_LAST_COACHING`, `null` without a session. */
   lastCoachedDays?: number | null;
 }
@@ -81,11 +116,8 @@ export const readMember = (membershipId: string) => api<Member>(`/members/${memb
 export const listReports = (membershipId: string) =>
   api<Member[]>(`/members/${membershipId}/reports`);
 
-export const MEMBER_STATUS_LABEL: Record<MemberStatus, string> = {
-  active: 'Active',
-  pending: 'Pending',
-  removed: 'Removed',
-};
+/** A member's status as its pill says it, English — the source; a screen reads the reader's (`orgMessages.status`). */
+export const MEMBER_STATUS_LABEL: Record<MemberStatus, string> = orgMessages.en.status;
 
 /** The people who report to you, and what you may do to each. */
 export interface TeamMember {
@@ -94,6 +126,8 @@ export interface TeamMember {
   initials: string;
   agentCode: string;
   role: HierarchyRole;
+  /** The rung they stand on, by its ladder code (ADR-0156). */
+  orgLevelCode?: string;
   directCount: number;
   /** Sent by the server, so the screen keeps no second copy of the rule. */
   canChangeRole: boolean;
@@ -112,7 +146,11 @@ export interface RoleChangeEntry {
 
 export const readMyTeam = () => api<TeamMember[]>('/members/my-team');
 
-export const changeRole = (membershipId: string, toRole: HierarchyRole, reason?: string) =>
+/**
+ * `toRole` is a rung of the company's ladder, by its code — `aab`, or a rung the company added, `SM` (OD-50). The
+ * class the member is given follows the rung's leader tier, on the server.
+ */
+export const changeRole = (membershipId: string, toRole: string, reason?: string) =>
   api<TeamMember[]>(`/members/${membershipId}/role`, {
     method: 'PATCH',
     body: { toRole, ...(reason ? { reason } : {}) },
@@ -137,6 +175,13 @@ export interface OrgTreeNode {
   subtreeCount: number;
   isLeader: boolean;
   isSelf: boolean;
+  /**
+   * **Today's activity count** (UI V1, UI-059; O-5): the office's day, the total Activity Management saved — the Group
+   * Tree's *n aktivitas* / *Belum lapor* pill. Optional for a fixture written before it; absent reads as nothing logged.
+   */
+  todayActivityCount?: number;
+  /** Their profile photo, when they have one (UI-059). */
+  photoUrl?: string | null;
 }
 
 /**
@@ -175,7 +220,13 @@ export interface MemberTags {
   membershipId: string;
   fullName: string;
   groupIds: string[];
+  /** The tag as stored; it has effect only while `canBeCoreLeader`. */
   isCoreLeader: boolean;
+  /**
+   * Their rung is a leader rung, so the tag may be set (ADR-0159 §1). False for an Agent — the API refuses the tag
+   * `CORE_LEADER_NOT_A_LEADER` — and for a member tagged and since moved off a leader rung. Optional for a fixture.
+   */
+  canBeCoreLeader?: boolean;
 }
 
 /** Somebody the Owner has handed the office's administration to. */
@@ -222,6 +273,16 @@ export const setTags = (membershipId: string, groupIds: string[], isCoreLeader: 
     body: { groupIds, isCoreLeader },
   });
 
+/**
+ * **Tag or untag one member *Core Leader* from the directory row** (ADR-0159 §1, P18.8-T5 AC-3): the flag alone,
+ * their groups untouched. A non-leader is refused `400 CORE_LEADER_NOT_A_LEADER`.
+ */
+export const setCoreLeader = (membershipId: string, isCoreLeader: boolean) =>
+  api<MemberTags>(`/members/${membershipId}/core-leader`, {
+    method: 'PUT',
+    body: { isCoreLeader },
+  });
+
 /** Where the reports of somebody being removed go. There is no default — see P3-T7 AC-3. */
 export type SubtreeDisposition =
   | { action: 'reassign'; toMembershipId: string }
@@ -264,15 +325,21 @@ export const removeMember = (
  */
 export function roleChangeExplanation(
   name: string,
-  from: HierarchyRole,
-  to: HierarchyRole,
+  from: string,
+  to: string,
   viewer: 'their-leader' | 'the-office',
+  /**
+   * The company's ladder, for a rung it added (OD-50). Each rung by its badge's name, *AAB* (P18.95-T9 AC-1;
+   * *Associate Agency Builder* until then). The seeded one by default.
+   */
+  ladder?: OrgLevel[],
+  /** The reader's language (P18.98-T4; `useLanguage()`): English, the source, when given none. */
+  language: Language = SOURCE_LANGUAGE,
 ): string {
-  if (viewer === 'their-leader' && from === 'agent' && to === 'aab') {
-    return `${name} will change from Agent to Associate Agency Builder. They keep reporting to you, and can now recruit and manage their own direct agents.`;
-  }
-  if (viewer === 'their-leader' && from === 'aab' && to === 'agent') {
-    return `${name} will change from Associate Agency Builder back to Agent. They keep reporting to you, but will no longer manage their own direct agents.`;
-  }
-  return `${name} will change from ${rungLabel(from)} to ${rungLabel(to)}. Nobody moves — they keep reporting to whoever they report to now.`;
+  const [f, t] = [from.toLowerCase(), to.toLowerCase()];
+  const words = messagesIn(orgMessages, language).roleChange;
+  const values = { name, from: rungShort(from, ladder), to: rungShort(to, ladder) };
+  if (viewer === 'their-leader' && f === 'agent' && t === 'aab') return words.promoted(values);
+  if (viewer === 'their-leader' && f === 'aab' && t === 'agent') return words.demoted(values);
+  return words.general(values);
 }

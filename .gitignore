@@ -10,6 +10,8 @@ test-results/
 *.log
 .DS_Store
 .turbo/
+# `vercel link` / `vercel pull` write the project's ids and pulled env files here (P18.7-T5)
+.vercel/
 
 # typescript build artifacts — regenerated, never reviewed
 *.tsbuildinfo

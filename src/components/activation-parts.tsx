@@ -2,18 +2,22 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
-import { Card, TextInput } from '@/components/ui/field';
+import { DateField } from '@/components/ui/date-field';
+import { Card } from '@/components/ui/field';
 import { KpiTile } from '@/components/ui/kpi-tile';
 import { NavIcon } from '@/components/ui/nav-icon';
 import { NumberBadge } from '@/components/ui/number-badge';
 import { Skeleton, SkeletonBar, SkeletonText } from '@/components/ui/skeleton';
 import { StatusPill } from '@/components/ui/status-pill';
 import { TippedGlyph } from '@/components/ui/tipped-glyph';
+import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
+import { activationMessages } from '@/i18n/messages/activation';
 import {
-  ASPECT_STATUS_LABEL, aspectTitle, dayShown, isWholeDate, OWN_COPY, PROTOTYPE_COPY,
+  aspectTitle, autoBadge, byHandBadge, dayShown, isWholeDate,
   type ActivationAspectProgress, type ActivationItemLink, type ActivationView, type AspectStatus,
 } from '@/lib/activation';
 import { cn } from '@/lib/cn';
+import { formatPercent } from '@/lib/format';
 
 /**
  * The parts the hire's page and the leader's detail share (`Overall.html:3270-3414`): the progress card
@@ -23,6 +27,9 @@ import { cn } from '@/lib/cn';
  *
  * **Every figure here is served** (P13-T2 AC-5): the day, the window, the counts, the percentage and
  * each aspect's verdict are the read's, printed, never worked out.
+ *
+ * **Their words are the catalogue's** (`i18n/messages/activation.ts`; P18.98-T4), in the reader's language, and the
+ * percentage is written in the figures' (`useFigureLanguage()`).
  */
 
 /** `.section-num` with the prototype's lightning bolt (`:3277-3279`, `:3371-3373`): the progress card's head. */
@@ -58,7 +65,7 @@ const ROW_TINT: Record<AspectStatus, string | undefined> = {
 };
 
 export function AspectStatusPill({ status }: { status: AspectStatus }) {
-  const label = ASPECT_STATUS_LABEL[status];
+  const label = useMessages(activationMessages).aspectStatus[status];
   return (
     <StatusPill
       // `watch` carries no words of its own; every tone here is given the prototype's.
@@ -77,28 +84,36 @@ export function AspectStatusPill({ status }: { status: AspectStatus }) {
  * ends *", overdue"* for a screen reader (*The module's own strings*), and nothing visible is added.
  */
 export function ProgressSummary({
-  view, label, markOverdue = false,
+  view, label, markOverdue = false, table = true,
 }: {
   view: ActivationView;
   /** The card's heading, which names the bar and the table for a screen reader. */
   label: string;
   markOverdue?: boolean;
+  /**
+   * The *Aspect · Items · Status* table. **`false` on New hire detail** (UI V1, UI-027: *no ASPEK table at any size* —
+   * each aspect's count is in its own heading): the tiles and the bar alone.
+   */
+  table?: boolean;
 }) {
+  const t = useMessages(activationMessages);
+  const figures = useFigureLanguage();
   const complete = view.total > 0 && view.done === view.total;
   const overdue = markOverdue && view.overdue;
   const width = Math.min(100, Math.max(0, view.pct));
+  const pctComplete = t.pctComplete({ pct: formatPercent(view.pct, {}, figures) });
   return (
-    <div className="grid gap-6 sm:grid-cols-[0.8fr_1.2fr]">
-      <div className="flex flex-col gap-3 sm:pt-7">
+    <div className={cn('grid gap-6', table && 'sm:grid-cols-[0.8fr_1.2fr]')}>
+      <div className={cn('flex flex-col gap-3', table && 'sm:pt-7')}>
         <KpiTile
-          label={PROTOTYPE_COPY.day}
+          label={t.day}
           value={dayShown(view.day, view.window)}
-          unit={<>/{view.window}{overdue && <span className="sr-only">{OWN_COPY.overdue}</span>}</>}
+          unit={<>/{view.window}{overdue && <span className="sr-only">{t.overdue}</span>}</>}
           variant={overdue ? 'overdue' : 'plain'}
           className="flex items-center justify-between px-4 py-3"
         />
         <KpiTile
-          label={PROTOTYPE_COPY.completed}
+          label={t.completed}
           value={view.done}
           unit={`/${view.total}`}
           variant={complete ? 'complete' : 'plain'}
@@ -111,34 +126,37 @@ export function ProgressSummary({
             aria-valuemin={0}
             aria-valuemax={100}
             aria-valuenow={width}
-            aria-valuetext={PROTOTYPE_COPY.pctComplete(view.pct)}
+            aria-valuetext={pctComplete}
             className="h-2 overflow-hidden rounded-md border border-hairline bg-base"
           >
             <div className="h-full rounded-md bg-gradient-to-r from-amber to-amber-dark" style={{ width: `${width}%` }} />
           </div>
-          <p className="mt-1.5 text-xs font-bold text-navy">{PROTOTYPE_COPY.pctComplete(view.pct)}</p>
+          <p className="mt-1.5 text-xs font-bold text-navy">{pctComplete}</p>
         </div>
       </div>
       {/* Scrolls inside the card on the narrowest phone, so the page never does (T4 AC-8). */}
-      <div className="min-w-0 overflow-x-auto">
-        <AspectTable aspects={view.aspects} caption={label} />
-      </div>
+      {table && (
+        <div className="min-w-0 overflow-x-auto">
+          <AspectTable aspects={view.aspects} caption={label} />
+        </div>
+      )}
     </div>
   );
 }
 
 /** `.aspect-progress-table.compact` (`:3309-3316`, `:1506-1519`): *Aspect · Items · Status*. */
 function AspectTable({ aspects, caption }: { aspects: readonly ActivationAspectProgress[]; caption: string }) {
+  const t = useMessages(activationMessages);
   const HEAD = 'border-b border-hairline px-2.5 py-1 text-left text-2xs font-semibold uppercase tracking-wide text-muted';
   const CELL = 'border-b border-hairline px-2.5 py-1.5 text-sm font-medium text-navy';
   return (
-    <table className="w-full border-collapse">
+    <table className="relative w-full border-collapse">
       <caption className="sr-only">{caption}</caption>
       <thead>
         <tr>
-          <th scope="col" className={HEAD}>{PROTOTYPE_COPY.aspect}</th>
-          <th scope="col" className={HEAD}>{PROTOTYPE_COPY.items}</th>
-          <th scope="col" className={HEAD}>{PROTOTYPE_COPY.status}</th>
+          <th scope="col" className={HEAD}>{t.aspect}</th>
+          <th scope="col" className={HEAD}>{t.items}</th>
+          <th scope="col" className={HEAD}>{t.status}</th>
         </tr>
       </thead>
       <tbody className="[&>tr:last-child>*]:border-b-0">
@@ -173,6 +191,12 @@ export const ITEM_ROW = 'border-b border-hairline py-[11px] last:border-b-0';
 /** The row's checkbox (`:1471`): 16px, ticked in the success green. */
 export const ITEM_CHECKBOX = 'h-4 w-4 shrink-0 cursor-pointer accent-success disabled:cursor-default';
 
+/** **UI V1 (UI-027, D-25)**, New hire detail's item rows: 44px tall, the name wrapping, never cut short. */
+export const V1_ITEM_ROW = 'flex min-h-11 flex-col justify-center py-1.5';
+
+/** **UI V1 (UI-027)**: the 22px box. */
+export const V1_ITEM_CHECKBOX = 'h-[22px] w-[22px] shrink-0 cursor-pointer accent-success disabled:cursor-default';
+
 /**
  * Who ticked a done item and when, or which link completed it (OD-121, T4 AC-5): an `ⓘ` whose words
  * show on hover, focus and tap and are its accessible name (ADR-0062 §2, form 2) — the provenance marker
@@ -188,11 +212,12 @@ export function AttributionMark({ words }: { words: string | null }) {
  * `completesWhen` (T4 AC-4) — how the row says what it waits for without a line of its own (ADR-0031).
  */
 export function AutoBadge({ link }: { link: ActivationItemLink }) {
+  const words = autoBadge(link.completesWhen, useLanguage());
   return (
     <TippedGlyph
-      glyph={PROTOTYPE_COPY.auto}
-      name={OWN_COPY.autoName(link.completesWhen)}
-      tip={OWN_COPY.autoTip(link.completesWhen)}
+      glyph={words.glyph}
+      name={words.name}
+      tip={words.tip}
       align="fit"
       className="-my-1"
       face="h-auto w-auto rounded-pill bg-navy/[0.06] px-[7px] py-0.5 text-2xs font-bold uppercase tracking-wide text-muted hover:bg-navy/[0.1]"
@@ -203,14 +228,15 @@ export function AutoBadge({ link }: { link: ActivationItemLink }) {
 /**
  * *Ticked by hand* (D-orphan, P18.5-T3 AC-4): a linked item whose link does not complete it now — its training
  * module is not offered — so the hire or a leader ticks it. The office's Settings badge, its words and its
- * tooltip (`OWN_COPY.byHand*`), in this row's pill.
+ * tooltip (`byHandBadge`), in this row's pill.
  */
 export function ByHandBadge() {
+  const words = byHandBadge(useLanguage());
   return (
     <TippedGlyph
-      glyph={OWN_COPY.byHand}
-      name={OWN_COPY.byHandName}
-      tip={OWN_COPY.byHandTip}
+      glyph={words.glyph}
+      name={words.name}
+      tip={words.tip}
       align="fit"
       className="-my-1"
       face="h-auto w-auto whitespace-nowrap rounded-pill border border-hairline bg-base px-[7px] py-0.5 text-2xs font-bold uppercase tracking-wide text-muted hover:bg-base hover:text-navy"
@@ -220,6 +246,7 @@ export function ByHandBadge() {
 
 /** *"Go to {label} →"* (`:6584`), the prototype's `.reopen-btn` pill, as the link it is. */
 export function GoToLink({ link }: { link: ActivationItemLink }) {
+  const t = useMessages(activationMessages);
   // A module no longer offered has no page to open (D-orphan): the item keeps its words, and no link.
   if (!link.route) return null;
   return (
@@ -227,15 +254,16 @@ export function GoToLink({ link }: { link: ActivationItemLink }) {
       href={link.route}
       className="inline-flex items-center whitespace-nowrap rounded-pill border border-hairline px-[11px] py-[5px] text-sm font-semibold text-navy-soft hover:bg-navy-soft/[0.08]"
     >
-      {PROTOTYPE_COPY.goTo(link.label)}
+      {t.goTo({ label: link.label })}
     </Link>
   );
 }
 
 /** A row's write that failed: put back, and why (T4 AC-7). */
 export function RowError({ message }: { message: string | undefined }) {
+  const t = useMessages(activationMessages);
   if (!message) return null;
-  return <p role="alert" className="mt-1.5 text-xs font-semibold text-alert">{OWN_COPY.notSaved(message)}</p>;
+  return <p role="alert" className="mt-1.5 text-xs font-semibold text-alert">{t.notSaved({ why: message })}</p>;
 }
 
 /**
@@ -255,14 +283,16 @@ export function useWriteQueue() {
 export const DATE_SETTLE_MS = 600;
 
 /**
- * A date written as the prototype writes its inputs, **on change, with no save button** (`:6662-6668`).
+ * A date written as the prototype writes its inputs, **on change, with no save button** (`:6662-6668`), through the
+ * shared {@link DateField} (P18.96-T2 AC-4): the date is shown as the app writes it, and the device's picker chooses
+ * it.
  *
- * A date can be typed a digit at a time, and every partial value but the last is a date nobody meant:
- * so a value is written once it is whole and `allowed`, after a short pause, and at once when the field
- * is left. Clearing it writes `null` when `clearable`. A write the server refuses puts the field back:
- * `value` is the last saved date, and the field returns to it whenever it changes or `resetKey` does.
+ * A date can still be typed a digit at a time where a browser lets the field take keys, and every partial value but
+ * the last is a date nobody meant: so a value is written once it is whole and `allowed`, after a short pause, and at
+ * once when the field is left. Clearing it writes `null` when `clearable`. A write the server refuses puts the field
+ * back: `value` is the last saved date, and the field returns to it whenever it changes or `resetKey` does.
  */
-export function DateField({
+export function AutoSaveDateField({
   id, value, onCommit, allowed = isWholeDate, clearable = false, invalidText, resetKey = 0, className, ...rest
 }: {
   id?: string;
@@ -307,22 +337,21 @@ export function DateField({
 
   return (
     <span className={cn('inline-flex flex-col', className)}>
-      <TextInput
+      <DateField
         {...rest}
         id={id}
-        type="date"
+        density="compact"
         value={draft}
         invalid={invalid}
         aria-describedby={invalid && invalidText ? errorId : rest['aria-describedby']}
-        onChange={(e) => {
-          const next = e.target.value;
+        onChange={(next) => {
           setDraft(next);
           setInvalid(false);
           if (timer.current) clearTimeout(timer.current);
           timer.current = setTimeout(() => commit(next), DATE_SETTLE_MS);
         }}
         onBlur={(e) => commit(e.target.value, true)}
-        className="h-[34px] w-[150px] text-base"
+        className="w-[150px]"
       />
       {invalid && invalidText && (
         <span id={errorId} role="alert" className="mt-1 text-xs font-semibold text-alert">{invalidText}</span>
@@ -336,7 +365,7 @@ export function ActivationSkeleton({ label }: { label: string }) {
   return (
     <Skeleton label={label}>
       <div className="flex flex-col gap-4">
-        <div className="rounded-lg border border-hairline bg-card px-5 py-4">
+        <div className="rounded-lg border border-card-edge bg-card px-5 py-4">
           <SkeletonBar className="h-5 w-56" />
           <div className="mt-4 grid gap-6 sm:grid-cols-[0.8fr_1.2fr]">
             <div className="flex flex-col gap-3">
@@ -348,7 +377,7 @@ export function ActivationSkeleton({ label }: { label: string }) {
           </div>
         </div>
         {[0, 1].map((i) => (
-          <div key={i} className="rounded-lg border border-hairline bg-card px-5 py-4">
+          <div key={i} className="rounded-lg border border-card-edge bg-card px-5 py-4">
             <SkeletonBar className="h-5 w-40" />
             <SkeletonText lines={3} className="mt-4" />
           </div>

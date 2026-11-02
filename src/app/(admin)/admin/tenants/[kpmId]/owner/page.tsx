@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { use, useEffect, useState } from 'react';
 import { Page } from '@/components/page';
 import { Button, ButtonLink, Card, ErrorBanner, Field, TextInput } from '@/components/ui/field';
+import { useMessages } from '@/i18n/language-provider';
+import { adminOfficesMessages } from '@/i18n/messages/admin-offices';
 import { assignOwner, readTenant, type TenantRow } from '@/lib/admin';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { LeaderLimitNotice, isLeaderLimit } from '@/components/leader-limit-notice';
@@ -12,6 +14,7 @@ import { LeaderLimitNotice, isLeaderLimit } from '@/components/leader-limit-noti
 export default function AssignOwnerPage({ params }: { params: Promise<{ kpmId: string }> }) {
   const { kpmId } = use(params);
   const router = useRouter();
+  const { owner: t, saving, cancel } = useMessages(adminOfficesMessages);
   const [kpm, setKpm] = useState<TenantRow | null>(null);
   const [email, setEmail] = useState('');
   const [error, setError] = useState<ApiError | null>(null);
@@ -39,7 +42,7 @@ export default function AssignOwnerPage({ params }: { params: Promise<{ kpmId: s
 
   return (
     <Page
-      title={transferring ? 'Transfer owner' : 'Assign owner'}
+      title={transferring ? t.transferTitle : t.assignTitle}
       subtitle={kpm ? `${kpm.code} · ${kpm.branchName}` : undefined}
     >
       <Card className="max-w-xl">
@@ -56,18 +59,18 @@ export default function AssignOwnerPage({ params }: { params: Promise<{ kpmId: s
 
           {transferring && (
             <p className="rounded-md border border-hairline bg-base p-3 text-md text-navy">
-              The current owner is <strong>{kpm?.ownerName}</strong>
-              {kpm?.ownerEmail && <> ({kpm.ownerEmail})</>}. A transfer is audited with
-              both the outgoing and incoming person, and takes the office&apos;s
-              administration rights away from the outgoing one.
+              {t.current({
+                name: <strong>{kpm?.ownerName}</strong>,
+                email: kpm?.ownerEmail ? ` (${kpm.ownerEmail})` : null,
+              })}
             </p>
           )}
 
           <Field
-            label="Email"
+            label={t.email}
             htmlFor="email"
-            hint="The account must already exist. If it does not, send them to Create an account first."
-            error={unknownAddress ? 'No account uses that address.' : undefined}
+            hint={t.emailHint}
+            error={unknownAddress ? t.unknown : undefined}
           >
             <TextInput
               id="email"
@@ -81,20 +84,18 @@ export default function AssignOwnerPage({ params }: { params: Promise<{ kpmId: s
           </Field>
 
           <p className="text-sm text-muted">
-            No account yet?{' '}
-            <Link href="/register" className="underline">
-              Create one
-            </Link>{' '}
-            — the office cannot be owned by someone who has not registered.
+            {t.noAccount({
+              link: (words) => <Link href="/register" className="underline">{words}</Link>,
+            })}
           </p>
 
           <div className="flex gap-2">
             <Button type="submit" disabled={busy || !email.trim()}>
-              {busy ? 'Saving…' : transferring ? 'Transfer' : 'Assign'}
+              {busy ? saving : transferring ? t.transfer : t.assign}
             </Button>
             <ButtonLink href={`/admin/tenants/${kpmId}`} variant="secondary">
-                Cancel
-              </ButtonLink>
+              {cancel}
+            </ButtonLink>
           </div>
         </form>
       </Card>

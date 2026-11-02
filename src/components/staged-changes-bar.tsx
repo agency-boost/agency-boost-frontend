@@ -1,6 +1,8 @@
 'use client';
 
 import { Button, Card } from '@/components/ui/field';
+import { useMessages } from '@/i18n/language-provider';
+import { settingsMessages } from '@/i18n/messages/settings';
 
 /**
  * What is held but not sent (P4-T19).
@@ -25,23 +27,21 @@ export function StagedChangesBar({
   onSave: () => void;
   onDiscard: () => void;
 }) {
+  const t = useMessages(settingsMessages);
   if (count === 0) return null;
 
   return (
     <Card className="mb-4 border-amber">
       <p className="text-md text-navy">
-        <strong>{count} {count === 1 ? 'change' : 'changes'} not saved yet.</strong>{' '}
-        <span className="text-muted">
-          Nothing has reached your office — and publishing to agents is a separate step
-          after that.
-        </span>
+        <strong>{t.staged.notSaved({ count })}</strong>{' '}
+        <span className="text-muted">{t.staged.nothingReached}</span>
       </p>
       <div className="mt-3 flex flex-wrap gap-2">
         <Button disabled={busy} onClick={onSave}>
-          {busy ? 'Saving…' : 'Save changes'}
+          {busy ? t.saving : t.staged.saveChanges}
         </Button>
         <Button variant="secondary" disabled={busy} onClick={onDiscard}>
-          Discard them
+          {t.staged.discard}
         </Button>
       </div>
     </Card>

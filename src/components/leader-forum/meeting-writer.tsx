@@ -4,8 +4,10 @@ import {
   createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode,
 } from 'react';
 import { Toast, useToast } from '@/components/ui/toast';
+import { useMessages } from '@/i18n/language-provider';
+import { forumMessages } from '@/i18n/messages/forum';
 import { ApiRequestError } from '@/lib/api-client';
-import { FORUM_COPY, type MeetingView, type MeetingWriter } from '@/lib/leader-meetings';
+import type { MeetingView, MeetingWriter } from '@/lib/leader-meetings';
 
 /**
  * **How a meeting is written** (`functional/leader-forum.md`, *Saving*; D-forum-model): one field per write,
@@ -19,10 +21,14 @@ import { FORUM_COPY, type MeetingView, type MeetingWriter } from '@/lib/leader-m
  *
  * The lines go to the page's toast, the one live region it has (`:2023`); a failure or a conflict also stays
  * under *Save* until a later write lands (L-110), because the toast goes after 2600 ms and the change it
- * names is still not saved.
+ * names is still not saved. **That line is held by what it says** — a conflict or a failure — and written in the
+ * screen's language each time it is drawn, so a reader who switches language reads it in the new one (P18.98-T4).
  */
 
-type Outcome = { ok: true } | { ok: false; line: string };
+/** What the line under *Save* says: a write was read again over somebody else's, or one failed. */
+type Line = 'conflict' | 'failed';
+
+type Outcome = { ok: true } | { ok: false; line: Line };
 
 interface WriterContext {
   writer: MeetingWriter;
@@ -55,17 +61,21 @@ export function MeetingWriterProvider({
   /** Optional in the type only, so `createElement(MeetingWriterProvider, props, child)` compiles. */
   children?: ReactNode;
 }) {
+  const t = useMessages(forumMessages);
   const { toast, show } = useToast();
-  const [line, setLine] = useState<string | null>(null);
+  const [line, setLine] = useState<Line | null>(null);
   const inFlight = useRef(new Set<Promise<Outcome>>());
-  // Read through refs, so `run` and `flush` stay the same functions while the meeting changes.
+  // Read through refs, so `run` and `flush` stay the same functions while the meeting changes — and the language.
   const rereadRef = useRef(reread);
   rereadRef.current = reread;
-  const lineRef = useRef<string | null>(null);
+  const words = useRef(t);
+  words.current = t;
+  const lineRef = useRef<Line | null>(null);
 
-  const say = useCallback((text: string, failure = false) => {
+  /** A toast in the screen's words; a failure or a conflict also stays under *Save*. */
+  const say = useCallback((text: string, failure: Line | null = null) => {
     show(text);
-    lineRef.current = failure ? text : null;
+    lineRef.current = failure;
     setLine(lineRef.current);
   }, [show]);
 
@@ -81,21 +91,21 @@ export function MeetingWriterProvider({
     const tracked: Promise<Outcome> = (async () => {
       try {
         answer = await write();
-        say(options?.done ?? FORUM_COPY.saved);
+        say(options?.done ?? words.current.saved);
         return { ok: true } as const;
       } catch (err) {
         if (err instanceof ApiRequestError && err.status === 409 && err.error.code === 'VERSION_CONFLICT') {
           try {
             const fresh = await rereadRef.current();
             setMeeting(() => fresh);
-            say(FORUM_COPY.conflict, true);
-            return { ok: false, line: FORUM_COPY.conflict } as const;
+            say(words.current.conflict, 'conflict');
+            return { ok: false, line: 'conflict' } as const;
           } catch {
             // Read again and failed too: what is on screen is not what was saved, and nothing says otherwise.
           }
         }
-        say(FORUM_COPY.failed, true);
-        return { ok: false, line: FORUM_COPY.failed } as const;
+        say(words.current.failed, 'failed');
+        return { ok: false, line: 'failed' } as const;
       }
     })();
     inFlight.current.add(tracked);
@@ -109,7 +119,7 @@ export function MeetingWriterProvider({
     if (isField(focused)) focused.blur();
     await Promise.resolve();
 
-    let failed: string | null = null;
+    let failed: Line | null = null;
     const seen = new Set<Promise<Outcome>>();
     // Writes that start while we wait (a blur's own) are waited for as well.
     for (;;) {
@@ -120,9 +130,9 @@ export function MeetingWriterProvider({
     }
 
     // A failure before *Save* was pressed and not sent again since is still not saved.
-    const still = failed ?? (lineRef.current === FORUM_COPY.failed ? FORUM_COPY.failed : null);
-    if (still) say(still, true);
-    else say(FORUM_COPY.allSaved);
+    const still = failed ?? (lineRef.current === 'failed' ? 'failed' : null);
+    if (still) say(words.current[still], still);
+    else say(words.current.allSaved);
   }, [say]);
 
   const readOnly = !meeting.can.edit;
@@ -130,7 +140,8 @@ export function MeetingWriterProvider({
     () => ({ run, update, announce, readOnly }),
     [run, update, announce, readOnly],
   );
-  const value = useMemo(() => ({ writer, flush, line }), [writer, flush, line]);
+  const shown = line === null ? null : t[line];
+  const value = useMemo(() => ({ writer, flush, line: shown }), [writer, flush, shown]);
 
   return (
     <Context.Provider value={value}>

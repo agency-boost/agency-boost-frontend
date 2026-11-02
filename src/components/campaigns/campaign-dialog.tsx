@@ -1,14 +1,20 @@
 'use client';
 
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { Button, ErrorBanner } from '@/components/ui/field';
+import { TAP_AREA } from '@/components/ui/phone';
 import { Skeleton, SkeletonBar, SkeletonText } from '@/components/ui/skeleton';
 import { useCampaignDialogHost, toggleChase } from '@/components/campaigns/campaign-list';
+import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
+import { campaignsMessages } from '@/i18n/messages/campaigns';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
+import { cn } from '@/lib/cn';
+import { useScrollLock } from '@/lib/use-scroll-lock';
 import {
-  figureWords, isReservedCode, OWN_COPY, progressWords, PROTOTYPE_COPY, readCampaign,
+  figureWords, isReservedCode, progressWords, ratioUnitsOf, readCampaign, showsChase,
   type CampaignCard, type CampaignDetail, type CampaignRequirement, type ProgressRow,
 } from '@/lib/campaigns';
+import { useTenantConfig } from '@/lib/tenant-config-cache';
 import { ChaseButton, DialogTags, Poster, PromotionLabel } from './campaign-parts';
 
 const FOCUSABLE = 'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -47,6 +53,7 @@ export function CampaignDialog({
   /** Each chase answer, so whoever opened it can update itself and say the toast. */
   onChased: (card: CampaignCard) => void;
 }) {
+  const t = useMessages(campaignsMessages);
   const [campaign, setCampaign] = useState<CampaignDetail | null>(null);
   const [missing, setMissing] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
@@ -55,6 +62,9 @@ export function CampaignDialog({
   const [attempt, setAttempt] = useState(0);
   const box = useRef<HTMLDivElement>(null);
   const titleId = useId();
+
+  // The page behind holds still while it is open (P18.96-T1 AC-2); the box scrolls, never past the screen.
+  useScrollLock(true);
 
   useEffect(() => {
     let live = true;
@@ -127,9 +137,9 @@ export function CampaignDialog({
   const close = (
     <button
       type="button"
-      aria-label={OWN_COPY.close}
+      aria-label={t.close}
       onClick={onClose}
-      className="absolute right-3 top-3 flex h-[30px] w-[30px] items-center justify-center rounded-full bg-navy/50 text-md text-white hover:bg-navy/70"
+      className={cn('absolute right-3 top-3 flex h-[30px] w-[30px] items-center justify-center rounded-full bg-navy/50 text-md text-white hover:bg-navy/70', TAP_AREA)}
     >
       <span aria-hidden="true">✕</span>
     </button>
@@ -137,17 +147,18 @@ export function CampaignDialog({
 
   return (
     // The backdrop closes it (`:8224-8229`); a click inside does not, so selecting its words never does.
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy/35 p-4 print:hidden" onClick={onClose} data-scrim>
+    // The top inset where it is more than 16px: never under a Home Screen app's clock (staging review, 2026-10-31).
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy/35 p-4 pt-[max(1rem,env(safe-area-inset-top))] print:hidden" onClick={onClose} data-scrim>
       <div
         ref={box}
         role="dialog"
         aria-modal="true"
         aria-labelledby={campaign ? titleId : undefined}
-        aria-label={campaign ? undefined : PROTOTYPE_COPY.title}
+        aria-label={campaign ? undefined : t.title}
         tabIndex={-1}
         onKeyDown={keys}
         onClick={(e) => e.stopPropagation()}
-        className="relative max-h-[calc(100vh-2rem)] w-[560px] max-w-full overflow-y-auto rounded-[14px] bg-card shadow-modal"
+        className="relative max-h-[calc(100dvh-1rem-max(1rem,env(safe-area-inset-top)))] w-[560px] max-w-full overflow-y-auto overscroll-contain rounded-[14px] bg-card shadow-modal"
       >
         {campaign ? (
           <Poster campaign={campaign} size="dialog">{close}</Poster>
@@ -157,7 +168,7 @@ export function CampaignDialog({
 
         <div className="px-5 pb-[26px] pt-[22px] sm:px-[26px]">
           {!campaign && !missing && !error && (
-            <Skeleton label={OWN_COPY.loadingOne}>
+            <Skeleton label={t.loadingOne}>
               <SkeletonBar className="w-24" />
               <SkeletonBar className="mt-3 h-6 w-2/3" />
               <SkeletonText lines={3} className="mt-4" />
@@ -166,13 +177,13 @@ export function CampaignDialog({
           {error && (
             <div>
               <ErrorBanner {...error} />
-              <Button variant="secondary" className="mt-3" onClick={() => setAttempt((n) => n + 1)}>{OWN_COPY.tryAgain}</Button>
+              <Button variant="secondary" className="mt-3" onClick={() => setAttempt((n) => n + 1)}>{t.tryAgain}</Button>
             </div>
           )}
           {missing && (
             <div data-state="not-found">
-              <p className="text-md font-semibold text-navy">{OWN_COPY.notFound}</p>
-              <p className="mt-1 text-base text-muted">{OWN_COPY.notFoundHint}</p>
+              <p className="text-md font-semibold text-navy">{t.notFound}</p>
+              <p className="mt-1 text-base text-muted">{t.notFoundHint}</p>
             </div>
           )}
           {campaign && (
@@ -191,7 +202,7 @@ export function CampaignDialog({
                   <span aria-hidden="true" className="shrink-0 text-lg">🏆</span>
                   <div className="min-w-0">
                     {/* Navy on the amber wash, where the prototype's amber-dark title is 2.6:1 (row 44). */}
-                    <p className="mb-0.5 text-xs font-bold uppercase tracking-wide text-navy">{PROTOTYPE_COPY.prize}</p>
+                    <p className="mb-0.5 text-xs font-bold uppercase tracking-wide text-navy">{t.prize}</p>
                     <p className="text-[0.84375rem] font-semibold text-navy">{campaign.reward}</p>
                   </div>
                 </div>
@@ -199,7 +210,8 @@ export function CampaignDialog({
               {campaign.requirements.length > 0 && (
                 <Requirements campaign={campaign} />
               )}
-              {campaign.can.chase && (
+              {/* No chase once the campaign has ended (P18.95-T10 AC-2): its tag says *Ended*. */}
+              {showsChase(campaign, campaign.can) && (
                 <div className="flex flex-wrap items-center gap-2.5">
                   <ChaseButton
                     chasing={campaign.chasing}
@@ -225,14 +237,18 @@ export function CampaignDialog({
  * figure the target stays and the reason sits under it: *Not uploaded yet*, *Not measured yet*.
  */
 function Requirements({ campaign }: { campaign: CampaignDetail }) {
+  const t = useMessages(campaignsMessages);
   const headingId = useId();
+  // A ratio requirement in the office's unit for it, as the card writes it (P18.97-T7; ADR-0174 §2).
+  const { config } = useTenantConfig();
+  const ratioUnits = useMemo(() => ratioUnitsOf(config?.ratios), [config]);
   // One progress row per requirement, in the requirements' order: by position, never by metric, so two
   // requirements on one metric can never share a row.
   const rows = campaign.progress?.rows ?? [];
   return (
     <section aria-labelledby={headingId} className="mb-5 border-t border-hairline">
       <h3 id={headingId} className="mb-2.5 mt-4 flex flex-wrap items-baseline justify-between gap-x-3 text-sm font-bold uppercase tracking-wide text-muted">
-        {PROTOTYPE_COPY.requirementsTitle}
+        {t.requirementsTitle}
         {/* The months the progress reads (D-windows): the one line a rolling or a year-to-date figure needs. */}
         {campaign.progress && (
           <span className="text-xs font-semibold normal-case tracking-normal">{campaign.progress.windowLabel}</span>
@@ -240,19 +256,24 @@ function Requirements({ campaign }: { campaign: CampaignDetail }) {
       </h3>
       <ul>
         {campaign.requirements.map((r, i) => (
-          <RequirementRow key={i} requirement={r} progress={campaign.progress ? rows[i] : undefined} />
+          <RequirementRow key={i} requirement={r} progress={campaign.progress ? rows[i] : undefined} ratioUnit={ratioUnits.get(r.metricKey)} />
         ))}
       </ul>
     </section>
   );
 }
 
-function RequirementRow({ requirement, progress }: { requirement: CampaignRequirement; progress: ProgressRow | undefined }) {
+function RequirementRow({
+  requirement, progress, ratioUnit,
+}: { requirement: CampaignRequirement; progress: ProgressRow | undefined; ratioUnit?: 'percent' | 'decimal' }) {
+  const t = useMessages(campaignsMessages);
+  const language = useLanguage();
+  const figures = useFigureLanguage();
   // A stored requirement nothing measures says so, whether or not the campaign has started.
   const words = !requirement.measured
-    ? { text: OWN_COPY.notMeasured, met: false, figure: false }
-    : progressWords(progress);
-  const target = figureWords(requirement.value, requirement.unit);
+    ? { text: t.notMeasured, met: false, figure: false }
+    : progressWords(progress, ratioUnit, language, figures);
+  const target = figureWords(requirement.value, requirement.unit, ratioUnit, figures, language);
   return (
     <li className="flex items-center justify-between gap-3 border-b border-hairline py-2.5 last:border-b-0" data-requirement={requirement.metricKey}>
       <span className="min-w-0 text-[0.84375rem] font-medium text-navy">{requirement.metricName}</span>
@@ -263,7 +284,7 @@ function RequirementRow({ requirement, progress }: { requirement: CampaignRequir
             {words.met && (
               <>
                 {' '}<span aria-hidden="true" className="text-success">✓</span>
-                <span className="sr-only">, {OWN_COPY.met.toLowerCase()}</span>
+                <span className="sr-only">{t.metAfter}</span>
               </>
             )}
           </span>

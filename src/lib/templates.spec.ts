@@ -21,7 +21,7 @@ describe('template names (P13.2 exit review)', () => {
 describe('savedTemplateSentence (P13.2 exit review, finding 2)', () => {
   const template = {
     id: 't', companyId: 'co-1', name: 'BSD City settings', isDefault: false, status: 'active' as const,
-    archivedAt: null, origin: { kind: 'office' as const }, officeCount: 0, publishedVersions: {} as never,
+    archivedAt: null, origin: { kind: 'office' as const }, officeCount: 0, publishedVersions: {} as never, sections: {} as never,
     createdAt: '', updatedAt: '', dropped: [],
   };
 
@@ -39,6 +39,37 @@ describe('savedTemplateSentence (P13.2 exit review, finding 2)', () => {
     }, 'Prudential')).toBe(
       'Saved as BSD City settings, a template of Prudential. Left out or changed, because they name something '
         + 'archived: Ratio LEADS_PER_ACTIVITY was left out. Checklist item A1 is kept as a manual item.',
+    );
+  });
+});
+
+/**
+ * **P18.98-T6: the sentence in the reader's language** — the words `admin-template.tsx`'s, the template's and the
+ * company's names as stored and each reason the API's, in the language it was written in; English when no language is
+ * passed, so the office page reads as before until it passes its own.
+ */
+describe('P18.98-T6 savedTemplateSentence in Indonesian', () => {
+  const template = {
+    id: 't', companyId: 'co-1', name: 'BSD City settings', isDefault: false, status: 'active' as const,
+    archivedAt: null, origin: { kind: 'office' as const }, officeCount: 0, publishedVersions: {} as never, sections: {} as never,
+    createdAt: '', updatedAt: '', dropped: [],
+  };
+
+  it('says what was made, the names as stored', () => {
+    expect(savedTemplateSentence(template, 'Prudential', 'id')).toBe('Tersimpan sebagai BSD City settings, template milik Prudential.');
+    expect(savedTemplateSentence(template, 'Prudential', 'en')).toBe(savedTemplateSentence(template, 'Prudential'));
+  });
+
+  it('says what was left out in one form for one and many, each reason the API’s', () => {
+    const one = [{ kind: 'ratio_set' as const, code: 'R1', reason: 'Ratio R1 tidak disertakan.' }];
+    const two = [...one, { kind: 'activation_checklist' as const, code: 'A1', reason: 'Item A1 menjadi item manual.' }];
+    expect(savedTemplateSentence({ ...template, dropped: one }, 'Prudential', 'id')).toBe(
+      'Tersimpan sebagai BSD City settings, template milik Prudential. Tidak disertakan atau diubah, karena menyebut '
+        + 'sesuatu yang diarsipkan: Ratio R1 tidak disertakan.',
+    );
+    expect(savedTemplateSentence({ ...template, dropped: two }, 'Prudential', 'id')).toBe(
+      'Tersimpan sebagai BSD City settings, template milik Prudential. Tidak disertakan atau diubah, karena menyebut '
+        + 'sesuatu yang diarsipkan: Ratio R1 tidak disertakan. Item A1 menjadi item manual.',
     );
   });
 });

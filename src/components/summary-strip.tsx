@@ -1,3 +1,4 @@
+import { TermTip } from '@/components/ui/term-tip';
 import { cn } from '@/lib/cn';
 import type { SummaryTile } from '@/lib/summary-tiles';
 
@@ -34,9 +35,12 @@ export function SummaryStrip({ tiles, className }: { tiles: SummaryTile[]; class
         <div
           key={tile.key}
           data-total={tile.total || undefined}
-          className="min-w-0 rounded-lg border border-hairline bg-card px-4 py-3"
+          className="min-w-0 rounded-lg border border-card-edge bg-card px-4 py-3"
         >
-          <span className="mb-1 block text-sm text-muted">{tile.label}</span>
+          <span className="mb-1 block text-sm text-muted">
+            {tile.label}
+            {tile.term && <> <TermTip term={tile.term} /></>}
+          </span>
           <span
             className={cn(
               'block font-body text-2xl font-bold',

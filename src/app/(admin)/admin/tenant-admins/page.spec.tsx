@@ -54,7 +54,7 @@ describe('KPM Owners & Admins (P3.5-T12)', () => {
     renderInLayout(AdminLayout, <TenantAdminsPage />, { me: SUPER_ADMIN });
 
     expect(await screen.findByText('Admin')).toBeInTheDocument();
-    expect(screen.getByText('01/09/2026')).toBeInTheDocument();
+    expect(screen.getByText('1 Sep 2026')).toBeInTheDocument();
   });
 
   it('AC-2: offers no control, and says why', async () => {

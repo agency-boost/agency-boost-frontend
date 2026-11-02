@@ -1,7 +1,7 @@
 import { act, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
-import { makeMe, makeSession, renderWithSession, stubFetch } from '@test/harness';
+import { InLanguage, makeMe, makeSession, renderWithSession, stubFetch } from '@test/harness';
 import { SessionContext } from '@/lib/session';
 import { announceInboxChanged, INBOX_CHANGED, type InboxChange } from '@/lib/notifications';
 import NotificationsPage from './page';
@@ -70,7 +70,7 @@ describe('the notifications inbox (P3.5-T10, P12.1)', () => {
     expect(await screen.findByText('You are in')).toBeInTheDocument();
     expect(screen.getByText('Your request was approved. You now have a leader.')).toBeInTheDocument();
     // P12.1-T3 AC-6: a short date — the day and month, on the office's calendar.
-    expect(screen.getByText('Sep 1')).toHaveAttribute('dateTime', '2026-09-01T00:00:00.000Z');
+    expect(screen.getByText('1 Sep')).toHaveAttribute('dateTime', '2026-09-01T00:00:00.000Z');
   });
 
   it('P12.1-T3 AC-6: a compact row, named by its title with Unread: in front while it is, and described by its detail and date', async () => {
@@ -78,12 +78,14 @@ describe('the notifications inbox (P3.5-T10, P12.1)', () => {
     renderWithSession(<NotificationsPage />, { me: READER });
 
     const unread = await screen.findByRole('button', { name: 'Unread: You are in' });
-    expect(unread).toHaveAccessibleDescription('Your request was approved. You now have a leader. Sep 1');
+    expect(unread).toHaveAccessibleDescription('Your request was approved. You now have a leader. 1 Sep');
     // The dot is drawn; its words are the name's.
     expect(screen.getByText('Unread:')).toHaveClass('sr-only');
-    // One line each, cut with an ellipsis.
-    expect(within(unread).getByText('You are in')).toHaveClass('truncate');
-    expect(within(unread).getByText('Your request was approved. You now have a leader.')).toHaveClass('truncate');
+    // One line each from 768px, cut with an ellipsis; P18.95-T7 AC-4 (UI-030): on a phone neither is cut, both wrap.
+    for (const line of [within(unread).getByText('You are in'), within(unread).getByText('Your request was approved. You now have a leader.')]) {
+      expect(line).toHaveClass('md:truncate', 'break-words');
+      expect(line).not.toHaveClass('truncate');
+    }
     // A read row stays legible: named by its title alone.
     expect(screen.getByRole('button', { name: 'Older' })).toBeInTheDocument();
   });
@@ -100,7 +102,7 @@ describe('the notifications inbox (P3.5-T10, P12.1)', () => {
     const modal = screen.getByRole('dialog', { name: 'You are in' });
     expect(within(modal).getByText('Your request was approved. You now have a leader.')).toBeInTheDocument();
     // Its date and time in full, in the office's timezone: 01:05 UTC is 8:05 in Jakarta.
-    expect(within(modal).getByText('October 3, 2026 · 8:05 AM')).toBeInTheDocument();
+    expect(within(modal).getByText('3 Oct 2026, 08:05')).toBeInTheDocument();
     expect(calls.filter((c) => c.init.method === 'POST').map((c) => c.url))
       .toEqual(['http://api.test/api/v1/notifications/n-1/read']);
 
@@ -108,6 +110,21 @@ describe('the notifications inbox (P3.5-T10, P12.1)', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
     // Read now, and the focus is back where it was.
     expect(screen.getByRole('button', { name: 'You are in' })).toHaveFocus();
+  });
+
+  it('P18.98-T3 AC-1 writes a row’s time and its modal’s date and time in the reader’s language: 08.05 and 08:05', async () => {
+    const page = { body: pageOf([item({ createdAt: '2026-10-03T01:05:00.000Z' })]) };
+    stubFetch({ '/notifications': [page, page] });
+    const { unmount } = renderWithSession(<InLanguage language="id"><NotificationsPage /></InLanguage>, { me: READER });
+    // Today's notice by its time, on the office's clock; its modal the day and the time in full.
+    expect(await screen.findByText('08.05')).toHaveAttribute('dateTime', '2026-10-03T01:05:00.000Z');
+    // The row's own words are Indonesian too since P18.98-T4 (the shared pieces); the notice's title is the API's.
+    await userEvent.click(screen.getByRole('button', { name: 'Belum dibaca: You are in' }));
+    expect(within(screen.getByRole('dialog', { name: 'You are in' })).getByText('3 Okt 2026, 08.05')).toBeInTheDocument();
+    unmount();
+
+    renderWithSession(<NotificationsPage />, { me: READER });
+    expect(await screen.findByText('08:05')).toHaveAttribute('dateTime', '2026-10-03T01:05:00.000Z');
   });
 
   it('P12.1-T3 AC-4: Escape and the backdrop close the modal too', async () => {
@@ -261,8 +278,10 @@ describe('the notifications inbox (P3.5-T10, P12.1)', () => {
     try {
       renderWithSession(<NotificationsPage />, { me: READER });
       await userEvent.click(await screen.findByRole('button', { name: 'Mark as read' }));
-      await vi.waitFor(() => expect(heard).toHaveLength(1));
-      expect(heard[0].unread).toBe(4);
+      // The badge's move as it is clicked (P18.95-T1 AC-7), then the answer's count.
+      await vi.waitFor(() => expect(heard).toHaveLength(2));
+      expect(heard[0]).toMatchObject({ delta: -1, local: true });
+      expect(heard[1].unread).toBe(4);
     } finally {
       window.removeEventListener(INBOX_CHANGED, listen);
     }
@@ -435,6 +454,124 @@ describe('the notifications inbox (P3.5-T10, P12.1)', () => {
     expect(calls.map((c) => c.url)).toContain('http://api.test/api/v1/notifications?page=1&pageSize=20');
   });
 
+  it('P18.95-T7 AC-1 keeps the page’s sub-line from 768px and draws it nowhere on a phone (grey text row 25)', async () => {
+    stubFetch({ '/notifications': { body: pageOf([item()]) } });
+    renderWithSession(<NotificationsPage />, { me: READER });
+    await screen.findByText('You are in');
+    const sub = screen.getByText('What has happened that you should know about.');
+    expect(sub.className.split(/\s+/).filter((c) => /hidden/.test(c))).toEqual(['max-md:hidden']);
+    expect(screen.getByRole('heading', { level: 1, name: 'Notifications' })).toBeInTheDocument();
+  });
+
+  /*
+   * **Repeats of one notice in a row, as one line** (P18.95-T7 AC-4; the client's UI review, UI-030 — *Wilson updated
+   * your goal · 7×*): one template, the same words and the same address, next to each other on the page.
+   */
+  describe('P18.95-T7 AC-4 repeats', () => {
+    const KICKOFF = (n: number, readAt: string | null = null) => item({
+      notificationId: `n-k${n}`, templateId: 'event.reminder', title: 'Kickoff 2026 is coming up',
+      detail: '9 Nov 2026, 09.00 · Kantor KPM', createdAt: `2026-10-0${3 - Math.min(n, 2)}T0${n}:00:00.000Z`, readAt,
+    });
+
+    it('P18.95-T7 AC-4 draws three in a row as one line with its count, and one apart from them on its own', async () => {
+      stubFetch({ '/notifications': { body: pageOf([KICKOFF(1), KICKOFF(2), KICKOFF(3), item(), KICKOFF(4)]) } });
+      renderWithSession(<NotificationsPage />, { me: READER });
+
+      const line = await screen.findByRole('button', { name: 'Unread: Kickoff 2026 is coming up, 3 notices' });
+      expect(line).toHaveTextContent('Kickoff 2026 is coming up · 3×');
+      expect(line).toHaveAccessibleDescription(/^9 Nov 2026, 09\.00 · Kantor KPM /);
+      expect(line).toHaveAttribute('aria-expanded', 'false');
+      // The item between them breaks the run: the fourth stands on its own, a row like any other.
+      expect(screen.getByRole('button', { name: 'Unread: You are in' })).toBeInTheDocument();
+      expect(screen.getAllByRole('button', { name: /^Unread: Kickoff 2026 is coming up$/ })).toHaveLength(1);
+    });
+
+    it('P18.95-T7 AC-4 opens to the notices themselves, reading none of them, each opening and marking on its own', async () => {
+      const { calls } = stubFetch({
+        'POST /notifications/n-k2/read': state('n-k2', '2026-10-03T03:00:00.000Z', 2),
+        '/notifications': { body: pageOf([KICKOFF(1), KICKOFF(2), KICKOFF(3)]) },
+      });
+      renderWithSession(<NotificationsPage />, { me: READER });
+
+      const line = await screen.findByRole('button', { name: /Kickoff 2026 is coming up, 3 notices/ });
+      const list = document.getElementById(line.getAttribute('aria-controls')!)!;
+      expect(list).not.toBeVisible();
+      await userEvent.click(line);
+      expect(line).toHaveAttribute('aria-expanded', 'true');
+      expect(list).toBeVisible();
+      expect(within(list).getAllByRole('button', { name: 'Unread: Kickoff 2026 is coming up' })).toHaveLength(3);
+      // Opening the line marked nothing.
+      expect(calls.filter((c) => c.init.method === 'POST')).toEqual([]);
+
+      // One of them, by its own toggle: that one alone.
+      await userEvent.click(within(list).getAllByRole('button', { name: 'Mark as read' })[1]);
+      await vi.waitFor(() => expect(calls.filter((c) => c.init.method === 'POST').map((c) => c.url.split('/v1')[1]))
+        .toEqual(['/notifications/n-k2/read']));
+      expect(within(list).getAllByRole('button', { name: /^Unread: / })).toHaveLength(2);
+      // Still unread as a whole while any of it is.
+      expect(line).toHaveAccessibleName('Unread: Kickoff 2026 is coming up, 3 notices');
+    });
+
+    it('P18.95-T7 AC-4 its toggle reads all of them at once, the bell moving by three, then settling on the last answer', async () => {
+      const { calls } = stubFetch({
+        'POST /notifications/n-k1/read': state('n-k1', '2026-10-03T03:00:00.000Z', 4),
+        'POST /notifications/n-k2/read': state('n-k2', '2026-10-03T03:00:00.000Z', 3),
+        'POST /notifications/n-k3/read': state('n-k3', '2026-10-03T03:00:00.000Z', 2),
+        '/notifications': { body: pageOf([KICKOFF(1), KICKOFF(2), KICKOFF(3)], { unread: 5 }) },
+      });
+      const heard: InboxChange[] = [];
+      const listen = (e: Event) => heard.push((e as CustomEvent<InboxChange>).detail);
+      window.addEventListener(INBOX_CHANGED, listen);
+      try {
+        renderWithSession(<NotificationsPage />, { me: READER });
+        await userEvent.click(await screen.findByRole('button', { name: 'Mark all 3 as read' }));
+
+        // All three at once, before any answer.
+        expect(screen.getByRole('button', { name: 'Kickoff 2026 is coming up, 3 notices' })).toBeInTheDocument();
+        await vi.waitFor(() => expect(heard).toHaveLength(2));
+        expect(heard[0]).toMatchObject({ delta: -3, local: true });
+        expect(heard[1].unread).toBe(2);
+        expect(calls.filter((c) => c.init.method === 'POST').map((c) => c.url.split('/v1')[1])).toEqual([
+          '/notifications/n-k1/read', '/notifications/n-k2/read', '/notifications/n-k3/read',
+        ]);
+        // Read, its toggle says the way back: all three unread again.
+        expect(screen.getByRole('button', { name: 'Mark all 3 as unread' })).toBeInTheDocument();
+      } finally {
+        window.removeEventListener(INBOX_CHANGED, listen);
+      }
+    });
+
+    it('P18.95-T7 AC-4 unreads all of them, and puts back the one the server refused, saying why', async () => {
+      const read = '2026-10-02T00:00:00.000Z';
+      const { calls } = stubFetch({
+        'POST /notifications/n-k1/unread': state('n-k1', null, 1),
+        'POST /notifications/n-k2/unread': {
+          status: 404, body: { error: { code: 'NOT_FOUND', message: 'That notification is not there.', requestId: 'r-1' } },
+        },
+        'POST /notifications/n-k3/unread': state('n-k3', null, 2),
+        '/notifications': { body: pageOf([KICKOFF(1, read), KICKOFF(2, read), KICKOFF(3, read)]) },
+      });
+      renderWithSession(<NotificationsPage />, { me: READER });
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Mark all 3 as unread' }));
+      await vi.waitFor(() => expect(calls.filter((c) => c.init.method === 'POST')).toHaveLength(3));
+      expect(await screen.findByRole('alert')).toHaveTextContent('That notification is not there.');
+      const line = screen.getByRole('button', { name: 'Unread: Kickoff 2026 is coming up, 3 notices' });
+      await userEvent.click(line);
+      const list = document.getElementById(line.getAttribute('aria-controls')!)!;
+      expect(within(list).getAllByRole('button', { name: /^Unread: / })).toHaveLength(2);
+      expect(within(list).getAllByRole('button', { name: 'Kickoff 2026 is coming up' })).toHaveLength(1);
+    });
+
+    it('P18.95-T7 AC-4 a read-only support session opens the line and its notices, and is offered no mark', async () => {
+      stubFetch({ '/notifications': { body: pageOf([KICKOFF(1), KICKOFF(2)]) } });
+      renderWithSession(<NotificationsPage />, { me: SUPPORT });
+      await userEvent.click(await screen.findByRole('button', { name: /Kickoff 2026 is coming up, 2 notices/ }));
+      expect(screen.queryByRole('button', { name: /Mark all/ })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Mark as read' })).not.toBeInTheDocument();
+    });
+  });
+
   it('renders a row with no detail without leaving an empty line, in the row or in its modal', async () => {
     stubFetch({
       'POST /notifications/n-1/read': state('n-1', '2026-10-03T03:00:00.000Z', 0),
@@ -445,7 +582,7 @@ describe('the notifications inbox (P3.5-T10, P12.1)', () => {
     const row = await screen.findByRole('button', { name: 'Unread: You are in' });
     expect(screen.queryByText('Your request was approved. You now have a leader.')).toBeNull();
     // Described by its date alone.
-    expect(row).toHaveAccessibleDescription('Sep 1');
+    expect(row).toHaveAccessibleDescription('1 Sep');
     await userEvent.click(row);
     // The date and time, and nothing above them.
     expect(screen.getByRole('dialog').querySelectorAll('p')).toHaveLength(1);

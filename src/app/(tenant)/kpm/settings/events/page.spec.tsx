@@ -87,7 +87,9 @@ describe('the office’s Events screen', () => {
     // 23:30 UTC is already the next day in Jakarta; a browser deriving it would disagree.
     render([type()], [event({ startsAt: '2026-10-01T23:30:00.000Z', startsOn: '2026-10-02' })]);
 
-    expect(await screen.findByText(/2026-10-02/)).toBeInTheDocument();
+    // Written as every screen writes a date (ADR-0167 §1), never the ISO day the read carries.
+    expect(await screen.findByText(/^2 Oct 2026 ·/)).toBeInTheDocument();
+    expect(screen.queryByText(/2026-10-02/)).not.toBeInTheDocument();
   });
 
   it('archives an event type and says what that affects', async () => {
@@ -346,7 +348,9 @@ describe('the office’s Events screen', () => {
 
     await userEvent.click(buttons[0]);
     const box = await screen.findByRole('dialog', { name: 'Last month' });
+    // Two tabs since P18.8-T13 (ADR-0161 §6): the roll call open, the summary a tab away.
     expect(await within(box).findByRole('heading', { name: 'Roll call' })).toBeInTheDocument();
+    await userEvent.click(within(box).getByRole('tab', { name: 'Feedback summary' }));
     expect(await within(box).findByRole('heading', { name: 'Last month — Feedback Summary' })).toBeInTheDocument();
     await userEvent.click(within(box).getByRole('button', { name: 'Close' }));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
@@ -433,6 +437,37 @@ describe('the office’s Events screen', () => {
     expect(screen.getByLabelText('Title')).toHaveValue('Kickoff');
   });
 
+  it('P18.8-T13 AC-2 the events are one bordered list, a row each, the row’s actions one group with View feedback first', async () => {
+    render([type()], [
+      event(),
+      event({ id: 'e3', code: 'LAST', title: 'Last month', phase: 'past' }),
+    ]);
+    await screen.findByText('Last month');
+
+    const lists = screen.getAllByRole('list');
+    expect(lists).toHaveLength(1);
+    expect(lists[0]).toHaveClass('divide-y', 'divide-hairline');
+    expect(within(lists[0]).getAllByRole('listitem')).toHaveLength(2);
+    const past = screen.getByText('Last month').closest('li')!;
+    const actions = within(past).getAllByRole('button').map((b) => b.textContent);
+    expect(actions).toEqual(['View feedback', 'Edit', 'Archive']);
+    expect(within(past).getByRole('button', { name: 'View feedback' }).parentElement)
+      .toBe(within(past).getByRole('button', { name: 'Edit' }).parentElement);
+  });
+
+  it('P18.8-T13 AC-2 the toolbar: Show archived and the tab’s add button together, above the list, on both tabs', async () => {
+    render([type()], [event()]);
+    const toggle = await screen.findByRole('checkbox', { name: 'Show archived' });
+    const add = screen.getByRole('button', { name: 'Add an event' });
+    expect(toggle.closest('div')).toBe(add.parentElement);
+    expect(add.compareDocumentPosition(screen.getByRole('list')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    await userEvent.click(screen.getByRole('link', { name: 'Event types' }));
+    const addType = await screen.findByRole('button', { name: 'Add an event type' });
+    expect(screen.getByRole('checkbox', { name: 'Show archived' }).closest('div')).toBe(addType.parentElement);
+    expect(screen.queryByRole('button', { name: 'Add an event' })).not.toBeInTheDocument();
+  });
+
   it('hides archived rows until asked', async () => {
     render([type()], [event({ status: 'archived' })]);
     await screen.findByRole('checkbox', { name: 'Show archived' });
@@ -480,5 +515,40 @@ describe('the office’s Events screen in a browser outside Jakarta', () => {
     const sent = JSON.parse(String(stub.calls.find((c) => c.init.method === 'PATCH')!.init.body));
     expect(sent.startsAt).toBe('2026-10-01T02:00:00.000Z');
     expect(sent.endsAt).toBe('2026-10-01T07:30:00.000Z');
+  });
+});
+
+/**
+ * **The events settings in order** (P18.97-T4 AC-8, ADR-0176 §8; the client's KPM Owner review of 2026-10-27, UI-030:
+ * *"past events first, upcoming at the bottom"*): upcoming soonest first, then happening now, then past latest first —
+ * the order the agents' Events list reads its sections in.
+ */
+describe('P18.97-T4 AC-8 the events settings: upcoming, then running, then past', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('P18.97-T4 AC-8 lists upcoming soonest first, then happening now, then past latest first', async () => {
+    render([type()], [
+      event({ id: 'e1', code: 'BOOTCAMP', title: 'New Agent Bootcamp', phase: 'past', startsAt: '2026-09-08T02:00:00.000Z' }),
+      event({ id: 'e2', code: 'AWARDS', title: 'Awards night', phase: 'past', startsAt: '2026-10-10T11:00:00.000Z' }),
+      event({ id: 'e3', code: 'TOWNHALL', title: 'Town Hall', phase: 'running', startsAt: '2026-10-28T02:00:00.000Z' }),
+      event({ id: 'e4', code: 'KICKOFF', title: 'Kickoff 2027', phase: 'upcoming', startsAt: '2027-01-08T02:00:00.000Z' }),
+      event({ id: 'e5', code: 'LAUNCH', title: 'Product launch', phase: 'upcoming', startsAt: '2026-11-12T02:00:00.000Z' }),
+    ]);
+    await screen.findByText('Town Hall');
+    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
+      'Product launch', 'Kickoff 2027', 'Town Hall', 'Awards night', 'New Agent Bootcamp',
+    ]);
+  });
+
+  it('P18.97-T4 AC-8 keeps an archived event in its own phase’s place when archived ones are shown', async () => {
+    render([type()], [
+      event({ id: 'e1', code: 'OLD', title: 'Archived launch', phase: 'past', status: 'archived', startsAt: '2026-10-20T02:00:00.000Z' }),
+      event({ id: 'e2', code: 'NEXT', title: 'Next training', phase: 'upcoming', startsAt: '2026-11-01T02:00:00.000Z' }),
+      event({ id: 'e3', code: 'PAST', title: 'Older training', phase: 'past', startsAt: '2026-08-01T02:00:00.000Z' }),
+    ]);
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'Show archived' }));
+    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
+      'Next training', 'Archived launch', 'Older training',
+    ]);
   });
 });

@@ -1,6 +1,8 @@
 import { createContext, useContext, useId, type ReactNode } from 'react';
+import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
+import { kpmOverviewMessages } from '@/i18n/messages/kpm-overview';
 import { cn } from '@/lib/cn';
-import { OWN_COPY, pctText, toneOf, type Tone } from '@/lib/kpm-overview';
+import { pctText, toneOf, type Tone } from '@/lib/kpm-overview';
 
 /** The split the read served (`thresholds.statusSplitPct`), for every percentage painted below the page. */
 export const SplitContext = createContext<number | null>(null);
@@ -74,13 +76,15 @@ export function PctPill({ pct, size = 'md', className }: { pct: number | null; s
   );
 }
 
-/** *76%*, or *—* with its reason for a screen reader. */
+/** *76%*, or *—* with its reason for a screen reader; the figure in the figures' language. */
 export function Pct({ pct }: { pct: number | null }) {
-  if (pct !== null) return <>{pctText(pct)}</>;
+  const t = useMessages(kpmOverviewMessages);
+  const figures = useFigureLanguage();
+  if (pct !== null) return <>{pctText(pct, figures)}</>;
   return (
     <>
       <span aria-hidden="true">—</span>
-      <span className="sr-only">{OWN_COPY.noRate}</span>
+      <span className="sr-only">{t.noRate}</span>
     </>
   );
 }
@@ -120,5 +124,5 @@ export function Bar({
 
 /** `.engage-card`, `.coaching-card`, `.pipeline-card`, `.production-card`: a 12px card on the hairline. */
 export function OverviewCard({ className, children }: { className?: string; children: ReactNode }) {
-  return <div className={cn('min-w-0 rounded-lg border border-hairline bg-card', className)}>{children}</div>;
+  return <div className={cn('min-w-0 rounded-lg border border-card-edge bg-card', className)}>{children}</div>;
 }

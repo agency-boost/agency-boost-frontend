@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { makeMe } from '@test/harness';
-import { destinationAfterSignIn, returnPathFrom, signInPathFrom } from './return-path';
+import {
+  destinationAfterSignIn, returnPathFrom, SESSION_EXPIRED_REASON, sessionEndedIn, signInPathFrom,
+} from './return-path';
 import type { Me } from './session';
 
 describe('where sign-in returns to (P18.1-T3 AC-2)', () => {
@@ -53,6 +55,47 @@ describe('a reader who signed out themselves (2026-10-11)', () => {
   });
 });
 
+/*
+ * ADR-0168 §1 (OD-208; the client's UI review, UI-006): **an expired session says so.** One helper, three cases —
+ * the reader signed out, the session ended under them, or there was none to end.
+ */
+describe('why the reader is sent to sign in (ADR-0168 §1)', () => {
+  const PROFILE = { pathname: '/profile', search: '?tab=personal' };
+
+  it('a deliberate sign-out: plain /login, with neither the page nor a reason', () => {
+    expect(signInPathFrom(PROFILE, { signedOut: true })).toBe('/login');
+    // Signing out wins, should both ever be said at once.
+    expect(signInPathFrom(PROFILE, { signedOut: true, expired: true })).toBe('/login');
+  });
+
+  it('a session that ended under the reader: the page, and reason=expired', () => {
+    expect(signInPathFrom(PROFILE, { expired: true })).toBe('/login?next=%2Fprofile%3Ftab%3Dpersonal&reason=expired');
+    expect(returnPathFrom('?next=%2Fprofile%3Ftab%3Dpersonal&reason=expired')).toBe('/profile?tab=personal');
+  });
+
+  it('a reader who arrived signed out, with no session to end: the page, and no reason', () => {
+    expect(signInPathFrom(PROFILE)).toBe('/login?next=%2Fprofile%3Ftab%3Dpersonal');
+    expect(signInPathFrom(PROFILE, { signedOut: false, expired: false })).toBe('/login?next=%2Fprofile%3Ftab%3Dpersonal');
+  });
+
+  it('from the home page an ended session still says so, though there is no page to carry', () => {
+    expect(signInPathFrom({ pathname: '/', search: '' }, { expired: true })).toBe('/login?reason=expired');
+  });
+});
+
+describe('what the sign-in page reads in its address (ADR-0168 §1)', () => {
+  it('the session ended only for reason=expired, as a string or as the parsed address', () => {
+    expect(sessionEndedIn('?next=%2Fprofile&reason=expired')).toBe(true);
+    expect(sessionEndedIn(new URLSearchParams('reason=expired'))).toBe(true);
+    expect(sessionEndedIn(`?reason=${SESSION_EXPIRED_REASON}`)).toBe(true);
+  });
+
+  it.each(['', '?next=%2Fprofile', '?reason=', '?reason=EXPIRED', '?reason=signed_out', '?expired=1'])(
+    'not for %j',
+    (search) => expect(sessionEndedIn(search)).toBe(false),
+  );
+});
+
 describe('where the person who just signed in goes (2026-10-11)', () => {
   const member = (over: Partial<NonNullable<Me['membership']>>, permissions: string[]) => makeMe({
     membership: {
@@ -72,18 +115,59 @@ describe('where the person who just signed in goes (2026-10-11)', () => {
   });
 
   it('to their own landing when they cannot: the reported case, an Agent or a leader after the Owner', () => {
-    expect(destinationAfterSignIn(COMPLIANCE, agent)).toBe('/activity/log');
-    expect(destinationAfterSignIn(COMPLIANCE, leader)).toBe('/unit/dashboard');
+    expect(destinationAfterSignIn(COMPLIANCE, agent)).toBe('/home');
+    expect(destinationAfterSignIn(COMPLIANCE, leader)).toBe('/home');
   });
 
   it('to their own landing with no next, an unsafe one, or one that is no page', () => {
     expect(destinationAfterSignIn('', owner)).toBe('/kpm/overview');
     expect(destinationAfterSignIn('?next=%2F', owner)).toBe('/kpm/overview');
     expect(destinationAfterSignIn('?next=%2F%2Fevil.test%2Fkpm%2Foverview', owner)).toBe('/kpm/overview');
-    expect(destinationAfterSignIn('?next=%2Fnope', agent)).toBe('/activity/log');
+    expect(destinationAfterSignIn('?next=%2Fnope', agent)).toBe('/home');
   });
 
   it('to sign in when the session could not be read after all', () => {
     expect(destinationAfterSignIn(COMPLIANCE, null)).toBe('/login');
+  });
+
+  /*
+   * **Every sign-in after an expired session starts on the landing** (the product owner's staging review, 2026-10-31:
+   * *"Tiap login masuknya ke home jangan activity/unit"*). The page the session ended on is in the address, and is not
+   * read; a link opened signed out carries no reason and is still followed.
+   */
+  describe('after an expired session (staging review, 2026-10-31)', () => {
+    const superAdmin = makeMe({ user: { ...makeMe().user, platformRole: 'super_admin' }, membership: null });
+    const ended = (page: string) => signInPathFrom({ pathname: page, search: '' }, { expired: true }).replace('/login', '');
+
+    it('an Agent and a leader land on Home, not on Goals, the Unit Dashboard or Activity they were on', () => {
+      expect(destinationAfterSignIn(ended('/goals'), agent)).toBe('/home');
+      expect(destinationAfterSignIn(ended('/unit'), leader)).toBe('/home');
+      expect(destinationAfterSignIn(ended('/activity/log'), leader)).toBe('/home');
+      // Even a page they could open: the reason decides, not the page.
+      expect(destinationAfterSignIn('?next=%2Fleader-meetings%2Fshared%2Fabc&reason=expired', agent)).toBe('/home');
+    });
+
+    it('an Owner or an Admin lands on the office overview, a Super Admin on the console', () => {
+      expect(destinationAfterSignIn(`${COMPLIANCE}&reason=expired`, owner)).toBe('/kpm/overview');
+      expect(destinationAfterSignIn(ended('/kpm/analytics'), member({ isKpmAdmin: true }, ['kpm_analytics:read'])))
+        .toBe('/kpm/overview');
+      expect(destinationAfterSignIn(ended('/admin/kpms'), superAdmin)).toBe('/admin');
+    });
+
+    it('the reason in either order, and with no page at all', () => {
+      expect(destinationAfterSignIn('?reason=expired&next=%2Fgoals', agent)).toBe('/home');
+      expect(destinationAfterSignIn('?reason=expired', owner)).toBe('/kpm/overview');
+    });
+
+    it('a link opened signed out, with no reason or another one, is still followed', () => {
+      expect(destinationAfterSignIn('?next=%2Fleader-meetings%2Fshared%2Fabc', agent)).toBe('/leader-meetings/shared/abc');
+      expect(destinationAfterSignIn('?next=%2Fleader-meetings%2Fshared%2Fabc&reason=EXPIRED', agent))
+        .toBe('/leader-meetings/shared/abc');
+      expect(destinationAfterSignIn(`${COMPLIANCE}&reason=signed_out`, owner)).toBe('/kpm/analytics/compliance?category=training#units');
+    });
+
+    it('to sign in when the session could not be read after all', () => {
+      expect(destinationAfterSignIn('?next=%2Fgoals&reason=expired', null)).toBe('/login');
+    });
   });
 });

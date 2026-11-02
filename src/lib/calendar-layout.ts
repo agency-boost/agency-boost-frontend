@@ -1,5 +1,5 @@
 import { clockMinutes, endMinutes } from './format';
-import { hhmm, isBusy, type CalendarItem } from './calendar';
+import { daysInclusive, hhmm, isBusy, type CalendarItem } from './calendar';
 
 /**
  * Where the calendar's things go on the page — pure arithmetic on what the read served, so each rule
@@ -108,7 +108,9 @@ export interface PlacedEntry<T> {
  * another, directly or through a third, shares one set of lanes; each item takes the first lane free
  * when it starts. Ordered by start, the longer first, as the read orders them by `startsAt`.
  */
-export function layoutDay<T extends { start?: string | null; end?: string | null }>(items: readonly T[]): PlacedEntry<T>[] {
+export function layoutDay<T extends { start?: string | null; end?: string | null }>(
+  items: readonly T[], hourPx: number = HOUR_PX,
+): PlacedEntry<T>[] {
   const timed = items
     .map((item) => ({ item, ...minutesOf(item) }))
     .sort((a, b) => a.start - b.start || b.end - a.end);
@@ -135,8 +137,8 @@ export function layoutDay<T extends { start?: string | null; end?: string | null
     clusterEnd = Math.max(clusterEnd, end);
     const placed: PlacedEntry<T> = {
       item,
-      top: (start / 60) * HOUR_PX,
-      height: Math.max(((end - start) / 60) * HOUR_PX - 2, MIN_ENTRY_PX),
+      top: (start / 60) * hourPx,
+      height: Math.max(((end - start) / 60) * hourPx - 2, MIN_ENTRY_PX),
       lane,
       lanes: 1,
     };
@@ -195,25 +197,75 @@ export function allDayHeight(lanes: number): number {
   return Math.max(ALLDAY_MIN_PX, lanes * (BAR_PX + BAR_GAP_PX) + BAR_GAP_PX);
 }
 
-/** A timed item on one date, for the week's day column. */
-export function timedOn<T extends CalendarItem>(items: readonly T[], day: string): T[] {
-  return items.filter((item) => !item.allDay && item.date === day);
+/** Anything with a time on the grid: an entry, a busy block, a joined event (UI-104). */
+export interface Timed {
+  allDay: boolean;
+  date: string | null;
+  start: string | null;
+  end: string | null;
+  startsOn: string | null;
+  endsOn: string | null;
+}
+
+/**
+ * **A timed item's part of one date** (UI V1, UI-104 point 8): a one-day item as it is; **one that runs over several
+ * days** — a trip with times, a joined event past midnight, which carry `startsOn` and `endsOn` — from its start to
+ * midnight on its first day, the whole of each day between, and from midnight to its end on its last. `null` when it is
+ * not on that date. A copy, so the item itself is never changed; an end of `00:00` is the end of the day.
+ */
+export function segmentOn<T extends Timed>(item: T, day: string): T | null {
+  if (item.allDay) return null;
+  const first = item.startsOn ?? item.date;
+  const last = item.endsOn ?? item.date;
+  if (!first || !last || day < first || day > last) return null;
+  if (first === last) return item;
+  return {
+    ...item,
+    date: day,
+    start: day === first ? item.start : '00:00',
+    end: day === last ? item.end : '00:00',
+  };
+}
+
+/** The timed items on one date — each item's part of it — for a day column. */
+export function timedOn<T extends Timed>(items: readonly T[], day: string): T[] {
+  return items.map((item) => segmentOn(item, day)).filter((item): item is T => item !== null);
+}
+
+/** **Which day of a trip a date is** — *Hari 1/2* (UI-104 point 8): from its first day, of how many it lasts. */
+export function tripDay(item: { startsOn: string | null; endsOn: string | null }, day: string): { n: number; of: number } {
+  const first = item.startsOn ?? day;
+  return { n: daysInclusive(first, day), of: daysInclusive(first, item.endsOn ?? first) };
+}
+
+/** How many *Tugas* each date holds (UI-104 point 2): the Week's and 3 Hari's count row, and the Month's badge. */
+export function tasksPerDay(tasks: readonly { date: string }[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const task of tasks) counts.set(task.date, (counts.get(task.date) ?? 0) + 1);
+  return counts;
 }
 
 /**
  * What a month cell lists for its date: the entries the week shows for that day, **and Travel on each
  * day it spans** (contradiction 9) — ordered by start, a trip first, since it has no time.
  */
-export function itemsOnDay<T extends CalendarItem>(items: readonly T[], day: string): T[] {
+export function itemsOnDay<T extends Timed>(items: readonly T[], day: string): T[] {
   const key = (item: T) => (item.allDay ? -1 : minutesOf(item).start);
   return items
-    .filter((item) => (item.allDay
-      ? (item.startsOn ?? '') <= day && day <= (item.endsOn ?? '')
-      : item.date === day))
+    .map((item) => (item.allDay
+      ? ((item.startsOn ?? '') <= day && day <= (item.endsOn ?? '') ? item : null)
+      : segmentOn(item, day)))
+    .filter((item): item is T => item !== null)
     .sort((a, b) => key(a) - key(b) || idOf(a).localeCompare(idOf(b)));
 }
 
-const idOf = (item: CalendarItem) => (isBusy(item) ? '' : item.entryId);
+const idOf = (item: Timed) => {
+  const keyed = item as Partial<{ entryId: string; eventId: string; busy: boolean }>;
+  return keyed.entryId ?? keyed.eventId ?? '';
+};
+
+/** Kept for the type's sake: an entry's id where it has one. */
+export const entryIdOf = (item: CalendarItem) => (isBusy(item) ? '' : item.entryId);
 
 /** How many lines a month cell shows before *"+{n} more…"* (`:1042-1049`). */
 export const MONTH_LINES = 3;

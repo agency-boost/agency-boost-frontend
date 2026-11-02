@@ -11,9 +11,12 @@ import { Page } from '@/components/page';
  * keeps the header, the person already read, and *Leader view* / *Agent view* where the reader left
  * it (AC-3). The tab pages beneath are only their panels.
  *
- * The page's title is the prototype's for every coaching view, with its empty sub-line
- * (`Overall.html:10407`). Gated as the roster is: `coaching_session:read`, and the API refuses a person
- * outside the reader's reach whatever this decides.
+ * **The page's title is the person's name** (P18.95-T7 AC-2; the client's UI review, UI-021), drawn by the shell once
+ * it has read who this is: *Coaching Session* was the title, a tab and the way back at once, and said nothing of whom
+ * the page is about. Where there is nobody to name — the address names nobody the reader coaches, the read failed, a
+ * former coach on a past session — the shell titles the page *Coaching Session*, the prototype's for every coaching
+ * view (`Overall.html:10407`). Gated as the roster is: `coaching_session:read`, and the API refuses a person outside
+ * the reader's reach whatever this decides.
  */
 export default function CoachingPersonLayout({
   children,
@@ -24,7 +27,7 @@ export default function CoachingPersonLayout({
 }) {
   const { membershipId } = use(params);
   return (
-    <Page title="Coaching Session" permission="coaching_session:read">
+    <Page permission="coaching_session:read">
       <PersonShell membershipId={membershipId}>{children}</PersonShell>
     </Page>
   );

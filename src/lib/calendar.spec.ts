@@ -7,8 +7,10 @@ import {
   addDays, answerEntry, createEntry, daysInclusive, deleteEntry, DOWNLINE_GROUP_LABEL, entryDate, entryNameSuffix,
   hhmm, initialsOf, INVITEES_MAX, isBusy, NOTES_MAX, OWN_COPY, PEOPLE_GROUP_LABEL, peopleOn, personTag, placeBlock,
   PROTOTYPE_COPY, readableDate, readCalendar, readCalendarSettings, readDownline, readEntry, saveCalendarSettings,
-  searchPeople, TITLE_MAX, titleOf, TRIP_DAYS_MAX, TYPE_BADGE, TYPE_LABEL, updateEntry,
+  searchPeople, TITLE_MAX, titleOf, TRIP_DAYS_MAX, TYPE_LABEL, updateEntry,
+  isZoomHost, meetingUrl, notesParts, viewOf, DISPLAYS, agendaHref, setLeadActionDone, setCoachingItemDone,
 } from './calendar';
+import * as calendarModule from './calendar';
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -43,6 +45,17 @@ describe('the calendar’s calls (functional/calendar.md, Data contract)', () =>
     expect(JSON.parse(String(calls[2].init.body))).toEqual({ ...input, version: 3 });
     expect(calls[3].init.method).toBe('DELETE');
     expect(calls[3].url).toMatch(/\/calendar\/entries\/e-1\?version=4$/);
+  });
+
+  it('UI-104 ticks a lead’s next action pinned to its version, and a coaching item, each at its source — and takes either back', async () => {
+    const { calls } = stubFetch({ '/leads/': { body: { id: 'l 1', version: 4, nextActionDate: null, nextActionNote: null } }, '/coaching/sessions/': ok });
+    await setLeadActionDone('l 1', true, 3);
+    await setCoachingItemDone('s-1', 'item 1', false);
+    expect(calls[0].url).toMatch(/\/leads\/l%201\/next-action\/done$/);
+    expect(calls[0].init.method).toBe('PUT');
+    expect(JSON.parse(String(calls[0].init.body))).toEqual({ done: true, version: 3 });
+    expect(calls[1].url).toMatch(/\/coaching\/sessions\/s-1\/action-items\/item%201\/done$/);
+    expect(JSON.parse(String(calls[1].init.body))).toEqual({ done: false });
   });
 
   it('answers for the reader alone, and nothing else (ADR-0097)', async () => {
@@ -80,9 +93,10 @@ describe('Hide my personal activities (P13.1-T8, ADR-0110)', () => {
 });
 
 describe('the words', () => {
-  it('P12-T2 AC-2 keeps the legend’s words and the badge’s apart, as the prototype has them (`:310-314`, `:824`)', () => {
+  it('P18.95-T8 AC-2 names the types once: the legend’s and the toggle’s words, verbatim (`:310-314`), which the badge now uses too', () => {
     expect(Object.values(TYPE_LABEL)).toEqual(['Internal meeting', '1:1 coaching', 'Client meeting', 'Task', 'Travel']);
-    expect(Object.values(TYPE_BADGE)).toEqual(['Meeting', 'Coaching', 'Client', 'Task', 'Travel']);
+    // The prototype's badge words (`:824`) are gone from the module: there is one map, not two.
+    expect(Object.keys(calendarModule)).not.toContain('TYPE_BADGE');
   });
 
   it('ADR-0096 keeps the prototype’s strings verbatim, KPM and every character included', () => {
@@ -106,7 +120,7 @@ describe('the words', () => {
 
   it('P12-T6 AC-7 / ADR-0096: none of the strings the calendar writes itself uses the six words, a phase or a code', () => {
     const strings = Object.values(OWN_COPY).map((value) => (typeof value === 'function'
-      ? (value as (...args: string[]) => string)('Rina Wijaya', 'Sep 28 – Oct 4, 2026')
+      ? (value as (...args: string[]) => string)('Rina Wijaya', '28 Sep – 4 Okt 2026')
       : value));
     expect(strings.length).toBeGreaterThan(30);
     for (const text of strings) {
@@ -119,13 +133,16 @@ describe('the words', () => {
   it('m3 builds each limit’s sentence from its limit, never from the number written again', () => {
     expect(OWN_COPY.tripTooLong).toBe(`A trip can be at most ${TRIP_DAYS_MAX} days.`);
     expect(OWN_COPY.titleTooLong).toBe(`Keep the title to ${TITLE_MAX} characters.`);
-    expect(OWN_COPY.notesTooLong).toBe(`Keep the notes to ${NOTES_MAX.toLocaleString('en-US')} characters.`);
+    expect(OWN_COPY.notesTooLong).toBe('Keep the notes to 1.000 characters.');
+    expect(NOTES_MAX).toBe(1000);
     expect(OWN_COPY.tooManyInvitees).toBe(`You can invite at most ${INVITEES_MAX} people.`);
     // In the source, each sentence names its constant and holds no digit of its own.
     const source = readFileSync(join(__dirname, 'calendar.ts'), 'utf8').split('\n');
     for (const key of ['tripTooLong', 'titleTooLong', 'notesTooLong', 'tooManyInvitees']) {
       const line = source.find((l) => l.trim().startsWith(`${key}:`)) ?? '';
-      expect(line, key).toMatch(/\$\{[A-Z_]+_MAX\b/);
+      // Through `formatNumber` where the limit can reach a thousand, so it is grouped `1.000` (ADR-0167 §1). Since
+      // P18.98-T4 the words are the catalogue's and the limit is handed to them as a value (`limitWords`, `max:`).
+      expect(line, key).toMatch(/(?:\$\{|max: )(?:formatNumber\()?[A-Z_]+_MAX\b/);
       expect(line, key).not.toMatch(/\d/);
     }
   });
@@ -174,17 +191,17 @@ describe('people', () => {
     expect(initialsOf('  ')).toBe('?');
   });
 
-  it('P12-T4 AC-3 tags with the ladder’s label and, for anybody not a direct report, their leader’s full name', () => {
+  it('P12-T4 AC-3, P18.95-T9 AC-1 tags with the rung’s badge name — the ladder’s long label never — and, for anybody not a direct report, their leader’s full name', () => {
     expect(personTag({ rung: AGENT_RUNG, leaderName: 'Agus Santoso', direct: true })).toBe('Agent');
     expect(personTag({ rung: AGENT_RUNG, leaderName: 'Sari Dewi', direct: false })).toBe('Agent · under Sari Dewi');
-    expect(personTag({ rung: AB_RUNG, leaderName: null, direct: false })).toBe('Agency Builder');
+    expect(personTag({ rung: AB_RUNG, leaderName: null, direct: false })).toBe('AB');
   });
 
   it('takes who is a direct report from the server’s `direct`, never from a leader’s name (invariant §2)', () => {
     // A namesake of the reader leads this agent: the same name, somebody else.
     expect(personTag({ rung: AGENT_RUNG, leaderName: 'Agus Santoso', direct: false })).toBe('Agent · under Agus Santoso');
     // The reader's direct report, whatever name the row carries for their leader.
-    expect(personTag({ rung: AAB_RUNG, leaderName: 'Agus S.', direct: true })).toBe('Associate Agency Builder');
+    expect(personTag({ rung: AAB_RUNG, leaderName: 'Agus S.', direct: true })).toBe('AAB');
   });
 
   it('D-audit: names everybody a write touched, before and after, once each', () => {
@@ -223,5 +240,78 @@ describe('dates, counted on their own numbers', () => {
     expect(hhmm(0)).toBe('00:00');
     expect(hhmm(585)).toBe('09:45');
     expect(hhmm(1440)).toBe('00:00');
+  });
+});
+
+describe('P18.95-T8 AC-2 meeting links in Location / notes', () => {
+  const links = (notes: string) => notesParts(notes).filter((p): p is { href: string; label: string } => 'href' in p);
+
+  it('P18.95-T8 AC-2 Join Zoom on a zoom.us host and its own subdomains, the address kept as the href', () => {
+    expect(notesParts('Zoom — https://us02web.zoom.us/j/81234567890?pwd=abc')).toEqual([
+      { text: 'Zoom — ' },
+      { href: 'https://us02web.zoom.us/j/81234567890?pwd=abc', label: 'Join Zoom' },
+    ]);
+    // The seed's own notes, typed without the scheme, read as https.
+    expect(notesParts('Zoom — zoom.us/j/91827364')).toEqual([
+      { text: 'Zoom — ' }, { href: 'https://zoom.us/j/91827364', label: 'Join Zoom' },
+    ]);
+    expect(isZoomHost('zoom.us')).toBe(true);
+    expect(isZoomHost('us02web.zoom.us')).toBe(true);
+  });
+
+  it('P18.95-T8 AC-2 Join meeting on any other http(s) address, and a look-alike Zoom host is another host', () => {
+    expect(links('Meet: https://meet.google.com/abc-defg-hij')).toEqual([{ href: 'https://meet.google.com/abc-defg-hij', label: 'Join meeting' }]);
+    expect(links('teams.microsoft.com/l/meetup-join/19%3a')).toEqual([{ href: 'https://teams.microsoft.com/l/meetup-join/19%3a', label: 'Join meeting' }]);
+    expect(links('http://intranet.example.co.id/room-2')).toEqual([{ href: 'http://intranet.example.co.id/room-2', label: 'Join meeting' }]);
+    for (const host of ['https://zoom.us.evil.com/j/1', 'https://evilzoom.us/j/1', 'https://notzoom.us/j/1']) {
+      expect([host, links(host)[0].label]).toEqual([host, 'Join meeting']);
+    }
+    expect(isZoomHost('zoom.us.evil.com')).toBe(false);
+  });
+
+  it('P18.95-T8 AC-2 makes nothing but http(s) a link: other schemes, bare words, sums and an email stay text', () => {
+    for (const notes of [
+      'javascript:alert(1)',
+      'data:text/html,<script>alert(1)</script>',
+      'mailto:agus@kpm0417.test',
+      'ftp://files.example.com/agenda',
+      'Kusuma residence, Jl. Melati 4',
+      'Rp 1.000/bulan, dll./lain',
+      'agenda.docx/notes',
+      'agus@zoom.us/j/1',
+      'Office — Meeting Room 2',
+    ]) {
+      expect([notes, links(notes)]).toEqual([notes, []]);
+      expect(notesParts(notes)).toEqual([{ text: notes }]);
+    }
+    expect(meetingUrl('javascript:alert(1)')).toBeNull();
+    expect(meetingUrl('https://localhost/x')).toBeNull();
+  });
+
+  it('P18.95-T8 AC-2 leaves a sentence’s closing mark to the sentence, finds every link, and keeps every other word', () => {
+    expect(notesParts('Join here (https://zoom.us/j/1). Backup: meet.google.com/xyz, thanks!')).toEqual([
+      { text: 'Join here (' },
+      { href: 'https://zoom.us/j/1', label: 'Join Zoom' },
+      { text: '). Backup: ' },
+      { href: 'https://meet.google.com/xyz', label: 'Join meeting' },
+      { text: ', thanks!' },
+    ]);
+    expect(notesParts('www.example.com/room')).toEqual([{ href: 'https://www.example.com/room', label: 'Join meeting' }]);
+    expect(notesParts('')).toEqual([]);
+  });
+});
+
+describe('P18.95-T8 AC-1 the agenda reads the week', () => {
+  it('UI-104 each view asks for its own read: the Agenda seven days from today, 3 Hari three, the Week, the Month', () => {
+    expect(DISPLAYS).toEqual(['agenda', 'three_days', 'week', 'month']);
+    expect(DISPLAYS.map(viewOf)).toEqual(['agenda', 'three_days', 'week', 'month']);
+    expect(agendaHref()).toBe('/calendar?view=agenda');
+    expect(agendaHref('2026-10-30')).toBe('/calendar?view=agenda&date=2026-10-30');
+  });
+
+  it('P18.95-T8 AC-1 counts a phone cell’s entries in words, and names its new strings with none of the six words', () => {
+    expect([OWN_COPY.eventCount(1), OWN_COPY.eventCount(4), OWN_COPY.eventCount(1250)]).toEqual(['1 event', '4 events', '1.250 events']);
+    expect([OWN_COPY.agenda, OWN_COPY.filters, OWN_COPY.noEvents, OWN_COPY.joinZoom, OWN_COPY.joinMeeting, OWN_COPY.newTab])
+      .toEqual(['Agenda', 'Filters', 'No events', 'Join Zoom', 'Join meeting', ', opens in a new tab']);
   });
 });

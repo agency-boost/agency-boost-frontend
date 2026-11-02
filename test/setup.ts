@@ -1,5 +1,14 @@
-import { afterEach } from 'vitest';
+import { configure } from '@testing-library/react';
+import { afterAll, afterEach } from 'vitest';
 import '@testing-library/jest-dom/vitest';
+import { LANGUAGE_COOKIE, LANGUAGE_PENDING } from '@/i18n/language';
+
+/*
+ * **`findBy…` and `waitFor` get CI's room too**, as `vitest.config.mts` gives each test: on GitHub's runner a
+ * validation message took longer than Testing Library's 1s to appear on a screen that had rendered (2026-10-27).
+ * Locally the default stands.
+ */
+configure({ asyncUtilTimeout: process.env.CI ? 5_000 : 1_000 });
 
 // The API origin is required, not optional — `apiOrigin()` throws without it, which is
 // deliberate: a build that silently calls a relative URL is worse than one that fails.
@@ -25,4 +34,23 @@ afterEach(() => {
   if (window.location.hash) {
     window.history.replaceState(window.history.state, '', window.location.pathname);
   }
+  /*
+   * **The language a test chose stays with it** (P18.98-T2): the switch writes the `ab_lang` cookie and `<html lang>`,
+   * and jsdom keeps one `document` per spec file, so the next test would start in it — and a pre-paint read would take
+   * it up. Cleared after each, as the hash is.
+   */
+  document.cookie = `${LANGUAGE_COOKIE}=; Max-Age=0; Path=/`;
+  document.documentElement.lang = '';
+  document.documentElement.removeAttribute(LANGUAGE_PENDING);
+});
+
+/**
+ * **Answers still in flight land before the environment goes.** A spec can end while a screen's stubbed read is
+ * still resolving; once vitest tears jsdom down there is no `window`, and the late `setState` throws an unhandled
+ * error that fails a run whose every test passed (CI, 2026-10-24 and 2026-10-27). A few turns of the event loop
+ * after the file's last test let those settle while `window` exists. Screens guard their own reads too
+ * (`TenantConfigProvider`, `/people/admins`); this is the net under the ones that do not yet.
+ */
+afterAll(async () => {
+  for (let turn = 0; turn < 5; turn += 1) await new Promise((resolve) => { setTimeout(resolve, 0); });
 });

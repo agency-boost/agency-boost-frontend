@@ -3,8 +3,10 @@
 import { useId, useState } from 'react';
 import { Modal } from '@/components/ui/modal';
 import { Button, Field, TextInput } from '@/components/ui/field';
+import { useLanguage, useMessages } from '@/i18n/language-provider';
+import { billingMessages } from '@/i18n/messages/billing';
 import {
-  BILLING_COPY as COPY, maskDate, parseDmy, planEnd, toDmy, validateQuote,
+  maskDate, parseDmy, planEnd, toDmy, validateQuote,
   type BillingPeriod, type QuoteDetails, type QuoteErrors,
 } from '@/lib/billing';
 
@@ -35,6 +37,8 @@ export function QuoteDialog({
   onGenerate: (details: QuoteDetails) => void;
 }) {
   const id = useId();
+  const COPY = useMessages(billingMessages).prototype;
+  const language = useLanguage();
   const [start, setStart] = useState(dates.start);
   const [end, setEnd] = useState(dates.end);
   const [endEdited, setEndEdited] = useState(false);
@@ -50,7 +54,7 @@ export function QuoteDialog({
 
   const generate = () => {
     const details = { ...names, start, end };
-    const found = validateQuote(details);
+    const found = validateQuote(details, language);
     setErrors(found);
     const first = (['kpm', 'pic', 'sales', 'start', 'end'] as const).find((name) => found[name]);
     if (first) {
@@ -90,8 +94,21 @@ export function QuoteDialog({
   );
 
   return (
-    <Modal open title={COPY.sendQuote} description={COPY.dialogLine} onClose={onCancel}>
+    <Modal
+      open
+      title={COPY.sendQuote}
+      description={COPY.dialogLine}
+      onClose={onCancel}
+      footer={(
+        // 6px under the last field's own 16px, as drawn: the foot's padding less 10px.
+        <div className="-mt-2.5 flex flex-wrap gap-2.5">
+          <Button type="submit" form={`${id}-form`}>{COPY.generate}</Button>
+          <Button variant="secondary" onClick={onCancel}>{COPY.cancel}</Button>
+        </div>
+      )}
+    >
       <form
+        id={`${id}-form`}
         noValidate
         onSubmit={(e) => {
           e.preventDefault();
@@ -107,10 +124,6 @@ export function QuoteDialog({
             setEnd(maskDate(text));
             setEndEdited(true);
           })}
-        </div>
-        <div className="mt-1.5 flex flex-wrap gap-2.5">
-          <Button type="submit">{COPY.generate}</Button>
-          <Button variant="secondary" onClick={onCancel}>{COPY.cancel}</Button>
         </div>
       </form>
     </Modal>

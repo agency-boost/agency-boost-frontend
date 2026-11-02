@@ -2,9 +2,12 @@
 
 import { useEffect, useId, useMemo, useState } from 'react';
 import { Button, ErrorBanner, TextInput } from '@/components/ui/field';
+import { shortOfRung } from '@/components/ui/role-badge';
 import { Skeleton, SkeletonBar } from '@/components/ui/skeleton';
+import { useLanguage, useMessages } from '@/i18n/language-provider';
+import { eventsOfficeMessages } from '@/i18n/messages/events-office';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
-import { ADMIN_COPY, chosenCount, leftRow, readInvitees, type EventInvitee } from '@/lib/events-admin';
+import { chosenCount, leftRow, readInvitees, type EventInvitee } from '@/lib/events-admin';
 
 /**
  * **Who is invited, one by one** (P18.5-T5 AC-10; D-picker): the *Chosen people* and *Chosen leaders*
@@ -28,6 +31,8 @@ export function AudiencePicker({ leadersOnly, chosen, disabled, onChange }: {
   disabled: boolean;
   onChange: (ids: string[]) => void;
 }) {
+  const t = useMessages(eventsOfficeMessages);
+  const language = useLanguage();
   const [people, setPeople] = useState<EventInvitee[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -71,13 +76,13 @@ export function AudiencePicker({ leadersOnly, chosen, disabled, onChange }: {
     return (
       <div className="mt-3">
         <ErrorBanner {...error} />
-        <Button variant="secondary" className="mt-3" onClick={() => setAttempt((n) => n + 1)}>{ADMIN_COPY.tryAgain}</Button>
+        <Button variant="secondary" className="mt-3" onClick={() => setAttempt((n) => n + 1)}>{t.tryAgain}</Button>
       </div>
     );
   }
   if (!people) {
     return (
-      <Skeleton label={ADMIN_COPY.loadingPeople} className="mt-3">
+      <Skeleton label={t.loadingPeople} className="mt-3">
         {[0, 1, 2].map((i) => <SkeletonBar key={i} className="mb-2 h-4 w-2/3" />)}
       </Skeleton>
     );
@@ -86,8 +91,8 @@ export function AudiencePicker({ leadersOnly, chosen, disabled, onChange }: {
   return (
     <div className="mt-3 rounded-md border border-hairline p-3" data-part="audience-picker">
       <div className="mb-2 flex flex-wrap items-end justify-between gap-2">
-        <label htmlFor={searchId} className="text-sm font-semibold text-navy">{ADMIN_COPY.searchPeople}</label>
-        <span id={countId} className="text-sm text-muted">{chosenCount(chosen.length)}</span>
+        <label htmlFor={searchId} className="text-sm font-semibold text-navy">{t.searchPeople}</label>
+        <span id={countId} className="text-sm text-muted">{chosenCount(chosen.length, language)}</span>
       </div>
       <TextInput
         id={searchId}
@@ -101,20 +106,20 @@ export function AudiencePicker({ leadersOnly, chosen, disabled, onChange }: {
         <ul className="mt-2 list-none p-0" data-part="kept">
           {kept.notLeading.map((person) => (
             <li key={person.membershipId}>
-              <KeptRow label={person.name} reason={ADMIN_COPY.leadsNobodyNow} disabled={disabled} onClear={() => onChange(chosen.filter((c) => c !== person.membershipId))} />
+              <KeptRow label={person.name} reason={t.leadsNobodyNow} disabled={disabled} onClear={() => onChange(chosen.filter((c) => c !== person.membershipId))} />
             </li>
           ))}
           {kept.left.length > 0 && (
             <li>
-              <KeptRow label={leftRow(kept.left.length)} disabled={disabled} onClear={() => onChange(chosen.filter((c) => !kept.left.includes(c)))} />
+              <KeptRow label={leftRow(kept.left.length, language)} disabled={disabled} onClear={() => onChange(chosen.filter((c) => !kept.left.includes(c)))} />
             </li>
           )}
         </ul>
       )}
       {offered.length === 0 ? (
-        <p className="mt-3 text-base text-muted">{leadersOnly ? ADMIN_COPY.nobodyLeads : ADMIN_COPY.noMatches}</p>
+        <p className="mt-3 text-base text-muted">{leadersOnly ? t.nobodyLeads : t.noMatches}</p>
       ) : shown.length === 0 ? (
-        <p className="mt-3 text-base text-muted">{ADMIN_COPY.noMatches}</p>
+        <p className="mt-3 text-base text-muted">{t.noMatches}</p>
       ) : (
         <ul className="mt-2 max-h-64 list-none overflow-y-auto p-0">
           {shown.map((person) => (
@@ -127,7 +132,8 @@ export function AudiencePicker({ leadersOnly, chosen, disabled, onChange }: {
                   onChange={(e) => toggle(person.membershipId, e.target.checked)}
                 />
                 <span className="min-w-0 flex-1 break-words">{person.name}</span>
-                <span className="shrink-0 text-sm text-muted">{person.rung}</span>
+                {/* The rung by its badge's name (P18.95-T9 AC-1): the server sends the ladder's label beside the code. */}
+                <span className="shrink-0 text-sm text-muted">{shortOfRung({ code: person.orgLevelCode, label: person.rung })}</span>
               </label>
             </li>
           ))}

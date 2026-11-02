@@ -1,4 +1,9 @@
+'use client';
+
+import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
+import { uiMessages } from '@/i18n/messages/ui';
 import { cn } from '@/lib/cn';
+import { formatPercent, percentOf } from '@/lib/format';
 import type { Status } from './status-pill';
 
 /**
@@ -6,7 +11,8 @@ import type { Status } from './status-pill';
  * attainment up to 999% (Overall.html:6303).
  *
  * A zero target renders the not-enough-data state rather than NaN%, which is what the
- * prototype does today (prototype-parity F-25).
+ * prototype does today (prototype-parity F-25). The percentage is half up in integers
+ * (`percentOf`; P18.97-T3, parity F-254): 23 of 40 is 58%, where `Math.round` read 57.
  */
 export function ProgressBar({
   value,
@@ -21,8 +27,10 @@ export function ProgressBar({
   showLabel?: boolean;
   className?: string;
 }) {
+  const language = useFigureLanguage();
+  const t = useMessages(uiMessages).progress;
   const hasTarget = target > 0;
-  const pct = hasTarget ? Math.round((value / target) * 100) : null;
+  const pct = hasTarget ? percentOf(value, target) : null;
   const width = pct === null ? 0 : Math.min(100, Math.max(0, pct));
 
   const fill: Record<Status, string> = {
@@ -39,13 +47,13 @@ export function ProgressBar({
         aria-valuenow={pct ?? undefined}
         aria-valuemin={0}
         aria-valuemax={100}
-        aria-label={hasTarget ? `${value} of ${target}` : 'No target set'}
+        aria-label={hasTarget ? t.of({ value: String(value), target: String(target) }) : t.noTarget}
       >
         <div className={cn('h-full rounded-pill transition-all', fill[status])} style={{ width: `${width}%` }} />
       </div>
       {showLabel && (
         <p className="mt-1 text-xs text-muted">
-          {pct === null ? 'No target set' : `${pct}%`}
+          {pct === null ? t.noTarget : formatPercent(pct, {}, language)}
         </p>
       )}
     </div>

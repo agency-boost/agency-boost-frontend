@@ -2,6 +2,9 @@
 
 import { useRouter } from 'next/navigation';
 import { createContext, useContext, useEffect } from 'react';
+import { useMessages } from '@/i18n/language-provider';
+import { pageFrameMessages } from '@/i18n/messages/page-frame';
+import { shellMessages } from '@/i18n/messages/shell';
 import { landingFor } from '@/lib/landing';
 import { useSession } from '@/lib/session';
 import { signInPathFrom } from '@/lib/return-path';
@@ -44,17 +47,19 @@ export function RequireSession({
   headingLevel?: 1 | 2;
   children: React.ReactNode;
 }) {
-  const { me, loading, signedOut } = useSession();
+  const { me, loading, signedOut, expired } = useSession();
   const router = useRouter();
   const titled = useContext(TitledPageContext);
+  const { takingYouToYourWork } = useMessages(shellMessages);
   const Heading = (headingLevel ?? (titled ? 2 : 1)) === 1 ? 'h1' : 'h2';
   const elsewhere = Boolean(me && family && !familyAllows(family, me));
 
   useEffect(() => {
     // Back to this page once signed in (`?next=`, `lib/return-path.ts`): a link opened signed out lands on it.
     // Not after the reader signed out themselves (2026-10-11): then this is the same plain `/login` the
-    // sign-out goes to, so which of the two navigations lands last no longer decides where they end up.
-    if (!loading && !me) router.replace(signInPathFrom(window.location, { signedOut }));
+    // sign-out goes to, so which of the two navigations lands last no longer decides where they end up. A session
+    // that ended under the reader adds `reason=expired`, and the sign-in page says so (ADR-0168 §1).
+    if (!loading && !me) router.replace(signInPathFrom(window.location, { signedOut, expired }));
     // Every route but three answers 403 while this is set, so rendering the screen would
     // put a shell around a page of failed requests (P3.6-T4). One redirect here covers
     // every screen, rather than each one inferring it from a 403 of its own.
@@ -63,18 +68,20 @@ export function RequireSession({
     // landing is always of the reader's own family, so this cannot send anybody round in a circle; and when
     // a support session starts or ends on a page of the other family, this is what takes them on.
     else if (!loading && me && elsewhere) router.replace(landingFor(me));
-  }, [loading, me, signedOut, elsewhere, router]);
+  }, [loading, me, signedOut, expired, elsewhere, router]);
 
   if (loading) {
+    // Every signed-in route is prerendered as this, and nothing in it is words: a page prerendered in another language
+    // than the reader's need not be held back for it (`sessionWait`, P18.98-T2; `pre-paint.ts`).
     return (
-      <PageSkeleton />
+      <PageSkeleton sessionWait />
     );
   }
 
   if (!me || me.mustChangePassword) return null;
 
   // On the way to their own landing: the words the home page's hand-off uses, and no chrome at all.
-  if (elsewhere) return <PageSkeleton label="Taking you to your work…" />;
+  if (elsewhere) return <PageSkeleton label={takingYouToYourWork} />;
 
   /*
    * **The refusal names no permission code** (P11-T6, ADR-0062 §3). It said *"This screen needs
@@ -88,16 +95,24 @@ export function RequireSession({
    * office"*. Said without the word, it settles nothing for the rest of the product (OD-39).
    */
   if (permission && !me.permissions.includes(permission)) {
-    return (
-      <div role="alert" data-permission={permission} className="px-5 py-10">
-        <Heading className="font-display text-xl font-bold text-navy">Not available to you</Heading>
-        <p className="mt-1 text-md text-muted">
-          Your account does not have access to this screen. If you believe it should, ask
-          whoever manages accounts where you work.
-        </p>
-      </div>
-    );
+    return <NotAvailableToYou permission={permission} headingLevel={Heading === 'h1' ? 1 : 2} />;
   }
 
   return <>{children}</>;
+}
+
+/**
+ * **The refusal, on its own** — what `RequireSession` draws for a missing permission, and what a page draws for a
+ * reader the server would refuse on a fact that is no permission: KPM analytics for a leader who is not a Core
+ * Leader (ADR-0159 §2), who holds the grant and is answered 404. One set of words, so the two cannot differ.
+ */
+export function NotAvailableToYou({ permission, headingLevel = 1 }: { permission?: string; headingLevel?: 1 | 2 }) {
+  const Heading = headingLevel === 1 ? 'h1' : 'h2';
+  const t = useMessages(pageFrameMessages).notAvailable;
+  return (
+    <div role="alert" data-permission={permission} className="px-5 py-10">
+      <Heading className="font-display text-xl font-bold text-navy">{t.title}</Heading>
+      <p className="mt-1 text-md text-muted">{t.body}</p>
+    </div>
+  );
 }

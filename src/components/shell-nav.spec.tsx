@@ -1,6 +1,7 @@
-import { screen, within } from '@testing-library/react';
+import { cleanup, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { makeMe, renderWithSession } from '@test/harness';
+import { atWidth as screenAt, makeMe, renderWithSession, stubFetch, wears } from '@test/harness';
 import { AgentShell } from './agent-shell';
 import { AdminShell } from './admin-shell';
 import { TenantShell } from './tenant-shell';
@@ -72,303 +73,12 @@ describe('the sidebar matches the prototype', () => {
     expect(screen.getByText('AgencyBoost')).toBeInTheDocument();
   });
 
-  it('agent app: the prototype nine sections, in order, with Admin last', () => {
-    // `Overall.html`'s eight, and *Recruitment tools* after *Sales tools* (`Recruitment_Section.html:251-254`, P17-T3 AC-1).
-    renderWithSession(<AgentShell title="x">body</AgentShell>, { me: AGENT });
-    const sections = navLabels().filter((t) =>
-      ['Personal tools', 'Unit tools', 'New agent', 'Training', 'Sales tools', 'Recruitment tools', 'KPM', 'Campaign', 'Admin']
-        .includes(t),
-    );
-    expect(sections).toEqual([
-      'Personal tools', 'Unit tools', 'New agent', 'Training', 'Sales tools', 'Recruitment tools', 'KPM', 'Campaign', 'Admin',
-    ]);
-  });
-
-  it('agent app: Group tree comes before User management inside Admin', () => {
-    renderWithSession(<AgentShell title="x">body</AgentShell>, { me: AGENT });
-    const labels = navLabels();
-    expect(labels.indexOf('Group tree')).toBeLessThan(labels.indexOf('User management'));
-  });
-
-  describe('Unit tools and Group tree follow the graph, not the rung (P10.1-T2 AC-9, OD-23)', () => {
-    /*
-     * The prototype's nav is static for every rung (`Overall.html:2624-2678`), so an Agent saw
-     * *Unit dashboard*, *Coaching session* and *Group tree* — the leak `roles-and-permissions.md`
-     * §4.2 names. A leader is someone with an active direct report (OD-23), so the gate is
-     * `directCount`, and an AAB who leads nobody is on the same side of it as an Agent: the tree
-     * either would see is a leader node and themselves. Per case, because a gate keyed on the
-     * role label would pass the Agent case and fail only the childless AAB.
-     */
-    const member = (role: 'ab' | 'aab' | 'agent', directCount: number) => makeMe({
-      membership: {
-        membershipId: 'mem-1', kpmId: 'kpm-1', orgLevelCode: role.toUpperCase(), hierarchyRole: role,
-        status: 'active', isKpmOwner: false, isKpmAdmin: false, directCount,
-      },
-      permissions: [],
-    });
-    // *New agent* follows the reader's own activation and hires (P13-T7 AC-5), which none of these has.
-    const SECTIONS = ['Personal tools', 'Unit tools', 'Training', 'Sales tools', 'Recruitment tools', 'KPM', 'Campaign', 'Admin'];
-
-    it.each([
-      ['an Agent', member('agent', 0)],
-      ['an AAB with no reports', member('aab', 0)],
-      ['an AB with no reports', member('ab', 0)],
-    ])('%s sees neither', (_who, me) => {
-      renderWithSession(<AgentShell title="x">body</AgentShell>, { me });
-      for (const label of ['Unit tools', 'Unit dashboard', 'Coaching session', 'Group tree']) {
-        expect(screen.queryByText(label), `${label} is offered`).not.toBeInTheDocument();
-      }
-      // The rest of Admin stays: User management is every member's. Seven sections, in order.
-      expect(screen.getByText('User management').closest('a')).toHaveAttribute('href', '/user-management/kpm');
-      expect(navLabels().filter((t) => SECTIONS.includes(t))).toEqual(SECTIONS.filter((s) => s !== 'Unit tools'));
-    });
-
-    it.each([
-      ['an AB with reports', member('ab', 2)],
-      ['an AAB with reports', member('aab', 1)],
-    ])('%s sees both', (_who, me) => {
-      renderWithSession(<AgentShell title="x">body</AgentShell>, { me });
-      // Both items under *Unit tools*, each a live link: *Unit dashboard* since the dashboard was built
-      // (P15-T2 AC-1), *Coaching session* since the roster was (P11-T6 AC-7); *Group tree* a live link,
-      // first in Admin.
-      expect(screen.getByText('Unit dashboard').closest('a')).toHaveAttribute('href', '/unit/dashboard');
-      expect(screen.getByText('Coaching session').closest('a')).toHaveAttribute('href', '/coaching');
-      expect(screen.getByText('Group tree').closest('a')).toHaveAttribute('href', '/group-tree');
-      const labels = navLabels();
-      expect(labels.filter((t) => SECTIONS.includes(t))).toEqual(SECTIONS);
-      expect(labels.indexOf('Group tree')).toBeLessThan(labels.indexOf('User management'));
-    });
-
-    it('a member with no membership: the gate fails closed, so neither is offered', () => {
-      // `(membership?.directCount ?? 0) > 0`: a reader with no office is on the Agent's side of
-      // the gate, not a leader's. (With no session at all the shell renders nothing, so there is
-      // no nav to assert on.)
-      renderWithSession(<AgentShell title="x">body</AgentShell>, { me: makeMe({ membership: null }) });
-      for (const label of ['Unit tools', 'Unit dashboard', 'Coaching session', 'Group tree']) {
-        expect(screen.queryByText(label), `${label} is offered`).not.toBeInTheDocument();
-      }
-      expect(screen.getByText('User management').closest('a')).toHaveAttribute('href', '/user-management/kpm');
-    });
-  });
-
-  describe('P13-T7 AC-5 New agent shows exactly what the reader has (`Overall.html:2638-2647`, `:6638-6642`)', () => {
-    const reader = (over: Partial<Parameters<typeof makeMe>[0]> = {}) => makeMe({
-      membership: {
-        membershipId: 'mem-1', kpmId: 'kpm-1', orgLevelCode: 'AGENT', hierarchyRole: 'agent', status: 'active',
-        isKpmOwner: false, isKpmAdmin: false, directCount: 0,
-      },
-      ...over,
-    });
-    const section = () => navLabels().filter((t) => ['Your 90-day activation', 'New hires'].includes(t) || t === 'New agent');
-
-    it('P13-T4 AC-1 a hire with an open activation sees it, live, and no New hires', () => {
-      renderWithSession(<AgentShell title="x">body</AgentShell>, { me: reader({ activation: { open: true, complete: false } }) });
-      expect(section()).toEqual(['New agent', 'Your 90-day activation']);
-      const item = screen.getByText('Your 90-day activation').closest('a')!;
-      expect(item).toHaveAttribute('href', '/activation');
-      expect(item).not.toHaveAttribute('aria-disabled');
-      expect(within(item).queryByText('Upcoming')).not.toBeInTheDocument();
-      // No check below 100%.
-      expect(item.querySelector('[data-mark="done"]')).toBeNull();
-      expect(item).toHaveAccessibleName('Your 90-day activation');
-    });
-
-    it('P13-T7 AC-5 draws the amber check at 100%, and says it', () => {
-      renderWithSession(<AgentShell title="x">body</AgentShell>, { me: reader({ activation: { open: true, complete: true } }) });
-      const item = screen.getByRole('link', { name: 'Your 90-day activation — complete' });
-      const check = item.querySelector('[data-mark="done"]')!;
-      expect(check).toHaveAttribute('aria-hidden', 'true');
-      expect(check.getAttribute('class')).toContain('text-amber');
-    });
-
-    it('P13-T7 AC-5 marks the activation current on its own page', () => {
-      route.path = '/activation';
-      try {
-        renderWithSession(<AgentShell title="x">body</AgentShell>, { me: reader({ activation: { open: true, complete: false } }) });
-        expect(screen.getByText('Your 90-day activation').closest('a')).toHaveAttribute('aria-current', 'page');
-      } finally {
-        route.path = '/group-tree';
-      }
-    });
-
-    it('P13-T5 AC-1 a reader with hires sees New hires, live, and current on a hire’s page', () => {
-      route.path = '/new-hires/mem-9';
-      try {
-        renderWithSession(<AgentShell title="x">body</AgentShell>, { me: reader({ newHires: true }) });
-        expect(section()).toEqual(['New agent', 'New hires']);
-        const item = screen.getByText('New hires').closest('a')!;
-        expect(item).toHaveAttribute('href', '/new-hires');
-        expect(item).toHaveAttribute('aria-current', 'page');
-      } finally {
-        route.path = '/group-tree';
-      }
-    });
-
-    it.each([
-      ['no activation and no hires', {}],
-      ['a graduated or ended activation and no hires', { activation: { open: false, complete: true } }],
-    ])('P13-T7 AC-5 hides the whole section for %s', (_who, over) => {
-      renderWithSession(<AgentShell title="x">body</AgentShell>, { me: reader(over) });
-      expect(section()).toEqual([]);
-      expect(screen.queryByText('New agent')).not.toBeInTheDocument();
-    });
-
-    it('P13-T7 AC-5 both, in the prototype’s order', () => {
-      renderWithSession(<AgentShell title="x">body</AgentShell>, { me: reader({ activation: { open: true, complete: false }, newHires: true }) });
-      expect(section()).toEqual(['New agent', 'Your 90-day activation', 'New hires']);
-    });
-  });
-
-  it('agent app: the shell carries no User Management sub-tabs', () => {
-    // Three screens used to show them — the group tree, the unit dashboard and the
-    // activity log — tabs for a module they are not part of. That was fixed with a
-    // `subtabs` opt-in; route groups then made the opt-in unnecessary. A layout renders
-    // for everything beneath it, so a strip that belongs to four of its routes belongs to
-    // those four: `UserManagementTabs`, rendered by the page.
-    renderWithSession(<AgentShell title="x">body</AgentShell>, { me: AGENT });
-    expect(screen.queryByRole('link', { name: 'Register KPM' })).not.toBeInTheDocument();
-  });
-
-  it('agent app: the nav item carries no count', () => {
-    // P3.5-T5 AC-3: no prototype puts a badge inside a nav anchor — `tab-badge` appears
-    // only on the sub-tab. The specified one lives on Pending Requests and still does.
-    renderWithSession(<AgentShell title="x">body</AgentShell>, { me: AGENT });
-    const item = screen.getByText('User management').closest('a')!;
-    expect(item.textContent).toBe('User management');
-  });
-
   /*
-   * P18.5-T1 AC-9 (I-150 amended): *Training modules* is live for every field rung and for the Owner and
-   * the Admin in their field view, current on the list and on every module's page. It was this file's
-   * example of an unbuilt item; `app-shell.spec.tsx` keeps that behaviour pinned on its own item.
+   * *Changed 2026-10-30 (UI V1, UI-004; ADR-0180):* the field shell's sidebar is regrouped as the *Lainnya* sheet — Home ·
+   * Activity · Calendar · Unit Dashboard · Search agent, then Saya, Aktivitas, Tim saya, Program, KPM — and who sees each
+   * item is pinned role by role in `field-shell.spec.tsx` and `lib/field-nav.spec.ts`. The prototype's nine sections, which
+   * these cases pinned (P10.1-T2 AC-9, P13-T7 AC-5, P15-T2 AC-1, P11-T6 AC-7, P18.5-T1 AC-9), are gone with them.
    */
-  describe('P18.5-T1 AC-9 Training modules is live (`Overall.html:2651`)', () => {
-    it('is a link to the learner’s list, with no pill', () => {
-      renderWithSession(<AgentShell title="x">body</AgentShell>, { me: AGENT });
-      const training = screen.getByText('Training modules').closest('a')!;
-      expect(training).toHaveAttribute('href', '/training');
-      expect(training).not.toHaveAttribute('aria-disabled');
-      expect(within(training).queryByText('Upcoming')).not.toBeInTheDocument();
-    });
-
-    it.each(['/training', '/training/SALES', '/training/SALES/CLOSING_TECHNIQUES'])('is the current item on %s', (path) => {
-      route.path = path;
-      try {
-        renderWithSession(<AgentShell title="x">body</AgentShell>, { me: AGENT });
-        expect(screen.getByText('Training modules').closest('a')).toHaveAttribute('aria-current', 'page');
-      } finally {
-        route.path = '/group-tree';
-      }
-    });
-
-    it.each(['/coaching/me/training', '/coaching/mem-9/training', '/trainings'])('is not current on %s', (path) => {
-      // The coaching *Training* tabs are coaching's; a prefix is not a parent.
-      route.path = path;
-      try {
-        renderWithSession(<AgentShell title="x">body</AgentShell>, { me: AGENT });
-        expect(screen.getByText('Training modules').closest('a')).not.toHaveAttribute('aria-current');
-      } finally {
-        route.path = '/group-tree';
-      }
-    });
-  });
-
-  describe('P15-T2 AC-1 Unit dashboard is live for a member who leads somebody (`Overall.html:2634`)', () => {
-    /*
-     * *Upcoming* from P10.1-T2 while its page was a sign (the client, 2026-10-01: a page that is not
-     * ready says so like the others). The dashboard is built, so the item is a link with no pill, and
-     * the current one on the reader's own unit and on every unit below them.
-     */
-    it('is a link to the reader’s own unit, with no pill', () => {
-      renderWithSession(<AgentShell title="x">body</AgentShell>, { me: AGENT });
-      const unit = screen.getByText('Unit dashboard').closest('a')!;
-      expect(unit).toHaveAttribute('href', '/unit/dashboard');
-      expect(unit).not.toHaveAttribute('aria-disabled');
-      expect(within(unit).queryByText('Upcoming')).not.toBeInTheDocument();
-      expect(unit).toHaveAccessibleName('Unit dashboard');
-    });
-
-    it.each(['/unit/dashboard', '/unit/dashboard/mem-9'])('is the current item on %s, and Coaching session is not', (path) => {
-      // A unit below the reader is the same screen over another head (P15-T4 AC-2), so the item that
-      // opened it stays current there.
-      route.path = path;
-      try {
-        renderWithSession(<AgentShell title="x">body</AgentShell>, { me: AGENT });
-        const unit = screen.getByText('Unit dashboard').closest('a')!;
-        expect(unit).toHaveAttribute('aria-current', 'page');
-        expect(unit.className).toContain('bg-amber/15');
-        expect(screen.getByText('Coaching session').closest('a')).not.toHaveAttribute('aria-current');
-      } finally {
-        route.path = '/group-tree';
-      }
-    });
-
-    it.each(['/unit', '/unit/dashboards', '/coaching/mem-9/summary', '/group-tree'])('is not current on %s', (path) => {
-      // A prefix is not a parent: `/unit/dashboards` is not beneath `/unit/dashboard`. And a drill from
-      // a row into a person's coaching tabs is coaching's, not the dashboard's.
-      route.path = path;
-      try {
-        renderWithSession(<AgentShell title="x">body</AgentShell>, { me: AGENT });
-        expect(screen.getByText('Unit dashboard').closest('a')).not.toHaveAttribute('aria-current');
-      } finally {
-        route.path = '/group-tree';
-      }
-    });
-  });
-
-  describe('P11-T6 AC-7 Coaching session is live for a member who leads somebody', () => {
-    it('is a link to the roster, with no pill', () => {
-      renderWithSession(<AgentShell title="x">body</AgentShell>, { me: AGENT });
-      const coaching = screen.getByText('Coaching session').closest('a')!;
-      expect(coaching).toHaveAttribute('href', '/coaching');
-      expect(coaching).not.toHaveAttribute('aria-disabled');
-      expect(within(coaching).queryByText('Upcoming')).not.toBeInTheDocument();
-    });
-
-    it.each(['/coaching', '/coaching/me', '/coaching/mem-9/session'])('is the current item on %s', (path) => {
-      // The roster, the reader's own notes and every person's tabs are all coaching: the prototype's
-      // item returns to the roster from any of them (`Overall.html:10596`).
-      route.path = path;
-      try {
-        renderWithSession(<AgentShell title="x">body</AgentShell>, { me: AGENT });
-        expect(screen.getByText('Coaching session').closest('a')).toHaveAttribute('aria-current', 'page');
-      } finally {
-        route.path = '/group-tree';
-      }
-    });
-
-    it('is not current anywhere else', () => {
-      // The Unit Dashboard's own addresses included: P15-T2 AC-1's cases above assert it there.
-      renderWithSession(<AgentShell title="x">body</AgentShell>, { me: AGENT });
-      expect(screen.getByText('Coaching session').closest('a')).not.toHaveAttribute('aria-current');
-    });
-  });
-
-  it('agent app: Personal summary is a live link, not a pill (P10-T4)', async () => {
-    renderWithSession(<AgentShell title="x">body</AgentShell>, { me: AGENT });
-    const summary = screen.getByText('Personal summary').closest('a')!;
-    expect(summary).toHaveAttribute('href', '/summary');
-    expect(summary).not.toHaveAttribute('aria-disabled');
-    expect(within(summary).queryByText('Upcoming')).not.toBeInTheDocument();
-  });
-
-  it('agent app: Goal settings is a live link, not a pill', async () => {
-    renderWithSession(<AgentShell title="x">body</AgentShell>, { me: AGENT });
-
-    const goals = screen.getByText('Goal settings').closest('a')!;
-    expect(goals).toHaveAttribute('href', '/goals');
-    expect(goals).not.toHaveAttribute('aria-disabled');
-    expect(within(goals).queryByText('Upcoming')).not.toBeInTheDocument();
-  });
-
-  it('agent app: Leads management is a live link, not a pill', async () => {
-    renderWithSession(<AgentShell title="x">body</AgentShell>, { me: AGENT });
-
-    const leads = screen.getByText('Leads management').closest('a')!;
-    expect(leads).toHaveAttribute('href', '/leads');
-    expect(leads).not.toHaveAttribute('aria-disabled');
-    expect(within(leads).queryByText('Upcoming')).not.toBeInTheDocument();
-  });
 
   it('KPM Owner: Overview alone at the top, People last, and no invented Office group', () => {
     renderWithSession(<TenantShell title="x">body</TenantShell>, { me: OWNER });
@@ -400,12 +110,7 @@ describe('the sidebar matches the prototype', () => {
     }
   });
 
-  it('P18.1-T2: the field shell gains no forum item — a Core Leader arrives by the address or a link (D-coeditors)', async () => {
-    renderWithSession(<AgentShell title="x">body</AgentShell>, { me: AGENT });
-    const items = await everyItem();
-    expect(items.some((a) => /Strategic Leader Forum|Leader Meetings/.test(a.textContent ?? ''))).toBe(false);
-    expect(items.some((a) => a.getAttribute('href')?.startsWith('/leader-meetings'))).toBe(false);
-  });
+  // The *KPM* group (a Core Leader's, ADR-0159 §3) is pinned in `field-shell.spec.tsx` since UI V1.
 
   it('KPM Owner: Ratio benchmarks is not a sidebar item — it is a sub-tab', () => {
     renderWithSession(<TenantShell title="x">body</TenantShell>, { me: OWNER });
@@ -427,6 +132,8 @@ describe('the sidebar matches the prototype', () => {
       .toEqual(['Companies', 'KPMs', 'Platform admin', 'Reporting']);
     expect(labels.indexOf('Overview')).toBeLessThan(labels.indexOf('Companies'));
     expect(screen.getByText('SUPERADMIN')).toBeInTheDocument();
+    // P18.8-T6 AC-2: the platform shell's profile line is the role alone — a Super Admin has no office.
+    expect(screen.getByText('Superadmin')).toHaveAttribute('title', 'Superadmin');
   });
 
   it('P18-T8 AC-4: Cross-platform analytics is live, and the console says Soon nowhere', async () => {
@@ -535,5 +242,300 @@ describe('a line between every two groups, in all three shells (parity I-144)', 
     sections.forEach((section, i) => {
       expect(section.lastElementChild?.getAttribute('role') === 'separator').toBe(i < sections.length - 1);
     });
+  });
+});
+
+/**
+ * **The phone's drawer is each shell's sidebar** (P18.95-T2 AC-2, ADR-0167 §3): below 768px ☰ opens the nav the
+ * sidebar draws wider — the field's, the office's and the console's — with the same groups in the same order,
+ * the same labels and badges, the *Core leader* group where the reader has it, and the current page marked.
+ * Compared against the sidebar itself, at a desktop's width, so neither can drift from the other.
+ */
+describe('P18.95-T2 AC-2 the phone’s drawer holds each shell’s sidebar', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    route.path = '/group-tree';
+  });
+
+  /** A width the shell can ask about, and move — each of the three ranges answered for it (`test/harness.tsx`). */
+  const atWidth = (px: number) => screenAt(px).resize;
+
+  const SUPER = makeMe({
+    user: { ...makeMe().user, platformRole: 'super_admin' }, membership: null, permissions: ['kpm:list_all'],
+  });
+  // The field shell has no drawer since UI V1 (UI-004): its tab bar and *Lainnya* sheet are `field-shell.spec.tsx`'s.
+
+  it.each([
+    ['office', () => <TenantShell title="x">body</TenantShell>, OWNER, '/people/members', 'All members', 'People'],
+    ['console', () => <AdminShell title="x">body</AdminShell>, SUPER, '/admin/tenants', 'All KPMs', 'Platform admin'],
+  ] as const)('the %s shell: the same groups, labels, order and current page', async (_shell, shell, me, path, current, group) => {
+    route.path = path;
+    const resize = atWidth(1280);
+    renderWithSession(shell(), { me });
+    const sidebar = screen.getByRole('navigation', { name: 'Main' });
+    const words = navLabels();
+    const markup = sidebar.innerHTML;
+    expect(words).toContain(group);
+
+    resize(375);
+    expect(screen.queryByRole('navigation', { name: 'Main' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Open menu' }));
+    const drawer = screen.getByRole('dialog', { name: 'Menu' });
+    const nav = within(drawer).getByRole('navigation', { name: 'Main' });
+
+    expect(navLabels()).toEqual(words);
+    expect(nav.innerHTML).toBe(markup);
+    expect(within(nav).getByRole('link', { name: current })).toHaveAttribute('aria-current', 'page');
+    // The sidebar's foot comes with it: who is signed in.
+    expect(within(drawer).getByRole('button', { name: /Rina|Signed in|Super Admin/ })).toBeInTheDocument();
+  });
+
+  it('the console: a badge on an item rides into the drawer as it is drawn in the sidebar', async () => {
+    // Two waiting and one decided: the count is the two (ADR-0157 §3).
+    stubFetch({ '/admin/leader-limit-requests': { body: [{ status: 'pending' }, { status: 'pending' }, { status: 'approved' }] } });
+    const resize = atWidth(1280);
+    renderWithSession(<AdminShell title="x">body</AdminShell>, {
+      me: { ...SUPER, permissions: [...SUPER.permissions, 'leader_limit_request:decide'] },
+    });
+    const sidebar = screen.getByRole('navigation', { name: 'Main' });
+    const item = () => within(sidebar).getByRole('link', { name: /Leaders past the limit/ });
+    await waitFor(() => expect(item()).toHaveTextContent('Leaders past the limit2'));
+    const badge = item().textContent;
+
+    resize(375);
+    await userEvent.click(screen.getByRole('button', { name: 'Open menu' }));
+    const nav = within(screen.getByRole('dialog', { name: 'Menu' })).getByRole('navigation', { name: 'Main' });
+    expect(within(nav).getByRole('link', { name: /Leaders past the limit/ }).textContent).toBe(badge);
+  });
+});
+
+/**
+ * **The phone's bar in each shell: the avatar holds the account and the notices** (P18.95-T12, the product owner's
+ * request of 2026-10-27). Below 768px the field's, the office's and the console's bar is ☰, the brand and the avatar
+ * alone, wearing the bell's count; the avatar's menu reads the person's details, *Notifications*, then the account's
+ * items. Every shell reads its count from `useUnreadCount`, one read of the inbox, so the avatar, its menu and — from
+ * 768px — the bell cannot disagree. The console's profile line has no office part (ADR-0159 §5).
+ */
+describe('P18.95-T12 the phone’s bar in each shell: the avatar holds the account and the notices', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    route.path = '/group-tree';
+  });
+
+  const atWidth = (px: number) => screenAt(px).resize;
+
+  const SUPER = makeMe({
+    user: { ...makeMe().user, platformRole: 'super_admin' }, membership: null, permissions: ['kpm:list_all'],
+  });
+  /** The inbox's count, as `useUnreadCount` reads it: a page of one. */
+  const inbox = (unread: number) => stubFetch({
+    '/notifications': { body: { items: [], unread, total: unread, page: 1, pageSize: 1 } },
+  });
+
+  const OFFICE = { code: '0417', branch: 'Cempaka Putih' };
+  // A Core Leader in a group, so the field's line has every part; the office's an Owner's; the console's no office.
+  const OFFICE_READER = makeMe({ ...OWNER, membership: { ...OWNER.membership!, office: OFFICE } });
+
+  const SHELLS = [
+    ['office', () => <TenantShell title="x">body</TenantShell>, OFFICE_READER, '/people/members',
+      ['Notifications', 'Open agent view', 'Your account'], 'KPM Owner · 0417 · Cempaka Putih'],
+    ['console', () => <AdminShell title="x">body</AdminShell>, SUPER, '/admin/tenants', ['Notifications', 'Your account'],
+      'Superadmin'],
+  ] as const;
+
+  const bar = () => document.querySelector('aside')!;
+  const panel = () => document.getElementById('sidebar-user-actions');
+
+  it.each(SHELLS)('the %s shell: the avatar alone on the bar, then one menu — details, Notifications, the account’s items', async (_shell, render, me, path, links, line) => {
+    route.path = path;
+    inbox(3);
+    const resize = atWidth(1280);
+    renderWithSession(render(), { me });
+    // The sidebar's chip first: the same profile line, and the bell's count.
+    await screen.findByRole('button', { name: 'Notifications, 3 unread' });
+    expect(within(within(bar()).getByRole('button', { name: /Rina/ })).getByTitle(line)).toHaveTextContent(line);
+
+    resize(375);
+    // AC-1: ☰, the brand, the avatar; no name, no profile line, no bell.
+    expect(within(bar()).queryByText('Rina')).not.toBeInTheDocument();
+    expect(within(bar()).queryByText(line)).not.toBeInTheDocument();
+    expect(within(bar()).queryByRole('button', { name: /^Notifications/ })).not.toBeInTheDocument();
+    expect(within(bar()).getAllByRole('button').map((b) => b.getAttribute('aria-label')))
+      .toEqual(['Open menu', 'Account and notifications, 3 unread']);
+    // AC-2: the count on the avatar.
+    const avatar = within(bar()).getByRole('button', { name: 'Account and notifications, 3 unread' });
+    expect(within(avatar).getByText('3')).toHaveClass('bg-alert');
+
+    // AC-3: the full name, the profile line, the email; Notifications with the count; the account's items.
+    await userEvent.click(avatar);
+    const lines = Array.from(panel()!.querySelectorAll('p')).map((p) => p.textContent);
+    expect(lines).toEqual(['Rina Wijaya', line, 'rina@kpm0417.test']);
+    expect(within(panel()!).getAllByRole('link').map((a) => a.textContent))
+      .toEqual(links.map((l) => (l === 'Notifications' ? 'Notifications3' : l)));
+    expect(within(panel()!).getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
+    const notices = within(panel()!).getByRole('link', { name: 'Notifications, 3 unread' });
+    expect(notices).toHaveAttribute('href', '/notifications');
+
+    // AC-4: focus in on Notifications; Escape shuts it and gives the focus back to the avatar.
+    expect(notices).toHaveFocus();
+    await userEvent.keyboard('{Escape}');
+    expect(panel()).toBeNull();
+    expect(avatar).toHaveFocus();
+  });
+
+  it.each(SHELLS)('the %s shell: Notifications goes to the inbox and closes the menu', async (_shell, render, me, path) => {
+    route.path = path;
+    inbox(2);
+    atWidth(375);
+    const swallow = (event: Event) => event.preventDefault();
+    document.addEventListener('click', swallow);
+    try {
+      renderWithSession(render(), { me });
+      await userEvent.click(await within(bar()).findByRole('button', { name: 'Account and notifications, 2 unread' }));
+      const notices = within(panel()!).getByRole('link', { name: 'Notifications, 2 unread' });
+      expect(notices).toHaveAttribute('href', '/notifications');
+      await userEvent.click(notices);
+      expect(panel()).toBeNull();
+    } finally {
+      document.removeEventListener('click', swallow);
+    }
+  });
+
+  it.each(SHELLS.flatMap(([shell, render, me, path]) => [
+    [shell, render, me, path, 12, '9+', 'Account and notifications, 12 unread'],
+    [shell, render, me, path, 0, null, 'Account and notifications'],
+  ] as const))('the %s shell at %i unread: the avatar’s badge reads %s', async (_shell, render, me, path, unread, badge, name) => {
+    route.path = path;
+    inbox(unread);
+    atWidth(375);
+    renderWithSession(render(), { me });
+    const avatar = await within(bar()).findByRole('button', { name });
+    if (badge) {
+      expect(within(avatar).getByText(badge)).toHaveAttribute('aria-hidden', 'true');
+    } else {
+      // The initials alone: no badge, and no pill in the menu's row.
+      expect(avatar).toHaveTextContent(/^RW$/);
+      await userEvent.click(avatar);
+      expect(within(panel()!).getByRole('link', { name: 'Notifications' })).toHaveTextContent(/^Notifications$/);
+    }
+  });
+
+  /*
+   * *Changed 2026-10-28 (P18.97-T6 AC-1):* this read *from 768px*, and its stub answered the phone's query alone, so
+   * 768 was a desktop to the shell. From 768 to 1023px the sidebar now opens on the rail (UI-033): the full chip and
+   * the bell beside it are the desktop's, from 1024px, and a tablet's sidebar opened full (the case after).
+   */
+  it.each(SHELLS)('the %s shell from 1024px: the chip with the name and the bell beside it, as before', async (_shell, render, me, path) => {
+    route.path = path;
+    inbox(3);
+    atWidth(1024);
+    renderWithSession(render(), { me });
+    const bell = await within(bar()).findByRole('button', { name: 'Notifications, 3 unread' });
+    expect(within(bell).getByText('3')).toBeInTheDocument();
+    expect(within(bar()).getByRole('button', { name: /Rina/ })).toHaveTextContent(/Rina/);
+    expect(within(bar()).queryByRole('button', { name: /^Account/ })).not.toBeInTheDocument();
+    // The bell is the sidebar's foot's last control, after the chip, as it was.
+    const row = bell.parentElement!.parentElement!;
+    expect(row.lastElementChild).toBe(bell.parentElement);
+  });
+
+  it.each(SHELLS)('P18.97-T6 AC-1 the %s shell from 768px: the rail’s foot — the bell above the avatar — and opened full, the chip and the bell as from 1024px', async (_shell, render, me, path, _links, line) => {
+    route.path = path;
+    inbox(3);
+    atWidth(768);
+    window.localStorage.clear();
+    renderWithSession(render(), { me });
+    const bell = await within(bar()).findByRole('button', { name: 'Notifications, 3 unread' });
+    // The avatar alone, the name and the profile line in its name; never the phone's avatar menu.
+    const chip = within(bar()).getByRole('button', { name: `Rina — ${line}` });
+    expect(chip).toHaveTextContent(/^RW$/);
+    expect(within(bar()).queryByRole('button', { name: /^Account/ })).not.toBeInTheDocument();
+    expect(bell.compareDocumentPosition(chip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    await userEvent.click(within(bar()).getByRole('button', { name: 'Expand the sidebar' }));
+    const full = within(bar()).getByRole('button', { name: /Rina/ });
+    expect(full).toHaveTextContent(/Rina/);
+    const row = within(bar()).getByRole('button', { name: 'Notifications, 3 unread' }).parentElement!.parentElement!;
+    expect(row.lastElementChild).toContainElement(within(bar()).getByRole('button', { name: 'Notifications, 3 unread' }));
+    window.localStorage.clear();
+  });
+});
+
+/**
+ * **Every shell opens on the rail on a tablet** (P18.97-T6 AC-1, ADR-0178 §1; the client's UI-033, reviewed in the
+ * office's but asked of every shell): the field's, the office's and the console's all draw their sidebar through
+ * `AppShell`, so each opens on the rail from 768 to 1023px, full from 1024px, and as the phone's bar below 768px.
+ * One reader's choice is one browser's, so a tablet opened full in one shell is opened full in the others.
+ */
+describe('P18.97-T6 AC-1 every shell: the rail from 768 to 1023px, full from 1024px, the phone’s bar below 768px', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.localStorage.clear();
+    route.path = '/group-tree';
+  });
+
+  const SUPER = makeMe({
+    user: { ...makeMe().user, platformRole: 'super_admin' }, membership: null, permissions: ['kpm:list_all'],
+  });
+  const SHELLS = [
+    ['office', () => <TenantShell title="x">body</TenantShell>, OWNER, '/people/members', 'All members', 'People'],
+    ['console', () => <AdminShell title="x">body</AdminShell>, SUPER, '/admin/tenants', 'All KPMs', 'Platform admin'],
+  ] as const;
+  const toggle = () => screen.queryByRole('button', { name: /^(Expand|Collapse) the sidebar$/ });
+  const aside = () => document.querySelector('aside')!;
+
+  it.each(SHELLS.flatMap(([shell, ...rest]) => [767, 768, 1023, 1024].map((px) => [shell, px, ...rest] as const)))(
+    'P18.97-T6 AC-1 the %s shell at %ipx',
+    async (_shell, px, render, me, path, current, group) => {
+      route.path = path;
+      window.localStorage.clear();
+      screenAt(px);
+      renderWithSession(render(), { me });
+      if (px < 768) {
+        // The phone's bar, unchanged: ☰, no sidebar nav, no rail to open or close.
+        expect(toggle()).toBeNull();
+        expect(screen.queryByRole('navigation', { name: 'Main' })).toBeNull();
+        await userEvent.click(screen.getByRole('button', { name: 'Open menu' }));
+        const menu = within(screen.getByRole('dialog', { name: 'Menu' }));
+        expect(menu.getByRole('button', { name: new RegExp(group) })).toBeInTheDocument();
+        expect(menu.getByRole('link', { name: current })).toHaveAttribute('aria-current', 'page');
+        return;
+      }
+      const nav = within(screen.getByRole('navigation', { name: 'Main' }));
+      const here = nav.getByRole('link', { name: current });
+      expect(here).toHaveAttribute('aria-current', 'page');
+      if (px < 1024) {
+        expect(toggle()).toHaveAttribute('aria-label', 'Expand the sidebar');
+        expect(wears(aside(), px).split(' ')).toContain('w-[var(--sidebar-rail-width)]');
+        // A glyph per item, named and tipped by its label; no heading to click.
+        expect(here).toHaveAttribute('title', current);
+        expect(here.textContent).toBe('');
+        expect(nav.queryByRole('button', { name: new RegExp(group) })).toBeNull();
+      } else {
+        expect(toggle()).toHaveAttribute('aria-label', 'Collapse the sidebar');
+        expect(wears(aside(), px).split(' ')).toContain('w-sidebar');
+        expect(here).toHaveTextContent(current);
+        expect(nav.getByRole('button', { name: new RegExp(group) })).toHaveAttribute('aria-expanded', 'true');
+      }
+      expect(window.localStorage.getItem('ab.sidebar.rail.tablet')).toBeNull();
+    },
+  );
+
+  it('UI-004 a tablet opened full in the office’s shell leaves the field shell’s desktop choice alone: the field has no tablet rail', async () => {
+    route.path = '/people/members';
+    window.localStorage.clear();
+    screenAt(900);
+    const office = renderWithSession(<TenantShell title="x">body</TenantShell>, { me: OWNER });
+    await userEvent.click(screen.getByRole('button', { name: 'Expand the sidebar' }));
+    expect(window.localStorage.getItem('ab.sidebar.rail.tablet')).toBe('0');
+    expect(window.localStorage.getItem('ab.sidebar.rail')).toBeNull();
+    office.unmount();
+    cleanup();
+
+    // The field shell from 1024px: the full sidebar, its desktop default, whatever a tablet chose.
+    route.path = '/leads';
+    screenAt(1280);
+    renderWithSession(<AgentShell title="x">body</AgentShell>, { me: AGENT });
+    expect(screen.getByRole('button', { name: 'Collapse the sidebar' })).toBeInTheDocument();
   });
 });

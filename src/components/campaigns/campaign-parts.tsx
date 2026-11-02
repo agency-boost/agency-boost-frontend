@@ -2,9 +2,11 @@
 
 import { Button } from '@/components/ui/field';
 import { TippedGlyph } from '@/components/ui/tipped-glyph';
+import { useLanguage, useMessages } from '@/i18n/language-provider';
+import { campaignsMessages } from '@/i18n/messages/campaigns';
 import { cn } from '@/lib/cn';
 import {
-  OWN_COPY, PROTOTYPE_COPY, statusWords,
+  statusWords,
   type CampaignCard, type ChaseBlock, type PosterColor,
 } from '@/lib/campaigns';
 
@@ -56,6 +58,8 @@ export function Poster({
   /** The dialog's ✕, over the poster. */
   children?: React.ReactNode;
 }) {
+  const t = useMessages(campaignsMessages);
+  const language = useLanguage();
   const ended = campaign.kind === 'seasonal' && campaign.phase === 'ended';
   return (
     <div
@@ -69,9 +73,9 @@ export function Poster({
       <span aria-hidden="true" className="relative">{campaign.poster.emoji}</span>
       {size === 'card' && (
         <>
-          <span className={cn(TAG, 'absolute left-2.5 top-2.5 bg-amber-dark text-navy')}>{PROTOTYPE_COPY.sourceTag}</span>
+          <span className={cn(TAG, 'absolute left-2.5 top-2.5 bg-amber-dark text-navy')}>{t.sourceTag}</span>
           <span className={cn(TAG, 'absolute right-2.5 top-2.5 bg-card/[0.92]', STATUS_TONE[statusKey(campaign)])}>
-            {statusWords(campaign)}
+            {statusWords(campaign, language)}
           </span>
         </>
       )}
@@ -85,12 +89,14 @@ export function Poster({
  * navy wash — *Ongoing* in navy words on an amber wash, where the prototype's amber-dark is 2.6:1 (row 44).
  */
 export function DialogTags({ campaign }: { campaign: Pick<CampaignCard, 'kind' | 'phase'> }) {
+  const t = useMessages(campaignsMessages);
+  const language = useLanguage();
   const ongoing = campaign.kind === 'structural';
   return (
     <div className="mb-2.5 flex flex-wrap gap-2">
-      <span className={cn(TAG, 'px-2.5 bg-amber-dark text-navy')}>{PROTOTYPE_COPY.sourceTag}</span>
+      <span className={cn(TAG, 'px-2.5 bg-amber-dark text-navy')}>{t.sourceTag}</span>
       <span className={cn(TAG, 'px-2.5 text-navy', ongoing ? 'bg-amber/[0.14]' : 'bg-navy/[0.06]')}>
-        {statusWords(campaign)}
+        {statusWords(campaign, language)}
       </span>
     </div>
   );
@@ -98,9 +104,10 @@ export function DialogTags({ campaign }: { campaign: Pick<CampaignCard, 'kind' |
 
 /** *Promotion path* over a promotion's title (`.promo-label`, `:1913`): amber-ink, where amber-dark is 2.99:1. */
 export function PromotionLabel({ className }: { className?: string }) {
+  const t = useMessages(campaignsMessages);
   return (
     <p className={cn('mb-1 text-2xs font-bold uppercase tracking-wide text-amber-ink', className)}>
-      {PROTOTYPE_COPY.promotionPath}
+      {t.promotionPath}
     </p>
   );
 }
@@ -114,10 +121,12 @@ export function PromotionLabel({ className }: { className?: string }) {
  * (*Chasing*), a ✓ before it, and `aria-pressed` — the calendar's *Accept* is the precedent (ADR-0137's sweep).
  * The prototype's ☆ and ⭐ stay, hidden from a screen reader with the ✓, so the name is the word.
  *
- * **Where it cannot be pressed it says why** (D-lists, AC-3): an ended campaign, or one not for the reader's
- * rung that they are not chasing, draws the button disabled and an ⓘ beside it whose name and tooltip are the
- * reason (ADR-0062 §2, form 2). A chaser whose rung has changed can still drop the chase. The caller draws no
- * control at all where the reader may not chase (`can.chase`: a support session).
+ * **Where it cannot be pressed it says why** (D-lists, AC-3): a campaign not for the reader's rung that they are
+ * not chasing draws the button disabled and an ⓘ beside it whose name and tooltip are the reason (ADR-0062 §2,
+ * form 2). A chaser whose rung has changed can still drop the chase. The caller draws no control at all where
+ * the reader may not chase (`can.chase`: a support session) **or the campaign has ended** (`showsChase`;
+ * P18.95-T10 AC-2, UI-024 — it was drawn disabled with an ⓘ until then); the `ended` branch below stays as the
+ * guard should a caller draw one anyway.
  */
 export function ChaseButton({
   chasing, blocked, busy, onToggle, compact = true,
@@ -131,6 +140,7 @@ export function ChaseButton({
 }) {
   // A chaser may always drop a chase that has not ended, even once the campaign is no longer for their rung
   // (the API takes the DELETE): only an ended campaign, or one closed to the reader who is not chasing it, is held.
+  const t = useMessages(campaignsMessages);
   const held = blocked === 'ended' || (blocked === 'not_eligible' && !chasing);
   return (
     <span className="inline-flex items-center gap-1">
@@ -143,10 +153,10 @@ export function ChaseButton({
         className={cn('gap-1.5', compact && 'h-auto rounded-pill px-[11px] py-[5px] text-sm')}
       >
         <span aria-hidden="true">{chasing ? '✓ ⭐' : '☆'}</span>
-        {chasing ? PROTOTYPE_COPY.chasing : PROTOTYPE_COPY.chase}
+        {chasing ? t.chasing : t.chase}
       </Button>
       {blocked && held && (
-        <TippedGlyph glyph="ⓘ" name={OWN_COPY.blocked[blocked]} tip={OWN_COPY.blocked[blocked]} align="fit" />
+        <TippedGlyph glyph="ⓘ" name={t.blocked[blocked]} tip={t.blocked[blocked]} align="fit" />
       )}
     </span>
   );

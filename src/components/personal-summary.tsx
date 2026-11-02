@@ -1,26 +1,38 @@
 'use client';
 
 import Link from 'next/link';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
+import { Boost } from '@/components/boost';
 import { ChasingCampaigns } from '@/components/campaigns/chasing-card';
 import { ComingInPhaseSection } from '@/components/coming-in-phase';
-import { Card, ErrorBanner } from '@/components/ui/field';
-import { NavIcon, type NavIconName } from '@/components/ui/nav-icon';
-import { Skeleton, SkeletonBar } from '@/components/ui/skeleton';
+import { GoalHeroCard } from '@/components/goal-hero-card';
+import { RatioCard } from '@/components/ratio-card';
+import { LineIcon } from '@/components/ui/line-icon';
+import { TEXT_TAP } from '@/components/ui/phone';
+import { ResponsiveSheet } from '@/components/ui/responsive-sheet';
 import { StatusPill } from '@/components/ui/status-pill';
+import { TermTip } from '@/components/ui/term-tip';
 import { TippedGlyph } from '@/components/ui/tipped-glyph';
-import type { ActivityRatio, ActivityRatios } from '@/lib/activity';
+import { kept } from '@/i18n/kept';
+import type { Language } from '@/i18n/language';
+import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
+import { campaignChasingMessages } from '@/i18n/messages/campaign-chasing';
+import { voiceOf, type Voice } from '@/i18n/messages/goal-words';
+import { summaryMessages } from '@/i18n/messages/summary';
+import type { ActivityRatios } from '@/lib/activity';
 import type { ApiError } from '@/lib/api-client';
-import { PROTOTYPE_COPY as CAMPAIGN_COPY } from '@/lib/campaigns';
 import { cn } from '@/lib/cn';
-import { capitalized, coachingTabHref, PRONOUN_FORMS, type CoacheeSubject } from '@/lib/coaching';
-import { formatMonth, formatShortDay } from '@/lib/format';
-import { formatRupiah, producedFrom } from '@/lib/goals';
+import { coachingTabHref, PRONOUN_FORMS, type CoacheeSubject } from '@/lib/coaching';
+import { formatCalendarDay, formatMonth, formatNumber, formatRupiahCompact, formatShortDay } from '@/lib/format';
+import { producedFrom } from '@/lib/goals';
 import { flagLabel } from '@/lib/leads';
 import { formatBenchmark, formatRatioForStatus } from '@/lib/ratio-format';
-import type {
-  ActivityTarget, FigureSource, Insight, OpenLead, Pace, PeriodFigures, SectionChip, Summary, SummaryActivity,
+import {
+  daysLeftIn,
+  type ActivityTarget, type FigureSource, type Insight, type OpenLead, type PeriodFigures, type SectionChip, type Summary,
+  type SummaryActivity,
 } from '@/lib/summary';
+import { useMediaQuery } from '@/lib/use-media-query';
 
 /**
  * The Personal Summary's cards (P10-T4 to P10-T7), drawn for whoever the page is about.
@@ -34,68 +46,93 @@ import type {
  * person's data, so the *Goal Settings* links open that person's *Goal Setting* tab, and the rest are
  * dropped, as the prototype's coaching copy has them (its one link is `href="#"`, `:4061`).
  *
- * What differs by subject is said once, in `voiceOf`, and every string either voice writes on a
+ * What differs by subject is said once, in `pageVoice`, and every string either voice writes on a
  * coachee's page uses none of ADR-0084's six words: *office*, *KPM*, *reports to*, *tagged to*,
  * *untagged*, *unassigned*.
  *
  * **Read from what other screens own, and editing none of it** (ADR-0058). The prototype's *produced*
  * figure is an input on both pages (`Overall.html:4021`, contradiction #7); here it is read-only, with
  * a marker beside it saying where it came from and for which month (ADR-0063 §5).
+ *
+ * **Its words are the catalogue's** (P18.98-T4, field selling; ADR-0179 §4): `i18n/messages/summary.tsx`, in the
+ * reader's language (`useLanguage()`), and every figure in the reader's figures' (`useFigureLanguage()`), handed to the
+ * message that holds it. A coachee is written in their pronoun's English forms (`PRONOUN_FORMS`) and is *dia* in
+ * Indonesian. What the office typed — a tile's and an activity's label, a ratio's name, a lead's name, status and note —
+ * is shown as typed.
+ *
+ * **UI V1 (2026-10-30; UI-050 – UI-057, P18.99-T7)** — the report and its `summary-mobile` and `summary-desktop` mockups
+ * are the design. One section pattern (the heading outside a borderless white card); the date header and the goal card
+ * with the gap inside it (UI-054); one *Target aktivitas* card (UI-050); the shared ratio card, as rows (UI-053); the
+ * leads card left out on a phone while it is empty (UI-055); two columns from 1024px (UI-056); line icons, no emoji
+ * (UI-057).
  */
 export type SummaryView = 'month' | 'year';
 
-export const SUMMARY_VIEWS = [
-  { id: 'month', label: 'Monthly' },
-  { id: 'year', label: 'Yearly' },
-] as const;
+/** The page's words, in the reader's language. */
+type Words = typeof summaryMessages.id;
 
 /**
- * Who a sentence is about: the reader, or a coachee in their pronoun. One table, so no card can come to
- * say *you* on a coachee's page.
+ * *Monthly* · *Yearly* in English, the catalogue's source — what a page not moved yet hands its switch. A page that has
+ * moved draws `useSummaryViews()`, the same two in the reader's language.
  */
-interface Voice {
-  /** The reader's own page. */
-  self: boolean;
-  subject: CoacheeSubject | null;
-  /** you · she · he · they */
-  pronoun: string;
-  /** you · her · him · them */
-  object: string;
-  /** your · her · his · their */
-  possessive: string;
-  /** *have* · *has* · *has* · *have*: *you haven’t*, *she hasn’t*. */
-  have: string;
-  /** *you’re* · *she’s* · *they’re* */
-  isShort: string;
-  /** *you’ve* · *she’s* · *they’ve* */
-  hasShort: string;
-  /** What a present-tense verb ends in: *you log*, *she logs*. */
-  s: string;
+export const SUMMARY_VIEWS = [
+  { id: 'month', label: summaryMessages.en.views.month },
+  { id: 'year', label: summaryMessages.en.views.year },
+] as const;
+
+/** The two views, *Monthly* and *Yearly*, in the reader's language (P18.98-T4): `/summary`'s switch. */
+export function useSummaryViews() {
+  const t = useMessages(summaryMessages);
+  return [
+    { id: 'month', label: t.views.month },
+    { id: 'year', label: t.views.year },
+  ] as const;
 }
 
-const YOU: Voice = {
-  self: true, subject: null, pronoun: 'you', object: 'you', possessive: 'your', have: 'have', isShort: 'you’re', hasShort: 'you’ve', s: '',
-};
+/**
+ * Who a sentence is about: the reader, or a coachee in their pronoun (`Voice`, `i18n/messages/goal-words.ts`), and
+ * the coachee for their links. One table, so no card can come to say *you* on a coachee's page.
+ */
+interface PageVoice extends Voice {
+  /** The coachee the page is about; `null` on the reader's own. */
+  readonly coachee: CoacheeSubject | null;
+}
 
-function voiceOf(subject?: CoacheeSubject): Voice {
-  if (!subject) return YOU;
-  const forms = PRONOUN_FORMS[subject.pronoun];
+function pageVoice(subject?: CoacheeSubject): PageVoice {
+  return { ...voiceOf(subject ? PRONOUN_FORMS[subject.pronoun] : undefined), coachee: subject ?? null };
+}
+
+/**
+ * **How the page names its period** (P18.8-T11, ADR-0161 §4). The current one in the prototype's words — *This
+ * month* on a card's tag, *this month* in a sentence — and a closed one by its name, *August 2026* and *in August
+ * 2026*, since *this month* about August would be false.
+ */
+interface PeriodWords {
+  /** The month or the year the page is about, by name: *Sep 2026*, *2026*. */
+  named: string;
+  /** The month or year is the office's current one. */
+  current: boolean;
+  /** A card's tag: *This month* · *This year* · *August 2026* · *2025*. */
+  tag: string;
+  /** In a sentence: *this month* · *this year* · *in August 2026* · *in 2025*. */
+  inline: string;
+}
+
+function periodWords(summary: Summary, month: boolean, t: Words, figures: Language): PeriodWords {
+  const named = month ? formatMonth(summary.month, figures) : summary.year;
+  const current = month ? summary.period.currentMonth : summary.period.currentYear;
+  const view = month ? 'month' : 'year';
   return {
-    self: false,
-    subject,
-    pronoun: forms.subject,
-    object: forms.object,
-    possessive: forms.possessive,
-    have: forms.have,
-    isShort: forms.isShort,
-    hasShort: forms.hasShort,
-    s: forms.s,
+    named,
+    current,
+    tag: current ? t.when.tag[view] : named,
+    inline: current ? t.when.inline[view] : t.when.inNamed({ named }),
   };
 }
 
 /** Where *Goal Settings* is for this page: the reader's own screen, or the coachee's *Goal Setting* tab. */
-const goalHref = (voice: Voice) =>
-  (voice.subject ? coachingTabHref(voice.subject.membershipId, 'goal-setting') : '/goals');
+const goalHref = (voice: PageVoice) =>
+  (voice.coachee ? coachingTabHref(voice.coachee.membershipId, 'goal-setting') : '/goals');
 
 export function SummaryCards({
   summary, view, pulse, subject,
@@ -103,118 +140,154 @@ export function SummaryCards({
   summary: Summary;
   view: SummaryView;
   /**
-   * The *Activity pulse*'s own read and its failure: the reader's `GET /activity/ratios`, or a
-   * coachee's `GET /activity/ratios?for=` on their rung (P11-T8). **Absent where no read serves it**,
-   * and the card's slot is then a sign rather than a card left out.
+   * The ratio card's own read and its failure: the reader's `GET /activity/ratios`, or a coachee's
+   * `GET /activity/ratios?for=` on their rung (P11-T8). **Absent where no read serves it**, and the card's slot is
+   * then a sign rather than a card left out.
    */
   pulse?: { ratios: ActivityRatios | null; error: ApiError | null };
   /** The coachee the page is about; absent on the reader's own `/summary`. */
   subject?: CoacheeSubject;
 }) {
-  const voice = voiceOf(subject);
+  const t = useMessages(summaryMessages);
+  // *From the Campaign list*: the campaigns' words (`campaign-chasing.ts`), in the reader's language.
+  const chasing = useMessages(campaignChasingMessages);
+  const figures = useFigureLanguage();
+  const voice = pageVoice(subject);
   const month = view === 'month';
-  const figures = month ? summary.monthly : summary.yearly;
-  const period = month ? 'this month' : 'this year';
+  const numbers = month ? summary.monthly : summary.yearly;
+  const when = periodWords(summary, month, t, figures);
+  const actions = summary.insights.filter((card) => card.kind === 'action');
+  const improve = summary.insights.filter((card) => card.kind === 'improve');
 
   return (
-    <div className="grid gap-3">
+    /*
+     * **One column below 1024px, two from it** (UI-050, UI-056): on a desktop the goal and the activity targets on the
+     * left (~60%), the ratios, the leads, the campaigns and the next steps on the right (~40%) — the leads right after
+     * the ratios since the staging review of 2026-10-31. The order in the
+     * document is the phone's, so a keyboard and a screen reader meet the sections as a phone shows them. Not centred:
+     * the cards' edge is the title's (UI-056).
+     */
+    <div className="grid gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-start lg:gap-5">
       {/*
-        * What the view is about, where the prototype prints *"Week of Aug 24 – Aug 30"* — a label for a
-        * weekly digest this page is not; the figures here are the calendar month and year (ADR-0056).
+        * What the view is about, on paper: on the screen the period pill names it (P18.8-T11).
         */}
-      <p className="text-sm text-muted">
-        {month ? formatMonth(summary.month) : summary.year}
+      <p className="hidden text-sm text-muted print:block lg:col-span-2">
+        {when.named}
       </p>
 
-      {!summary.goal.set ? (
-        <Card>
-          <p className="text-md text-navy">
-            {capitalized(voice.pronoun)} {voice.have}n’t set a goal for {summary.year} yet, so there is nothing to measure against.
-          </p>
-          <Link href={goalHref(voice)} className="mt-2 inline-block font-semibold text-navy underline">Set {voice.possessive} goal</Link>
-        </Card>
-      ) : summary.yearly.targetMinor === null ? (
-        // Saved, but with no APE target to measure against — zero, or inputs that make no plan.
-        <Card>
-          <p className="text-md text-navy">
-            {capitalized(voice.possessive)} goal for {summary.year} has no APE target to measure against yet.
-          </p>
-          <Link href={goalHref(voice)} className="mt-2 inline-block font-semibold text-navy underline">Open Goal Settings</Link>
-        </Card>
-      ) : (
-        <>
-          <GoalCard figures={figures} month={month} source={figures.source} voice={voice} />
-          <GapCard figures={figures} period={period} pace={month ? summary.pace : null} voice={voice} />
-        </>
-      )}
+      <div className="grid min-w-0 gap-4">
+        {!summary.goal.set ? (
+          <PlainCard>
+            <p className="text-md text-navy">
+              {summary.period.currentYear
+                ? t.noGoal.notYet({ who: voice, year: summary.year })
+                // A year that has ended can no longer be given a goal (P18.8-T11): it is said, and nothing offers it.
+                : t.noGoal.didNot({ who: voice, year: summary.year })}
+            </p>
+            {summary.period.currentYear && (
+              <Link href={goalHref(voice)} className={cn('mt-2 inline-block font-semibold text-navy underline', TEXT_TAP)}>{t.noGoal.set({ who: voice })}</Link>
+            )}
+          </PlainCard>
+        ) : summary.yearly.targetMinor === null ? (
+          // Saved, but with no APE target to measure against — zero, or inputs that make no plan.
+          <PlainCard>
+            <p className="text-md text-navy">
+              {summary.period.currentYear
+                // *APE*'s first appearance on the page when there is no goal card, so its ⓘ is here (P18.95-T9 AC-3).
+                ? t.noTarget.notYet({ who: voice, year: summary.year, tip: <TermTip term="APE" /> })
+                : t.noTarget.had({ who: voice, year: summary.year, tip: <TermTip term="APE" /> })}
+            </p>
+            {summary.period.currentYear && (
+              <Link href={goalHref(voice)} className={cn('mt-2 inline-block font-semibold text-navy underline', TEXT_TAP)}>{t.noTarget.open}</Link>
+            )}
+          </PlainCard>
+        ) : (
+          <GoalSection summary={summary} numbers={numbers} month={month} voice={voice} when={when} />
+        )}
 
-      <TargetsCard activity={month ? summary.activity.monthly : summary.activity.yearly} month={month} period={period} voice={voice} />
-      {pulse ? (
-        <PulseCard pulse={pulse.ratios} error={pulse.error} voice={voice} />
-      ) : (
-        <ComingInPhaseSection
-          title="Activity pulse"
-          what={`${capitalized(voice.possessive)} selling and recruitment ratios over the last 30 days, each against its benchmark.`}
-          icon="bolt"
-          headingClassName="text-md"
-          className="px-[22px] py-[18px] print:hidden"
-        />
-      )}
-      <LeadsCard leads={summary.leads} voice={voice} />
-      {/*
-        * *Campaigns you're chasing* (`Overall.html:3225-3232`, P18.5-T7 AC-6), replacing the sign it was
-        * (parity D-11, ADR-0059): the bolt and *From the Campaign list*, a row per chase with *View →*. On
-        * paper with the rest, as the prototype prints it.
-        *
-        * **On a coachee's page**, *Campaigns she's chasing* in their pronoun (`:4121-4130`, P18.5-T9 AC-1): the
-        * bolt and no tag, as drawn, and 🚀 chips by title — the same chases, from the same read.
-        */}
-      <SummaryCard
-        id="summary-campaigns"
-        title={`Campaigns ${voice.isShort.replace('’', "'")} chasing`}
-        icon="bolt"
-        tag={voice.self ? CAMPAIGN_COPY.fromList : undefined}
-      >
-        <ChasingCampaigns forMembershipId={voice.subject?.membershipId} />
-      </SummaryCard>
-      <InsightCards insights={summary.insights} voice={voice} />
+        <TargetsSection activity={month ? summary.activity.monthly : summary.activity.yearly} when={when} voice={voice} />
+      </div>
+
+      <div className="grid min-w-0 gap-4">
+        {pulse ? (
+          /*
+           * **The shared ratio card, as rows** (UI-053, O-3): its header inside it — *Ratio · 30 hari terakhir* — the
+           * split bar and every ratio, the same figures as Activity › Ratio (the same read). No heading outside it.
+           */
+          <RatioCard
+            ratios={pulse.ratios?.ratios ?? null}
+            days={pulse.ratios?.days ?? 30}
+            error={pulse.error}
+            className="print:break-inside-avoid"
+          />
+        ) : (
+          <ComingInPhaseSection
+            title={t.pulse.title}
+            what={t.pulse.sign({ who: voice })}
+            icon="bolt"
+            headingClassName="text-md"
+            className="px-[22px] py-[18px] print:hidden"
+          />
+        )}
+
+        {/*
+          * **The leads directly after the ratios** (staging review 2026-10-31, the product owner: *Mestinya setelah
+          * ratio*): Ratio → Leads → Campaign → next steps, on `/summary` and on a coachee's Summary tab alike. Still left
+          * out on a phone while empty (UI-055).
+          */}
+        <LeadsSection leads={summary.leads} voice={voice} />
+
+        {/*
+          * *Campaign yang Anda kejar* (P18.5-T7 AC-6; UI-006): the chases from the Campaign list that have not ended, each
+          * opening its dialog in place; *Dari Campaign list* on a desktop only (Appendix A). About a coachee, in their
+          * pronoun, as chips by title (P18.5-T9 AC-1).
+          */}
+        <Section
+          id="summary-campaigns"
+          title={t.campaigns({ who: voice })}
+          meta={voice.self ? <span className="max-lg:hidden">{chasing.fromList}</span> : undefined}
+        >
+          <div className={cn(CARD, 'px-3.5 py-1.5')}>
+            <ChasingCampaigns forMembershipId={voice.coachee?.membershipId} />
+          </div>
+        </Section>
+
+        <InsightSections actions={actions} improve={improve} voice={voice} />
+      </div>
     </div>
   );
 }
 
+/** A white card, borderless on the V1 surface (UI-008): 16px corners. */
+const CARD = 'rounded-lg border border-card-edge bg-card';
+
+function PlainCard({ children }: { children: ReactNode }) {
+  return <div className={cn(CARD, 'px-[22px] py-[18px] print:break-inside-avoid')}>{children}</div>;
+}
+
 /**
- * The Summary's card: a titled `<section>` named by its heading, an icon, and a tag or a badge on the
- * right. The coaching session's cards are the same card (G-18), with no icon — the prototype's
- * session cards have none (`Overall.html:4186-4315`) — and, where the prototype puts one, a control or
- * a note on the right in place of the tag (`aside`).
+ * **The one section pattern** (UI-050): the heading outside the card, 14px/700, with an optional ⓘ beside it and an
+ * optional meta on the right; the card below it. A `<section>` named by its heading.
  */
-export function SummaryCard({
-  id, title, icon, tag, badge, aside, className, children,
+function Section({
+  id, title, info, meta, className, children,
 }: {
   id: string;
-  /** The heading. A node where the prototype puts a link beside the words (*Activity → view full dashboard*). */
   title: ReactNode;
-  icon?: NavIconName;
-  tag?: ReactNode;
-  badge?: string;
-  /** On the right of the heading: the session's *+* buttons and the Goal card's hint. */
-  aside?: ReactNode;
+  /** Beside the heading, outside it, so the heading's name stays its words. */
+  info?: ReactNode;
+  meta?: ReactNode;
   className?: string;
   children: ReactNode;
 }) {
   return (
-    <section aria-labelledby={id} className={cn('rounded-lg border border-hairline bg-card px-[22px] py-[18px] print:break-inside-avoid', className)}>
-      {/* Wraps rather than squeezes: on a phone a long tag drops under the title instead of folding it. */}
-      <div className="mb-3.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
-        <h2 id={id} className="flex items-center gap-2 text-md font-bold text-navy">
-          {icon && <NavIcon name={icon} className="h-[17px] w-[17px] text-navy-soft" />}
-          {title}
-        </h2>
-        {tag && <span className="whitespace-nowrap rounded-pill bg-base px-2.5 py-0.5 text-2xs font-semibold text-muted">{tag}</span>}
-        {badge && (
-          <span className="whitespace-nowrap rounded-pill bg-navy px-2.5 py-0.5 text-2xs font-bold uppercase tracking-wide text-white">{badge}</span>
-        )}
-        {aside}
+    <section aria-labelledby={id} className={cn('min-w-0 print:break-inside-avoid', className)}>
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+        <span className="flex min-w-0 items-center gap-1">
+          <h2 id={id} className="font-body text-md font-bold text-navy">{title}</h2>
+          {info}
+        </span>
+        {meta && <span className="text-xs text-muted">{meta}</span>}
       </div>
       {children}
     </section>
@@ -222,308 +295,272 @@ export function SummaryCard({
 }
 
 /**
- * The section chips under the three targets: **the office's summary tiles**, grouped by the server
- * (ADR-0064) — on the seed, the prototype's *Recruitment* and *Development* (`Overall.html:3164-3183`,
- * `:4240-4252`). The Summary's targets card and the coaching session's Activity card draw them with
- * this one component, so the two can never group or word them differently (I-140); `heading` is the
- * one thing that differs, *Recruitment activities* on the Summary and *Recruitment* in the session,
- * each its prototype's words.
- */
-export function SectionChips({
-  sections, idPrefix, heading = (label) => `${label} activities`,
-}: {
-  sections: readonly SectionChip[];
-  /** Ids for each chip's heading, unique on the page. */
-  idPrefix: string;
-  heading?: (label: string) => string;
-}) {
-  if (sections.length === 0) return null;
-  return (
-    <div className="mt-2.5 grid gap-2.5 sm:grid-cols-2">
-      {sections.map((section) => (
-        <section key={section.code} aria-labelledby={`${idPrefix}-${section.code}`} className="rounded-[10px] border border-hairline bg-base px-3.5 py-3">
-          <div className="mb-2 flex items-center justify-between gap-3 border-b border-hairline pb-2">
-            <h3 id={`${idPrefix}-${section.code}`} className="text-sm font-semibold text-navy">{heading(section.label)}</h3>
-            <span className="font-body text-lg font-bold text-navy-soft">{section.total}</span>
-          </div>
-          <ul>
-            {section.rows.map((row) => (
-              <li key={row.code} className="flex items-baseline justify-between gap-3 py-0.5 text-xs text-muted">
-                <span>{row.label}</span>
-                <span className="font-body font-bold text-navy">{row.count}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ))}
-    </div>
-  );
-}
-
-/**
- * *Goal vs. actual (APE)* (`Overall.html:3094-3115`, `:4014-4031`), read-only (ADR-0058).
+ * **The date header and the goal card** (UI-054, UI-050).
  *
- * **Where the figure came from is a marker, not a sentence** (ADR-0063 §5): a glyph beside it whose
- * name and tooltip say whose figure it is and for which month — the upload, its correction, or the
- * member's own. Before this month's file there is no figure to mark: *Not uploaded yet* says so.
+ * - **The date header**, outside and above the card in the headings' style: a calendar line icon and the day the APE is
+ *   valid for — the office's latest upload for the period (`uploadedOn`), or the period's name while there is none —
+ *   and on the right the days left in the current month or year after today, *sisa 1 hari bulan ini*, or that today is
+ *   the last. A closed period: the date only.
+ * - **The goal card** (`GoalHeroCard`): *Target vs. realisasi (APE)* and its % badge, the APE produced and the target,
+ *   the bar, and — for the current period — the gap inside it: *Sisa bulan ini* | *Polis yang dibutuhkan ± 4 polis*. No
+ *   separate *Selisih* card and no pace box: the behind-pace message is the *Langkah berikutnya* card's, once (UI-054).
+ * - **Boost celebrating** beside the figure when the goal is reached (UI-102: goal ≥ 100%).
+ *
+ * **Where the figure came from is a marker, not a sentence** (ADR-0063 §5): the ⓘ beside it says whose figure it is and
+ * for which month. Read-only (ADR-0058).
  */
-function GoalCard({
-  figures, month, source, voice,
-}: { figures: PeriodFigures; month: boolean; source: FigureSource | null; voice: Voice }) {
-  const pct = figures.attainmentPct;
+function GoalSection({
+  summary, numbers, month, voice, when,
+}: { summary: Summary; numbers: PeriodFigures & { source: FigureSource | null }; month: boolean; voice: PageVoice; when: PeriodWords }) {
+  const t = useMessages(summaryMessages);
+  const language = useLanguage();
+  const figures = useFigureLanguage();
+  const pct = numbers.attainmentPct;
   // The year was made before this month began: the month has no target left to fill (ADR-0047).
-  const madeAlready = figures.targetMet && figures.targetMinor === 0;
+  const madeAlready = numbers.targetMet && numbers.targetMinor === 0;
+  const money = (minor: number) => formatRupiahCompact(minor, {}, figures);
+  const source = numbers.source;
+
+  // *The gap*, inside the card, **for the current period only** (P18.8-T11, ADR-0161 §4): about a closed one it is false.
+  const facts = when.current && numbers.targetMinor !== null ? [
+    {
+      label: t.gap.remaining({ when: when.inline }),
+      value: numbers.gapMinor === null ? '—'
+        : numbers.targetMet
+          ? (numbers.overMinor ? t.gap.reachedOver({ sum: money(numbers.overMinor) }) : t.gap.reached)
+          : money(numbers.gapMinor),
+    },
+    {
+      label: t.gap.policiesNeeded,
+      value: numbers.policiesNeeded === null ? '—'
+        : numbers.targetMet ? t.gap.none : t.gap.about({ n: numbers.policiesNeeded }),
+    },
+  ] as const : undefined;
+
+  // *APE*'s first appearance on the page, so its ⓘ follows the heading (P18.95-T9 AC-3; UI-028).
+  const apeTip = <TermTip term="APE" className="ml-0.5" />;
+
   return (
-    <SummaryCard id="summary-goal" title="Goal vs. actual (APE)" icon="target" tag={month ? 'This month' : 'This year'}>
-      <div className="mb-2.5 flex flex-wrap items-end justify-between gap-2.5">
-        <p className="flex flex-wrap items-baseline gap-1.5">
-          {figures.actualMinor === null ? (
-            <strong className="font-body text-2xl font-bold text-muted">Not uploaded yet</strong>
-          ) : (
-            <>
-              <strong className="font-body text-2xl font-bold text-navy">{formatRupiah(figures.actualMinor)}</strong>
-              {source && (
-                <ProducedMarker words={producedFrom(source, month ? 'month' : 'year', voice.subject?.pronoun)} />
-              )}
-            </>
-          )}
-          {figures.targetMinor !== null && !madeAlready && (
-            <span className="text-sm text-muted">of {formatRupiah(figures.targetMinor)} target</span>
-          )}
-        </p>
-        {pct !== null && (
-          <span className="rounded-pill bg-amber/15 px-3 py-1 text-sm font-bold text-navy">{pct}%</span>
+    <section aria-labelledby="summary-goal" data-summary-goal="" className="min-w-0 print:break-inside-avoid">
+      <DateHeader summary={summary} month={month} when={when} />
+      <GoalHeroCard
+        // The words and a glyph on the accent are navy: the shared card's rule (5.9:1).
+        className="[&_button]:text-navy [&_button:hover]:bg-navy/10"
+        title={(
+          <>
+            <span role="heading" aria-level={2} id="summary-goal">{t.goal.title}</span>
+            {apeTip}
+          </>
         )}
-      </div>
-      {madeAlready ? (
-        <p className="text-sm text-navy">{capitalized(voice.possessive)} year’s target was made before this month began — this month needs nothing more.</p>
-      ) : pct !== null && (
-        // Only a measured figure gets a bar: an empty track under *Not uploaded yet* reads as zero.
-        <>
-          <div
-            role="progressbar"
-            aria-label={month ? 'This month’s target' : 'This year’s target'}
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={Math.min(100, pct)}
-            aria-valuetext={`${pct}%`}
-            className="h-3 overflow-hidden rounded-md border border-hairline bg-base"
-          >
-            <div className="h-full rounded-md bg-gradient-to-r from-amber to-amber-dark" style={{ width: `${Math.min(100, pct)}%` }} />
-          </div>
-          <div className="mt-1.5 flex justify-between text-xs text-muted">
-            <span>Rp 0</span>
-            <span>{month ? 'This month’s target' : 'This year’s target'}</span>
-          </div>
-        </>
-      )}
-    </SummaryCard>
+        percent={pct}
+        achieved={numbers.actualMinor === null ? (
+          <span className="text-2xl font-bold">{t.goal.notUploaded}</span>
+        ) : (
+          <>
+            {money(numbers.actualMinor)}
+            {source && (
+              <ProducedMarker words={producedFrom(source, month ? 'month' : 'year', voice.coachee?.pronoun, figures, language)} />
+            )}
+          </>
+        )}
+        target={madeAlready
+          ? <span className="block text-base">{when.current ? t.goal.madeAlready({ who: voice }) : t.goal.madeBefore({ who: voice, named: when.named })}</span>
+          : numbers.targetMinor !== null ? t.goal.ofTarget({ sum: money(numbers.targetMinor) }) : undefined}
+        facts={facts}
+        aside={pct !== null && pct >= 100 ? <Boost pose="celebrating" size={96} /> : undefined}
+      />
+    </section>
   );
 }
 
-/** The provenance marker (ADR-0063 §5): `ⓘ`, its words on hover, focus and tap — the leads table's glyph. */
+/** The provenance marker (ADR-0063 §5): an ⓘ line icon, its words on hover, focus and tap. */
 function ProducedMarker({ words }: { words: string }) {
-  return <TippedGlyph glyph="ⓘ" name={words} tip={words} align="fit" className="self-center" />;
-}
-
-const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
-
-/** *The gap* (`Overall.html:3117-3136`, `:4037-4052`), and the pace sentence for this month (ADR-0109). */
-function GapCard({ figures, period, pace, voice }: { figures: PeriodFigures; period: string; pace: Pace | null; voice: Voice }) {
   return (
-    <SummaryCard id="summary-gap" title="The gap" icon="chart">
-      <div className="grid gap-3 sm:grid-cols-2">
-        <GapTile
-          label={`Remaining ${period}`}
-          value={figures.gapMinor === null ? '—'
-            : figures.targetMet
-              ? (figures.overMinor ? `Reached — ${formatRupiah(figures.overMinor)} over` : 'Reached')
-              : formatRupiah(figures.gapMinor)}
-        />
-        <GapTile
-          label="≈ Policies still needed"
-          value={figures.policiesNeeded === null ? '—'
-            : figures.targetMet ? 'None' : plural(figures.policiesNeeded, 'policy', 'policies')}
-        />
-      </div>
-      {pace && <PaceNote pace={pace} voice={voice} />}
-    </SummaryCard>
+    <TippedGlyph
+      glyph={<LineIcon name="info" className="h-4 w-4" />}
+      name={words}
+      tip={words}
+      align="fit"
+      className="ml-1 align-middle [&_button]:font-normal"
+    />
   );
 }
 
-function GapTile({ label, value }: { label: string; value: string }) {
+/** *30 Okt 2026* · *sisa 1 hari bulan ini* (UI-054): above the goal card, outside it. */
+function DateHeader({ summary, month, when }: { summary: Summary; month: boolean; when: PeriodWords }) {
+  const t = useMessages(summaryMessages);
+  const figures = useFigureLanguage();
+  const span = month ? 'month' : 'year';
+  const uploaded = month ? summary.uploadedOn?.month : summary.uploadedOn?.year;
+  const left = when.current ? daysLeftIn(summary.today, span) : null;
   return (
-    <div className="rounded-md border border-hairline bg-base px-3.5 py-3">
-      <span className="mb-0.5 block text-xs text-muted">{label}</span>
-      <span className="font-body text-xl font-bold text-navy">{value}</span>
+    <div data-date-header="" className="mb-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+      <p className="flex items-center gap-1.5 text-md font-bold text-navy">
+        <LineIcon name="calendar" className="h-4 w-4" />
+        {uploaded ? formatCalendarDay(uploaded, figures) : when.named}
+      </p>
+      {left !== null && (
+        <p className="text-xs text-muted">{left === 0 ? t.dateHeader.lastDay[span] : t.dateHeader.daysLeft[span]({ n: left })}</p>
+      )}
     </div>
   );
 }
 
 /**
- * The pace sentence, **the prototype's, verbatim** (ADR-0109; `Overall.html:3132-3135`, `:6340-6347`): on
- * its danger box with ⚠️ (`.pace-note`, `:1143`) until this month's APE target — or the year's — is
- * reached, and on its green box with ✅ (`.pace-note.on-track`, `:1144`) from then on. Every day of the
- * month, with no grey first week.
- *
- * The numbers are the server's: *N* the closings of the last 30 days, *M* the closings chip's target, *W*
- * the office's weeks left (the prototype's *2 weeks*, F-24), *K* the APE gap in policies over *W*. One of
- * anything is singular, as the prototype's own *1 policy* (`:4045`) is. About a coachee it is the
- * prototype's coaching sentence, *"At her current pace, she's tracking to close …"* (`:4050-4051`).
+ * The three columns, in the cascade's words (ADR-0160 §4, 2026-10-26) — the same three stages `/goals` names, kept
+ * English in both languages (§A.6; UI-006).
  */
-function PaceNote({ pace, voice }: { pace: Pace; voice: Voice }) {
-  const met = pace.targetMet;
-  const policies = (n: number) => plural(n, 'policy', 'policies');
-
-  return (
-    <p
-      className={cn(
-        'mt-3 flex items-start gap-2 rounded-md border px-3.5 py-3 text-sm leading-relaxed text-navy',
-        met ? 'border-success/20 bg-success/[0.06]' : 'border-alert/20 bg-alert/[0.06]',
-      )}
-    >
-      <span aria-hidden="true">{met ? '✅' : '⚠️'}</span>
-      <span>
-        {met
-          ? `${capitalized(voice.hasShort)} already reached this month’s target — nice work. Keep the pace to stay ahead.`
-          : (
-            <>
-              At {voice.possessive} current pace, {voice.isShort} tracking to close <strong>{policies(pace.closingsLast30Days)}</strong> this
-              month against a target of <strong>{pace.closingTarget}</strong>. With {plural(pace.weeksLeft, 'week', 'weeks')} left,{' '}
-              {voice.pronoun}’d need to close roughly <strong>{pace.neededPerWeek} {pace.neededPerWeek === 1 ? 'policy' : 'policies'}/week</strong> to
-              catch up.
-            </>
-          )}
-      </span>
-    </p>
-  );
-}
-
-/** The prototype's three chip labels (`Overall.html:3146-3160`), verbatim. */
 const TARGET_LABEL: Record<ActivityTarget['key'], string> = {
-  leads: 'Leads contacted',
-  appointments: 'Appointments',
-  closings: 'Closings',
+  leads: kept('Set appointment'),
+  appointments: kept('Sales meeting'),
+  closings: kept('Submission polis'),
 };
 
 /**
- * *Your sales activity targets* (`Overall.html:3139-3182`, P10-T5); *Her sales activity targets* about
- * a coachee (`:4058-4079`).
+ * ***Target aktivitas penjualan Anda*** (UI-050, UI-056; P10-T5): **one white card**.
  *
- * The targets are the cascade run on this card's period — this month's fixed APE target, or the year's —
- * so the closings chip and the pace sentence above name one number (ADR-0056). **No target is said, not
- * divided by**: the prototype's bars had no guard, and a zero target printed `NaN%` (F-25).
- *
- * **The section chips are the office's summary tiles** (ADR-0064, P10.1-T6): the server groups the
- * sections that share a tile into one chip under the tile's label, and leaves out a tile holding a
- * cascade type. On the seed that is the prototype's two, *Recruitment activities* and *Development
- * activities* (`Overall.html:3164-3183`). The screen draws the chips as they come and regroups nothing.
+ * - **Top**: three columns split by a 1px line — *Set appointment · Sales meeting · Submission polis* — each its 12px
+ *   label (it may wrap), *1 / 40* (22px/700 and 12px grey) and a 6px bar, the numbers in line however the labels wrap.
+ *   The targets are the cascade run on the period's APE target (ADR-0056); **no target is said, not divided by** (F-25).
+ * - **Below a divider, the office's summary tiles** (ADR-0064): on a phone one split row, *Aktivitas Recruitment 1 ›* |
+ *   *Aktivitas Development 2 ›*, each opening its list in a sheet; from 768px the lists side by side, every row shown
+ *   (UI-056; Appendix A: the activity names *behind a tap* on a phone only).
+ * - **The heading's meta is the total** — *6 aktivitas bulan ini*, the sum of the rows beneath it (UI-052 (c)) — and its
+ *   ⓘ says **where the policies come from**: *Submission polis* is what was logged, APE the office's upload (UI-052 (a)).
+ *   On a tablet the ⓘ also holds *Dari Goal Settings — …*, which a desktop shows as a line and a phone leaves out
+ *   (Appendix A).
  */
-function TargetsCard({ activity, month, period, voice }: { activity: SummaryActivity; month: boolean; period: string; voice: Voice }) {
+function TargetsSection({ activity, when, voice }: { activity: SummaryActivity; when: PeriodWords; voice: PageVoice }) {
+  const t = useMessages(summaryMessages);
+  const figures = useFigureLanguage();
+  const tablet = useMediaQuery('tablet');
+  const [open, setOpen] = useState<string | null>(null);
+  const tip = tablet ? `${t.targets.fromTip({ who: voice })} ${t.targets.source({ who: voice })}` : t.targets.source({ who: voice });
+  const opened = activity.sections.find((section) => section.code === open) ?? null;
   return (
-    <SummaryCard id="summary-targets" title={`${capitalized(voice.possessive)} sales activity targets`} icon="flag" tag={month ? 'This month' : 'This year'}>
-      <p className="-mt-2 mb-3.5 text-xs text-muted">
-        From <Link href={goalHref(voice)} className="font-semibold text-navy-soft underline">Goal Settings</Link> — appointments
-        and closings are {voice.possessive} {voice.self ? 'Sales' : 'sales'} pipeline targets.
-      </p>
-      <div className="grid gap-2.5 md:grid-cols-3">
-        {activity.targets.map((target) => <TargetChip key={target.key} target={target} month={month} />)}
+    <Section
+      id="summary-targets"
+      title={t.targets.title({ who: voice })}
+      info={<TippedGlyph glyph={<LineIcon name="info" className="h-4 w-4" />} name={tip} tip={tip} align="fit" />}
+      meta={(
+        <span data-activity-total="">
+          {t.targets.total({
+            strong: (words) => <strong className="font-bold text-navy">{words}</strong>,
+            count: formatNumber(activity.total, {}, figures),
+            n: activity.total,
+            when: when.inline,
+          })}
+        </span>
+      )}
+    >
+      <div className={cn(CARD, 'overflow-hidden')}>
+        {/* Appendix A: shown on a desktop, behind the ⓘ on a tablet, removed on a phone. */}
+        <p className="px-3.5 pt-3 text-xs text-muted max-lg:hidden">
+          {t.targets.from({
+            who: voice,
+            link: (words) => <Link href={goalHref(voice)} className="font-semibold text-navy-soft underline">{words}</Link>,
+          })}
+        </p>
+        <div className="grid grid-cols-3 px-0.5 py-3 lg:px-1 lg:py-3.5">
+          {activity.targets.map((target) => <TargetColumn key={target.key} target={target} when={when} />)}
+        </div>
+        {activity.sections.length > 0 && (
+          <>
+            <div data-breakdown="phone" className="grid grid-cols-2 border-t border-divider md:hidden">
+              {activity.sections.map((section) => (
+                <button
+                  key={section.code}
+                  type="button"
+                  aria-haspopup="dialog"
+                  onClick={() => setOpen(section.code)}
+                  className="flex min-h-12 min-w-0 items-center justify-between gap-1.5 px-3 text-left hover:bg-hover-row [&:nth-child(even)]:border-l [&:nth-child(even)]:border-divider [&:nth-child(n+3)]:border-t [&:nth-child(n+3)]:border-divider"
+                >
+                  <span className="min-w-0 text-xs text-muted">{t.targets.section({ label: section.label })}</span>
+                  <span className="flex shrink-0 items-center gap-0.5 text-xl font-bold text-navy">
+                    {formatNumber(section.total, {}, figures)}
+                    <LineIcon name="chevronRight" className="h-4 w-4 text-signal-grey" />
+                  </span>
+                </button>
+              ))}
+            </div>
+            <div data-breakdown="wide" className="grid border-t border-divider max-md:hidden md:grid-cols-2">
+              {activity.sections.map((section) => (
+                <div
+                  key={section.code}
+                  className="min-w-0 px-3.5 py-3 text-base [&:nth-child(even)]:border-l [&:nth-child(even)]:border-divider [&:nth-child(n+3)]:border-t [&:nth-child(n+3)]:border-divider"
+                >
+                  <h3 className="mb-1.5 flex items-baseline justify-between gap-3 font-bold text-navy">
+                    <span>{t.targets.section({ label: section.label })}</span>
+                    <span>{formatNumber(section.total, {}, figures)}</span>
+                  </h3>
+                  <BreakdownRows rows={section.rows} />
+                </div>
+              ))}
+            </div>
+          </>
+        )}
       </div>
-      <p className="mt-3 text-center text-xs text-muted">
-        <strong className="text-navy">{activity.total}</strong> total activities logged {period} across all categories.
-      </p>
-      <SectionChips sections={activity.sections} idPrefix="summary-section" />
-    </SummaryCard>
+      {opened && (
+        <ResponsiveSheet open title={t.targets.section({ label: opened.label })} onClose={() => setOpen(null)}>
+          <BreakdownRows rows={opened.rows} />
+        </ResponsiveSheet>
+      )}
+    </Section>
   );
 }
 
-function TargetChip({ target, month }: { target: ActivityTarget; month: boolean }) {
+/** A summary tile's rows: each activity as the office named it, and its count. */
+function BreakdownRows({ rows }: { rows: SectionChip['rows'] }) {
+  const figures = useFigureLanguage();
+  return (
+    <ul>
+      {rows.map((row) => (
+        <li key={row.code} className="flex items-baseline justify-between gap-3 py-0.5 text-base text-navy">
+          <span className="min-w-0">{row.label}</span>
+          <span className="font-semibold tabular-nums">{formatNumber(row.count, {}, figures)}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** One of the three columns: its label, *1 / 40* and its bar — or why there is no bar. */
+function TargetColumn({ target, when }: { target: ActivityTarget; when: PeriodWords }) {
+  const t = useMessages(summaryMessages);
+  const figures = useFigureLanguage();
   const label = TARGET_LABEL[target.key];
   const pct = target.attainmentPct;
   return (
-    <div className="rounded-[10px] border border-hairline bg-base p-3">
-      <span className="mb-1.5 block text-xs text-muted">{label}</span>
-      <span className="mb-2 block font-body text-lg font-bold text-navy">
-        {target.logged}
-        {target.target !== null && target.target > 0 && (
-          <span className="text-xs font-medium text-muted"> / {target.target}</span>
+    <div data-target={target.key} className="flex min-w-0 flex-col justify-between gap-1.5 px-2.5 [&+&]:border-l [&+&]:border-divider">
+      <span className="text-xs text-muted">{label}</span>
+      <div>
+        <p className="text-[1.375rem] font-bold leading-tight tabular-nums text-navy">
+          {formatNumber(target.logged, {}, figures)}
+          {target.target !== null && target.target > 0 && (
+            <span className="text-xs font-normal text-muted"> / {formatNumber(target.target, {}, figures)}</span>
+          )}
+        </p>
+        {target.target === null ? (
+          <span className="mt-1 block text-xs text-muted">{t.targets.noTarget}</span>
+        ) : target.target === 0 ? (
+          <span className="mt-1 block text-xs text-muted">{t.targets.nothingMore({ when: when.inline })}</span>
+        ) : (
+          <div
+            role="progressbar"
+            aria-label={t.targets.against({ label })}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.min(100, pct ?? 0)}
+            aria-valuetext={t.targets.progress({ logged: target.logged, target: target.target })}
+            className="mt-1.5 h-1.5 overflow-hidden rounded bg-navy/10"
+          >
+            <div className="h-full rounded bg-navy" style={{ width: `${Math.min(100, pct ?? 0)}%` }} />
+          </div>
         )}
-      </span>
-      {target.target === null ? (
-        <span className="block text-xs text-muted">No target yet</span>
-      ) : target.target === 0 ? (
-        <span className="block text-xs text-muted">Nothing more needed {month ? 'this month' : 'this year'}</span>
-      ) : (
-        <div
-          role="progressbar"
-          aria-label={`${label} against target`}
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={Math.min(100, pct ?? 0)}
-          aria-valuetext={`${target.logged} of ${target.target}`}
-          className="h-1.5 overflow-hidden rounded bg-navy/[0.08]"
-        >
-          <div className="h-full rounded bg-navy-soft" style={{ width: `${Math.min(100, pct ?? 0)}%` }} />
-        </div>
-      )}
+      </div>
     </div>
   );
 }
-
-/**
- * The pulse's columns follow its tiles: the prototype's four across (`Overall.html:929`) when there are
- * four, three when there are three or five — an agent's seed, or an office that added a ratio — so a row
- * never ends in a hole wider than a tile. Literal class names, so Tailwind sees every one.
- */
-const pulseColumns = (n: number) => (n === 4 || n >= 7 ? 'lg:grid-cols-4' : n === 2 ? '' : n === 1 ? 'sm:grid-cols-1' : 'lg:grid-cols-3');
-
-const PULSE_VALUE: Record<ActivityRatio['status'], string> = {
-  success: 'text-success',
-  alert: 'text-alert',
-  neutral: 'text-navy',
-};
-
-/**
- * *Activity pulse* (`Overall.html:3184-3208`, P10-T5): **the ratio engine's answer for the member's
- * rung** — the prototype's four tiles were markup, 9.1% and 0.0% whatever anybody logged.
- *
- * The rates only. The balance is a track with two named ends, and it lives on the ratio screen with the
- * formulas.
- */
-function PulseCard({ pulse, error, voice }: { pulse: ActivityRatios | null; error: ApiError | null; voice: Voice }) {
-  const rates = pulse?.ratios.filter((r) => r.comparison !== 'band') ?? [];
-  return (
-    <SummaryCard id="summary-pulse" title="Activity pulse" icon="bolt" tag="Last 30 days">
-      {error && <ErrorBanner {...error} />}
-      {!pulse && !error && (
-        <Skeleton label={`Working out ${voice.possessive} ratios…`}>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {[0, 1, 2].map((i) => <SkeletonBar key={i} className="h-[92px] rounded-[10px]" />)}
-          </div>
-        </Skeleton>
-      )}
-      {pulse && (rates.length === 0 ? (
-        <p className="text-sm text-navy">
-          {voice.self ? 'Your office has no ratios for your role yet.' : `There are no ratios for ${voice.possessive} role yet.`}
-        </p>
-      ) : (
-        <div className={cn('grid gap-3 sm:grid-cols-2', pulseColumns(rates.length))}>
-          {rates.map((ratio) => (
-            <div key={ratio.code} className="rounded-[10px] border border-hairline bg-base px-3.5 py-3">
-              <span className="mb-1 block text-xs text-muted">{ratio.label}</span>
-              <span className={cn('mb-1.5 block font-body text-xl font-bold', PULSE_VALUE[ratio.status])}>
-                {formatRatioForStatus(ratio.value, ratio.displayUnit, ratio.benchmark, ratio.status)}
-              </span>
-              <StatusPill status={ratio.status} />
-            </div>
-          ))}
-        </div>
-      ))}
-    </SummaryCard>
-  );
-}
-
-const LEAD_TYPE: Record<'sales' | 'recruitment', string> = { sales: 'Sales', recruitment: 'Recruitment' };
 
 /**
  * *Leads that need you* (`Overall.html:3210-3217`, `:6151-6218`, P10-T6), and *Leads that need her*
@@ -531,55 +568,73 @@ const LEAD_TYPE: Record<'sales' | 'recruitment', string> = { sales: 'Sales', rec
  * leads, nearest next action first, undated last.
  *
  * **The flags are the Leads screen's**, from the server's one definition, and *Closes this month* hides
- * none of them (I-103): the prototype showed only the green chip on a lead two weeks late. The nearest
- * ten are listed. The footer that counted the rest and linked to the Leads screen went with the other
- * footnotes (P10.1-T6); whether the card lists every open lead, as the prototype does, is a payload
- * change on the client's sign-off list.
+ * none of them (I-103). The nearest ten are listed.
+ *
+ * **UI V1** (UI-050, UI-055, UI-056): the heading outside the card, directly after the ratio card (the staging review
+ * of 2026-10-31 moved it up from last on the page); its tag, *Leads terbuka Anda, tanggal terdekat lebih dulu*, on a desktop only (Appendix A). **On a
+ * phone it is not drawn while there is no open lead** (UI-055); from 768px the empty card says so, as before.
  */
-function LeadsCard({ leads, voice }: { leads: Summary['leads']; voice: Voice }) {
+function LeadsSection({ leads, voice }: { leads: Summary['leads']; voice: PageVoice }) {
+  const t = useMessages(summaryMessages);
+  /*
+   * **A leader's empty card says whose leads it counts** (P18.8-T15 AC-4, the client's UI review, UI-002). The card is
+   * the reader's own leads only, while Leads Management shows a leader their unit's too, so an AB with 71 there read
+   * *No active leads yet* here. A reader with none of their own whose unit holds some — `unitOpen`, the server's count
+   * of what Leads Management lists them besides their own — is told where those are; anybody else keeps the
+   * prototype's sentence.
+   */
+  const unitHasSome = voice.self && (leads.unitOpen ?? 0) > 0;
+  const leadsLink = (words: string) => <Link href="/leads" className="font-semibold text-navy underline">{words}</Link>;
+  const empty = leads.total === 0;
   return (
-    <SummaryCard
+    <Section
       id="summary-leads"
-      title={`Leads that need ${voice.object}`}
-      icon="pin"
-      tag={voice.self ? 'Your open leads, nearest date first' : 'All active leads, nearest date first'}
+      title={t.leads.title({ who: voice })}
+      meta={<span className="max-lg:hidden">{voice.self ? t.leads.tagOwn : t.leads.tagTheirs}</span>}
+      className={cn(empty && 'max-md:hidden')}
     >
-      {leads.total === 0 ? (
-        voice.self ? (
-          <p className="text-sm text-muted">
-            No active leads yet — add some in{' '}
-            <Link href="/leads" className="font-semibold text-navy underline">Leads Management</Link>.
-          </p>
+      <div className={cn(CARD, 'px-3.5', empty ? 'py-3' : 'py-1')}>
+        {empty ? (
+          voice.self ? (
+            <p className="text-sm text-muted">
+              {unitHasSome ? t.leads.unitHasSome({ link: leadsLink }) : t.leads.noneYet({ link: leadsLink })}
+            </p>
+          ) : (
+            // The prototype's own empty line on a coachee's card (`Overall.html:10498`).
+            <p className="text-sm text-muted">{t.leads.noneTheirs}</p>
+          )
         ) : (
-          // The prototype's own empty line on a coachee's card (`Overall.html:10498`).
-          <p className="text-sm text-muted">No active leads.</p>
-        )
-      ) : (
-        <ul>
-          {leads.rows.map((lead) => <LeadRow key={lead.id} lead={lead} voice={voice} />)}
-        </ul>
-      )}
-    </SummaryCard>
+          <ul>
+            {leads.rows.map((lead) => <LeadRow key={lead.id} lead={lead} voice={voice} />)}
+          </ul>
+        )}
+      </div>
+    </Section>
   );
 }
 
-function LeadRow({ lead, voice }: { lead: OpenLead; voice: Voice }) {
+function LeadRow({ lead, voice }: { lead: OpenLead; voice: PageVoice }) {
+  const t = useMessages(summaryMessages);
+  const language = useLanguage();
+  const figures = useFigureLanguage();
   // A lead with no type yet is said without one on a coachee's page, whose words carry none of
-  // ADR-0084's six; the reader's own keeps the Leads screen's word for it.
-  const type = lead.type ? LEAD_TYPE[lead.type] : voice.self ? 'Unassigned' : null;
-  const status = lead.statusLabel ?? 'No status yet';
+  // ADR-0084's six; the reader's own keeps the Leads screen's word for it. The two types are the Leads screen's,
+  // *Recruit*, not *Recruitment*, since 2026-10-26 (ADR-0161 §2).
+  const type = lead.type ? t.leads.types[lead.type] : voice.self ? t.leads.unassigned : null;
+  // The stage's name is the office's, as typed.
+  const status = lead.statusLabel ?? t.leads.noStatus;
   return (
     // Side by side from `sm`; on a phone the date goes under the name, which a 240px column would squeeze.
     <li className="flex flex-col gap-1.5 border-b border-hairline py-3 last:border-b-0 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
       <div className="flex min-w-0 flex-col gap-1">
-        <span className="text-sm font-semibold text-navy">{lead.name || '(unnamed)'}</span>
+        <span className="text-sm font-semibold text-navy">{lead.name || t.leads.unnamed}</span>
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs text-muted">
             {type === null ? status : <>{type} · {status}</>}
           </span>
-          {lead.thisMonth && <StatusPill status="success" label="Closes this month" className="whitespace-nowrap" />}
+          {lead.thisMonth && <StatusPill status="success" label={t.leads.closesThisMonth} className="whitespace-nowrap" />}
           {lead.flags.map((flag) => (
-            <StatusPill key={flag} status="alert" label={flagLabel(flag, lead.overdueDays)} className="whitespace-nowrap" />
+            <StatusPill key={flag} status="alert" label={flagLabel(flag, lead.overdueDays, language)} className="whitespace-nowrap" />
           ))}
         </div>
       </div>
@@ -587,154 +642,150 @@ function LeadRow({ lead, voice }: { lead: OpenLead; voice: Voice }) {
         {lead.nextActionDate ? (
           <>
             {/* Navy, not the prototype's amber: small amber text clears no contrast floor (`tokens.md`). */}
-            <span className="text-xs font-bold text-navy">{formatShortDay(lead.nextActionDate)}</span>
+            <span className="text-xs font-bold text-navy">{formatShortDay(lead.nextActionDate, {}, figures)}</span>
             {lead.nextActionNote && <span className="text-xs text-navy-soft"> — {lead.nextActionNote}</span>}
           </>
         ) : (
-          <span className="text-xs font-semibold text-muted">No date set</span>
+          <span className="text-xs font-semibold text-muted">{t.leads.noDate}</span>
         )}
       </div>
     </li>
   );
 }
 
-const days = (n: number) => plural(n, 'day', 'days');
-const link = (href: string, text: string) => <Link href={href} className="font-semibold text-navy underline">{text}</Link>;
+/** A screen an insight names, as the link to it: its words the sentence's, in the reader's language. */
+function screenLink(href: string, words: string) {
+  return <Link href={href} className="font-semibold text-navy underline">{words}</Link>;
+}
 
 /**
- * The sentence for a card. Every number in it is one the server read, from a registered metric.
+ * The sentence for a card. Every number in it is one the server read, from a registered metric; a day and a ratio are
+ * written here, in the figures' language, and handed to the message.
  *
  * About a coachee the sentence is in their pronoun and links nowhere: *Log Activity*, *Leads
  * Management* and *Activity Ratios* are the reader's own screens, and would open the reader's data.
  */
-function insightText(card: Insight, voice: Voice): ReactNode {
-  const You = capitalized(voice.pronoun);
+function insightText(card: Insight, voice: PageVoice, t: Words, figures: Language, language: Language): ReactNode {
+  const strong = (words: string) => <strong>{words}</strong>;
+  /** A screen the sentence names, as a link to it — on the reader's own page only. */
+  const linkTo = (href: string) => (words: string) => screenLink(href, words);
+  const say = t.insights;
   switch (card.rule) {
-    case 'NOTHING_LOGGED':
-      if (!voice.self) {
-        return card.facts.lastLoggedOn === null
-          ? <>{You} {voice.have}n’t logged any activity yet — a few minutes each day is what every number on this page is made of.</>
-          : <>Nothing logged in the last {days(card.facts.windowDays)} — {voice.possessive} last entry was {formatShortDay(card.facts.lastLoggedOn)}. Every number on this page is made of what {voice.pronoun} log{voice.s}.</>;
+    case 'NOTHING_LOGGED': {
+      const { lastLoggedOn, windowDays } = card.facts;
+      if (lastLoggedOn === null) {
+        return voice.self ? say.neverOwn({ link: linkTo('/activity/log') }) : say.neverTheirs({ who: voice });
       }
-      return card.facts.lastLoggedOn === null
-        ? <>You haven’t logged any activity yet — a few minutes in {link('/activity/log', 'Log Activity')} each day is what every number on this page is made of.</>
-        : <>Nothing logged in the last {days(card.facts.windowDays)} — your last entry was {formatShortDay(card.facts.lastLoggedOn)}. Every number on this page is made of what you log in {link('/activity/log', 'Log Activity')}.</>;
+      const date = formatShortDay(lastLoggedOn, {}, figures);
+      return voice.self
+        ? say.quietSinceOwn({ windowDays, date, link: linkTo('/activity/log') })
+        : say.quietSinceTheirs({ who: voice, windowDays, date });
+    }
     case 'BEHIND_PACE':
-      return (
-        <>
-          {capitalized(voice.isShort)} behind pace — at this rate {voice.pronoun}’ll close <strong>{card.facts.closingsLast30Days}</strong> of <strong>{card.facts.closingTarget}</strong> this
-          month.{' '}
-          {card.facts.weeksLeft === 1
-            ? <>About <strong>{plural(card.facts.neededPerWeek, 'policy', 'policies')}</strong> in the week left would catch up.</>
-            : <>About <strong>{plural(card.facts.neededPerWeek, 'policy', 'policies')} a week</strong> for the {card.facts.weeksLeft} weeks left would catch up.</>}
-        </>
-      );
+      return say.behindPace({
+        who: voice,
+        strong,
+        closings: card.facts.closingsLast30Days,
+        target: card.facts.closingTarget,
+        perWeek: card.facts.neededPerWeek,
+        weeksLeft: card.facts.weeksLeft,
+      });
     case 'LEAD_OVERDUE':
-      return (
-        <>
-          <strong>{card.facts.name}</strong>’s next action is {days(card.facts.overdueDays)} overdue — reschedule it or set a new date this week
-          {voice.self ? <> in {link('/leads', 'Leads Management')}.</> : '.'}
-          {card.facts.others > 0 && <> {plural(card.facts.others, `more of ${voice.possessive} leads is`, `more of ${voice.possessive} leads are`)} overdue too.</>}
-        </>
-      );
+      return say.leadOverdue({
+        who: voice,
+        strong,
+        name: card.facts.name,
+        overdueDays: card.facts.overdueDays,
+        others: card.facts.others,
+        link: voice.self ? linkTo('/leads') : null,
+      });
     case 'LEAD_NEGLECTED':
-      return (
-        <>
-          <strong>{card.facts.name}</strong> has no next action and no remarks — follow up and log what happened so this lead doesn’t stall.
-          {card.facts.others > 0 && <> {plural(card.facts.others, 'more lead has', 'more leads have')} neither.</>}
-        </>
-      );
+      return say.leadNeglected({ strong, name: card.facts.name, others: card.facts.others });
     case 'RATIO_BELOW':
-      return (
-        <>
-          <strong>{card.facts.label}</strong> is {formatRatioForStatus(card.facts.value, card.facts.displayUnit, card.facts.benchmark, 'alert')} over
-          the last 30 days, below its benchmark of {formatBenchmark(card.facts.benchmark, card.facts.displayUnit)} — that step is where {voice.possessive} activity
-          is not yet converting.{voice.self && <> {link('/activity/ratio', 'Activity Ratios')} shows what it counts.</>}
-        </>
-      );
+      return say.ratioBelow({
+        who: voice,
+        strong,
+        label: card.facts.label,
+        value: formatRatioForStatus(card.facts.value, card.facts.displayUnit, card.facts.benchmark, 'alert', figures, language),
+        benchmark: formatBenchmark(card.facts.benchmark, card.facts.displayUnit, figures, language),
+        link: voice.self ? linkTo('/activity/ratio') : null,
+      });
     case 'RATIO_STRENGTH':
-      return (
-        <>
-          <strong>{card.facts.label}</strong> is a genuine strength —{' '}
-          {formatRatioForStatus(card.facts.value, card.facts.displayUnit, card.facts.benchmark, 'success')} over the last 30 days, well above its
-          benchmark of {formatBenchmark(card.facts.benchmark, card.facts.displayUnit)}.
-        </>
-      );
+      return say.ratioStrength({
+        strong,
+        label: card.facts.label,
+        value: formatRatioForStatus(card.facts.value, card.facts.displayUnit, card.facts.benchmark, 'success', figures, language),
+        benchmark: formatBenchmark(card.facts.benchmark, card.facts.displayUnit, figures, language),
+      });
   }
 }
-
-/**
- * The prototype's badge on both cards, verbatim (`Overall.html:3238`, `:3253`, `:4136`, `:4150`). One
- * constant, so the two cards cannot come to say different things.
- */
-const INSIGHT_BADGE = 'AI-powered';
 
 /**
  * *What to do next* and *How you can improve your performance* (`Overall.html:3233-3262`, P10-T7) —
  * *How she can improve* about a coachee (`:4149`): **named rules over the member's own numbers**
  * (ADR-0060, D-02), **badged as the prototype badges them**.
  *
- * Both cards wear *AI-powered*, verbatim, at the client's request of 2026-10-01 (ADR-0069, amending
- * ADR-0063 §6, which had made it *Rules, not AI*). What the cards are has not changed: every suggestion
- * is one of ADR-0060's fixed rules, worked out on read, and nothing is generated or learned. The manual
- * says so, which is where ADR-0062 §2 puts an explanation. **The prototype's footnotes stay out** —
- * *Generated automatically*, *will get sharper the more weeks you log*, *Pattern-based coaching*: they
- * claim a system that learns from your weeks, and these rules give the same suggestions for the same
- * numbers however long you log. No item names its rule on screen (ADR-0063 §6): `insights[].rule`
- * stays in the payload, for the tests and for coaching.
+ * Both wear *AI-powered* — *Berbasis AI* — at the client's request of 2026-10-01 (ADR-0069, amending ADR-0063 §6). What
+ * the cards are has not changed: every suggestion is one of ADR-0060's fixed rules, worked out on read, and nothing is
+ * generated or learned. The manual says so. No item names its rule on screen (ADR-0063 §6): `insights[].rule` stays in
+ * the payload, for the tests and for coaching.
  *
- * **The badge is a solid navy pill**, not the prototype's gradients: `#4A6FE0` is in no token, and white
- * on the improvement card's `--amber-dark` end (`Overall.html:1009-1011`) fails the contrast floor. The
- * cards keep the product's own navy and amber edges. The server picks at most four in a fixed priority;
- * a card with nothing in it is not drawn, and when no rule fired the page says so rather than going quiet.
+ * **UI V1** (UI-050, UI-054): each a section with its heading outside the card and the badge — a solid navy pill, in
+ * sentence case — on the right; the behind-pace message is said here and nowhere else on the page (UI-054). The server
+ * picks at most four in a fixed priority; a card with nothing in it is not drawn, and when no rule fired the page says
+ * so rather than going quiet.
  */
-function InsightCards({ insights, voice }: { insights: Insight[]; voice: Voice }) {
-  const actions = insights.filter((card) => card.kind === 'action');
-  const improve = insights.filter((card) => card.kind === 'improve');
+function InsightSections({ actions, improve, voice }: { actions: Insight[]; improve: Insight[]; voice: PageVoice }) {
+  const t = useMessages(summaryMessages);
+  const badge = (
+    <span className="whitespace-nowrap rounded-pill bg-navy px-2 py-0.5 text-xs font-semibold text-white">{t.insights.badge}</span>
+  );
   return (
     <>
       {(actions.length > 0 || improve.length === 0) && (
-        <SummaryCard id="summary-next" title="What to do next" icon="spark" badge={INSIGHT_BADGE} className="border-l-4 border-l-navy-soft">
-          {actions.length === 0 ? (
-            <p className="text-sm text-navy">
-              {voice.self
-                ? 'Nothing in your numbers asks for anything right now — keep logging, and this is where it will show.'
-                : `Nothing in ${voice.possessive} numbers asks for anything right now.`}
-            </p>
-          ) : (
-            <ol className="flex flex-col gap-2.5">
-              {actions.map((card, i) => (
-                <li key={card.rule} className="flex items-start gap-2.5 text-sm leading-normal text-navy">
-                  <span aria-hidden="true" className="mt-px flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-navy text-2xs font-bold text-white">{i + 1}</span>
-                  <InsightBody card={card} voice={voice} />
-                </li>
-              ))}
-            </ol>
-          )}
-        </SummaryCard>
+        <Section id="summary-next" title={t.insights.next} meta={badge}>
+          <div className={cn(CARD, 'px-3.5 py-3')}>
+            {actions.length === 0 ? (
+              <p className="text-base text-navy">
+                {voice.self ? t.insights.quietOwn : t.insights.quietTheirs({ who: voice })}
+              </p>
+            ) : actions.length === 1 ? (
+              <InsightBody card={actions[0]} voice={voice} />
+            ) : (
+              <ol className="flex flex-col gap-2.5">
+                {actions.map((card, i) => (
+                  <li key={card.rule} className="flex items-start gap-2.5">
+                    <span aria-hidden="true" className="mt-px flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-navy text-2xs font-bold text-white">{i + 1}</span>
+                    <InsightBody card={card} voice={voice} />
+                  </li>
+                ))}
+              </ol>
+            )}
+          </div>
+        </Section>
       )}
       {improve.length > 0 && (
-        <SummaryCard
+        <Section
           id="summary-improve"
-          title={voice.self ? 'How you can improve your performance' : `How ${voice.pronoun} can improve`}
-          icon="trend"
-          badge={INSIGHT_BADGE}
-          className="border-l-4 border-l-amber"
+          title={voice.self ? t.insights.improveOwn : t.insights.improveTheirs({ who: voice })}
+          meta={badge}
         >
-          <ul className="flex flex-col gap-3">
+          <ul className={cn(CARD, 'flex flex-col gap-3 px-3.5 py-3')}>
             {improve.map((card) => (
-              <li key={card.rule} className="flex items-start gap-2.5 text-sm leading-normal text-navy">
-                <span aria-hidden="true" className="mt-1.5 h-[7px] w-[7px] shrink-0 rounded-full bg-amber" />
+              <li key={card.rule}>
                 <InsightBody card={card} voice={voice} />
               </li>
             ))}
           </ul>
-        </SummaryCard>
+        </Section>
       )}
     </>
   );
 }
 
-function InsightBody({ card, voice }: { card: Insight; voice: Voice }) {
-  return <p className="min-w-0">{insightText(card, voice)}</p>;
+function InsightBody({ card, voice }: { card: Insight; voice: PageVoice }) {
+  const t = useMessages(summaryMessages);
+  const language = useLanguage();
+  const figures = useFigureLanguage();
+  return <p className="min-w-0 text-base leading-normal text-navy">{insightText(card, voice, t, figures, language)}</p>;
 }

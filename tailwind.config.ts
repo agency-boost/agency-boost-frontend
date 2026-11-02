@@ -58,6 +58,40 @@ const config: Config = {
         card: token('card'),
         muted: token('muted'),
         hairline: token('hairline'),
+        // UI V1 (UI-008, the report's token table). A card's edge: the hairline, and none on a V1 surface (`globals.css`).
+        'card-edge': token('card-edge'),
+        // The four status pills, tint and words (D-27: never a dot).
+        pill: {
+          red: token('pill-red'),
+          'red-ink': token('pill-red-ink'),
+          amber: token('pill-amber'),
+          'amber-ink': token('pill-amber-ink'),
+          green: token('pill-green'),
+          'green-ink': token('pill-green-ink'),
+          grey: token('pill-grey'),
+          'grey-ink': token('pill-grey-ink'),
+          // The Group Tree's *Anda* pill on the reader's own row (UI-059; W1-B's shared person row).
+          blue: token('pill-blue'),
+          'blue-ink': token('pill-blue-ink'),
+        },
+        // Words on white, and words on navy.
+        signal: { red: token('signal-red'), green: token('signal-green'), grey: token('signal-grey') },
+        'on-navy': {
+          red: token('on-navy-red'),
+          green: token('on-navy-green'),
+          lavender: token('on-navy-lavender'),
+          // The ratio card's *Target X*, and the line between its rows (UI-053; W1-B).
+          muted: token('on-navy-muted'),
+          line: token('on-navy-line'),
+        },
+        // WhatsApp's round button (UI-081; W1-B's `ContactButtons`).
+        whatsapp: token('whatsapp'),
+        // The one ink, the desktop's row under the pointer, a divider between rows, the tree's lines, the Recruitment bar.
+        ink: token('ink'),
+        'hover-row': token('hover-row'),
+        divider: token('divider'),
+        line: token('line'),
+        lavender: token('lavender'),
         'sidebar-text': token('sidebar-text'),
         'input-focus': token('input-focus'),
         success: token('success'),
@@ -82,19 +116,28 @@ const config: Config = {
       },
       // Nine steps replacing the prototype's 18 sizes, several separated by half a
       // pixel. Declared in rem so browser zoom and OS text sizing work.
+      //
+      // **The five steps under 16px are custom properties** (`globals.css`), at the same rem they
+      // always had, so a phone can move them and nothing wider does (ADR-0167, the client's UI review
+      // of 2026-10-26): below 768px `2xs` and `xs` read 12px, the floor (UI-029), and inside a field all
+      // five read 16px, so iOS does not zoom the page on focus (UI-014). One rule each, rather than a
+      // `max-md:` class on 244 call sites. `theme.spec.ts` pins the values.
       fontSize: {
-        '2xs': ['0.625rem', '1.4'],
-        xs: ['0.6875rem', '1.4'],
-        sm: ['0.75rem', '1.45'],
-        base: ['0.8125rem', '1.45'],
-        md: ['0.875rem', '1.45'],
+        '2xs': ['var(--text-2xs)', '1.4'],
+        xs: ['var(--text-xs)', '1.4'],
+        sm: ['var(--text-sm)', '1.45'],
+        base: ['var(--text-base)', '1.45'],
+        md: ['var(--text-md)', '1.45'],
         lg: ['1rem', '1.45'],
         xl: ['1.125rem', '1.2'],
         '2xl': ['1.25rem', '1.2'],
         '3xl': ['1.75rem', '1.2'],
+        // A page's title (UI V1, UI-004, UI-008): 20px, 22px from 768px, 24px from 1024px — the width is the stylesheet's.
+        title: ['var(--text-title)', '1.2'],
       },
-      borderRadius: { sm: '4px', md: '8px', lg: '12px', pill: '999px' },
-      boxShadow: { modal: 'var(--shadow-modal)' },
+      // `lg` is a card's corner: 12px, and 16px on a V1 surface; `row` a row's or a tile's inside one, 14px there (UI-008).
+      borderRadius: { sm: '4px', md: '8px', lg: 'var(--radius-card)', row: 'var(--radius-row)', pill: '999px' },
+      boxShadow: { modal: 'var(--shadow-modal)', bar: 'var(--shadow-bar)' },
       spacing: { sidebar: 'var(--sidebar-width)' },
     },
   },

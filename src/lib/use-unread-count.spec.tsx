@@ -40,6 +40,23 @@ describe('useUnreadCount', () => {
     expect(mock).toHaveBeenCalledTimes(1);
   });
 
+  it('P18.95-T1 AC-7 moves by a change’s delta at once, never below zero, without asking again', async () => {
+    const { mock } = stubFetch({ '/notifications': { body: { items: [], unread: 2, total: 2, page: 1, pageSize: 1 } } });
+    const { result } = renderHook(() => useUnreadCount(), { wrapper });
+    await waitFor(() => expect(result.current).toBe(2));
+
+    act(() => announceInboxChanged({ delta: -1, local: true }));
+    expect(result.current).toBe(1);
+    act(() => announceInboxChanged({ delta: 1, local: true }));
+    expect(result.current).toBe(2);
+    act(() => announceInboxChanged({ delta: -5, local: true }));
+    expect(result.current).toBe(0);
+    // A count beats a delta: the answer settles whatever the moves added up to.
+    act(() => announceInboxChanged({ unread: 7, delta: -1 }));
+    expect(result.current).toBe(7);
+    expect(mock).toHaveBeenCalledTimes(1);
+  });
+
   it('shows nothing rather than an error when the count cannot be read', async () => {
     stubFetch({ '/notifications': [{ body: { items: [], unread: 2 } }, { status: 500, body: { error: { code: 'INTERNAL_ERROR', message: 'x', requestId: 'r' } } }] });
     const { result } = renderHook(() => useUnreadCount(), { wrapper });

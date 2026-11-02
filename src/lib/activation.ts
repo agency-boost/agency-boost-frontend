@@ -1,5 +1,9 @@
+import { messagesIn } from '@/i18n/catalogue';
+import { SOURCE_LANGUAGE, type Language } from '@/i18n/language';
+import { activationMessages } from '@/i18n/messages/activation';
+import { newHiresMessages } from '@/i18n/messages/new-hires';
 import { api } from './api-client';
-import { formatOfficeDay, formatShortDay } from './format';
+import { formatOfficeDay, formatPercent, formatShortDay, OFFICE_TIME_ZONE } from './format';
 
 /**
  * The 90-day activation (Phase 13, `docs/02-specs/functional/activation.md`): the shapes the API
@@ -35,10 +39,27 @@ export interface ActivationPerson {
 export interface ActivationItemLink {
   kind: string;
   label: string;
-  /** `null`: nowhere to go — a training module no longer offered (D-orphan); no *Go to* is drawn. */
+  /**
+   * `null`: nowhere to go — a training module no longer offered (D-orphan), or a data-backed item, whose way in is its
+   * own form (P18.96-T4 AC-3); no *Go to* is drawn.
+   */
   route: string | null;
   completesWhen: string;
   live: boolean;
+  /**
+   * **The form a hand tick opens** (P18.96-T4 AC-3): `closing` — *Which case?* — or `one_on_one` — *Log 1:1* — for the
+   * three data-backed items, which are ticked by hand only with their record; `null` for every other link.
+   */
+  form: ActivationRecordForm | null;
+}
+
+/** What a data-backed item's hand tick is saved with (P18.96-T4 AC-3). */
+export type ActivationRecordForm = 'closing' | 'one_on_one';
+
+/** A record a done data-backed item names (P18.96-T4 AC-2): a lead, a coaching session, or the file's month. */
+export interface ActivationItemRecord {
+  collection: 'goals' | 'leads' | 'activityLogs' | 'trainingProgress' | 'monthlyAgentData' | 'coachingSessions';
+  id: string;
 }
 
 /**
@@ -55,6 +76,34 @@ export interface ActivationItemProgress {
   doneBy: ActivationPerson | null;
   note: string | null;
   date: string | null;
+  /** *"Ticked by {name}, waiting for data"* (P18.96-T4 AC-4): a data-backed item ticked by hand, not yet confirmed. */
+  waiting: boolean;
+  /** The record its source line links to (P18.96-T4 AC-2), for a done data-backed item; else `null`. */
+  record: ActivationItemRecord | null;
+}
+
+/** One of a member's closings (P18.96-T4 AC-3): what *Which case?* offers. */
+export interface ActivationClosing {
+  leadId: string;
+  name: string;
+  date: string;
+}
+
+/** `GET /activation/me/closings`, `GET /new-hires/:membershipId/closings`. */
+export interface ActivationClosings {
+  closings: ActivationClosing[];
+}
+
+/**
+ * **The record sent with a data-backed item's tick** (P18.96-T4 AC-3): an existing closing by its lead, a new one by a
+ * name and the day it was paid and issued, or a 1:1 by the day it was held and a note.
+ */
+export interface ActivationRecordInput {
+  kind: ActivationRecordForm;
+  leadId?: string;
+  name?: string;
+  date?: string;
+  note?: string;
 }
 
 export interface ActivationAspectProgress {
@@ -100,44 +149,155 @@ export interface ActivationView {
   note: ActivationNote | null;
 }
 
-/** A hire on the roster (`Overall.html:6750-6772`). */
-export interface NewHireRow {
-  hire: ActivationPerson;
-  startDate: string;
-  day: number;
-  window: number;
-  overdue: boolean;
-  pct: number;
-  firstCaseClosed: boolean;
-}
-
 /**
  * *Direct Unit*, or the nearest leader's unit below the reader (D-group): an AAB's, or — an AB under an
  * AB (ADR-0014) — an AB's, the card naming the rung (a Fix).
  */
 export type NewHireGroupKind = 'direct' | 'aab' | 'ab';
 
-export interface NewHireGroup {
+/**
+ * A new hire's **3M activation** (`ACTIVATION_3M`, ADR-0171 §2; P18.96-T6): in progress through day 90 of the join date,
+ * then activated (a first sale by day 90) or not. The server decides and keeps it; this only draws it.
+ */
+export type Activation3MResult = 'in_progress' | 'activated' | 'not_activated';
+
+/** The unit a new hire is counted in. */
+export interface NewHireUnitRef {
   kind: NewHireGroupKind;
   leader: ActivationPerson | null;
-  hires: NewHireRow[];
 }
 
-export interface NewHiresRoster {
-  groups: NewHireGroup[];
-  today: string;
+/** A new hire's checklist, where they have one: an AB or an AAB placed as a new hire has none (ADR-0103). */
+export interface NewHireChecklist {
+  state: ActivationState;
+  done: number;
+  total: number;
+  pct: number;
+  overdue: boolean;
 }
+
+/**
+ * **A new hire's status** (UI V1, D-24, UI-023): *Teraktivasi* as soon as there is a first sale — `activated` by day 90,
+ * `activated_late` after it (amber, *lewat 3M*, outside the 3M share) — and `not_yet` without one. The server decides it.
+ */
+export type NewHireStatus = 'activated' | 'activated_late' | 'not_yet';
+
+/** Where a first sale came from (D-26): the data — a lead or the production file — or a closing logged by hand. */
+export type FirstSaleSource = 'sales' | 'manual';
+
+/** One new hire on `/new-hires` (ADR-0173 §2; UI V1, UI-023). */
+export interface NewHireRow {
+  hire: ActivationPerson;
+  unit: NewHireUnitRef;
+  joinDate: string;
+  /** Which day since joining today is: *Hari ke-X*. */
+  day: number;
+  firstSaleDate: string | null;
+  /** The first sale's day since joining: *Pecah telor di hari ke-X*. `null` with none. */
+  firstSaleDay: number | null;
+  firstSaleSource: FirstSaleSource | null;
+  status: NewHireStatus;
+  activation3M: Activation3MResult;
+  /** Kept as data only since UI V1: it decides nothing (D-24). */
+  leftOn: string | null;
+  checklist: NewHireChecklist | null;
+}
+
+/**
+ * `ACTIVATION_3M_PCT` over a set, as the server computes it (rule A): `pct` `null` while nobody is decided. `late` — a
+ * first sale after day 90 — and `inProgress` are in neither part. The screen shows `pct` alone (D-24).
+ */
+export interface Activation3MShare {
+  activated: number;
+  notActivated: number;
+  late: number;
+  inProgress: number;
+  pct: number | null;
+}
+
+/** One join month's share. */
+export interface Activation3MMonth {
+  month: string;
+  activated: number;
+  notActivated: number;
+  late: number;
+  inProgress: number;
+  pct: number | null;
+}
+
+export interface Activation3MFigures {
+  all: Activation3MShare;
+  byMonth: Activation3MMonth[];
+}
+
+export interface NewHireUnit {
+  kind: NewHireGroupKind;
+  leader: ActivationPerson | null;
+  activation3M: Activation3MFigures;
+}
+
+export interface NewHiresSections {
+  inProgress: NewHireRow[];
+  activated: NewHireRow[];
+  notActivated: NewHireRow[];
+}
+
+export interface NewHiresWindow {
+  from: string;
+  to: string;
+}
+
+/** `GET /new-hires` (P18.96-T6): a year of new hires by their 3M result, and the 3M activation % at the top. */
+export interface NewHiresRoster {
+  today: string;
+  window: NewHiresWindow;
+  /** The day the result is decided after: what *Day 64 of 90* prints. */
+  days: number;
+  activation3M: Activation3MFigures;
+  units: NewHireUnit[];
+  sections: NewHiresSections;
+}
+
+/**
+ * **A new hire's 3M standing on their detail** (UI-023, D-25): what the strip says — the same status, day and first
+ * sale as their row on `/new-hires`. `null` for somebody who is not a new hire. The detail and its writes carry it.
+ */
+export interface NewHireStanding {
+  status: NewHireStatus;
+  activation3M: Activation3MResult;
+  joinDate: string;
+  day: number;
+  firstSaleDate: string | null;
+  firstSaleDay: number | null;
+  firstSaleSource: FirstSaleSource | null;
+  /** Who they report to (UI-027, D-25): the header's *AAB Arief · Bergabung 3 Agu 2026*. */
+  leader: NewHireLeader | null;
+  /** Their WhatsApp number as stored, `+62…`, or `null` (UI-027, UI-081): the detail's *WhatsApp* opens it. */
+  phone: string | null;
+}
+
+/** The hire's leader on their detail (UI-027): who, and on which rung. */
+export interface NewHireLeader {
+  membershipId: string;
+  name: string;
+  role: 'ab' | 'aab' | 'agent';
+}
+
+/** `GET /new-hires/:membershipId`: the activation as a leader reads it, and the hire's 3M standing. */
+export type NewHireDetail = ActivationView & { newHire?: NewHireStanding | null };
 
 /** What a saved note answers. */
 export interface ActivationNoteSaved {
   note: ActivationNote;
 }
 
-/** What the hire's tick sends: the state, and their own note and date when they change one. */
+/** What the hire's tick sends: the state, and their own note and date when they change one — or its record. */
 export interface MyItemInput {
   done: boolean;
   note?: string | null;
   date?: string | null;
+  /** A data-backed item's tick only (P18.96-T4 AC-3). */
+  record?: ActivationRecordInput;
 }
 
 /*
@@ -156,7 +316,7 @@ export const readMyActivation = () => api<ActivationView>('/activation/me');
 export const saveMyItem = (code: string, input: MyItemInput) =>
   api<ActivationView>(`/activation/me/items/${encodeURIComponent(code)}`, { method: 'PUT', body: input });
 
-/** *Mark activation complete →* (OD-28): the hire's own, at 100%. */
+/** *Mark checklist complete* (OD-28; the button's name since P18.96-T6, ADR-0173 §4): the hire's own, at 100%. */
 export const graduateMyActivation = () =>
   api<ActivationView>('/activation/me/graduate', { method: 'POST' });
 
@@ -164,13 +324,20 @@ export const graduateMyActivation = () =>
 export const readNewHires = () => api<NewHiresRoster>('/new-hires');
 
 /** One hire's activation as a leader reads it — also what the coaching *Activation* tab reads. */
-export const readNewHire = (membershipId: string) => api<ActivationView>(`/new-hires/${encodeURIComponent(membershipId)}`);
+export const readNewHire = (membershipId: string) => api<NewHireDetail>(`/new-hires/${encodeURIComponent(membershipId)}`);
 
-/** A leader's tick on a hire's manual item. */
-export const saveHireItem = (membershipId: string, code: string, done: boolean) =>
+/** A leader's tick on a hire's manual item — or a data-backed one's, with its record (P18.96-T4 AC-3). */
+export const saveHireItem = (membershipId: string, code: string, done: boolean, record?: ActivationRecordInput) =>
   api<ActivationView>(`/new-hires/${encodeURIComponent(membershipId)}/items/${encodeURIComponent(code)}`, {
-    method: 'PUT', body: { done },
+    method: 'PUT', body: record ? { done, record } : { done },
   });
+
+/** The reader's own closings, for *Which case?* (P18.96-T4 AC-3). */
+export const readMyClosings = () => api<ActivationClosings>('/activation/me/closings');
+
+/** A hire's closings, for a leader's *Which case?* (P18.96-T4 AC-3). */
+export const readHireClosings = (membershipId: string) =>
+  api<ActivationClosings>(`/new-hires/${encodeURIComponent(membershipId)}/closings`);
 
 /** A leader's correction of the start date (OD-118). */
 export const correctStartDate = (membershipId: string, startDate: string) =>
@@ -203,136 +370,177 @@ export const FIRST_CASE_CLOSED = 'FIRST_CASE_CLOSED';
  * ── The words ────────────────────────────────────────────────────────────────────────────────────
  */
 
+/** The activation's words in a language (P18.98-T4): the hire's page, its shared parts, the coaching record's. */
+const wordsIn = (language: Language) => messagesIn(activationMessages, language);
+
+/** The roster's and one hire's words in a language (P18.98-T4): `/new-hires` and `/new-hires/[membershipId]`. */
+const hiresIn = (language: Language) => messagesIn(newHiresMessages, language);
+
+/** Both in English, the catalogue's source: the copy objects below, and every function here given no language. */
+const EN = wordsIn(SOURCE_LANGUAGE);
+const HIRES = hiresIn(SOURCE_LANGUAGE);
+
 /**
- * The prototype's strings, verbatim (D-copy), with its straight apostrophes. Two are rewritten as
- * D-copy and OD-28 say: the graduation confirm speaks to the hire, without the demo's *"same as when a
- * real agent finishes"*.
+ * **The prototype's strings, verbatim, in English** (D-copy) — the catalogue's source (`i18n/messages/activation.ts`,
+ * `new-hires.ts`; P18.98-T4), in the shapes this module has always handed its callers and its spec. **A screen reads
+ * the reader's language instead**: `useMessages(activationMessages)`, `useMessages(newHiresMessages)`. Read here by the
+ * modules whose words have not moved yet — the coaching record (`activation-record.tsx`) and the Company template's link
+ * badge (`template-editor.tsx`) — so they read English, as before, until theirs do.
+ *
+ * Two are rewritten as D-copy and OD-28 say: the graduation confirm speaks to the hire, without the demo's *"same as
+ * when a real agent finishes"*. **Both titles are the nav items' words** since P18.95-T9 AC-2 (ADR-0167 §10, OD-205;
+ * UI-027, *menu labels = page titles*): the prototype titled them *90-Day Activation* and *Your New Hires* under nav
+ * items reading *Your 90-day activation* and *New hires* (`Overall.html:2638-2647`, `:10408-10409`). **Join date** is
+ * one name for the one date (P18.96-T2 AC-5, ADR-0169 §7; UI-009; parity I-454), where the prototype said *Start date*
+ * (`:3284`) and *Joined* (`:6734`). **Mark checklist complete** (P18.96-T6 AC-5, ADR-0173 §4; parity I-475) is the
+ * prototype's *Mark activation complete →* (`:3285`), renamed so it cannot be read as the 3M result. A placeholder
+ * holds no ⓘ, so the note's example spells out *joint field work* (P18.95-T9 AC-3; UI-028). `pctComplete` writes its
+ * figure in Indonesian, as every caller of this object did before P18.98-T3.
  */
 export const PROTOTYPE_COPY = {
-  // `Overall.html:10408-10409`
-  title: '90-Day Activation',
-  subtitle: 'Your first 90 days, checklist by checklist.',
-  rosterTitle: 'Your New Hires',
-  rosterSubtitle: "Track your new agents' 90-day activation progress.",
-  // The hire's page (`:3280-3349`).
-  progressHeading: 'Your activation progress',
-  startDate: 'Start date',
-  graduate: 'Mark activation complete →',
-  day: 'Day',
-  completed: 'Completed',
-  pctComplete: (pct: number) => `${pct}% complete`,
-  aspect: 'Aspect',
-  items: 'Items',
-  status: 'Status',
-  footer: "Visible only to new agents, for their first 6 months. Tenured agents won't see this section.",
-  // A row (`:6570-6604`).
-  showNoteAndDate: 'Show note and date',
-  notePlaceholder: 'Note (optional)',
-  auto: 'Auto',
-  goTo: (label: string) => `Go to ${label} →`,
-  // Graduation (`:6683-6688`, `:4673-4674`; the question per OD-28 and D-copy).
-  graduateQuestion: 'Mark your activation complete? The 90-Day Activation menu will be removed.',
-  confirm: 'Confirm',
-  cancel: 'Cancel',
-  graduated: 'Marked as tenured agent — 90-Day Activation removed from menu.',
-  // The roster (`:6742-6783`).
-  directUnit: 'Direct Unit',
-  aabUnit: (name: string) => `AAB: ${name}`,
+  title: EN.title,
+  subtitle: EN.subtitle,
+  rosterTitle: HIRES.title,
+  rosterSubtitle: HIRES.subtitle,
+  progressHeading: EN.progressHeading,
+  joinDate: EN.joinDate,
+  graduate: EN.graduate,
+  day: EN.day,
+  completed: EN.completed,
+  pctComplete: (pct: number) => EN.pctComplete({ pct: formatPercent(pct) }),
+  aspect: EN.aspect,
+  items: EN.items,
+  status: EN.status,
+  footer: EN.footer,
+  showNoteAndDate: EN.showNoteAndDate,
+  notePlaceholder: EN.notePlaceholder,
+  auto: EN.auto,
+  goTo: (label: string) => EN.goTo({ label }),
+  graduateQuestion: EN.graduateQuestion,
+  confirm: EN.confirm,
+  cancel: EN.cancel,
+  graduated: EN.graduated,
+  directUnit: HIRES.directUnit,
+  aabUnit: (name: string) => HIRES.aabUnit({ name }),
   // D-group's Fix: the prototype's form for the other rung the nearest leader may stand on.
-  abUnit: (name: string) => `AB: ${name}`,
-  name: 'Name',
-  joined: 'Joined',
-  progress: 'Progress',
-  activeAgent: 'Active Agent',
-  closedFirstCase: 'Closed first case',
+  abUnit: (name: string) => HIRES.abUnit({ name }),
+  name: HIRES.columns.name,
+  /** A missing figure: a mark in no language. */
   none: '—',
-  // The detail (`:3367-3414`, `:6793-6794`, `:6869`, `:6891`).
-  back: 'Back to Your New Hires',
-  detailSubtitle: 'You can update their 90-Day Activation status, plus your coaching note.',
-  detailHeading: 'Activation progress',
-  statusUpdated: 'Activation status updated.',
-  noteHeading: 'Coaching note',
-  noteHint: 'Visible to this agent on their own 90-Day Activation page.',
-  noteExample: "e.g. Great pace on prospecting — let's focus on booking your first JFW this week.",
-  saveNote: 'Save note',
-  noteSaved: (name: string) => `Coaching note saved — visible to ${name}.`,
-  // The coaching renderer (`:6464-6489`).
-  cardTitle: '90-Day Activation',
-  doneNewActiveAgent: '✓ Done · New Active Agent',
-  itemDone: '✓ Done',
-  notDone: 'Not done',
+  back: HIRES.detail.back,
+  detailSubtitle: HIRES.detail.subtitle,
+  detailHeading: HIRES.detail.heading,
+  statusUpdated: HIRES.detail.statusUpdated,
+  noteHeading: EN.noteHeading,
+  noteHint: HIRES.note.hint,
+  noteExample: HIRES.note.example,
+  saveNote: HIRES.note.save,
+  noteSaved: (name: string) => HIRES.note.saved({ name }),
+  cardTitle: EN.record.title,
+  doneNewActiveAgent: EN.record.doneNewActiveAgent,
+  itemDone: EN.record.done,
+  notDone: EN.record.notDone,
 } as const;
 
-/** The aspect pill's words (`:6547-6551`). */
-export const ASPECT_STATUS_LABEL: Record<AspectStatus, string> = {
-  done: 'Done',
-  in_progress: 'In progress',
-  not_started: 'Not started',
-};
+/** The aspect pill's words (`:6547-6551`), in English. */
+export const ASPECT_STATUS_LABEL: Record<AspectStatus, string> = EN.aspectStatus;
+
+/** A new hire's 3M result in words (P18.96-T6; the client's report, R2), in English. */
+export const ACTIVATION_3M_LABEL: Record<Activation3MResult, string> = HIRES.result3M;
 
 /**
- * The module's own strings: the states the prototype lacks (L-01), the attribution, and the
- * refusals. **None of ADR-0084's six words** (D-copy): *office*, *KPM*, *reports to*, *tagged to*,
- * *untagged*, *unassigned*.
+ * **The module's own strings, in English** — the states the prototype lacks (L-01), the attribution, the refusals'
+ * frame — from the catalogue's source as `PROTOTYPE_COPY` is. **None of ADR-0084's six words** (D-copy): *office*,
+ * *KPM*, *reports to*, *tagged to*, *untagged*, *unassigned*; `activation.spec.ts` holds every one of them to it.
  */
 export const OWN_COPY = {
-  loading: 'Loading your activation…',
-  loadingRoster: 'Loading your new hires…',
-  loadingHire: 'Loading this activation…',
-  tryAgain: 'Try again',
-  // `/activation` for a reader it is not offered to (T4 AC-7).
-  noneTitle: 'You have no 90-day activation.',
-  noneLine: 'It is for people in their first months as an agent.',
-  graduatedTitle: 'Your 90-day activation is complete.',
-  graduatedLine: (on: string) => `You marked it complete on ${on}.`,
-  expiredTitle: 'Your 90-day activation has ended.',
-  expiredLine: (on: string) => `It ran for six months, until ${on}.`,
-  checklistElsewhere: 'Your checklist stays on your own coaching page.',
-  ownCoaching: 'Your own coaching',
-  // `/new-hires` with nobody on it.
-  rosterEmpty: 'No one you lead is in their 90-day activation right now.',
-  // `/new-hires/[membershipId]` outside the reader's reach.
-  hireNotFoundTitle: 'This person isn’t one of your new hires.',
-  hireNotFoundLine: 'They may have moved to another leader, or the address may be mistyped.',
-  // A hire whose activation is over, on the detail and the coaching tab.
-  closedGraduated: (by: string, on: string) => `Marked complete by ${by} on ${on}.`,
-  closedExpired: (on: string) => `Ended on ${on}, six months after it started.`,
-  // The coaching tab for somebody with none.
-  coacheeNone: (name: string) => `${name} has no 90-day activation.`,
-  meNone: 'You have no 90-day activation.',
-  // The *Auto* badge (T4 AC-4): the registry's sentence, as its tooltip and in its name.
-  autoTip: (completesWhen: string) => `Completes when ${completesWhen}.`,
-  autoName: (completesWhen: string) => `Auto — completes when ${completesWhen}`,
-  /*
-   * The settings row's badge for a link that does not work (P13-T3 AC-1, parity I-80): *whether* the
-   * link completes the item, never when (ADR-0062 §3) — so no "yet", no "until", no phase.
-   */
-  byHand: 'Ticked by hand',
-  byHandTip: 'This link does not complete the item on its own, so the hire or one of their leaders ticks it.',
-  byHandName: 'Ticked by hand — this link does not complete the item on its own, so the hire or one of their leaders ticks it',
-  // The overdue *Day*, after the day, for a screen reader: the red and the bold say it to everybody else.
-  overdue: ', overdue',
-  // Attribution (OD-121, T4 AC-5).
-  you: 'you',
-  tickedBy: (who: string, when: string) => `Ticked by ${who} · ${when}`,
+  loading: EN.loading,
+  loadingRoster: HIRES.loading,
+  loadingHire: HIRES.detail.loading,
+  tryAgain: EN.tryAgain,
+  noneTitle: EN.noneTitle,
+  noneLine: EN.noneLine,
+  graduatedTitle: EN.graduatedTitle,
+  graduateLocked: (n: number) => EN.graduateLocked({ n }),
+  graduatedLine: (on: string) => EN.graduatedLine({ on }),
+  expiredTitle: EN.expiredTitle,
+  expiredLine: (on: string) => EN.expiredLine({ on }),
+  checklistElsewhere: EN.checklistElsewhere,
+  ownCoaching: EN.ownCoaching,
+  rosterEmpty: HIRES.empty,
+  activation3MHeading: HIRES.activation3M,
+  activation3MCounts: (activated: number, notActivated: number, inProgress: number) =>
+    HIRES.counts({ activated, notActivated, inProgress }),
+  /** A share over nobody decided: no figure, never 0% — said in words to a screen reader. */
+  noFigure: '—',
+  noFigureName: HIRES.noFigureName,
+  joinMonth: HIRES.joinMonth,
+  allMonths: HIRES.allMonths,
+  byUnit: HIRES.byUnit,
+  sectionInProgress: HIRES.sections.inProgress,
+  sectionActivated: HIRES.sections.activated,
+  sectionNotActivated: HIRES.sections.notActivated,
+  sectionEmpty: HIRES.sectionEmpty,
+  checklist: HIRES.columns.checklist,
+  noChecklist: HIRES.noChecklist,
+  firstSale: HIRES.columns.firstSale,
+  result: HIRES.columns.result,
+  actions: HIRES.columns.actions,
+  scheduleOneOnOne: HIRES.scheduleOneOnOne,
+  scheduleOneOnOneName: (name: string) => HIRES.scheduleOneOnOneName({ name }),
+  hireNotFoundTitle: HIRES.detail.notFoundTitle,
+  hireNotFoundLine: HIRES.detail.notFoundLine,
+  closedGraduated: (by: string, on: string) => HIRES.detail.closedGraduated({ by, on }),
+  closedExpired: (on: string) => HIRES.detail.closedExpired({ on }),
+  coacheeNone: (name: string) => EN.record.coacheeNone({ name }),
+  meNone: EN.record.meNone,
+  autoTip: (completesWhen: string) => EN.autoTip({ completesWhen }),
+  autoName: (completesWhen: string) => EN.autoName({ completesWhen }),
+  byHand: EN.byHand,
+  byHandTip: EN.byHandTip,
+  byHandName: EN.byHandName,
+  overdue: EN.overdue,
+  dayOf: (day: string, window: number) => HIRES.dayOf({ day, of: window }),
+  you: EN.you,
+  tickedBy: (who: string, when: string) => EN.tickedBy({ who, when }),
   completedFrom: (label: string, who: string | null, when: string) =>
-    who ? `Completed from ${label} by ${who} · ${when}` : `Completed from ${label} · ${when}`,
-  completedAutomatically: (when: string) => `Completed automatically · ${when}`,
-  // The start date's correction (OD-118).
-  correctedBy: (who: string, when: string) => `Start date corrected by ${who} · ${when}`,
-  startDateRange: (from: string) => `Choose a date from ${from} to today.`,
-  startSaved: 'Start date updated.',
-  // The note.
-  noteFrom: (who: string, when: string) => `From ${who} · ${when}`,
-  noteSavedBy: (who: string, when: string) => `Last saved by ${who} · ${when}`,
-  noteEmpty: 'Write a note before saving.',
-  saving: 'Saving…',
-  // The hire's note and date, named for a screen reader by the placeholder and the row they belong to.
-  itemNoteName: (label: string) => `${PROTOTYPE_COPY.notePlaceholder} — ${label}`,
-  itemDateName: (label: string) => `Date — ${label}`,
-  // A row whose write failed: it is put back, and this says why.
-  notSaved: (why: string) => `Not saved. ${why}`,
+    (who ? EN.completedFromBy({ label, who, when }) : EN.completedFrom({ label, when })),
+  completedAutomatically: (when: string) => EN.completedAutomatically({ when }),
+  correctedBy: (who: string, when: string) => EN.correctedBy({ who, when }),
+  startDateRange: (from: string) => HIRES.detail.startDateRange({ from }),
+  startSaved: HIRES.detail.startSaved,
+  noteFrom: (who: string, when: string) => EN.noteFrom({ who, when }),
+  noteSavedBy: (who: string, when: string) => HIRES.note.savedBy({ who, when }),
+  noteEmpty: HIRES.note.empty,
+  saving: EN.saving,
+  itemNoteName: (label: string) => EN.itemNoteName({ label }),
+  itemDateName: (label: string) => EN.itemDateName({ label }),
+  notSaved: (why: string) => EN.notSaved({ why }),
+  completedFromData: (label: string, when: string) => EN.completedFrom({ label, when }),
+  waitingForData: (who: string) => EN.waitingForData({ who }),
+  fromData: (label: string) => EN.fromData({ label }),
+  whichCase: EN.whichCase,
+  newClosing: EN.newClosing,
+  closingName: EN.closingName,
+  closingDate: EN.closingDate,
+  /** A closing to choose: its name and its day, joined — no word of ours. */
+  closingOption: (name: string, when: string) => `${name} · ${when}`,
+  noClosings: EN.noClosings,
+  loadingClosings: EN.loadingClosings,
+  logOneOnOne: EN.logOneOnOne,
+  oneOnOneDate: EN.oneOnOneDate,
+  oneOnOneNote: EN.oneOnOneNote,
+  oneOnOnePlaceholder: EN.oneOnOnePlaceholder,
+  saveRecord: EN.save,
+  cancelRecord: EN.cancel,
+  recordIncomplete: EN.recordIncomplete,
 } as const;
+
+/** The link badge's words, ***Auto*** and ***Ticked by hand***: `lib/activation-badges.ts`' (P18.99-T16), re-exported. */
+export { autoBadge, byHandBadge, type BadgeWords } from './activation-badges';
+
+/** *From {label}*: what a data-backed item completes from, in the office's settings (P18.96-T7 G2), in `language`. */
+export const fromDataWords = (label: string, language: Language = SOURCE_LANGUAGE) => wordsIn(language).fromData({ label });
 
 /*
  * ── Small readings of the shapes ─────────────────────────────────────────────────────────────────
@@ -357,36 +565,101 @@ export const dayShown = (day: number, window: number) => (day > window ? `${wind
 /** The way back to a hire's detail, and the detail's own address. */
 export const newHireHref = (membershipId: string) => `/new-hires/${encodeURIComponent(membershipId)}`;
 
-/** `/coaching/me`'s *Activation* tab (D-coaching-me). */
-export const MY_COACHING_ACTIVATION_HREF = '/coaching/me/activation';
+/** `/coaching/me`'s *Activation* tab: in `lib/hrefs.ts`, so the coaching record's tabs link here without this module. */
+export { MY_COACHING_ACTIVATION_HREF } from './hrefs';
 
-/** The roster card's heading (D-group). */
-export function groupTitle(group: NewHireGroup): string {
-  if (!group.leader || group.kind === 'direct') return PROTOTYPE_COPY.directUnit;
-  return group.kind === 'ab' ? PROTOTYPE_COPY.abUnit(group.leader.name) : PROTOTYPE_COPY.aabUnit(group.leader.name);
+/**
+ * A unit's name on `/new-hires` (D-group): *Direct Unit*, *AAB: {name}* or *AB: {name}* — in the reader's `language`
+ * (P18.98-T4; `useLanguage()`), English when given none.
+ */
+export function groupTitle(group: NewHireUnitRef, language: Language = SOURCE_LANGUAGE): string {
+  const t = hiresIn(language);
+  if (!group.leader || group.kind === 'direct') return t.directUnit;
+  return group.kind === 'ab' ? t.abUnit({ name: group.leader.name }) : t.aabUnit({ name: group.leader.name });
 }
+
+/** A person as these lines name them: by name, or *you* for the reader. */
+const whoOf = (person: ActivationPerson, reader: string | null | undefined, language: Language) =>
+  (person.membershipId === reader ? wordsIn(language).you : person.name);
 
 /**
  * Who ticked a done item and when, or which link completed it (OD-121, T4 AC-5): the attribution
  * marker's words, which are its accessible name too. `null` for an item that is not done.
  *
- * `reader` is the reader's membership, so their own tick reads *you*.
+ * `reader` is the reader's membership, so their own tick reads *you*. **Its words in `language`, its day in
+ * `figures`** (P18.98-T4): its caller passes `useLanguage()` and `useFigureLanguage()`; given neither, English words
+ * and an Indonesian day, as before.
  */
-export function attributionOf(item: ActivationItemProgress, reader: string | null | undefined): string | null {
+export function attributionOf(
+  item: ActivationItemProgress, reader: string | null | undefined, language: Language = SOURCE_LANGUAGE, figures?: Language,
+): string | null {
   if (!item.done) return null;
-  const when = item.doneAt ? formatOfficeDay(item.doneAt) : '';
-  const who = item.doneBy ? (item.doneBy.membershipId === reader ? OWN_COPY.you : item.doneBy.name) : null;
+  const t = wordsIn(language);
+  const when = item.doneAt ? formatOfficeDay(item.doneAt, OFFICE_TIME_ZONE, figures) : '';
+  const who = item.doneBy ? whoOf(item.doneBy, reader, language) : null;
   if (item.source === 'link') {
-    return item.link ? OWN_COPY.completedFrom(item.link.label, who, when) : OWN_COPY.completedAutomatically(when);
+    // A data-backed item names its data, not a person (P18.96-T4 AC-2): *"Completed from Sales data · {date}"*.
+    if (item.link?.form) return t.completedFrom({ label: item.link.label, when });
+    if (!item.link) return t.completedAutomatically({ when });
+    return who ? t.completedFromBy({ label: item.link.label, who, when }) : t.completedFrom({ label: item.link.label, when });
   }
-  return who ? OWN_COPY.tickedBy(who, when) : null;
+  return who ? t.tickedBy({ who, when }) : null;
 }
 
-/** The correction's words, or `null` when nobody moved the date. */
-export function correctionOf(view: ActivationView, reader: string | null | undefined): string | null {
+/**
+ * **A data-backed item** (P18.96-T4): one of the three the office's sales and coaching data complete — *Close first
+ * case independently*, *Reach Independent Agent milestone*, *Weekly 1-on-1 check-in* — which a hand tick opens a form
+ * for. The server says which, through the link's `form`; nothing here knows the codes.
+ */
+export const isDataBacked = (item: ActivationItemProgress) => item.link?.form != null;
+
+/**
+ * Its source line (AC-2, AC-4): where it was completed from, or who ticked it and that it waits; `null` undone. Its
+ * words in `language`, its day in `figures`, as `attributionOf`.
+ */
+export function sourceLineOf(
+  item: ActivationItemProgress, reader: string | null | undefined, language: Language = SOURCE_LANGUAGE, figures?: Language,
+): string | null {
+  if (!item.done || !isDataBacked(item)) return null;
+  if (item.waiting) {
+    const who = item.doneBy ? whoOf(item.doneBy, reader, language) : wordsIn(language).you;
+    return wordsIn(language).waitingForData({ who });
+  }
+  return attributionOf(item, reader, language, figures);
+}
+
+/**
+ * **Where the source line goes** (AC-2): the record it names, on a page its reader may open — the hire's own Leads and
+ * coaching sessions, or a leader's archive of a session with them. `null` for a month of the production file, and for a
+ * lead to a leader, which no page of theirs opens by itself.
+ */
+export function recordHref(
+  item: ActivationItemProgress, audience: 'hire' | 'leader', hireMembershipId: string,
+): string | null {
+  const record = item.record;
+  if (!record || !item.done) return null;
+  if (record.collection === 'coachingSessions') {
+    return audience === 'hire'
+      ? `/coaching/me?session=${encodeURIComponent(record.id)}`
+      : `/coaching/${encodeURIComponent(hireMembershipId)}/archive/${encodeURIComponent(record.id)}`;
+  }
+  if (record.collection === 'leads' && audience === 'hire') return '/leads';
+  return null;
+}
+
+/**
+ * Whether a data-backed item takes a hand write now (P18.96-T4 AC-3): a tick, through its form, or an untick of a tick
+ * saved by hand. Never one its data completed: that is the link's (`409 ACTIVATION_ITEM_AUTOMATIC`).
+ */
+export const takesHandWrite = (item: ActivationItemProgress) => isDataBacked(item) && !(item.done && item.source === 'link');
+
+/** The correction's words, or `null` when nobody moved the date: in `language`, its day in `figures`. */
+export function correctionOf(
+  view: ActivationView, reader: string | null | undefined, language: Language = SOURCE_LANGUAGE, figures?: Language,
+): string | null {
   const c = view.startCorrected;
   if (!c) return null;
-  return OWN_COPY.correctedBy(c.by.membershipId === reader ? OWN_COPY.you : c.by.name, formatOfficeDay(c.at));
+  return wordsIn(language).correctedBy({ who: whoOf(c.by, reader, language), when: formatOfficeDay(c.at, OFFICE_TIME_ZONE, figures) });
 }
 
 /**
@@ -422,5 +695,59 @@ export function startDateAllowed(value: string, today: string): boolean {
   return isWholeDate(value) && value <= today && value >= earliestStart(today);
 }
 
-/** The bound's sentence, in the product's date. */
-export const startDateRangeText = (today: string) => OWN_COPY.startDateRange(formatShortDay(earliestStart(today), { year: true }));
+/** The bound's sentence, in the product's date: its words in `language`, its day in `figures`. */
+export const startDateRangeText = (today: string, language: Language = SOURCE_LANGUAGE, figures?: Language) =>
+  hiresIn(language).detail.startDateRange({ from: formatShortDay(earliestStart(today), { year: true }, figures) });
+
+/*
+ * ── The roster as UI V1 draws it (UI-024; D-24) ──────────────────────────────────────────────────
+ */
+
+/** *Teraktivasi* as soon as there is a first sale, in amber after day 90 (UI-023): the server's status, read. */
+export const hasFirstSale = (row: Pick<NewHireRow, 'status'>) => row.status !== 'not_yet';
+
+/** The filter's three choices: *Semua*, *Teraktivasi*, *Belum* (UI-024). */
+export type NewHireFilter = 'all' | 'activated' | 'not_yet';
+
+export const NEW_HIRE_FILTERS: readonly NewHireFilter[] = ['all', 'activated', 'not_yet'];
+
+/** Whether a row shows under a filter: *Belum* is everybody without a first sale, whatever day they are on. */
+export const inFilter = (row: Pick<NewHireRow, 'status'>, filter: NewHireFilter) =>
+  filter === 'all' || (filter === 'activated' ? hasFirstSale(row) : !hasFirstSale(row));
+
+/** One leader's group on `/new-hires` (UI-024): their unit as the server served it, and its people, newest first. */
+export interface NewHireGroup {
+  key: string;
+  unit: NewHireUnit;
+  rows: NewHireRow[];
+}
+
+/** The unit a row is counted in, as a key: the leader's membership, or *direct* for the reader's own. */
+const unitKey = (unit: NewHireUnitRef) => (unit.kind === 'direct' || !unit.leader ? 'direct' : unit.leader.membershipId);
+
+/**
+ * **The roster as a tree of leaders** (UI-024, D-24): every row of every section under the unit it is counted in — the
+ * reader's *Direct Unit* first, then each unit below in the order the server lists them — **newest joiner on top**.
+ * Nothing is computed but the grouping: each unit's *Aktivasi 3M* is the one the server served (`unit.activation3M`).
+ */
+export function newHireGroups(roster: NewHiresRoster): NewHireGroup[] {
+  const rows = [...roster.sections.inProgress, ...roster.sections.activated, ...roster.sections.notActivated];
+  const newestFirst = (a: NewHireRow, b: NewHireRow) =>
+    (a.joinDate !== b.joinDate ? (a.joinDate < b.joinDate ? 1 : -1) : a.hire.name.localeCompare(b.hire.name));
+  const units = [...roster.units].sort((a, b) => Number(unitKey(a) !== 'direct') - Number(unitKey(b) !== 'direct'));
+  return units.map((unit) => ({
+    key: unitKey(unit),
+    unit,
+    rows: rows.filter((row) => unitKey(row.unit) === unitKey(unit)).sort(newestFirst),
+  }));
+}
+
+/** How many rows each filter shows (UI-024's *Semua 10 · Teraktivasi 8 · Belum 2*). */
+export function newHireCounts(roster: NewHiresRoster): Record<NewHireFilter, number> {
+  const rows = [...roster.sections.inProgress, ...roster.sections.activated, ...roster.sections.notActivated];
+  return {
+    all: rows.length,
+    activated: rows.filter(hasFirstSale).length,
+    not_yet: rows.filter((row) => !hasFirstSale(row)).length,
+  };
+}

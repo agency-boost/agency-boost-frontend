@@ -7,14 +7,19 @@ import { Cell, DataTable, Row } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ConfigBadge } from '@/components/ui/config-badge';
 import {
-  Button, Card, ErrorBanner, Field, FieldRow, ReadOnlyField, Switch, TextInput,
+  Button, Card, ErrorBanner, Field, FieldRow, ReadOnlyField, Select, TextInput,
 } from '@/components/ui/field';
+import { LineIcon } from '@/components/ui/line-icon';
 import { SkeletonTable } from '@/components/ui/skeleton';
 import {
-  createCompany, listCompanies, setCompanyStatus, updateCompany, type Company,
+  createCompany, insurersOf, isTemplateLibrary, listCompanies, setCompanyStatus, updateCompany, type Company,
 } from '@/lib/admin';
+import { companyHref } from '@/lib/template-sections';
 import { toDisplayError } from '@/lib/api-client';
 import { SLUG_MAX, toSlug } from '@/lib/slug';
+import type { MessagesOf } from '@/i18n/catalogue';
+import { useMessages } from '@/i18n/language-provider';
+import { adminTemplateCompaniesMessages } from '@/i18n/messages/admin-template-companies';
 
 /**
  * The server's pattern, letter for letter (`CreateCompanyDto.slug`). It is the shape
@@ -26,17 +31,17 @@ const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 /**
  * The skeleton and the table read the same array, so a column added to one cannot
  * be missing from the other — which is what keeps the placeholder the same width as
- * the thing it stands in for.
+ * the thing it stands in for. Its words are the catalogue's, in the reader's language.
  */
-const COLUMNS = [
-  'Name', 'Slug', 'Currency', 'Time zone', 'Status',
-  // The template belongs to the company (ADR-0018), so it is reached through the company
-  // rather than from a nav item that would have nothing to point at.
-  { label: 'Company template', visuallyHidden: true },
-  { label: 'Actions', visuallyHidden: true },
+const columnsOf = (t: MessagesOf<typeof adminTemplateCompaniesMessages.en>['columns']) => [
+  // A company's name opens its page — its KPM templates and its own settings (ADR-0185 §2).
+  t.name, t.slug, t.currency, t.timeZone, t.status,
+  { label: t.actions, visuallyHidden: true },
 ] as const;
 
 export default function CompaniesPage() {
+  const t = useMessages(adminTemplateCompaniesMessages);
+  const columns = columnsOf(t.columns);
   const [companies, setCompanies] = useState<Company[] | null>(null);
   const [name, setName] = useState('');
   const [slug, setSlug] = useState('');
@@ -47,13 +52,11 @@ export default function CompaniesPage() {
    */
   const [slugTouched, setSlugTouched] = useState(false);
   /**
-   * Whether the new company starts from the platform's presets.
+   * **Start from** (ADR-0164 §4, ADR-0185 §1): a copy of *Template bawaan AgencyBoost*, or *Empty*.
    *
-   * **On by default, because it is right almost every time** — an insurer being onboarded
-   * wants the twelve activity types and the five ratios to edit, not a blank screen. Off is
-   * for a company whose presets are being authored from scratch, and it has to be a choice
-   * made *here*: the eight template kinds are computed on read, so a company that took the
-   * defaults by accident cannot later be told it did not want them.
+   * **The built-in templates by default, because they are right almost every time** — an insurer being
+   * onboarded wants the twelve activity types and the five ratios to edit, not a blank screen. *Empty* is for
+   * a company whose presets are being authored from scratch, and it has to be a choice made *here*.
    */
   const [withDefaults, setWithDefaults] = useState(true);
   const [error, setError] = useState<{ code: string; message: string; requestId: string } | null>(null);
@@ -67,6 +70,12 @@ export default function CompaniesPage() {
   }, []);
 
   const badSlug = slug.length > 0 && !SLUG.test(slug);
+  /**
+   * **The platform's built-in templates** (ADR-0164, ADR-0185 §1): the library company, which a new company copies —
+   * one card above the insurers, never a row among them. Absent where no migration has made it.
+   */
+  const library = companies?.find(isTemplateLibrary) ?? null;
+  const insurers = companies ? insurersOf(companies) : null;
   // A slug already in use comes back as its own code, so it belongs on the field that
   // caused it rather than only in the banner above the form.
   const takenSlug = error?.code === 'COMPANY_SLUG_TAKEN' ? error.message : undefined;
@@ -116,29 +125,41 @@ export default function CompaniesPage() {
   const draftSlugBad = draft.slug.length > 0 && !SLUG.test(draft.slug);
 
   return (
-    <Page
-      title="Companies"
-      subtitle="Each company has its own role ladder, product catalog, and Company template. A KPM belongs to exactly one, and inherits its currency, locale and time zone."
-    >
-      <div className="grid gap-4 lg:grid-cols-[1fr_20rem]">
+    // The nav item's words (P18.95-T9 AC-2; UI-027): *Manage companies* (`Superadmin.html:177`).
+    <Page title={t.title} subtitle={t.subtitle}>
+      {/* `minmax(0, 1fr)`, not `1fr`: a column is otherwise at least as wide as its table, which pushed the page sideways
+          at every size; the table scrolls in its own frame instead (P18.98-T4 AC-6, the walk of 2026-10-29). */}
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
         <div>
-          {companies === null && (
-            <SkeletonTable caption="Companies" columns={COLUMNS} rows={4} />
+          {library && (
+            <Link
+              href={companyHref(library._id)}
+              className="mb-4 flex items-center gap-4 rounded-lg border border-card-edge bg-card px-5 py-4 hover:border-navy/30"
+            >
+              <span className="min-w-0 flex-1">
+                <span className="block font-display text-lg font-bold text-navy">{t.library.name}</span>
+                <span className="block text-md text-muted">{t.library.lead}</span>
+              </span>
+              <LineIcon name="chevronRight" className="h-5 w-5 shrink-0 text-navy" />
+            </Link>
           )}
-          {companies?.length === 0 && (
-            <div className="rounded-lg border border-hairline bg-card">
-              <EmptyState title="No companies yet. Add one to start provisioning offices." />
+          {insurers === null && (
+            <SkeletonTable caption={t.caption} columns={columns} rows={4} />
+          )}
+          {insurers?.length === 0 && (
+            <div className="rounded-lg border border-card-edge bg-card">
+              <EmptyState title={t.empty} />
             </div>
           )}
-          {companies && companies.length > 0 && (
-            <DataTable caption="Companies" columns={COLUMNS}>
-              {companies.map((c) => (editing === c._id ? (
+          {insurers && insurers.length > 0 && (
+            <DataTable caption={t.caption} columns={columns}>
+              {insurers.map((c) => (editing === c._id ? (
                 <Row key={c._id}>
                   {/* The whole row, because a rename is two fields and a name field alone
                       would leave the slug reachable only by creating a second company. */}
-                  <Cell colSpan={COLUMNS.length}>
+                  <Cell colSpan={columns.length}>
                     <FieldRow>
-                      <Field label="Name" htmlFor={`name-${c._id}`}>
+                      <Field label={t.name} htmlFor={`name-${c._id}`}>
                         <TextInput
                           id={`name-${c._id}`}
                           value={draft.name}
@@ -147,12 +168,10 @@ export default function CompaniesPage() {
                         />
                       </Field>
                       <Field
-                        label="Slug"
+                        label={t.slug}
                         htmlFor={`slug-${c._id}`}
-                        hint="Nothing stores it — every office points at the company by id."
-                        error={draftSlugBad
-                          ? 'Lower-case letters and digits, separated by single hyphens.'
-                          : takenSlug}
+                        hint={t.slugEditHint}
+                        error={draftSlugBad ? t.slugShape : takenSlug}
                       >
                         <TextInput
                           id={`slug-${c._id}`}
@@ -169,16 +188,21 @@ export default function CompaniesPage() {
                             name: draft.name.trim(), slug: draft.slug.trim(),
                           }))}
                         >
-                          Save
+                          {t.save}
                         </Button>
-                        <Button variant="secondary" onClick={() => setEditing(null)}>Cancel</Button>
+                        <Button variant="secondary" onClick={() => setEditing(null)}>{t.cancel}</Button>
                       </FieldRow.Actions>
                     </FieldRow>
                   </Cell>
                 </Row>
               ) : (
                 <Row key={c._id}>
-                  <Cell className="font-semibold">{c.name}</Cell>
+                  <Cell className="font-semibold">
+                    <Link href={companyHref(c._id)} className="inline-flex items-center gap-1 text-navy underline">
+                      {c.name}
+                      <LineIcon name="chevronRight" className="h-4 w-4" />
+                    </Link>
+                  </Cell>
                   <Cell>
                     <code className="text-sm">{c.slug}</code>
                   </Cell>
@@ -187,23 +211,15 @@ export default function CompaniesPage() {
                   <Cell>
                     <span className="flex flex-wrap items-center gap-2">
                       <ConfigBadge tone={c.status === 'active' ? 'won' : 'open'}>
-                        {c.status === 'active' ? 'Active' : 'Suspended'}
+                        {c.status === 'active' ? t.active : t.suspended}
                       </ConfigBadge>
                       {/* Said once, on the row it is true of. A company that took nothing
-                          shows nine empty template tabs, and this is the only thing that
+                          shows every template section empty, and this is the only thing that
                           explains why. */}
                       {!c.usesPlatformDefaults && (
-                        <ConfigBadge tone="open">Started blank</ConfigBadge>
+                        <ConfigBadge tone="open">{t.startedBlank}</ConfigBadge>
                       )}
                     </span>
-                  </Cell>
-                  <Cell>
-                    <Link
-                      href={`/admin/companies/${c._id}/template`}
-                      className="text-md font-semibold text-navy underline"
-                    >
-                      Company template
-                    </Link>
                   </Cell>
                   <Cell>
                     <span className="flex flex-wrap items-center gap-2">
@@ -215,16 +231,16 @@ export default function CompaniesPage() {
                           setDraft({ name: c.name, slug: c.slug });
                         }}
                       >
-                        Edit
+                        {t.edit}
                       </Button>
                       {c.status === 'active' ? (
                         <Button
                           variant="inlineDanger"
                           disabled={busy}
-                          title="No new person and no new office attaches to it. Its existing offices carry on."
+                          title={t.suspendTip}
                           onClick={() => void run(() => setCompanyStatus(c._id, 'suspended'))}
                         >
-                          Suspend
+                          {t.suspend}
                         </Button>
                       ) : (
                         <Button
@@ -232,7 +248,7 @@ export default function CompaniesPage() {
                           disabled={busy}
                           onClick={() => void run(() => setCompanyStatus(c._id, 'active'))}
                         >
-                          Reactivate
+                          {t.reactivate}
                         </Button>
                       )}
                     </span>
@@ -244,12 +260,12 @@ export default function CompaniesPage() {
         </div>
 
         <Card>
-          <h2 className="font-display text-lg font-bold text-navy">Add a company</h2>
+          <h2 className="font-display text-lg font-bold text-navy">{t.addTitle}</h2>
           <form onSubmit={submit} className="mt-3 flex flex-col gap-4" noValidate>
             {/* A taken slug is explained on the Slug field, so the banner would announce
                 the same failure twice — a screen reader reads both. */}
             {error && !takenSlug && <ErrorBanner {...error} />}
-            <Field label="Name" htmlFor="name">
+            <Field label={t.name} htmlFor="name">
               <TextInput
                 id="name"
                 required
@@ -260,10 +276,10 @@ export default function CompaniesPage() {
               />
             </Field>
             <Field
-              label="Slug"
+              label={t.slug}
               htmlFor="slug"
-              hint="Filled in from the name, and yours to change. Unique, and not renamed later."
-              error={badSlug ? 'Lower-case letters and digits, separated by single hyphens.' : takenSlug}
+              hint={t.slugAddHint}
+              error={badSlug ? t.slugShape : takenSlug}
             >
               <TextInput
                 id="slug"
@@ -281,32 +297,32 @@ export default function CompaniesPage() {
                 single-currency and single-timezone (ADR-0016). Shown rather than offered,
                 because a form field nobody can vary is worse than a stated fact. */}
             {/*
-              * **On by default, and a choice rather than a fact.** The eight Company template
-              * kinds are computed when a tab is opened, not written at creation — so a company
-              * that did not want the platform's presets has to say so here, or it will find the
-              * twelve activity types waiting for it with no way to decline them.
+              * **The built-in templates by default, and a choice rather than a fact** (ADR-0185 §1): named the
+              * same whether the library exists or the API falls back to the code's own starting point — the
+              * same settings either way, and *AgencyBoost defaults* is no longer a name the console says.
               */}
-            <Switch
-              id="with-defaults"
-              label="Start from the AgencyBoost defaults"
-              checked={withDefaults}
-              disabled={busy}
-              describedBy="with-defaults-hint"
-              onChange={setWithDefaults}
-            />
-            <p id="with-defaults-hint" className="-mt-2 text-sm text-muted">
-              On: the activity taxonomy, ratios, lead ladders, training tree, activation
-              checklist, capability ladder, event types, carrier rules and product catalog
-              arrive ready to edit. Off: every one of them starts empty. The role ladder is
-              seeded either way — an office whose company has none is one nobody can join.
-            </p>
+            <Field
+              label={t.startFrom}
+              htmlFor="start-from"
+              hint={withDefaults ? t.fromLibraryHint : t.emptyHint}
+            >
+              <Select
+                id="start-from"
+                value={withDefaults ? 'template' : 'empty'}
+                disabled={busy}
+                onChange={(e) => setWithDefaults(e.target.value === 'template')}
+              >
+                <option value="template">{t.fromLibrary}</option>
+                <option value="empty">{t.startEmpty}</option>
+              </Select>
+            </Field>
             <ReadOnlyField
-              label="Offices inherit"
+              label={t.inherit}
               value="IDR · Asia/Jakarta · id-ID"
-              reason="Currency, time zone and locale are the same for every company in v1, so a new office takes them without being asked."
+              reason={t.inheritReason}
             />
             <Button type="submit" disabled={busy || badSlug || !name.trim() || !slug.trim()}>
-              {busy ? 'Adding…' : 'Add company'}
+              {busy ? t.adding : t.add}
             </Button>
           </form>
         </Card>

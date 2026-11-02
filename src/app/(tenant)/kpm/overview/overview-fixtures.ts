@@ -13,7 +13,12 @@ import type {
 export const rp = (millions: number) => Math.round(millions * 1_000_000 * 100);
 
 const leader = (membershipId: string, name: string, coached: number, teamSize: number, pct: number | null): LeaderboardRow => ({
-  membershipId, name, coached, teamSize, pct,
+  membershipId, name, coached, teamSize, pct, leads: true,
+});
+
+/** An AB who leads nobody, as the server lists them — last, no team, no rate (P18.97-T3 AC-5, UI-017). */
+export const noTeam = (membershipId: string, name: string): LeaderboardRow => ({
+  membershipId, name, coached: 0, teamSize: 0, pct: null, leads: false,
 });
 
 /** Eight ABs with a downline, lowest first, as the server orders them (D-coverage). */

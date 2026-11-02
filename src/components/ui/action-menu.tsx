@@ -17,6 +17,12 @@ export interface ActionMenuItem {
   disabled?: boolean;
   /** Why it is not live — beneath it on the screen, and its accessible description. */
   reason?: string;
+  /**
+   * What it does, where its label does not say all of it: its tooltip, and its accessible description while it is
+   * live. The tooltip the inline button it stands in for carried — *Archive the section*'s *"Archives the section and
+   * everything in it."*, behind a section's ⋮ below 1024px (P18.97-T6 AC-3).
+   */
+  hint?: string;
   onSelect: () => void;
 }
 
@@ -204,6 +210,7 @@ export function ActionMenu({
                 // Named by its label alone; the reason is its description, not part of its name.
                 aria-labelledby={`${itemId}-label`}
                 aria-describedby={item.disabled && item.reason ? `${itemId}-reason` : undefined}
+                title={item.hint}
                 onClick={() => choose(item)}
                 className={cn(
                   'flex w-full items-start gap-2.5 px-3 py-2 text-left text-md',

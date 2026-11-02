@@ -1,4 +1,5 @@
 import { makeMe } from './harness';
+import { percentOf } from '@/lib/format';
 import type {
   AabUnitRow, AgencyRow, AnalyticsHead, AnalyticsPeriod, KpmAnalyticsView, Moc, UnitFigures,
 } from '@/lib/kpm-analytics';
@@ -19,15 +20,21 @@ const head = (membershipId: string, name: string, isReader = false, leads = true
 type Figures = Omit<UnitFigures, 'head'>;
 
 function figures(over: Partial<Figures> = {}): Figures {
-  return {
+  const row = {
     apeMonth: { achievedMinor: rp(50), targetMinor: rp(100), pct: 50 },
     apeAnnual: { achievedMinor: rp(600), targetMinor: rp(1200), pct: 50 },
     coached7d: { count: 2, of: 4, pct: 50 },
-    activeAgents: 3,
+    activeAgents: 3 as number | null,
     leads: { sales: 4, salesPotential: 2, recruit: 1, recruitPotential: 1 },
     manpower: { aab: 0, agents: 3, total: 4 },
     ...over,
   };
+  // The share's base (OD-235): this month's manpower, unless a case says otherwise — a past month's members.
+  const activeOf = over.activeOf ?? row.manpower.total;
+  // The share the server serves beside the count (P18.97-T3 AC-10): its `rateOver` over that base.
+  const activePct = 'activePct' in over ? (over.activePct as number | null)
+    : row.activeAgents === null ? null : percentOf(row.activeAgents, activeOf);
+  return { ...row, activePct, activeOf };
 }
 
 export const MOC_MET: Moc = {
@@ -172,8 +179,8 @@ export function analyticsView(period: AnalyticsPeriod = 'this_month', over: Part
     thresholds: { statusSplitPct: 70 },
     // What the server composes from the seeded MOC rules (the prototype's numbers, `KPM_Owner.html:1248`).
     mocRulesText: [
-      'AAB: Net APE ≥ Rp200M AND Monthly2 AA ≥ 2 AND Rolling Persistency DU ≥ 75%.',
-      'AB: (Net APE ≥ Rp600M AND Monthly2 AA DU ≥ 4 / DG ≥ 6 AND Rolling Persistency DU/DG ≥ 75%) OR Direct AB (AB on AB) ≥ 5.',
+      'AAB: Net APE ≥ Rp 200 jt AND Monthly2 AA ≥ 2 AND Rolling Persistency DU ≥ 75%.',
+      'AB: (Net APE ≥ Rp 600 jt AND Monthly2 AA DU ≥ 4 / DG ≥ 6 AND Rolling Persistency DU/DG ≥ 75%) OR Direct AB (AB on AB) ≥ 5.',
     ].join('\n'),
     agencies: agencies(period),
     total: {
@@ -184,6 +191,9 @@ export function analyticsView(period: AnalyticsPeriod = 'this_month', over: Part
       apeAnnual: { achievedMinor: rp(5780), targetMinor: rp(5200), pct: 111 },
       coached7d: { count: 31, of: 68, pct: 46 },
       activeAgents: period === 'this_month' ? 54 : 47,
+      // 54 of 68 and 47 of 68, as the server serves them (P18.97-T3 AC-10), over the 68 it serves as their base (OD-235).
+      activePct: period === 'this_month' ? 79 : 69,
+      activeOf: 68,
       leads: { sales: 27, salesPotential: 15, recruit: 11, recruitPotential: 8 },
       manpower: { aab: 2, agents: 62, total: 68 },
       abCount: 4,
@@ -211,6 +221,8 @@ export const NO_AB = analyticsView('this_month', {
     apeAnnual: { achievedMinor: null, targetMinor: null, pct: null },
     coached7d: { count: 0, of: 0, pct: null },
     activeAgents: null,
+    activePct: null,
+    activeOf: 0,
     leads: { sales: 0, salesPotential: 0, recruit: 0, recruitPotential: 0 },
     manpower: { aab: 0, agents: 0, total: 0 },
     abCount: 0,
@@ -240,6 +252,23 @@ export const ADMIN_ME = makeMe({
     isKpmOwner: false, isKpmAdmin: true, directCount: 0,
   },
   permissions: ['member:read_profile', 'kpm_analytics:read'],
+});
+
+/**
+ * **A Core Leader** (ADR-0159, P18.8-T5): Hendra Wibowo, an AB tagged *Core Leader*, holding the analytics' grant as
+ * every AB does — the session's `isCoreLeader` is what lets him read it, in his own field shell.
+ */
+export const CORE_LEADER_ME = makeMe({
+  user: {
+    id: 'u-hendra', email: 'hendra@kpm0417.test', fullName: 'Hendra Wibowo', preferredName: null,
+    pronoun: 'he', initials: 'HW', platformRole: 'none',
+  },
+  membership: {
+    membershipId: 'mem-hendra', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab', status: 'active',
+    isKpmOwner: false, isKpmAdmin: false, directCount: 4, isCoreLeader: true,
+    groups: ['Top Producers 2026'], office: { code: '0417', branch: 'Cempaka Putih' },
+  },
+  permissions: ['member:read_profile', 'kpm_analytics:read', 'org_tree:read', 'leader_meeting:read'],
 });
 
 /** The office shell's own reads, answered so nothing reaches a network. */

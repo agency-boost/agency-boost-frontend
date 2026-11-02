@@ -1,9 +1,19 @@
-import { screen, within } from '@testing-library/react';
+import { fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import AgentLayout from '@/app/(agent)/layout';
 import { makeMe, renderInLayout, stubFetch } from '@test/harness';
+import { dayInZone, OFFICE_TIME_ZONE } from '@/lib/format';
 import PendingPage from './page';
+
+/** The office's today, the join date approving defaults to (P18.96-T3 AC-5). */
+const TODAY = dayInZone(OFFICE_TIME_ZONE, new Date());
+
+/** *Approve* opens the row's join date, and *Approve* again sends it (P18.96-T3 AC-5, ADR-0170 §5). */
+async function approve() {
+  await userEvent.click(await screen.findByRole('button', { name: 'Approve' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Approve' }));
+}
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
@@ -132,10 +142,48 @@ describe('the approval inbox (P3-T5)', () => {
     });
     renderInLayout(AgentLayout, <PendingPage />, { me: AB });
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Approve' }));
+    await approve();
 
     const post = calls.find((c) => c.url.includes('/approve'))!;
-    expect(JSON.parse(post.init.body as string)).toEqual({});
+    expect(JSON.parse(post.init.body as string)).toEqual({ joinDate: TODAY });
+  });
+
+  it('P18.96-T3 AC-5 approving asks for the join date, today by default, and sends the one chosen; a day after today holds it', async () => {
+    const { calls } = stubFetch({
+      '/join/requests/routing': { body: [] },
+      '/join/requests/req-1/approve': { body: [] },
+      '/join/requests': { body: [request()] },
+    });
+    renderInLayout(AgentLayout, <PendingPage />, { me: AB });
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Approve' }));
+    // Nothing is sent by the first press: it asks when they joined.
+    expect(calls.some((c) => c.url.includes('/approve'))).toBe(false);
+    const field = screen.getByLabelText('Join date');
+    expect(field).toHaveValue(TODAY);
+    expect(field).toHaveAttribute('max', TODAY);
+
+    fireEvent.change(field, { target: { value: '2999-01-01' } });
+    expect(await screen.findByText(/The join date cannot be after today/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Approve' })).toBeDisabled();
+
+    fireEvent.change(field, { target: { value: '2026-01-05' } });
+    await userEvent.click(screen.getByRole('button', { name: 'Approve' }));
+    const post = calls.find((c) => c.url.includes('/approve'))!;
+    expect(JSON.parse(post.init.body as string)).toEqual({ joinDate: '2026-01-05' });
+  });
+
+  it('P18.96-T3 AC-5 backs out of approving with Cancel, sending nothing', async () => {
+    const { calls } = stubFetch({
+      '/join/requests/routing': { body: [] },
+      '/join/requests': { body: [request()] },
+    });
+    renderInLayout(AgentLayout, <PendingPage />, { me: AB });
+    await userEvent.click(await screen.findByRole('button', { name: 'Approve' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByLabelText('Join date')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Decline' })).toBeInTheDocument();
+    expect(calls.some((c) => c.url.includes('/approve'))).toBe(false);
   });
 
   it('AC-2: approves into the unit that was chosen', async () => {
@@ -147,10 +195,10 @@ describe('the approval inbox (P3-T5)', () => {
     renderInLayout(AgentLayout, <PendingPage />, { me: AB });
 
     await userEvent.selectOptions(await screen.findByLabelText('Add to'), 'mem-aab');
-    await userEvent.click(screen.getByRole('button', { name: 'Approve' }));
+    await approve();
 
     const post = calls.find((c) => c.url.includes('/approve'))!;
-    expect(JSON.parse(post.init.body as string)).toEqual({ routeToMembershipId: 'mem-aab' });
+    expect(JSON.parse(post.init.body as string)).toEqual({ routeToMembershipId: 'mem-aab', joinDate: TODAY });
   });
 
   it('takes the inbox the server returned, not its own guess at it', async () => {
@@ -163,7 +211,7 @@ describe('the approval inbox (P3-T5)', () => {
     });
     renderInLayout(AgentLayout, <PendingPage />, { me: AB });
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Approve' }));
+    await approve();
     expect(await screen.findByText('No pending requests right now.')).toBeInTheDocument();
   });
 
@@ -198,13 +246,39 @@ describe('the approval inbox (P3-T5)', () => {
     expect(screen.getByRole('button', { name: 'Approve' })).toBeInTheDocument();
   });
 
-  it('says declining is not removal, so nobody thinks they have thrown somebody out', async () => {
+  it('UI-089 says what approving does, in the client’s words from 768px (was grey text row 7)', async () => {
     stubFetch({
       '/join/requests/routing': { body: [] },
       '/join/requests': { body: [] },
     });
     renderInLayout(AgentLayout, <PendingPage />, { me: AB });
-    expect(await screen.findByText(/free to ask somebody else/)).toBeInTheDocument();
+    const line = await screen.findByText('Approve to add them to your unit.');
+    // UI-089 (Appendix A): from 768px only.
+    expect(line.className.split(/\s+/).filter((c) => /hidden/.test(c))).toEqual(['max-md:hidden']);
+    expect(screen.queryByText(/These are people who found you/)).not.toBeInTheDocument();
+  });
+
+  it('UI-089: nothing waiting is one small card with Boost thinking, the inbox’s line, and no second heading', async () => {
+    stubFetch({ '/join/requests/routing': { body: [] }, '/join/requests': { body: [] } });
+    renderInLayout(AgentLayout, <PendingPage />, { me: AB });
+
+    const empty = await screen.findByTestId('pending-empty');
+    expect(empty.querySelector('img[data-boost="thinking"]')).toHaveAttribute('width', '72');
+    expect(empty).toHaveTextContent('No pending requests right now.');
+    expect(screen.getAllByRole('heading', { level: 2, name: 'Incoming requests' })).toHaveLength(1);
+    // The card's padding is 16px, so Boost (75px tall) and the card come in under 120px.
+    expect(empty.closest('.rounded-lg')!.className).toContain('p-4');
+  });
+
+  it('UI-085: the tab shows the inbox’s count when something waits, and nothing at 0', async () => {
+    const { calls } = stubFetch({ '/join/requests/routing': { body: [] }, '/join/requests': { body: [request(), request({ requestId: 'req-2', membershipId: 'mem-p2' })] } });
+    renderInLayout(AgentLayout, <PendingPage />, { me: AB });
+
+    const tab = await screen.findByRole('link', { name: /Pending Requests/ });
+    await vi.waitFor(() => expect(tab.querySelector('[data-count]')).toHaveTextContent('2'));
+    expect(tab.querySelector('[data-count]')!.className).toContain('bg-amber');
+    // Here the inbox is read once, and the tab row asks nothing of its own.
+    expect(calls.filter((c) => c.url.endsWith('/join/requests/count'))).toHaveLength(0);
   });
 
   it('AC-4: reloads when somebody else decided first, rather than leaving a dead row', async () => {
@@ -224,7 +298,7 @@ describe('the approval inbox (P3-T5)', () => {
     });
     renderInLayout(AgentLayout, <PendingPage />, { me: AB });
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Approve' }));
+    await approve();
 
     expect(await screen.findByRole('alert')).toHaveTextContent('already approved');
     expect(calls.filter((c) => c.url.endsWith('/join/requests')).length).toBeGreaterThan(1);
@@ -248,7 +322,7 @@ describe('the approval inbox (P3-T5)', () => {
     });
     renderInLayout(AgentLayout, <PendingPage />, { me: AB });
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Approve' }));
+    await approve();
 
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent(
@@ -265,5 +339,57 @@ describe('the approval inbox (P3-T5)', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Not available to you');
     // The gate's code is on the refusal as data, and never in its words (P11-T6).
     expect(screen.getByRole('alert')).toHaveAttribute('data-permission', 'leader_request:read_inbox');
+  });
+
+  /*
+   * P18.8-T2 AC-6 (ADR-0157): an approval past the limit may wait for AgencyBoost — *Ask AgencyBoost to approve*
+   * asks to let the joiner in, and the row then says it is waiting, with *Cancel request*, in place of Approve.
+   */
+  describe('P18.8-T2 — a leader past the limit waits for AgencyBoost', () => {
+    const ASKER = makeMe({
+      membership: AB.membership,
+      permissions: [...AB.permissions, 'leader_limit_request:create', 'leader_limit_request:read'],
+    });
+    const ask = (over: Record<string, unknown> = {}) => ({
+      requestId: 'llr-1', kpmId: 'kpm-1', kpmCode: '0603', kpmBranchName: 'Tangerang Branch',
+      subjectMembershipId: 'mem-joiner', subjectName: 'Putri Anggraini', subjectAgentCode: '88009', action: 'activate',
+      fromOrgLevelCode: 'AAB', toOrgLevelCode: null, reason: null, requestedByMembershipId: 'mem-ab',
+      requestedByName: 'Agus Prasetyo', status: 'pending', requestedAt: '2026-10-25T00:00:00.000Z', decidedAt: null,
+      declineReason: null, maxLeaders: 10, leadersUsed: 10, ...over,
+    });
+
+    it('asks to let the joiner in, and the row then waits with Cancel request', async () => {
+      const { calls } = stubFetch({
+        '/join/requests/routing': { body: [] },
+        '/join/requests/req-1/approve': {
+          status: 409,
+          body: {
+            error: {
+              code: 'LEADER_LIMIT_REACHED', message: 'x', requestId: 'r-2',
+              details: { maxLeaders: 10, leadersUsed: 10, canRequest: true },
+            },
+          },
+        },
+        '/join/requests': { body: [request({ role: 'aab' })] },
+        'POST /members/mem-joiner/leader-limit-request': { status: 201, body: ask() },
+        '/members/leader-limit-requests': [{ body: [] }, { body: [] }, { body: [ask()] }],
+        'DELETE /members/leader-limit-requests/llr-1': { body: [] },
+      });
+      renderInLayout(AgentLayout, <PendingPage />, { me: ASKER });
+
+      await approve();
+      const alert = await screen.findByRole('alert');
+      await userEvent.click(within(alert).getByRole('button', { name: 'Ask AgencyBoost to approve' }));
+
+      const posted = calls.find((c) => c.url.includes('/leader-limit-request') && c.init.method === 'POST');
+      expect(posted?.url).toContain('/members/mem-joiner/leader-limit-request');
+      expect(JSON.parse(String(posted?.init.body))).toEqual({ action: 'activate' });
+
+      expect(await screen.findByText("Waiting for AgencyBoost's approval")).toBeInTheDocument();
+      expect(screen.getByText('Let in as AAB')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument();
+      await userEvent.click(screen.getByRole('button', { name: 'Cancel request' }));
+      expect(calls.some((c) => c.init.method === 'DELETE')).toBe(true);
+    });
   });
 });

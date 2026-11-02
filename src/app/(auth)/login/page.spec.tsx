@@ -1,16 +1,19 @@
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { makeMe, renderWithSession, stubFetch } from '@test/harness';
 import { ApiConfigError } from '@/lib/api';
 import { ApiRequestError } from '@/lib/api-client';
 import type { Me } from '@/lib/session';
+import { AUTH_PAGE } from '@/components/auth-page';
+import { SIGN_IN_PAGE } from '@/components/sign-in-welcome';
 import LoginPage from './page';
 
 const push = vi.fn();
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push, replace: vi.fn() }),
   usePathname: () => '/login',
+  useSearchParams: () => new URLSearchParams(window.location.search),
 }));
 
 /** A member of the office, as `signIn` resolves to them: active, with the rung and the reports given. */
@@ -46,6 +49,40 @@ async function signInFrom(search: string, who: Me | null): Promise<unknown> {
 }
 
 describe('login', () => {
+  it('UI-102 is a welcome screen: Boost pointing and the three icon cards above the name, its one line, then the form', () => {
+    renderWithSession(<LoginPage />);
+    const main = screen.getByRole('main');
+    // Centred from 768px as registration's column is; on a phone it starts near the top, the welcome filling the space
+    // P18.95-T7 AC-3's 16% left above the title (reverses that row, UI-102).
+    expect(main.className).toBe(SIGN_IN_PAGE);
+    expect(main.className).not.toBe(AUTH_PAGE);
+    const welcome = main.querySelector('[data-sign-in-welcome]')!;
+    expect(main.firstElementChild).toBe(welcome);
+    expect(welcome).toHaveAttribute('aria-hidden', 'true');
+    expect(welcome.querySelector('[data-boost="pointing"]')).toHaveAttribute('width', '200');
+    expect([...welcome.querySelectorAll('[data-sign-in-card]')].map((c) => c.getAttribute('data-sign-in-card')))
+      .toEqual(['chart', 'calendar', 'checklist']);
+    // Each card holds its 3D icon (UI-102), not a line icon.
+    expect([...welcome.querySelectorAll('[data-sign-in-card] [data-icon-3d]')].map((i) => i.getAttribute('data-icon-3d')))
+      .toEqual(['chart', 'calendar', 'checklist']);
+    expect(screen.getByRole('heading', { level: 1, name: 'AgencyBoost' })).toBeInTheDocument();
+    // Not a form card: the form stands on the page.
+    expect(screen.getByRole('button', { name: 'Sign in' }).closest('[data-card]')).toBeNull();
+  });
+
+  it('UI-102 the sign-in button is one big pill, at least 52px, the full width of the column', () => {
+    renderWithSession(<LoginPage />);
+    const button = screen.getByRole('button', { name: 'Sign in' });
+    expect(button).toHaveClass('h-[3.25rem]', 'w-full', 'rounded-pill');
+  });
+
+  it('UI-102 keeps today’s method and words: email, password, the two links', () => {
+    renderWithSession(<LoginPage />);
+    expect(screen.getByText('Sign in to continue.')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Forgot your password?' })).toHaveAttribute('href', '/forgot-password');
+    expect(screen.getByRole('link', { name: 'Create an account' })).toHaveAttribute('href', '/register');
+  });
+
   it('labels both fields and marks them for the password manager', () => {
     renderWithSession(<LoginPage />);
     expect(screen.getByLabelText('Email')).toHaveAttribute('autocomplete', 'email');
@@ -60,7 +97,7 @@ describe('login', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Sign in' }));
 
     expect(session.signIn).toHaveBeenCalledWith('rina@kpm0417.test', 'demo password rina');
-    expect(push).toHaveBeenCalledWith('/activity/log');
+    expect(push).toHaveBeenCalledWith('/home');
   });
 
   it('P18.1-T3 AC-2 returns to the page that sent the reader to sign in, such as a shared meeting', async () => {
@@ -79,12 +116,12 @@ describe('login', () => {
       expect(await signInFrom(COMPLIANCE, OWNER)).toBe('/kpm/analytics/compliance?category=training');
     });
 
-    it('the reported case: an Agent who signs in after them lands on their own day, not on the Owner’s page', async () => {
-      expect(await signInFrom(COMPLIANCE, AGENT)).toBe('/activity/log');
+    it('the reported case: an Agent who signs in after them lands on Home (UI-100), not on the Owner’s page', async () => {
+      expect(await signInFrom(COMPLIANCE, AGENT)).toBe('/home');
     });
 
-    it('a leader who signs in after them lands on their unit’s dashboard', async () => {
-      expect(await signInFrom(COMPLIANCE, LEADER)).toBe('/unit/dashboard');
+    it('a leader who signs in after them lands on Home (UI-100)', async () => {
+      expect(await signInFrom(COMPLIANCE, LEADER)).toBe('/home');
     });
 
     it('an address that is no page of the app lands on their own page rather than a 404', async () => {
@@ -92,7 +129,7 @@ describe('login', () => {
     });
 
     it('an unsafe next still lands on their own page: a host written as a path', async () => {
-      expect(await signInFrom('?next=%2F%2Fevil.test%2Fx', AGENT)).toBe('/activity/log');
+      expect(await signInFrom('?next=%2F%2Fevil.test%2Fx', AGENT)).toBe('/home');
     });
 
     it('an unsafe next still lands on their own page: another origin, whatever path it ends in', async () => {
@@ -101,6 +138,52 @@ describe('login', () => {
 
     it('no next lands on their own page', async () => {
       expect(await signInFrom('', OWNER)).toBe('/kpm/overview');
+    });
+  });
+
+  /*
+   * ADR-0168 §1 (OD-208; the client's UI review, UI-006): **a session that ended says so.** A page that found the
+   * reader's session gone sends them here with `reason=expired`; everybody else — a link opened signed out, a
+   * deliberate sign-out — reads what the page always said.
+   */
+  describe('what the page says (ADR-0168 §1)', () => {
+    const at = (search: string) => {
+      window.history.pushState({}, '', `/login${search}`);
+      onTestFinished(() => window.history.pushState({}, '', '/'));
+      renderWithSession(<LoginPage />, { me: null });
+    };
+
+    it('reads "Your session ended. Sign in again." when the session ended', () => {
+      at('?next=%2Fprofile&reason=expired');
+      expect(screen.getByText('Your session ended. Sign in again.')).toBeInTheDocument();
+      expect(screen.queryByText('Sign in to continue.')).not.toBeInTheDocument();
+    });
+
+    it.each([
+      ['no reason', '?next=%2Fprofile'],
+      ['no query at all', ''],
+      ['another reason', '?next=%2Fprofile&reason=signed_out'],
+      ['the word in another case', '?reason=EXPIRED'],
+    ])('reads "Sign in to continue." for %s', (_what, search) => {
+      at(search);
+      expect(screen.getByText('Sign in to continue.')).toBeInTheDocument();
+      expect(screen.queryByText('Your session ended. Sign in again.')).not.toBeInTheDocument();
+    });
+
+    /*
+     * **After an expired session, signing in starts on the landing** (the product owner's staging review, 2026-10-31:
+     * *"Tiap login masuknya ke home jangan activity/unit"*): the page the session ended on is not where they go back to.
+     */
+    it('lands on Home, not on the Goals page the session ended on', async () => {
+      expect(await signInFrom('?next=%2Fgoals&reason=expired', AGENT)).toBe('/home');
+    });
+
+    it('lands on Home even from a page they can open: the reason decides, not the page', async () => {
+      expect(await signInFrom('?next=%2Fleader-meetings%2Fshared%2Fabc&reason=expired', AGENT)).toBe('/home');
+    });
+
+    it('lands an Owner on the office overview, not on the analytics page the session ended on', async () => {
+      expect(await signInFrom('?next=%2Fkpm%2Fanalytics%2Fcompliance&reason=expired', OWNER)).toBe('/kpm/overview');
     });
   });
 
@@ -138,6 +221,46 @@ describe('login', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Sign in' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Could not reach the server.');
+  });
+
+  /*
+   * P18.97-T4 AC-10 (ADR-0176 §10; the client's UI-032): the sign-in error read *"Could not reach the server. Check
+   * your connection and try again."* and under it a raw *NETWORK*. A failure the browser detected carries no request
+   * id and its code is internal — the sentence alone, and the code to the console; a server's answer keeps both.
+   */
+  describe('P18.97-T4 AC-10 a code the browser made is not shown', () => {
+    async function signInFailing(error: unknown) {
+      const signIn = vi.fn(async () => { throw error; });
+      renderWithSession(<LoginPage />, { signIn });
+      await userEvent.type(screen.getByLabelText('Email'), 'owner@kpm0417.test');
+      await userEvent.type(screen.getByLabelText('Password'), 'pw');
+      await userEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+      return screen.findByRole('alert');
+    }
+
+    it('P18.97-T4 AC-10 says a network failure as its sentence alone, and logs NETWORK to the console', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      onTestFinished(() => warn.mockRestore());
+      const alert = await signInFailing(new TypeError('Failed to fetch'));
+      expect(alert).toHaveTextContent(/^Could not reach the server\. Check your connection and try again\.$/);
+      expect(alert.textContent).not.toContain('NETWORK');
+      expect(warn).toHaveBeenCalledWith('[NETWORK] Could not reach the server. Check your connection and try again.');
+    });
+
+    it('P18.97-T4 AC-10 says a misconfiguration by its sentence, and keeps CONFIG off the page', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      onTestFinished(() => warn.mockRestore());
+      const alert = await signInFailing(new ApiConfigError('NEXT_PUBLIC_API_ORIGIN is not set.', 'NEXT_PUBLIC_API_ORIGIN'));
+      expect(alert).toHaveTextContent(/^NEXT_PUBLIC_API_ORIGIN is not set\.$/);
+      expect(warn).toHaveBeenCalledWith(expect.stringMatching(/^\[CONFIG\] /));
+    });
+
+    it('P18.97-T4 AC-10 keeps a server’s code and request id under its sentence, which support asks for', async () => {
+      const alert = await signInFailing(new ApiRequestError(401, {
+        code: 'AUTH_INVALID_CREDENTIALS', message: 'Email or password is incorrect.', requestId: 'req-9',
+      }));
+      expect(alert).toHaveTextContent('Email or password is incorrect.AUTH_INVALID_CREDENTIALS · req-9');
+    });
   });
 
   it('offers the reset path and the way to an account', () => {

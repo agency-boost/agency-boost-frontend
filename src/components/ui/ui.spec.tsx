@@ -1,12 +1,15 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { useState } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { StatusPill, statusFor, STATUS_LABEL } from './status-pill';
 import { Stepper } from './stepper';
+import { InLanguage } from '@test/harness';
 import { ProgressBar } from './progress-bar';
 import { EmptyState } from './empty-state';
-import { RoleBadge, SEEDED_LADDER } from './role-badge';
+import { RoleBadge, RUNG_SHORT_CODE_MAX_LENGTH, rungLabel, rungShort, SEEDED_LADDER, shortOfRung } from './role-badge';
 import { ConfigBadge } from './config-badge';
 import { NumberBadge } from './number-badge';
 import { KpiTile } from './kpi-tile';
@@ -15,6 +18,7 @@ import { Segmented } from './segmented';
 import { CascadeRow } from './cascade-row';
 import { AutoGrowTextarea } from './auto-grow-textarea';
 import { Dialog } from './dialog';
+import { inModal, Modal } from './modal';
 import { DataTable, Row, Cell } from './data-table';
 import { RouteTabs } from './route-tabs';
 import { SectionCard } from './section-card';
@@ -75,6 +79,23 @@ describe('RouteTabs', () => {
     );
     expect(screen.getByRole('link', { name: 'Pending Requests 3' })).toBeInTheDocument();
   });
+
+  it('P18.8-T12 a nested tab is current beneath its own address too, and a prefix is not a parent', () => {
+    // The mocked address is `/activity/log`: beneath `/activity`, not beneath `/activity/lo`.
+    render(
+      <RouteTabs
+        label="Nested"
+        tabs={[
+          { href: '/activity', label: 'Beneath', nested: true },
+          { href: '/activity/lo', label: 'A prefix', nested: true },
+        ]}
+      />,
+    );
+    render(<RouteTabs label="Exact" tabs={[{ href: '/activity', label: 'Exact only' }]} />);
+    expect(screen.getByRole('link', { name: 'Beneath' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('link', { name: 'A prefix' })).not.toHaveAttribute('aria-current');
+    expect(screen.getByRole('link', { name: 'Exact only' })).not.toHaveAttribute('aria-current');
+  });
 });
 
 describe('Card', () => {
@@ -105,15 +126,26 @@ describe('SectionCard', () => {
     expect(container.firstElementChild!.className).toContain('overflow-hidden');
   });
 
-  it('tops the row rather than centring it, because the left side can run to two lines', () => {
+  it('P18.8-T8 AC-1 centres the row, with a sub-note and without, at the client’s request', () => {
+    // ADR-0161 §3: a registered divergence from the prototype's `flex-start` (`Overall.html:118`).
     const { container } = render(
       <SectionCard title="Leads">
-        <SectionCard.Row control={<button>+</button>}>Menghubungi prospek</SectionCard.Row>
+        <SectionCard.Row control={<button>+</button>}>Set Appointment</SectionCard.Row>
+        <SectionCard.Row control={<button>+</button>}>
+          <span>Set Appointment</span>
+          <span>telepon, WhatsApp, tatap muka, dll</span>
+        </SectionCard.Row>
       </SectionCard>,
     );
-    const row = container.querySelector('header')!.nextElementSibling!;
-    expect(row.className).toContain('items-start');
-    expect(row.className).toContain('justify-between');
+    const rows = [...container.querySelectorAll('section > div')];
+    expect(rows).toHaveLength(2);
+    for (const row of rows) {
+      expect(row.className).toContain('items-center');
+      expect(row.className).not.toContain('items-start');
+      expect(row.className).toContain('justify-between');
+      // The number and the words beside it share the middle too.
+      expect(row.firstElementChild!.className).toContain('items-center');
+    }
   });
 });
 
@@ -455,10 +487,11 @@ describe('Segmented', () => {
 });
 
 describe('CascadeRow', () => {
+  // The goal calculator's three, in the client's words (ADR-0160 §4).
   const COLUMNS = [
-    { label: 'Leads contacted', chip: 'Activity #3', icon: 'clipboard' as const, month: '67', week: '≈ 16/week' },
-    { label: 'Appointments', chip: 'Activity #4', icon: 'calendar' as const, month: '20', week: '≈ 5/week' },
-    { label: 'Closings', chip: 'Activity #6', icon: 'target' as const, month: '6', week: '≈ 1/week', hero: true },
+    { label: 'Set appointment', chip: 'Activity #3', icon: 'clipboard' as const, month: '40/month', week: '≈ 10/week' },
+    { label: 'Sales meeting', chip: 'Activity #4', icon: 'calendar' as const, month: '20/month', week: '≈ 5/week' },
+    { label: 'Submission polis', chip: 'Activity #6', icon: 'target' as const, month: '6/month', week: '≈ 1.4/week', hero: true },
   ];
 
   it('renders every column with its chip, monthly figure and weekly sub-line', () => {
@@ -473,18 +506,18 @@ describe('CascadeRow', () => {
   it('emphasises the hero column in fill as well as in value', () => {
     const { container } = render(<CascadeRow columns={COLUMNS} links={['30%', '30%']} />);
     const hero = container.querySelector('[data-hero="true"]')!;
-    expect(hero).toHaveTextContent('Closings');
+    expect(hero).toHaveTextContent('Submission polis');
     expect(hero.className).toContain('bg-amber/[0.14]');
   });
 
   it('uses amber-deep for the figures, because amber-dark on this tint clears no floor', () => {
     render(<CascadeRow columns={COLUMNS} links={['30%', '30%']} />);
-    expect(screen.getByText('67').className).toContain('text-amber-deep');
+    expect(screen.getByText('40/month').className).toContain('text-amber-deep');
   });
 
   it('P13.1-T5 AC-5 draws the weekly line larger and blue, in a blue that passes AA at its size', () => {
     render(<CascadeRow columns={COLUMNS} links={['30%', '30%']} />);
-    const week = screen.getByText('≈ 16/week');
+    const week = screen.getByText('≈ 10/week');
     // 14px semibold navy-soft: 8.8:1 on the hero tint. Not the prototype's 11px grey caption (`:724`), and
     // not `--color-info`, which passes only as large text (tokens.md, *Status*).
     expect(week.className.split(' ')).toEqual(expect.arrayContaining(['text-md', 'font-semibold', 'text-navy-soft']));
@@ -492,12 +525,13 @@ describe('CascadeRow', () => {
   });
 
   it('spells the conversion out for a screen reader, since the arrow is decorative', () => {
-    render(<CascadeRow columns={COLUMNS} links={['30%', '30%']} />);
+    render(<CascadeRow columns={COLUMNS} links={['50%', '30%']} />);
+    // *From … to …*, as the field it repeats reads: *Appointment to Sales meeting* (ADR-0160 §4).
     expect(
-      screen.getByText('30% of leads contacted become appointments'),
+      screen.getByText('50% from set appointment to sales meeting'),
     ).toBeInTheDocument();
     expect(
-      screen.getByText('30% of appointments become closings'),
+      screen.getByText('30% from sales meeting to submission polis'),
     ).toBeInTheDocument();
   });
 
@@ -506,11 +540,11 @@ describe('CascadeRow', () => {
     // no useful weekly equivalent, still draws its column.
     render(
       <CascadeRow
-        columns={[{ label: 'Leads contacted', icon: 'clipboard', month: '67' }]}
+        columns={[{ label: 'Set appointment', icon: 'clipboard', month: '40/month' }]}
         links={[]}
       />,
     );
-    expect(screen.getByText('67')).toBeInTheDocument();
+    expect(screen.getByText('40/month')).toBeInTheDocument();
     expect(screen.queryByText(/week/)).not.toBeInTheDocument();
   });
 
@@ -706,6 +740,31 @@ describe('Dialog', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
+  it('SR-10 is drawn over the modal that asked it, never under it (staging review, 2026-10-31)', () => {
+    // A Modal draws at the end of <body> (z-50); a question asked from inside one — a calendar entry's Hapus, a lead
+    // sheet's Hapus tugas — must come after it in <body> and one step above, or the tap lands on the sheet behind.
+    function Asked() {
+      return (
+        <>
+          <Modal open title="Ibu Wulan Sari" onClose={() => {}}>
+            <p>sheet</p>
+          </Modal>
+          <Dialog open message="Hapus tugas untuk Ibu Wulan Sari?" confirmLabel="Hapus tugas" onConfirm={() => {}} onCancel={() => {}} />
+        </>
+      );
+    }
+    const { container } = render(<Asked />);
+    const question = screen.getByRole('dialog', { name: 'Hapus tugas untuk Ibu Wulan Sari?' });
+    const layer = question.parentElement!;
+    expect(layer.parentElement).toBe(document.body);
+    expect(container.contains(question)).toBe(false);
+    expect(layer).toHaveClass('z-[55]');
+    expect(layer).toHaveAttribute('data-modal-root');
+    const sheet = document.querySelector('[data-modal-root]:not([data-dialog-root])')!;
+    expect(sheet.compareDocumentPosition(layer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(inModal(screen.getByRole('button', { name: 'Hapus tugas' }))).toBe(true);
+  });
+
   it('is a modal dialog named by its question', () => {
     render(<Host />);
     expect(screen.getByRole('dialog', { name: 'Delete Rina Wijaya?' })).toHaveAttribute(
@@ -784,6 +843,24 @@ describe('Dialog', () => {
     expect(onCancel).not.toHaveBeenCalled();
     expect(onConfirm).not.toHaveBeenCalled();
   });
+
+  it('P18.96-T1 AC-2 is never taller than the screen: a long question scrolls, the two buttons stay, the page holds still', () => {
+    document.body.style.overflow = 'auto';
+    const { unmount } = render(<Host />);
+    const box = screen.getByRole('dialog');
+    // The dynamic viewport, so a phone's browser bar coming back never hides the buttons.
+    // And its top below the top inset, never under a Home Screen app's clock (staging review, 2026-10-31).
+    expect(box).toHaveClass('flex', 'flex-col', 'max-h-[calc(100dvh-1.25rem-max(1.25rem,env(safe-area-inset-top)))]');
+    expect(box.parentElement).toHaveClass('pt-[max(1.25rem,env(safe-area-inset-top))]');
+    expect(box.className).not.toMatch(/\d+vh/);
+    const message = screen.getByText('Delete Rina Wijaya?');
+    expect(message).toHaveClass('min-h-0', 'overflow-y-auto', 'overscroll-contain');
+    expect(screen.getByRole('button', { name: 'Delete lead' }).parentElement).toHaveClass('shrink-0');
+    expect(document.body.style.overflow).toBe('hidden');
+    unmount();
+    expect(document.body.style.overflow).toBe('auto');
+    document.body.style.overflow = '';
+  });
 });
 
 describe('DataTable density and widths', () => {
@@ -842,10 +919,16 @@ describe('DataTable density and widths', () => {
 });
 
 describe('ProgressBar', () => {
-  it('caps the bar at 100% while the label may exceed it', () => {
+  it('caps the bar at 100% while the label may exceed it — P18.97-T3 AC-1, whole', () => {
     render(<ProgressBar value={200} target={100} />);
     expect(screen.getByText('200%')).toBeInTheDocument();
     expect(screen.getByRole('progressbar').firstElementChild).toHaveStyle({ width: '100%' });
+  });
+
+  it('P18.97-T3 F-254 rounds an exact half up in integers: 23 of 40 is 58%, which Math.round(23 / 40 * 100) reads 57%', () => {
+    render(<ProgressBar value={23} target={40} />);
+    expect(screen.getByText('58%')).toBeInTheDocument();
+    expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '58');
   });
 
   it('renders no-target rather than NaN% when the target is zero', () => {
@@ -862,6 +945,15 @@ describe('ProgressBar', () => {
   it('can hide its label', () => {
     render(<ProgressBar value={50} target={100} showLabel={false} />);
     expect(screen.queryByText('50%')).not.toBeInTheDocument();
+  });
+
+  it('P18.98-T3 AC-2 writes the one share it rounds in the reader’s marks: 1,250% in English, 1.250% in Indonesian', () => {
+    render(<ProgressBar value={2_500} target={200} />);
+    render(<InLanguage language="id"><ProgressBar value={2_500} target={200} /></InLanguage>);
+    expect(screen.getByText('1,250%')).toBeInTheDocument();
+    expect(screen.getByText('1.250%')).toBeInTheDocument();
+    // The same figure, rounded once: the bar's value is a number in no language.
+    for (const bar of screen.getAllByRole('progressbar')) expect(bar).toHaveAttribute('aria-valuenow', '1250');
   });
 });
 
@@ -889,12 +981,14 @@ describe('RoleBadge', () => {
      * badge said nothing at all.
      *
      * Outside a provider the badge falls back to the seeded ladder — which is what v1
-     * ships, and what keeps every existing screen looking exactly as it did.
+     * ships, and what keeps every existing screen looking exactly as it did. **Its labels are the
+     * seed's** (P18.95-T9 AC-1): the backend's `DEFAULT_ORG_LADDER` labels the rungs *AB* and *AAB*,
+     * and this copy said *Agency Builder* and *Associate Agency Builder*.
      */
     expect(SEEDED_LADDER.map((l) => [l.code, l.label])).toEqual([
       ['AGENT', 'Agent'],
-      ['AAB', 'Associate Agency Builder'],
-      ['AB', 'Agency Builder'],
+      ['AAB', 'AAB'],
+      ['AB', 'AB'],
     ]);
   });
 
@@ -910,16 +1004,46 @@ describe('RoleBadge', () => {
     expect(screen.getByText('Agent')).toBeInTheDocument();
   });
 
-  it('always carries a text label, with the full name available on hover', () => {
+  it('always carries a text label, with the ladder’s label available on hover', () => {
     render(<RoleBadge role="aab" />);
     const badge = screen.getByText('AAB');
     expect(badge).toBeInTheDocument();
-    expect(badge).toHaveAttribute('title', 'Associate Agency Builder');
+    expect(badge).toHaveAttribute('title', 'AAB');
   });
 
-  it('can render the long form', () => {
+  it('can render the long form: the ladder’s own label, where the ladder writes one', () => {
+    const ladder = [...SEEDED_LADDER, { ...SEEDED_LADDER[2], orgLevelId: 'x', code: 'SM', label: 'Senior Manager', displayOrder: 4 }];
+    expect(rungLabel('sm', ladder)).toBe('Senior Manager');
     render(<RoleBadge role="ab" short={false} />);
-    expect(screen.getByText('Agency Builder')).toBeInTheDocument();
+    expect(screen.getByText('AB')).toBeInTheDocument();
+  });
+
+  it('P18.95-T9 AC-1 the short-code limit is the backend’s, read from its constants (invariant §7)', () => {
+    const backend = readFileSync(join(__dirname, '..', '..', '..', '..', 'backend', 'src', 'domain', 'constants', 'leader-tier.ts'), 'utf8');
+    expect(Number(/export const RUNG_SHORT_CODE_MAX_LENGTH = (\d+);/.exec(backend)?.[1])).toBe(RUNG_SHORT_CODE_MAX_LENGTH);
+    expect(shortOfRung({ code: 'ABCD', label: 'Four' })).toBe('ABCD');
+    expect(shortOfRung({ code: 'ABCDE', label: 'Five' })).toBe('Five');
+  });
+
+  it('P18.95-T8 AC-3 rungShort says, without a hook, what the badge prints — AB, AAB, Agent — from the ladder it is given', () => {
+    expect(['ab', 'AAB', 'agent'].map((code) => rungShort(code))).toEqual(['AB', 'AAB', 'Agent']);
+    const another = [...SEEDED_LADDER, { ...SEEDED_LADDER[0], orgLevelId: 'x', code: 'SENIOR', label: 'Senior Partner', displayOrder: 4 }];
+    expect(rungShort('senior', another)).toBe('Senior Partner');
+    // A code the ladder does not hold reads as itself, as the badge's does.
+    expect(rungShort('zz')).toBe('ZZ');
+    render(<RoleBadge role="aab" />);
+    expect(screen.getByText(rungShort('aab'))).toHaveAttribute('title', 'AAB');
+  });
+
+  it('P18.95-T9 AC-1 names a rung the caller holds as the badge does, whatever the ladder’s label says', () => {
+    // The one rule, for a `{ code, label }` the API sends as for a code found in the ladder.
+    expect(shortOfRung({ code: 'AAB', label: 'Associate Agency Builder' })).toBe('AAB');
+    expect(shortOfRung({ code: 'AGENT', label: 'Agent' })).toBe('Agent');
+    expect(shortOfRung({ code: 'REGIONAL', label: 'Regional Director' })).toBe('Regional Director');
+    expect(rungShort({ code: 'SM', label: 'Senior Manager' })).toBe('SM');
+    // And the same name from a code, through the ladder: one name per rung, the badge's.
+    const ladder = [...SEEDED_LADDER, { ...SEEDED_LADDER[2], orgLevelId: 'x', code: 'SM', label: 'Senior Manager', displayOrder: 4 }];
+    expect(rungShort('sm', ladder)).toBe('SM');
   });
 });
 

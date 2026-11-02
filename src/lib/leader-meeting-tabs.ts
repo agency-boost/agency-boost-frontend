@@ -2,11 +2,20 @@
 
 import { useCallback, useRef, useState } from 'react';
 import { ApiRequestError } from './api-client';
-import { formatMonth } from './format';
+import { messagesIn } from '@/i18n/catalogue';
+import { kept } from '@/i18n/kept';
+import { DEFAULT_LANGUAGE, SOURCE_LANGUAGE, type Language } from '@/i18n/language';
+import { forumMessages } from '@/i18n/messages/forum';
+import { forumMinutesMessages } from '@/i18n/messages/forum-minutes';
+import { forumStatsMessages } from '@/i18n/messages/forum-stats';
+import {
+  type CompactUnit, formatCalendarDay, formatDecimalInput, formatMoneyUnit, formatMonth, formatMonthName, formatNumber, formatPercent,
+  parseDecimal, RUPIAH_PER_UNIT,
+} from './format';
 import { MINOR_UNITS_PER_MAJOR } from './goals';
 import type {
-  ActionItem, ActionStatus, AgendaItem, AgendaSection, ColumnKey, MeetingView, MeetingWriter, RowKey, Scorecard,
-  ScorecardCell, ScorecardRow, TargetRowKey,
+  ActionItem, ActionStatus, AgendaItem, AgendaSection, ColumnKey, ColumnPeriod, MeetingView, MeetingWriter, MonthlyTarget,
+  RowKey, Scorecard, ScorecardCell, ScorecardRow, TargetRowKey, YtdChange,
 } from './leader-meetings';
 
 /**
@@ -14,180 +23,407 @@ import type {
  * Items*, *Saving*, *Printing*): their words, how a figure is written, and how a field's write is sent.
  *
  * The figures are the server's, exact (OD-144, ADR-0129); this file only rounds them for display, as the spec
- * says each row is drawn. Nothing here decides a figure, who may edit or a bound (`limits`).
+ * says each row is drawn. Nothing here decides a figure, who may edit or a bound (`limits`) — the places a target's
+ * rate is typed to are the backend's, held here as a copy its spec pins (`LEADER_MEETING_TARGET_RATE_DECIMALS`).
  */
 
 /*
  * ── The words ───────────────────────────────────────────────────────────────────────────────────
  */
 
-/** The prototype's, verbatim (`KPM_Owner.html:2458-2475`, `:2653-2695`, `:2780-2843`, `:2865-2901`). */
+/**
+ * **The tabs' words are the catalogue's** (P18.98-T4): *Overview & Stats*' in `i18n/messages/forum-stats.ts`, the
+ * agenda's and the tracker's in `forum-minutes.ts`, English the source and Indonesian the approved glossary's. A screen
+ * reads the reader's with `useMessages`; a function here that writes words takes the reader's language (`useLanguage()`)
+ * as `words`, English when given none, and one that writes a figure too takes the figures' (`useFigureLanguage()`) as
+ * `language`, before it.
+ *
+ * `TABS_COPY` and `TABS_OWN_COPY` are **the source's words, English, in the shapes the prototype's copy had** — the
+ * slide's labels, its rows in its order, the prototype's headers and statuses verbatim — as `leader-meeting-tabs.spec.ts`
+ * reads and scans them. Nothing on a screen reads them.
+ */
+const STATS = forumStatsMessages.en;
+const MINUTES = forumMinutesMessages.en;
+
+/** The strip's chips in the slide's order (UI-011). */
+const CHIP_KEYS = ['manpower', 'agents', 'units', 'ab', 'aab'] as const satisfies readonly (keyof Scorecard['chips'])[];
+
 export const TABS_COPY = {
-  chips: [
-    { key: 'manpower', label: 'Manpower' },
-    { key: 'agents', label: '# of agents' },
-    { key: 'units', label: '# of units' },
-    { key: 'ab', label: '# of AB' },
-    { key: 'aab', label: '# of AAB' },
-  ] as const satisfies readonly { key: keyof Scorecard['chips']; label: string }[],
-  metrics: 'Metrics',
-  monthlyTarget: 'Monthly Target',
-  columns: { thisMonthLastYear: 'This Month, Last Year', lastMonth: 'Last Month', thisMonth: 'This Month' },
-  rows: {
-    ape: 'APE (IDR B)',
-    manpower: 'Manpower',
-    flc: 'FLC (avg. monthly)',
-    producing_agents: 'Producing agents',
-    new_aa: 'New AA (avg. monthly)',
-    new_agent_3m: '3M new agent %*',
-    avg_monthly_aa: 'Avg. Monthly AA',
-    case_submission: 'Case submission',
-    average_case_size: 'Average Case Size (IDR M)',
-  } satisfies Record<RowKey, string>,
-  pending: 'pending data',
+  chips: CHIP_KEYS.map((key) => ({ key, label: STATS.chips[key] })),
+  metrics: STATS.metrics,
+  monthlyTarget: STATS.monthlyTarget,
+  groups: STATS.groups,
+  columns: STATS.columns,
+  rows: STATS.rows satisfies Record<RowKey, string>,
+  pending: STATS.pending,
   none: '—',
-  note: 'Note: AA = Active Agent; 3M new agent % is the share of new agents producing at least one case in their join month or the following three months.',
-  source: 'Source: Manpower, APE, average case size, producing agents, avg. monthly AA, FLC and case submission as tagged to this KPM.',
-  sections: { preparation: 'Preparation', during: 'During', post: 'Post' } satisfies Record<AgendaSection, string>,
-  pic: 'PIC:',
-  addItem: '+ Add item',
-  tracker: 'Action items tracker',
-  dragHint: 'Drag ⠿ to reorder',
-  headers: {
-    initiative: 'Key initiative',
-    metric: 'Success metric',
-    action: 'Action item',
-    pic: 'PIC',
-    status: 'Status',
-    remarks: 'Remarks / Target',
-  },
-  addAction: '+ Add action item',
-  statuses: {
-    not_planned: 'Not yet planned',
-    planned: 'Planned',
-    implemented: 'Implemented',
-  } satisfies Record<ActionStatus, string>,
-  statusUpdated: 'Status updated',
-  rowRemoved: 'Row removed',
-  reordered: 'Reordered',
+  tbd: STATS.tbd,
+  sections: MINUTES.sections satisfies Record<AgendaSection, string>,
+  pic: `${MINUTES.pic}:`,
+  addItem: MINUTES.addItem,
+  tracker: MINUTES.tracker,
+  dragHint: MINUTES.dragHint,
+  headers: MINUTES.headers,
+  addAction: MINUTES.addAction,
+  statuses: MINUTES.statuses satisfies Record<ActionStatus, string>,
+  statusUpdated: MINUTES.statusUpdated,
+  rowRemoved: MINUTES.rowRemoved,
+  reordered: MINUTES.reordered,
 } as const;
 
-/** `a`, `a and b`, `a, b and c`. */
-export function listed(items: readonly string[]): string {
-  if (items.length <= 1) return items.join('');
-  return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
+/** *—*: a figure there is none of, in both languages. */
+export const NONE = '—';
+
+/** The chips in the slide's order, each with its label in a language (UI-011). */
+export const chipsIn = (words: Language = SOURCE_LANGUAGE) =>
+  CHIP_KEYS.map((key) => ({ key, label: messagesIn(forumStatsMessages, words).chips[key] }));
+
+/** `a`, `a and b`, `a, b and c` — `a, b, dan c` in Indonesian. */
+export function listed(items: readonly string[], words: Language = SOURCE_LANGUAGE): string {
+  return messagesIn(forumMessages, words).list({ items });
 }
 
 /**
- * The module's own (*The module's own strings*, D-copy): none uses the six words, a phase, an id or a
- * permission code. `leader-meeting-tabs.spec.ts` scans them.
+ * The module's own (*The module's own strings*, D-copy), English, as the old copy's positional functions read: none
+ * uses the six words, a phase, an id or a permission code. `leader-meeting-tabs.spec.ts` scans them.
  */
 export const TABS_OWN_COPY = {
-  /** A blocked cell, for screen readers (I-255). */
-  notTracked: 'Not tracked',
-  /** A figure over part of its period (F-183, Phase 15's rule). */
-  leftOut: (months: string) => `Without ${months}: no figures uploaded for them yet.`,
-  /** *—*, a ratio over nothing. */
-  noPolicies: 'No policies in this period.',
-  statusName: (status: string, next: string) => `${status}. Change to ${next}`,
-  handleName: (n: number, initiative: string) => `Move row ${n}, ${initiative}. Use the arrow keys.`,
-  removeName: (n: number) => `Remove row ${n}`,
-  cellName: (column: string, n: number) => `${column}, row ${n}`,
-  agendaText: (section: string, n: number) => `${section} item ${n}`,
-  agendaPic: (section: string, n: number) => `PIC for ${section} item ${n}`,
-  /** A *Monthly Target* input's name: the column, then the row, as a tracker cell's is. */
-  targetName: (row: string) => `Monthly Target, ${row}`,
-  /** A ticked *During* item read-only: the strike-through said to a screen reader. */
-  done: 'Done',
-  /**
-   * The access note (F-188): who may edit **now**, the Owner first, then each Admin, then the tag. *"shown
-   * above"* dropped, because a past meeting's chips are its frozen record.
-   */
-  accessNote: (names: readonly string[]) => `🔒 Only ${listed([...names, 'tagged core leaders'])} can edit this tracker.`,
+  notTracked: STATS.notTracked,
+  unrecorded: STATS.unrecorded,
+  none: STATS.none satisfies Partial<Record<RowKey, string>>,
+  partialMark: STATS.partialMark,
+  title: (branch: string, month: string) => `${branch}: ${month}`,
+  asOf: STATS.asOf,
+  asOfUnrecorded: STATS.asOfUnrecorded,
+  change: STATS.change,
+  statusName: (status: string, next: string) => MINUTES.statusName({ status, next }),
+  handleName: (n: number, initiative: string) => MINUTES.handleName({ n, initiative }),
+  removeName: (n: number) => MINUTES.removeName({ n }),
+  cellName: (column: string, n: number) => MINUTES.cellName({ column, n }),
+  agendaText: (section: string, n: number) => MINUTES.agendaText({ section, n }),
+  agendaPic: (section: string, n: number) => MINUTES.agendaPic({ section, n }),
+  addPic: MINUTES.addPic,
+  targetName: (row: string) => STATS.targetName({ row }),
+  notARate: (example: string) => STATS.notARate({ example }),
+  done: MINUTES.done,
+  accessNote: (names: readonly string[]) => MINUTES.accessNote({ names, list: (items) => listed(items) }),
 } as const;
 
-export const accessNoteText = (note: MeetingView['accessNote']) =>
-  TABS_OWN_COPY.accessNote([...(note.ownerName ? [note.ownerName] : []), ...note.adminNames]);
+/**
+ * The access note (F-188): who may edit **now**, the Owner first, then each Admin, then the tag. *"shown above"*
+ * dropped, because a past meeting's chips are its frozen record.
+ */
+export const accessNoteText = (note: MeetingView['accessNote'], words: Language = SOURCE_LANGUAGE) =>
+  messagesIn(forumMinutesMessages, words).accessNote({
+    names: [...(note.ownerName ? [note.ownerName] : []), ...note.adminNames],
+    list: (items) => listed(items, words),
+  });
 
 /*
  * ── The scorecard ───────────────────────────────────────────────────────────────────────────────
  */
 
-/** *FY 2025*, *YTD 2026* from the meeting's own year (F-184); the three months as drawn. */
-export function columnHeader(column: ColumnKey, periods: Scorecard['periods']): string {
-  if (column === 'fy') return `FY ${periods.fy}`;
-  if (column === 'ytd') return `YTD ${periods.ytd}`;
-  return TABS_COPY.columns[column];
-}
-
-/** How a row's name is drawn (`:2461-2473`): indented, bold, or as is. */
-export const ROW_STYLE: Record<RowKey, 'plain' | 'indent' | 'bold'> = {
-  ape: 'plain',
-  manpower: 'plain',
-  flc: 'indent',
-  producing_agents: 'indent',
-  new_aa: 'plain',
-  new_agent_3m: 'indent',
-  avg_monthly_aa: 'plain',
-  case_submission: 'plain',
-  average_case_size: 'bold',
-};
-
-/** The section row drawn above a row (`:2466`, `:2469`): *Activation* above *New AA*, *Productivity* above *Avg. Monthly AA*. */
-export const SECTION_BEFORE: Partial<Record<RowKey, string>> = {
-  new_aa: 'Activation',
-  avg_monthly_aa: 'Productivity',
-};
-
-/** Rupiah in billions for *APE (IDR B)*, in millions for *Average Case Size (IDR M)*, as the labels say. */
-const MONEY_SCALE: Partial<Record<RowKey, number>> = { ape: 1e9, average_case_size: 1e6 };
+/** `'26` for 2026: the slide's year in a period. */
+const shortYear = (month: string) => month.slice(2, 4);
 
 /**
- * One decimal, two below 1 (`:2488` draws *0.75*). Rounded to two first, so 0.996 is *1.0*, never *1.00*.
- * A point for the decimal, as the prototype writes it and as the product's other figures do (`0.30`, `15.0%`).
+ * **A column's two-line header** (P18.97-T1 AC-2, UI-002): its name — *Full Year 2025*, *YTD 2026*, *This Month* — and
+ * its period from the meeting's month, in the app's month abbreviations (ADR-0174 §6): *(Jan-Des '25)*, *(Jan-Okt '26)*,
+ * *(Jan '26)* for a January's *YTD*, *(Okt-25)* for a single month, as the slide writes them.
  */
-function scaled(value: number): string {
-  const two = Math.round(value * 100) / 100;
-  return Math.abs(two) < 1 ? two.toFixed(2) : value.toFixed(1);
+export function columnHeader(
+  column: ColumnKey, periods: Scorecard['periods'], language: Language = DEFAULT_LANGUAGE,
+): { name: string; period: string } {
+  const { from, to } = periods[column];
+  const year = from.slice(0, 4);
+  const month = (m: string) => formatMonthName(m, language);
+  const span = (p: ColumnPeriod) => (p.from === p.to
+    ? `(${month(p.from)} '${shortYear(p.from)})`
+    : `(${month(p.from)}-${month(p.to)} '${shortYear(p.to)})`);
+  // Kept names (§A.4), the same in both languages: only the period's months are the reader's.
+  if (column === 'fy') return { name: `${STATS.columns.fy} ${year}`, period: span(periods[column]) };
+  if (column === 'ytd' || column === 'ytdLastYear') return { name: `${STATS.columns.ytd} ${year}`, period: span(periods[column]) };
+  return { name: STATS.columns[column], period: `(${month(to)}-${shortYear(to)})` };
 }
 
 /**
- * A figure as the table writes it — **for display only**; the served value is exact. Money from minor units,
- * through the one conversion (`MINOR_UNITS_PER_MAJOR`); counts and the averages whole (`:2470`); a percentage
- * whole, with its sign.
+ * **The money rows' unit** (ADR-0174 §5): *APE* in a *miliar*, *Avg. Case Size* in a *juta* — the compact units' own
+ * codes (`RUPIAH_PER_UNIT`, `lib/format.ts`), so a figure's size and its header's unit are read from one place.
  */
-export function formatFigure(row: Pick<ScorecardRow, 'key' | 'unit'>, value: number): string {
-  if (row.unit === 'idr_minor') return scaled(value / MINOR_UNITS_PER_MAJOR / (MONEY_SCALE[row.key] ?? 1e9));
-  if (row.unit === 'percentage') return `${Math.round(value)}%`;
-  return String(Math.round(value));
+const ROW_MONEY_UNIT: Partial<Record<RowKey, CompactUnit>> = { ape: 'M', average_case_size: 'jt' };
+
+/**
+ * **A row's name as the table heads it** (P18.98-T3 AC-1; the glossary's §E): a money row's unit in the reader's
+ * language — *APE (Rp M)* and *Avg. Case Size (Rp jt)* in Indonesian, *APE (IDR B)* and *Avg. Case Size (IDR M)* in
+ * English, as the client's slide writes it. The name is a kept-English term (§A.4); the unit is a format
+ * (`formatMoneyUnit`). Every other row reads its name.
+ */
+export function rowName(key: RowKey, language: Language = DEFAULT_LANGUAGE): string {
+  const unit = ROW_MONEY_UNIT[key];
+  return unit ? `${STATS.rows[key]} (${formatMoneyUnit(unit, language)})` : STATS.rows[key];
 }
 
-/** A cell's words: the figure, *pending data*, *—*, or nothing for a blocked cell. */
-export function cellText(row: Pick<ScorecardRow, 'key' | 'unit'>, cell: ScorecardCell): string {
-  if (cell.kind === 'figure') return formatFigure(row, cell.value);
-  if (cell.kind === 'pending') return TABS_COPY.pending;
-  if (cell.kind === 'none') return TABS_COPY.none;
+/** How a row is drawn (UI-004): bold, a shaded band, indented under *Manpower*, or as is. */
+export const ROW_STYLE: Record<RowKey, { bold?: true; band?: true; indent?: true }> = {
+  ape: { bold: true },
+  manpower: { bold: true, band: true },
+  flc: { indent: true },
+  producing_agents: { bold: true, indent: true },
+  new_agent_3m: {},
+  avg_monthly_aa: {},
+  case_submission: {},
+  cases_per_producing_agent: { bold: true },
+  average_case_size: { bold: true, band: true },
+};
+
+/** The section bands (UI-004): *Activation* above *3M new agent %*, *Productivity* above *Case submission* — kept. */
+export const SECTION_BEFORE: Partial<Record<RowKey, string>> = STATS.sections;
+
+/** The rows whose *YTD {Y−1}* and *YTD {Y}* pair a red outline frames (UI-006, AC-8). */
+export const OUTLINED_ROWS: readonly RowKey[] = ['ape', 'producing_agents', 'case_submission'];
+
+/**
+ * **A numbered footnote, in our metric's words** (P18.97-T1 AC-12; ADR-0175 §5): the rows it is marked on, and what it
+ * says — true of the figure beside it, where the slide's words describe metrics nobody computes. The slide's footnote 1,
+ * *Net APE*, and its *new business only* wait with OD-231 (`NET_APE_FOOTNOTE`).
+ */
+export interface Footnote {
+  rows: readonly RowKey[];
+  text: string;
+}
+
+/**
+ * The slide's footnote 1 — *"Net APE includes Saver, SPI, Top Up, and PRUWorks"* — **not drawn until the client answers
+ * OD-231**: the file's APE is not known to be net. `null` here, so the numbering below starts at *Annual Active
+ * Agents*; the day OD-231 is answered it is a `Footnote` on `ape`, and every number after it moves up one.
+ */
+export const NET_APE_FOOTNOTE: Footnote | null = null;
+
+/** Which rows each of the four footnotes is marked on, in the catalogue's order (`forumStatsMessages.footnotes`). */
+const FOOTNOTE_ROWS: Record<keyof typeof STATS.footnotes, readonly RowKey[]> = {
+  producing_agents: ['producing_agents'],
+  new_agent_3m: ['new_agent_3m'],
+  avg_monthly_aa: ['avg_monthly_aa'],
+  case_submission: ['case_submission', 'average_case_size'],
+};
+
+/**
+ * **The four the table draws, in a language** (P18.98-T4): "the monthly production file" says what *the office's file*
+ * does, in none of the six words. The day OD-231 is answered, `NET_APE_FOOTNOTE` takes its words in both.
+ */
+export function footnotesIn(words: Language = SOURCE_LANGUAGE): readonly Footnote[] {
+  const notes = messagesIn(forumStatsMessages, words).footnotes;
+  return [
+    ...(NET_APE_FOOTNOTE ? [NET_APE_FOOTNOTE] : []),
+    ...(Object.keys(FOOTNOTE_ROWS) as (keyof typeof FOOTNOTE_ROWS)[]).map((key) => ({ rows: FOOTNOTE_ROWS[key], text: notes[key] })),
+  ];
+}
+
+/** The four, English: the source. */
+export const FOOTNOTES: readonly Footnote[] = footnotesIn(SOURCE_LANGUAGE);
+
+/**
+ * **The footnotes numbered without a gap, in the order the rows reach them** (AC-12): each row's mark, and the list.
+ * A note on no row drawn is not drawn.
+ */
+export function numberedFootnotes(
+  rows: readonly RowKey[], notes: readonly Footnote[] = FOOTNOTES,
+): { marks: Partial<Record<RowKey, number>>; list: { n: number; text: string }[] } {
+  const marks: Partial<Record<RowKey, number>> = {};
+  const list: { n: number; text: string }[] = [];
+  const numbered = new Map<Footnote, number>();
+  for (const row of rows) {
+    const note = notes.find((f) => f.rows.includes(row));
+    if (!note) continue;
+    if (!numbered.has(note)) {
+      numbered.set(note, list.length + 1);
+      list.push({ n: list.length + 1, text: note.text });
+    }
+    marks[row] = numbered.get(note);
+  }
+  return { marks, list };
+}
+
+/** `Agu–Des 2025`, `Des 2025–Jan 2026`, `Agu 2025`: a run of months, as the client's *(\*)* note writes it. */
+function monthRun(from: string, to: string, language: Language): string {
+  if (from === to) return formatMonth(from, language);
+  if (from.slice(0, 4) === to.slice(0, 4)) return `${formatMonthName(from, language)}–${formatMonth(to, language)}`;
+  return `${formatMonth(from, language)}–${formatMonth(to, language)}`;
+}
+
+/** Every month from one to another, `YYYY-MM`. */
+function monthsOf({ from, to }: ColumnPeriod): string[] {
+  const out: string[] = [];
+  for (let [y, m] = [Number(from.slice(0, 4)), Number(from.slice(5, 7))]; `${y}-${String(m).padStart(2, '0')}` <= to;) {
+    out.push(`${y}-${String(m).padStart(2, '0')}`);
+    [y, m] = m === 12 ? [y + 1, 1] : [y, m + 1];
+  }
+  return out;
+}
+
+/**
+ * **One *(\*)* note per partial period, in the client's words** (AC-12; ADR-0175 §5): *"(\*) Full Year 2025 covers
+ * Agu–Des 2025 only; earlier months not uploaded"* — its months held being the period's months its figures leave none
+ * of out. Later months not uploaded read so; a gap in between is named. The months in the figures' `language`, the
+ * words in the reader's (`words`, P18.98-T4).
+ */
+export function partialNotes(
+  scorecard: Pick<Scorecard, 'periods' | 'partialPeriods'>,
+  language: Language = DEFAULT_LANGUAGE,
+  words: Language = SOURCE_LANGUAGE,
+): string[] {
+  const partial = messagesIn(forumStatsMessages, words).partial;
+  return scorecard.partialPeriods.map(({ column, leavesOut }) => {
+    const { name } = columnHeader(column, scorecard.periods, language);
+    const covered = monthsOf(scorecard.periods[column]).filter((m) => !leavesOut.includes(m));
+    if (covered.length === 0) return partial.noFigures({ column: name });
+    const [first, last] = [covered[0], covered[covered.length - 1]];
+    const months = monthRun(first, last, language);
+    if (leavesOut.every((m) => m < first)) return partial.earlier({ column: name, months });
+    if (leavesOut.every((m) => m > last)) return partial.later({ column: name, months });
+    return partial.gap({ column: name, months, without: listed(leavesOut.map((m) => formatMonth(m, language)), words) });
+  });
+}
+
+/**
+ * **One decimal** (ADR-0174 §5, UI-012): *5,8*, *17,6*, *0,1* — *5.8*, *17.6*, *0.1* in English (P18.98-T3) — the *two
+ * below 1* rule gone, and **a figure that is not zero and rounds to *0,0* reads *< 0,1*** (*< 0.1*), so a small sum is
+ * never shown as none. The threshold is the figure's own tenth, written by the same formatter.
+ */
+export function oneDecimal(value: number, language: Language = DEFAULT_LANGUAGE): string {
+  if (value > 0 && value < 0.05) return `< ${formatNumber(0.1, { decimals: 1 }, language)}`;
+  return formatNumber(value, { decimals: 1 }, language);
+}
+
+/**
+ * Sen to the row's unit: *miliar* for *APE*, *juta* for *Avg. Case Size*, as their headers say (`rowName`) — the compact
+ * units' own sizes (`RUPIAH_PER_UNIT`, `lib/format.ts`), never a second copy (invariant §7).
+ */
+const inRowUnit = (row: Pick<ScorecardRow, 'key'>, minor: number) =>
+  minor / MINOR_UNITS_PER_MAJOR / RUPIAH_PER_UNIT[ROW_MONEY_UNIT[row.key] ?? 'M'];
+
+/**
+ * A figure as the table writes it — **for display only**; the served value is exact (P18.97-T1 AC-15). Money from
+ * minor units, through the one conversion (`MINOR_UNITS_PER_MAJOR`), in its header's unit to one decimal; a
+ * percentage whole (ADR-0174 §1); *Cases/producing agents* to a tenth; counts and the averages whole, half up, a
+ * thousand with a dot.
+ */
+export function formatFigure(
+  row: Pick<ScorecardRow, 'key' | 'unit'>, value: number, language: Language = DEFAULT_LANGUAGE,
+): string {
+  if (row.unit === 'idr_minor') return oneDecimal(inRowUnit(row, value), language);
+  if (row.unit === 'percentage') return formatPercent(value, {}, language);
+  if (row.unit === 'ratio') return oneDecimal(value, language);
+  return formatNumber(Math.round(value), {}, language);
+}
+
+/** A cell's words: the figure, *pending data*, *—* over nothing or for what a kept scorecard lacks, nothing when not tracked. */
+export function cellText(
+  row: Pick<ScorecardRow, 'key' | 'unit'>,
+  cell: ScorecardCell,
+  language: Language = DEFAULT_LANGUAGE,
+  words: Language = SOURCE_LANGUAGE,
+): string {
+  if (cell.kind === 'figure') return formatFigure(row, cell.value, language);
+  if (cell.kind === 'pending') return messagesIn(forumStatsMessages, words).pending;
+  if (cell.kind === 'none' || cell.kind === 'unrecorded') return NONE;
   return '';
 }
 
-/** *"Without August 2026: no figures uploaded for them yet."* for `YYYY-MM` months: the one wording of both. */
-export const leftOutWords = (months: readonly string[]) => TABS_OWN_COPY.leftOut(listed(months.map(formatMonth)));
+/** A figure over part of its period: marked *\** (AC-12), its note under the table. */
+export const isPartial = (cell: ScorecardCell) => cell.kind === 'figure' && cell.leavesOut.length > 0;
 
-/** A figure's own: `null` when it leaves nothing out. */
-export function leftOutLine(cell: ScorecardCell): string | null {
-  if (cell.kind !== 'figure' || cell.leavesOut.length === 0) return null;
-  return leftOutWords(cell.leavesOut);
+/** *—*'s words for a screen reader: why there is no figure. */
+export function noneWords(row: Pick<ScorecardRow, 'key'>, cell: ScorecardCell, words: Language = SOURCE_LANGUAGE): string {
+  const own = messagesIn(forumStatsMessages, words);
+  if (cell.kind === 'unrecorded') return own.unrecorded;
+  return (own.none as Partial<Record<RowKey, string>>)[row.key] ?? own.unrecorded;
 }
 
 /**
- * The print's (P18.1-T3, data honesty): every month any figure of the table leaves out, once each, in month order —
- * `null` when no figure is partial. On paper there is no tooltip, so a *†* marks each such figure and this line
- * under the table says what they leave out.
+ * A phone's card's change (AC-17), as the server computed it: *+18%*, *-9%*, *0%* — a percentage of last year's — or,
+ * on a row whose own figure is a percentage, **the difference in percentage points** (P18.97-T8 F1, parity F-256):
+ * *+15 points*, *-40 points*, *+1 point* — *+15 poin* in Indonesian (§B.7) — whole, as the app writes points
+ * (`formatRatioValue`). *—* where there is none. The figure in `language`, the word in `words` (P18.98-T4).
  */
-export function printLeftOutLine(scorecard: Pick<Scorecard, 'rows'>): string | null {
-  const months = new Set(scorecard.rows.flatMap((r) => Object.values(r.cells).flatMap((c) => (c.kind === 'figure' ? c.leavesOut : []))));
-  return months.size === 0 ? null : `† ${leftOutWords([...months].sort())}`;
+export function changeText(change: YtdChange, language: Language = DEFAULT_LANGUAGE, words: Language = SOURCE_LANGUAGE): string {
+  if (change.kind === 'none') return NONE;
+  if (change.unit === 'points') {
+    const points = Math.round(Math.abs(change.value));
+    const sign = change.value > 0 ? '+' : change.value < 0 ? '-' : '';
+    return messagesIn(forumStatsMessages, words).points({ sign, figure: formatNumber(points, {}, language), points });
+  }
+  return `${change.value > 0 ? '+' : ''}${formatPercent(change.value, {}, language)}`;
 }
+
+/** The title above the table (AC-13): *"BSD City Branch: Okt 2026"*, the meeting's month — the branch's name, as typed. */
+export const statsTitle = (branch: string, meetingDate: string, language: Language = DEFAULT_LANGUAGE) =>
+  `${branch}: ${formatMonth(meetingDate.slice(0, 7), language)}`;
+
+/** *"AS OF 26 Okt 2026"*; *"AS OF —"* on a scorecard kept before it; nothing with no file yet (AC-13, AC-19). */
+export function asOfText(asOf: Scorecard['asOf'], language: Language = DEFAULT_LANGUAGE): string | null {
+  if (asOf.kind === 'none') return null;
+  return `${STATS.asOf} ${asOf.kind === 'date' ? formatCalendarDay(asOf.date, language) : NONE}`;
+}
+
+/*
+ * ── A *Monthly Target*, as a rate per unit (P18.97-T1 AC-10, ADR-0175 §4) ──────────────────────────
+ */
+
+/**
+ * **The places a count's rate is typed to, and its value shown to** — the backend's
+ * `LEADER_MEETING_TARGET_RATE_DECIMALS` (`domain/constants/leader-forum.ts`, `metrics-and-definitions.md` §B.21), which
+ * refuses a rate with more (`400 VALIDATION_FAILED`) and rounds a value to as many. Not served: `leader-meeting-tabs.spec.ts`
+ * reads the backend's value, so the two cannot drift (invariant §7).
+ */
+export const LEADER_MEETING_TARGET_RATE_DECIMALS = 2;
+const TARGET_RATE_SCALE = 10 ** LEADER_MEETING_TARGET_RATE_DECIMALS;
+
+/**
+ * A rate as typed into its field: *APE*'s in *miliar*, the reader's decimal mark — a comma, a point in English — and no
+ * thousands mark, so `parseDecimal` reads it back in either language (P18.98-T3 AC-3).
+ */
+export function rateText(row: Pick<ScorecardRow, 'key'>, rate: number, language: Language = DEFAULT_LANGUAGE): string {
+  const inUnit = row.key === 'ape' ? inRowUnit(row, rate) : rate;
+  return formatDecimalInput(Number(inUnit.toFixed(6)), language);
+}
+
+/** *"9 (1 @ unit)"* (UI-008): the server's value in the row's unit, then the rate typed; *TBD* on *APE* with none, else blank. */
+export function targetText(
+  row: Pick<ScorecardRow, 'key' | 'unit'>, target: MonthlyTarget, language: Language = DEFAULT_LANGUAGE,
+): string {
+  if (target.rate !== null && target.value !== null) {
+    const places = { maxDecimals: LEADER_MEETING_TARGET_RATE_DECIMALS };
+    const value = row.key === 'ape' ? oneDecimal(inRowUnit(row, target.value), language) : formatNumber(target.value, places, language);
+    const rate = row.key === 'ape'
+      ? formatNumber(inRowUnit(row, target.rate), { maxDecimals: 3 }, language)
+      : formatNumber(target.rate, places, language);
+    return `${value} (${rate} @ ${kept('unit')})`;
+  }
+  if (target.typed) return target.typed;
+  return row.key === 'ape' ? STATS.tbd : '';
+}
+
+/** What a field's text is, before it is edited: the rate typed, else the text a target was typed as, else nothing. */
+export const targetDraftText = (row: Pick<ScorecardRow, 'key'>, target: MonthlyTarget, language: Language = DEFAULT_LANGUAGE) =>
+  (target.rate !== null ? rateText(row, target.rate, language) : target.typed ?? '');
+
+/**
+ * **What an editor typed, as the rate the server takes** — a comma or a point (`parseDecimal`), from 0 — *APE*'s
+ * *miliar* to whole rupiah in sen (invariant §9), a count's to two places; nothing typed clears it (`null`). Anything
+ * else is no rate: the field says so and nothing is sent.
+ */
+export function rateFromTyped(row: TargetRowKey, typed: string): { rate: number | null } | { invalid: true } {
+  const text = typed.trim();
+  if (text === '') return { rate: null };
+  const n = parseDecimal(text);
+  if (!Number.isFinite(n) || n < 0) return { invalid: true };
+  if (row === 'ape') return { rate: Math.round(n * RUPIAH_PER_UNIT.M) * MINOR_UNITS_PER_MAJOR };
+  return { rate: Math.round(n * TARGET_RATE_SCALE) / TARGET_RATE_SCALE };
+}
+
+/** The half a rate's hint offers as its example, written as the field takes it: *0,5*, *0.5* in English. */
+export const rateExample = (language: Language = DEFAULT_LANGUAGE) => formatDecimalInput(0.5, language);
 
 /*
  * ── The tracker ─────────────────────────────────────────────────────────────────────────────────
@@ -258,7 +494,7 @@ export const withActionItem = (meeting: MeetingView, saved: ActionItem) =>
       : [...meeting.actionItems, saved],
   );
 
-export function withTarget(meeting: MeetingView, row: TargetRowKey, target: { value: string; version: number }): MeetingView {
+export function withTarget(meeting: MeetingView, row: TargetRowKey, target: MonthlyTarget): MeetingView {
   return {
     ...written(meeting),
     scorecard: {

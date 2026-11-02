@@ -1,46 +1,85 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { DownloadPdfButton } from '@/components/coaching-print';
 import {
-  ActivityPanel, byDueDate, DateTag, EditAgainButton, EMPTY_LINE, FinalizedBadge, FromLeadTag, GoalRow, GROUP_LABEL,
-  NumberDot, RatiosPanel, ReopenDialog,
+  ActivityTilesCard, byDueDate, EditAgainButton, EMPTY_LINE, NumberDot,
 } from '@/components/coaching-parts';
+import { SessionLeadsCard, useCoacheeLeads } from '@/components/coaching-leads';
 import { useSessionHistoryPrefetch } from '@/components/coaching-person';
-import { LeadsTable } from '@/components/leads-table';
-import { SummaryCard } from '@/components/personal-summary';
+import { PersonalRatioCard } from '@/components/ratio-card';
+import { ActionRow, actionDay } from '@/components/ui/action-row';
+import { AutoGrowTextarea } from '@/components/ui/auto-grow-textarea';
+import { AutoMarker } from '@/components/ui/auto-marker';
 import { Button, ErrorBanner, TextInput } from '@/components/ui/field';
+import { FLOATING_BAR_BUTTON, FLOATING_BAR_ROOM, FloatingBar } from '@/components/ui/floating-bar';
+import { LineIcon } from '@/components/ui/line-icon';
 import { Skeleton, SkeletonBar, SkeletonText } from '@/components/ui/skeleton';
-import { Toast, useToast } from '@/components/ui/toast';
 import {
-  readActivityRatios, readActivitySummary, type ActivityRatios, type ActivitySummary,
-} from '@/lib/activity';
+  InlineSaveField, InlineSaveStatus, useInlineSave, type InlineSaveStatusProps,
+} from '@/components/ui/inline-save-status';
+import { TonePill } from '@/components/ui/tone-pill';
+import { Toast, useToast } from '@/components/ui/toast';
+import { messagesIn } from '@/i18n/catalogue';
+import { SOURCE_LANGUAGE, type Language } from '@/i18n/language';
+import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
+import { coachingSessionMessages } from '@/i18n/messages/coaching-session';
+import { uiMessages } from '@/i18n/messages/ui';
+import { readActivitySummary, type ActivitySummary } from '@/lib/activity';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
+import { confirmationMessages } from '@/i18n/messages/confirmations';
+import { withDetail } from '@/lib/confirmations';
 import { cn } from '@/lib/cn';
 import {
-  capitalized, coachingArchiveHref, finalizeRefusal, finalizeSession, pastSessionSummary, PRONOUN_FORMS,
+  coachingArchiveHref, finalizeRefusal, finalizeSession, leadActionText, pastSessionSummary,
   readSession, readSessionHistory, reopenWindowClosed, saveSessionDraft, startSession,
   type Coachee, type CoachingSession, type LeadAction, type SessionDraftBody, type SessionHistory,
 } from '@/lib/coaching';
-import { formatCalendarDayLong, formatShortDay } from '@/lib/format';
+import { formatCalendarDayLong, formatPercent, formatRupiahCompact, formatShortDay, moneyPrefix } from '@/lib/format';
 import {
-  formatRupiah, goalInputsOf, groupDigits, parseDigits, readGoal, saveGoal, toMajor, toMinor,
+  goalBodyOf, goalInputsOf, groupDigits, parseDigits, readGoal, saveGoal, toMajor, toMinor,
 } from '@/lib/goals';
-import type { Lead } from '@/lib/leads';
+import { readLead, type Lead } from '@/lib/leads';
 import { useCan, useSession } from '@/lib/session';
-import { readSummary, type Summary } from '@/lib/summary';
+import { useOpenedOnce } from '@/lib/use-opened-once';
+import { readSummary, type PeriodFigures, type Summary } from '@/lib/summary';
+
+/**
+ * **The lead sheet, downloaded when a lead is first opened** (P18.99-T16, the bundle), and mounted from then on
+ * (`useOpenedOnce`): it was the largest thing on this route that the first paint does not draw.
+ */
+const LeadSheet = dynamic(() => import('@/components/lead-sheet').then((m) => m.LeadSheet), { ssr: false });
+/** *Edit again*'s dialog, downloaded when it is first opened and mounted from then on (`useOpenedOnce`; P18.99-T16). */
+const ReopenDialog = dynamic(() => import('@/components/coaching-reopen-dialog').then((m) => m.ReopenDialog), { ssr: false });
 
 /**
  * A coachee's *Coaching Session* tab (`Overall.html:4167-4319`, logic `:10666-11187`; P11-T8): the
  * 1-on-1 itself, inside the person shell.
  *
+ * **UI V1 (UI-032, UI-060, UI-061, UI-062, UI-081): the page is a 1-on-1 script** — review (last week), look (the goal,
+ * the ratios, the activity), plan (the leads, the next actions), finalise:
+ *
+ * - **One session card** (UI-032): *Sesi hari ini*, the day, its tag and *Mulai sesi coaching*, and the past sessions
+ *   as rows under it, three and then *Semua* — no dropdown, and no line under the button.
+ * - **One compact action row everywhere** (UI-061, `ActionRow`): *Tindakan minggu lalu* with a checkbox, *Dari leads*
+ *   with the ⚡ and a link into the lead, *Lainnya* with a ✕; one date format, sentence-case labels, 16px boxes.
+ * - **The Leads card** (UI-062, `SessionLeadsCard`): compact rows, *Isi tindakan* / *Isi tanggal* where a lead has no
+ *   next action, five and then *Tampilkan semua*, WhatsApp and Call always live (UI-081); a row opens the lead sheet.
+ * - **The ratio card as rows** (O-3, `PersonalRatioCard`), all five ratios; *Goal* as two tiles; *Aktivitas* as three.
+ * - **Finalkan is always in reach** (UI-060, UI-062): a pinned bar above the tab bar on a phone and a tablet, the foot of
+ *   the sticky right column on a desktop. Every action has a date (the server's `defaultDueDate`); a refusal for a
+ *   missing one scrolls to the first such row, outlines each in red and says the count above the button. Finalized,
+ *   a green *Difinalkan* strip and *Ubah lagi*.
+ * - **The layout per size** (UI-062): one column on a phone; on a tablet *Goal | Ratio* side by side; on a desktop the
+ *   work on the left two thirds and the context — goal, ratio, activity, *Finalkan* — in a sticky right third.
+ *
  * **What it opens on is the server's** (`GET /coaching/coachees/:membershipId/sessions`, *What the
  * workspace opens on*): the reader's open draft with this person, else the session they are
- * correcting, else the one they finalized today, else the prototype's pre-start state, *▶ Start
- * coaching session*. Nothing is read about the person — no goal, no ratios, no leads — until a
- * session is open, because each of those reads is audited (roles §3.5) and the pre-start state shows
- * none of them.
+ * correcting, else the one they finalized today, else the pre-start state, *Mulai sesi coaching*. Nothing is
+ * read about the person — no goal, no ratios, no leads — until a session is open, because each of those reads is
+ * audited (roles §3.5) and the pre-start state shows none of them.
  *
  * **The draft is the server's record, saved as it is edited** (`functional/coaching.md`, *The
  * draft*): each change to last week's ticks and dates, the action items and the tips sends the whole
@@ -48,26 +87,16 @@ import { readSummary, type Summary } from '@/lib/summary';
  * past is refused with `VERSION_CONFLICT`; the screen reads the session again and says so in one line.
  * Typing writes nothing until the box is left, as the prototype's blur handlers do.
  *
- * **Every figure is read live** while the session is open — the Goal card from the coachee's Summary,
- * the Ratios card on their rung, the Activity card's last 7 days against pro-rated targets — and each
- * card fails in its own place. Finalize freezes what the server snapshots; nothing here reads a
- * snapshot (*A snapshot is evidence, not duplication*): the archive does.
- *
  * **The reads go out together** (P11-T8's browser walk). The history is read beside the person, when
  * the shell starts it (`useSessionHistoryPrefetch`); once it names the session to open, the cards'
- * reads — the Summary, the ratios, the last 7 days, the leads — go out beside the session's own, since
- * each needs only the person. Not before: the pre-start state reads nothing about the person.
+ * reads — the Summary, the ratios, the last 7 days, the leads — go out beside the session's own.
  *
  * **What it opens on** is the server's `current`, unless the address names a session (`?session=`):
- * the correction the archive's *Edit again* started, which a draft open beside it would otherwise hide
- * (`functional/coaching.md`, *Reopen*; parity L-64).
+ * the correction the archive's *Edit again* started (`functional/coaching.md`, *Reopen*; parity L-64).
  *
- * **Finalized, it locks what the prototype locks** (`Overall.html:1389-1417`): the inputs become
- * text, the add and remove controls go, the annual target is no longer a control and the Leads card's
- * controls go inert. Past sessions, the closed leads and the Activity drill still open, and
- * *⬇ Download as PDF* prints the frozen session (ADR-0077).
- *
- * Coaching's own strings use none of ADR-0084's six words, and none names a phase, an id or a code.
+ * Coaching's own strings use none of ADR-0084's six words, and none names a phase, an id or a code. They are the
+ * catalogue's (`messages/coaching-session.tsx`, P18.98-T4), in the reader's language; every figure is written in
+ * `useFigureLanguage()`'s.
  */
 export function SessionWorkspace({ coachee, opening }: { coachee: Coachee; opening?: string }) {
   const { me } = useSession();
@@ -78,6 +107,8 @@ export function SessionWorkspace({ coachee, opening }: { coachee: Coachee; openi
   const canReopen = useCan('coaching_session:reopen');
   const canSetGoal = useCan('goal:update');
   const { toast, show } = useToast();
+  const t = useMessages(coachingSessionMessages);
+  const confirmed = useMessages(confirmationMessages);
   const takePrefetched = useSessionHistoryPrefetch();
   const { membershipId } = coachee;
 
@@ -92,9 +123,16 @@ export function SessionWorkspace({ coachee, opening }: { coachee: Coachee; openi
   const [reloaded, setReloaded] = useState(false);
   /** Each annual target saved here: the Activity card's pro-rated targets follow the goal. */
   const [goalSaves, setGoalSaves] = useState(0);
+  /** *Finalkan*'s refusal, said above the button; for a missing date, the rows it names are outlined (UI-060). */
+  const [refusal, setRefusal] = useState<Refusal | null>(null);
+  /** The lead sheet: a lead, or `null` for a new one. */
+  const [sheet, setSheet] = useState<{ lead: Lead | null; focus?: 'nextAction' } | null>(null);
+  const sheetOpened = useOpenedOnce(sheet !== null);
 
   const draft = useSessionDraft();
   const { reset, onConflict } = draft;
+  const shownId = session?.sessionId ?? openingId;
+  const leads = useCoacheeLeads(membershipId, shownId !== null);
 
   /** Show a session as the server answered it, and start editing from there. */
   const open = useCallback((next: CoachingSession) => {
@@ -151,10 +189,11 @@ export function SessionWorkspace({ coachee, opening }: { coachee: Coachee; openi
       const started = await startSession(membershipId);
       setOpeningId(started.sessionId);
       open(started);
-      // The prototype's toast says what was carried; with no session before this one, nothing was.
-      show(started.lastWeek
-        ? 'Session started — unfinished items and tips from last week carried forward.'
-        : 'Session started.');
+      /*
+       * *Session started ✓* (P18.95-T1 AC-6, ADR-0167 §5; UI-008), and the prototype's own sentence after it
+       * for what was carried; with no session before this one, nothing was.
+       */
+      show(withDetail(confirmed.sessionStarted, started.lastWeek ? t.carried : null));
     } catch (err) {
       setStartError(toDisplayError(err));
     } finally {
@@ -165,107 +204,163 @@ export function SessionWorkspace({ coachee, opening }: { coachee: Coachee; openi
   const mine = session !== null && session.coach.membershipId === myMembership;
   const finalized = session?.status === 'finalized';
   const locked = !session || finalized || !mine || !canEdit;
-  const shownId = session?.sessionId ?? openingId;
 
   /**
-   * After a lead write, *From leads (automatic)* may no longer be what the leads say — a date moved, a
-   * note changed, a lead was named. While the session is open it is derived on every read, so it is
-   * read again then, and only then: each read of the session is audited.
+   * After a lead write, *Dari leads* may no longer be what the leads say — a date moved, a note changed, a lead was
+   * named. While the session is open it is derived on every read, so it is read again then, and only then: each read
+   * of the session is audited.
    */
   const leadWritten = useCallback(async (lead: Lead) => {
+    leads.put(lead);
     if (!session || session.status === 'finalized' || !leadActionsStale(session.leadActions, lead)) return;
     try {
       const fresh = await readSession(session.sessionId);
       setSession((s) => (s && s.sessionId === fresh.sessionId ? { ...s, leadActions: fresh.leadActions } : s));
     } catch { /* the list stays as it was; the next read brings it up to date */ }
-  }, [session]);
+  }, [session, leads]);
+
+  /** *Dari leads*' › opens the lead's sheet: the lead as held, or read when the card has not arrived yet. */
+  const openLead = useCallback(async (leadId: string) => {
+    const held = leads.leads?.find((lead) => lead.id === leadId);
+    if (held) {
+      setSheet({ lead: held });
+      return;
+    }
+    try {
+      setSheet({ lead: await readLead(leadId) });
+    } catch (err) {
+      setError(toDisplayError(err));
+    }
+  }, [leads.leads]);
+
+  const opened = history !== null && shownId !== null && !error;
+  const ready = session !== null && draft.state !== null;
+  const bar = ready && (finalized || (mine && canFinalize));
+  // Below 1024px every card spans the tablet's two columns, but *Goal* and *Ratio* (UI-062).
+  const SPAN = 'md:max-lg:col-span-2';
 
   return (
-    <div className="flex min-w-0 flex-col gap-4">
-      <SessionHeader coachee={coachee} history={history} session={session} />
-
+    <div data-session-workspace="" className={cn('min-w-0', bar && FLOATING_BAR_ROOM)}>
       {error && <ErrorBanner {...error} />}
       {!history && !error && <SessionSkeleton />}
-
-      {history && !shownId && !error && (
-        canStart ? (
-          <StartCard starting={starting} error={startError} onStart={() => void start()} />
-        ) : null
-      )}
-
-      {history && shownId && !error && (
-        <>
-          {reloaded && (
-            <p role="status" className="rounded-md border border-hairline bg-base px-3.5 py-2.5 text-sm text-navy">
-              This session was changed somewhere else, so it has been read again.
-            </p>
+      {history && !error && (
+        <div
+          className={cn(
+            'flex min-w-0 flex-col gap-2.5',
+            opened && 'md:max-lg:grid md:max-lg:grid-cols-2 lg:grid lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] lg:items-start lg:gap-4',
           )}
-          {draft.error && <ErrorBanner {...draft.error} />}
-
-          {!(session && draft.state) && <AgreementSkeleton />}
-          {session && draft.state && session.lastWeek && (
-            <LastWeekCard session={session} draft={draft} locked={locked} />
-          )}
-
-          <div className="grid min-w-0 gap-4 lg:grid-cols-2">
-            <GoalCard
+        >
+          {/* The work: left two thirds on a desktop; below it, its cards take their places in one flow (`order`). */}
+          <div className="contents lg:flex lg:min-w-0 lg:flex-col lg:gap-4">
+            <SessionCard
+              className={SPAN}
               coachee={coachee}
-              sessionId={shownId}
-              editable={!locked && canSetGoal}
-              onSaved={() => {
-                setGoalSaves((n) => n + 1);
-                show('Goal updated — reflected across both tabs.');
-              }}
+              history={history}
+              session={session}
+              start={!shownId && canStart ? { starting, error: startError, onStart: () => void start() } : null}
             />
-            <RatiosCard coachee={coachee} />
+            {opened && (
+              <>
+                {reloaded && (
+                  <p role="status" className={cn(SPAN, 'order-1 rounded-row bg-card px-3.5 py-2.5 text-base text-navy lg:order-none')}>
+                    {t.reloaded}
+                  </p>
+                )}
+                {draft.error && <div className={cn(SPAN, 'order-1 lg:order-none')}><ErrorBanner {...draft.error} /></div>}
+                {!ready && <AgreementSkeleton className={cn(SPAN, 'order-2 lg:order-none')} />}
+                {ready && session.lastWeek && (
+                  <LastWeekCard className={cn(SPAN, 'order-2 lg:order-none')} session={session} draft={draft} locked={locked} />
+                )}
+                <SessionLeadsCard
+                  className={cn(SPAN, 'order-6 lg:order-none')}
+                  leads={leads.leads}
+                  error={leads.error}
+                  locked={locked}
+                  onOpen={(lead, focus) => setSheet({ lead, focus })}
+                  onSaved={(lead) => void leadWritten(lead)}
+                />
+                {ready && (
+                  <>
+                    <NextActionsCard
+                      className={cn(SPAN, 'order-8 md:max-lg:order-7 lg:order-none')}
+                      draft={draft}
+                      leadActions={session.leadActions}
+                      locked={locked}
+                      newRowDate={session.defaultDueDate ?? history.today}
+                      refusal={refusal}
+                      onOpenLead={(id) => void openLead(id)}
+                    />
+                    <TipsCard className={cn(SPAN, 'order-7 md:max-lg:order-8 lg:order-none')} draft={draft} locked={locked} />
+                  </>
+                )}
+              </>
+            )}
           </div>
 
-          <ActivityCard coachee={coachee} refresh={goalSaves} />
-
-          <SummaryCard id="session-leads" title="Leads" className="min-w-0">
-            <LeadsTable
-              filters
-              offerDelete={false}
-              owner={membershipId}
-              readOnly={locked}
-              caption={`${capitalized(PRONOUN_FORMS[coachee.pronoun].possessive)} leads`}
-              onNotice={show}
-              onWrite={(lead) => void leadWritten(lead)}
-            />
-          </SummaryCard>
-
-          {session && draft.state && (
-            <>
-              <TipsCard draft={draft} locked={locked} />
-              <NextActionsCard draft={draft} leadActions={session.leadActions} locked={locked} today={history.today} />
-
-              <FinalizeCard
+          {/* The context: a sticky right third on a desktop, *Finalkan* at its foot (UI-062). */}
+          {opened && (
+            <div className="contents lg:sticky lg:top-4 lg:flex lg:min-w-0 lg:flex-col lg:gap-4">
+              <GoalCard
+                className="order-3 lg:order-none"
                 coachee={coachee}
-                session={session}
-                today={history.today}
-                draft={draft}
-                canFinalize={mine && canFinalize}
-                canReopen={canReopen}
-                showCoach={!mine}
-                onFinalized={async (next) => {
-                  open(next);
-                  setReloaded(false);
-                  show('Session finalized — this coaching is now marked done, and locked to view-only.');
-                  await refreshHistory().catch(() => undefined);
+                sessionId={shownId}
+                editable={!locked && canSetGoal}
+                onSaved={() => {
+                  setGoalSaves((n) => n + 1);
+                  show(t.goalUpdated);
                 }}
-                onReopened={async (next) => {
-                  open(next);
-                  setReloaded(false);
-                  show('Reopened for editing — finalize again when you’re done.');
-                  await refreshHistory().catch(() => undefined);
-                }}
-                onConflict={reload}
               />
-            </>
+              <PersonalRatioCard membershipId={membershipId} className="order-4 min-w-0 lg:order-none" />
+              <ActivityCard className={cn(SPAN, 'order-5 lg:order-none')} coachee={coachee} refresh={goalSaves} />
+              {bar && (
+                <FinalizeBar
+                  coachee={coachee}
+                  session={session}
+                  today={history.today}
+                  draft={draft}
+                  refusal={refusal}
+                  onRefusal={setRefusal}
+                  canFinalize={mine && canFinalize}
+                  canReopen={canReopen}
+                  onFinalized={async (next) => {
+                    open(next);
+                    setReloaded(false);
+                    show(t.finalizedToast);
+                    await refreshHistory().catch(() => undefined);
+                  }}
+                  onReopened={async (next) => {
+                    open(next);
+                    setReloaded(false);
+                    show(t.reopenedToast);
+                    await refreshHistory().catch(() => undefined);
+                  }}
+                  onConflict={reload}
+                />
+              )}
+              {/* *Unduh sebagai PDF* below 1024px: the pinned bar holds the strip and *Ubah lagi* only. */}
+              {finalized && (
+                <div className={cn(SPAN, 'order-9 lg:hidden')}>
+                  <DownloadPdfButton sessionId={session.sessionId} showCoach={!mine} className="w-full" />
+                </div>
+              )}
+            </div>
           )}
-        </>
+        </div>
       )}
 
+      {sheetOpened && (
+        <LeadSheet
+          open={sheet !== null}
+          lead={sheet?.lead ?? null}
+          focus={sheet?.focus}
+          owner={membershipId}
+          readOnly={locked}
+          offerDelete={false}
+          onClose={() => setSheet(null)}
+          onSaved={(lead) => void leadWritten(lead)}
+          onClosedLead={(lead) => void leadWritten(lead)}
+        />
+      )}
       <Toast toast={toast} />
     </div>
   );
@@ -279,6 +374,15 @@ export function leadActionsStale(actions: readonly LeadAction[], lead: Pick<Lead
   return entry.dueDate !== lead.nextActionDate
     || entry.leadName !== lead.name
     || (lead.nextActionNote !== null && entry.text !== lead.nextActionNote);
+}
+
+/**
+ * *Finalkan*'s refusal (UI-060): the prototype's sentence for the rule the server named, and — for a missing date — how
+ * many rows lack one, which the rows themselves then show.
+ */
+interface Refusal {
+  sentence: string;
+  rule: string | null;
 }
 
 /*
@@ -337,10 +441,21 @@ export interface SessionDraft {
   reset: (session: CoachingSession) => void;
   /** Change the draft on screen, without saving: typing. */
   change: (fn: (draft: Draft) => Draft) => void;
-  /** Change it and save: a tick, a date, a row removed. */
-  commit: (fn: (draft: Draft) => Draft) => void;
-  /** Save whatever is unsaved, one save at a time. Resolves `false` when a save was refused. */
-  save: () => Promise<boolean>;
+  /**
+   * Change it and save: a tick, a date, a row removed. With `field`, that field's row says *Saving… →
+   * Saved ✓* (P18.95-T1 AC-5); a row removed has no field left to say it beside.
+   */
+  commit: (fn: (draft: Draft) => Draft, field?: string) => void;
+  /**
+   * Save whatever is unsaved, one save at a time. Resolves `true` once saved, `false` when a save was
+   * refused (the banner says why), `null` when the session was read again under it (a conflict, a finalize
+   * elsewhere) and the draft it held is gone.
+   */
+  save: () => Promise<boolean | null>;
+  /** A text field left: saved, with its confirmation, **when anything is unsaved** — an untouched box says nothing. */
+  saveField: (field: string) => void;
+  /** A field's *Saving…*, *Saved ✓* or *Couldn't save — retry* (P18.95-T1 AC-5). */
+  status: (field: string) => InlineSaveStatusProps;
   version: () => number;
   onConflict: (handler: () => void) => void;
 }
@@ -354,9 +469,18 @@ function useSessionDraft(): SessionDraft {
   const [state, setState] = useState<Draft | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const held = useRef<Held | null>(null);
-  const inFlight = useRef<Promise<boolean> | null>(null);
+  const inFlight = useRef<Promise<boolean | null> | null>(null);
   const again = useRef(false);
   const conflict = useRef<() => void>(() => undefined);
+  /**
+   * **Each field says its save** (P18.95-T1 AC-5, ADR-0167 §5; UI-007). The draft is saved whole, so a save
+   * that lands has saved every field: one that failed before it has nothing unsaved left, and its
+   * *Couldn't save — retry* goes. Its retry is a save of the draft as it is now, which still holds the
+   * value that failed.
+   */
+  const { save: track, clear, statusOf } = useInlineSave();
+  const failedFields = useRef(new Set<string>());
+  const trackedFields = useRef(new Set<string>());
 
   const reset = useCallback((session: CoachingSession) => {
     const draft = draftOf(session);
@@ -364,7 +488,11 @@ function useSessionDraft(): SessionDraft {
     again.current = false;
     setError(null);
     setState(draft);
-  }, []);
+    // A session read again is a new draft: nothing said about the old one's fields still stands.
+    for (const field of trackedFields.current) clear(field);
+    trackedFields.current.clear();
+    failedFields.current.clear();
+  }, [clear]);
 
   const change = useCallback((fn: (draft: Draft) => Draft) => {
     const current = held.current;
@@ -373,12 +501,12 @@ function useSessionDraft(): SessionDraft {
     setState(current.draft);
   }, []);
 
-  const save = useCallback((): Promise<boolean> => {
+  const save = useCallback((): Promise<boolean | null> => {
     if (inFlight.current) {
       again.current = true;
       return inFlight.current;
     }
-    const run = async (): Promise<boolean> => {
+    const run = async (): Promise<boolean | null> => {
       const mine = held.current;
       if (!mine) return true;
       do {
@@ -389,7 +517,7 @@ function useSessionDraft(): SessionDraft {
         try {
           const saved = await saveSessionDraft(mine.sessionId, { version: mine.version, ...bodyOf(sent) });
           // A session read again meanwhile is a new draft; this answer belongs to the old one.
-          if (held.current !== mine) return false;
+          if (held.current !== mine) return null;
           mine.version = saved.version;
           mine.saved = snapshot;
           // The server names the rows it was sent, in the order it was sent them.
@@ -404,8 +532,11 @@ function useSessionDraft(): SessionDraft {
           setError(null);
         } catch (err) {
           const shown = toDisplayError(err);
-          if (shown.code === 'VERSION_CONFLICT' || shown.code === 'COACHING_SESSION_FINALIZED') conflict.current();
-          else setError(shown);
+          if (shown.code === 'VERSION_CONFLICT' || shown.code === 'COACHING_SESSION_FINALIZED') {
+            conflict.current();
+            return null;
+          }
+          setError(shown);
           return false;
         }
       } while (again.current);
@@ -415,118 +546,174 @@ function useSessionDraft(): SessionDraft {
     return inFlight.current;
   }, []);
 
-  const commit = useCallback((fn: (draft: Draft) => Draft) => {
+  /** A save with `field`'s confirmation; a landed one takes every earlier failure's retry away (see above). */
+  const saveTracked = useCallback((field: string) => {
+    trackedFields.current.add(field);
+    void track(field, async () => {
+      const outcome = await save();
+      if (outcome === false) {
+        failedFields.current.add(field);
+        return false;
+      }
+      for (const other of failedFields.current) if (other !== field) clear(other);
+      failedFields.current.clear();
+      return outcome;
+    });
+  }, [clear, save, track]);
+
+  const commit = useCallback((fn: (draft: Draft) => Draft, field?: string) => {
     change(fn);
-    void save();
-  }, [change, save]);
+    if (field) saveTracked(field);
+    else void save();
+  }, [change, save, saveTracked]);
+
+  const saveField = useCallback((field: string) => {
+    const current = held.current;
+    if (!current || snapshotOf(current.draft) === current.saved) return;
+    saveTracked(field);
+  }, [saveTracked]);
 
   const version = useCallback(() => held.current?.version ?? 0, []);
   const onConflict = useCallback((handler: () => void) => { conflict.current = handler; }, []);
 
-  return { state, error, reset, change, commit, save, version, onConflict };
+  return { state, error, reset, change, commit, save, saveField, status: statusOf, version, onConflict };
 }
 
 /*
- * ── The header and the pre-start state ──────────────────────────────────────────────────────────
+ * ── The cards' frame ────────────────────────────────────────────────────────────────────────────
  */
 
 /**
- * `.session-header-card` (`Overall.html:4169-4175`): *Today's session — {date}*, its tag, and the past
- * sessions.
- *
- * **The date is the office's today until the session is first finalized, and the session's own date
- * from then on** (a Fix): the prototype prints the browser's today whatever it shows. Both are the
- * server's calendar days.
- *
- * **A past session opens its archive** (`/coaching/[membershipId]/archive/[sessionId]`), where the
- * prototype toasted that the archive was *"coming next"* (`:10712-10715`, contradiction #5).
+ * **A V1 card** (UI-008): white, borderless on the V1 surface, 16px corners, 14px of room; its title 16px/700 and
+ * whatever sits at the right of it. A region named by its title.
  */
-function SessionHeader({ coachee, history, session }: { coachee: Coachee; history: SessionHistory | null; session: CoachingSession | null }) {
-  const [showPast, setShowPast] = useState(false);
-  const listId = useId();
-  const day = session?.date ?? history?.today ?? null;
+function SessionPanel({
+  title, aside, className, card, children,
+}: { title: React.ReactNode; aside?: React.ReactNode; className?: string; card: string; children: React.ReactNode }) {
+  const id = useId();
+  return (
+    <section aria-labelledby={id} data-session-card={card} className={cn('min-w-0 rounded-lg border border-card-edge bg-card p-3.5', className)}>
+      <div className="mb-1 flex min-h-8 flex-wrap items-center justify-between gap-x-2 gap-y-1">
+        <h2 id={id} className="text-lg font-bold text-navy">{title}</h2>
+        {aside}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+/*
+ * ── The session card ────────────────────────────────────────────────────────────────────────────
+ */
+
+/** How many past sessions the card lists before *Semua* (UI-032: *Show 3, then "Semua ›"*). A layout count. */
+const PAST_SHOWN = 3;
+
+/**
+ * **The session card** (UI V1, UI-032): one card for one action. *Sesi hari ini*, the day — the office's today until the
+ * session is first finalized, the session's own from then on (a Fix) — and its tag; ***Mulai sesi coaching***, 48px,
+ * before a session is open; and **the past sessions as rows under it**, *29 Okt 2026 · 6 tindakan · 0 selesai ›*, each
+ * 52px and wholly a link to its archive — three, then *Semua (n)*. No dropdown, and no line under the button.
+ */
+function SessionCard({
+  coachee, history, session, start, className,
+}: {
+  coachee: Coachee;
+  history: SessionHistory;
+  session: CoachingSession | null;
+  start: { starting: boolean; error: ApiError | null; onStart: () => void } | null;
+  className?: string;
+}) {
+  const figures = useFigureLanguage();
+  const language = useLanguage();
+  const t = useMessages(coachingSessionMessages);
+  const [all, setAll] = useState(false);
+  const titleId = useId();
+  const pastId = useId();
+  const day = session?.date ?? history.today;
   const finalized = session?.status === 'finalized';
+  const past = history.sessions;
+  const shown = all ? past : past.slice(0, PAST_SHOWN);
 
   return (
-    <div className="rounded-lg border border-hairline bg-card px-5 py-3">
-      <div className="flex flex-wrap items-center justify-between gap-2.5">
-        <p className="text-base text-muted">
-          {"Today's session — "}<strong className="text-navy">{day ? formatCalendarDayLong(day) : ''}</strong>
-          {' '}
-          <span
-            className={cn(
-              'ml-1.5 whitespace-nowrap rounded-pill px-2.5 py-0.5 text-2xs font-semibold',
-              finalized ? 'bg-success/10 text-success' : 'bg-base text-muted',
-            )}
-          >
-            {finalized ? 'Finalized' : 'Draft'}
-          </span>
-        </p>
-        <button
-          type="button"
-          aria-expanded={showPast}
-          aria-controls={listId}
-          onClick={() => setShowPast((v) => !v)}
-          className="rounded-sm text-sm font-semibold text-navy-soft hover:underline"
-        >
-          {showPast ? 'Hide past sessions' : 'View past sessions'}
-          <span aria-hidden="true">{showPast ? ' ▴' : ' ▾'}</span>
-        </button>
+    <section aria-labelledby={titleId} data-session-card="session" className={cn('min-w-0 rounded-lg border border-card-edge bg-card px-3.5 py-2.5', className)}>
+      <div className="flex min-h-9 flex-wrap items-center gap-x-2 gap-y-1">
+        <h2 id={titleId} className="flex flex-wrap items-baseline gap-x-1.5 text-md font-bold text-navy">
+          <span className="text-sm font-normal text-muted">{t.sessionCard.label}</span>
+          {formatCalendarDayLong(day, figures)}
+        </h2>
+        <TonePill tone={finalized ? 'green' : session ? 'amber' : 'grey'}>{sessionTag(session, language)}</TonePill>
       </div>
-      <div id={listId} hidden={!showPast} className="mt-3 border-t border-hairline pt-3">
-        {!history ? null : history.sessions.length === 0 ? (
-          <p className="py-1.5 text-sm text-muted">No past sessions yet.</p>
-        ) : (
-          <ul>
-            {history.sessions.map((past) => (
-              <li key={past.sessionId}>
+      {start && (
+        <>
+          <Button onClick={start.onStart} disabled={start.starting} className="mt-2.5 h-12 w-full gap-2 rounded-pill text-lg md:w-auto md:px-6">
+            <LineIcon name="play" className="h-4 w-4" />
+            {t.start.button}
+          </Button>
+          {start.error && <div className="mt-2.5"><ErrorBanner {...start.error} /></div>}
+        </>
+      )}
+      {past.length > 0 && (
+        <div className="mt-2 border-t border-divider">
+          <h3 id={pastId} className="sr-only">{t.sessionCard.past}</h3>
+          <ul aria-labelledby={pastId} className="divide-y divide-divider">
+            {shown.map((row) => (
+              <li key={row.sessionId}>
                 <Link
-                  href={coachingArchiveHref(coachee.membershipId, past.sessionId)}
-                  className="flex items-center justify-between gap-3 rounded-sm py-[7px] text-sm text-muted hover:text-navy"
+                  href={coachingArchiveHref(coachee.membershipId, row.sessionId)}
+                  className="-mx-3.5 flex min-h-[52px] items-center gap-2 px-3.5 text-base text-ink hover:bg-hover-row"
                 >
-                  <span>
-                    <strong className="text-navy">{formatShortDay(past.date, { year: true })}</strong> — {pastSessionSummary(past)}
+                  <span className="min-w-0 flex-1">
+                    {t.sessionCard.row({ day: formatShortDay(row.date, { year: true }, figures), summary: pastSessionSummary(row, language) })}
                   </span>
-                  <span className="whitespace-nowrap">View →</span>
+                  <LineIcon name="chevronRight" className="h-4 w-4 text-signal-grey" />
                 </Link>
               </li>
             ))}
           </ul>
-        )}
-      </div>
-    </div>
+          {past.length > PAST_SHOWN && (
+            <button
+              type="button"
+              aria-expanded={all}
+              onClick={() => setAll((v) => !v)}
+              className="flex min-h-11 items-center gap-1 text-base font-semibold text-navy-soft hover:underline"
+            >
+              {all ? t.sessionCard.fewer : t.sessionCard.all({ n: past.length })}
+              <LineIcon name={all ? 'chevronUp' : 'chevronRight'} className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+      )}
+    </section>
   );
 }
 
-function StartCard({ starting, error, onStart }: { starting: boolean; error: ApiError | null; onStart: () => void }) {
-  return (
-    <div className="rounded-lg border border-hairline bg-card px-[22px] py-[18px] text-center">
-      <div className="py-3.5">
-        <Button onClick={onStart} disabled={starting} className="h-auto px-[22px] py-[11px]">
-          <span aria-hidden="true">▶&nbsp;</span>Start coaching session
-        </Button>
-        <p className="mt-2.5 text-sm text-muted">
-          {"Opens last week's items, goals, leads, and everything else for today's 1-on-1."}
-        </p>
-      </div>
-      {error && <div className="text-left"><ErrorBanner {...error} /></div>}
-    </div>
-  );
+/**
+ * **The session's tag**: *Not started* before *Start coaching session* has opened one (P18.95-T7 AC-2; the client's
+ * UI review, UI-021), *Draft* while it is open, *Finalized* once it is. In the reader's `language`, English when passed
+ * none (P18.98-T4).
+ */
+export function sessionTag(session: Pick<CoachingSession, 'status'> | null, language: Language = SOURCE_LANGUAGE): string {
+  const t = messagesIn(coachingSessionMessages, language).tag;
+  if (session === null) return t.notStarted;
+  return session.status === 'finalized' ? t.finalized : t.draft;
 }
 
 function SessionSkeleton() {
+  const t = useMessages(coachingSessionMessages);
   return (
-    <Skeleton label="Opening the session…" className="rounded-lg border border-hairline bg-card px-[22px] py-[18px]">
-      <SkeletonBar className="mx-auto h-10 w-56" />
-      <SkeletonText lines={1} className="mx-auto mt-3 w-2/3" />
+    <Skeleton label={t.opening} className="rounded-lg border border-card-edge bg-card px-3.5 py-3">
+      <SkeletonBar className="h-5 w-2/3" />
+      <SkeletonBar className="mt-3 h-12 w-full rounded-pill" />
     </Skeleton>
   );
 }
 
 /** Where last week's items will be, while the session is read beside the cards below it. */
-function AgreementSkeleton() {
+function AgreementSkeleton({ className }: { className?: string }) {
+  const t = useMessages(coachingSessionMessages);
   return (
-    <Skeleton label="Opening the session…" className="rounded-lg border border-hairline bg-card px-[22px] py-[18px]">
+    <Skeleton label={t.opening} className={cn('rounded-lg border border-card-edge bg-card p-3.5', className)}>
       <SkeletonBar className="h-4 w-1/3" />
       <SkeletonText lines={2} className="mt-3" />
     </Skeleton>
@@ -538,62 +725,50 @@ function AgreementSkeleton() {
  */
 
 /**
- * *Last week's action items* (`Overall.html:4186-4189`, `:10717-10734`): the items of the coachee's
- * latest finalized session, whoever led it. **Ticking one writes the tick on this session** — the
- * session it came from is frozen (P11-T5 AC-2). Not drawn for a coachee with no earlier session (a
- * Fill): the prototype's card always has rows.
+ * *Tindakan minggu lalu* (`Overall.html:4186-4189`, `:10717-10734`; UI-061): the items of the coachee's latest finalized
+ * session, whoever led it, each **the compact action row with a checkbox** — the date (changeable while the session is
+ * open), the words, the lead after a person icon. **Ticking one writes the tick on this session** — the session it came
+ * from is frozen (P11-T5 AC-2). Each row says its save under it (P18.95-T1 AC-5). Not drawn for a coachee with no
+ * earlier session.
  */
-function LastWeekCard({ session, draft, locked }: { session: CoachingSession; draft: SessionDraft; locked: boolean }) {
+function LastWeekCard({
+  session, draft, locked, className,
+}: { session: CoachingSession; draft: SessionDraft; locked: boolean; className?: string }) {
+  const figures = useFigureLanguage();
+  const t = useMessages(coachingSessionMessages).agreement;
   const rows = draft.state?.lastWeek ?? [];
-  const uid = useId();
   return (
-    <SummaryCard
-      id="session-last-week"
-      title="Last week's action items"
-      tag={session.lastWeek ? `From ${formatShortDay(session.lastWeek.date)} session` : undefined}
+    <SessionPanel
+      card="last-week"
+      className={className}
+      title={t.lastWeek}
+      aside={session.lastWeek ? (
+        <span className="text-sm text-muted">{t.fromSession({ day: actionDay(session.lastWeek.date, figures), coach: null })}</span>
+      ) : undefined}
     >
-      <ul>
+      <ul className="divide-y divide-divider">
         {session.lastWeekItems.map((item, i) => {
           const row = rows.find((r) => r.itemId === item.itemId) ?? { itemId: item.itemId, done: item.done, dueDate: item.dueDate };
-          const textId = `${uid}-text-${i}`;
+          const field = `lastWeek:${item.itemId}`;
+          const set = (patch: Partial<DraftLastWeek>) => draft.commit(
+            (d) => ({ ...d, lastWeek: d.lastWeek.map((r) => (r.itemId === item.itemId ? { ...r, ...patch } : r)) }),
+            field,
+          );
           return (
-            <li key={item.itemId} className="flex min-h-10 flex-wrap items-center gap-2.5 border-b border-hairline py-[9px] last:border-b-0">
-              <input
-                type="checkbox"
-                aria-labelledby={textId}
-                checked={row.done}
-                disabled={locked}
-                className={cn('h-4 w-4 shrink-0 accent-success', locked ? 'opacity-70' : 'cursor-pointer')}
-                onChange={(e) => {
-                  const done = e.target.checked;
-                  draft.commit((d) => ({ ...d, lastWeek: d.lastWeek.map((r) => (r.itemId === item.itemId ? { ...r, done } : r)) }));
-                }}
+            <li key={item.itemId}>
+              <ActionRow
+                date={row.dueDate}
+                onDateChange={locked ? undefined : (dueDate) => set({ dueDate })}
+                text={item.text}
+                person={item.lead?.name}
+                control={{ kind: 'check', checked: row.done, disabled: locked, onChange: (done) => set({ done }) }}
               />
-              {locked ? (
-                <DateTag day={row.dueDate} />
-              ) : (
-                <TextInput
-                  type="date"
-                  density="cell"
-                  aria-label={`Date, ${item.text || `item ${i + 1}`}`}
-                  className="w-[8.5rem] border-hairline"
-                  value={row.dueDate ?? ''}
-                  onChange={(e) => {
-                    const dueDate = e.target.value || null;
-                    draft.commit((d) => ({ ...d, lastWeek: d.lastWeek.map((r) => (r.itemId === item.itemId ? { ...r, dueDate } : r)) }));
-                  }}
-                />
-              )}
-              {item.lead && <FromLeadTag name={item.lead.name} />}
-              {/* At least 10rem, so on a phone the words take a line of their own rather than a sliver beside the date. */}
-              <span id={textId} className={cn('min-w-[10rem] flex-1 text-md', row.done ? 'text-muted line-through' : 'text-navy')}>
-                {item.text}
-              </span>
+              <InlineSaveStatus {...draft.status(field)} label={item.text || t.item({ n: i + 1 })} className="-mt-1 mb-1.5 pl-[58px]" />
             </li>
           );
         })}
       </ul>
-    </SummaryCard>
+    </SessionPanel>
   );
 }
 
@@ -602,27 +777,23 @@ function LastWeekCard({ session, draft, locked }: { session: CoachingSession; dr
  */
 
 /**
- * *Goal* (`Overall.html:4192-4214`; ADR-0075, contradiction #1): this month's and this year's APE
- * produced over the target, the percentage, the bar and what remains — **each the figure the Summary
- * shows for the same period**, from the coachee's `GET /summary?for=`, *Not uploaded yet* included.
+ * *Goal* (`Overall.html:4192-4214`; ADR-0075, contradiction #1; UI-062: **two tiles side by side**, *Bulan ini* and
+ * *Tahun ini*): what was produced, over the target, the percentage — whole (UI-080) — and the bar, **each the figure the
+ * Summary shows for the same period**, from the coachee's `GET /summary?for=`, *Belum diunggah* included.
  *
- * **Only the annual target is editable, and only by a deliberate save** — never on a keystroke or a
- * blur — through `PUT /goals/:period?for=&session=`, which carries the leader's name and makes every
- * save in this session one notice to the coachee. The plan sent is the one `GET /goals/:period?for=`
- * answers, set to a direct target. This month's target moves only by its formula (ADR-0056), so it is
- * a figure here like the others. The hint says only what is true.
+ * **Only the annual target is editable, and only by a deliberate save** — never on a keystroke or a blur — through
+ * `PUT /goals/:period?for=&session=`, which carries the leader's name and makes every save in this session one notice
+ * to the coachee. The target in the year's tile is the control (a dotted underline); the box opens under the tiles.
+ * This month's target moves only by its formula (ADR-0056). **One money formatter** (F-02): `formatRupiahCompact`.
  *
- * **One money formatter** (F-02, contradiction #13): `formatRupiah` everywhere on the card, the
- * *remaining* lines included, where the prototype had a compact second formatter that wrote a
- * billion as *Rp1.2M+*.
- *
- * **It says so once the card shows it** (P11-T8's browser walk): the figures are read again first, the
- * box stays open on what was saved meanwhile, and only then does it close and the toast say the goal
- * was updated — never over the old target.
+ * **It says so once the card shows it** (P11-T8's browser walk): the figures are read again first, and only then does
+ * the box close and the toast say the goal was updated — never over the old target.
  */
 function GoalCard({
-  coachee, sessionId, editable, onSaved,
-}: { coachee: Coachee; sessionId: string; editable: boolean; onSaved: () => void }) {
+  coachee, sessionId, editable, onSaved, className,
+}: { coachee: Coachee; sessionId: string; editable: boolean; onSaved: () => void; className?: string }) {
+  const figures = useFigureLanguage();
+  const t = useMessages(coachingSessionMessages).goal;
   const [summary, setSummary] = useState<Summary | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [editing, setEditing] = useState(false);
@@ -671,9 +842,11 @@ function GoalCard({
     setSaveError(null);
     try {
       const plan = await readGoal(summary.year, membershipId);
+      const inputs = goalInputsOf(plan);
       await saveGoal(
         summary.year,
-        { ...goalInputsOf(plan), mode: 'direct', annualApeTargetMinor: toMinor(parseDigits(typed)) },
+        // The target alone: the APE produced is left out (S1), so the coachee's own figure stands whatever this read.
+        goalBodyOf({ ...inputs, mode: 'direct', annualApeTargetMinor: toMinor(parseDigits(typed)) }, inputs),
         membershipId,
         sessionId,
       );
@@ -695,14 +868,14 @@ function GoalCard({
   }
 
   const editor = (
-    <form onSubmit={(e) => void save(e)} className="flex flex-wrap items-center gap-2">
+    <form onSubmit={(e) => void save(e)} className="mt-2.5 flex flex-wrap items-center gap-2">
       <TextInput
         id={inputId}
-        prefix="Rp"
-        aria-label="Annual APE target"
+        prefix={moneyPrefix(figures)}
+        aria-label={t.annualTarget}
         inputMode="numeric"
         className="w-48"
-        value={typed === '' ? '' : groupDigits(parseDigits(typed))}
+        value={typed === '' ? '' : groupDigits(parseDigits(typed), figures)}
         readOnly={saving}
         onChange={(e) => setTyped(e.target.value)}
         onKeyDown={(e) => {
@@ -712,109 +885,119 @@ function GoalCard({
           }
         }}
       />
-      <Button type="submit" disabled={saving}>Save</Button>
-      <Button variant="secondary" onClick={cancel} disabled={saving}>Cancel</Button>
+      <Button type="submit" disabled={saving}>{t.save}</Button>
+      <Button variant="secondary" onClick={cancel} disabled={saving}>{t.cancel}</Button>
     </form>
   );
 
+  const money = (minor: number) => formatRupiahCompact(minor, {}, figures);
   return (
-    <SummaryCard
-      id="session-goal"
-      title="Goal"
-      className="min-w-0"
-      aside={editable && !noGoal && summary && !editing
-        ? <span className="text-xs text-muted">Click this year’s target to edit</span>
-        : undefined}
+    <SessionPanel
+      card="goal"
+      className={className}
+      title={t.title}
+      aside={editable && !noGoal && summary && !editing ? <span className="text-xs text-muted max-md:hidden">{t.tapToEdit}</span> : undefined}
     >
       {error && <ErrorBanner {...error} />}
       {!summary && !error && (
-        <Skeleton label="Reading the goal…">
-          <SkeletonBar className="h-6 w-2/3" />
-          <SkeletonBar className="mt-3 h-1.5 w-full" />
-          <SkeletonBar className="mt-6 h-6 w-2/3" />
-          <SkeletonBar className="mt-3 h-1.5 w-full" />
+        <Skeleton label={t.reading}>
+          <div className="mt-1.5 grid grid-cols-2 gap-2">
+            {[0, 1].map((i) => <SkeletonBar key={i} className="h-[84px] rounded-row" />)}
+          </div>
         </Skeleton>
       )}
       {summary && (noGoal ? (
-        <div className="flex flex-col gap-3">
-          <p className="font-body text-[1.1875rem] font-bold text-navy">No goal set</p>
+        <div className="flex flex-col gap-2">
+          <p className="text-xl font-bold text-navy">{t.none}</p>
           {editable && (editing ? editor : (
-            <Button ref={trigger} variant="inline" className="self-start" onClick={edit}>Set this year’s target</Button>
+            <Button ref={trigger} variant="inline" className="self-start" onClick={edit}>{t.set}</Button>
           ))}
         </div>
       ) : (
         <>
-          <GoalRow figures={summary.monthly} period="month" target={
-            summary.monthly.targetMinor === null ? '—' : formatRupiah(summary.monthly.targetMinor)
-          } />
-          <GoalRow
-            figures={summary.yearly}
-            period="year"
-            className="mt-3.5"
-            target={editing ? null : editable ? (
-              <button
-                ref={trigger}
-                type="button"
-                onClick={edit}
-                className="rounded-[3px] border-b-[1.5px] border-dashed border-hairline px-px hover:border-amber focus:border-amber"
-              >
-                {formatRupiah(summary.yearly.targetMinor!)}
-                <span className="sr-only">, this year’s target — edit</span>
-              </button>
-            ) : formatRupiah(summary.yearly.targetMinor!)}
-            editor={editing ? editor : null}
-          />
+          <div className="mt-1.5 grid grid-cols-2 gap-2">
+            <GoalTile
+              label={t.monthTile}
+              barLabel={t.month}
+              figures={summary.monthly}
+              target={summary.monthly.targetMinor === null ? '—' : money(summary.monthly.targetMinor)}
+            />
+            <GoalTile
+              label={t.yearTile}
+              barLabel={t.year}
+              figures={summary.yearly}
+              target={editable && !editing ? (
+                <button
+                  ref={trigger}
+                  type="button"
+                  onClick={edit}
+                  className="rounded-[3px] border-b-[1.5px] border-dashed border-line px-px hover:border-amber focus:border-amber"
+                >
+                  {money(summary.yearly.targetMinor!)}
+                  <span className="sr-only">{t.editTarget}</span>
+                </button>
+              ) : money(summary.yearly.targetMinor!)}
+            />
+          </div>
+          {editing && editor}
         </>
       ))}
       {saveError && <div className="mt-3"><ErrorBanner {...saveError} /></div>}
-    </SummaryCard>
+    </SessionPanel>
+  );
+}
+
+/** One of the Goal card's two tiles (UI-062): the period, what was produced, *of* the target and the %, the bar. */
+function GoalTile({
+  label, barLabel, figures, target,
+}: {
+  label: string;
+  barLabel: string;
+  figures: Pick<PeriodFigures, 'actualMinor' | 'attainmentPct'>;
+  target: React.ReactNode;
+}) {
+  const figureLanguage = useFigureLanguage();
+  const t = useMessages(coachingSessionMessages).goal;
+  const pct = figures.attainmentPct;
+  return (
+    <div data-goal-tile="" className="min-w-0 rounded-row bg-base px-3 py-2.5">
+      <span className="block text-xs text-muted">{label}</span>
+      <span className="mt-0.5 block truncate text-xl font-bold text-navy">
+        {figures.actualMinor === null
+          ? <span className="text-base font-semibold text-muted">{t.notUploaded}</span>
+          : formatRupiahCompact(figures.actualMinor, {}, figureLanguage)}
+      </span>
+      <span className="block text-xs text-muted">
+        / {target}
+        {pct !== null && <> · <strong className="font-bold text-ink">{formatPercent(pct, {}, figureLanguage)}</strong></>}
+      </span>
+      {pct !== null && (
+        <div
+          role="progressbar"
+          aria-label={barLabel}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={Math.min(100, pct)}
+          aria-valuetext={formatPercent(pct, {}, figureLanguage)}
+          className="mt-2 h-1.5 overflow-hidden rounded-pill bg-hairline"
+        >
+          <div className="h-full rounded-pill bg-amber" style={{ width: `${Math.min(100, pct)}%` }} />
+        </div>
+      )}
+    </div>
   );
 }
 
 /*
- * ── Ratios and Activity ─────────────────────────────────────────────────────────────────────────
+ * ── Activity ────────────────────────────────────────────────────────────────────────────────────
  */
 
 /**
- * *Ratios*, *Last 30 days* (`Overall.html:4215-4218`, `:10906-10920`): **the coachee's ratios on the
- * coachee's rung** (ADR-0020), where the prototype's were markup. A rate is coloured against its
- * benchmark and says it; the balance says which way it leans, in points, and its band.
+ * *Aktivitas* · *7 hari terakhir* (`Overall.html:4221-4254`, contradiction #6; UI-062): **the coachee's saved week
+ * against pro-rated targets** as three small tiles and the sections' one line (`ActivityTilesCard`). Read again after
+ * the annual target is saved (`refresh`): the pro-rated targets are this month's, and this month's follows the goal.
  */
-function RatiosCard({ coachee }: { coachee: Coachee }) {
-  const [ratios, setRatios] = useState<ActivityRatios | null>(null);
-  const [error, setError] = useState<ApiError | null>(null);
-
-  useEffect(() => {
-    let live = true;
-    readActivityRatios(coachee.membershipId)
-      .then((next) => { if (live) setRatios(next); })
-      .catch((err) => { if (live) setError(toDisplayError(err)); });
-    return () => { live = false; };
-  }, [coachee.membershipId]);
-
-  return (
-    <RatiosPanel
-      rows={ratios?.ratios ?? null}
-      error={error}
-      emptyLine={`There are no ratios for ${PRONOUN_FORMS[coachee.pronoun].possessive} role yet.`}
-    />
-  );
-}
-
-/**
- * *Activity → view full dashboard* · *Last 7 days* (`Overall.html:4221-4254`, contradiction #6): **the
- * coachee's saved week against pro-rated targets**, where the prototype's card was static.
- *
- * The three chips are `SUB_PERIOD_ACTIVITY_TARGET`: this month's cascade target scaled to seven days,
- * which metrics §B.3 asks every screen to **label as pro-rated**, so each target says so where it is
- * printed. Below them the section chips, grouped by the office's summary tiles exactly as the Summary's
- * are (ADR-0064, I-140), and the drill, a dialog in the page (`ActivityPanel`).
- *
- * **Read again after the annual target is saved** (`refresh`, P11-T8's browser walk): the pro-rated
- * targets are this month's, and this month's follows the goal. What it showed stays until the new
- * week arrives.
- */
-function ActivityCard({ coachee, refresh }: { coachee: Coachee; refresh: number }) {
+function ActivityCard({ coachee, refresh, className }: { coachee: Coachee; refresh: number; className?: string }) {
   const [week, setWeek] = useState<ActivitySummary | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
 
@@ -831,7 +1014,8 @@ function ActivityCard({ coachee, refresh }: { coachee: Coachee; refresh: number 
   }, [coachee.membershipId, refresh]);
 
   return (
-    <ActivityPanel
+    <ActivityTilesCard
+      className={className}
       name={coachee.name}
       week={week ? { targets: week.targets ?? [], sections: week.sections ?? [] } : null}
       error={error}
@@ -844,28 +1028,29 @@ function ActivityCard({ coachee, refresh }: { coachee: Coachee; refresh: number 
  */
 
 /**
- * The round *+* in a card's head (`Overall.html:4290`, `:4298`) — the prototype's `.btn-primary`, so the
- * primary button made round: it adds, and an action is amber (ADR-0137).
+ * The round *+* in a card's head (`Overall.html:4290`, `:4298`) — the primary button made round: it adds, and an
+ * action is amber (ADR-0137), its words navy (parity I-542).
  */
 function AddButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
-    <Button
-      title={label}
-      aria-label={label}
-      onClick={onClick}
-      className="h-[30px] w-[30px] shrink-0 rounded-full px-0 text-lg leading-none"
-    >
-      <span aria-hidden="true">+</span>
+    <Button title={label} aria-label={label} onClick={onClick} className="h-8 w-8 shrink-0 rounded-full px-0">
+      <LineIcon name="plus" className="h-[18px] w-[18px]" />
     </Button>
   );
 }
 
+/** A row's ✕, a line icon, a 44px target below 1024px. */
 function RemoveButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
-    <Button variant="icon" tone="alert" title={label} onClick={onClick}>
-      <span aria-hidden="true">✕</span>
-      <span className="sr-only">{label}</span>
-    </Button>
+    <button
+      type="button"
+      title={label}
+      aria-label={label}
+      onClick={onClick}
+      className="-my-2 -mr-2.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-pill text-signal-grey hover:bg-hover-row hover:text-navy lg:h-8 lg:w-8 lg:-my-1 lg:mr-0"
+    >
+      <LineIcon name="close" className="h-4 w-4" />
+    </button>
   );
 }
 
@@ -882,21 +1067,25 @@ function useFocusNew() {
   return { focus: setKey, idOf };
 }
 
+/** The words of a row typed in place (UI-061): 16px so iOS does not zoom, wrapping as they grow, never cut. */
+const EDITOR = 'min-h-0 w-full px-0 py-0 text-md leading-snug text-ink';
+
 /**
- * *Coaching tips* (`Overall.html:4287-4293`, `:11011-11038`): *+* adds a blank row and focuses it,
- * *Type the tip…*, *✕*. No categories (ADR-0083). The empty line points up at the *+*, which is above
- * it — the prototype's pointed below (contradiction #14, a Fix in its sibling's words).
+ * *Tips coaching* (`Overall.html:4287-4293`, `:11011-11038`): *+* adds a blank row and focuses it, *Tulis tipsnya…*,
+ * *✕*. No categories (ADR-0083). Each row numbered, its words typed in place, saved when left.
  */
-function TipsCard({ draft, locked }: { draft: SessionDraft; locked: boolean }) {
+function TipsCard({ draft, locked, className }: { draft: SessionDraft; locked: boolean; className?: string }) {
+  const { agreement, tips: t } = useMessages(coachingSessionMessages);
   const tips = draft.state?.tips ?? [];
   const { focus, idOf } = useFocusNew();
   return (
-    <SummaryCard
-      id="session-tips"
-      title="Coaching tips"
+    <SessionPanel
+      card="tips"
+      className={className}
+      title={agreement.tips}
       aside={locked ? undefined : (
         <AddButton
-          label="Add tip"
+          label={t.add}
           onClick={() => {
             const key = newKey();
             draft.change((d) => ({ ...d, tips: [...d.tips, { key, text: '' }] }));
@@ -906,33 +1095,34 @@ function TipsCard({ draft, locked }: { draft: SessionDraft; locked: boolean }) {
       )}
     >
       {tips.length === 0 ? (
-        <p className={EMPTY_LINE}>
-          {locked ? 'No tips were added this session.' : 'No tips added yet — click + above to add one.'}
-        </p>
+        <p className={EMPTY_LINE}>{locked ? agreement.noTips : t.emptyOpen}</p>
       ) : (
-        <ol>
+        <ol className="divide-y divide-divider">
           {tips.map((tip, i) => (
-            <li key={tip.key} className="flex items-start gap-2.5 border-b border-hairline py-[9px] text-base text-navy last:border-b-0">
+            <li key={tip.key} className="flex min-h-10 items-start gap-2.5 py-2">
               <NumberDot n={i + 1} />
               {locked ? (
-                <span className="min-w-0 flex-1">{tip.text}</span>
+                <span className="min-w-0 flex-1 text-md text-ink">{tip.text}</span>
               ) : (
                 <>
-                  <TextInput
-                    id={idOf(tip.key)}
-                    aria-label={`Tip ${i + 1}`}
-                    placeholder="Type the tip…"
-                    className="h-8 min-w-0 flex-1"
-                    value={tip.text}
-                    onChange={(e) => {
-                      const text = e.target.value;
-                      draft.change((d) => ({ ...d, tips: d.tips.map((t) => (t.key === tip.key ? { ...t, text } : t)) }));
-                    }}
-                    onBlur={() => void draft.save()}
-                  />
+                  {/* The tip says its save under its words, and a retry puts the focus back in it (P18.95-T1 AC-5). */}
+                  <InlineSaveField status={draft.status(`tip:${tip.key}`)} label={t.tip({ n: i + 1 })} className="min-w-0 flex-1">
+                    <AutoGrowTextarea
+                      id={idOf(tip.key)}
+                      aria-label={t.tip({ n: i + 1 })}
+                      placeholder={t.placeholder}
+                      className={EDITOR}
+                      value={tip.text}
+                      onChange={(e) => {
+                        const text = e.target.value;
+                        draft.change((d) => ({ ...d, tips: d.tips.map((x) => (x.key === tip.key ? { ...x, text } : x)) }));
+                      }}
+                      onBlur={() => draft.saveField(`tip:${tip.key}`)}
+                    />
+                  </InlineSaveField>
                   <RemoveButton
-                    label={`Remove tip ${i + 1}`}
-                    onClick={() => draft.commit((d) => ({ ...d, tips: d.tips.filter((t) => t.key !== tip.key) }))}
+                    label={t.remove({ n: i + 1 })}
+                    onClick={() => draft.commit((d) => ({ ...d, tips: d.tips.filter((x) => x.key !== tip.key) }))}
                   />
                 </>
               )}
@@ -940,29 +1130,49 @@ function TipsCard({ draft, locked }: { draft: SessionDraft; locked: boolean }) {
           ))}
         </ol>
       )}
-    </SummaryCard>
+    </SessionPanel>
   );
 }
 
 /**
- * *Next action items* (`Overall.html:4295-4301`, `:11040-11102`).
+ * *Tindakan berikutnya* (`Overall.html:4295-4301`, `:11040-11102`; UI-060, UI-061), in the compact action row.
  *
- * - *From leads (automatic)*: each of the coachee's leads with a next action date, nearest first, with
- *   its note or *Follow up with {name}*. Read-only: it is the leads', and the Leads card above edits it.
- * - *Other action items*: a date and *What needs to happen…*, by date, undated last. A new one is
- *   dated the office's today — the prototype dated it with the browser's UTC day, which in Jakarta is
- *   yesterday until 07:00 (F-01).
+ * - ***Dari leads*** with the ⚡ (D-25; its ⓘ says where they come from): each of the coachee's leads with a next action
+ *   date, nearest first, its note or *Follow up with {name}*, the lead's name after it — and a link icon and › that open
+ *   the lead's sheet, where it is changed. Not removed here: it is the lead's.
+ * - ***Lainnya***: a date and the words, typed in place, by date, undated last, each with a ✕. **A new one is dated a
+ *   week from the office's today**, the server's `defaultDueDate` (UI-060: every action always has a date).
+ * - **A refusal for a missing date** (UI-060) outlines every undated row in red, its date reading *Pilih tanggal* in
+ *   red, and scrolls to the first.
  *
- * *+* refuses to start a second blank row, in the prototype's sentence — said beside the list, where
- * the reader can act on it, rather than in a toast that leaves (`components-and-patterns.md`, *Toast*),
- * and the focus goes to the row already started.
+ * *+* refuses to start a second blank row, in the prototype's sentence, said beside the list, and the focus goes to the
+ * row already started.
  */
 function NextActionsCard({
-  draft, leadActions, locked, today,
-}: { draft: SessionDraft; leadActions: readonly LeadAction[]; locked: boolean; today: string }) {
+  draft, leadActions, locked, newRowDate, refusal, onOpenLead, className,
+}: {
+  draft: SessionDraft;
+  leadActions: readonly LeadAction[];
+  locked: boolean;
+  newRowDate: string;
+  refusal: Refusal | null;
+  onOpenLead: (leadId: string) => void;
+  className?: string;
+}) {
+  const language = useLanguage();
+  const ui = useMessages(uiMessages);
+  const { agreement, actions: t } = useMessages(coachingSessionMessages);
   const actions = [...(draft.state?.actions ?? [])].sort(byDueDate);
   const { focus, idOf } = useFocusNew();
   const [guard, setGuard] = useState(false);
+  const undated = refusal?.rule === 'UNDATED_ACTION_ITEM';
+
+  // *Finalkan* refused for a missing date: bring the first such row into view (UI-060).
+  useEffect(() => {
+    if (!undated) return;
+    document.querySelector<HTMLElement>('[data-next-actions] [data-action-row][data-invalid]')
+      ?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+  }, [undated, refusal]);
 
   function add() {
     const blank = draft.state?.actions.find((a) => !a.text.trim());
@@ -973,135 +1183,145 @@ function NextActionsCard({
     }
     setGuard(false);
     const key = newKey();
-    draft.change((d) => ({ ...d, actions: [...d.actions, { key, text: '', dueDate: today }] }));
+    draft.change((d) => ({ ...d, actions: [...d.actions, { key, text: '', dueDate: newRowDate }] }));
     focus(key);
   }
 
-  const label = GROUP_LABEL;
+  const SUB = 'mt-2 flex items-center gap-1.5 text-base font-semibold text-pill-grey-ink first:mt-0';
   return (
-    <SummaryCard
-      id="session-next"
-      title="Next action items"
-      aside={locked ? undefined : <AddButton label="Add action" onClick={add} />}
-    >
-      <h3 className={label}>From leads (automatic)</h3>
-      {leadActions.length === 0 ? (
-        <p className={EMPTY_LINE}>No leads have a next action date set yet.</p>
-      ) : (
-        <ul>
-          {leadActions.map((a) => (
-            <li key={a.leadId} className="flex min-h-10 flex-wrap items-center gap-2.5 border-b border-hairline py-[9px] last:border-b-0">
-              <DateTag day={a.dueDate} />
-              <FromLeadTag name={a.leadName} />
-              <span className="min-w-[10rem] flex-1 text-md text-navy">{a.text || `Follow up with ${a.leadName}`}</span>
-            </li>
-          ))}
-        </ul>
-      )}
+    <SessionPanel card="next" className={className} title={agreement.next} aside={locked ? undefined : <AddButton label={t.add} onClick={add} />}>
+      <div data-next-actions="">
+        <h3 className={SUB}>
+          <AutoMarker name={agreement.fromLeadsShort} explanation={agreement.autoWhy} />
+          {agreement.fromLeadsShort}
+        </h3>
+        {leadActions.length === 0 ? (
+          <p className={cn(EMPTY_LINE, 'py-1.5')}>{agreement.noLeadDates}</p>
+        ) : (
+          <ul className="divide-y divide-divider">
+            {leadActions.map((a) => (
+              <li key={a.leadId}>
+                <ActionRow
+                  date={a.dueDate}
+                  text={leadActionText(a, language)}
+                  person={a.leadName}
+                  control={{ kind: 'lead', name: a.leadName, onOpen: () => onOpenLead(a.leadId) }}
+                />
+              </li>
+            ))}
+          </ul>
+        )}
 
-      <h3 className={label}>Other action items</h3>
-      {actions.length === 0 ? (
-        <p className={EMPTY_LINE}>
-          {locked ? 'No other action items were added this session.' : 'No other action items yet — click + above to add one.'}
-        </p>
-      ) : (
-        <ol>
-          {actions.map((item, i) => (
-            <li key={item.key} className="flex min-h-10 flex-wrap items-center gap-2.5 border-b border-hairline py-[9px] last:border-b-0">
-              <NumberDot n={i + 1} />
-              {locked ? (
-                <>
-                  <DateTag day={item.dueDate} />
-                  <span className="min-w-[10rem] flex-1 text-md text-navy">{item.text}</span>
-                </>
-              ) : (
-                <>
-                  <TextInput
-                    type="date"
-                    aria-label={`Date, action item ${i + 1}`}
-                    className="h-8 w-[118px] px-2"
-                    value={item.dueDate ?? ''}
-                    onChange={(e) => {
-                      const dueDate = e.target.value || null;
-                      draft.commit((d) => ({ ...d, actions: d.actions.map((a) => (a.key === item.key ? { ...a, dueDate } : a)) }));
-                    }}
-                  />
-                  <TextInput
-                    id={idOf(item.key)}
-                    aria-label={`Action item ${i + 1}`}
-                    placeholder="What needs to happen…"
-                    className="h-8 min-w-[140px] flex-1"
-                    value={item.text}
-                    onChange={(e) => {
-                      const text = e.target.value;
-                      if (text.trim()) setGuard(false);
-                      draft.change((d) => ({ ...d, actions: d.actions.map((a) => (a.key === item.key ? { ...a, text } : a)) }));
-                    }}
-                    onBlur={() => void draft.save()}
-                  />
-                  <RemoveButton
-                    label={`Remove action item ${i + 1}`}
-                    onClick={() => {
-                      setGuard(false);
-                      draft.commit((d) => ({ ...d, actions: d.actions.filter((a) => a.key !== item.key) }));
-                    }}
-                  />
-                </>
-              )}
-            </li>
-          ))}
-        </ol>
-      )}
-      {guard && !locked && (
-        <p role="alert" className="mt-2 text-sm font-semibold text-alert">
-          Fill in the action item you already started before adding another.
-        </p>
-      )}
-    </SummaryCard>
+        <h3 className={SUB}>{agreement.otherShort}</h3>
+        {actions.length === 0 ? (
+          <p className={cn(EMPTY_LINE, 'py-1.5')}>{locked ? agreement.noOther : t.emptyOpen}</p>
+        ) : (
+          <ol className="divide-y divide-divider">
+            {actions.map((item, i) => {
+              const field = `action:${item.key}`;
+              return (
+                <li key={item.key}>
+                  {locked ? (
+                    <ActionRow date={item.dueDate} text={item.text} />
+                  ) : (
+                    <>
+                      <ActionRow
+                        date={item.dueDate}
+                        invalid={undated && !item.dueDate}
+                        emptyText={ui.chooseDate}
+                        onDateChange={(dueDate) => draft.commit(
+                          (d) => ({ ...d, actions: d.actions.map((a) => (a.key === item.key ? { ...a, dueDate } : a)) }),
+                          field,
+                        )}
+                        text={item.text || t.item({ n: i + 1 })}
+                        editor={(
+                          <InlineSaveField status={draft.status(field)} label={t.item({ n: i + 1 })}>
+                          <AutoGrowTextarea
+                            id={idOf(item.key)}
+                            aria-label={t.item({ n: i + 1 })}
+                            placeholder={t.placeholder}
+                            className={EDITOR}
+                            value={item.text}
+                            onChange={(e) => {
+                              const text = e.target.value;
+                              if (text.trim()) setGuard(false);
+                              draft.change((d) => ({ ...d, actions: d.actions.map((a) => (a.key === item.key ? { ...a, text } : a)) }));
+                            }}
+                            onBlur={() => draft.saveField(field)}
+                          />
+                          </InlineSaveField>
+                        )}
+                        control={{
+                          kind: 'remove',
+                          onRemove: () => {
+                            setGuard(false);
+                            draft.commit((d) => ({ ...d, actions: d.actions.filter((a) => a.key !== item.key) }));
+                          },
+                        }}
+                      />
+                    </>
+                  )}
+                </li>
+              );
+            })}
+          </ol>
+        )}
+        {guard && !locked && (
+          <p role="alert" className="mt-2 text-base font-semibold text-alert">{t.guard}</p>
+        )}
+      </div>
+    </SessionPanel>
   );
 }
 
 /*
- * ── Finalize, and Edit again ────────────────────────────────────────────────────────────────────
+ * ── Finalkan, and Ubah lagi ─────────────────────────────────────────────────────────────────────
  */
 
 /**
- * The finalize card (`Overall.html:4303-4315`).
+ * **Finalkan, always in reach** (UI V1, UI-060, UI-062; D-01): **the floating bar above the tab bar below 1024px** — the
+ * message and the button seen together, in Goal Setting's pill (`FloatingBar`; the product owner's staging review,
+ * 2026-10-31, in place of the full-width strip) — and **the foot of the sticky right column on a desktop**.
  *
- * **Open**: *✓ Finalize this session* and its line. Whatever is unsaved is saved first, then finalize
- * goes with the version that save answered. **A refusal is the server's** — the prototype's five
- * checks, in its order — **in the prototype's sentence**, said under the button where the reader can
- * act on it rather than in a toast (`details.rule`, `functional/coaching.md`).
+ * **Open**: *Draf · 6 tindakan* and ***Finalkan sesi ini***. Whatever is unsaved is saved first, then finalize goes with
+ * the version that save answered. **A refusal is the server's** — the prototype's five checks, in its order — said
+ * **right above the button**, 14px, red, with the alert icon, in an alert region, the button still enabled; a missing
+ * date adds **how many rows lack one**, which counts down as each is dated and goes when none is left.
  *
- * **Finalized**: *✓ Finalized {date}*, *Edit again*, which asks why in a dialog that says the coachee
- * reads the reason (ADR-0079, a Fill), and *⬇ Download as PDF*, the print of the frozen session
- * (ADR-0077, P11-T10 AC-3), which closes parity D-17. Past the seven days *Edit again* stays where it
- * is, drawn locked with a title saying until when it could have been used.
+ * **Finalized**: toast *Tersimpan*, then the green ***Difinalkan 30 Okt*** strip and ***Ubah lagi*** (44px), which asks
+ * why in a dialog that says the coachee reads the reason (ADR-0079) and reopens the same session as a draft with every
+ * field as it was; finalizing again keeps the session's date and counts once (the server's, W1-C). Past the seven days
+ * *Ubah lagi* stays, drawn locked, its title saying until when. *Unduh sebagai PDF* under it on a desktop.
  */
-function FinalizeCard({
-  coachee, session, today, draft, canFinalize, canReopen, showCoach, onFinalized, onReopened, onConflict,
+function FinalizeBar({
+  coachee, session, today, draft, refusal, onRefusal, canFinalize, canReopen, onFinalized, onReopened, onConflict,
 }: {
   coachee: Coachee;
   session: CoachingSession;
   today: string;
   draft: SessionDraft;
+  refusal: Refusal | null;
+  onRefusal: (refusal: Refusal | null) => void;
   canFinalize: boolean;
   canReopen: boolean;
-  /** The reader did not lead it: the print says who did. */
-  showCoach: boolean;
   onFinalized: (session: CoachingSession) => Promise<void>;
   onReopened: (session: CoachingSession) => Promise<void>;
   onConflict: () => void;
 }) {
+  const figures = useFigureLanguage();
+  const language = useLanguage();
+  const { me } = useSession();
+  const t = useMessages(coachingSessionMessages);
   const [busy, setBusy] = useState(false);
-  const [refusal, setRefusal] = useState<string | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [asking, setAsking] = useState(false);
+  const reopenOpened = useOpenedOnce(asking);
   const finalized = session.status === 'finalized';
+  const mine = session.coach.membershipId === me?.membership?.membershipId;
 
   async function finalize() {
     setBusy(true);
-    setRefusal(null);
+    onRefusal(null);
     setError(null);
     try {
       if (!(await draft.save())) return;
@@ -1109,8 +1329,8 @@ function FinalizeCard({
       await onFinalized(next);
     } catch (err) {
       const shown = toDisplayError(err);
-      const sentence = shown.code === 'COACHING_SESSION_INCOMPLETE' ? finalizeRefusal(shown.details) : null;
-      if (sentence) setRefusal(sentence);
+      const sentence = shown.code === 'COACHING_SESSION_INCOMPLETE' ? finalizeRefusal(shown.details, language) : null;
+      if (sentence) onRefusal({ sentence, rule: typeof shown.details?.rule === 'string' ? shown.details.rule : null });
       else if (shown.code === 'VERSION_CONFLICT' || shown.code === 'COACHING_SESSION_FINALIZED') onConflict();
       else setError(shown);
     } finally {
@@ -1120,45 +1340,77 @@ function FinalizeCard({
 
   if (!finalized) {
     if (!canFinalize) return null;
+    const undated = draft.state?.actions.filter((a) => !a.dueDate).length ?? 0;
+    const message = !refusal ? null
+      : refusal.rule === 'UNDATED_ACTION_ITEM'
+        ? (undated > 0 ? t.bar.count({ sentence: refusal.sentence, n: undated }) : null)
+        : refusal.sentence;
+    const count = session.leadActions.length + (draft.state?.actions.length ?? 0);
+    /*
+     * **The floating bar** (staging review, 2026-10-31): below 1024px the Goal Setting pill's form — *Draf · n tindakan*
+     * on the left, the accent's 44px *Finalkan sesi ini* on the right — and a refusal or a failure in a card of its own
+     * right above it. From 1024px, the card at the sticky column's foot it always was.
+     */
+    const note = message || error ? (
+      <>
+        {message && (
+          <p role="alert" data-finalize-refusal="" className="flex items-start gap-1.5 text-md font-medium text-pill-red-ink">
+            <LineIcon name="alert" className="mt-px h-[18px] w-[18px]" />
+            {message}
+          </p>
+        )}
+        {error && <ErrorBanner {...error} />}
+      </>
+    ) : null;
     return (
-      <div className="rounded-lg border border-hairline bg-card px-[22px] py-[18px] text-center">
-        <Button onClick={() => void finalize()} disabled={busy}>
-          <span aria-hidden="true">✓&nbsp;</span>Finalize this session
+      <FloatingBar data-finalize-bar="draft" wide="card" note={note}>
+        <span className="min-w-0 flex-1 text-base text-muted lg:flex-none">{t.bar.draft({ n: count })}</span>
+        <Button
+          onClick={() => void finalize()}
+          disabled={busy}
+          className={cn(FLOATING_BAR_BUTTON, 'gap-2 lg:h-[50px] lg:min-w-0 lg:flex-1 lg:text-lg')}
+        >
+          <LineIcon name="check" className="h-5 w-5" />
+          {t.finalize.button}
         </Button>
-        <p className="mt-2.5 text-sm text-muted">
-          Coaching is only counted as done once finalized. You can keep editing everything until then.
-        </p>
-        {refusal && <p role="alert" className="mt-2.5 text-sm font-semibold text-alert">{refusal}</p>}
-        {error && <div className="mt-3 text-left"><ErrorBanner {...error} /></div>}
-      </div>
+      </FloatingBar>
     );
   }
 
   const closed = reopenWindowClosed(today, session.reopenableUntil);
-  const until = session.reopenableUntil ? formatShortDay(session.reopenableUntil, { year: true }) : '';
+  const until = session.reopenableUntil ? formatShortDay(session.reopenableUntil, { year: true }, figures) : '';
+  /*
+   * Below 1024px the same pill: *Difinalkan 30 Okt* in green on its left, *Ubah lagi* on its right. From 1024px, the
+   * green strip and *Ubah lagi* on one line and *Unduh sebagai PDF* under them, as the column's foot always had them.
+   */
   return (
-    <div className="rounded-lg border border-hairline bg-card px-[22px] py-[18px] text-center">
-      <FinalizedBadge date={session.date} />
-      <div className="mt-3.5 flex flex-wrap justify-center gap-2.5 empty:hidden">
-        {canReopen && session.reopenableUntil !== null && (
-          <EditAgainButton closed={closed} until={until} onClick={() => setAsking(true)} />
-        )}
-        <DownloadPdfButton sessionId={session.sessionId} showCoach={showCoach} />
+    <FloatingBar data-finalize-bar="finalized" wide="card">
+      <p className="flex min-h-11 min-w-0 flex-1 items-center gap-2 text-md font-semibold text-pill-green-ink lg:h-[50px] lg:rounded-row lg:bg-pill-green lg:px-3">
+        <LineIcon name="checkCircle" className="h-5 w-5" />
+        <span className="truncate">{t.bar.finalized({ day: session.date ? actionDay(session.date, figures) : '' })}</span>
+      </p>
+      {canReopen && session.reopenableUntil !== null && (
+        <EditAgainButton closed={closed} until={until} onClick={() => setAsking(true)} className="h-11 shrink-0 rounded-pill px-4" />
+      )}
+      <div className="basis-full max-lg:hidden">
+        <DownloadPdfButton sessionId={session.sessionId} showCoach={!mine} className="w-full" />
       </div>
-      <ReopenDialog
-        open={asking}
-        coacheeName={coachee.name}
-        session={session}
-        onClose={() => setAsking(false)}
-        onReopened={async (next) => {
-          setAsking(false);
-          await onReopened(next);
-        }}
-        onConflict={() => {
-          setAsking(false);
-          onConflict();
-        }}
-      />
-    </div>
+      {reopenOpened && (
+        <ReopenDialog
+          open={asking}
+          coacheeName={coachee.name}
+          session={session}
+          onClose={() => setAsking(false)}
+          onReopened={async (next) => {
+            setAsking(false);
+            await onReopened(next);
+          }}
+          onConflict={() => {
+            setAsking(false);
+            onConflict();
+          }}
+        />
+      )}
+    </FloatingBar>
   );
 }

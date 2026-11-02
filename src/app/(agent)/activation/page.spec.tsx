@@ -42,21 +42,23 @@ describe('/activation, the hire’s own 90-Day Activation (P13-T4)', () => {
     vi.useRealTimers();
   });
 
-  it('P13-T4 AC-2 is titled and headed verbatim, and reads the reader’s own activation once', async () => {
+  it('P13-T4 AC-2, P18.95-T9 AC-2 is titled as its nav item, headed verbatim, and reads the reader’s own activation once', async () => {
     const { calls } = show();
     await ready();
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^90-Day Activation$/);
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Your 90-Day Activation$/);
     expect(screen.getByText('Your first 90 days, checklist by checklist.')).toBeInTheDocument();
     expect(calls.filter((c) => c.url.includes('/activation/me')).map((c) => c.url)).toEqual(['http://api.test/api/v1/activation/me']);
   });
 
-  it('P13-T4 AC-2 draws the start date read-only (OD-118): shown, and no field to change it', async () => {
+  it('P13-T4 AC-2, P18.96-T2 AC-3 AC-5 draws the join date read-only (OD-118): named Join date, shown, and no field to change it', async () => {
     show();
     await ready();
-    const term = screen.getByText('Start date');
+    const term = screen.getByText('Join date');
     expect(term.tagName).toBe('DT');
-    expect(term.nextElementSibling).toHaveTextContent('Aug 6, 2026');
-    expect(screen.queryByLabelText('Start date')).not.toBeInTheDocument();
+    expect(term.nextElementSibling).toHaveTextContent('6 Aug 2026');
+    expect(screen.queryByLabelText('Join date')).not.toBeInTheDocument();
+    // The prototype's *Start date* is gone: one name for the one date.
+    expect(screen.queryByText('Start date')).not.toBeInTheDocument();
   });
 
   it('P13-T4 AC-2 prints the served tiles, bar and table: Day n/window, Completed n/items, the percentage', async () => {
@@ -149,7 +151,7 @@ describe('/activation, the hire’s own 90-Day Activation (P13-T4)', () => {
     expect(box).toBeChecked();
     await screen.findByText('38% complete');
     expect(box).toBeChecked();
-    expect(within(row('CRM_SETUP')).getByRole('button', { name: 'Ticked by you · Oct 3, 2026' })).toBeInTheDocument();
+    expect(within(row('CRM_SETUP')).getByRole('button', { name: 'Ticked by you · 3 Oct 2026' })).toBeInTheDocument();
     expect(writes(calls)).toEqual([['PUT', '/activation/me/items/CRM_SETUP', { done: true }]]);
   });
 
@@ -192,6 +194,54 @@ describe('/activation, the hire’s own 90-Day Activation (P13-T4)', () => {
     await userEvent.click(box);
     expect(await within(row('CRM_SETUP')).findByRole('alert')).toHaveTextContent('Not saved. This activation is closed.');
     expect(box).not.toBeChecked();
+  });
+
+  it('P18.95-T1 AC-5: a tick says Saved ✓ beside its box once it lands', async () => {
+    show({ 'PUT /activation/me/items/': () => ({ body: crmTicked() }) });
+    await ready();
+    await userEvent.click(within(row('CRM_SETUP')).getByRole('checkbox', { name: 'Set up company CRM system' }));
+
+    const said = await within(row('CRM_SETUP')).findByText('Saved ✓');
+    expect(said).toHaveAttribute('role', 'status');
+    // On the box's own line, beside it.
+    expect(said.parentElement).toContainElement(within(row('CRM_SETUP')).getByRole('checkbox'));
+  });
+
+  it('P18.95-T1 AC-5: a refused tick says Couldn’t save — retry, and the retry sends the same tick again', async () => {
+    const { calls } = show({
+      'PUT /activation/me/items/': [
+        { status: 500, body: { error: { code: 'INTERNAL_ERROR', message: 'Something went wrong.', requestId: 'r-1' } } },
+        { body: crmTicked() },
+      ],
+    });
+    await ready();
+    await userEvent.click(within(row('CRM_SETUP')).getByRole('checkbox'));
+    const retry = await within(row('CRM_SETUP')).findByRole('button', { name: "Couldn't save — retry: Set up company CRM system" });
+    // The row's own *Not saved.* still says why.
+    expect(within(row('CRM_SETUP')).getByRole('alert')).toHaveTextContent('Not saved. Something went wrong.');
+
+    await userEvent.click(retry);
+
+    await waitFor(() => expect(writes(calls)).toEqual([
+      ['PUT', '/activation/me/items/CRM_SETUP', { done: true }],
+      ['PUT', '/activation/me/items/CRM_SETUP', { done: true }],
+    ]));
+    expect(await within(row('CRM_SETUP')).findByText('Saved ✓')).toBeInTheDocument();
+    expect(within(row('CRM_SETUP')).getByRole('checkbox')).toBeChecked();
+  });
+
+  it('P18.95-T1 AC-5: the note says Saved ✓ under its own box, and the date has none of its own', async () => {
+    show({ 'PUT /activation/me/items/': () => ({ body: activationView() }) });
+    await ready();
+    const crm = within(row('CRM_SETUP'));
+    await userEvent.click(crm.getByRole('button', { name: 'Show note and date' }));
+    const note = crm.getByRole('textbox');
+    await userEvent.type(note, 'Asked IT');
+    await userEvent.tab();
+
+    const said = await crm.findByText('Saved ✓');
+    expect(note.parentElement).toContainElement(said);
+    expect(crm.getAllByText('Saved ✓')).toHaveLength(1);
   });
 
   it('P13-T4 AC-3 the note is saved when the field is left, once, and only when it changed', async () => {
@@ -281,7 +331,7 @@ describe('/activation, the hire’s own 90-Day Activation (P13-T4)', () => {
     const view = activationView();
     view.aspects[2].items[0] = {
       ...view.aspects[2].items[0],
-      link: { kind: 'training:PRODUCT', label: 'Training module', route: '/training', completesWhen: 'the hire has completed that training module', live: false },
+      link: { kind: 'training:PRODUCT', label: 'Training module', route: '/training', completesWhen: 'the hire has completed that training module', live: false, form: null },
     };
     show({ 'GET /activation/me': { body: view } });
     await ready();
@@ -294,18 +344,18 @@ describe('/activation, the hire’s own 90-Day Activation (P13-T4)', () => {
   it('P13-T4 AC-5 every done row says who ticked it and when, or which link completed it', async () => {
     show();
     await ready();
-    expect(within(row('INSURANCE_BASICS')).getByRole('button', { name: 'Ticked by you · Aug 10, 2026' })).toBeInTheDocument();
-    expect(within(row('CAREER_MINDSET')).getByRole('button', { name: 'Ticked by Sari Puspita · Aug 12, 2026' })).toBeInTheDocument();
-    expect(within(row('GOAL_SETTING')).getByRole('button', { name: 'Completed from Goal Settings by you · Aug 15, 2026' })).toBeInTheDocument();
-    expect(within(row('ADD_PROSPECTS')).getByRole('button', { name: 'Completed from Leads Management by Sari Puspita · Aug 16, 2026' })).toBeInTheDocument();
+    expect(within(row('INSURANCE_BASICS')).getByRole('button', { name: 'Ticked by you · 10 Aug 2026' })).toBeInTheDocument();
+    expect(within(row('CAREER_MINDSET')).getByRole('button', { name: 'Ticked by Sari Puspita · 12 Aug 2026' })).toBeInTheDocument();
+    expect(within(row('GOAL_SETTING')).getByRole('button', { name: 'Completed from Goal Settings by you · 15 Aug 2026' })).toBeInTheDocument();
+    expect(within(row('ADD_PROSPECTS')).getByRole('button', { name: 'Completed from Leads Management by Sari Puspita · 16 Aug 2026' })).toBeInTheDocument();
     // An item not done carries none.
     expect(within(row('CRM_SETUP')).queryByText('ⓘ')).not.toBeInTheDocument();
   });
 
-  it('P13-T4 AC-5 a correction of the start date is said beside it', async () => {
+  it('P13-T4 AC-5, P18.96-T2 AC-5 a correction of the join date is said beside it', async () => {
     show({ 'GET /activation/me': { body: activationView({ startCorrected: { by: SARI, at: '2026-09-01T02:00:00.000Z' } }) } });
     await ready();
-    expect(screen.getByRole('button', { name: 'Start date corrected by Sari Puspita · Sep 1, 2026' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Join date corrected by Sari Puspita · 1 Sep 2026' })).toBeInTheDocument();
   });
 
   it('P13-T6 AC-3 the leader’s coaching note is read here, read-only, with who wrote it and when', async () => {
@@ -313,7 +363,7 @@ describe('/activation, the hire’s own 90-Day Activation (P13-T4)', () => {
     await ready();
     const card = screen.getByRole('region', { name: 'Coaching note' });
     expect(card).toHaveTextContent('Great pace on prospecting — let’s book your first JFW this week.');
-    expect(card).toHaveTextContent('From Sari Puspita · Sep 30, 2026');
+    expect(card).toHaveTextContent('From Sari Puspita · 30 Sep 2026');
     expect(within(card).queryByRole('textbox')).not.toBeInTheDocument();
     expect(within(card).queryByRole('button')).not.toBeInTheDocument();
   });
@@ -324,17 +374,23 @@ describe('/activation, the hire’s own 90-Day Activation (P13-T4)', () => {
     expect(screen.queryByRole('region', { name: 'Coaching note' })).not.toBeInTheDocument();
   });
 
-  it('P13-T7 AC-1 Mark activation complete → is drawn disabled below 100%', async () => {
+  it('P13-T7 AC-1, P18.96-T6 AC-5 Mark checklist complete is drawn disabled below 100%, saying why', async () => {
     show();
     await ready();
-    expect(screen.getByRole('button', { name: 'Mark activation complete →' })).toBeDisabled();
+    const button = screen.getByRole('button', { name: 'Mark checklist complete' });
+    expect(button).toBeDisabled();
+    // The checklist's own total, served with it: sixteen on the seed's checklist.
+    expect(button).toHaveAccessibleDescription('Unlocks when all 16 items are done');
+    expect(screen.getByText('Unlocks when all 16 items are done')).toBeVisible();
   });
 
   it('P13-T7 AC-2 at 100% it asks in the product’s dialog, in the hire’s terms; Cancel leaves everything as it was', async () => {
     const { calls } = show({ 'GET /activation/me': { body: completeView() } });
     await ready();
-    await userEvent.click(screen.getByRole('button', { name: 'Mark activation complete →' }));
-    const dialog = screen.getByRole('dialog', { name: 'Mark your activation complete? The 90-Day Activation menu will be removed.' });
+    // P18.96-T6 AC-5: nothing left to wait on, so no reason is drawn.
+    expect(screen.queryByText(/Unlocks when all/)).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Mark checklist complete' }));
+    const dialog = screen.getByRole('dialog', { name: 'Mark your checklist complete? The 90-Day Activation menu will be removed.' });
     expect(within(dialog).getAllByRole('button').map((b) => b.textContent)).toEqual(['Cancel', 'Confirm']);
     await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
@@ -345,15 +401,16 @@ describe('/activation, the hire’s own 90-Day Activation (P13-T4)', () => {
     const { calls, session } = show({
       'GET /activation/me': { body: completeView() },
       'POST /activation/me/graduate': { body: completeView({ state: 'graduated', graduatedAt: '2026-10-03T03:00:00.000Z', graduatedBy: RINA }) },
-    });
+      // At 100%, as the session says once the last tick lands — and not where an unfinished one starts (P18.96-T3).
+    }, { ...RINA_ME, activation: { open: true, complete: true } });
     await ready();
-    await userEvent.click(screen.getByRole('button', { name: 'Mark activation complete →' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Mark checklist complete' }));
     await userEvent.click(screen.getByRole('button', { name: 'Confirm' }));
 
     expect(await screen.findByText('Marked as tenured agent — 90-Day Activation removed from menu.')).toBeInTheDocument();
     expect(writes(calls)).toEqual([['POST', '/activation/me/graduate', undefined]]);
     // An Agent who leads nobody lands on their own day (`landing.ts`), in place of the prototype's *New hires*.
-    expect(nav.replace).toHaveBeenCalledWith('/activity/log');
+    expect(nav.replace).toHaveBeenCalledWith('/home');
     expect(session.reload).toHaveBeenCalled();
   });
 
@@ -365,17 +422,17 @@ describe('/activation, the hire’s own 90-Day Activation (P13-T4)', () => {
       },
     });
     await ready();
-    await userEvent.click(screen.getByRole('button', { name: 'Mark activation complete →' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Mark checklist complete' }));
     await userEvent.click(screen.getByRole('button', { name: 'Confirm' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Every item must be done first.');
     expect(nav.replace).not.toHaveBeenCalled();
-    expect(screen.getByRole('button', { name: 'Mark activation complete →' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Mark checklist complete' })).toBeEnabled();
   });
 
   it('P13-T4 AC-9 a read-only support session reads the page and draws no write control', async () => {
     const { calls } = show({ 'GET /activation/me': { body: completeView() } }, readOnlySession(RINA_ME));
     await ready();
-    expect(screen.queryByRole('button', { name: 'Mark activation complete →' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Mark checklist complete' })).not.toBeInTheDocument();
     for (const box of screen.getAllByRole('checkbox')) expect(box).toBeDisabled();
     const basics = within(row('INSURANCE_BASICS'));
     await userEvent.click(basics.getByRole('button', { name: 'Show note and date' }));
@@ -387,7 +444,7 @@ describe('/activation, the hire’s own 90-Day Activation (P13-T4)', () => {
   it('P13-T4 AC-9 a reader without the tick permission sees the boxes and cannot use them, nor graduate', async () => {
     show({ 'GET /activation/me': { body: completeView() } }, { ...RINA_ME, permissions: ['activation:read'] });
     await ready();
-    expect(screen.queryByRole('button', { name: 'Mark activation complete →' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Mark checklist complete' })).not.toBeInTheDocument();
     expect(within(row('CRM_SETUP')).getByRole('checkbox')).toBeDisabled();
   });
 
@@ -426,8 +483,8 @@ describe('/activation, the hire’s own 90-Day Activation (P13-T4)', () => {
 
   it('P13-T7 AC-4 a graduated activation is not offered here, and says where the checklist now lives', async () => {
     show({ 'GET /activation/me': { body: completeView({ state: 'graduated', graduatedAt: '2026-09-29T03:00:00.000Z', graduatedBy: RINA }) } });
-    expect(await screen.findByRole('heading', { level: 2, name: 'Your 90-day activation is complete.' })).toBeInTheDocument();
-    expect(screen.getByText('You marked it complete on Sep 29, 2026.')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 2, name: 'Your 90-day checklist is complete.' })).toBeInTheDocument();
+    expect(screen.getByText('You marked it complete on 29 Sep 2026.')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Your own coaching' })).toHaveAttribute('href', '/coaching/me/activation');
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
   });
@@ -435,7 +492,7 @@ describe('/activation, the hire’s own 90-Day Activation (P13-T4)', () => {
   it('P13-T7 AC-4 an expired activation says when it ended', async () => {
     show({ 'GET /activation/me': { body: activationView({ state: 'expired', endsOn: '2026-09-30' }) } });
     expect(await screen.findByRole('heading', { level: 2, name: 'Your 90-day activation has ended.' })).toBeInTheDocument();
-    expect(screen.getByText('It ran for six months, until Sep 30, 2026.')).toBeInTheDocument();
+    expect(screen.getByText('It ran for six months, until 30 Sep 2026.')).toBeInTheDocument();
   });
 });
 
@@ -456,13 +513,13 @@ describe('Phase 13 exit review — /activation', () => {
 
   it('Phase 13 exit review: an expired activation’s date is the short one every other date on these pages uses', async () => {
     show({ 'GET /activation/me': { body: activationView({ state: 'expired', endsOn: '2027-01-06' }) } });
-    expect(await screen.findByText('It ran for six months, until Jan 6, 2027.')).toBeInTheDocument();
+    expect(await screen.findByText('It ran for six months, until 6 Jan 2027.')).toBeInTheDocument();
     expect(document.body).not.toHaveTextContent(/January/);
   });
 
   it('Phase 13 exit review: a graduation with no moment recorded falls back to today, in the short date too', async () => {
     show({ 'GET /activation/me': { body: completeView({ state: 'graduated', graduatedAt: null, today: '2027-01-06' }) } });
-    expect(await screen.findByText('You marked it complete on Jan 6, 2027.')).toBeInTheDocument();
+    expect(await screen.findByText('You marked it complete on 6 Jan 2027.')).toBeInTheDocument();
   });
 
   it('Phase 13 exit review: the hire’s own Day tile has no overdue state, and so no overdue word', async () => {

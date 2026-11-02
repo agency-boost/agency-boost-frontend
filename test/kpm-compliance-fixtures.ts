@@ -291,6 +291,8 @@ export function complianceView(
     selected: { category, item: chosen },
     tree: tree(cellsOf(category, chosen)),
     can: { override: true },
+    // UI V1 (UI-109): the server's split, as `KPM_REPORTING` serves it.
+    thresholds: { lowBelowPct: 50, highFromPct: 80 },
     ...over,
   };
 }

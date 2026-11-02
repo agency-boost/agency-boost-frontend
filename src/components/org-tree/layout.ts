@@ -176,3 +176,22 @@ export function defaultCollapsed(tree: OrgTree): Set<string> {
     tree.nodes.filter((n) => n.isLeader && n.layer >= DEFAULT_OPEN_LAYERS).map((n) => n.membershipId),
   );
 }
+
+/**
+ * **What is open when the phone's list first draws** (P18.95-T8 AC-3): the reader's own line, one level
+ * down — their direct reports shown, every unit below those closed — and every line above the reader,
+ * so the reader is in view however deep they stand (an Admin's office-wide tree). With no reader in the
+ * tree, the roots open one level instead. Nothing is measured, as the canvas measures nothing.
+ */
+export function defaultOpenInList(tree: OrgTree): Set<string> {
+  const byId = new Map(tree.nodes.map((n) => [n.membershipId, n]));
+  const self = tree.nodes.find((n) => n.isSelf) ?? (tree.selfId ? byId.get(tree.selfId) : undefined);
+  if (!self) return new Set(tree.rootIds.filter((id) => byId.get(id)?.isLeader));
+  const open = new Set<string>();
+  let at: OrgTreeNode | undefined = self;
+  while (at && !open.has(at.membershipId)) {
+    if (at.isLeader) open.add(at.membershipId);
+    at = at.leaderId ? byId.get(at.leaderId) : undefined;
+  }
+  return open;
+}

@@ -1,11 +1,10 @@
 'use client';
 
-import { use } from 'react';
+import { Suspense } from 'react';
 import { Page } from '@/components/page';
 import { UnitDashboard } from '@/components/unit/unit-dashboard';
-import { periodFrom, PROTOTYPE_COPY } from '@/lib/unit-dashboard';
-
-type Query = { period?: string | string[] };
+import { periodFrom, tabFrom } from '@/lib/unit-dashboard';
+import { useQuery } from '@/lib/use-query';
 
 /**
  * The Unit Dashboard (`Overall.html:3888-3949`, `unit-dashboard.md`; P15-T2): a leader's roster — the
@@ -14,14 +13,23 @@ type Query = { period?: string | string[] };
  *
  * Gated by `unit_dashboard:read`, which every field rung holds for their own unit: somebody who leads
  * nobody is answered an empty unit and meets the empty state, not a refusal (D-reach). The period is the
- * address's, `?period=7d|month|year`, *This month* when it names none.
+ * address's, `?period=7d|month|year`, *This month* when it names none; the tab too, `?tab=activities` (UI V1, UI-001).
  */
-export default function UnitDashboardPage({ searchParams }: { searchParams?: Promise<Query> }) {
-  const query = searchParams ? use(searchParams) : {};
+export default function UnitDashboardPage() {
   return (
-    // The prototype's title, verbatim, and its empty sub-line (`Overall.html:10410`).
-    <Page title={PROTOTYPE_COPY.title} permission="unit_dashboard:read">
-      <UnitDashboard period={periodFrom(query.period)} />
+    // `useSearchParams` needs a boundary (`lib/use-query.ts`). Nothing in its place: a prerender draws the shell's gate, never this.
+    <Suspense fallback={null}>
+      <Dashboard />
+    </Suspense>
+  );
+}
+
+function Dashboard() {
+  const query = useQuery();
+  return (
+    // UI V1 (UI-004, UI-012): the screen draws its own title row — the title, and below 1024px the *Search agent* pill.
+    <Page permission="unit_dashboard:read">
+      <UnitDashboard period={periodFrom(query.period)} tab={tabFrom(query.tab)} />
     </Page>
   );
 }

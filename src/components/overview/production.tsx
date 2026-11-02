@@ -3,18 +3,20 @@
 import { useId, useState } from 'react';
 import { RoleBadge } from '@/components/ui/role-badge';
 import { TippedGlyph } from '@/components/ui/tipped-glyph';
+import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
+import { kpmOverviewMessages } from '@/i18n/messages/kpm-overview';
 import { cn } from '@/lib/cn';
-import { formatRupiah } from '@/lib/goals';
+import { formatRupiahCompact } from '@/lib/format';
 import {
-  leftOutWords, markerAt, ofTarget, OWN_COPY, projectedWords, PROTOTYPE_COPY, RANKING_SHOWN, showingWords,
+  leftOutWords, markerAt, ofTarget, projectedWords, RANKING_SHOWN, showingWords,
   targetLegend, unitNums, type OverviewAabUnit, type OverviewAgency, type OverviewProduction,
 } from '@/lib/kpm-overview';
 import { Bar, FILL_TONE, OverviewCard, Pct, PctPill, TEXT_TONE, useTone } from './parts';
 
 /**
  * *Production — this year* (`KPM_Owner.html:1075-1220`, CSS `:533-563`): the office's APE so far against
- * the sum of its members' goals (OD-143), *"Rp {achieved} of Rp {target} target"* in the product's money
- * formatter — never the prototype's *8.4B* — the bar, the projection marker, and *Units furthest behind
+ * the sum of its members' goals (OD-143), *"Rp {achieved} of Rp {target} target"* in the product's compact money
+ * formatter (*Rp 8,4 M*, ADR-0167 §1) — never the prototype's *8.4B* — the bar, the projection marker, and *Units furthest behind
  * target*.
  *
  * **The projection is a run-rate** (D-figures): the year to date as of the latest month held ÷ that month's
@@ -25,23 +27,25 @@ import { Bar, FILL_TONE, OverviewCard, Pct, PctPill, TEXT_TONE, useTone } from '
  * so, and the total names in its tooltip the months and the members it leaves out (Phase 15's rule).
  */
 export function Production({ production }: { production: OverviewProduction }) {
+  const t = useMessages(kpmOverviewMessages);
+  const language = useLanguage();
+  const figures = useFigureLanguage();
   const tone = useTone();
   const { ytd, projectionMinor, agencies } = production;
-  const left = leftOutWords(ytd);
+  const left = leftOutWords(ytd, language, figures);
   const marker = markerAt(projectionMinor, ytd.targetMinor);
   const showBar = ytd.pct !== null && ytd.targetMinor !== null && ytd.targetMinor > 0;
 
   return (
     <OverviewCard className="p-5">
-      {/* Each piece wraps on its own: a full rupiah figure is wide, and on a phone the line breaks rather
-          than pushing the card past the screen. */}
+      {/* Each piece wraps on its own: on a phone the line breaks rather than pushing the card past the screen. */}
       <div className="mb-2.5 flex flex-wrap items-baseline gap-x-2 gap-y-1">
         <span className={cn('font-body text-2xl font-bold sm:text-3xl', ytd.achievedMinor === null ? 'text-muted' : 'text-navy')}>
-          {ytd.achievedMinor === null ? OWN_COPY.notUploaded : formatRupiah(ytd.achievedMinor)}
+          {ytd.achievedMinor === null ? t.notUploaded : formatRupiahCompact(ytd.achievedMinor, {}, figures)}
         </span>
         {left && <TippedGlyph glyph="ⓘ" name={left} tip={left} align="fit" className="-my-1 self-center" />}
         <span className="text-md text-muted">
-          {ytd.targetMinor === null ? OWN_COPY.noGoal : ofTarget(ytd.targetMinor)}
+          {ytd.targetMinor === null ? t.noGoal : ofTarget(ytd.targetMinor, language, figures)}
         </span>
         {ytd.pct !== null && <PctPill pct={ytd.pct} className="ml-auto" />}
       </div>
@@ -55,7 +59,7 @@ export function Production({ production }: { production: OverviewProduction }) {
               className={cn('mb-1 text-2xs font-bold text-navy', marker > 50 ? 'text-right' : 'text-left')}
               style={marker > 50 ? { paddingRight: `${100 - marker}%` } : { paddingLeft: `${marker}%` }}
             >
-              {projectedWords(projectionMinor)}
+              {projectedWords(projectionMinor, language, figures)}
             </p>
           )}
           <div className="relative">
@@ -65,19 +69,19 @@ export function Production({ production }: { production: OverviewProduction }) {
             )}
           </div>
           <div className="mt-1.5 flex justify-between gap-3 text-xs text-muted">
-            <span>{PROTOTYPE_COPY.legendZero}</span>
-            <span>{targetLegend(ytd.targetMinor)}</span>
+            <span>0</span>
+            <span>{targetLegend(ytd.targetMinor, language, figures)}</span>
           </div>
         </div>
       )}
       {/* Without a target there is no bar to place it on; the projection is still a figure. */}
       {!showBar && projectionMinor !== null && (
-        <p className="text-xs font-bold text-navy">{projectedWords(projectionMinor)}</p>
+        <p className="text-xs font-bold text-navy">{projectedWords(projectionMinor, language, figures)}</p>
       )}
 
       <div className="mt-[18px] border-t border-hairline pt-3.5">
-        <h3 className="mb-0.5 text-base font-bold text-navy">{PROTOTYPE_COPY.unitsTitle}</h3>
-        <p className="mb-3 text-xs text-muted">{PROTOTYPE_COPY.unitsSub}</p>
+        <h3 className="mb-0.5 text-base font-bold text-navy">{t.unitsTitle}</h3>
+        <p className="mb-3 text-xs text-muted">{t.unitsSub}</p>
         <Units agencies={agencies} />
       </div>
     </OverviewCard>
@@ -89,10 +93,12 @@ export function Production({ production }: { production: OverviewProduction }) {
  * four shown and the rest in place behind *view full ranking →* (D-coverage).
  */
 function Units({ agencies }: { agencies: OverviewAgency[] }) {
+  const t = useMessages(kpmOverviewMessages);
+  const language = useLanguage();
   const [all, setAll] = useState(false);
   const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set());
   const listId = useId();
-  if (agencies.length === 0) return <p className="text-base text-muted">{OWN_COPY.noUnits}</p>;
+  if (agencies.length === 0) return <p className="text-base text-muted">{t.noUnits}</p>;
   const shown = all ? agencies : agencies.slice(0, RANKING_SHOWN);
   const toggle = (id: string) => setOpen((was) => {
     const next = new Set(was);
@@ -110,7 +116,7 @@ function Units({ agencies }: { agencies: OverviewAgency[] }) {
       </ul>
       {agencies.length > RANKING_SHOWN && (
         <p className="mt-2.5 text-sm text-muted">
-          {showingWords(shown.length, agencies.length)}
+          {showingWords(shown.length, agencies.length, language)}
           <button
             type="button"
             aria-expanded={all}
@@ -118,7 +124,7 @@ function Units({ agencies }: { agencies: OverviewAgency[] }) {
             onClick={() => setAll((was) => !was)}
             className="font-semibold text-amber-ink underline-offset-2 hover:underline"
           >
-            {all ? OWN_COPY.showFewer : PROTOTYPE_COPY.viewFullRanking}
+            {all ? t.showFewer : t.viewFullRanking}
           </button>
         </p>
       )}
@@ -131,6 +137,7 @@ function Units({ agencies }: { agencies: OverviewAgency[] }) {
  * whether it is open, its name, its percentage and *"Rp {a} / Rp {t} unit target"* its accessible name.
  */
 function AgencyRow({ agency, open, onToggle }: { agency: OverviewAgency; open: boolean; onToggle: () => void }) {
+  const t = useMessages(kpmOverviewMessages);
   const toneFor = useTone();
   const childId = useId();
   const tone = toneFor(agency.pct);
@@ -149,7 +156,7 @@ function AgencyRow({ agency, open, onToggle }: { agency: OverviewAgency; open: b
       <div id={childId} hidden={!open} className="ml-5 mt-[9px] border-l-[1.5px] border-hairline pl-5">
         {agency.aabUnits.length === 0 ? (
           <p className="py-[7px] pl-2 text-base font-medium text-navy">
-            {PROTOTYPE_COPY.noAab}{' '}
+            {t.noAab}{' '}
             <span aria-hidden="true" className="ml-[3px] inline-flex rounded-pill bg-role-aab/15 px-2 py-0.5 text-2xs font-bold text-navy-soft">—</span>
           </p>
         ) : (
@@ -189,10 +196,12 @@ function UnitFigures({
   agency: boolean;
   className?: string;
 }) {
+  const language = useLanguage();
+  const figures = useFigureLanguage();
   const tone = useTone();
   return (
     <span className={cn('mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1', className)}>
-      <span className="text-xs text-muted">{unitNums(money, agency)}</span>
+      <span className="text-xs text-muted">{unitNums(money, agency, language, figures)}</span>
       {money.pct !== null && (
         <Bar pct={money.pct} fill={FILL_TONE[tone(money.pct)]} height="thin" className="min-w-16 flex-1" />
       )}

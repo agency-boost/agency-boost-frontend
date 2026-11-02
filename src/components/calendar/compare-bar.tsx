@@ -2,8 +2,10 @@
 
 import { useEffect, useId, useRef, useState, type RefObject } from 'react';
 import { Button } from '@/components/ui/field';
+import { useLanguage, useMessages } from '@/i18n/language-provider';
+import { calendarMessages } from '@/i18n/messages/calendar';
 import {
-  COMPARE_MAX, DOWNLINE_GROUP_LABEL, initialsOf, OWN_COPY, personTag, PROTOTYPE_COPY, readDownline,
+  COMPARE_MAX, initialsOf, personTag, readDownline,
   type CalendarDownlinePerson,
 } from '@/lib/calendar';
 import { cn } from '@/lib/cn';
@@ -13,16 +15,16 @@ import { Avatar, CHIP } from './calendar-parts';
  * The compare bar (`Calendar_Section.html:296-307`, `:905-965`; P12-T5 AC-1, AC-2).
  *
  * *"Viewing:"* and the reader's own *"My Calendar"*, which cannot be removed, are drawn for everybody.
- * **The rest is a leader's, and Week's** (ADR-0087, D-month): a chip per compared person with a ✕ named
- * *Remove {name}*, and *"+ Compare with downline"* with its popover. In Month neither is offered, and
- * the chips chosen come back with Week.
+ * **The rest is a leader's** (ADR-0087): a chip per compared person with a ✕ named *Remove {name}*, and
+ * *"+ Compare with downline"* with its popover — **in Week, in Month and in a phone's Agenda alike**
+ * (P18.95-T8 AC-2; the client's UI review, UI-020: *"Compare with downline" missing in Month view*).
+ * D-month had kept it to Week; the chips chosen stay with whichever view is drawn.
  *
  * **Removing somebody puts the focus on *"+ Compare with downline"*** (F2): their ✕ goes with their
  * chip, and the focus would have gone with it to the page's foot.
  */
 export function CompareBar({
   myInitials,
-  week,
   canCompare,
   compared,
   lost,
@@ -31,7 +33,6 @@ export function CompareBar({
   onLostSeen,
 }: {
   myInitials: string;
-  week: boolean;
   canCompare: boolean;
   compared: readonly CalendarDownlinePerson[];
   /** Somebody whose calendar the read now refuses — they left, or the edge closed. */
@@ -40,21 +41,22 @@ export function CompareBar({
   onRemove: (membershipId: string) => void;
   onLostSeen: () => void;
 }) {
+  const t = useMessages(calendarMessages);
   const toggle = useRef<HTMLButtonElement>(null);
   return (
     <div className="mb-4 flex flex-wrap items-center gap-2 rounded-[10px] border border-hairline bg-card px-3.5 py-2.5">
-      <span className="mr-0.5 text-sm font-semibold text-muted">{PROTOTYPE_COPY.viewing}</span>
+      <span className="mr-0.5 text-sm font-semibold text-muted">{t.viewing}</span>
       <span className={cn(CHIP, 'py-1.5 pl-1.5 pr-2')}>
         <Avatar initials={myInitials} me />
-        {PROTOTYPE_COPY.myCalendar}
+        {t.myCalendar}
       </span>
-      {week && compared.map((person) => (
+      {compared.map((person) => (
         <span key={person.membershipId} className={cn(CHIP, 'py-1.5 pl-1.5 pr-1.5')}>
           <Avatar initials={initialsOf(person.name)} />
           {person.name}
           <button
             type="button"
-            aria-label={OWN_COPY.remove(person.name)}
+            aria-label={t.remove({ name: person.name })}
             onClick={() => {
               onRemove(person.membershipId);
               toggle.current?.focus();
@@ -65,10 +67,10 @@ export function CompareBar({
           </button>
         </span>
       ))}
-      {week && canCompare && (
+      {canCompare && (
         <ComparePopover toggle={toggle} compared={compared} lost={lost} onAdd={onAdd} onClosed={onLostSeen} />
       )}
-      {lost && <p role="status" className="w-full text-sm text-muted">{OWN_COPY.lost(lost)}</p>}
+      {lost && <p role="status" className="w-full text-sm text-muted">{t.lost({ name: lost })}</p>}
     </div>
   );
 }
@@ -99,6 +101,7 @@ function ComparePopover({
   onAdd: (person: CalendarDownlinePerson) => void;
   onClosed: () => void;
 }) {
+  const t = useMessages(calendarMessages);
   const [open, setOpen] = useState(false);
   const [people, setPeople] = useState<CalendarDownlinePerson[] | null>(null);
   const [failed, setFailed] = useState(false);
@@ -196,12 +199,12 @@ function ComparePopover({
         onClick={() => (open ? close() : setOpen(true))}
         className="flex items-center gap-1.5 rounded-pill border-[1.3px] border-dashed border-hairline px-[13px] py-[7px] text-sm font-semibold text-navy-soft hover:border-navy-soft hover:bg-navy-soft/5"
       >
-        {PROTOTYPE_COPY.compare}
+        {t.compare}
       </button>
       <div
         id={popover}
         hidden={!open}
-        className="absolute left-0 top-full z-30 mt-2 w-[270px] max-w-[calc(100vw-2rem)] rounded-lg border border-hairline bg-card p-2.5 shadow-modal"
+        className="absolute left-0 top-full z-30 mt-2 w-[270px] max-w-[calc(100vw-2rem)] rounded-lg border border-card-edge bg-card p-2.5 shadow-modal"
       >
         {open && (
           <>
@@ -209,24 +212,24 @@ function ComparePopover({
               ref={search}
               type="text"
               autoComplete="off"
-              aria-label={PROTOTYPE_COPY.searchDownline}
-              placeholder={PROTOTYPE_COPY.searchDownline}
+              aria-label={t.searchDownline}
+              placeholder={t.searchDownline}
               value={text}
               onChange={(e) => setText(e.target.value)}
               className="mb-2 w-full rounded-[7px] border-[1.3px] border-hairline px-2.5 py-2 text-base text-navy focus:border-amber"
             />
             <div ref={list} className="max-h-[320px] overflow-y-auto">
-              {lost && <p className="px-2.5 py-2 text-sm text-muted">{OWN_COPY.lost(lost)}</p>}
-              {atCap && <p className="px-2.5 py-2 text-sm text-muted">{PROTOTYPE_COPY.compareCap(COMPARE_MAX)}</p>}
+              {lost && <p className="px-2.5 py-2 text-sm text-muted">{t.lost({ name: lost })}</p>}
+              {atCap && <p className="px-2.5 py-2 text-sm text-muted">{t.compareCap({ max: COMPARE_MAX })}</p>}
               {failed ? (
                 <div role="alert" className="flex items-center justify-between gap-2 px-2.5 py-2 text-sm text-alert">
-                  {OWN_COPY.listFailed}
-                  <Button variant="inline" onClick={() => setAttempt((a) => a + 1)}>{OWN_COPY.tryAgain}</Button>
+                  {t.listFailed}
+                  <Button variant="inline" onClick={() => setAttempt((a) => a + 1)}>{t.tryAgain}</Button>
                 </div>
               ) : people === null ? (
-                <p role="status" className="px-2.5 py-2 text-sm text-muted">{OWN_COPY.searching}</p>
+                <p role="status" className="px-2.5 py-2 text-sm text-muted">{t.searching}</p>
               ) : shown.length === 0 ? (
-                <p className="p-2.5 text-sm text-muted">{PROTOTYPE_COPY.noMatches}</p>
+                <p className="p-2.5 text-sm text-muted">{t.noMatches}</p>
               ) : (
                 <DownlineList people={shown} compared={compared} atCap={atCap} onAdd={add} />
               )}
@@ -249,6 +252,8 @@ function DownlineList({
   atCap: boolean;
   onAdd: (person: CalendarDownlinePerson) => void;
 }) {
+  const t = useMessages(calendarMessages);
+  const language = useLanguage();
   const groups: { group: CalendarDownlinePerson['group']; members: CalendarDownlinePerson[] }[] = [];
   for (const person of people) {
     const last = groups[groups.length - 1];
@@ -260,7 +265,7 @@ function DownlineList({
       {groups.map(({ group, members }, g) => (
         <div key={`${group}-${g}`} role="group" aria-labelledby={`downline-${group}-${g}`}>
           <p id={`downline-${group}-${g}`} className="px-2 pb-1 pt-1.5 text-2xs font-bold uppercase tracking-[0.05em] text-muted">
-            {DOWNLINE_GROUP_LABEL[group]}
+            {t.downlineGroups[group]}
           </p>
           <ul>
             {members.map((person) => {
@@ -278,8 +283,8 @@ function DownlineList({
                     <span className="min-w-0">
                       <span className="block truncate text-base font-semibold text-navy">{person.name}</span>
                       <span className="block truncate text-xs text-muted">
-                        {personTag(person)}
-                        {already ? PROTOTYPE_COPY.added : ''}
+                        {personTag(person, language)}
+                        {already ? t.added : ''}
                       </span>
                     </span>
                   </button>

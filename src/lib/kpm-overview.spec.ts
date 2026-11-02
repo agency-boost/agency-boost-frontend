@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   coachedWords, daysAgoWords, inTeam, lastLoggedWords, leftOutWords, markerAt, moreWords, newThisMonth, officeLine,
-  ofTarget, parseTarget, pctText, projectedWords, recruitPill, rungShort, showingWords, targetLegend,
-  toneOf, trendWords, unitNums,
+  ofTarget, OWN_COPY, parseTarget, pctText, projectedWords, PROTOTYPE_COPY, recruitPill, rungShort, showingWords,
+  targetLegend, targetValueWords, toneOf, trendWords, unitNums,
 } from './kpm-overview';
 
 const rp = (millions: number) => Math.round(millions * 1_000_000 * 100);
@@ -24,12 +24,19 @@ describe('KPM Overview words (P18-T1)', () => {
   });
 
   describe('the trend against last month to the same day (AC-4, D-figures)', () => {
-    it('AC-4: Up, with the rise relative to last month, rounded — 142 against 138 is +3% (`:977`)', () => {
+    it('AC-4, P18.97-T3 AC-1: Up, with the rise relative to last month, whole — 142 against 138 is +3% (`:977`; ADR-0174 §1)', () => {
       expect(trendWords(142, 138)).toEqual({ direction: 'up', lead: 'Up from 138 last month', change: '+3%' });
     });
 
-    it('AC-4: Down, with the fall', () => {
+    it('AC-4, P18.97-T3 AC-1: Down, with the fall, whole and with no ,0', () => {
       expect(trendWords(120, 150)).toEqual({ direction: 'down', lead: 'Down from 150 last month', change: '−20%' });
+    });
+
+    it('P18.97-T3 F-254 the change rounds an exact half up in integers: 63 against 40 is +58%, which Math.round made +57%', () => {
+      expect(Math.round(((63 - 40) / 40) * 100)).toBe(57);
+      expect(trendWords(63, 40)).toEqual({ direction: 'up', lead: 'Up from 40 last month', change: '+58%' });
+      // A fall of 23 on 40 is −57,5%: its size half up, so −58%, its sign apart.
+      expect(trendWords(17, 40)).toEqual({ direction: 'down', lead: 'Down from 40 last month', change: '−58%' });
     });
 
     it('AC-4: the same count is said as the same, with no percentage', () => {
@@ -64,10 +71,15 @@ describe('KPM Overview words (P18-T1)', () => {
   });
 
   describe('coverage and the leaderboard (AC-5)', () => {
-    it('AC-5: *"· {n} in team"* and *"{c}/{n} · {p}%"* (`:1027-1029`)', () => {
+    it('AC-5, P18.97-T3 AC-1: *"· {n} in team"* and *"{c}/{n} · {p}%"* (`:1027-1029`), the percentage whole', () => {
       expect(inTeam(31)).toBe('· 31 in team');
-      expect(coachedWords({ coached: 6, teamSize: 31, pct: 19 })).toBe('6/31 · 19%');
-      expect(coachedWords({ coached: 0, teamSize: 0, pct: null })).toBe('0/0 · —');
+      expect(coachedWords({ coached: 6, teamSize: 31, pct: 19, leads: true })).toBe('6/31 · 19%');
+      expect(coachedWords({ coached: 0, teamSize: 0, pct: null, leads: true })).toBe('0/0 · —');
+    });
+
+    it('P18.97-T3 AC-5 an AB who leads nobody reads No team where the figure would be — never 0/0, never 0%', () => {
+      expect(coachedWords({ coached: 0, teamSize: 0, pct: null, leads: false })).toBe('No team');
+      expect(OWN_COPY.noTeam).toBe('No team');
     });
 
     it('AC-5 (D-copy): the count of ABs is counted, not the prototype’s 8 (`:1045`)', () => {
@@ -88,6 +100,13 @@ describe('KPM Overview words (P18-T1)', () => {
       expect(pctText(null)).toBe('—');
       expect(pctText(0)).toBe('0%');
     });
+
+    it('P18.97-T3 AC-1: writes the server’s whole percent as it came — 96%, never 96,0% (UI-018, OD-213)', () => {
+      // 27 of 28 is 96,4, which `rateOver` serves as 96: one rounding, the server's, and no ,0 after it.
+      expect(pctText(96)).toBe('96%');
+      expect(pctText(57)).toBe('57%');
+      expect(pctText(100)).toBe('100%');
+    });
   });
 
   describe('the recruitment pill and target (AC-6)', () => {
@@ -101,6 +120,17 @@ describe('KPM Overview words (P18-T1)', () => {
       expect(recruitPill(13, null)).toBeNull();
     });
 
+    it('P18.97-T3 AC-7 the Target reads as a value — its number, or No target set — with Edit and its toast', () => {
+      expect(targetValueWords(15)).toBe('15');
+      expect(targetValueWords(0)).toBe('0');
+      expect(targetValueWords(null)).toBe('No target set');
+      expect([OWN_COPY.edit, OWN_COPY.editTarget, OWN_COPY.targetSaved]).toEqual(['Edit', 'Edit target', 'Target saved ✓']);
+    });
+
+    it('P18.97-T3 AC-6 Engagement’s sub-line names the two periods its cards read (UI-020)', () => {
+      expect(PROTOTYPE_COPY.engagementSub).toBe('This month · Last 7 days');
+    });
+
     it('AC-11: a target is a whole number from 0, and nothing else is sent', () => {
       expect(parseTarget('15')).toBe(15);
       expect(parseTarget(' 0 ')).toBe(0);
@@ -109,10 +139,10 @@ describe('KPM Overview words (P18-T1)', () => {
   });
 
   describe('production (AC-7)', () => {
-    it('AC-7: the figures in the product’s money formatter, never *8.4B*', () => {
-      expect(ofTarget(rp(12500))).toBe('of Rp 12.500.000.000 target');
-      expect(projectedWords(rp(11900))).toBe('Projected: Rp 11.900.000.000');
-      expect(targetLegend(rp(12500))).toBe('Target: Rp 12.500.000.000');
+    it('AC-7: the figures in the product’s compact money formatter, never *8.4B* (ADR-0167 §1)', () => {
+      expect(ofTarget(rp(12500))).toBe('of Rp 12,5 M target');
+      expect(projectedWords(rp(11900))).toBe('Projected: Rp 11,9 M');
+      expect(targetLegend(rp(12500))).toBe('Target: Rp 12,5 M');
     });
 
     it('AC-7: the marker sits where the projection falls against the target, clamped to the bar', () => {
@@ -123,22 +153,22 @@ describe('KPM Overview words (P18-T1)', () => {
       expect(markerAt(rp(100), 0)).toBeNull();
     });
 
-    it('AC-7: a unit’s line, *"Rp {a} / Rp {t} unit target"* on an agency and without the words on an AAB unit', () => {
-      expect(unitNums({ achievedMinor: rp(620), targetMinor: rp(1500) }, true)).toBe('Rp 620.000.000 / Rp 1.500.000.000 unit target');
-      expect(unitNums({ achievedMinor: rp(210), targetMinor: rp(500) }, false)).toBe('Rp 210.000.000 / Rp 500.000.000');
+    it('AC-7: a unit’s line, *"Rp {a} / {t} unit target"* on an agency and without the words on an AAB unit — one Rp (UI-030)', () => {
+      expect(unitNums({ achievedMinor: rp(620), targetMinor: rp(1500) }, true)).toBe('Rp 620 jt / 1,5 M unit target');
+      expect(unitNums({ achievedMinor: rp(210), targetMinor: rp(500) }, false)).toBe('Rp 210 jt / 500 jt');
     });
 
     it('AC-9: a unit with no file or no goal says so, never 0', () => {
-      expect(unitNums({ achievedMinor: null, targetMinor: rp(600) }, true)).toBe('Not uploaded yet / Rp 600.000.000 unit target');
-      expect(unitNums({ achievedMinor: rp(10), targetMinor: null }, true)).toBe('Rp 10.000.000 · No goal set');
+      expect(unitNums({ achievedMinor: null, targetMinor: rp(600) }, true)).toBe('Not uploaded yet / Rp 600 jt unit target');
+      expect(unitNums({ achievedMinor: rp(10), targetMinor: null }, true)).toBe('Rp 10 jt · No goal set');
       expect(unitNums({ achievedMinor: null, targetMinor: null }, false)).toBe('Not uploaded yet · No goal set');
     });
 
     it('AC-7 (D-figures): the total names in its tooltip the months and the members it leaves out', () => {
       expect(leftOutWords({ missingMonths: ['2026-08'], membersWithoutGoal: 0 }))
-        .toBe('Not uploaded yet for August 2026, so not counted in this total.');
+        .toBe('Not uploaded yet for Agu 2026, so not counted in this total.');
       expect(leftOutWords({ missingMonths: ['2026-07', '2026-08', '2026-09'], membersWithoutGoal: 1 }))
-        .toBe('Not uploaded yet for July 2026, August 2026 and September 2026, so not counted in this total. '
+        .toBe('Not uploaded yet for Jul 2026, Agu 2026 and Sep 2026, so not counted in this total. '
           + '1 member has no goal set, so the target leaves them out.');
       expect(leftOutWords({ missingMonths: [], membersWithoutGoal: 3 }))
         .toBe('3 members have no goal set, so the target leaves them out.');

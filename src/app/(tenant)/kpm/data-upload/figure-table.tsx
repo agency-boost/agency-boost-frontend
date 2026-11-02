@@ -1,9 +1,11 @@
 'use client';
 
 import { useId } from 'react';
+import { useMessages } from '@/i18n/language-provider';
+import { dataUploadMessages } from '@/i18n/messages/data-upload';
 import { cn } from '@/lib/cn';
 import {
-  CADENCE_GROUP_LABEL, CADENCES, FIGURE_COLUMNS, METRIC_COLUMN_LABEL, PRODUCTION_METRICS, type Cadence,
+  AGENT_COLUMN, CADENCE_GROUP_LABEL, CADENCES, FIGURE_COLUMNS, METRIC_COLUMN_LABEL, PRODUCTION_METRICS, type Cadence,
   type ProductionMetric,
 } from '@/lib/production';
 
@@ -57,13 +59,14 @@ export function FigureTable({
   tableClassName?: string;
   children: (headersOf: (figure: Figure) => string) => React.ReactNode;
 }) {
+  const t = useMessages(dataUploadMessages);
   const id = useId();
   const groupId = (cadence: Cadence) => `${id}-${cadence}`;
   const figureId = ({ cadence, metric }: Figure) => `${id}-${cadence}-${metric}`;
   const headersOf = (figure: Figure) => `${groupId(figure.cadence)} ${figureId(figure)}`;
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-hairline bg-card">
+    <div className="overflow-x-auto rounded-lg border border-card-edge bg-card">
       {/* `relative` for the reason `DataTable` gives: an `sr-only` name must not escape the scroll box. */}
       <table className={cn('relative w-full border-collapse text-left', COMPACT, tableClassName)}>
         <caption className="sr-only">{caption}</caption>
@@ -83,8 +86,8 @@ export function FigureTable({
         )}
         <thead>
           <tr className="border-b border-hairline">
-            <th rowSpan={2} scope="col" className={HEADING}>Agent</th>
-            <th rowSpan={2} scope="col" className={HEADING}>Agent code</th>
+            <th rowSpan={2} scope="col" className={HEADING}>{AGENT_COLUMN}</th>
+            <th rowSpan={2} scope="col" className={HEADING}>{t.agentCode}</th>
             {CADENCES.map((cadence, i) => (
               <th
                 key={cadence}
@@ -96,7 +99,7 @@ export function FigureTable({
                 {CADENCE_GROUP_LABEL[cadence]}
               </th>
             ))}
-            {active && <th rowSpan={2} scope="col" className={cn(HEADING, GROUP_DIVIDER)}>Active (MAA)</th>}
+            {active && <th rowSpan={2} scope="col" className={cn(HEADING, GROUP_DIVIDER)}>{t.activeColumn}</th>}
           </tr>
           <tr className="border-b border-hairline">
             {FIGURE_COLUMNS.map((figure, i) => (

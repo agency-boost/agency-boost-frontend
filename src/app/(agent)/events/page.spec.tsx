@@ -1,8 +1,8 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AgentLayout from '@/app/(agent)/layout';
-import { renderInLayout, routeParams, stubFetch, type StubReply } from '@test/harness';
+import { atWidth, renderInLayout, routeParams, stubFetch, type StubReply } from '@test/harness';
 import {
   BOOTCAMP, CAN_NONE, conflict, eventList, guestEvent, KICKOFF, notFound, PRODUCT_REFRESH, PRULINK, READ_ONLY_RINA,
   RINA_EVENTS, RINA_ME, serverError, SHELL_STUBS, TOWN_HALL,
@@ -62,7 +62,8 @@ describe('/events, KPM Events (P18.5-T5, T6)', () => {
     it('P18.5-T5 AC-4 Event list is live in the nav, no pill, and current', async () => {
       list();
       await listReady();
-      const item = screen.getByRole('link', { name: 'Event list' });
+      // The field shell's sidebar since UI V1 (UI-004): *Event*, under *Program*.
+      const item = within(screen.getByRole('navigation', { name: 'Main' })).getByRole('link', { name: 'Event' });
       expect(item).toHaveAttribute('href', '/events');
       expect(item).not.toHaveAttribute('aria-disabled');
       expect(item).toHaveAttribute('aria-current', 'page');
@@ -72,7 +73,8 @@ describe('/events, KPM Events (P18.5-T5, T6)', () => {
     it('P18.5-T5 AC-4 is titled and sub-titled as drawn, and reads the list once', async () => {
       const { calls } = list();
       await listReady();
-      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^KPM Events$/);
+      // P18.95-T9 AC-2: the nav item's words, *Event list*, where the prototype titled it *KPM Events*.
+      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Event List$/);
       expect(screen.getByText('Browse upcoming and past events from your KPM — join, and share feedback once they wrap up.'))
         .toBeInTheDocument();
       expect(calls.filter((c) => /\/events$/.test(c.url))).toHaveLength(1);
@@ -104,7 +106,7 @@ describe('/events, KPM Events (P18.5-T5, T6)', () => {
       list({ 'GET /events': { body: eventList([huddle, KICKOFF]) } });
       await listReady();
       expect(titlesIn('Going')).toEqual(["Leaders' huddle"]);
-      expect(within(card("Leaders' huddle")).getByText('Going', { selector: '[data-tag]' })).toBeInTheDocument();
+      expect(within(card("Leaders' huddle")).getByText('Going', { selector: '[data-pill]' })).toBeInTheDocument();
     });
 
     it('P18.5-T5 AC-4 Upcoming shows Going and Upcoming, Past only the past', async () => {
@@ -124,36 +126,75 @@ describe('/events, KPM Events (P18.5-T5, T6)', () => {
       expect(screen.getByText('No past events yet.')).toBeInTheDocument();
     });
 
-    it('P18.5-T5 AC-4 each card: poster with its tag, audience line, title, date and time, place ↗, blurb, pill, View event', async () => {
+    it('P18.5-T5 AC-4, P18.95-T10 AC-1 each card: the type’s icon, audience line, title, date and time, place ↗, blurb, pill, View event', async () => {
       list();
       await listReady();
       const refresh = card('Product refresh briefing');
-      expect(within(refresh).getByText('Going', { selector: '[data-tag]' })).toBeInTheDocument();
+      expect(within(refresh).getByText('Going', { selector: '[data-pill]' })).toBeInTheDocument();
       expect(within(refresh).getByText('Prudential Event | All agents')).toBeInTheDocument();
-      expect(within(refresh).getByText(/Oct 15, 2026 · 2:00 PM/)).toBeInTheDocument();
+      expect(within(refresh).getByText(/15 Oct 2026, 14:00/)).toBeInTheDocument();
       const where = within(refresh).getByRole('link', { name: /Online — Zoom/ });
       expect(where).toHaveAttribute('href', 'https://zoom.us/j/1234567890');
       expect(where).toHaveAttribute('target', '_blank');
       expect(where).toHaveTextContent('↗');
       expect(within(refresh).getByText("ev-refresh's line.")).toBeInTheDocument();
       expect(within(refresh).getByRole('button', { name: 'View event' })).toBeInTheDocument();
-      // The type's colour is the poster's, as the office set it.
+      // The type's colour is the icon's, as the office set it.
       expect(refresh.querySelector('[style]')).toHaveStyle({ backgroundColor: '#2D9CDB' });
       // A place with no address is words, not a link.
       expect(within(card('Kickoff 2026')).queryByRole('link')).not.toBeInTheDocument();
       expect(within(card('Kickoff 2026')).getByText('KPM | All agents')).toBeInTheDocument();
     });
 
-    it('P18.5-T5 AC-4, T6 AC-4 the five foot pills and the three tags', async () => {
+    it('P18.5-T5 AC-4, T6 AC-4 the five foot pills', async () => {
       list();
       await listReady();
       const pill = (title: string) => card(title).querySelector('[data-pill]')!.textContent;
-      const tag = (title: string) => card(title).querySelector('[data-tag]')!.textContent;
-      expect([pill('Product refresh briefing'), tag('Product refresh briefing')]).toEqual(['Going', 'Going']);
-      expect([pill('Kickoff 2026'), tag('Kickoff 2026')]).toEqual(['Not joined', 'Not Joined']);
-      expect([pill('PRULink briefing'), tag('PRULink briefing')]).toEqual(['Feedback pending', 'Past']);
-      expect([pill('August Town Hall'), tag('August Town Hall')]).toEqual(["Didn't join", 'Not Joined']);
-      expect([pill('New Agent Bootcamp'), tag('New Agent Bootcamp')]).toEqual(['Feedback sent', 'Past']);
+      expect(pill('Product refresh briefing')).toBe('Going');
+      expect(pill('Kickoff 2026')).toBe('Not joined');
+      expect(pill('PRULink briefing')).toBe('Feedback pending');
+      expect(pill('August Town Hall')).toBe("Didn't join");
+      expect(pill('New Agent Bootcamp')).toBe('Feedback sent');
+    });
+
+    it('P18.95-T10 AC-1 one status per card: the pill, in words, and no poster tag saying it again', async () => {
+      list();
+      await listReady();
+      for (const title of ['Product refresh briefing', 'Kickoff 2026', 'PRULink briefing', 'August Town Hall', 'New Agent Bootcamp']) {
+        const c = card(title);
+        expect(c.querySelectorAll('[data-pill]')).toHaveLength(1);
+        expect(c.querySelector('[data-tag]')).toBeNull();
+        // Never colour alone: the one status carries its words.
+        expect(c.querySelector('[data-pill]')!.textContent!.trim()).not.toBe('');
+      }
+      expect(within(card('Kickoff 2026')).getAllByText(/not joined/i)).toHaveLength(1);
+      expect(within(card('August Town Hall')).queryByText(/not joined/i)).not.toBeInTheDocument();
+      expect(within(card('Product refresh briefing')).getAllByText(/^going$/i)).toHaveLength(1);
+    });
+
+    it('P18.95-T10 AC-1 the icon in place of the banner: the type’s emoji at 32px on its colour, hidden from a screen reader', async () => {
+      list();
+      await listReady();
+      const kickoff = card('Kickoff 2026');
+      const emoji = within(kickoff).getByText('🏆');
+      expect(emoji).toHaveAttribute('aria-hidden', 'true');
+      const icon = emoji.parentElement!;
+      expect(icon).toHaveClass('h-8', 'w-8', 'shrink-0', 'rounded-md');
+      expect(icon).toHaveStyle({ backgroundColor: '#27AE60' });
+      // No 110px poster on any card.
+      expect(document.querySelector('[data-event] .h-\\[110px\\]')).toBeNull();
+      // The icon sits beside the audience line and the title, inside the card's body.
+      expect(icon.parentElement).toContainElement(screen.getByRole('heading', { level: 3, name: 'Kickoff 2026' }));
+      // A past event's icon keeps its veil.
+      expect(within(card('August Town Hall')).getByText('📚').parentElement!.className).toMatch(/before:bg-navy/);
+    });
+
+    it('P18.95-T10 AC-1 an event with no colour or emoji: a navy icon and 📅', async () => {
+      const plain = guestEvent({ id: 'ev-plain', title: 'Plain one', type: { code: 'X', label: 'X', emoji: null, color: null } });
+      list({ 'GET /events': { body: eventList([plain]) } });
+      const emoji = within(await screen.findByRole('heading', { level: 3, name: 'Plain one' }).then((h) => h.closest<HTMLElement>('[data-event]')!))
+        .getByText('📅');
+      expect(emoji.parentElement).toHaveClass('bg-navy', 'h-8', 'w-8');
     });
 
     it('P18.5-T5 AC-4 a past card is grey; an upcoming one is not', async () => {
@@ -217,14 +258,104 @@ describe('/events, KPM Events (P18.5-T5, T6)', () => {
     });
   });
 
+  describe('Join on the card (P18.95-T10 AC-1)', () => {
+    const joinOn = (title: string) => within(card(title)).queryByRole('button', { name: `Join ${title}` });
+
+    it('P18.95-T10 AC-1 Join is on a card the reader may join, and on no other', async () => {
+      list();
+      await listReady();
+      expect(joinOn('Kickoff 2026')).toBeInTheDocument();
+      // Going already, past, and past unjoined: the one status says so, and there is nothing to press.
+      expect(joinOn('Product refresh briefing')).not.toBeInTheDocument();
+      expect(joinOn('PRULink briefing')).not.toBeInTheDocument();
+      expect(joinOn('August Town Hall')).not.toBeInTheDocument();
+      expect(joinOn('New Agent Bootcamp')).not.toBeInTheDocument();
+      // Its words are the client's Join, its name the event's too, beside View event.
+      expect(joinOn('Kickoff 2026')).toHaveTextContent(/^Join$/);
+      expect(within(card('Kickoff 2026')).getByRole('button', { name: 'View event' })).toBeInTheDocument();
+    });
+
+    it('P18.95-T10 AC-1 Join is the action button: amber, navy words (ADR-0137)', async () => {
+      list();
+      await listReady();
+      expect(joinOn('Kickoff 2026')).toHaveClass('bg-amber', 'text-navy');
+    });
+
+    it('P18.95-T10 AC-1, P18.95-T1 AC-10 Join is a 44px target on a phone, 32px from 768px', async () => {
+      list();
+      await listReady();
+      expect(joinOn('Kickoff 2026')).toHaveClass('h-8', 'max-md:min-h-11');
+    });
+
+    it('P18.95-T10 AC-1 a read-only support session is shown no Join on any card', async () => {
+      list({ 'GET /events': { body: eventList(RINA_EVENTS, { can: CAN_NONE }) } }, READ_ONLY_RINA);
+      await listReady();
+      expect(screen.queryByRole('button', { name: /^Join/ })).not.toBeInTheDocument();
+      expect(card('Kickoff 2026').querySelector('[data-pill]')).toHaveTextContent('Not joined');
+    });
+
+    it('P18.95-T10 AC-1 a running event the reader has not joined can be joined from its card', async () => {
+      const huddle = guestEvent({ id: 'ev-huddle', title: "Leaders' huddle", phase: 'running' });
+      list({ 'GET /events': { body: eventList([huddle, KICKOFF]) } });
+      await listReady();
+      expect(joinOn("Leaders' huddle")).toBeInTheDocument();
+    });
+
+    it('P18.95-T10 AC-1, P18.95-T1 AC-6 Join is the modal’s call: POST …/rsvp, "Joined ✓ — you\'re going to {title}", the card to Going', async () => {
+      const going = { ...KICKOFF, me: { ...KICKOFF.me, rsvp: 'going' as const } };
+      const { calls } = list({ 'POST /events/ev-kickoff/rsvp': { status: 201, body: going } });
+      await listReady();
+      await userEvent.click(joinOn('Kickoff 2026')!);
+      expect(await screen.findByText("Joined ✓ — you're going to Kickoff 2026")).toBeInTheDocument();
+      const post = calls.find((c) => c.url.endsWith('/events/ev-kickoff/rsvp'))!;
+      expect(post.init.method).toBe('POST');
+      expect(bodyOf(post)).toEqual({});
+      await waitFor(() => expect(titlesIn('Going')).toContain('Kickoff 2026'));
+      expect(card('Kickoff 2026').querySelector('[data-pill]')).toHaveTextContent('Going');
+      expect(joinOn('Kickoff 2026')).not.toBeInTheDocument();
+      // A press on Join is not a press on the card: the modal stays shut.
+      expect(nav.push).not.toHaveBeenCalled();
+      // The Join it was on is gone; the focus follows the card to its View event.
+      await waitFor(() => expect(within(card('Kickoff 2026')).getByRole('button', { name: 'View event' })).toHaveFocus());
+    });
+
+    it('P18.95-T10 AC-1 a refusal is said under the card in the spec’s words, and the list read again: the card moves to Past', async () => {
+      const ended = { ...KICKOFF, phase: 'past' as const, ended: true };
+      const { calls } = list({
+        'GET /events': [{ body: eventList() }, { body: eventList([PRODUCT_REFRESH, ended, PRULINK, TOWN_HALL, BOOTCAMP]) }],
+        'POST /events/ev-kickoff/rsvp': conflict('EVENT_RSVP_CLOSED', 'This event has ended, so its RSVP is closed.'),
+      });
+      await listReady();
+      await userEvent.click(joinOn('Kickoff 2026')!);
+      const alert = await within(card('Kickoff 2026')).findByRole('alert');
+      expect(alert).toHaveTextContent('This event has already ended.');
+      expect(alert).toHaveTextContent('EVENT_RSVP_CLOSED');
+      await waitFor(() => expect(titlesIn('Past')).toContain('Kickoff 2026'));
+      expect(calls.filter((c) => /\/events$/.test(c.url))).toHaveLength(2);
+      expect(card('Kickoff 2026').querySelector('[data-pill]')).toHaveTextContent("Didn't join");
+      expect(joinOn('Kickoff 2026')).not.toBeInTheDocument();
+      expect(screen.queryByText(/^Joined ✓/)).not.toBeInTheDocument();
+      expect(nav.push).not.toHaveBeenCalled();
+    });
+
+    it('P18.95-T10 AC-1 another refusal is said and the list is not read again', async () => {
+      const { calls } = list({ 'POST /events/ev-kickoff/rsvp': serverError });
+      await listReady();
+      await userEvent.click(joinOn('Kickoff 2026')!);
+      expect(await within(card('Kickoff 2026')).findByRole('alert')).toHaveTextContent('Something went wrong.');
+      expect(calls.filter((c) => /\/events$/.test(c.url))).toHaveLength(1);
+      expect(joinOn('Kickoff 2026')).toBeInTheDocument();
+    });
+  });
+
   describe('the modal (T5 AC-5)', () => {
     it('P18.5-T5 AC-5 opens over the list at its address, named by the event, with the tag, audience, 📅, 📍 and description', async () => {
       modal(KICKOFF);
       const box = await dialog('Kickoff 2026');
       expect(within(box).getByText('Not Joined')).toBeInTheDocument();
       expect(within(box).getByText('KPM | All agents')).toBeInTheDocument();
-      expect(within(box).getByText('Oct 24, 2026', { selector: 'strong' })).toBeInTheDocument();
-      expect(within(box).getByText(/· 6:00 PM/)).toBeInTheDocument();
+      expect(within(box).getByText('24 Oct 2026', { selector: 'strong' })).toBeInTheDocument();
+      expect(within(box).getByText(/, 18:00/)).toBeInTheDocument();
       expect(within(box).getByText('BSD City Branch')).toBeInTheDocument();
       expect(within(box).getByText('About ev-kickoff.')).toBeInTheDocument();
       expect(box).toHaveAttribute('aria-modal', 'true');
@@ -263,12 +394,12 @@ describe('/events, KPM Events (P18.5-T5, T6)', () => {
       expect(behind).toContainElement(screen.getByRole('group', { name: 'Show events', hidden: true }));
     });
 
-    it('P18.5-T5 AC-5 Join event → "You\'re going to {title}", the card moves to Going', async () => {
+    it('P18.5-T5 AC-5, P18.95-T1 AC-6 Join event → "Joined ✓ — you\'re going to {title}", the card moves to Going', async () => {
       const going = { ...KICKOFF, me: { ...KICKOFF.me, rsvp: 'going' as const } };
       const { calls } = modal(KICKOFF, { 'POST /events/ev-kickoff/rsvp': { status: 201, body: going } });
       const box = await dialog('Kickoff 2026');
       await userEvent.click(within(box).getByRole('button', { name: 'Join event' }));
-      expect(await screen.findByText("You're going to Kickoff 2026")).toBeInTheDocument();
+      expect(await screen.findByText("Joined ✓ — you're going to Kickoff 2026")).toBeInTheDocument();
       expect(within(box).getByText("You're going")).toBeInTheDocument();
       expect(within(box).getByRole('button', { name: 'Cancel RSVP' })).toBeInTheDocument();
       expect(within(box).queryByRole('button', { name: 'Join event' })).not.toBeInTheDocument();
@@ -334,7 +465,7 @@ describe('/events, KPM Events (P18.5-T5, T6)', () => {
         modal(KICKOFF, { 'POST /events/ev-kickoff/rsvp': { status: 201, body: going } });
         const box = await dialog('Kickoff 2026');
         await userEvent.click(within(box).getByRole('button', { name: 'Join event' }));
-        const toast = await screen.findByText("You're going to Kickoff 2026");
+        const toast = await screen.findByText("Joined ✓ — you're going to Kickoff 2026");
         const z = (el: Element | null) => Number(/(?:^|\s)z-(?:\[)?(\d+)/.exec(el?.className ?? '')?.[1] ?? 0);
         const toastLayer = toast.closest('[data-layer="toast"]');
         const modalLayer = box.closest('.fixed');
@@ -358,7 +489,7 @@ describe('/events, KPM Events (P18.5-T5, T6)', () => {
 
     it('P18.5-T5 AC-5 an error reading the event, with a retry', async () => {
       modal(KICKOFF, { [`GET /events/${KICKOFF.id}`]: [serverError, { body: KICKOFF }] });
-      const box = await screen.findByRole('dialog', { name: 'KPM Events' });
+      const box = await screen.findByRole('dialog', { name: 'Event List' });
       expect(await within(box).findByRole('alert')).toHaveTextContent('Something went wrong.');
       await userEvent.click(within(box).getByRole('button', { name: 'Try again' }));
       expect(await dialog('Kickoff 2026')).toBeInTheDocument();
@@ -370,6 +501,84 @@ describe('/events, KPM Events (P18.5-T5, T6)', () => {
       expect(within(box).getByText("You're going")).toBeInTheDocument();
       expect(within(box).queryByRole('button', { name: 'Cancel RSVP' })).not.toBeInTheDocument();
       expect(within(box).queryByRole('button', { name: 'Join event' })).not.toBeInTheDocument();
+    });
+  });
+
+  /*
+   * **The findings' UI-043**: at 1000×620 the box, centred and taller than the window, had its top pushed off the
+   * screen with ✕ in it, and *Submit feedback* below the foot; `overflow-hidden` and no height cap meant nothing
+   * scrolled to either. jsdom lays nothing out, so these pin the classes that do; the walk measured them.
+   */
+  describe('a short window (P18.96-T1 AC-1)', () => {
+    afterEach(() => {
+      document.body.style.overflow = '';
+    });
+
+    it('P18.96-T1 AC-1 the box is capped at the dynamic viewport and scrolls inside itself, never pushed off the screen', async () => {
+      modal(PRULINK);
+      const box = await dialog('PRULink briefing');
+      // From 640px: at most the screen less its 1.25rem margins; below it, the whole screen, the same way. Either way
+      // below the top inset, never under a Home Screen app's clock (staging review, 2026-10-31).
+      expect(box).toHaveClass(
+        'sm:max-h-[calc(100dvh-1.25rem-max(1.25rem,env(safe-area-inset-top)))]', 'h-[calc(100dvh-env(safe-area-inset-top))]',
+        'sm:h-auto', 'sm:max-w-[560px]',
+      );
+      expect(box.parentElement).toHaveClass('pt-[env(safe-area-inset-top)]', 'max-sm:bg-card', 'sm:pt-[max(1.25rem,env(safe-area-inset-top))]');
+      expect(box).toHaveClass('overflow-y-auto', 'overscroll-contain');
+      expect(box).not.toHaveClass('overflow-hidden');
+      expect(box).not.toHaveClass('min-h-full');
+      // Nothing outside it scrolls: the box is what scrolls.
+      expect(box.parentElement).not.toHaveClass('overflow-y-auto');
+    });
+
+    it('P18.96-T1 AC-1 ✕ rides on the poster, held at the top; Submit feedback is held at the foot', async () => {
+      modal(PRULINK);
+      const box = await dialog('PRULink briefing');
+      const close = within(box).getByRole('button', { name: 'Close' });
+      const poster = close.parentElement!;
+      expect(poster).toHaveClass('sticky', 'top-0');
+      expect(poster.parentElement).toBe(box);
+
+      const submit = within(box).getByRole('button', { name: 'Submit feedback' });
+      const foot = submit.closest<HTMLElement>('[data-sticky-submit]')!;
+      expect(foot).toHaveClass('sticky', 'bottom-0', 'bg-card');
+      // Held against the whole body, not the form's own block (which draws no box, `contents`), so it is at the
+      // foot from the moment the dialog opens rather than only once the form is scrolled to.
+      const block = foot.parentElement!;
+      expect(block).toHaveAttribute('data-block', 'form');
+      expect(block).toHaveClass('contents');
+      expect(block.parentElement).toContainElement(screen.getByRole('heading', { level: 2, name: 'PRULink briefing' }));
+    });
+
+    it('P18.96-T1 AC-1 the 190px banner shrinks to the card’s 110px while the feedback form shows, and only then', async () => {
+      modal(PRULINK);
+      const withForm = await dialog('PRULink briefing');
+      const posterOf = (box: HTMLElement) => within(box).getByRole('button', { name: 'Close' }).parentElement!;
+      expect(posterOf(withForm)).toHaveClass('h-[110px]');
+      expect(posterOf(withForm)).not.toHaveClass('h-[190px]');
+      cleanup();
+
+      modal(KICKOFF);
+      expect(posterOf(await dialog('Kickoff 2026'))).toHaveClass('h-[190px]');
+    });
+
+    it('P18.96-T1 AC-1 the page behind does not scroll while it is open, and gets its scroll back when it closes', async () => {
+      document.body.style.overflow = 'auto';
+      modal(PRULINK);
+      await dialog('PRULink briefing');
+      expect(document.body.style.overflow).toBe('hidden');
+      cleanup();
+      expect(document.body.style.overflow).toBe('auto');
+    });
+
+    it('P18.96-T1 AC-1 Submit feedback still submits from the held foot, and a refusal shows beside it', async () => {
+      const { calls } = modal(PRULINK, { 'POST /events/ev-prulink/feedback': serverError });
+      const box = await dialog('PRULink briefing');
+      await userEvent.click(within(box).getByRole('radio', { name: '9' }));
+      await userEvent.click(within(box).getByRole('button', { name: 'Submit feedback' }));
+      expect(calls.some((c) => c.url.endsWith('/feedback'))).toBe(true);
+      const foot = within(box).getByRole('button', { name: 'Submit feedback' }).closest<HTMLElement>('[data-sticky-submit]')!;
+      expect(await within(foot).findByRole('alert')).toBeInTheDocument();
     });
   });
 
@@ -532,5 +741,97 @@ describe('/events, KPM Events (P18.5-T5, T6)', () => {
       const box = await dialog('New Agent Bootcamp');
       expect(within(box).getByText('You scored this event 9/10 — "Clear and practical."')).toBeInTheDocument();
     });
+  });
+});
+
+/**
+ * **UI V1 on a phone** (UI-108; `campaign-event-mobile` 2): *All | Upcoming | Past* as one segmented control, two groups
+ * with counts, empty ones hidden; a card with its date block, *start – end*, the place's glyph and the audience only where
+ * it limits; **Join and Not going both on an upcoming card**, the chosen one filled, the other changing it and the
+ * chosen one undoing it; a past card's standing as a tinted pill. 375px.
+ */
+describe('UI-108 /events on a phone', () => {
+  beforeEach(() => {
+    nav.push.mockReset();
+    nav.replace.mockReset();
+    nav.back.mockReset();
+    atWidth(375);
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  const answers = (title: string) => screen.getByRole('group', { name: `Your answer for ${title}` });
+  const pressed = (title: string) => within(answers(title)).getAllByRole('button')
+    .filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.textContent);
+
+  it('UI-108 two groups with their counts, soonest and latest first; start – end, the place’s glyph, the limiting audience', async () => {
+    list();
+    await listReady();
+    await waitFor(() => expect(document.querySelector('[data-group="upcoming"]')).not.toBeNull());
+    expect(within(section('Upcoming')).getAllByRole('heading', { level: 3 }).map((h) => h.textContent))
+      .toEqual(['Product refresh briefing', 'Kickoff 2026']);
+    expect(section('Upcoming')).toHaveTextContent(/^Upcoming2/);
+    expect(within(section('Past')).getAllByRole('heading', { level: 3 }).map((h) => h.textContent))
+      .toEqual(['PRULink briefing', 'August Town Hall', 'New Agent Bootcamp']);
+    const refresh = card('Product refresh briefing');
+    // Start – end, spaces around the dash, the end from `endsAt` in the office's zone (English figures here); online.
+    expect(refresh).toHaveTextContent('15Oct');
+    expect(refresh).toHaveTextContent('14:00 – 16:00');
+    expect(refresh).toHaveTextContent('Online — Zoom');
+    // The audience only where it limits who can come.
+    expect(card('New Agent Bootcamp')).toHaveTextContent('· Select agents');
+    expect(refresh).not.toHaveTextContent('All agents');
+    // No emoji on a phone's card (UI-108, UI-102).
+    expect(within(section('Upcoming')).queryByText('🚀')).not.toBeInTheDocument();
+  });
+
+  it('UI-108 Join and Not going both on an upcoming card: the other changes it, the chosen one again undoes it', async () => {
+    const { calls } = list({
+      'POST /events/ev-kickoff/rsvp/cancel': { body: { ...KICKOFF, me: { rsvp: 'cancelled', claimed: false, feedback: null } } },
+      'POST /events/ev-kickoff/rsvp/withdraw': { body: { ...KICKOFF, me: { rsvp: null, claimed: false, feedback: null } } },
+      'POST /events/ev-refresh/rsvp/withdraw': { body: { ...PRODUCT_REFRESH, me: { rsvp: null, claimed: false, feedback: null } } },
+    });
+    await listReady();
+    await waitFor(() => expect(answers('Kickoff 2026')).toBeInTheDocument());
+    expect(pressed('Product refresh briefing')).toEqual(['Join']);
+    expect(pressed('Kickoff 2026')).toEqual([]);
+    await userEvent.click(within(answers('Kickoff 2026')).getByRole('button', { name: 'Not going' }));
+    await waitFor(() => expect(pressed('Kickoff 2026')).toEqual(['Not going']));
+    expect(await screen.findByText('You’re not going to Kickoff 2026'.replace('’', "'"))).toBeInTheDocument();
+    await userEvent.click(within(answers('Kickoff 2026')).getByRole('button', { name: 'Not going' }));
+    await waitFor(() => expect(pressed('Kickoff 2026')).toEqual([]));
+    await userEvent.click(within(answers('Product refresh briefing')).getByRole('button', { name: /Join/ }));
+    await waitFor(() => expect(pressed('Product refresh briefing')).toEqual([]));
+    expect(calls.filter((c) => c.init.method === 'POST').map((c) => c.url.replace('http://api.test/api/v1', ''))).toEqual([
+      '/events/ev-kickoff/rsvp/cancel', '/events/ev-kickoff/rsvp/withdraw', '/events/ev-refresh/rsvp/withdraw',
+    ]);
+  });
+
+  it('UI-108 a past card says where the reader stands as a tinted pill; the card opens the event', async () => {
+    list();
+    await listReady();
+    await waitFor(() => expect(document.querySelector('[data-group="past"]')).not.toBeNull());
+    expect(within(card('PRULink briefing')).getByText('Feedback pending')).toHaveAttribute('data-tone', 'amber');
+    expect(within(card('New Agent Bootcamp')).getByText('Feedback sent')).toHaveAttribute('data-tone', 'green');
+    expect(within(card('August Town Hall')).getByText('Didn’t join'.replace('’', "'"))).toHaveAttribute('data-tone', 'grey');
+    expect(within(card('PRULink briefing')).queryByRole('group')).not.toBeInTheDocument();
+    await userEvent.click(within(card('PRULink briefing')).getByRole('button', { name: 'PRULink briefing' }));
+    expect(nav.push).toHaveBeenCalledWith('/events/ev-prulink', { scroll: false });
+  });
+
+  it('UI-108 the filter is one segmented control; Past shows the past group alone', async () => {
+    list();
+    await listReady();
+    const filter = screen.getByRole('group', { name: 'Show events' });
+    expect(filter).toHaveClass('max-md:w-full', 'max-md:rounded-pill');
+    await userEvent.click(within(filter).getByRole('button', { name: 'Past' }));
+    await waitFor(() => expect(document.querySelector('[data-group="upcoming"]')).toBeNull());
+    expect(document.querySelector('[data-group="past"]')).not.toBeNull();
+  });
+
+  it('UI-108 a read-only support session reads the cards without Join or Not going', async () => {
+    list({ 'GET /events': { body: eventList(RINA_EVENTS, { can: CAN_NONE }) } }, READ_ONLY_RINA);
+    await listReady();
+    await waitFor(() => expect(document.querySelector('[data-group="upcoming"]')).not.toBeNull());
+    expect(screen.queryByRole('group', { name: 'Your answer for Kickoff 2026' })).not.toBeInTheDocument();
   });
 });

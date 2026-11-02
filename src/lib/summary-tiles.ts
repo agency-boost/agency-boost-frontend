@@ -1,4 +1,8 @@
+import { messagesIn } from '@/i18n/catalogue';
+import { SOURCE_LANGUAGE, type Language } from '@/i18n/language';
+import { summaryTileMessages } from '@/i18n/messages/summary-tiles';
 import type { ApiError } from './api-client';
+import type { TermKey } from './terms';
 import { suggestCode } from './config-code';
 
 /**
@@ -16,6 +20,10 @@ import { suggestCode } from './config-code';
  * **Presentation, never a metric input.** Nothing but the strips reads the grouping. A tile's value
  * is whatever the screen counts for its categories, and the total is the screen's own figure, so
  * regrouping moves a count between tiles and never changes one.
+ *
+ * *Amended 2026-10-26 (P18.95-T5 AC-2):* **Log Activity draws a tile per section** (`sectionTiles`),
+ * at the client's request, so its tiles and its cards are one list; the grouping is the Activity
+ * Dashboard's strip's alone.
  */
 
 /** What the strip reads off a category — `ActivityCategoryRow` satisfies it. */
@@ -37,6 +45,8 @@ export interface SummaryTile {
   value: number;
   /** The strip's last tile, the one it is about. */
   total: boolean;
+  /** A term the tile's label uses, whose ⓘ it carries (P18.95-T9 AC-3): *Total touches* → *a touch*. */
+  term?: TermKey;
 }
 
 /** Whether a reader on `rung` is shown this category. Empty means every rung (ADR-0020). */
@@ -59,7 +69,7 @@ export function summaryTiles<C extends SummaryTileCategory>(
   categories: readonly C[],
   rung: string,
   count: (category: C) => number,
-  total: { label: string; value: number },
+  total: { label: string; value: number; term?: TermKey },
 ): SummaryTile[] {
   const shown = categories
     .map((category, at) => ({ category, at }))
@@ -87,7 +97,47 @@ export function summaryTiles<C extends SummaryTileCategory>(
     }
   }
 
-  return [...tiles.values(), { key: 'total', label: total.label, value: total.value, total: true }];
+  return [...tiles.values(), { key: 'total', label: total.label, value: total.value, total: true, term: total.term }];
+}
+
+/**
+ * **The sections Log Activity shows this reader**, in display order: the active ones their rung is shown
+ * (ADR-0020), by display order, ties by position, as `summaryTiles` orders its tiles.
+ *
+ * The one list the log draws **both** its cards and its tiles from (P18.95-T5 AC-2; the client's UI review,
+ * UI-017: four tiles above five groups, because the seed counts Personal and Team Development in one
+ * *Development* tile).
+ */
+export function shownSections<C extends SummaryTileCategory>(categories: readonly C[], rung: string): C[] {
+  return categories
+    .map((category, at) => ({ category, at }))
+    .filter(({ category }) => category.status === 'active' && isShownTo(category, rung))
+    .sort((a, b) => a.category.displayOrder - b.category.displayOrder || a.at - b.at)
+    .map(({ category }) => category);
+}
+
+/**
+ * **One tile per section, then the total** — Log Activity's strip since 2026-10-26 (P18.95-T5 AC-2, the
+ * client's explicit request): the tiles name exactly the groups below them, so a reader adds up what they see.
+ * The office's *Summary tile* grouping (ADR-0064) no longer applies here; the Activity Dashboard's strip,
+ * `summaryTiles`, still reads it.
+ *
+ * `sections` is `shownSections`' answer, the list the cards are drawn from, so the two cannot disagree.
+ */
+export function sectionTiles<C extends SummaryTileCategory>(
+  sections: readonly C[],
+  count: (category: C) => number,
+  total: { label: string; value: number; term?: TermKey },
+): SummaryTile[] {
+  return [
+    ...sections.map((section) => ({
+      key: `own:${section.code}`,
+      label: section.label,
+      value: Number(count(section)) || 0,
+      total: false,
+    })),
+    { key: 'total', label: total.label, value: total.value, total: true, term: total.term },
+  ];
 }
 
 // ------------------------------------------------------------------ the settings field (AC-5)
@@ -136,10 +186,8 @@ export interface TileChange extends SummaryGroup {
 /** What typing a tile name does: every category it changes, or why it is refused. */
 export type TilePlan = { changes: TileChange[] } | { refused: string };
 
-/** Said when a section with a tile of its own is given another name for it. */
-export const OWN_TILE_REFUSED =
-  'A section with a tile of its own shows its own name. Rename the section to change it, or type the '
-  + 'tile name of another section to count them together.';
+/** Said when a section with a tile of its own is given another name for it — in English, the catalogue's source. */
+export const OWN_TILE_REFUSED = summaryTileMessages.en.ownTile;
 
 /**
  * A code no group and **no section** holds: suggested from the name, then the section's own, then
@@ -175,11 +223,14 @@ function freeCode(name: string, fallback: string, held: ReadonlySet<string>): st
  * **Leaving a tile of two leaves a tile of one**, which then carries neither field — the other section
  * is changed too. Archived sections count throughout: they still render history, and the server
  * compares labels across all of an office's sections (`CONFIG_SUMMARY_GROUP_LABEL_MISMATCH`).
+ *
+ * A refusal is said in the reader's `language` (P18.98-T4; `messages/summary-tiles.ts`), English when none is passed.
  */
 export function planSummaryTile(
   typed: string,
   self: TileMember,
   categories: readonly TileMember[],
+  language: Language = SOURCE_LANGUAGE,
 ): TilePlan {
   const name = typed.trim();
   const same = (a: string, b: string) => a.toLocaleLowerCase() === b.toLocaleLowerCase();
@@ -218,7 +269,7 @@ export function planSummaryTile(
       changes: [self, ...mates].map((c) => ({ code: c.code, summaryGroupCode: current, summaryGroupLabel: name })),
     };
   }
-  return { refused: OWN_TILE_REFUSED };
+  return { refused: messagesIn(summaryTileMessages, language).ownTile };
 }
 
 /**
@@ -226,26 +277,19 @@ export function planSummaryTile(
  *
  * `CONFIG_SUMMARY_GROUP_LABEL_MISMATCH` carries the tile's labels in `details`; its message carries
  * the batch's op prefix and the tile's code, which the screens never show.
- * `CONFIG_SUMMARY_GROUP_CODE_TAKEN` names the code, because the reader typed it as a section's.
+ * `CONFIG_SUMMARY_GROUP_CODE_TAKEN` names the code, because the reader typed it as a section's. Said in the reader's
+ * `language` (P18.98-T4), English when none is passed.
  */
-export function tileRefusal(error: ApiError): ApiError | null {
+export function tileRefusal(error: ApiError, language: Language = SOURCE_LANGUAGE): ApiError | null {
+  const t = messagesIn(summaryTileMessages, language);
   if (error.code === 'CONFIG_SUMMARY_GROUP_CODE_TAKEN') {
     const code = String(error.details?.summaryGroupCode ?? '');
     const label = String(error.details?.label ?? '');
-    return {
-      ...error,
-      message: `${code} is already the code of the summary tile “${label}”. Give the section another code.`,
-    };
+    return { ...error, message: t.codeTaken({ code, label }) };
   }
   if (error.code !== 'CONFIG_SUMMARY_GROUP_LABEL_MISMATCH') return null;
   const labels = (error.details?.labels as string[] | undefined) ?? [];
-  const named = labels.length > 1
-    ? `${labels.slice(0, -1).map((l) => `“${l}”`).join(', ')} and “${labels.at(-1)}”`
-    : 'two names';
-  return {
-    ...error,
-    message: `One summary tile, two names: ${named}. Give every section in it the same tile name.`,
-  };
+  return { ...error, message: t.twoNames({ labels }) };
 }
 
 /** What the field shows for a section: its group's label, or empty for a tile of its own. */

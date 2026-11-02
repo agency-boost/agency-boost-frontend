@@ -3,7 +3,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AgentLayout from '@/app/(agent)/layout';
-import { makeMe, renderInLayout, stubFetch, type StubReply } from '@test/harness';
+import { atWidth, makeMe, renderInLayout, stubFetch, type StubReply } from '@test/harness';
 import {
   BRIEF, HESITATIONS, MOTIVATIONS, NEXT_ACTION, plan, READ_ONLY_RINA, READERS, refused, RETIREE_PLAN, RINA_ME,
   serverError, SHELL_STUBS, TYPES, view,
@@ -12,21 +12,25 @@ import { SessionContext } from '@/lib/session';
 import RecruitmentLayout from '../layout';
 import RecruitmentAttackPlanPage from './page';
 
-const nav = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn(), back: vi.fn() }));
+const nav = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn(), back: vi.fn(), search: '' }));
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: nav.push, replace: nav.replace, back: nav.back }),
   usePathname: () => '/recruitment/attack-plan',
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () => new URLSearchParams(nav.search),
   useParams: () => ({}),
 }));
+
+/** The address's query (`useQuery`, `lib/use-query.ts`): each test names its own, and starts from none. */
+beforeEach(() => { nav.search = ''; });
 
 type Query = Record<string, string>;
 type Routes = Record<string, StubReply | StubReply[]>;
 
-/** The page at an address, as the App Router hands it its query: a settled thenable. */
-const searchParams = (query: Query) => Object.assign(Promise.resolve(query), { status: 'fulfilled', value: query });
-
-const page = (query: Query) => <RecruitmentLayout><RecruitmentAttackPlanPage searchParams={searchParams(query)} /></RecruitmentLayout>;
+/** The page at an address: the query is the address's, which the page reads with `useSearchParams`. */
+const page = (query: Query) => {
+  nav.search = new URLSearchParams(query).toString();
+  return <RecruitmentLayout><RecruitmentAttackPlanPage /></RecruitmentLayout>;
+};
 
 /** The bare read answers the vocabulary; a read with a brief, `plan()`. */
 const answer = ({ url }: { url: string }) => ({ body: url.includes('?') ? view(plan()) : view() });
@@ -56,16 +60,18 @@ const briefHeading = () => screen.findByRole('heading', { level: 2, name: 'Who a
 const result = (name = 'Fresh graduate') => screen.findByRole('heading', { level: 2, name });
 const group = (name: string) => screen.getByRole('group', { name });
 const chip = (question: string, name: string) => within(group(question)).getByRole('button', { name });
+/** What an element wears at 768px and wider: every class but the phone's. */
+const desktopOnly = (el: Element) => (el.getAttribute('class') ?? '').split(/\s+/).filter((c) => c && !c.startsWith('max-md:'));
 const pressed = (question: string) =>
   within(group(question)).getAllByRole('button').filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.textContent);
 
 async function chooseTheBrief() {
   await userEvent.click(chip('Candidate type', 'Fresh grad'));
   // Clicked out of order: the address lists them in the chips' order (`:521`).
-  await userEvent.click(chip('What\'s driving them', 'Building a team / leadership'));
-  await userEvent.click(chip('What\'s driving them', 'Extra income on the side'));
+  await userEvent.click(chip('What\'s driving them', 'Lead a team'));
+  await userEvent.click(chip('What\'s driving them', 'Side income'));
   await userEvent.click(chip('Their biggest hesitation', 'Worried about time commitment'));
-  await userEvent.click(chip('Their biggest hesitation', 'No sales experience'));
+  await userEvent.click(chip('Their biggest hesitation', 'No sales exp.'));
 }
 
 describe('/recruitment/attack-plan, the Recruitment Attack Plan (P17-T3)', () => {
@@ -77,11 +83,12 @@ describe('/recruitment/attack-plan, the Recruitment Attack Plan (P17-T3)', () =>
   afterEach(() => vi.unstubAllGlobals());
 
   describe('the page and the brief, verbatim (AC-2, AC-3)', () => {
-    it('P17-T3 AC-2 the title, the sub-line and the two tabs as links, Attack Plan the current one', async () => {
+    it('P17-T3 AC-2, P18.95-T7 AC-1 the title, the sub-line off a phone, and the two tabs as links, Attack Plan the current one', async () => {
       show();
       await briefHeading();
       expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Recruitment$/);
-      expect(screen.getByText('Build the pitch on the fly, or pull the ready-made materials to show a candidate.')).toBeInTheDocument();
+      // Grey text row 8: its words from 768px; the client's *Remove* below it.
+      expect(screen.getByText('Build the pitch on the fly, or pull the ready-made materials to show a candidate.')).toHaveClass('max-md:hidden');
       const tabs = within(screen.getByRole('navigation', { name: 'Recruitment' })).getAllByRole('link');
       expect(tabs.map((t) => [t.textContent, t.getAttribute('href'), t.getAttribute('aria-current')])).toEqual([
         ['Attack Plan', '/recruitment/attack-plan', 'page'],
@@ -101,8 +108,9 @@ describe('/recruitment/attack-plan, the Recruitment Attack Plan (P17-T3)', () =>
       const steps = within(screen.getByRole('list', { name: 'Steps' })).getAllByRole('listitem');
       expect(steps.map((s) => s.textContent)).toEqual(['11 Candidate brief', '22 Recruitment plan']);
       expect(steps[0]).toHaveAttribute('aria-current', 'step');
-      expect(screen.getByText('Three questions. Enough to get an opening line, a benefits list, and an objection response, fast.'))
-        .toBeInTheDocument();
+      // P18.95-T7 AC-1 (grey text row 9): the client's line from 768px; on a phone no grey line (UI-107, D-08).
+      expect(desktopOnly(screen.getByText('Answer 3 questions to get your pitch.'))).not.toContain('hidden');
+      expect(screen.getByText('Answer 3 questions to get your pitch.')).toHaveClass('max-md:hidden');
       expect(reads(calls)).toEqual([API]);
     });
 
@@ -136,14 +144,14 @@ describe('/recruitment/attack-plan, the Recruitment Attack Plan (P17-T3)', () =>
       expect(build).toHaveClass('bg-amber', 'text-navy', 'w-full');
       expect(build).toBeDisabled();
       await userEvent.click(chip('Candidate type', 'Retiree'));
-      await userEvent.click(chip('What\'s driving them', 'Full career change'));
+      await userEvent.click(chip('What\'s driving them', 'Career change'));
       expect(build).toBeDisabled();
-      await userEvent.click(chip('Their biggest hesitation', 'No network to sell to'));
+      await userEvent.click(chip('Their biggest hesitation', 'No network'));
       expect(build).toBeEnabled();
       // A chosen chip is a selection, so it stays navy beside the amber action.
-      expect(chip('Their biggest hesitation', 'No network to sell to')).toHaveClass('bg-navy', 'text-white');
+      expect(chip('Their biggest hesitation', 'No network')).toHaveClass('bg-navy', 'text-white');
       // Unchoosing the only hesitation closes it again.
-      await userEvent.click(chip('Their biggest hesitation', 'No network to sell to'));
+      await userEvent.click(chip('Their biggest hesitation', 'No network'));
       expect(build).toBeDisabled();
     });
 
@@ -153,9 +161,9 @@ describe('/recruitment/attack-plan, the Recruitment Attack Plan (P17-T3)', () =>
       await userEvent.click(chip('Candidate type', 'Fresh grad'));
       await userEvent.click(chip('Candidate type', 'Retiree'));
       expect(pressed('Candidate type')).toEqual(['Retiree']);
-      await userEvent.click(chip('What\'s driving them', 'Flexibility / time freedom'));
-      await userEvent.click(chip('What\'s driving them', 'Full career change'));
-      expect(pressed('What\'s driving them')).toEqual(['Full career change', 'Flexibility / time freedom']);
+      await userEvent.click(chip('What\'s driving them', 'Flexibility'));
+      await userEvent.click(chip('What\'s driving them', 'Career change'));
+      expect(pressed('What\'s driving them')).toEqual(['Career change', 'Flexibility']);
     });
 
     it('P17-T3 AC-5 Build puts the brief in the address, the answers comma-separated in the chips’ order', async () => {
@@ -191,8 +199,8 @@ describe('/recruitment/attack-plan, the Recruitment Attack Plan (P17-T3)', () =>
       expect(within(back).getByText('←')).toHaveAttribute('aria-hidden', 'true');
       // *Type* is the profile's label, not the chip's: *Fresh grad* reads *Fresh graduate* (`:557`).
       expect(screen.getByLabelText('Candidate brief').textContent).toBe(
-        'Type: Fresh graduateMotivation: Extra income on the side, Building a team / leadership'
-        + 'Hesitation: No sales experience, Worried about time commitment',
+        'Type: Fresh graduateMotivation: Side income, Lead a team'
+        + 'Hesitation: No sales exp., Worried about time commitment',
       );
     });
 
@@ -218,8 +226,8 @@ describe('/recruitment/attack-plan, the Recruitment Attack Plan (P17-T3)', () =>
       await result();
       const openings = Array.from(container.querySelectorAll('[data-opening]'));
       expect(openings.map((o) => o.textContent)).toEqual([
-        'Extra income on the side“Are you thinking of this as something on the side for now, or could it become your main thing if it works out?”',
-        'Building a team / leadership“Where do you want to be in three years — still doing the same role, or running your own team?”',
+        'Side income“Are you thinking of this as something on the side for now, or could it become your main thing if it works out?”',
+        'Lead a team“Where do you want to be in three years — still doing the same role, or running your own team?”',
       ]);
     });
 
@@ -304,8 +312,8 @@ describe('/recruitment/attack-plan, the Recruitment Attack Plan (P17-T3)', () =>
       navigate(shown, {});
       await briefHeading();
       expect(pressed('Candidate type')).toEqual(['Fresh grad']);
-      expect(pressed('What\'s driving them')).toEqual(['Extra income on the side', 'Building a team / leadership']);
-      expect(pressed('Their biggest hesitation')).toEqual(['No sales experience', 'Worried about time commitment']);
+      expect(pressed('What\'s driving them')).toEqual(['Side income', 'Lead a team']);
+      expect(pressed('Their biggest hesitation')).toEqual(['No sales exp.', 'Worried about time commitment']);
       expect(screen.getByRole('button', { name: 'Build recruitment plan' })).toBeEnabled();
       expect(reads(stub.calls)).toEqual([PLAN_URL]);
     });
@@ -428,6 +436,59 @@ describe('/recruitment/attack-plan, the Recruitment Attack Plan (P17-T3)', () =>
   });
 
   describe('who may (AC-9)', () => {
+    it('P18.95-T6 AC-2 labels: the chips read the client’s shorter words, the codes behind them unchanged', async () => {
+      const { calls } = show();
+      await briefHeading();
+      const labels = (name: string) => within(group(name)).getAllByRole('button').map((b) => b.textContent);
+      expect(labels('What\'s driving them')).toEqual(['Side income', 'Career change', 'Flexibility', 'Lead a team']);
+      expect(labels('Their biggest hesitation'))
+        .toEqual(['No sales exp.', 'Already has a stable job', 'Bad reputation', 'No network', 'Worried about time commitment']);
+      await chooseTheBrief();
+      await userEvent.click(screen.getByRole('button', { name: 'Build recruitment plan' }));
+      // The address carries the prototype's codes, whatever the chips say.
+      expect(nav.push).toHaveBeenCalledWith(
+        '/recruitment/attack-plan?type=fresh-grad&motivation=side-income,leadership&hesitation=no-experience,time',
+        { scroll: false },
+      );
+      expect(reads(calls)).toEqual([API]);
+    });
+
+    it('UI-107 on a phone: pill chips that wrap, and the button under the last question in the flow — never a fixed bar', async () => {
+      show();
+      await briefHeading();
+      for (const name of ['Candidate type', 'What\'s driving them', 'Their biggest hesitation']) {
+        const box = within(group(name)).getAllByRole('button')[0].parentElement!;
+        expect(box).toHaveClass('flex', 'flex-wrap', 'max-md:gap-1.5');
+        expect(box).not.toHaveClass('max-md:grid');
+        for (const chipEl of within(group(name)).getAllByRole('button')) {
+          expect(chipEl).toHaveClass('max-md:h-[2.375rem]', 'max-md:rounded-pill');
+          expect(desktopOnly(chipEl)).not.toContain('w-full');
+        }
+      }
+      const build = screen.getByRole('button', { name: 'Build recruitment plan' });
+      expect(document.querySelector('.max-md\\:fixed')).toBeNull();
+      expect(build).toHaveClass('max-md:w-full', 'max-md:rounded-pill');
+      expect(build.parentElement!.previousElementSibling).toContainElement(group('Their biggest hesitation'));
+      expect(build).toBeDisabled();
+    });
+
+    it('UI-107 on a phone the button is always active: with a question open it focuses that question', async () => {
+      atWidth(375);
+      show();
+      await briefHeading();
+      const build = screen.getByRole('button', { name: 'Build recruitment plan' });
+      await waitFor(() => expect(build).toBeEnabled());
+      await userEvent.click(build);
+      expect(group('Candidate type')).toHaveFocus();
+      expect(nav.push).not.toHaveBeenCalled();
+    });
+
+    it('P18.95-T6 AC-1 the plan has no bar: Build is the brief’s alone', async () => {
+      show(BRIEF);
+      await result();
+      expect(document.querySelector('.max-md\\:fixed')).toBeNull();
+    });
+
     it.each(READERS)('P17-T3 AC-9 %s builds a plan', async (_who, me) => {
       show(BRIEF, {}, me);
       await result();
@@ -456,5 +517,42 @@ describe('/recruitment/attack-plan, the Recruitment Attack Plan (P17-T3)', () =>
       await result();
       for (const url of reads(calls)) expect(url).not.toMatch(/kpm|company|office/i);
     });
+  });
+});
+
+/**
+ * **UI V1 on a phone** (UI-107; `attack-plan-mobile` 5): the recruitment plan as the phone draws it — the answers with
+ * *Ubah*, the candidate in a navy card, four numbered sections, the push-backs as bubbles, *Buka Pitch Materials ›*.
+ */
+describe('UI-107 /recruitment/attack-plan on a phone', () => {
+  beforeEach(() => {
+    nav.push.mockReset();
+    nav.replace.mockReset();
+    nav.back.mockReset();
+    atWidth(375);
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('UI-107 step 2: the answers with Ubah, the navy card, four numbered sections, the Pitch Materials link', async () => {
+    show(BRIEF);
+    const heading = await screen.findByRole('heading', { level: 2, name: 'Fresh graduate' });
+    await waitFor(() => expect(document.querySelector('[data-layout="phone-plan"]')).not.toBeNull());
+    const answers = within(screen.getByRole('list', { name: 'Candidate brief' })).getAllByRole('listitem').map((li) => li.textContent);
+    expect(answers).toHaveLength(5);
+    expect(screen.queryByRole('button', { name: 'Back' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Change' }));
+    expect(nav.replace).toHaveBeenCalledWith('/recruitment/attack-plan', { scroll: false });
+    const card = heading.closest('article')!;
+    expect(card).toHaveClass('bg-navy');
+    expect(card).toHaveTextContent('Candidate profilePlan readyFresh graduate');
+    const sections = [...document.querySelectorAll('[data-layout="phone-plan"] section[data-block]')];
+    expect(sections.map((sec) => sec.querySelector('h3')!.textContent)).toEqual([
+      '11 Opening lines', '22 Lead with these benefits', '33 If they push back', '44 Next action',
+    ]);
+    // Two motivations: each opening tagged with its own; two hesitations: two pairs of bubbles.
+    expect(sections[0].querySelectorAll('[data-opening]')).toHaveLength(2);
+    expect(sections[2].querySelectorAll('[data-part="bubbles"]')).toHaveLength(2);
+    expect(within(sections[3] as HTMLElement).getByRole('link', { name: 'Go to Pitch Materials' }))
+      .toHaveAttribute('href', '/recruitment/pitch-materials');
   });
 });

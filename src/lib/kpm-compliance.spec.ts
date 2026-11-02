@@ -19,7 +19,7 @@ const row = (name: string, status: string | null, extra: Partial<ComplianceCell>
 function strings(copy: object): string[] {
   return Object.values(copy).flatMap((v): string[] => {
     if (typeof v === 'string') return [v];
-    if (typeof v === 'function') return [String((v as (...a: unknown[]) => unknown)('Sep 1', 'x', 'y'))];
+    if (typeof v === 'function') return [String((v as (...a: unknown[]) => unknown)('1 Sep', 'x', 'y'))];
     if (v && typeof v === 'object') return strings(v);
     return [];
   });
@@ -212,7 +212,7 @@ describe('the compliance tree’s rules (P18.6-T1, T2)', () => {
     });
 
     it('labels and tags each campaign (CAMPAIGN_ITEMS, :3002-3011), an upcoming one starting, never “since”', () => {
-      expect(CAMPAIGNS.map((c) => campaignDateLabel(c, TODAY))).toEqual(['Always on', 'Since Sep 1', 'Starts Nov 1', 'Ended Aug 31']);
+      expect(CAMPAIGNS.map((c) => campaignDateLabel(c, TODAY))).toEqual(['Always on', 'Since 1 Sep', 'Starts 1 Nov', 'Ended 31 Agu']);
       expect(CAMPAIGNS.map((c) => campaignTag(c))).toEqual([
         { label: 'Structural', tone: 'structural' },
         { label: 'Ongoing', tone: 'ongoing' },
@@ -225,7 +225,7 @@ describe('the compliance tree’s rules (P18.6-T1, T2)', () => {
       expect(campaignGroups([...CAMPAIGNS, NEXT_YEAR_CAMPAIGN]).ongoing.map((c) => c.code))
         .toEqual(['APE_SPRINT', 'APE_CHALLENGE_NEXT', 'NEW_YEAR_DASH']);
       expect(campaignTag(NEXT_YEAR_CAMPAIGN)).toEqual({ label: 'Upcoming', tone: 'upcoming' });
-      expect(campaignDateLabel(NEXT_YEAR_CAMPAIGN, TODAY)).toBe('Starts Jan 1, 2027');
+      expect(campaignDateLabel(NEXT_YEAR_CAMPAIGN, TODAY)).toBe('Starts 1 Jan 2027');
     });
 
     it('finds a campaign by its code in any case, as the read accepts it', () => {
@@ -234,8 +234,8 @@ describe('the compliance tree’s rules (P18.6-T1, T2)', () => {
     });
 
     it('writes a day as the column does, with the year only when it is not this one', () => {
-      expect(dayWords('2026-09-01', TODAY)).toBe('Sep 1');
-      expect(dayWords('2025-12-20', TODAY)).toBe('Dec 20, 2025');
+      expect(dayWords('2026-09-01', TODAY)).toBe('1 Sep');
+      expect(dayWords('2025-12-20', TODAY)).toBe('20 Des 2025');
     });
   });
 
@@ -254,7 +254,7 @@ describe('the compliance tree’s rules (P18.6-T1, T2)', () => {
     });
 
     it('names the expired activation’s end in its words (OD-159, ADR-0149)', () => {
-      expect(OWN_COPY.expiredName('Sep 30')).toBe('Overdue: ended on Sep 30 without being marked complete');
+      expect(OWN_COPY.expiredName('30 Sep')).toBe('Overdue: ended on 30 Sep without being marked complete');
     });
 
     it('names a past event’s — for a member nobody has confirmed yet (D-status)', () => {

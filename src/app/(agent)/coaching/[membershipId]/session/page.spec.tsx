@@ -1,16 +1,24 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AgentLayout from '@/app/(agent)/layout';
-import { makeMe, renderInLayout, routeParams, stubFetch, type StubReply } from '@test/harness';
+import { InLanguage, makeMe, renderInLayout, renderWithSession, routeParams, stubFetch, type StubReply } from '@test/harness';
+import type { Language } from '@/i18n/language';
 import { act } from 'react';
 import CoachingPersonLayout from '../layout';
 import CoachingSessionTabPage from './page';
+import { sessionTag } from '@/components/coaching-session';
+import { FLOATING_BAR_ROOM } from '@/components/ui/floating-bar';
 
+const nav = vi.hoisted(() => ({ search: '' }));
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
   usePathname: () => '/coaching/mem-rina/session',
+  useSearchParams: () => new URLSearchParams(nav.search),
 }));
+
+/** The address's query (`useQuery`, `lib/use-query.ts`): each test names its own, and starts from none. */
+beforeEach(() => { nav.search = ''; });
 
 const LEADER = makeMe({
   user: {
@@ -59,7 +67,7 @@ const history = (over: Record<string, unknown> = {}) => ({
 const session = (over: Record<string, unknown> = {}) => ({
   sessionId: 's-1', coachee: { membershipId: 'mem-rina', name: 'Rina Wijaya' }, coach: AGUS,
   status: 'draft', version: 1, date: null, startedAt: '2026-10-02T02:00:00.000Z',
-  finalizedAt: null, finalizedBy: null, reopenableUntil: null,
+  finalizedAt: null, finalizedBy: null, reopenableUntil: null, defaultDueDate: '2026-10-09',
   lastWeek: { sessionId: 's-0924', date: '2026-09-24' },
   lastWeekItems: [
     { itemId: 'lw-1', text: 'Confirm submission paperwork with Bp. Andi', dueDate: '2026-09-24', lead: null, done: true },
@@ -76,7 +84,7 @@ const session = (over: Record<string, unknown> = {}) => ({
 
 const finalized = (over: Record<string, unknown> = {}) => session({
   status: 'finalized', version: 3, date: '2026-10-02', finalizedAt: '2026-10-02T03:00:00.000Z', finalizedBy: AGUS,
-  reopenableUntil: '2026-10-09', ...over,
+  reopenableUntil: '2026-10-09', defaultDueDate: null, ...over,
 });
 
 const M = 1_000_000 * 100;
@@ -154,6 +162,7 @@ const GOAL = {
   snapshot: { monthlyApeTargetMinor: 80 * M, policiesPerMonth: 5, appointmentsPerMonth: 16, leadsPerMonth: 53 },
   projected: null,
   cascadeMapping: { leadsCode: 'LEADS_CONTACTED', appointmentsCode: 'SELL_PRESENTATION', closingsCode: 'SELL_SUBMISSION' },
+  cascadeBinding: { leads: ['LEADS_CONTACTED'], appointments: ['SELL_PRESENTATION'], closings: ['SELL_SUBMISSION'] },
   measured: null, savedAt: '2026-09-01T02:00:00.000Z', savedByMembershipId: 'mem-rina',
 };
 
@@ -174,7 +183,8 @@ const echoSave: StubReply = ({ body }) => {
   };
 };
 
-const show = (routes: Record<string, StubReply | StubReply[]> = {}) => {
+/** The session tab, in English (every spec's default) or, asked for, in Indonesian (P18.98-T3). */
+const show = (routes: Record<string, StubReply | StubReply[]> = {}, language?: Language) => {
   const stub = stubFetch({
     '/kpm/config': { body: { activity: [], ratios: [], leadPipelines: PIPELINES, version: 1 } },
     '/kpm/org-levels': { body: [] },
@@ -185,24 +195,21 @@ const show = (routes: Record<string, StubReply | StubReply[]> = {}) => {
     '/summary?for=mem-rina': { body: summary() },
     '/activity/ratios?for=mem-rina': { body: RATIOS },
     '/activity/summary?': { body: WEEK },
-    'outcome=open': { body: page([lead()]) },
-    'outcome=won': { body: page([]) },
-    'outcome=lost': { body: page([]) },
+    'GET /leads?owner=mem-rina': { body: page([lead()]) },
     'GET /goals/2026': { body: GOAL },
     'PUT /goals/2026': { body: GOAL },
     ...routes,
   });
-  const view = renderInLayout(
-    AgentLayout,
-    <CoachingPersonLayout params={routeParams({ membershipId: 'mem-rina' })}><CoachingSessionTabPage /></CoachingPersonLayout>,
-    { me: LEADER },
-  );
+  const tab = <CoachingPersonLayout params={routeParams({ membershipId: 'mem-rina' })}><CoachingSessionTabPage /></CoachingPersonLayout>;
+  const view = language
+    ? renderWithSession(<InLanguage language={language}><AgentLayout>{tab}</AgentLayout></InLanguage>, { me: LEADER })
+    : renderInLayout(AgentLayout, tab, { me: LEADER });
   return { ...stub, ...view };
 };
 
 const card = (name: string | RegExp) => screen.findByRole('region', { name });
-/** *Today's session — {date}* and its tag: one line, across its `<strong>` and its tag. */
-const headerLine = () => screen.getByText((_, el) => el?.tagName === 'P' && /^Today's session — /.test(el.textContent ?? ''));
+/** The session card (UI-032): *Sesi hari ini*, the day and the tag, in either language. */
+const sessionCard = () => document.querySelector('[data-session-card="session"]') as HTMLElement;
 const sent = (calls: { url: string; init: RequestInit }[], method: string, fragment: string) =>
   calls.filter((c) => (c.init.method ?? 'GET') === method && c.url.includes(fragment));
 const bodyOf = (call: { init: RequestInit }) => JSON.parse(call.init.body as string);
@@ -219,48 +226,68 @@ describe('the session workspace (P11-T8)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   describe('the header and the start', () => {
-    it('P11-T8 AC-1 heads the tab with the office’s today and the Draft tag, before anything starts', async () => {
+    it('P11-T8 AC-1, P18.95-T7 AC-2, UI-032 heads the tab with the office’s today and Not started, before anything starts', async () => {
       show({ 'GET /coaching/coachees/mem-rina/sessions': { body: history() } });
 
       await screen.findByRole('button', { name: 'Start coaching session' });
-      const header = headerLine();
-      expect(header).toHaveTextContent("Today's session — Friday, October 2, 2026 Draft");
-      expect(within(header).getByText('Friday, October 2, 2026').tagName).toBe('STRONG');
+      const heading = within(sessionCard()).getByRole('heading', { level: 2 });
+      expect(heading).toHaveTextContent(/^Today’s session ?Friday, 2 Oct 2026$/);
+      // P18.95-T7 AC-2 (UI-021): *Not started*, not the prototype's *Draft* of a session nobody has opened.
+      expect(within(sessionCard()).getByText('Not started')).toHaveAttribute('data-tone', 'grey');
+      expect(sessionCard()).not.toHaveTextContent('Draft');
     });
 
-    it('P11-T8 AC-1 lists past sessions behind View past sessions ▾, each a row that opens its archive', async () => {
+    it('P18.95-T7 AC-2 tags a session Draft once it is open, and Finalized once it is done', () => {
+      expect(sessionTag(null)).toBe('Not started');
+      expect(sessionTag({ status: 'draft' })).toBe('Draft');
+      expect(sessionTag({ status: 'reopened' })).toBe('Draft');
+      expect(sessionTag({ status: 'finalized' })).toBe('Finalized');
+    });
+
+    it('UI-032 one card: the day, the tag and Start coaching session in it, past sessions as rows under it without a tap', async () => {
       show({ 'GET /coaching/coachees/mem-rina/sessions': { body: history() } });
-      const toggle = await screen.findByRole('button', { name: 'View past sessions' });
-      expect(toggle).toHaveTextContent('View past sessions ▾');
-      expect(toggle).toHaveAttribute('aria-expanded', 'false');
-      expect(screen.queryByRole('link', { name: /Sep 24, 2026/ })).not.toBeInTheDocument();
-
-      await userEvent.click(toggle);
-
-      expect(toggle).toHaveAttribute('aria-expanded', 'true');
-      expect(toggle).toHaveTextContent('Hide past sessions ▴');
-      const rows = within(document.getElementById(toggle.getAttribute('aria-controls')!)!).getAllByRole('link');
+      const start = await screen.findByRole('button', { name: 'Start coaching session' });
+      // One card for one action: the button is inside the session card, 48px, a line icon and no ▶.
+      expect(sessionCard()).toContainElement(start);
+      expect(start).toHaveClass('h-12');
+      expect(start).not.toHaveTextContent('▶');
+      expect(start.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
+      expect(screen.queryByRole('button', { name: /View past sessions/ })).not.toBeInTheDocument();
+      const rows = within(sessionCard()).getAllByRole('link');
       expect(rows.map((r) => [r.textContent, r.getAttribute('href')])).toEqual([
-        ['Sep 24, 2026 — 3 action items · 1 completedView →', '/coaching/mem-rina/archive/s-0924'],
-        ['Sep 17, 2026 — 1 action item · 1 completedView →', '/coaching/mem-rina/archive/s-0917'],
+        ['24 Sep 2026 · 3 action items · 1 completed', '/coaching/mem-rina/archive/s-0924'],
+        ['17 Sep 2026 · 1 action item · 1 completed', '/coaching/mem-rina/archive/s-0917'],
       ]);
-
-      await userEvent.click(toggle);
-      expect(screen.queryByRole('link', { name: /Sep 24, 2026/ })).not.toBeInTheDocument();
+      for (const row of rows) expect(row).toHaveClass('min-h-[52px]');
     });
 
-    it('P11-T8 AC-1 says so when there is no past session yet', async () => {
+    it('UI-032 shows three past sessions, then All (n), which shows the rest and folds them again', async () => {
+      const sessions = ['09-24', '09-17', '09-10', '09-03', '08-27'].map((d) => ({
+        sessionId: `s-${d}`, date: `2026-${d}`, coach: AGUS, actionItemCount: 2, completedCount: 1,
+      }));
+      show({ 'GET /coaching/coachees/mem-rina/sessions': { body: history({ sessions }) } });
+      await screen.findByRole('button', { name: 'Start coaching session' });
+      expect(within(sessionCard()).getAllByRole('link')).toHaveLength(3);
+
+      const all = within(sessionCard()).getByRole('button', { name: 'All (5)' });
+      await userEvent.click(all);
+      expect(within(sessionCard()).getAllByRole('link')).toHaveLength(5);
+      expect(within(sessionCard()).getByRole('button', { name: 'Show fewer' })).toHaveAttribute('aria-expanded', 'true');
+    });
+
+    it('UI-032, D-08 draws no past-session list when there is none', async () => {
       show({ 'GET /coaching/coachees/mem-rina/sessions': { body: history({ sessions: [] }) } });
-      await userEvent.click(await screen.findByRole('button', { name: 'View past sessions' }));
-      expect(screen.getByText('No past sessions yet.')).toBeInTheDocument();
+      await screen.findByRole('button', { name: 'Start coaching session' });
+      expect(within(sessionCard()).queryAllByRole('link')).toHaveLength(0);
+      expect(screen.queryByText('No past sessions yet.')).not.toBeInTheDocument();
     });
 
-    it('P11-T8 AC-2 opens on ▶ Start coaching session and its line, and reads nothing about her until it starts', async () => {
+    it('P11-T8 AC-2, UI-032 opens on Start coaching session with no line under it, and reads nothing about her until it starts', async () => {
       const { calls } = show({ 'GET /coaching/coachees/mem-rina/sessions': { body: history() } });
 
-      const start = await screen.findByRole('button', { name: 'Start coaching session' });
-      expect(start).toHaveTextContent('▶ Start coaching session');
-      expect(screen.getByText("Opens last week's items, goals, leads, and everything else for today's 1-on-1.")).toBeInTheDocument();
+      await screen.findByRole('button', { name: 'Start coaching session' });
+      // UI-032: the line under the button went at every size.
+      expect(screen.queryByText(/Opens last week's items/)).not.toBeInTheDocument();
       // Every one of these reads is audited; the pre-start state draws none of them.
       expect(calls.some((c) => /\/summary\?|\/activity\/|\/leads|\/goals\//.test(c.url))).toBe(false);
       expect(screen.queryByRole('region', { name: 'Goal' })).not.toBeInTheDocument();
@@ -274,11 +301,12 @@ describe('the session workspace (P11-T8)', () => {
 
       await userEvent.click(await screen.findByRole('button', { name: 'Start coaching session' }));
 
-      await toastSays('Session started — unfinished items and tips from last week carried forward.');
+      // *Session started ✓* first since 2026-10-26 (P18.95-T1 AC-6), the prototype's sentence after it.
+      await toastSays('Session started ✓ — unfinished items and tips from last week carried forward.');
       expect(sent(calls, 'POST', '/coaching/coachees/mem-rina/sessions')).toHaveLength(1);
       expect(screen.queryByRole('button', { name: 'Start coaching session' })).not.toBeInTheDocument();
-      expect(screen.getByLabelText('Action item 1')).toHaveValue('Practice a tighter close for the Rp30M+ segment');
-      expect(screen.getByLabelText('Tip 1')).toHaveValue('Slow down on the opening line — let the client finish before pitching.');
+      expect(screen.getByRole('textbox', { name: 'Action item 1' })).toHaveValue('Practice a tighter close for the Rp30M+ segment');
+      expect(screen.getByRole('textbox', { name: 'Tip 1' })).toHaveValue('Slow down on the opening line — let the client finish before pitching.');
       expect(await card('Goal')).toBeInTheDocument();
     });
 
@@ -290,7 +318,7 @@ describe('the session workspace (P11-T8)', () => {
 
       await userEvent.click(await screen.findByRole('button', { name: 'Start coaching session' }));
 
-      await toastSays('Session started.');
+      await toastSays('Session started ✓');
       expect(screen.queryByText(/carried forward/)).not.toBeInTheDocument();
       expect(screen.queryByRole('region', { name: "Last week's action items" })).not.toBeInTheDocument();
     });
@@ -318,19 +346,24 @@ describe('the session workspace (P11-T8)', () => {
   });
 
   describe('last week’s action items', () => {
-    it('P11-T8 AC-3 lists them under From {date} session: a checkbox, a date, the Leads tag and the text, struck when done', async () => {
+    it('P11-T8 AC-3, UI-061 lists them under From {date} session in the compact row: date, text, lead after a person icon, checkbox', async () => {
       show();
       const lastWeek = await card("Last week's action items");
 
-      expect(within(lastWeek).getByText('From Sep 24 session')).toBeInTheDocument();
-      const done = within(lastWeek).getByRole('checkbox', { name: 'Confirm submission paperwork with Bp. Andi' });
+      expect(within(lastWeek).getByText('From 24 Sep session')).toBeInTheDocument();
+      const done = within(lastWeek).getByRole('checkbox', { name: 'Done: Confirm submission paperwork with Bp. Andi' });
       expect(done).toBeChecked();
       expect(within(lastWeek).getByText('Confirm submission paperwork with Bp. Andi')).toHaveClass('line-through');
-      const open = within(lastWeek).getByRole('checkbox', { name: 'Follow up with Alvin Sanjaya — no contact in 8 days' });
+      const open = within(lastWeek).getByRole('checkbox', { name: /^Done: Follow up with Alvin Sanjaya/ });
       expect(open).not.toBeChecked();
-      expect(within(lastWeek).getByText('Follow up with Alvin Sanjaya — no contact in 8 days')).not.toHaveClass('line-through');
-      expect(within(lastWeek).getByText('Leads · Alvin Sanjaya')).toBeInTheDocument();
-      expect(within(lastWeek).getAllByLabelText(/^Date, /).map((d) => (d as HTMLInputElement).value)).toEqual(['2026-09-24', '2026-09-24']);
+      // UI-061: the lead in 12px grey after a person icon, on the same line — no chip.
+      expect(within(lastWeek).getByText('Alvin Sanjaya')).toHaveClass('text-sm', 'text-signal-grey');
+      expect(within(lastWeek).queryByText('Leads · Alvin Sanjaya')).not.toBeInTheDocument();
+      expect(within(lastWeek).getAllByLabelText(/^Change the date: /).map((d) => (d as HTMLInputElement).value)).toEqual(['2026-09-24', '2026-09-24']);
+      // One date format: *24 Sep*, the year only when it is not this year.
+      expect(lastWeek.querySelectorAll('[data-action-row]')).toHaveLength(2);
+      expect(lastWeek).toHaveTextContent('24 Sep');
+      expect(lastWeek).not.toHaveTextContent('24 Sep 2026');
     });
 
     it('P11-T8 AC-3 writes a tick on this session, the whole state at the version it read', async () => {
@@ -358,9 +391,8 @@ describe('the session workspace (P11-T8)', () => {
 
       await userEvent.click(within(lastWeek).getByRole('checkbox', { name: /Follow up with Alvin Sanjaya/ }));
       await waitFor(() => expect(sent(calls, 'PUT', '/coaching/sessions/s-1')).toHaveLength(1));
-      const date = within(lastWeek).getByLabelText('Date, Follow up with Alvin Sanjaya — no contact in 8 days');
-      await userEvent.clear(date);
-      await userEvent.type(date, '2026-10-06');
+      const date = within(lastWeek).getByLabelText('Change the date: Follow up with Alvin Sanjaya — no contact in 8 days');
+      fireEvent.change(date, { target: { value: '2026-10-06' } });
 
       await waitFor(() => expect(bodyOf(sent(calls, 'PUT', '/coaching/sessions/s-1').at(-1)!).lastWeekItems[1])
         .toEqual({ itemId: 'lw-2', done: true, dueDate: '2026-10-06' }));
@@ -369,21 +401,36 @@ describe('the session workspace (P11-T8)', () => {
   });
 
   describe('the Goal card', () => {
-    it('P11-T8 AC-4 shows the month and the year as her Summary does, in one money formatter, with what remains', async () => {
+    it('P18.98-T3 AC-1 in Indonesian: the header’s day, the Goal tiles’ sums in juta and the ratios whole', async () => {
+      show({}, 'id');
+      const goal = await card('Goal');
+      await within(goal).findByText(/Rp 65,6 jt/);
+      expect(goal).toHaveTextContent('Bulan ini');
+      expect(goal).toHaveTextContent('Tahun ini');
+      expect(goal).toHaveTextContent('Rp 65,6 jt/ Rp 80 jt · 82%');
+      expect(within(sessionCard()).getByRole('heading', { level: 2 })).toHaveTextContent(/^Sesi hari ini ?Jumat, 2 Okt 2026$/);
+      const ratios = await card('Ratio · 30 hari terakhir');
+      expect(await within(ratios).findByText('18%')).toBeInTheDocument();
+      // The box holds the target's digits in its marks, its prefix *Rp*.
+      expect(within(goal).getAllByRole('button').map((b) => b.textContent)).toEqual(['Rp 960 jt, target tahun ini — ubah']);
+      await userEvent.click(within(goal).getByRole('button', { name: /target tahun ini — ubah/ }));
+      expect(within(goal).getByLabelText('Target APE tahunan')).toHaveValue('960.000.000');
+    });
+
+    it('P11-T8 AC-4, UI-062 shows the month and the year as two tiles, as her Summary does, the attainment whole', async () => {
       const { calls } = show();
       const goal = await card('Goal');
 
-      await within(goal).findByText(/Rp 65\.600\.000/);
-      expect(goal).toHaveTextContent('Rp 65.600.000 / Rp 80.000.000');
-      expect(goal).toHaveTextContent('82%');
-      expect(goal).toHaveTextContent('Rp 14.400.000 remaining this month.');
-      expect(goal).toHaveTextContent('Rp 620.000.000 / Rp 960.000.000');
-      expect(goal).toHaveTextContent('65%');
-      expect(goal).toHaveTextContent('Rp 340.000.000 remaining this year.');
+      await within(goal).findByText(/IDR 65.6M/);
+      const tiles = goal.querySelectorAll('[data-goal-tile]');
+      expect(tiles).toHaveLength(2);
+      expect(tiles[0]).toHaveTextContent('This monthIDR 65.6M/ IDR 80M · 82%');
+      expect(tiles[1]).toHaveTextContent('This yearIDR 620M/ IDR 960M, this year’s target — edit · 65%');
+      expect(goal).not.toHaveTextContent('82.0%');
       expect(within(goal).getByRole('progressbar', { name: 'This month’s target' })).toHaveAttribute('aria-valuenow', '82');
-      expect(within(goal).getByText('Click this year’s target to edit')).toBeInTheDocument();
+      expect(within(goal).getByText('Tap this year’s target to edit')).toHaveClass('max-md:hidden');
       // One control on the card: the annual target. This month's target is a figure.
-      expect(within(goal).getAllByRole('button').map((b) => b.textContent)).toEqual(['Rp 960.000.000, this year’s target — edit']);
+      expect(within(goal).getAllByRole('button').map((b) => b.textContent)).toEqual(['IDR 960M, this year’s target — edit']);
       expect(calls.filter((c) => c.url.includes('/summary?for=mem-rina')).map((c) => c.url))
         .toEqual(['http://api.test/api/v1/summary?for=mem-rina']);
     });
@@ -395,10 +442,10 @@ describe('the session workspace (P11-T8)', () => {
 
       const field = within(goal).getByLabelText('Annual APE target');
       expect(field).toHaveFocus();
-      expect(field).toHaveValue('960.000.000');
+      expect(field).toHaveValue('960,000,000');
       await userEvent.clear(field);
       await userEvent.type(field, '1200000000');
-      expect(field).toHaveValue('1.200.000.000');
+      expect(field).toHaveValue('1,200,000,000');
       // Leaving the box saves nothing: only Save does (ADR-0075).
       await userEvent.tab();
       expect(sent(calls, 'PUT', '/goals/')).toHaveLength(0);
@@ -408,9 +455,10 @@ describe('the session workspace (P11-T8)', () => {
       await toastSays('Goal updated — reflected across both tabs.');
       const [put] = sent(calls, 'PUT', '/goals/');
       expect(put.url).toBe('http://api.test/api/v1/goals/2026?for=mem-rina&session=s-1');
+      // The target alone: the APE produced is left out (S1), so the coachee's own figure stands, whatever this read.
       expect(bodyOf(put)).toEqual({
         mode: 'direct', annualApeTargetMinor: 1_200_000_000_00, savingsTargetMinor: 96 * M, commissionRatePct: 10,
-        monthsLeft: null, apeAchievedMinor: 0, caseSizeMinor: 18 * M, leadsToApptPct: 30, closingRatePct: 30,
+        monthsLeft: null, caseSizeMinor: 18 * M, leadsToApptPct: 30, closingRatePct: 30,
       });
       expect(sent(calls, 'GET', '/goals/2026?for=mem-rina')).toHaveLength(1);
       // The figures are read again, so this month's target moves by its formula, not by a hand.
@@ -437,7 +485,7 @@ describe('the session workspace (P11-T8)', () => {
       await userEvent.click(within(goal).getByRole('button', { name: 'Save' }));
 
       expect(await within(goal).findByRole('alert')).toHaveTextContent('This session is finalized.');
-      expect(within(goal).getByLabelText('Annual APE target')).toHaveValue('960.000.000');
+      expect(within(goal).getByLabelText('Annual APE target')).toHaveValue('960,000,000');
     });
 
     it('P11-T8 AC-4 says No goal set, and the annual target can still be set', async () => {
@@ -445,7 +493,7 @@ describe('the session workspace (P11-T8)', () => {
       const goal = await card('Goal');
 
       expect(await within(goal).findByText('No goal set')).toBeInTheDocument();
-      expect(within(goal).queryByText('Click this year’s target to edit')).not.toBeInTheDocument();
+      expect(within(goal).queryByText('Tap this year’s target to edit')).not.toBeInTheDocument();
       await userEvent.click(within(goal).getByRole('button', { name: 'Set this year’s target' }));
       await userEvent.type(within(goal).getByLabelText('Annual APE target'), '500000000{Enter}');
 
@@ -468,47 +516,48 @@ describe('the session workspace (P11-T8)', () => {
       show({ '/summary?for=mem-rina': refused(404, 'NOT_FOUND', 'Not found') });
       const goal = await card('Goal');
       expect(await within(goal).findByRole('alert')).toHaveTextContent('Not found');
-      expect(await card('Ratios')).toBeInTheDocument();
+      expect(await card('Ratio · last 30 days')).toBeInTheDocument();
     });
   });
 
   describe('Ratios and Activity', () => {
-    it('P11-T8 AC-5 reads her ratios on her rung, the last 30 days, each against its benchmark', async () => {
+    it('P11-T8 AC-5, UI-062, O-3 reads her ratios on her rung, the last 30 days, in the shared card as rows, every percentage whole', async () => {
       const { calls } = show();
-      const ratios = await card('Ratios');
+      const ratios = await card('Ratio · last 30 days');
 
-      expect(within(ratios).getByText('Last 30 days')).toBeInTheDocument();
-      await within(ratios).findByText('18.0%');
-      const lines = within(ratios).getAllByRole('listitem').map((li) => li.textContent);
-      expect(lines).toEqual([
-        'Selling success rate18.0%Benchmark: 15.0%',
-        'Leads per activity0.35Benchmark: 0.30',
-        'Recruitment success rate–Benchmark: 15.0%',
-        // Each side's share of the two, as her own Activity Ratios card writes it (P13.1-T6 AC-7).
-        'Sales vs. Recruitment70% Selling · 30% RecruitmentBenchmark: 35%–65% each side',
+      expect(ratios).toHaveAttribute('data-ratio-card');
+      await within(ratios).findByText('18%');
+      expect(within(ratios).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
+        'Selling success rateTarget 15%18%',
+        'Leads per activityTarget 0.300.35',
+        'Recruitment success rateTarget 15%–Not enough data',
       ]);
-      expect(within(ratios).getByText('18.0%')).toHaveClass('text-success');
-      expect(within(ratios).getByText('–')).toHaveClass('text-muted');
+      // The balance as the split bar, each side's share.
+      expect(within(ratios).getByRole('img')).toHaveAccessibleName('Selling 70% · Recruitment 30%');
       expect(sent(calls, 'GET', '/activity/ratios').map((c) => c.url)).toEqual(['http://api.test/api/v1/activity/ratios?for=mem-rina']);
     });
 
     it('P11-T8 AC-5 says when her role has no ratios', async () => {
       show({ '/activity/ratios?for=mem-rina': { body: { ...RATIOS, ratios: [] } } });
-      const ratios = await card('Ratios');
-      expect(await within(ratios).findByText('There are no ratios for her role yet.')).toBeInTheDocument();
+      const ratios = await card('Ratio · last 30 days');
+      expect(await within(ratios).findByText('No ratio applies here yet.')).toBeInTheDocument();
     });
 
-    it('P11-T8 AC-6 shows the last 7 days against pro-rated targets, then the section chips as the Summary groups them', async () => {
+    it('P11-T8 AC-6, UI-062 shows the last 7 days as three tiles against pro-rated targets, then one line for the sections', async () => {
       const { calls } = show();
-      const week = await card(/^Activity → view full dashboard/);
+      const week = await card('Activity');
 
-      expect(within(week).getByText('Last 7 days')).toBeInTheDocument();
-      await within(week).findByText('Leads contacted');
-      expect(week).toHaveTextContent('Leads contacted14 / 16 pro-rated');
-      expect(week).toHaveTextContent('Appointments4 / 5 pro-rated');
-      expect(week).toHaveTextContent('Closings1 / 1 pro-rated');
-      expect(within(week).getByRole('region', { name: 'Recruitment' })).toHaveTextContent('Recruitment0Candidate leads0Recruitment presentations0');
-      expect(within(week).getByRole('region', { name: 'Development' })).toHaveTextContent('Development3Training attended1Coaching sessions1Team activities1');
+      await within(week).findByText('Set appointment');
+      const tiles = week.querySelectorAll('[data-week-tile]');
+      expect([...tiles].map((t) => t.textContent)).toEqual([
+        'Set appointment14 / 16 / 16 pro-rated', 'Sales meeting4 / 5 / 5 pro-rated', 'Submission polis1 / 1 / 1 pro-rated',
+      ]);
+      expect(within(week).getByRole('button', { name: 'Last 7 days' })).toHaveAttribute('aria-haspopup', 'dialog');
+      const line = within(week).getByRole('button', { name: 'Recruitment 0 · Development 3' });
+      expect(line).toHaveAttribute('aria-expanded', 'false');
+      await userEvent.click(line);
+      expect(line).toHaveAttribute('aria-expanded', 'true');
+      expect(within(week).getByText('Training attended')).toBeVisible();
       expect(sent(calls, 'GET', '/activity/summary').map((c) => c.url))
         .toEqual(['http://api.test/api/v1/activity/summary?membershipId=mem-rina&period=ROLLING_7D']);
     });
@@ -522,19 +571,20 @@ describe('the session workspace (P11-T8)', () => {
     it('P11-T8 AC-6 drills into the week in a dialog in the page, which closes back to where it was opened', async () => {
       show();
       const week = await card(/^Activity/);
-      const drill = within(week).getByRole('button', { name: '→ view full dashboard' });
+      const drill = within(week).getByRole('button', { name: 'Last 7 days' });
       await waitFor(() => expect(drill).toBeEnabled());
 
       await userEvent.click(drill);
 
-      const dialog = screen.getByRole('dialog', { name: 'Rina Wijaya — Activity Dashboard' });
+      // Its module is fetched on the first opening (P18.99-T16).
+      const dialog = await screen.findByRole('dialog', { name: 'Rina Wijaya — Activity Dashboard' });
       expect(dialog).toHaveAccessibleDescription('Last 7 days · category breakdown');
       const rows = within(dialog).getAllByRole('row').map((r) => [...r.children].map((c) => c.textContent));
       expect(rows).toEqual([
         ['Category', 'Logged', 'Target (pro-rated)'],
-        ['Leads contacted', '14', '16'],
-        ['Appointments', '4', '5'],
-        ['Closings', '1', '1'],
+        ['Set appointment', '14', '16'],
+        ['Sales meeting', '4', '5'],
+        ['Submission polis', '1', '1'],
         ['Candidate leads', '0', '–'],
         ['Recruitment presentations', '0', '–'],
         ['Training attended', '1', '–'],
@@ -552,45 +602,149 @@ describe('the session workspace (P11-T8)', () => {
     });
   });
 
-  describe('the Leads card', () => {
-    it('P11-T8 AC-7 mounts the leads table for her: the card’s toolbar, her leads only, read and closed, and no delete', async () => {
-      const { calls } = show();
-      const leads = await card('Leads');
+  describe('the Leads card (UI-062, UI-081)', () => {
+    /** Ibu Shinta has no next action at all; Pak Gilang a note and no date; Desi is dated; Hana late. */
+    const SHINTA = lead({ id: 'l-shinta', name: 'Ibu Shinta Maharani', nextActionDate: null, nextActionNote: null, statusCode: 'NOT_YET_APPROACHED', version: 1 });
+    const GILANG = lead({ id: 'l-gilang', name: 'Pak Gilang Ramadhan', nextActionDate: null, nextActionNote: 'Second meeting, with his wife.', version: 2 });
+    const HANA = lead({ id: 'l-hana', name: 'Hana Permata', nextActionDate: '2026-09-30', nextActionNote: 'Call back', flags: ['overdue'], overdueDays: 2, contact: { phone: '+6281234567890', email: null } });
+    const WON = lead({ id: 'l-won', name: 'Won One', outcome: 'won' });
+    const rowsOf = (leads: HTMLElement) => [...leads.querySelectorAll('[data-coachee-lead]')].map((li) => li.getAttribute('data-coachee-lead'));
 
-      expect(await within(leads).findByDisplayValue('Desi Pratama')).toBeInTheDocument();
-      expect(within(leads).getByRole('table', { name: 'Her leads' })).toBeInTheDocument();
-      expect(within(leads).getByRole('searchbox', { name: 'Search leads' })).toHaveAttribute('placeholder', 'Search leads…');
-      expect(within(leads).getByLabelText('Filter by type')).toHaveDisplayValue('All types');
-      expect(within(leads).getByRole('button', { name: '+ Add lead' })).toBeInTheDocument();
-      expect(within(leads).queryByRole('button', { name: 'Delete lead' })).not.toBeInTheDocument();
-      const reads = calls.filter((c) => c.url.includes('/leads?')).map((c) => new URL(c.url).searchParams.get('owner'));
-      expect(reads.length).toBe(3);
-      expect(new Set(reads)).toEqual(new Set(['mem-rina']));
+    it('UI-062 compact rows: the name, type and stage pills, one next-action line, WhatsApp and Call; read once, by owner', async () => {
+      const { calls } = show({ 'GET /leads?owner=mem-rina': { body: page([lead(), HANA, WON]) } });
+      const leads = await card(/^Leads/);
+      await within(leads).findByRole('button', { name: 'Desi Pratama' });
+
+      expect(within(leads).getByRole('heading', { level: 2 })).toHaveTextContent('Leads· 2');
+      const desi = leads.querySelector('[data-coachee-lead="l-desi"]') as HTMLElement;
+      expect(within(desi).getByText('Sales')).toBeInTheDocument();
+      expect(within(desi).getByText('Follow-up')).toHaveAttribute('data-tone', 'grey');
+      expect(desi.querySelector('[data-next-action]')).toHaveTextContent('5 Oct· Confirm submission paperwork');
+      // UI-081: both, enabled, round and solid; no disabled button, no 📞.
+      const whatsApp = within(desi).getByRole('button', { name: 'Send a WhatsApp message to Desi Pratama' });
+      expect(whatsApp).toBeEnabled();
+      expect(within(desi).getByRole('button', { name: 'Call Desi Pratama' })).toBeEnabled();
+      expect(leads.textContent).not.toContain('📞');
+      // A number saved: one tap opens WhatsApp, no sheet.
+      const hana = leads.querySelector('[data-coachee-lead="l-hana"]') as HTMLElement;
+      expect(within(hana).getByRole('link', { name: 'Send a WhatsApp message to Hana Permata' })).toHaveAttribute('href', expect.stringMatching(/^https:\/\/wa\.me\/62/));
+      // The closed lead is the one line, never a row.
+      expect(rowsOf(leads)).toEqual(['l-hana', 'l-desi']);
+      expect(leads.querySelector('[data-closed-line]')).toHaveTextContent('Closed: Won 1 · Lost 0');
+      const reads = calls.filter((c) => c.url.includes('/leads?'));
+      expect(reads.map((c) => new URL(c.url).searchParams.get('owner'))).toEqual(['mem-rina']);
     });
 
-    it('P11-T8 AC-7 pins a write to the version its row was read at, and reads the session again when it moves a next action', async () => {
+    it('UI-062 Ibu Shinta shows Isi tindakan and Pak Gilang Isi tanggal: no lead disappears for lack of a date, and they come first', async () => {
+      show({ 'GET /leads?owner=mem-rina': { body: page([lead(), HANA, GILANG, SHINTA]) } });
+      const leads = await card(/^Leads/);
+      await within(leads).findByRole('button', { name: 'Ibu Shinta Maharani' });
+
+      expect(rowsOf(leads)).toEqual(['l-gilang', 'l-shinta', 'l-hana', 'l-desi']);
+      const shinta = leads.querySelector('[data-coachee-lead="l-shinta"]') as HTMLElement;
+      const fill = within(shinta).getByRole('button', { name: 'Add an action' });
+      expect(fill).toHaveClass('text-pill-red-ink');
+      expect(fill.querySelector('svg')).not.toBeNull();
+      const gilang = leads.querySelector('[data-coachee-lead="l-gilang"]') as HTMLElement;
+      expect(within(gilang).getByLabelText('Next action date for Pak Gilang Ramadhan')).toHaveAttribute('type', 'date');
+      expect(gilang).toHaveTextContent('Add a date· Second meeting, with his wife.');
+      // Hidden on a phone when there is nothing closed (D-08).
+      expect(leads.querySelector('[data-closed-line]')).toHaveClass('max-md:hidden');
+    });
+
+    it('UI-062 Isi tanggal saves the date to the lead, pinned to its version, and reads the session again for Dari leads', async () => {
       const { calls } = show({
-        'PATCH /leads/l-desi': ({ body }) => ({ body: lead({ ...(body as object), version: 4 }) }),
+        'GET /leads?owner=mem-rina': { body: page([GILANG]) },
+        'PATCH /leads/l-gilang': ({ body }) => ({ body: { ...GILANG, nextActionDate: (body as { nextActionDate: string }).nextActionDate, version: 3 } }),
       });
-      const leads = await card('Leads');
-      await within(leads).findByDisplayValue('Desi Pratama');
+      const leads = await card(/^Leads/);
       const before = sent(calls, 'GET', '/coaching/sessions/s-1').length;
+      fireEvent.change(await within(leads).findByLabelText('Next action date for Pak Gilang Ramadhan'), { target: { value: '2026-10-06' } });
 
-      fireEvent.change(within(leads).getByLabelText('Next action date, row 1'), { target: { value: '2026-10-09' } });
-
-      await waitFor(() => expect(sent(calls, 'PATCH', '/leads/l-desi')).toHaveLength(1));
-      expect(bodyOf(sent(calls, 'PATCH', '/leads/l-desi')[0])).toEqual({ nextActionDate: '2026-10-09', version: 3 });
+      await waitFor(() => expect(sent(calls, 'PATCH', '/leads/l-gilang')).toHaveLength(1));
+      expect(bodyOf(sent(calls, 'PATCH', '/leads/l-gilang')[0])).toEqual({ nextActionDate: '2026-10-06', version: 2 });
       await waitFor(() => expect(sent(calls, 'GET', '/coaching/sessions/s-1').length).toBeGreaterThan(before));
+      expect((leads.querySelector('[data-coachee-lead="l-gilang"]') as HTMLElement).querySelector('[data-next-action]')).toHaveTextContent('6 Oct');
     });
 
-    it('P11-T8 AC-7 toasts a status move in the prototype’s words', async () => {
-      show({ 'PATCH /leads/l-desi/status': ({ body }) => ({ body: lead({ statusCode: (body as { statusCode: string }).statusCode, version: 4 }) }) });
-      const leads = await card('Leads');
-      await within(leads).findByDisplayValue('Desi Pratama');
+    it('UI-062 a row opens the lead sheet; Isi tindakan opens it too; + Add lead opens a new one', async () => {
+      show({ 'GET /leads?owner=mem-rina': { body: page([lead(), SHINTA]) }, 'GET /leads/l-desi': { body: { ...lead(), history: [] } }, 'GET /leads/l-shinta': { body: { ...SHINTA, history: [] } } });
+      const leads = await card(/^Leads/);
+      await userEvent.click(await within(leads).findByRole('button', { name: 'Desi Pratama' }));
+      expect(await screen.findByRole('dialog')).toBeInTheDocument();
+      await userEvent.keyboard('{Escape}');
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
 
-      await userEvent.selectOptions(within(leads).getByLabelText('Status, row 1'), 'PAID_AND_ISSUED');
+      await userEvent.click(within(leads).getByRole('button', { name: 'Add an action' }));
+      expect(await screen.findByRole('dialog')).toBeInTheDocument();
+      await userEvent.keyboard('{Escape}');
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
 
-      await toastSays('Desi Pratama\'s status updated to "Paid and issued".');
+      await userEvent.click(within(leads).getByRole('button', { name: '+ Add lead' }));
+      expect(await screen.findByRole('dialog')).toBeInTheDocument();
+    });
+
+    it('UI-062 shows five rows and Show all (n) with six or more; open, Show fewer at the foot; a search shows every match', async () => {
+      const many = Array.from({ length: 7 }, (_, i) => lead({ id: `l-${i}`, name: `Lead Number ${i}`, nextActionDate: `2026-10-1${i}` }));
+      show({ 'GET /leads?owner=mem-rina': { body: page(many) } });
+      const leads = await card(/^Leads/);
+      await within(leads).findByRole('button', { name: 'Lead Number 0' });
+
+      expect(rowsOf(leads)).toHaveLength(5);
+      const more = within(leads).getByRole('button', { name: 'Show all (7)' });
+      expect(more).toHaveClass('h-11');
+      await userEvent.click(more);
+      expect(rowsOf(leads)).toHaveLength(7);
+      expect(within(leads).getByRole('button', { name: 'Show fewer' })).toHaveAttribute('aria-expanded', 'true');
+      await userEvent.click(within(leads).getByRole('button', { name: 'Show fewer' }));
+      expect(rowsOf(leads)).toHaveLength(5);
+
+      await userEvent.type(within(leads).getByRole('searchbox'), 'number');
+      expect(rowsOf(leads)).toHaveLength(7);
+      expect(within(leads).queryByRole('button', { name: /Show all/ })).not.toBeInTheDocument();
+    });
+
+    it('UI-062 fewer than six leads: no toggle', async () => {
+      show();
+      const leads = await card(/^Leads/);
+      await within(leads).findByRole('button', { name: 'Desi Pratama' });
+      expect(within(leads).queryByRole('button', { name: /Show all/ })).not.toBeInTheDocument();
+    });
+
+    it('UI-081 with no number, WhatsApp asks for one, saves it to the lead and then opens WhatsApp; a bad number says so inline', async () => {
+      const open = vi.fn(() => ({ location: { href: '' }, close: vi.fn() }));
+      vi.stubGlobal('open', open);
+      const { calls } = show({
+        'PATCH /leads/l-desi': ({ body }) => ({ body: lead({ contact: (body as { contact: { phone: string } }).contact, version: 4 }) }),
+      });
+      const leads = await card(/^Leads/);
+      await userEvent.click(await within(leads).findByRole('button', { name: 'Send a WhatsApp message to Desi Pratama' }));
+      const sheet = await screen.findByRole('dialog', { name: 'Enter WhatsApp number' });
+      const field = within(sheet).getByLabelText('WhatsApp number');
+      await userEvent.type(field, '12');
+      await userEvent.click(within(sheet).getByRole('button', { name: 'Save' }));
+      expect(await within(sheet).findByText(/Enter 9 to 13 digits after \+62\./)).toBeInTheDocument();
+      expect(sent(calls, 'PATCH', '/leads/l-desi')).toHaveLength(0);
+
+      await userEvent.clear(field);
+      await userEvent.type(field, '0812 3456 7890');
+      await userEvent.click(within(sheet).getByRole('button', { name: 'Save' }));
+      await waitFor(() => expect(sent(calls, 'PATCH', '/leads/l-desi')).toHaveLength(1));
+      expect(bodyOf(sent(calls, 'PATCH', '/leads/l-desi')[0]).contact.phone).toBe('+6281234567890');
+    });
+
+    it('UI-062 a finalized session adds no lead and dates nothing: Isi tanggal is words, the rows still open read-only', async () => {
+      show({
+        'GET /coaching/sessions/s-1': { body: finalized() },
+        'GET /leads?owner=mem-rina': { body: page([GILANG, SHINTA]) },
+      });
+      const leads = await card(/^Leads/);
+      await within(leads).findByRole('button', { name: 'Pak Gilang Ramadhan' });
+      expect(within(leads).queryByRole('button', { name: '+ Add lead' })).not.toBeInTheDocument();
+      expect(within(leads).queryByLabelText(/Next action date for/)).not.toBeInTheDocument();
+      expect(within(leads).queryByRole('button', { name: 'Add an action' })).not.toBeInTheDocument();
+      expect(leads).toHaveTextContent('Add an action');
+      expect(leads).toHaveTextContent('Add a date');
     });
   });
 
@@ -637,7 +791,7 @@ describe('the session workspace (P11-T8)', () => {
 
       await userEvent.click(within(tips).getByRole('button', { name: 'Remove tip 1' }));
 
-      expect(within(tips).getByText('No tips added yet — click + above to add one.')).toBeInTheDocument();
+      expect(within(tips).getByText('No tips added yet — tap + above to add one.')).toBeInTheDocument();
       await waitFor(() => expect(sent(calls, 'PUT', '/coaching/sessions/s-1')).toHaveLength(1));
       expect(bodyOf(sent(calls, 'PUT', '/coaching/sessions/s-1')[0]).tips).toEqual([]);
     });
@@ -646,22 +800,29 @@ describe('the session workspace (P11-T8)', () => {
       show();
       const next = await card('Next action items');
 
-      expect(within(next).getByRole('heading', { name: 'From leads (automatic)' })).toBeInTheDocument();
+      // UI-061: sentence case, the ⚡ with its ⓘ in place of *(OTOMATIS)*.
+      const heading = within(next).getByRole('heading', { name: /From leads$/ });
+      expect(heading.querySelector('[data-auto-marker]')).not.toBeNull();
+      expect(within(next).getByRole('heading', { name: 'Other' })).toBeInTheDocument();
+      expect(next.textContent).not.toMatch(/AUTOMATIC|OTOMATIS|\(automatic\)/);
       const fromLeads = within(next).getAllByRole('list')[0];
       expect(within(fromLeads).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
-        'Oct 5Leads · Desi PratamaConfirm submission paperwork',
-        'Oct 7Leads · Hana PermataFollow up with Hana Permata',
+        '5 OctConfirm submission paperworkDesi Pratama',
+        '7 OctFollow up with Hana PermataHana Permata',
       ]);
+      // A lead's action links into its lead, with no ✕: it is the lead's.
+      expect(within(fromLeads).getByRole('button', { name: 'Open Desi Pratama’s lead' })).toBeInTheDocument();
+      expect(within(fromLeads).queryByRole('button', { name: /^Remove/ })).not.toBeInTheDocument();
     });
 
     it('P11-T8 AC-9 says when no lead has a next action date, and when nothing else is planned', async () => {
       show({ 'GET /coaching/sessions/s-1': { body: session({ leadActions: [], actionItems: [] }) } });
       const next = await card('Next action items');
       expect(within(next).getByText('No leads have a next action date set yet.')).toBeInTheDocument();
-      expect(within(next).getByText('No other action items yet — click + above to add one.')).toBeInTheDocument();
+      expect(within(next).getByText('No other action items yet — tap + above to add one.')).toBeInTheDocument();
     });
 
-    it('P11-T8 AC-9 adds an action dated the office’s today, and refuses a second blank one in the prototype’s words', async () => {
+    it('UI-060 adds an action dated a week ahead — the server’s defaultDueDate — and refuses a second blank one', async () => {
       const { calls } = show({ 'GET /coaching/sessions/s-1': { body: session({ actionItems: [] }) } });
       const next = await card('Next action items');
 
@@ -669,7 +830,8 @@ describe('the session workspace (P11-T8)', () => {
       const text = within(next).getByLabelText('Action item 1');
       expect(text).toHaveFocus();
       expect(text).toHaveAttribute('placeholder', 'What needs to happen…');
-      expect(within(next).getByLabelText('Date, action item 1')).toHaveValue('2026-10-02');
+      // Every action always has a date (UI-060): the office's today, 2 October, plus seven — never blank.
+      expect(within(next).getByLabelText('Change the date: Action item 1')).toHaveValue('2026-10-09');
 
       await userEvent.click(within(next).getByRole('button', { name: 'Add action' }));
       expect(within(next).getByRole('alert')).toHaveTextContent('Fill in the action item you already started before adding another.');
@@ -682,9 +844,9 @@ describe('the session workspace (P11-T8)', () => {
       // The blank row was saved as the focus left it for +, as the prototype allows; the server named it,
       // and the text goes to that row.
       await waitFor(() => expect(sent(calls, 'PUT', '/coaching/sessions/s-1')).toHaveLength(2));
-      expect(bodyOf(sent(calls, 'PUT', '/coaching/sessions/s-1')[0]).actionItems).toEqual([{ text: '', dueDate: '2026-10-02' }]);
+      expect(bodyOf(sent(calls, 'PUT', '/coaching/sessions/s-1')[0]).actionItems).toEqual([{ text: '', dueDate: '2026-10-09' }]);
       expect(bodyOf(sent(calls, 'PUT', '/coaching/sessions/s-1')[1]).actionItems)
-        .toEqual([{ itemId: 'a-new-0', text: 'Book the field visit with Desi', dueDate: '2026-10-02' }]);
+        .toEqual([{ itemId: 'a-new-0', text: 'Book the field visit with Desi', dueDate: '2026-10-09' }]);
     });
 
     it('P11-T8 AC-9 orders other items by date, undated last, and removes one with ✕', async () => {
@@ -702,7 +864,7 @@ describe('the session workspace (P11-T8)', () => {
       const next = await card('Next action items');
       expect(within(next).getAllByLabelText(/^Action item \d$/).map((i) => (i as HTMLInputElement).value)).toEqual(['Sooner', 'Later', 'Undated']);
 
-      await userEvent.click(within(next).getByRole('button', { name: 'Remove action item 3' }));
+      await userEvent.click(within(next).getByRole('button', { name: 'Remove: Undated' }));
 
       await waitFor(() => expect(sent(calls, 'PUT', '/coaching/sessions/s-1')).toHaveLength(1));
       expect(bodyOf(sent(calls, 'PUT', '/coaching/sessions/s-1')[0]).actionItems.map((a: { itemId: string }) => a.itemId)).toEqual(['a-2', 'a-3']);
@@ -710,35 +872,126 @@ describe('the session workspace (P11-T8)', () => {
   });
 
   describe('finalize and Edit again', () => {
-    it('P11-T8 AC-10 saves what is unsaved, finalizes at the version that answered, and locks the session', async () => {
+    it('P11-T8 AC-10, UI-060 saves what is unsaved, finalizes at the version that answered, says Saved, and locks the session', async () => {
       const { calls } = show({ 'POST /coaching/sessions/s-1/finalize': { body: finalized() } });
       const tips = await card('Coaching tips');
-      await userEvent.type(within(tips).getByLabelText('Tip 1'), '!');
+      await userEvent.type(within(tips).getByRole('textbox', { name: 'Tip 1' }), '!');
 
-      const finalize = screen.getByRole('button', { name: 'Finalize this session' });
-      expect(finalize).toHaveTextContent('✓ Finalize this session');
-      expect(screen.getByText('Coaching is only counted as done once finalized. You can keep editing everything until then.')).toBeInTheDocument();
+      const bar = document.querySelector('[data-finalize-bar="draft"]') as HTMLElement;
+      // UI-062: the floating bar above the tab bar below 1024px, the sticky column's foot from 1024px; *Draf · n tindakan*
+      // beside it.
+      expect(bar).toHaveAttribute('data-floating-bar');
+      expect(bar).toHaveClass('fixed', 'lg:static');
+      expect(bar.className).toContain('var(--tab-bar-space)');
+      expect(bar).toHaveTextContent('Draft · 3 actions');
+      const finalize = within(bar).getByRole('button', { name: 'Finalize this session' });
+      expect(finalize).not.toHaveTextContent('✓');
+      expect(screen.queryByText(/Coaching is only counted as done once finalized/)).not.toBeInTheDocument();
       await userEvent.click(finalize);
 
-      await toastSays('Session finalized — this coaching is now marked done, and locked to view-only.');
+      // UI-060: *Tersimpan*, then the green strip.
+      await toastSays('Saved');
       expect(sent(calls, 'PUT', '/coaching/sessions/s-1')).toHaveLength(1);
       expect(bodyOf(sent(calls, 'POST', '/finalize')[0])).toEqual({ version: 2 });
 
-      expect(screen.getByText('✓ Finalized Friday, October 2, 2026')).toBeInTheDocument();
-      expect(headerLine()).toHaveTextContent('Finalized');
+      const done = document.querySelector('[data-finalize-bar="finalized"]') as HTMLElement;
+      expect(done).toHaveTextContent('Finalized 2 Oct');
+      expect(within(done).getByRole('button', { name: 'Edit again' })).toHaveClass('h-11', 'rounded-pill');
+      expect(within(sessionCard()).getByText('Finalized')).toHaveAttribute('data-tone', 'green');
       // The lock (`Overall.html:1389-1417`): no add, no remove, inputs as text, the target not a control.
       for (const name of ['Add tip', 'Add action', '+ Add lead', 'Remove tip 1', 'Finalize this session']) {
         expect(screen.queryByRole('button', { name })).not.toBeInTheDocument();
       }
-      expect(screen.queryByLabelText('Tip 1')).not.toBeInTheDocument();
-      expect(screen.queryByLabelText(/^Action item/)).not.toBeInTheDocument();
+      expect(screen.queryByRole('textbox', { name: 'Tip 1' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('textbox', { name: /^Action item/ })).not.toBeInTheDocument();
       expect(screen.getAllByRole('checkbox', { name: /Bp\. Andi/ })[0]).toBeDisabled();
-      expect(screen.getByRole('searchbox', { name: 'Search leads' })).toBeDisabled();
       const goal = await card('Goal');
       expect(within(goal).queryByRole('button')).not.toBeInTheDocument();
-      expect(within(goal).queryByText('Click this year’s target to edit')).not.toBeInTheDocument();
       // The history is read again, so the finalized session is among the past ones.
       expect(sent(calls, 'GET', '/coaching/coachees/mem-rina/sessions').length).toBeGreaterThan(1);
+    });
+
+    /*
+     * **The floating bar, in Goal Setting's form** (the product owner's staging review, 2026-10-31: *"yang lain jelek,
+     * kotak gitu, sizenya juga aneh"*). Below 1024px a pill 12px from the sides and 12px over the tab bar — not the
+     * full-width square strip with a rule above it — and the home indicator counted once: the strip stood on
+     * `--tab-bar-space`, which holds it, and padded it again under the button. From 1024px, the column's card as before.
+     */
+    it('UI-062 draws Finalkan in the floating bar’s pill, the inset counted once, and the card from 1024px', async () => {
+      show({ 'POST /coaching/sessions/s-1/finalize': { body: finalized() } });
+      await card('Coaching tips');
+
+      const bar = document.querySelector('[data-finalize-bar="draft"]') as HTMLElement;
+      expect(bar).toHaveClass('inset-x-3', 'bottom-[max(calc(var(--tab-bar-space)+0.75rem),calc(env(safe-area-inset-bottom)+0.75rem))]');
+      expect(bar.className).not.toMatch(/inset-x-0|border-t|pb-\[calc/);
+      expect(bar).toHaveClass('lg:static', 'lg:rounded-lg', 'lg:border', 'lg:p-3.5');
+      const finalize = within(bar).getByRole('button', { name: 'Finalize this session' });
+      const pill = finalize.parentElement!;
+      expect(pill).toHaveAttribute('data-floating-bar-pill');
+      expect(pill).toHaveClass('rounded-pill', 'bg-card', 'shadow-modal', 'lg:rounded-none', 'lg:shadow-none');
+      expect(within(pill).getByText('Draft · 3 actions')).toHaveClass('min-w-0', 'flex-1');
+      // The pill's 44px accent button below 1024px; the column's 50px one from 1024px.
+      expect(finalize).toHaveClass('min-h-11', 'rounded-pill', 'bg-amber', 'font-bold', 'lg:h-[50px]', 'lg:flex-1');
+      // Room under the last card for the pill: the floating bar's one room class.
+      expect(document.querySelector('[data-session-workspace]')).toHaveClass(FLOATING_BAR_ROOM);
+      expect(document.querySelector('[data-session-workspace]')).not.toHaveClass('max-lg:pb-28');
+
+      await userEvent.click(finalize);
+      await toastSays('Saved');
+      const done = document.querySelector('[data-finalize-bar="finalized"]') as HTMLElement;
+      expect(done).toHaveAttribute('data-floating-bar');
+      expect(done).toHaveClass('inset-x-3', 'lg:static');
+      // In the pill, the words in green on its left and *Edit again* on its right; the green strip from 1024px.
+      const words = within(done).getByText('Finalized 2 Oct').closest('p')!;
+      expect(words).toHaveClass('min-h-11', 'text-pill-green-ink', 'lg:bg-pill-green', 'lg:h-[50px]');
+      expect(words).not.toHaveClass('bg-pill-green');
+      expect(words.parentElement).toHaveAttribute('data-floating-bar-pill');
+      expect(words.parentElement).toContainElement(within(done).getByRole('button', { name: 'Edit again' }));
+    });
+
+    it('UI-060 a cleared date: Finalkan scrolls to it, outlines it red with Pilih tanggal, and says the count above the button', async () => {
+      const scrolled = vi.fn();
+      Element.prototype.scrollIntoView = scrolled;
+      const { calls } = show({
+        'GET /coaching/sessions/s-1': {
+          body: session({
+            actionItems: [
+              { itemId: 'a-1', text: 'Dated', dueDate: '2026-10-09' },
+              { itemId: 'a-2', text: 'Run the comparison', dueDate: null },
+              { itemId: 'a-3', text: 'Block Tuesday mornings', dueDate: null },
+            ],
+          }),
+        },
+        'POST /coaching/sessions/s-1/finalize': refused(422, 'COACHING_SESSION_INCOMPLETE', 'Every action item needs a date.', {
+          rule: 'UNDATED_ACTION_ITEM', count: 2, itemIds: ['a-2', 'a-3'],
+        }),
+      });
+      const next = await card('Next action items');
+      const finalize = screen.getByRole('button', { name: 'Finalize this session' });
+      await userEvent.click(finalize);
+
+      const message = await screen.findByRole('alert');
+      expect(message).toHaveTextContent('Every action item needs a date before finalizing. (2)');
+      expect(message).toHaveClass('text-md', 'text-pill-red-ink');
+      expect(message.querySelector('svg')).not.toBeNull();
+      // Right above the button, in the same bar; the button still enabled.
+      expect(message.closest('[data-finalize-bar]')).toContainElement(finalize);
+      expect(finalize).toBeEnabled();
+      // Below 1024px, in the floating bar's card over its pill: the pill and its button are the same ones, the focus kept.
+      const note = message.closest('[data-floating-bar-note]') as HTMLElement;
+      expect(note.nextElementSibling).toHaveAttribute('data-floating-bar-pill');
+      expect(note.nextElementSibling).toContainElement(screen.getByRole('button', { name: 'Finalize this session' }));
+      expect(screen.getByRole('button', { name: 'Finalize this session' })).toBe(finalize);
+      const invalid = next.querySelectorAll('[data-action-row][data-invalid]');
+      expect(invalid).toHaveLength(2);
+      for (const row of invalid) expect(row).toHaveTextContent('Choose a date');
+      expect(within(invalid[0] as HTMLElement).getByLabelText(/^Change the date:/)).toHaveAttribute('aria-invalid', 'true');
+      expect(scrolled).toHaveBeenCalled();
+      expect(sent(calls, 'POST', '/finalize')).toHaveLength(1);
+
+      // Dating one counts down; dating the last takes the message away.
+      fireEvent.change(within(invalid[0] as HTMLElement).getByLabelText(/^Change the date:/), { target: { value: '2026-10-10' } });
+      await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('(1)'));
     });
 
     it.each([
@@ -753,7 +1006,7 @@ describe('the session workspace (P11-T8)', () => {
 
       await userEvent.click(screen.getByRole('button', { name: 'Finalize this session' }));
 
-      expect(await screen.findByText(sentence)).toHaveAttribute('role', 'alert');
+      expect(await screen.findByRole('alert')).toHaveTextContent(sentence);
       expect(screen.queryByText('The server’s own words')).not.toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Finalize this session' })).toBeEnabled();
     });
@@ -774,7 +1027,8 @@ describe('the session workspace (P11-T8)', () => {
 
       await userEvent.click(await screen.findByRole('button', { name: 'Edit again' }));
 
-      const dialog = screen.getByRole('dialog', { name: 'Edit this session again?' });
+      // Its module is fetched on the first opening (P18.99-T16).
+      const dialog = await screen.findByRole('dialog', { name: 'Edit this session again?' });
       expect(dialog).toHaveAccessibleDescription(
         'Say why it needs changing. The reason stays with the session, and everyone who reads the session reads it — Rina Wijaya included.',
       );
@@ -788,8 +1042,10 @@ describe('the session workspace (P11-T8)', () => {
       await toastSays('Reopened for editing — finalize again when you’re done.');
       expect(bodyOf(sent(calls, 'POST', '/reopen')[0])).toEqual({ version: 3, reason: 'Wrong date on the follow-up' });
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-      expect(headerLine()).toHaveTextContent('Friday, October 2, 2026 Draft');
-      expect(screen.getByLabelText('Tip 1')).toBeInTheDocument();
+      expect(sessionCard()).toHaveTextContent('Friday, 2 Oct 2026');
+      expect(within(sessionCard()).getByText('Draft')).toBeInTheDocument();
+      // UI-060: reopening keeps every field as it was.
+      expect(screen.getByRole('textbox', { name: 'Tip 1' })).toHaveValue('Slow down on the opening line — let the client finish before pitching.');
       expect(screen.getByRole('button', { name: 'Finalize this session' })).toBeInTheDocument();
     });
 
@@ -818,12 +1074,12 @@ describe('the session workspace (P11-T8)', () => {
 
       const edit = await screen.findByRole('button', { name: 'Edit again' });
       expect(edit).toHaveAttribute('aria-disabled', 'true');
-      expect(edit).toHaveAttribute('title', 'This session could be reopened until Oct 9, 2026.');
-      expect(edit).toHaveAccessibleDescription('This session could be reopened until Oct 9, 2026.');
+      expect(edit).toHaveAttribute('title', 'This session could be reopened until 9 Oct 2026.');
+      expect(edit).toHaveAccessibleDescription('This session could be reopened until 9 Oct 2026.');
       await userEvent.click(edit);
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
       // The header names the session's own date, not the office's today (a Fix).
-      expect(headerLine()).toHaveTextContent('Friday, October 2, 2026');
+      expect(sessionCard()).toHaveTextContent('Friday, 2 Oct 2026');
     });
 
     it('P11-T8 AC-10 a finalized session still opens its past sessions, its closed leads and the Activity drill', async () => {
@@ -835,13 +1091,12 @@ describe('the session workspace (P11-T8)', () => {
       // A reader who may not reopen it sees no Edit again at all.
       expect(screen.queryByRole('button', { name: 'Edit again' })).not.toBeInTheDocument();
 
-      await userEvent.click(screen.getByRole('button', { name: 'View past sessions' }));
-      expect(screen.getByRole('link', { name: /Sep 24, 2026/ })).toBeInTheDocument();
-      const drill = within(week).getByRole('button', { name: '→ view full dashboard' });
+      expect(screen.getByRole('link', { name: /24 Sep 2026/ })).toBeInTheDocument();
+      const drill = within(week).getByRole('button', { name: 'Last 7 days' });
       await waitFor(() => expect(drill).toBeEnabled());
       await userEvent.click(drill);
-      expect(screen.getByRole('dialog', { name: 'Rina Wijaya — Activity Dashboard' })).toBeInTheDocument();
-      expect(screen.getByRole('heading', { name: 'Closed leads' })).toBeInTheDocument();
+      expect(await screen.findByRole('dialog', { name: 'Rina Wijaya — Activity Dashboard' })).toBeInTheDocument();
+      expect(document.querySelector('[data-closed-line]')).toBeInTheDocument();
     });
 
     it('P11-T8 AC-8 and AC-9 say what was added once a session is finalized with nothing in it', async () => {
@@ -880,12 +1135,100 @@ describe('the session workspace (P11-T8)', () => {
     });
   });
 
+  /**
+   * **A field that saves itself says so** (P18.95-T1 AC-5; ADR-0167 §5; the client's UI review of 2026-10-26, UI-007):
+   * the draft is saved as it is edited, and each field — a tip, an action item, last week's tick and date — says
+   * *Saving… → Saved ✓* beside it, or *Couldn't save — retry*.
+   */
+  describe('P18.95-T1 AC-5 — the draft’s fields say their save', () => {
+    const tip = 'Slow down on the opening line — let the client finish before pitching.';
+
+    it('P18.95-T1 AC-5: a tip left changed says Saved ✓ under it; one left untouched says nothing', async () => {
+      const { calls } = show();
+      const tips = await card('Coaching tips');
+      const box = within(tips).getByLabelText('Tip 1');
+      await userEvent.click(box);
+      await userEvent.tab();
+      expect(within(tips).queryByRole('status')).not.toBeInTheDocument();
+      expect(sent(calls, 'PUT', '/coaching/sessions/s-1')).toHaveLength(0);
+
+      await userEvent.type(box, '!');
+      await userEvent.tab();
+
+      const said = await within(tips).findByText('Saved ✓');
+      expect(box.parentElement).toContainElement(said);
+      expect(sent(calls, 'PUT', '/coaching/sessions/s-1')).toHaveLength(1);
+    });
+
+    it('P18.95-T1 AC-5: a refused save offers the retry beside the tip, which sends the same words again', async () => {
+      const { calls } = show({
+        'PUT /coaching/sessions/s-1': [refused(500, 'INTERNAL_ERROR', 'Something went wrong.'), echoSave],
+      });
+      const tips = await card('Coaching tips');
+      await userEvent.type(within(tips).getByLabelText('Tip 1'), '!');
+      await userEvent.tab();
+
+      const retry = await within(tips).findByRole('button', { name: "Couldn't save — retry: Tip 1" });
+      // The banner above the session still says why.
+      expect(screen.getByRole('alert')).toHaveTextContent('Something went wrong.');
+      await userEvent.click(retry);
+
+      await waitFor(() => expect(sent(calls, 'PUT', '/coaching/sessions/s-1')).toHaveLength(2));
+      const [first, second] = sent(calls, 'PUT', '/coaching/sessions/s-1').map(bodyOf);
+      expect(second.tips[0].text).toBe(`${tip}!`);
+      expect(second.tips).toEqual(first.tips);
+      expect(await within(tips).findByText('Saved ✓')).toBeInTheDocument();
+      expect(within(tips).getByLabelText('Tip 1')).toHaveFocus();
+    });
+
+    it('P18.95-T1 AC-5: the draft is saved whole, so a later save that lands takes an earlier failure’s retry away', async () => {
+      show({ 'PUT /coaching/sessions/s-1': [refused(500, 'INTERNAL_ERROR', 'Something went wrong.'), echoSave] });
+      const tips = await card('Coaching tips');
+      await userEvent.type(within(tips).getByLabelText('Tip 1'), '!');
+      await userEvent.tab();
+      expect(await within(tips).findByRole('button', { name: "Couldn't save — retry: Tip 1" })).toBeInTheDocument();
+
+      const lastWeek = await card("Last week's action items");
+      await userEvent.click(within(lastWeek).getByRole('checkbox', { name: 'Done: Follow up with Alvin Sanjaya — no contact in 8 days' }));
+
+      expect(await within(lastWeek).findByText('Saved ✓')).toBeInTheDocument();
+      expect(within(tips).queryByRole('button', { name: /^Couldn't save/ })).not.toBeInTheDocument();
+    });
+
+    it('P18.95-T1 AC-5: last week’s tick says Saved ✓ at its row’s end', async () => {
+      show();
+      const lastWeek = await card("Last week's action items");
+      const box = within(lastWeek).getByRole('checkbox', { name: 'Done: Follow up with Alvin Sanjaya — no contact in 8 days' });
+      await userEvent.click(box);
+
+      const said = await within(lastWeek).findByText('Saved ✓');
+      expect(box.closest('li')).toContainElement(said);
+    });
+
+    it('P18.95-T1 AC-5: a stale save reads the session again and leaves nothing to retry', async () => {
+      show({
+        'PUT /coaching/sessions/s-1': refused(409, 'VERSION_CONFLICT', 'Somebody saved first.'),
+        'GET /coaching/sessions/s-1': [
+          { body: session() },
+          { body: session({ version: 5, tips: [{ tipId: 't-1', text: 'Saved on the other device' }] }) },
+        ],
+      });
+      const tips = await card('Coaching tips');
+      await userEvent.type(within(tips).getByLabelText('Tip 1'), ' more');
+      await userEvent.tab();
+
+      expect(await screen.findByText('This session was changed somewhere else, so it has been read again.')).toBeInTheDocument();
+      await waitFor(() => expect(within(tips).getByLabelText('Tip 1')).toHaveValue('Saved on the other device'));
+      expect(screen.queryByRole('button', { name: /^Couldn't save/ })).not.toBeInTheDocument();
+    });
+  });
+
   describe('the record’s controls and the reads (P11-T10, P11-T8’s browser walk)', () => {
     /**
      * `show`, with chosen reads held until the test lets them go: what has gone out while they wait is
      * what was asked for in parallel. Each request is noted as it is made, before it is answered.
      */
-    const showHeld = (held: Record<string, Promise<void>>, routes: Record<string, StubReply | StubReply[]> = {}, searchParams?: Record<string, string>) => {
+    const showHeld = (held: Record<string, Promise<void>>, routes: Record<string, StubReply | StubReply[]> = {}, query: Record<string, string> = {}) => {
       const stub = stubFetch({
         '/kpm/config': { body: { activity: [], ratios: [], leadPipelines: PIPELINES, version: 1 } },
         '/kpm/org-levels': { body: [] },
@@ -895,9 +1238,7 @@ describe('the session workspace (P11-T8)', () => {
         '/summary?for=mem-rina': { body: summary() },
         '/activity/ratios?for=mem-rina': { body: RATIOS },
         '/activity/summary?': { body: WEEK },
-        'outcome=open': { body: page([lead()]) },
-        'outcome=won': { body: page([]) },
-        'outcome=lost': { body: page([]) },
+        'GET /leads?owner=mem-rina': { body: page([lead()]) },
         ...routes,
       });
       const answer = stub.mock.getMockImplementation()!;
@@ -908,10 +1249,11 @@ describe('the session workspace (P11-T8)', () => {
         if (wait) await wait;
         return answer(url, init);
       });
+      nav.search = new URLSearchParams(query).toString();
       const view = renderInLayout(
         AgentLayout,
         <CoachingPersonLayout params={routeParams({ membershipId: 'mem-rina' })}>
-          <CoachingSessionTabPage searchParams={searchParams ? routeParams(searchParams) : undefined} />
+          <CoachingSessionTabPage />
         </CoachingPersonLayout>,
         { me: LEADER },
       );
@@ -981,14 +1323,19 @@ describe('the session workspace (P11-T8)', () => {
         },
       });
 
-      const download = await screen.findByRole('button', { name: 'Download as PDF' });
-      expect(download.parentElement).toContainElement(screen.getByRole('button', { name: 'Edit again' }));
+      // From 1024px under the strip and *Edit again*, in the sticky column; below it, a row of its own (UI-060).
+      await screen.findByRole('button', { name: 'Edit again' });
+      const [inBar, below] = screen.getAllByRole('button', { name: 'Download as PDF' });
+      expect(inBar.closest('[data-finalize-bar]')).toContainElement(screen.getByRole('button', { name: 'Edit again' }));
+      expect(inBar.parentElement).toHaveClass('max-lg:hidden');
+      expect(below.parentElement).toHaveClass('lg:hidden');
+      const download = inBar;
       await userEvent.click(download);
 
       await waitFor(() => expect(print).toHaveBeenCalledTimes(1));
       expect(calls.filter((c) => c.url.endsWith('/coaching/sessions/s-1/print'))).toHaveLength(1);
       // Its coach printed it: the paper does not name them.
-      expect(document.querySelector('[data-print-view] p')).toHaveTextContent(/^Friday, October 2, 2026 · Finalized$/);
+      expect(document.querySelector('[data-print-view] p')).toHaveTextContent(/^Friday, 2 Oct 2026 · Finalized$/);
       act(() => { window.dispatchEvent(new Event('afterprint')); });
     });
 
@@ -1023,13 +1370,13 @@ describe('the session workspace (P11-T8)', () => {
 
       await waitFor(() => expect(calls.filter((c) => c.init.method === 'PUT' && c.url.includes('/goals/'))).toHaveLength(1));
       // Saved, not yet shown: the box stays, on what was saved, and nothing is said yet.
-      expect(within(goal).getByLabelText('Annual APE target')).toHaveValue('1.200.000.000');
+      expect(within(goal).getByLabelText('Annual APE target')).toHaveValue('1,200,000,000');
       expect(screen.queryByText('Goal updated — reflected across both tabs.')).not.toBeInTheDocument();
 
       await reread.open();
       await toastSays('Goal updated — reflected across both tabs.');
       expect(within(goal).queryByLabelText('Annual APE target')).not.toBeInTheDocument();
-      expect(goal).toHaveTextContent('Rp 620.000.000 / Rp 1.200.000.000');
+      expect(goal).toHaveTextContent('IDR 620M/ IDR 1.2B');
     });
 
     it('P11-T8’s walk: reads the last 7 days again once the annual target is saved, since its pro-rated targets follow the goal', async () => {
@@ -1060,15 +1407,15 @@ describe('the session workspace (P11-T8)', () => {
       await userEvent.click(within(goal).getByRole('button', { name: 'Save' }));
 
       expect(await within(goal).findByRole('alert')).toHaveTextContent('Summary down');
-      expect(goal).not.toHaveTextContent('Rp 960.000.000');
+      expect(goal).not.toHaveTextContent('IDR 960M');
       await toastSays('Goal updated — reflected across both tabs.');
     });
   });
 
   it('P11-T8 AC-11 writes none of ADR-0084’s six words, and no phase', async () => {
     show();
-    await card('Leads');
-    await screen.findByDisplayValue('Desi Pratama');
+    const leads = await card(/^Leads/);
+    await within(leads).findByRole('button', { name: 'Desi Pratama' });
     const main = screen.getByRole('main');
     expect(main.textContent).not.toMatch(SIX_WORDS);
     expect(main.textContent).not.toMatch(/\bphase\b/i);

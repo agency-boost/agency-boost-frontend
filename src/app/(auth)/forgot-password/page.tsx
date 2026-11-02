@@ -4,11 +4,15 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { api } from '@/lib/api-client';
 import { Button, Card, Field, TextInput } from '@/components/ui/field';
+import { PublicTitle } from '@/components/public-title';
+import { useMessages } from '@/i18n/language-provider';
+import { authMessages } from '@/i18n/messages/auth';
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
+  const t = useMessages(authMessages).forgot;
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -26,24 +30,22 @@ export default function ForgotPasswordPage() {
 
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-5">
-      <h1 className="font-display text-3xl font-bold text-navy">Reset your password</h1>
+      <PublicTitle>
+        <h1 className="font-display text-3xl font-bold text-navy">{t.title}</h1>
+      </PublicTitle>
 
       <Card className="mt-6">
         {sent ? (
           <div>
-            <p className="text-md text-navy">
-              If an account exists for <strong>{email}</strong>, a reset link is on its way.
-            </p>
-            <p className="mt-2 text-sm text-muted">
-              The link expires in 30 minutes. Check your spam folder before requesting another.
-            </p>
+            <p className="text-md text-navy">{t.sent({ email: <strong>{email}</strong> })}</p>
+            <p className="mt-2 text-sm text-muted">{t.sentLine}</p>
             <Link href="/login" className="mt-4 inline-block text-sm text-muted underline">
-              Back to sign in
+              {t.backToSignIn}
             </Link>
           </div>
         ) : (
           <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
-            <Field label="Email" htmlFor="email" hint="We will send a reset link to this address.">
+            <Field label={t.email} htmlFor="email" hint={t.emailHint}>
               <TextInput
                 id="email"
                 type="email"
@@ -54,10 +56,10 @@ export default function ForgotPasswordPage() {
               />
             </Field>
             <Button type="submit" disabled={busy}>
-              {busy ? 'Sending…' : 'Send reset link'}
+              {busy ? t.sending : t.send}
             </Button>
             <Link href="/login" className="text-center text-sm text-muted underline">
-              Back to sign in
+              {t.backToSignIn}
             </Link>
           </form>
         )}

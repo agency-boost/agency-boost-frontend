@@ -6,6 +6,7 @@ import { makeMe, renderInLayout, routeParams, stubFetch, type StubReply } from '
 import {
   category, NOT_FOUND, PRODUCT, progressView, row, SALES, SHELL_STUBS, skill,
 } from '@test/training-fixtures';
+import { PHONE_QUERY } from '@/lib/use-phone';
 import CoachingPersonLayout from '../layout';
 import CoacheeTrainingTab from './page';
 
@@ -59,30 +60,33 @@ describe('/coaching/[membershipId]/training, a coachee’s Training tab (P18.5-T
   it('P18.5-T4 AC-2 heads every category “{Label} ({done}/{total})”, the counts the server’s, an empty one at (0/0)', async () => {
     show();
     await sales();
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Coaching Session$/);
+    // P18.95-T7 AC-2: the coachee's name is the page's title, so it is no longer a heading of its own below it.
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Rina Wijaya$/);
     expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
-      'Rina Wijaya', 'Sales (4/10)', 'Product (0/0)',
+      'Sales (4/10)', 'Product (0/0)',
     ]);
     // Muted, as `:7749` draws them.
     expect(screen.getByText('(4/10)').className).toContain('text-muted');
   });
 
-  it('P18.5-T4 AC-2 draws the skill cards numbered from 1 again in each category, with the five columns', async () => {
+  it('P18.5-T4 AC-2, UI-066 draws the skills numbered from 1 again in each category, with done/total and Module · Format · Status', async () => {
     const product = category('PRODUCT', 'Product', [skill('PRODUCT_KNOWLEDGE', 'Product Knowledge', [row('WHOLE_LIFE', 'Whole Life vs Term Life')])]);
     show({ 'GET /training/progress': { body: progressView([SALES, product]) } });
     await sales();
     const product3 = screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent);
-    expect(product3).toEqual(['1Prospecting', '2Needs Analysis', '3Objection Handling', '4Closing', '5Cross-sell', '6Retention', '1Product Knowledge']);
-    const table = screen.getByRole('table', { name: 'Product Knowledge modules' });
-    expect(within(table).getAllByRole('columnheader').map((c) => c.textContent)).toEqual(['No.', 'Skill', 'Module', 'Format', 'Status']);
+    expect(product3).toEqual([
+      '1Prospecting3/3', '2Needs Analysis1/2', '3Objection Handling0/2', '4Closing0/1', '5Cross-sell0/1', '6Retention0/1', '1Product Knowledge0/1',
+    ]);
+    const card = screen.getByRole('list', { name: 'Product Knowledge modules' }).closest('[data-skill]')!;
+    expect(card.querySelector('div[aria-hidden="true"]')!.textContent).toBe('ModuleFormatStatus');
   });
 
   it('P18.5-T4 AC-2 is read-only: no link in any row and no status control (contradiction 13)', async () => {
     show();
     await sales();
-    for (const table of screen.getAllByRole('table')) expect(within(table).queryAllByRole('link')).toEqual([]);
+    for (const list of screen.getAllByRole('list', { name: / modules$/ })) expect(within(list).queryAllByRole('link')).toEqual([]);
     expect(screen.queryByRole('group', { name: 'Status' })).not.toBeInTheDocument();
-    expect(screen.getByRole('rowheader', { name: 'Asking the Right Discovery Questions' })).toBeInTheDocument();
+    expect(screen.getByText('Asking the Right Discovery Questions')).toBeInTheDocument();
   });
 
   it('P18.5-T4 AC-2, D-history keeps a module done and since withdrawn under its skill: Done, then Archived, outside the count', async () => {
@@ -93,12 +97,12 @@ describe('/coaching/[membershipId]/training, a coachee’s Training tab (P18.5-T
     const sales9 = category('SALES', 'Sales', [skill('CLOSING', 'Closing', [row('CLOSING_TECHNIQUES', 'Closing Techniques That Work')]), retention]);
     show({ 'GET /training/progress': { body: progressView([sales9]) } });
     expect(await screen.findByRole('heading', { level: 2, name: 'Sales (0/1)' })).toBeInTheDocument();
-    const archived = within(screen.getByRole('table', { name: 'Retention modules' })).getAllByRole('row')[1];
-    expect(within(archived).getByRole('rowheader')).toHaveTextContent('Client Retention Best Practices');
-    expect(within(archived).getAllByRole('cell')[3]).toHaveTextContent(/^DoneArchived$/);
+    const archived = within(screen.getByRole('list', { name: 'Retention modules' })).getByRole('listitem');
+    // The module, its Format, its pill and *Archived* after it — no › and no link (UI-066).
+    expect(archived).toHaveTextContent(/^Client Retention Best PracticesFileDoneArchived$/);
     // A withdrawn module's Format is its own kinds of material, served on the history row — never “No material yet”.
-    expect(within(archived).getAllByRole('cell')[2]).toHaveTextContent('File');
-    expect(within(archived).getAllByRole('cell')[2]).not.toHaveTextContent(/No material yet/);
+    expect(archived).not.toHaveTextContent(/No material yet/);
+    expect(within(archived).queryByRole('link')).not.toBeInTheDocument();
   });
 
   it('P18.5-T4 AC-2 draws the empty state for an office with no category', async () => {
@@ -140,6 +144,54 @@ describe('/coaching/[membershipId]/training, a coachee’s Training tab (P18.5-T
   it('P18.5-T4 AC-2 keeps the product’s empty Product category in its place, with its heading only', async () => {
     show({ 'GET /training/progress': { body: progressView([PRODUCT, SALES]) } });
     expect(await screen.findByRole('heading', { level: 2, name: 'Product (0/0)' })).toBeInTheDocument();
-    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['Rina Wijaya', 'Product (0/0)', 'Sales (4/10)']);
+    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['Product (0/0)', 'Sales (4/10)']);
   });
 });
+
+/*
+ * **The same rows on a phone** (P18.95-T3 AC-5): the learner's list and a person's tab draw a module one way (P18.5-T4
+ * AC-4), so the tab's cards are a row per module below 768px too — its name and its status, the history's *Archived*
+ * after it — read-only, as the table's rows are.
+ */
+describe('P18.95-T3 — a coachee’s Training tab on a phone', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('P18.95-T3 AC-5 draws a row per module, its name and its status, Archived after a withdrawn one, and no link', async () => {
+    vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
+      media: query, matches: query === PHONE_QUERY, addEventListener: () => {}, removeEventListener: () => {},
+    })));
+    const retention = skill('RETENTION', 'Retention', [], {
+      offered: false,
+      archived: [{ code: 'CLIENT_RETENTION', title: 'Client Retention Best Practices', status: 'done', completedAt: '2026-08-01T03:00:00.000Z', formats: ['file'] }],
+    });
+    const sales9 = category('SALES', 'Sales', [skill('CLOSING', 'Closing', [row('CLOSING_TECHNIQUES', 'Closing Techniques That Work')]), retention]);
+    // The tab asks the width before its read answers, so the table is never drawn first.
+    expect(await drewATable(async () => {
+      show({ 'GET /training/progress': { body: progressView([sales9]) } });
+      await screen.findByRole('heading', { level: 2, name: 'Sales (0/1)' });
+    })).toBe(false);
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    const archived = within(screen.getByRole('list', { name: 'Retention modules' })).getByRole('listitem');
+    expect(archived).toHaveTextContent(/^Client Retention Best PracticesDoneArchived$/);
+    const closing = within(screen.getByRole('list', { name: 'Closing modules' })).getByRole('listitem');
+    expect(closing).toHaveTextContent(/^Closing Techniques That WorkNot started$/);
+    expect(screen.queryByRole('link', { name: 'Closing Techniques That Work' })).not.toBeInTheDocument();
+  });
+});
+
+/** Whether a `<table>` was ever put on the page while `run` waited: a phone's first paint must already be its cards. */
+async function drewATable(run: () => Promise<unknown>) {
+  let seen = false;
+  const observer = new MutationObserver((records) => {
+    for (const record of records) {
+      for (const node of record.addedNodes) {
+        if (node instanceof Element && (node.matches('table') || node.querySelector('table'))) seen = true;
+      }
+    }
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
+  await run();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  observer.disconnect();
+  return seen;
+}

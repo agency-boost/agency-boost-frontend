@@ -131,4 +131,103 @@ describe('the shared tenant configuration (P4-T7)', () => {
     render(<TenantConfigProvider><Reader /></TenantConfigProvider>);
     await waitFor(() => expect(screen.getByText('vnone')).toBeInTheDocument());
   });
+
+  describe('P18.95-T5 AC-3: the configuration settles on its own', () => {
+    /*
+     * The two reads were one `Promise.all`, so `loading` — which Log Activity's skeleton reads — waited for the
+     * ladder too, and a ladder that failed threw away a configuration that had arrived (UI-030).
+     */
+    function LadderReader() {
+      const { ladder } = useTenantConfig();
+      return <p>{ladder.length ? `rungs ${ladder.length}` : 'no rungs'}</p>;
+    }
+
+    it('P18.95-T5 AC-3: stops loading once the configuration answers, the ladder still on its way', async () => {
+      const { mock } = stubFetch({ '/kpm/config': { body: CONFIG }, '/kpm/org-levels': { body: LADDER } });
+      let release!: () => void;
+      const held = new Promise<void>((resolve) => { release = resolve; });
+      vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+        if (url.includes('/kpm/org-levels')) await held;
+        return mock(url, init);
+      }));
+      render(<TenantConfigProvider><Reader /><LadderReader /></TenantConfigProvider>);
+
+      expect(await screen.findByText('v1')).toBeInTheDocument();
+      expect(screen.getByText('no rungs')).toBeInTheDocument();
+      release();
+      expect(await screen.findByText('rungs 1')).toBeInTheDocument();
+    });
+
+    it('P18.95-T5 AC-3: keeps a configuration that arrived when the ladder fails', async () => {
+      stubFetch({
+        '/kpm/config': { body: CONFIG },
+        '/kpm/org-levels': { status: 500, body: { error: { code: 'INTERNAL_ERROR', message: 'x', requestId: 'r' } } },
+      });
+      render(<TenantConfigProvider><Reader /><LadderReader /></TenantConfigProvider>);
+      expect(await screen.findByText('v1')).toBeInTheDocument();
+      expect(screen.getByText('no rungs')).toBeInTheDocument();
+    });
+
+    it('P18.95-T5 AC-3: still waits for both before a settings screen’s refresh resolves', async () => {
+      const { mock } = stubFetch({ '/kpm/config': { body: CONFIG }, '/kpm/org-levels': { body: LADDER } });
+      let release!: () => void;
+      const held = new Promise<void>((resolve) => { release = resolve; });
+      let gate = false;
+      vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+        if (gate && url.includes('/kpm/org-levels')) await held;
+        return mock(url, init);
+      }));
+      let refreshOf!: () => Promise<void>;
+      function Grab() {
+        refreshOf = useTenantConfig().refresh;
+        return null;
+      }
+      render(<TenantConfigProvider><Reader /><Grab /></TenantConfigProvider>);
+      await screen.findByText('v1');
+
+      gate = true;
+      let done = false;
+      const refreshing = refreshOf().then(() => { done = true; });
+      await new Promise((resolve) => { setTimeout(resolve, 10); });
+      expect(done).toBe(false);
+      release();
+      await refreshing;
+      expect(done).toBe(true);
+    });
+  });
+
+  describe('a read that lands after the provider is gone', () => {
+    /*
+     * On CI the answer arrived after the spec's environment was torn down: no `window`, so setting state threw,
+     * and the unhandled rejection failed a run whose every test had passed (2026-10-24). Reproduced as it
+     * happened: the provider unmounted, `window` taken away as the teardown takes it, and only then the answer.
+     */
+    for (const outcome of ['answered', 'refused'] as const) {
+      it(`is dropped when ${outcome}, and touches nothing`, async () => {
+        let release!: () => void;
+        const gate = new Promise<void>((resolve) => { release = resolve; });
+        const fetchMock = vi.fn(async (url: string) => {
+          await gate;
+          return outcome === 'answered'
+            ? { ok: true, status: 200, json: async () => (url.includes('/kpm/org-levels') ? LADDER : CONFIG) }
+            : { ok: false, status: 500, json: async () => ({ error: { code: 'INTERNAL_ERROR', message: 'x', requestId: 'r' } }) };
+        });
+        vi.stubGlobal('fetch', fetchMock);
+        const unhandled = vi.fn();
+        process.on('unhandledRejection', unhandled);
+        try {
+          const { unmount } = render(<TenantConfigProvider><Reader /></TenantConfigProvider>);
+          expect(fetchMock).toHaveBeenCalledTimes(2);
+          unmount();
+          vi.stubGlobal('window', undefined);
+          release();
+          for (let tick = 0; tick < 3; tick += 1) await new Promise((resolve) => { setTimeout(resolve, 0); });
+        } finally {
+          vi.unstubAllGlobals();
+          process.off('unhandledRejection', unhandled);
+        }
+        expect(unhandled).not.toHaveBeenCalled();
+      });
+    }
+  });
 });

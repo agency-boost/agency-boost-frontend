@@ -4,29 +4,38 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import {
-  ActivationSkeleton, AspectCard, AttributionMark, AutoBadge, ByHandBadge, DateField, GoToLink, ITEM_CHECKBOX, ITEM_ROW,
+  ActivationSkeleton, AspectCard, AttributionMark, AutoBadge, AutoSaveDateField, ByHandBadge, GoToLink, ITEM_CHECKBOX, ITEM_ROW,
   ProgressHeading, ProgressSummary, RowError, useWriteQueue,
 } from '@/components/activation-parts';
+import { DataItemRow } from '@/components/activation-data-item';
 import { Dialog } from '@/components/ui/dialog';
 import { Button, Card, ErrorBanner, TextInput } from '@/components/ui/field';
+import { InlineSaveField, InlineSaveStatus, useInlineSave, type InlineSaveStatusProps } from '@/components/ui/inline-save-status';
 import { Toast, useHostToast, useToast } from '@/components/ui/toast';
+import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
+import { activationMessages } from '@/i18n/messages/activation';
 import {
-  attributionOf, correctionOf, graduateMyActivation, isComplete, isManual, isTickedByHandLink, ITEM_NOTE_MAX, MY_COACHING_ACTIVATION_HREF, OWN_COPY,
-  PROTOTYPE_COPY, readMyActivation, saveMyItem, type ActivationItemProgress, type ActivationView, type MyItemInput,
+  attributionOf, correctionOf, graduateMyActivation, isComplete, isDataBacked, isManual, isTickedByHandLink, ITEM_NOTE_MAX,
+  MY_COACHING_ACTIVATION_HREF, readMyActivation, readMyClosings, saveMyItem,
+  type ActivationItemProgress, type ActivationRecordInput, type ActivationView, type MyItemInput,
 } from '@/lib/activation';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
-import { formatOfficeDay, formatShortDay } from '@/lib/format';
+import { formatOfficeDay, formatShortDay, OFFICE_TIME_ZONE } from '@/lib/format';
 import { landingFor } from '@/lib/landing';
 import { useCan, useSession } from '@/lib/session';
+
+/** Which of a row's three fields a write came from, for its own save confirmation. */
+type ItemField = 'done' | 'note' | 'date';
 
 /**
  * **The hire's own *90-Day Activation*** (`/activation`, `Overall.html:3270-3352`, logic `:6430-6694`;
  * P13-T4, T6, T7): their pinned checklist, ticked as they go.
  *
  * - **The header card**: *Your activation progress*, the *Start date* — read-only, since a leader
- *   corrects it and the hire does not (OD-118) — and *Mark activation complete →*, enabled at 100%
- *   (OD-28), asked in the product's dialog (F-72).
+ *   corrects it and the hire does not (OD-118) — and *Mark checklist complete* (the prototype's *Mark activation
+ *   complete →*, renamed by P18.96-T6 AC-5, ADR-0173 §4), enabled at 100% (OD-28) and saying why while it is not —
+ *   *"Unlocks when all 16 items are done"* — asked in the product's dialog (F-72).
  * - **The progress**: *Day*, *Completed*, the bar and the aspect table, all served (P13-T2 AC-5).
  * - **A manual row**: a checkbox, and the chevron *Show note and date* opening the hire's own *Note
  *   (optional)* and date, each saved as the prototype saves them, on change (T4 AC-3).
@@ -41,10 +50,18 @@ import { useCan, useSession } from '@/lib/session';
  * never overwrites a later one. **The percentage waits for the answer**: the server computes it, and a
  * screen that worked it out could disagree with the leader's (exit criterion 2).
  *
+ * **Settled, and in place** (P18.96-T7 AC-1, AC-2; UI-007, UI-008): the figures are the skeleton until the one read
+ * answers, every link evaluated by the server first; after that an answer updates them where they are — every row keeps
+ * its node and the focus, nothing scrolls, and the session read again for the nav's check replaces no part of the page.
+ *
  * **A read-only support session draws no write control** (T4 AC-9, the calendar's L-79): the boxes are
  * drawn disabled, the note and date read-only, and there is no button.
+ *
+ * **Its words are the catalogue's** (`i18n/messages/activation.ts`; P18.98-T4) and its dates are written in the
+ * figures' language (`useFigureLanguage()`), so a date beside the shared date field reads as its face does.
  */
 export function MyActivation() {
+  const t = useMessages(activationMessages);
   const { me, reload } = useSession();
   const router = useRouter();
   const readOnly = !!me?.isImpersonating && !!me.impersonationReadOnly;
@@ -54,17 +71,23 @@ export function MyActivation() {
   const hostToast = useHostToast();
   const local = useToast();
   const queue = useWriteQueue();
+  /**
+   * The tick, the note and the date each say *Saving… → Saved ✓* beside them, or *Couldn't save — retry*
+   * (P18.95-T1 AC-5, ADR-0167 §5; UI-007), above the row's *Not saved.* which still says why.
+   */
+  const { save: track, statusOf } = useInlineSave();
 
   const [view, setView] = useState<ActivationView | null>(null);
   const [missing, setMissing] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const [attempt, setAttempt] = useState(0);
-  const [pending, setPending] = useState<Readonly<Record<string, MyItemInput>>>({});
+  const [pending, setPending] = useState<Readonly<Record<string, Omit<MyItemInput, 'record'>>>>({});
   const [failed, setFailed] = useState<Readonly<Record<string, string>>>({});
   const [resets, setResets] = useState<Readonly<Record<string, number>>>({});
   const asked = useRef<Record<string, number>>({});
   const [asking, setAsking] = useState(false);
   const [graduating, setGraduating] = useState(false);
+  const lockedId = useId();
   const [graduateError, setGraduateError] = useState<ApiError | null>(null);
   /*
    * The nav's amber check, as the session last read it (`me.activation.complete`). A write whose answer
@@ -88,12 +111,14 @@ export function MyActivation() {
     return () => { live = false; };
   }, [attempt]);
 
-  const save = useCallback((code: string, patch: MyItemInput) => {
+  const write = useCallback((code: string, patch: MyItemInput): Promise<boolean> => {
     const ask = (asked.current[code] ?? 0) + 1;
     asked.current[code] = ask;
-    setPending((p) => ({ ...p, [code]: { ...p[code], ...patch } }));
+    // The record goes with the write, and never onto the row drawn meanwhile: it is not the item's record yet.
+    const { record: _sent, ...shown } = patch;
+    setPending((p) => ({ ...p, [code]: { ...p[code], ...shown } }));
     setFailed(({ [code]: _gone, ...rest }) => rest);
-    void queue(async () => {
+    return queue(async () => {
       try {
         const next = await saveMyItem(code, patch);
         setView(next);
@@ -103,9 +128,11 @@ export function MyActivation() {
           navComplete.current = complete;
           void reload();
         }
+        return true;
       } catch (err) {
         setFailed((f) => ({ ...f, [code]: toDisplayError(err).message }));
         setResets((r) => ({ ...r, [code]: (r[code] ?? 0) + 1 }));
+        return false;
       } finally {
         // A later write to the same row keeps its own pending state until its own answer.
         if (asked.current[code] === ask) setPending(({ [code]: _done, ...rest }) => rest);
@@ -113,13 +140,23 @@ export function MyActivation() {
     });
   }, [queue, reload]);
 
+  /** One field's write, with its confirmation; a retry sends the same patch again (AC-5). */
+  const save = useCallback((code: string, patch: MyItemInput, field: ItemField) => {
+    void track(`${code}\n${field}`, () => write(code, patch));
+  }, [track, write]);
+
+  /** A data-backed item's write (P18.96-T4 AC-3): an untick, or the tick and its record together. */
+  const saveData = useCallback((code: string, done: boolean, record?: ActivationRecordInput) =>
+    track(`${code}\ndone`, () => write(code, record ? { done, record } : { done })), [track, write]);
+  const loadClosings = useCallback(async () => (await readMyClosings()).closings, []);
+
   const graduate = async () => {
     setAsking(false);
     setGraduating(true);
     setGraduateError(null);
     try {
       await graduateMyActivation();
-      (hostToast ?? local.show)(PROTOTYPE_COPY.graduated);
+      (hostToast ?? local.show)(t.graduated);
       // The reader's landing, in place of the prototype's *New hires* (`:6687`; contradiction 4, a Fix):
       // a hire with no hires has no such page. Replaced, so Back does not return to a page no longer offered.
       router.replace(landingFor(me));
@@ -140,59 +177,80 @@ export function MyActivation() {
       {error && (
         <div>
           <ErrorBanner {...error} />
-          <Button variant="secondary" className="mt-3" onClick={() => setAttempt((n) => n + 1)}>{OWN_COPY.tryAgain}</Button>
+          <Button variant="secondary" className="mt-3" onClick={() => setAttempt((n) => n + 1)}>{t.tryAgain}</Button>
         </div>
       )}
-      {!view && !error && <ActivationSkeleton label={OWN_COPY.loading} />}
+      {!view && !error && <ActivationSkeleton label={t.loading} />}
 
       {view && (
         <>
           <Card density="compact">
             <div className="mb-4 flex flex-wrap items-end justify-between gap-3.5">
-              <ProgressHeading>{PROTOTYPE_COPY.progressHeading}</ProgressHeading>
+              <ProgressHeading>{t.progressHeading}</ProgressHeading>
               <div className="flex flex-wrap items-end gap-2.5">
-                <StartDate view={view} reader={me?.membership?.membershipId} />
+                <JoinDate view={view} reader={me?.membership?.membershipId} />
                 {mayGraduate && (
-                  <Button
-                    variant="secondary"
-                    disabled={view.pct < 100 || graduating}
-                    onClick={() => setAsking(true)}
-                    className="h-auto px-4 py-[9px] text-base"
-                  >
-                    {PROTOTYPE_COPY.graduate}
-                  </Button>
+                  <div className="flex flex-col items-end">
+                    <Button
+                      variant="secondary"
+                      disabled={view.pct < 100 || graduating}
+                      aria-describedby={view.pct < 100 ? lockedId : undefined}
+                      onClick={() => setAsking(true)}
+                      className="h-auto px-4 py-[9px] text-base"
+                    >
+                      {t.graduate}
+                    </Button>
+                    {/* P18.96-T6 AC-5 (ADR-0173 §4): while it waits, it says why — the checklist's own total, served. */}
+                    {view.pct < 100 && <p id={lockedId} className="mt-1 text-xs text-muted">{t.graduateLocked({ n: view.total })}</p>}
+                  </div>
                 )}
               </div>
             </div>
             {graduateError && <div className="mb-4"><ErrorBanner {...graduateError} /></div>}
-            <ProgressSummary view={view} label={PROTOTYPE_COPY.progressHeading} />
+            <ProgressSummary view={view} label={t.progressHeading} />
           </Card>
 
           {view.aspects.map((aspect, i) => (
             <AspectCard key={aspect.code} n={i + 1} label={aspect.label}>
-              {aspect.items.map((item) => (
+              {aspect.items.map((item) => (isDataBacked(item) ? (
+                <DataItemRow
+                  key={item.code}
+                  item={{ ...item, ...pending[item.code] }}
+                  reader={me?.membership?.membershipId}
+                  writable={mayTick}
+                  audience="hire"
+                  hireId={view.hire.membershipId}
+                  today={view.today}
+                  startDate={view.startDate}
+                  loadClosings={loadClosings}
+                  onSave={(done, record) => saveData(item.code, done, record)}
+                  status={statusOf(`${item.code}\ndone`)}
+                  error={failed[item.code]}
+                />
+              ) : (
                 <MyItemRow
                   key={item.code}
                   item={{ ...item, ...pending[item.code] }}
                   reader={me?.membership?.membershipId}
                   writable={mayTick}
-                  onSave={(patch) => save(item.code, patch)}
+                  onSave={(patch, field) => save(item.code, patch, field)}
+                  status={(field) => statusOf(`${item.code}\n${field}`)}
                   error={failed[item.code]}
                   resetKey={resets[item.code] ?? 0}
                 />
-              ))}
+              )))}
             </AspectCard>
           ))}
 
           {view.note && <NoteFromLeader view={view} reader={me?.membership?.membershipId} />}
 
-          <p className="mt-1 text-center text-sm leading-relaxed text-muted">{PROTOTYPE_COPY.footer}</p>
+          <p className="mt-1 text-center text-sm leading-relaxed text-muted">{t.footer}</p>
 
           <Dialog
             open={asking}
-            message={PROTOTYPE_COPY.graduateQuestion}
-            confirmLabel={PROTOTYPE_COPY.confirm}
-            cancelLabel={PROTOTYPE_COPY.cancel}
+            message={t.graduateQuestion}
+            confirmLabel={t.confirm}
+            cancelLabel={t.cancel}
             onConfirm={() => void graduate()}
             onCancel={() => setAsking(false)}
           />
@@ -204,17 +262,20 @@ export function MyActivation() {
 }
 
 /**
- * *Start date* (`:3283-3287`), **read-only for the hire** (OD-118): the prototype's input lets anybody
- * reset their own ninety days and hide an overdue, so the date is shown, not offered. When a leader moved
- * it, the marker beside it says who and when.
+ * *Join date* — the prototype's *Start date* (`:3283-3287`; P18.96-T2 AC-5, ADR-0169) — **read-only for the hire**
+ * (OD-118): the prototype's input lets anybody reset their own ninety days and hide an overdue, so the date is
+ * shown, not offered. When a leader moved it, the marker beside it says who and when.
  */
-function StartDate({ view, reader }: { view: ActivationView; reader: string | null | undefined }) {
-  const corrected = correctionOf(view, reader);
+function JoinDate({ view, reader }: { view: ActivationView; reader: string | null | undefined }) {
+  const t = useMessages(activationMessages);
+  const language = useLanguage();
+  const figures = useFigureLanguage();
+  const corrected = correctionOf(view, reader, language, figures);
   return (
     <dl className="flex items-center gap-2">
-      <dt className="whitespace-nowrap text-xs font-semibold text-navy">{PROTOTYPE_COPY.startDate}</dt>
+      <dt className="whitespace-nowrap text-xs font-semibold text-navy">{t.joinDate}</dt>
       <dd className="flex h-[34px] items-center rounded-md border-[1.5px] border-hairline bg-base px-3 text-base text-navy">
-        <time dateTime={view.startDate}>{formatShortDay(view.startDate, { year: true })}</time>
+        <time dateTime={view.startDate}>{formatShortDay(view.startDate, { year: true }, figures)}</time>
       </dd>
       {corrected && <dd><AttributionMark words={corrected} /></dd>}
     </dl>
@@ -228,18 +289,21 @@ function StartDate({ view, reader }: { view: ActivationView; reader: string | nu
  * with the chevron opening the hire's own note and date.
  */
 function MyItemRow({
-  item, reader, writable, onSave, error, resetKey,
+  item, reader, writable, onSave, status, error, resetKey,
 }: {
   item: ActivationItemProgress;
   reader: string | null | undefined;
   writable: boolean;
-  onSave: (patch: MyItemInput) => void;
+  onSave: (patch: MyItemInput, field: ItemField) => void;
+  /** Each field's save confirmation (P18.95-T1 AC-5). */
+  status: (field: ItemField) => InlineSaveStatusProps;
   error: string | undefined;
   resetKey: number;
 }) {
+  const t = useMessages(activationMessages);
   const [open, setOpen] = useState(false);
   const metaId = useId();
-  const words = attributionOf(item, reader);
+  const words = attributionOf(item, reader, useLanguage(), useFigureLanguage());
 
   if (!isManual(item) && item.link) {
     return (
@@ -271,17 +335,19 @@ function MyItemRow({
               type="checkbox"
               checked={item.done}
               disabled={!writable}
-              onChange={(e) => onSave({ done: e.target.checked })}
+              onChange={(e) => onSave({ done: e.target.checked }, 'done')}
               className={ITEM_CHECKBOX}
             />
             <span>{item.label}</span>
           </label>
           {isTickedByHandLink(item) && <ByHandBadge />}
           <AttributionMark words={words} />
+          {/* Beside the box it confirms, on the row's own line. */}
+          <InlineSaveStatus {...status('done')} label={item.label} />
         </div>
         <button
           type="button"
-          aria-label={PROTOTYPE_COPY.showNoteAndDate}
+          aria-label={t.showNoteAndDate}
           aria-expanded={open}
           aria-controls={metaId}
           onClick={() => setOpen((was) => !was)}
@@ -297,15 +363,19 @@ function MyItemRow({
       </div>
       {/* `hidden` alone loses to Tailwind's `flex`, which sets `display`: the class goes with the state. */}
       <div id={metaId} hidden={!open} className={cn('ml-[26px] mt-2.5 flex-wrap gap-2', open ? 'flex' : 'hidden')}>
-        <NoteInput item={item} writable={writable} onSave={onSave} resetKey={resetKey} />
-        <DateField
-          value={item.date}
-          clearable
-          readOnly={!writable}
-          resetKey={resetKey}
-          aria-label={OWN_COPY.itemDateName(item.label)}
-          onCommit={(date) => onSave({ done: item.done, date })}
-        />
+        <InlineSaveField status={status('note')} label={t.itemNoteName({ label: item.label })} className="min-w-0 flex-[1_1_170px]">
+          <NoteInput item={item} writable={writable} onSave={(patch) => onSave(patch, 'note')} resetKey={resetKey} />
+        </InlineSaveField>
+        <InlineSaveField status={status('date')} label={t.itemDateName({ label: item.label })}>
+          <AutoSaveDateField
+            value={item.date}
+            clearable
+            readOnly={!writable}
+            resetKey={resetKey}
+            aria-label={t.itemDateName({ label: item.label })}
+            onCommit={(date) => onSave({ done: item.done, date }, 'date')}
+          />
+        </InlineSaveField>
       </div>
       <RowError message={error} />
     </div>
@@ -319,6 +389,7 @@ function MyItemRow({
 function NoteInput({
   item, writable, onSave, resetKey,
 }: { item: ActivationItemProgress; writable: boolean; onSave: (patch: MyItemInput) => void; resetKey: number }) {
+  const t = useMessages(activationMessages);
   const [draft, setDraft] = useState(item.note ?? '');
   useEffect(() => { setDraft(item.note ?? ''); }, [item.note, resetKey]);
   return (
@@ -327,15 +398,16 @@ function NoteInput({
       value={draft}
       readOnly={!writable}
       maxLength={ITEM_NOTE_MAX}
-      placeholder={PROTOTYPE_COPY.notePlaceholder}
-      aria-label={OWN_COPY.itemNoteName(item.label)}
+      placeholder={t.notePlaceholder}
+      aria-label={t.itemNoteName({ label: item.label })}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={() => {
         const next = draft.trim();
         if (next === (item.note ?? '')) return;
         onSave({ done: item.done, note: next === '' ? null : next });
       }}
-      className="h-[34px] min-w-0 flex-[1_1_170px] text-base"
+      // The row's flex share is its save confirmation's box's now (P18.95-T1 AC-5); the box fills it.
+      className="h-[34px] w-full min-w-0 text-base"
     />
   );
 }
@@ -347,13 +419,15 @@ function NoteInput({
  * fact a tooltip can carry.
  */
 function NoteFromLeader({ view, reader }: { view: ActivationView; reader: string | null | undefined }) {
+  const t = useMessages(activationMessages);
+  const figures = useFigureLanguage();
   const note = view.note!;
-  const who = note.by.membershipId === reader ? OWN_COPY.you : note.by.name;
+  const who = note.by.membershipId === reader ? t.you : note.by.name;
   return (
-    <section aria-labelledby="activation-note" className="rounded-lg border border-hairline bg-card p-[18px]">
-      <h2 id="activation-note" className="font-display text-md font-bold text-navy">{PROTOTYPE_COPY.noteHeading}</h2>
+    <section aria-labelledby="activation-note" className="rounded-lg border border-card-edge bg-card p-[18px]">
+      <h2 id="activation-note" className="font-display text-md font-bold text-navy">{t.noteHeading}</h2>
       <p className="mt-2 whitespace-pre-line text-md text-navy">{note.text}</p>
-      <p className="mt-2 text-sm text-muted">{OWN_COPY.noteFrom(who, formatOfficeDay(note.at))}</p>
+      <p className="mt-2 text-sm text-muted">{t.noteFrom({ who, when: formatOfficeDay(note.at, OFFICE_TIME_ZONE, figures) })}</p>
     </section>
   );
 }
@@ -365,19 +439,25 @@ function NoteFromLeader({ view, reader }: { view: ActivationView; reader: string
  * coaching, whose *Activation* tab keeps it (D-coaching-me).
  */
 function NotOffered({ view, coachingLink }: { view: ActivationView | null; coachingLink: boolean }) {
+  const t = useMessages(activationMessages);
+  const figures = useFigureLanguage();
   const [title, line] = !view
-    ? [OWN_COPY.noneTitle, OWN_COPY.noneLine]
+    ? [t.noneTitle, t.noneLine]
     : view.state === 'graduated'
-      ? [OWN_COPY.graduatedTitle, OWN_COPY.graduatedLine(view.graduatedAt ? formatOfficeDay(view.graduatedAt) : formatShortDay(view.today, { year: true }))]
-      : [OWN_COPY.expiredTitle, OWN_COPY.expiredLine(formatShortDay(view.endsOn, { year: true }))];
+      ? [t.graduatedTitle, t.graduatedLine({
+        on: view.graduatedAt
+          ? formatOfficeDay(view.graduatedAt, OFFICE_TIME_ZONE, figures)
+          : formatShortDay(view.today, { year: true }, figures),
+      })]
+      : [t.expiredTitle, t.expiredLine({ on: formatShortDay(view.endsOn, { year: true }, figures) })];
   return (
     <Card>
       <h2 className="font-display text-lg font-bold text-navy">{title}</h2>
       <p className="mt-1 text-md text-muted">{line}</p>
       {view && coachingLink && (
         <p className="mt-1 text-md text-muted">
-          {OWN_COPY.checklistElsewhere}{' '}
-          <Link href={MY_COACHING_ACTIVATION_HREF} className="font-semibold text-navy underline">{OWN_COPY.ownCoaching}</Link>
+          {t.checklistElsewhere}{' '}
+          <Link href={MY_COACHING_ACTIVATION_HREF} className="font-semibold text-navy underline">{t.ownCoaching}</Link>
         </p>
       )}
     </Card>
