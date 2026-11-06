@@ -96,9 +96,11 @@ const en = {
   /** The states of Q7 and Q8, as the coaching mockup's pills name them. */
   states: { consistent: 'Consistent', inconsistent: 'Not consistent', not_done: 'Not done' },
 
-  /** The coaching *Survei* tab (ADR-0216 §7). */
+  /**
+   * The coaching *Survei* tab (ADR-0216 §7). *The tab's own name is `coachingMessages.person.surveyTab` since 2026-11-06*
+   * (the bundle): every coachee's page draws the tab bar, and loading this area for one word put it in all of them.
+   */
   coaching: {
-    tab: 'Survey',
     time: 'Time',
     tenure: 'Tenure',
     age: 'Age',
@@ -284,7 +286,6 @@ const id: MessagesOf<typeof en> = {
   states: { consistent: 'Konsisten', inconsistent: 'Tidak konsisten', not_done: 'Tidak dilakukan' },
 
   coaching: {
-    tab: 'Survei',
     time: 'Waktu',
     tenure: 'Masa kerja',
     age: 'Usia',

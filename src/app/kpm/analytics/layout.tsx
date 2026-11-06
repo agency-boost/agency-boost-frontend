@@ -2,7 +2,7 @@
 
 import { Suspense, type ReactNode } from 'react';
 import { RouteSegments } from '@/components/analytics/route-segments';
-import { SubtitleOnPhone } from '@/components/app-shell';
+import { SubtitleOnPhone } from '@/components/page-header';
 import { NotAvailableToYou } from '@/components/require-session';
 import { RoleShell } from '@/components/role-shell';
 import { useMessages } from '@/i18n/language-provider';

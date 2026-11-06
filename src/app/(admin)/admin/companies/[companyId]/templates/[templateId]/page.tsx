@@ -1,13 +1,12 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { use, useEffect, useState } from 'react';
 import { Page } from '@/components/page';
 import { BackLink, useCompany, useCompanyName } from '@/components/kpm-template/company-frame';
-import { ApplyToOfficesDialog } from '@/components/kpm-template/apply-to-offices-dialog';
 import { settleDraftSaves } from '@/components/kpm-template/use-template-drafts';
-import { PublishAllDialog, PublishAllReport } from '@/components/kpm-template/publish-all-dialog';
 import { TemplateActions } from '@/components/kpm-template/template-actions';
 import { Button, Card, ErrorBanner } from '@/components/ui/field';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -26,6 +25,22 @@ import { useMessages } from '@/i18n/language-provider';
 import { adminTemplateMessages } from '@/i18n/messages/admin-template';
 import { adminTemplateAnalyticsMessages } from '@/i18n/messages/admin-template-analytics';
 import { sectionSummary, type AdvancedAnalyticsConfig } from '@/lib/advanced-analytics';
+import { useOpenedOnce } from '@/lib/use-opened-once';
+
+/*
+ * **What *Terbitkan semua* and *Dipakai N KPM* open loads when they first open** (the bundle, 2026-11-06;
+ * `performance-and-scale.md`): the publish dialog, the report it leaves and the push to the offices are drawn only after
+ * a tap, so none is in the checklist's first load. Mounted from then on, closed, as before (`useOpenedOnce`).
+ */
+const PublishAllDialog = dynamic(
+  () => import('@/components/kpm-template/publish-all-dialog').then((m) => m.PublishAllDialog), { ssr: false },
+);
+const PublishAllReport = dynamic(
+  () => import('@/components/kpm-template/publish-all-dialog').then((m) => m.PublishAllReport), { ssr: false },
+);
+const ApplyToOfficesDialog = dynamic(
+  () => import('@/components/kpm-template/apply-to-offices-dialog').then((m) => m.ApplyToOfficesDialog), { ssr: false },
+);
 
 const STATE_TONE: Record<ReturnType<typeof sectionState>['state'], PillTone> = {
   published: 'green',
@@ -62,6 +77,8 @@ export default function TemplatePage({
   const [busy, setBusy] = useState(false);
   const [results, setResults] = useState<PublishAllOutcome[] | null>(null);
   const [publishError, setPublishError] = useState<ApiError | null>(null);
+  const publishMounted = useOpenedOnce(dialog === 'publish');
+  const applyMounted = useOpenedOnce(dialog === 'apply');
 
   useEffect(() => {
     let live = true;
@@ -228,21 +245,25 @@ export default function TemplatePage({
             ))}
           </ul>
 
-          <PublishAllDialog
-            analyticsKpms={analytics?.kpms ?? 0}
-            open={dialog === 'publish'}
-            sections={waiting}
-            busy={busy}
-            onConfirm={() => void publishAll()}
-            onClose={() => setDialog(null)}
-          />
-          <ApplyToOfficesDialog
-            open={dialog === 'apply'}
-            companyId={companyId}
-            templateId={templateId}
-            kinds={applyKinds}
-            onClose={() => { setDialog(null); setOfficesRead((n) => n + 1); }}
-          />
+          {publishMounted && (
+            <PublishAllDialog
+              analyticsKpms={analytics?.kpms ?? 0}
+              open={dialog === 'publish'}
+              sections={waiting}
+              busy={busy}
+              onConfirm={() => void publishAll()}
+              onClose={() => setDialog(null)}
+            />
+          )}
+          {applyMounted && (
+            <ApplyToOfficesDialog
+              open={dialog === 'apply'}
+              companyId={companyId}
+              templateId={templateId}
+              kinds={applyKinds}
+              onClose={() => { setDialog(null); setOfficesRead((n) => n + 1); }}
+            />
+          )}
         </>
       )}
     </Page>

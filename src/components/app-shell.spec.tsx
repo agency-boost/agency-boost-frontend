@@ -3,7 +3,8 @@ import userEvent from '@testing-library/user-event';
 import { renderToString } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { fieldChrome } from '@test/shell-fixtures';
-import { AppShell, PageHeader, type NavSection } from './app-shell';
+import { AppShell, type NavSection } from './app-shell';
+import { PageHeader } from './page-header';
 
 // Every test reads `/admin`.
 const route = vi.hoisted(() => ({ path: '/admin' }));

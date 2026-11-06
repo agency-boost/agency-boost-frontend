@@ -6,8 +6,8 @@ import { LeadContactButtons } from '@/components/contact-buttons';
 import { DateField } from '@/components/ui/date-field';
 import { ErrorBanner } from '@/components/ui/field';
 import { LineIcon } from '@/components/ui/line-icon';
-import { Avatar } from '@/components/ui/person-row';
-import { ResponsiveSheet } from '@/components/ui/responsive-sheet';
+import { Avatar } from '@/components/ui/avatar';
+import { LazyResponsiveSheet } from '@/components/ui/lazy-responsive-sheet';
 import { Skeleton, SkeletonBar } from '@/components/ui/skeleton';
 import { TonePill } from '@/components/ui/tone-pill';
 import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
@@ -384,7 +384,7 @@ export function SessionLeadsCard({
         </>
       )}
 
-      <ResponsiveSheet open={filtering} title={t.list.filters.title} onClose={() => setFiltering(false)}>
+      <LazyResponsiveSheet open={filtering} title={t.list.filters.title} onClose={() => setFiltering(false)}>
         <div role="group" aria-label={t.list.chips} className="flex flex-wrap gap-1.5 pb-2">
           {(['all', 'sales', 'recruitment'] as const).map((chip) => (
             <button
@@ -403,7 +403,7 @@ export function SessionLeadsCard({
             </button>
           ))}
         </div>
-      </ResponsiveSheet>
+      </LazyResponsiveSheet>
     </section>
   );
 }

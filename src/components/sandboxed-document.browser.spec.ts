@@ -52,11 +52,17 @@ const PROBE = `<!doctype html>
   try { found.parent = String(parent.document.title); } catch (e) { found.parent = 'refused:' + e.name; }
   found.origin = self.origin;
   document.getElementById('jump').click();
-  setTimeout(function () {
+  // Report once the anchor has scrolled and the frame has its width, or 3 s on the clock: a loaded machine can take longer than one fixed wait
+  // to apply the jump, and a fixed 400 ms then read an unscrolled frame (2026-11-06). By the clock, not by a count of
+  // timers: Chrome runs an off-screen cross-origin frame's timers about once a second.
+  var until = Date.now() + 3000;
+  (function report() {
+    var settled = window.scrollY > 0 && document.documentElement.clientWidth > 0;
+    if (!settled && Date.now() < until) { setTimeout(report, 50); return; }
     found.scrolledInside = window.scrollY > 0;
     found.innerWidth = document.documentElement.clientWidth;
     parent.postMessage(found, '*');
-  }, 400);
+  })();
 </script>
 </body></html>`;
 
@@ -192,7 +198,7 @@ describe.skipIf(!CHROME)('P19.6-T2 a lesson in the sandboxed frame, in a real br
     await tab.send('Emulation.setDeviceMetricsOverride', { width, height: 800, deviceScaleFactor: 1, mobile: width < 768 });
     await tab.send('Page.navigate', { url: `${originOf(app)}/${all ? '' : 'one'}` });
     const count = all ? 3 : 1;
-    for (let tries = 0; tries < 100; tries += 1) {
+    for (let tries = 0; tries < 200; tries += 1) {
       const found = await tab.evaluate<Record<string, Record<string, unknown>> | null>(
         `document.readyState === "complete" && window.__found && Object.keys(window.__found).length === ${count} ? window.__found : null`,
       );

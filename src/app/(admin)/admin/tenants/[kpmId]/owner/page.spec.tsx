@@ -132,7 +132,10 @@ describe('assign owner', () => {
       owner: { fullName: 'Victor Gunawan', phone: '0812 1100 2200', email: 'victor@example.test', agentCode: '70011223' },
       sendInvitation: true,
     });
-    expect(screen.getAllByRole('status').some((r) => r.textContent?.includes('Owner set. Invitation sent.'))).toBe(true);
+    // The toast is drawn after the navigation is asked for, a tick later under load: wait for it, as for the push.
+    await vi.waitFor(() => expect(
+      screen.getAllByRole('status').some((r) => r.textContent?.includes('Owner set. Invitation sent.')),
+    ).toBe(true));
   });
 
   it('P19.4-T3 AC-6 names a pending Owner — named at KPM baru with no email — and fills in what is known of them', async () => {

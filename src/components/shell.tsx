@@ -4,7 +4,7 @@ import dynamic from 'next/dynamic';
 import { usePathname, useRouter } from 'next/navigation';
 import { Fragment, useCallback, useEffect, useState } from 'react';
 import { AppShell, type NavItem, type NavSection } from '@/components/app-shell';
-import type { ViewEntry, ViewMenuAction, ViewSwitcher } from '@/components/field-nav';
+import type { ViewEntry, ViewMenuAction, ViewSwitcher } from '@/components/field-chrome';
 import { RequireSession } from '@/components/require-session';
 import { ToastHost, useToast } from '@/components/ui/toast';
 import { shortOfRung, useLadder } from '@/components/ui/role-badge';

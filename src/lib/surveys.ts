@@ -1,6 +1,5 @@
 'use client';
 
-import { useEffect, useSyncExternalStore } from 'react';
 import type { Language } from '@/i18n/language';
 import { api } from './api-client';
 import { formatMonth } from './format';
@@ -109,48 +108,10 @@ export const markPopupShown = (moment: Moment, runIds: string[]) =>
 // ---------------------------------------------------------------------------------- the reminder, shared
 
 /**
- * **One read of `/surveys/pending` for the whole shell** (C-R2): the *Lainnya* dot, the sheet's cards, the *Survei*
- * tile's dot and Home's popup read the same answer, so they never disagree. Read once a page load; read again after
- * an answer, *Kirim* or a popup drawn (`refreshPending`). A reader with no office, or one the API refuses, has none.
+ * The reminder's one read (C-R2) lives in `survey-pending.ts`, which the shell's tab bar and *Lainnya* import without the
+ * rest of this client (the bundle, 2026-11-06). Re-exported, so every reader shares the one store.
  */
-let pending: SurveyPending | null = null;
-let loading: Promise<void> | null = null;
-const listeners = new Set<() => void>();
-const notify = () => listeners.forEach((l) => l());
-
-export function refreshPending(): Promise<void> {
-  loading = api<SurveyPending>('/surveys/pending')
-    .then((next) => { pending = next; })
-    .catch(() => { pending = null; })
-    .finally(() => { loading = null; notify(); });
-  return loading;
-}
-
-/** For a test: forget what was read. */
-export function resetPending(value: SurveyPending | null = null): void {
-  pending = value;
-  loading = null;
-  notify();
-}
-
-/** The shell's pending surveys; `null` until read, or for a reader with none to read. */
-export function useSurveyPending(enabled = true): SurveyPending | null {
-  const value = useSyncExternalStore(
-    (listener) => {
-      listeners.add(listener);
-      return () => { listeners.delete(listener); };
-    },
-    () => pending,
-    () => null,
-  );
-  useEffect(() => {
-    if (enabled && pending === null && loading === null) void refreshPending();
-  }, [enabled]);
-  return enabled ? value : null;
-}
-
-/** C-R2: the dot on *Lainnya* and on the *Survei* tile — a run open and not sent. */
-export const hasSurveyDot = (p: SurveyPending | null) => (p?.open.length ?? 0) > 0;
+export { hasSurveyDot, refreshPending, resetPending, useSurveyPending } from './survey-pending';
 
 // ------------------------------------------------------------------------------------------------- the words
 

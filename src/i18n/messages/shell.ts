@@ -26,6 +26,10 @@ import { kept } from '@/i18n/kept';
  * @moved components/field-nav.tsx
  * @moved components/field-more-sheet.tsx
  * @moved lib/field-nav.ts
+ * @moved components/field-chrome.tsx
+ * @moved components/page-header.tsx
+ * @moved components/unread-badge.tsx
+ * @moved components/notification-popover.tsx
  */
 const en = {
   /*

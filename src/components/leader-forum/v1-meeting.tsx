@@ -2,10 +2,10 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
-import { TitleAvatar, useFieldChrome } from '@/components/field-nav';
-import { Avatar } from '@/components/ui/person-row';
+import { TitleAvatar, useFieldChrome } from '@/components/field-chrome';
+import { Avatar } from '@/components/ui/avatar';
 import { LineIcon } from '@/components/ui/line-icon';
-import { ResponsiveSheet } from '@/components/ui/responsive-sheet';
+import { LazyResponsiveSheet } from '@/components/ui/lazy-responsive-sheet';
 import { TonePill, type PillTone } from '@/components/ui/tone-pill';
 import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
 import { forumMessages } from '@/i18n/messages/forum';
@@ -170,9 +170,9 @@ export function V1Overview({ meeting }: { meeting: MeetingView }) {
       <ul className="overflow-hidden rounded-lg bg-card">
         {scorecard.rows.map((row) => <MetricLine key={row.key} meeting={meeting} row={row} onOpen={() => setOpen(row.key)} />)}
       </ul>
-      <ResponsiveSheet open={opened !== null} title={opened ? rowName(opened.key, figures) : ''} onClose={() => setOpen(null)}>
+      <LazyResponsiveSheet open={opened !== null} title={opened ? rowName(opened.key, figures) : ''} onClose={() => setOpen(null)}>
         {opened && <MetricSheet meeting={meeting} row={opened} />}
-      </ResponsiveSheet>
+      </LazyResponsiveSheet>
     </div>
   );
 }

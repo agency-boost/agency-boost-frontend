@@ -1,21 +1,22 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import { useState } from 'react';
-import { Modal } from '@/components/ui/modal';
-import { Button } from '@/components/ui/field';
 import { checkAgentCodes, type CompanyTemplate } from '@/lib/admin';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
-import { freshKodes, monthLabel, type AdvancedAnalyticsConfig } from '@/lib/advanced-analytics';
-import { useLanguage, useMessages } from '@/i18n/language-provider';
-import { adminTemplateAnalyticsMessages } from '@/i18n/messages/admin-template-analytics';
+import type { AdvancedAnalyticsConfig } from '@/lib/advanced-analytics';
+import { useOpenedOnce } from '@/lib/use-opened-once';
+import type { Blocked } from '@/components/kpm-template/analytics/analytics-publish-dialogs';
 
-/** What blocks a publish: the registered codes the agent-code format does not match (AA UI-018, Case 10). */
-interface Blocked {
-  mismatched: number;
-  total: number;
-  examples: string[];
-  pattern: string;
-}
+/**
+ * **The two dialogs, loaded the first time one opens** (the bundle, 2026-11-06; `performance-and-scale.md`): every
+ * section's page calls this hook, and only *Terbitkan* on *Advanced analytics* opens them — their words were the section
+ * page's heaviest first-load module.
+ */
+const AnalyticsPublishDialogs = dynamic(
+  () => import('@/components/kpm-template/analytics/analytics-publish-dialogs').then((m) => m.AnalyticsPublishDialogs),
+  { ssr: false },
+);
 
 /**
  * ***Terbitkan* for *Advanced analytics*** (P19.5-T1 AC-11, AC-15; spec §6): the agent-code format is tested over every
@@ -23,7 +24,8 @@ interface Blocked {
  * analytics v<n>?*, which says the section applies to **every KPM on the template**, existing ones included, and how
  * many; the columns, each new one with its start month; that the Owners and Admins are told; the sections shown and
  * hidden; and that running surveys keep their questions and cut-offs. The server refuses a mismatch the same way
- * (`409 ANALYTICS_CODE_PATTERN_MISMATCH`), and its answer opens the same dialog.
+ * (`409 ANALYTICS_CODE_PATTERN_MISMATCH`), and its answer opens the same dialog. The dialogs themselves are
+ * `analytics-publish-dialogs.tsx`'s.
  */
 export function useAnalyticsPublish({
   companyId,
@@ -44,13 +46,11 @@ export function useAnalyticsPublish({
   publish: () => Promise<{ ok: boolean; error: ApiError | null }>;
   onOpenUpload: () => void;
 }) {
-  const t = useMessages(adminTemplateAnalyticsMessages).publish;
-  const names = useMessages(adminTemplateAnalyticsMessages).sections.names;
-  const language = useLanguage() === 'en' ? 'en' : 'id';
   const [dialog, setDialog] = useState<null | 'confirm' | Blocked>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const config = payload as unknown as AdvancedAnalyticsConfig | undefined;
+  const opened = useOpenedOnce(dialog !== null);
 
   async function request() {
     if (!config) return;
@@ -84,67 +84,17 @@ export function useAnalyticsPublish({
     setError(done.error);
   }
 
-  const published = (view?.published?.payload as unknown as AdvancedAnalyticsConfig | undefined) ?? null;
-  const fresh = config ? config.uploadFields.filter((f) => freshKodes(published, config).has(f.kode)) : [];
-  const months = [...new Set(fresh.map((f) => monthLabel(f.effectiveFrom, language)))].join(', ');
-  const off = config ? config.sections.filter((s) => !s.enabled) : [];
-  const kpms = view?.analytics?.kpms ?? 0;
-
-  const dialogs = (
-    <>
-      <Modal
-        open={dialog === 'confirm'}
-        title={t.title({ v: view?.version ?? 1 })}
-        onClose={() => setDialog(null)}
-        className="max-w-[30rem]"
-        footer={(
-          <div className="flex flex-wrap justify-end gap-2">
-            <Button variant="secondary" onClick={() => setDialog(null)} disabled={busy}>{t.cancel}</Button>
-            <Button onClick={() => void confirm()} disabled={busy}>{t.confirm}</Button>
-          </div>
-        )}
-      >
-        <p className="text-md text-navy">{t.lead({ kpms })}</p>
-        {config && (
-          <ul className="mt-2.5 list-disc pl-5 text-md text-navy">
-            <li>
-              {t.columns({ n: config.uploadFields.length })}
-              {fresh.length > 0 && t.columnsNew({ n: fresh.length, months })}. {t.columnsTail}
-            </li>
-            <li>{t.told}</li>
-            <li>
-              {t.shown({ on: config.sections.length - off.length, of: config.sections.length })}
-              {off.length > 0 && t.hidden({ names: off.map((s) => names[s.kode]).join(', ') })}.
-            </li>
-            <li>{t.running}</li>
-          </ul>
-        )}
-      </Modal>
-      <Modal
-        open={dialog !== null && dialog !== 'confirm'}
-        title={t.blockedTitle}
-        onClose={() => setDialog(null)}
-        className="max-w-[30rem]"
-        footer={(
-          <div className="flex flex-wrap justify-end gap-2">
-            <Button variant="secondary" onClick={() => setDialog(null)}>{t.close}</Button>
-            <Button onClick={() => { setDialog(null); onOpenUpload(); }}>{t.openUpload}</Button>
-          </div>
-        )}
-      >
-        {dialog !== null && dialog !== 'confirm' && (
-          <>
-            <p className="text-md text-navy">
-              {t.blocked({
-                n: dialog.mismatched, total: dialog.total, pattern: dialog.pattern, examples: dialog.examples.join(', '),
-              })}
-            </p>
-            <p className="mt-2 text-sm text-muted">{t.blockedHint}</p>
-          </>
-        )}
-      </Modal>
-    </>
-  );
+  const dialogs = opened ? (
+    <AnalyticsPublishDialogs
+      dialog={dialog}
+      busy={busy}
+      view={view}
+      config={config}
+      onClose={() => setDialog(null)}
+      onConfirm={() => void confirm()}
+      onOpenUpload={onOpenUpload}
+    />
+  ) : null;
 
   return { request: () => void request(), busy, error, dialogs };
 }

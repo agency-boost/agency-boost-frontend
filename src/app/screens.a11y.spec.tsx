@@ -326,6 +326,15 @@ const OVERVIEW = {
   ],
 };
 
+/**
+ * *Agenda* and *Action Items* load after the first paint (`meeting-tabs.tsx`; the bundle, 2026-11-06): axe reads a
+ * panel once it is drawn, not its placeholder.
+ */
+const meetingPanel = async (tab: 'Agenda' | 'Action Items') => {
+  const panel = within(screen.getByRole('tabpanel', { name: tab }));
+  await (tab === 'Agenda' ? panel.findAllByRole('heading', { level: 3 }) : panel.findByRole('table'));
+};
+
 describe('screens have no axe violations', () => {
   afterEach(() => {
     cleanup();
@@ -2986,7 +2995,8 @@ describe('screens have no axe violations', () => {
       renderInLayout(AdminLayout, <AdminOverviewPage />, { me: SUPER_ADMIN });
       await screen.findByText('2 offices have no Owner');
       await userEvent.click(screen.getByRole('button', { name: 'Notifications, 1 unread' }));
-      const popover = screen.getByRole('dialog', { name: 'Notifications' });
+      // The popover's module loads on the bell's first tap (`notification-popover.tsx`, the bundle).
+      const popover = await screen.findByRole('dialog', { name: 'Notifications' });
       await within(popover).findByRole('button', { name: 'Unread: You are in' });
       noNesting();
       await expectClean('the bell’s popover');
@@ -3001,7 +3011,7 @@ describe('screens have no axe violations', () => {
       renderInLayout(AdminLayout, <AdminOverviewPage />, { me: SUPER_ADMIN });
       await screen.findByText('2 offices have no Owner');
       await userEvent.click(screen.getByRole('button', { name: 'Notifications, 1 unread' }));
-      await userEvent.click(await within(screen.getByRole('dialog', { name: 'Notifications' }))
+      await userEvent.click(await within(await screen.findByRole('dialog', { name: 'Notifications' }))
         .findByRole('button', { name: 'Unread: You are in' }));
       expect(screen.getByRole('dialog', { name: 'You are in' })).toBeInTheDocument();
       await expectClean('the bell’s popover (modal open)');
@@ -4470,9 +4480,12 @@ describe('screens have no axe violations', () => {
       await screen.findByRole('list', { name: 'Template sections' });
       await expectClean('admin/companies/[companyId]/templates/[templateId]');
       await userEvent.click(screen.getByRole('button', { name: 'Publish all (1)' }));
+      // Each dialog loads on its first opening (the bundle, 2026-11-06): axe reads it once it is drawn.
+      await screen.findByRole('dialog', { name: 'Publish all changes?' });
       await expectClean('admin/companies/[companyId]/templates/[templateId] (Publish all)');
       await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
       await userEvent.click(await screen.findByRole('button', { name: '1 office is on an older version' }));
+      await screen.findByRole('dialog', { name: 'Apply to existing offices too?' });
       await expectClean('admin/companies/[companyId]/templates/[templateId] (offices behind)');
     });
 
@@ -5059,8 +5072,10 @@ describe('screens have no axe violations', () => {
       await meetingTitle();
       await expectClean('leader-meetings/[meetingId] (Overview & Stats)');
       await userEvent.click(screen.getByRole('tab', { name: 'Agenda' }));
+      await meetingPanel('Agenda');
       await expectClean('leader-meetings/[meetingId] (Agenda)');
       await userEvent.click(screen.getByRole('tab', { name: 'Action Items' }));
+      await meetingPanel('Action Items');
       await expectClean('leader-meetings/[meetingId] (Action Items)');
     });
 
@@ -5461,8 +5476,10 @@ describe('P18.10-T4 the forum and the people screens in Indonesian', () => {
     await screen.findByText('Dapat mengubah notulen ini');
     await expectClean('leader-meetings/[meetingId] (id, Overview & Stats)');
     await userEvent.click(screen.getByRole('tab', { name: 'Agenda' }));
+    await meetingPanel('Agenda');
     await expectClean('leader-meetings/[meetingId] (id, Agenda)');
     await userEvent.click(screen.getByRole('tab', { name: 'Action Items' }));
+    await meetingPanel('Action Items');
     await expectClean('leader-meetings/[meetingId] (id, Action Items)');
     await userEvent.click(screen.getByRole('button', { name: 'Bagikan' }));
     await screen.findByRole('button', { name: 'Salin tautan' });

@@ -1,13 +1,11 @@
 'use client';
 
-import {
-  ActivationChecklistEditor, CampaignKindsEditor, CapabilityLadderEditor, EventTypesEditor,
-  PipelineEditor, RatioSetEditor, TaxonomyEditor, TrainingEditor,
-  type ActivationChecklistPayload, type CampaignKindsPayload, type CapabilityLadderPayload,
-  type EventTypesPayload, type PipelinePayload, type RatioSetPayload,
-  type TaxonomyPayload, type TrainingTaxonomyPayload,
-} from '@/components/template-editor';
 import dynamic from 'next/dynamic';
+import type {
+  ActivationChecklistPayload, CampaignKindsPayload, CapabilityLadderPayload,
+  EventTypesPayload, PipelinePayload, RatioSetPayload,
+  TaxonomyPayload, TrainingEditor as TrainingEditorOf, TrainingTaxonomyPayload,
+} from '@/components/template-editor';
 import { Card } from '@/components/ui/field';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import type { ApiError } from '@/lib/api-client';
@@ -16,7 +14,43 @@ import type { MetricDefinition } from '@/lib/tenant-config';
 import type { AnalyticsHalf } from '@/components/kpm-template/analytics/analytics-editor';
 import { useMessages } from '@/i18n/language-provider';
 import { adminTemplateMessages } from '@/i18n/messages/admin-template';
-import { TemplateBrandingEditor } from '@/components/branding/template-branding-editor';
+
+/**
+ * **Every section's editor loads when its section is opened** (the bundle, 2026-11-06; `performance-and-scale.md`): a
+ * section draws one editor, and *Pengaturan perusahaan* draws only the carrier rules' — so none is in a route's first
+ * load. `template-editor.tsx` holds eight of them in one module, which was the heaviest thing either route loaded; each
+ * part's cards stand in while it arrives, as the section's own loading state draws them.
+ */
+const editorLoading = () => <SkeletonCards count={4} />;
+const TaxonomyEditor = dynamic(
+  () => import('@/components/template-editor').then((m) => m.TaxonomyEditor), { loading: editorLoading },
+);
+const RatioSetEditor = dynamic(
+  () => import('@/components/template-editor').then((m) => m.RatioSetEditor), { loading: editorLoading },
+);
+const PipelineEditor = dynamic(
+  () => import('@/components/template-editor').then((m) => m.PipelineEditor), { loading: editorLoading },
+);
+const ActivationChecklistEditor = dynamic(
+  () => import('@/components/template-editor').then((m) => m.ActivationChecklistEditor), { loading: editorLoading },
+);
+const TrainingEditor = dynamic(
+  () => import('@/components/template-editor').then((m) => m.TrainingEditor), { loading: editorLoading },
+);
+const CapabilityLadderEditor = dynamic(
+  () => import('@/components/template-editor').then((m) => m.CapabilityLadderEditor), { loading: editorLoading },
+);
+const EventTypesEditor = dynamic(
+  () => import('@/components/template-editor').then((m) => m.EventTypesEditor), { loading: editorLoading },
+);
+const CampaignKindsEditor = dynamic(
+  () => import('@/components/template-editor').then((m) => m.CampaignKindsEditor), { loading: editorLoading },
+);
+/** The *Branding* section's (P19.6-T1 AC-11): its logo, colours and mascot. */
+const TemplateBrandingEditor = dynamic(
+  () => import('@/components/branding/template-branding-editor').then((m) => m.TemplateBrandingEditor),
+  { loading: editorLoading },
+);
 
 /**
  * **The *Rekrutmen* section's editor loads when it is opened** (P18.10-T6's bundle rule): only that section draws it, and
@@ -66,7 +100,7 @@ export function KindEditor({
   /** `campaign_kinds`: the platform's metrics (P5-T9), read rather than listed again here. */
   metrics?: MetricDefinition[];
   /** `training_taxonomy`: each module row's *Materi (n)* (ADR-0208 §1). */
-  material?: Parameters<typeof TrainingEditor>[0]['material'];
+  material?: Parameters<typeof TrainingEditorOf>[0]['material'];
   /** `recruitment_playbook`: the section's last publish refused, its violations put beside their fields (ADR-0210). */
   refusal?: ApiError | null;
   /** `advanced_analytics`: whose template, for the code check and the open runs it reads as it is used (ADR-0214 §1). */

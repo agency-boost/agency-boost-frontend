@@ -336,7 +336,8 @@ describe('tenant detail', () => {
     };
     const open = async () => {
       await userEvent.click(await screen.findByRole('button', { name: 'Save as template' }));
-      return screen.getByRole('dialog', { name: 'Save as template' });
+      // The dialog loads on its first opening (the bundle, 2026-11-06).
+      return screen.findByRole('dialog', { name: 'Save as template' });
     };
 
     it('is offered only to a reader who may write a template', async () => {
@@ -734,7 +735,7 @@ describe('P19.2-T2 a KPM’s page below 1024px (UI-134, UI-135)', () => {
       'POST /admin/tenants/kpm-1/template': { status: 201, body: { id: 't-1', companyId: 'co-2', name: 'For Allianz', dropped: [] } },
     });
     await userEvent.click(await screen.findByRole('button', { name: 'Save as template' }));
-    const dialog = screen.getByRole('dialog', { name: 'Save as template' });
+    const dialog = await screen.findByRole('dialog', { name: 'Save as template' });
     const pill = await within(dialog).findByRole('button', { name: 'Company: Prudential' });
     expect(document.querySelector('select')).toBeNull();
     await userEvent.click(pill);

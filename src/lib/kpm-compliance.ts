@@ -319,6 +319,14 @@ export function complianceQuery(selection: ComplianceSelection, group: string | 
 export const readCompliance = (selection: ComplianceSelection, group: string | null = null) =>
   api<ComplianceView>('/kpm/analytics/compliance' + complianceQuery(selection, group));
 
+/**
+ * ***Lihat sebagai KPM*'s *Compliance*** (ADR-0207; P19.4-T3), through the Super Admin's platform read: here beside the
+ * Owner's own (the bundle, 2026-11-06; `platform-reads.ts`). The query's `?` is written literally
+ * (`check-api-consumers.py`).
+ */
+export const readComplianceAsPlatform = (kpmId: string, selection: ComplianceSelection, group: string | null) =>
+  api<ComplianceView>(`/admin/tenants/${encodeURIComponent(kpmId)}/analytics/compliance?${complianceQuery(selection, group).replace(/^\?/, '')}`);
+
 /** One value of a query parameter, as `searchParams` may hold several. */
 const one = (value: string | string[] | null | undefined) => (Array.isArray(value) ? value[0] : value) ?? null;
 

@@ -8,7 +8,7 @@ import {
   ProgressSummary, RowError, useWriteQueue, V1_ITEM_CHECKBOX, V1_ITEM_ROW,
 } from '@/components/activation-parts';
 import { DataItemRow } from '@/components/activation-data-item';
-import { PageHeader } from '@/components/app-shell';
+import { PageHeader } from '@/components/page-header';
 import { ActionMenu } from '@/components/ui/action-menu';
 import { AutoMarker } from '@/components/ui/auto-marker';
 import { DateField } from '@/components/ui/date-field';

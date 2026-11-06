@@ -3,14 +3,13 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { createContext, Suspense, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
-import { PageHeader, PageLanguageSwitch, usePageLanguageSwitch } from '@/components/app-shell';
+import { PageHeader, PageLanguageSwitch, usePageLanguageSwitch } from '@/components/page-header';
 import { TitledPageContext } from '@/components/require-session';
 import { Card, ErrorBanner } from '@/components/ui/field';
 import { LineIcon } from '@/components/ui/line-icon';
-import { Avatar } from '@/components/ui/person-row';
+import { Avatar } from '@/components/ui/avatar';
 import { TAB_PHONE, TAP_HEIGHT } from '@/components/ui/phone';
 import { useTabRow } from '@/components/ui/use-tab-row';
-import { surveyMessages } from '@/i18n/messages/surveys';
 import { Skeleton, SkeletonBar } from '@/components/ui/skeleton';
 import { useLanguage, useMessages } from '@/i18n/language-provider';
 import { coachingMessages } from '@/i18n/messages/coaching';
@@ -368,9 +367,10 @@ export function PersonIdentity({
  * mapping* behind a line lock.
  */
 function PersonTabs({ membershipId, current }: { membershipId: string; current: CoachingTab | null }) {
-  const names = useMessages(coachingMessages).person.tabs;
+  const person = useMessages(coachingMessages).person;
+  const names = person.tabs;
   // *Survei* is the reader's word (EN *Survey*), not one of §A.3's kept tab names.
-  const survey = useMessages(surveyMessages).coaching.tab;
+  const survey = person.surveyTab;
   return (
     <CoachingTabBar
       items={TABS.map((t) => ({

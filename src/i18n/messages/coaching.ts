@@ -140,6 +140,11 @@ const en = {
     },
     /** The tab bar's name. */
     nav: kept('Coaching'),
+    /**
+     * ***Survei***, the reader's word (EN *Survey*) — not one of §A.3's kept tab names (ADR-0216 §7). Here, beside the
+     * others, since 2026-11-06 (the bundle): it was the survey area's, which every coachee's page then loaded for it.
+     */
+    surveyTab: 'Survey',
     /** A tab not built yet (P11-T7 AC-7): its tooltip, and its name beginning with the words on screen. */
     upcoming: 'Upcoming',
     upcomingName: ({ label }: { label: string }) => `${label}, upcoming`,
@@ -247,6 +252,7 @@ const id: MessagesOf<typeof en> = {
       leaderNotes: kept('Capability mapping'),
     },
     nav: kept('Coaching'),
+    surveyTab: 'Survei',
     upcoming: 'Segera hadir',
     upcomingName: ({ label }) => `${label}, segera hadir`,
     loading: 'Memuat data orang ini…',

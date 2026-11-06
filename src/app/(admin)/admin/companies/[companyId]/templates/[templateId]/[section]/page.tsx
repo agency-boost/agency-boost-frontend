@@ -1,15 +1,13 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import { use, useEffect, useState } from 'react';
 import { Page } from '@/components/page';
 import { SettingsTabs } from '@/components/settings-tabs';
 import { BackLink } from '@/components/kpm-template/company-frame';
 import { DraftBar, useVersionWords } from '@/components/kpm-template/draft-bar';
 import { KindEditor } from '@/components/kpm-template/kind-editor';
-import { ApplyToOfficesDialog } from '@/components/kpm-template/apply-to-offices-dialog';
-import {
-  materialCount, TemplateModuleMaterialDialog, type PayloadMaterial,
-} from '@/components/kpm-template/template-module-material';
+import { materialCount, type PayloadMaterial } from '@/components/kpm-template/material-count';
 import { useTemplateDrafts } from '@/components/kpm-template/use-template-drafts';
 import { useAnalyticsPublish } from '@/components/kpm-template/analytics/analytics-publish';
 import { Button, ErrorBanner } from '@/components/ui/field';
@@ -22,8 +20,23 @@ import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { tileRefusal } from '@/lib/summary-tiles';
 import { useHashTab } from '@/lib/use-hash-tab';
 import { sectionOf, templateHref, type TemplateSection } from '@/lib/template-sections';
+import { useOpenedOnce } from '@/lib/use-opened-once';
 import { useLanguage, useMessages } from '@/i18n/language-provider';
 import { adminTemplateMessages } from '@/i18n/messages/admin-template';
+
+/*
+ * **The two dialogs load the first time they open** (the bundle, 2026-11-06; `performance-and-scale.md`): a module's
+ * material from its row's *Materi*, and *Terapkan juga ke KPM yang sudah ada?* after a publish. Mounted from then on,
+ * closed, as they always were (`useOpenedOnce`).
+ */
+const TemplateModuleMaterialDialog = dynamic(
+  () => import('@/components/kpm-template/template-module-material').then((m) => m.TemplateModuleMaterialDialog),
+  { ssr: false },
+);
+const ApplyToOfficesDialog = dynamic(
+  () => import('@/components/kpm-template/apply-to-offices-dialog').then((m) => m.ApplyToOfficesDialog),
+  { ssr: false },
+);
 
 /**
  * **One section of a template, through its existing editor** (ADR-0185 §3; P18.11-T20 AC-3): its parts as pills, its
@@ -159,6 +172,8 @@ function SectionBody({
     : [];
   const withMaterial = trainingModules.filter((m) => materialCount(m.content) > 0).length;
   const materialModule = trainingModules.find((m) => m.code === materialFor) ?? null;
+  const materialMounted = useOpenedOnce(materialModule !== null);
+  const applyMounted = useOpenedOnce(applyOpen);
 
   /*
    * *Advanced analytics* asks first (P19.5-T1 AC-11, AC-15): its agent-code format tested over every registered code,
@@ -249,23 +264,27 @@ function SectionBody({
       )}
       {/* A draft the server refused would be lost by leaving: asked first. A draft on its way is sent as it closes. */}
       <LeaveGuard active={Boolean(drafts.error)} />
-      <TemplateModuleMaterialDialog
-        open={materialModule !== null}
-        companyId={companyId}
-        templateId={templateId}
-        module={materialModule}
-        revision={drafts.drafts.training_taxonomy?.view.revision ?? 0}
-        beforeSave={drafts.flush}
-        onSaved={(view) => drafts.accept('training_taxonomy', view)}
-        onClose={() => setMaterialFor(null)}
-      />
-      <ApplyToOfficesDialog
-        open={applyOpen}
-        companyId={companyId}
-        templateId={templateId}
-        kinds={pushable}
-        onClose={() => setApplyOpen(false)}
-      />
+      {materialMounted && (
+        <TemplateModuleMaterialDialog
+          open={materialModule !== null}
+          companyId={companyId}
+          templateId={templateId}
+          module={materialModule}
+          revision={drafts.drafts.training_taxonomy?.view.revision ?? 0}
+          beforeSave={drafts.flush}
+          onSaved={(view) => drafts.accept('training_taxonomy', view)}
+          onClose={() => setMaterialFor(null)}
+        />
+      )}
+      {applyMounted && (
+        <ApplyToOfficesDialog
+          open={applyOpen}
+          companyId={companyId}
+          templateId={templateId}
+          kinds={pushable}
+          onClose={() => setApplyOpen(false)}
+        />
+      )}
       {section.slug === 'analytics' && analytics.dialogs}
       <Toast toast={toast} />
     </>

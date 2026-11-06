@@ -1,7 +1,7 @@
 'use client';
 
 import { useContext } from 'react';
-import { brandingFileUrl } from '@/lib/branding';
+import { brandingFileUrl } from '@/lib/branding-files';
 import { cn } from '@/lib/cn';
 import { SessionContext } from '@/lib/session';
 

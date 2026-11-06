@@ -1,7 +1,7 @@
 'use client';
 
 import { api } from './api-client';
-import { signedUploadForm, type SignedUpload } from './tenant-config';
+import { signedUploadForm, type SignedUpload } from './signed-upload';
 
 /**
  * ***Profil saya*'s reads and writes** (UI V1, UI-111): the read-only facts beside `GET /auth/me`, and the photo.

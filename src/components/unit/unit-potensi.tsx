@@ -6,7 +6,7 @@ import { useEffect, useId, useState } from 'react';
 import { stageTone } from '@/components/lead-card';
 import { Button, Card, ErrorBanner } from '@/components/ui/field';
 import { LineIcon } from '@/components/ui/line-icon';
-import { Avatar, initialsFor } from '@/components/ui/person-row';
+import { Avatar, initialsFor } from '@/components/ui/avatar';
 import { ResponsiveSheet } from '@/components/ui/responsive-sheet';
 import { rungShort } from '@/components/ui/role-badge';
 import { Skeleton, SkeletonBar } from '@/components/ui/skeleton';

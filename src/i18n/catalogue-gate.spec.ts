@@ -172,6 +172,9 @@ describe('P18.10-T1 AC-6 a module already moved keeps its words in the catalogue
       'lib/landing.ts', 'lib/views.ts', 'lib/profile-line.ts',
       // UI V1 (UI-004): the field shell's tab bar, its *Lainnya* sheet and the model both draw.
       'components/field-nav.tsx', 'components/field-more-sheet.tsx', 'lib/field-nav.ts',
+      // The bundle, 2026-11-06: the title row's parts, the page header and the bell's popover, each a module of its own.
+      'components/field-chrome.tsx', 'components/page-header.tsx', 'components/unread-badge.tsx',
+      'components/notification-popover.tsx',
     ]);
   });
 

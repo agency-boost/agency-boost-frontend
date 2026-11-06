@@ -3,7 +3,8 @@
 import Link from 'next/link';
 import { useEffect, useRef, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
-import { FieldAvatar, MORE_SHEET_ID, type FieldChrome } from '@/components/field-nav';
+import { MORE_SHEET_ID } from '@/components/field-nav';
+import { FieldAvatar, type FieldChrome } from '@/components/field-chrome';
 import { LanguageSwitch } from '@/components/language-switch';
 import { PoweredBy, useBranding } from '@/components/kpm-brand';
 import { SurveyCards } from '@/components/surveys/survey-cards';
@@ -13,7 +14,7 @@ import { shellMessages } from '@/i18n/messages/shell';
 import { cn } from '@/lib/cn';
 import type { FieldDestination } from '@/lib/field-nav';
 import { PANDUAN_GLYPH } from '@/lib/panduan';
-import { hasSurveyDot, useSurveyPending } from '@/lib/surveys';
+import { hasSurveyDot, useSurveyPending } from '@/lib/survey-pending';
 import { useScrollLock } from '@/lib/use-scroll-lock';
 
 /** What Tab can land on inside the sheet. A *Segera hadir* tile is no link, and is not. */

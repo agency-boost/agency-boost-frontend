@@ -9,7 +9,7 @@ import { DateField } from '@/components/ui/date-field';
 import { Dialog } from '@/components/ui/dialog';
 import { ErrorBanner, TextInput } from '@/components/ui/field';
 import { LineIcon } from '@/components/ui/line-icon';
-import { Avatar } from '@/components/ui/person-row';
+import { Avatar } from '@/components/ui/avatar';
 import { TonePill } from '@/components/ui/tone-pill';
 import { ResponsiveSheet } from '@/components/ui/responsive-sheet';
 import { SaveStateLabel, useSaveState } from '@/components/ui/save-state';

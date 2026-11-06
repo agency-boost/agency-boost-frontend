@@ -10,6 +10,7 @@ import { kept } from '@/i18n/kept';
  * *Proposal* and *Plan* read alike in both (`SAME_IN_INDONESIAN`). Content stays as typed.
  *
  * @moved components/product-proposal-editor.tsx
+ * @moved components/faq-list.tsx
  */
 const en = {
   title: 'Proposal',

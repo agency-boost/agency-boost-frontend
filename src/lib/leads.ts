@@ -3,12 +3,13 @@ import { SOURCE_LANGUAGE, type Language } from '@/i18n/language';
 import { leadsMessages } from '@/i18n/messages/leads';
 import { api } from '@/lib/api-client';
 import { whatsAppNumber } from '@/lib/phone-number';
+import type { LeadFlag } from './lead-flags';
 
 export type LeadType = 'sales' | 'recruitment';
 export type LeadOutcome = 'won' | 'lost';
 
-/** Derived on read, never stored — a stored flag is one that is wrong at midnight. */
-export type LeadFlag = 'overdue' | 'no-next-action' | 'no-remarks';
+/** A lead's attention flags and their words live in `lead-flags.ts`, which Personal Summary reads without this client. */
+export { FLAG_LABEL, flagLabel, type LeadFlag } from './lead-flags';
 
 /** Whatever contact detail the agent has. Both optional, both clearable, sent as a pair. */
 export interface LeadContact {
@@ -191,33 +192,6 @@ export interface LeadQuery {
 
 /** The flags' words in English, the catalogue's source (`messages/leads.ts`). */
 const EN = leadsMessages.en;
-
-/**
- * What each attention flag is called on screen, **in English**: one place, so two screens cannot disagree. A screen
- * reads it in the reader's language through `flagLabel(flag, overdueDays, language)` (P18.10-T4).
- */
-export const FLAG_LABEL: Record<LeadFlag, string> = {
-  overdue: EN.flags.overdue,
-  'no-next-action': EN.flags.noNextAction,
-  'no-remarks': EN.flags.noRemarks,
-};
-
-/**
- * What a flag reads as on a row — *Overdue 14 days* rather than *Overdue*, as the prototype has
- * it (`leads-management.md` §4).
- *
- * **The count comes from the server, not from the browser's clock.** `overdueDays` is whole
- * calendar days in the **office's** timezone; a screen subtracting two dates itself would be
- * wrong for anybody whose device is in another zone, which is the defect the whole day-boundary
- * rule exists to stop (invariant §9).
- *
- * In the reader's words' `language` (P18.10-T4), English when none is passed: *Terlambat 14 hari*.
- */
-export const flagLabel = (flag: LeadFlag, overdueDays: number | null, language: Language = SOURCE_LANGUAGE): string => {
-  const t = messagesIn(leadsMessages, language).flags;
-  if (flag === 'overdue') return overdueDays === null ? t.overdue : t.overdueDays({ days: overdueDays });
-  return flag === 'no-next-action' ? t.noNextAction : t.noRemarks;
-};
 
 /**
  * How many open leads the table draws before *Show more* (P13.1-T4 AC-8, ADR-0108 §7).

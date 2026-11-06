@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { PageHeader } from '@/components/app-shell';
+import { PageHeader } from '@/components/page-header';
 import { Button, ErrorBanner } from '@/components/ui/field';
 import { Skeleton, SkeletonBar } from '@/components/ui/skeleton';
 import { useMessages } from '@/i18n/language-provider';

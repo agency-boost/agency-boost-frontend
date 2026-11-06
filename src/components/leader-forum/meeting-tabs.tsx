@@ -1,15 +1,26 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import { useId, useRef } from 'react';
+import { SkeletonCards } from '@/components/ui/skeleton';
 import { useMessages } from '@/i18n/language-provider';
 import { forumMessages } from '@/i18n/messages/forum';
 import { cn } from '@/lib/cn';
 import type { MeetingView } from '@/lib/leader-meetings';
-import { ActionItems } from './action-items';
-import { Agenda } from './agenda';
 import { Scorecard } from './scorecard';
 import { V1Overview } from './v1-meeting';
-import { V1Actions, V1Agenda } from './v1-minutes';
+
+/*
+ * ***Agenda* and *Action Items* load after the first paint** (the bundle, 2026-11-06; `performance-and-scale.md`): a
+ * meeting opens on *Overview & Stats*, and the two other panels — mounted from the start, hidden, as below — are fetched
+ * as they mount rather than with the page; a phone fetches only the V1 panels and a desktop only its own. Cards stand
+ * in should a tab be chosen before its panel has arrived.
+ */
+const panelLoading = () => <SkeletonCards count={3} />;
+const Agenda = dynamic(() => import('./agenda').then((m) => m.Agenda), { loading: panelLoading });
+const ActionItems = dynamic(() => import('./action-items').then((m) => m.ActionItems), { loading: panelLoading });
+const V1Agenda = dynamic(() => import('./v1-minutes').then((m) => m.V1Agenda), { loading: panelLoading });
+const V1Actions = dynamic(() => import('./v1-minutes').then((m) => m.V1Actions), { loading: panelLoading });
 
 export type MeetingTab = 'overview' | 'agenda' | 'actions';
 const TABS: readonly MeetingTab[] = ['overview', 'agenda', 'actions'];

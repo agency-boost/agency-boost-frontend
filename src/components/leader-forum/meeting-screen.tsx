@@ -4,8 +4,8 @@ import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { PageHeader } from '@/components/app-shell';
-import { useFieldContent } from '@/components/field-nav';
+import { PageHeader } from '@/components/page-header';
+import { useFieldContent } from '@/components/field-chrome';
 import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
 import { forumMessages } from '@/i18n/messages/forum';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
@@ -20,7 +20,6 @@ import { LoadError, MeetingSkeleton, NotFound } from './forum-states';
 import { MeetingHead } from './meeting-head';
 import { MeetingTabs, type MeetingTab } from './meeting-tabs';
 import { MeetingWriterProvider, useMeetingWriter } from './meeting-writer';
-import { PrintLayout } from './print-layout';
 import { V1MeetingHead } from './v1-meeting';
 
 /**
@@ -29,6 +28,11 @@ import { V1MeetingHead } from './v1-meeting';
  */
 const MeetingDialog = dynamic(() => import('./meeting-dialog').then((m) => m.MeetingDialog), { ssr: false });
 const ShareDialog = dynamic(() => import('./share-dialog').then((m) => m.ShareDialog), { ssr: false });
+/**
+ * **The paper, after the first paint** (the bundle, 2026-11-06): the print layout is drawn only on paper, so it is
+ * fetched as it mounts, not with the page; *Cetak* waits for nothing the screen has not long since loaded.
+ */
+const PrintLayout = dynamic(() => import('./print-layout').then((m) => m.PrintLayout), { ssr: false });
 
 /** How the page was reached: the meeting's own address, or a shared link (ADR-0131). */
 export type MeetingSource = { via: 'address'; meetingId: string } | { via: 'link'; token: string };

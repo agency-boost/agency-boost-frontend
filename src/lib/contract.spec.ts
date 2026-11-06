@@ -269,7 +269,8 @@ const PAIRS: ReadonlyArray<[file: string, ours: string, theirs: string]> = [
   ['recruitment-pitch.ts', 'PitchDocumentLink', 'PitchDocumentUrlDto'],
   // P19.4-T5 (ADR-0210): the playbook is read and written as a template section — `CompanyTemplate.playbook` above.
   ['recruitment-playbook.ts', 'PlaybookLimits', 'RecruitmentPlaybookLimitsDto'],
-  ['tenant-config.ts', 'SignedUpload', 'SignedUploadDto'],
+  // In a module of its own since 2026-11-06 (the bundle), which `tenant-config.ts` re-exports.
+  ['signed-upload.ts', 'SignedUpload', 'SignedUploadDto'],
   // Phase 18: the KPM Overview, its not-logged list and target, the analytics, and the platform's adoption.
   ['kpm-overview.ts', 'KpmOverviewView', 'KpmOverviewDto'],
   ['kpm-overview.ts', 'OverviewOffice', 'OfficeHeaderDto'],
@@ -608,8 +609,9 @@ const CALENDAR_PAIRS: ReadonlyArray<[file: string, ours: string, theirs: string]
   ['calendar.ts', 'CalendarDownlinePerson', 'CalendarDownlineRowDto'],
   ['calendar.ts', 'CalendarDownline', 'CalendarDownlineDto'],
   // P13.1-T8: *Hide my personal activities* (ADR-0110), read and sent whole.
-  ['calendar.ts', 'CalendarSettings', 'CalendarSettingsDto'],
-  ['calendar.ts', 'CalendarSettings', 'SaveCalendarSettingsDto'],
+  // In a module of its own since 2026-11-06 (the bundle), which `calendar.ts` re-exports.
+  ['calendar-settings.ts', 'CalendarSettings', 'CalendarSettingsDto'],
+  ['calendar-settings.ts', 'CalendarSettings', 'SaveCalendarSettingsDto'],
   // UI V1 (UI-104): what other features put on the calendar — its Tugas and the events joined.
   ['calendar.ts', 'CalendarTask', 'CalendarTaskDto'],
   ['calendar.ts', 'CalendarTaskLead', 'CalendarTaskLeadDto'],

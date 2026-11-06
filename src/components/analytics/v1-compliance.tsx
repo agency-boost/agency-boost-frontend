@@ -1,7 +1,7 @@
 'use client';
 
 import { useId, useMemo, useState } from 'react';
-import { Avatar } from '@/components/ui/person-row';
+import { Avatar } from '@/components/ui/avatar';
 import { ResponsiveSheet } from '@/components/ui/responsive-sheet';
 import { TonePill, type PillTone as V1Tone } from '@/components/ui/tone-pill';
 import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';

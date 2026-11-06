@@ -244,7 +244,8 @@ describe('RoleShell', () => {
       expect(bell).toHaveAttribute('aria-expanded', 'false');
       await userEvent.click(bell);
 
-      const popover = screen.getByRole('dialog', { name: 'Notifications' });
+      // The popover's module loads on the bell's first tap (`notification-popover.tsx`, the bundle).
+      const popover = await screen.findByRole('dialog', { name: 'Notifications' });
       expect(bell).toHaveAttribute('aria-expanded', 'true');
       expect(bell).toHaveAttribute('aria-controls', popover.id);
       expect(await within(popover).findByRole('button', { name: 'Unread: You are in' })).toBeInTheDocument();
@@ -260,7 +261,7 @@ describe('RoleShell', () => {
 
       const bell = await screen.findByRole('button', { name: 'Notifications, 1 unread' });
       await userEvent.click(bell);
-      expect(screen.getByRole('dialog', { name: 'Notifications' })).toHaveFocus();
+      expect(await screen.findByRole('dialog', { name: 'Notifications' })).toHaveFocus();
       await userEvent.keyboard('{Escape}');
 
       expect(screen.queryByRole('dialog', { name: 'Notifications' })).toBeNull();

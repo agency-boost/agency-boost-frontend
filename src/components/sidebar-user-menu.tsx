@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
-import { ViewMenu, hasViewMenu, type ViewSwitcher } from '@/components/field-nav';
+import { ViewMenu, hasViewMenu, type ViewSwitcher } from '@/components/field-chrome';
 import { LanguageSwitch } from '@/components/language-switch';
 import { useMessages } from '@/i18n/language-provider';
 import { shellMessages } from '@/i18n/messages/shell';

@@ -8,7 +8,7 @@ import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { formatNumber } from '@/lib/format';
 import { HTML_ACCEPT, HTML_MIME_TYPE, isHtmlFile } from '@/lib/html-document';
 import { formatFileSize, PDF_MAX_BYTES } from '@/lib/recruitment-pitch';
-import { signedUploadForm, type SignedUpload } from '@/lib/tenant-config';
+import { signedUploadForm, type SignedUpload } from '@/lib/signed-upload';
 
 const PDF = 'application/pdf';
 

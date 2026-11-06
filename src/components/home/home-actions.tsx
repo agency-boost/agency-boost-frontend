@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useState, type ReactNode } from 'react';
 import { LeadContactButtons, MemberContactButtons } from '@/components/contact-buttons';
 import { LineIcon } from '@/components/ui/line-icon';
-import { Avatar } from '@/components/ui/person-row';
+import { Avatar } from '@/components/ui/avatar';
 import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
 import { calendarMessages } from '@/i18n/messages/calendar';
 import { homeMessages } from '@/i18n/messages/home';

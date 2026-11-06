@@ -9,13 +9,13 @@ import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
 import { kpmAnalyticsMessages } from '@/i18n/messages/kpm-analytics';
 import {
-  ANALYTICS_PERIODS, analyticsQuery, leaderManpower, readKpmAnalytics,
+  ANALYTICS_PERIODS, analyticsQuery, leaderManpower, readKpmAnalytics, readKpmAnalyticsAsPlatform,
   type AnalyticsLeader, type AnalyticsMoney, type AnalyticsPeriod, type KpmAnalyticsView, type LeaderChip,
 } from '@/lib/kpm-analytics';
 import { formatPercent, formatRupiahCompact } from '@/lib/format';
 import { useSession } from '@/lib/session';
 import { useMediaQuery } from '@/lib/use-media-query';
-import { keepTab, readKpmAnalyticsAsPlatform } from '@/lib/platform-reads';
+import { keepTab } from '@/lib/platform-reads';
 import { GroupFilter } from './group-filter';
 import { LeaderList, LeaderSheet } from './leaders';
 import { MocDialog, type MocOpen } from './moc';

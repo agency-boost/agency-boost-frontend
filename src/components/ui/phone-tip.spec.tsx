@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
-import { PageHeader, SubtitleOnPhone } from '@/components/app-shell';
+import { PageHeader, SubtitleOnPhone } from '@/components/page-header';
 import { Field, TextInput } from './field';
 import { REMOVED_ON_PHONE } from './phone';
 import { PhoneTip } from './phone-tip';

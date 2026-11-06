@@ -9,7 +9,7 @@ import { GoalHeroCard } from '@/components/goal-hero-card';
 import { RatioCard } from '@/components/ratio-card';
 import { LineIcon } from '@/components/ui/line-icon';
 import { TEXT_TAP } from '@/components/ui/phone';
-import { ResponsiveSheet } from '@/components/ui/responsive-sheet';
+import { LazyResponsiveSheet } from '@/components/ui/lazy-responsive-sheet';
 import { StatusPill } from '@/components/ui/status-pill';
 import { TermTip } from '@/components/ui/term-tip';
 import { goalWordMessages } from '@/i18n/messages/goal-words';
@@ -26,7 +26,7 @@ import { cn } from '@/lib/cn';
 import { coachingTabHref, PRONOUN_FORMS, type CoacheeSubject } from '@/lib/coaching';
 import { formatCalendarDay, formatMonth, formatNumber, formatRupiahCompact, formatShortDay, moneyPrefix } from '@/lib/format';
 import { groupDigits, parseDigits, producedFrom, saveApeEstimate, toMajor, toMinor } from '@/lib/goals';
-import { flagLabel } from '@/lib/leads';
+import { flagLabel } from '@/lib/lead-flags';
 import { formatBenchmark, formatRatioForStatus } from '@/lib/ratio-format';
 import {
   daysLeftIn,
@@ -711,9 +711,9 @@ function TargetsSection({ activity, when, voice }: { activity: SummaryActivity; 
         )}
       </div>
       {opened && (
-        <ResponsiveSheet open title={t.targets.section({ label: opened.label })} onClose={() => setOpen(null)}>
+        <LazyResponsiveSheet open title={t.targets.section({ label: opened.label })} onClose={() => setOpen(null)}>
           <BreakdownRows rows={opened.rows} />
-        </ResponsiveSheet>
+        </LazyResponsiveSheet>
       )}
     </Section>
   );

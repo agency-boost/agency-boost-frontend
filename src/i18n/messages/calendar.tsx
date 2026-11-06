@@ -20,6 +20,7 @@ import { kept } from '@/i18n/kept';
  * figures' language and passed in; the weekday and month names are the formatters' (P18.10-T3).
  *
  * @moved lib/calendar.ts
+ * @moved lib/calendar-settings.ts
  * @moved lib/calendar-form.ts
  * @moved lib/calendar-layout.ts
  * @moved components/calendar/

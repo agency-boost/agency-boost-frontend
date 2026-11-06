@@ -7,7 +7,8 @@ import { KEPT_ENGLISH } from '@/i18n/glossary';
 import { shellMessages } from '@/i18n/messages/shell';
 import type { Me } from '@/lib/session';
 import { AgentShell } from './agent-shell';
-import { NotificationBell, withUnread } from './notification-bell';
+import { NotificationBell } from './notification-bell';
+import { withUnread } from './unread-badge';
 import { Shell } from './shell';
 
 const route = vi.hoisted(() => ({ path: '/coaching' }));
@@ -223,7 +224,8 @@ describe('P18.10-T1 the bell in Indonesian', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Notifications, 2 belum dibaca' }));
 
-    const popover = screen.getByRole('dialog', { name: 'Notifications' });
+    // The popover's module loads on the first tap (`notification-popover.tsx`, the bundle).
+    const popover = await screen.findByRole('dialog', { name: 'Notifications' });
     expect(within(popover).getByRole('link', { name: 'Lihat semua notifikasi' })).toHaveAttribute('href', '/notifications');
     expect(await within(popover).findByRole('button', { name: 'Tandai semua sudah dibaca' })).toBeInTheDocument();
   });
@@ -236,7 +238,7 @@ describe('P18.10-T1 the bell in Indonesian', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Notifications' }));
 
-    expect(screen.getByRole('status')).toHaveTextContent('Memuat notifikasi Anda…');
+    expect(await screen.findByRole('status')).toHaveTextContent('Memuat notifikasi Anda…');
   });
 });
 

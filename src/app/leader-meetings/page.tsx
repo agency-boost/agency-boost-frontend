@@ -1,7 +1,7 @@
 'use client';
 
 import { ForumList } from '@/components/leader-forum/forum-list';
-import { SubtitleOnPhone } from '@/components/app-shell';
+import { SubtitleOnPhone } from '@/components/page-header';
 import { RoleShell } from '@/components/role-shell';
 import { useMessages } from '@/i18n/language-provider';
 import { forumMessages } from '@/i18n/messages/forum';

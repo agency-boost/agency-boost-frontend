@@ -3,15 +3,15 @@
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useEffect, useId, useState, type ReactNode } from 'react';
-import { describeDevice, SessionList } from '@/components/session-list';
 import { useDestructiveAction } from '@/components/ui/destructive-action';
 import { RoleShell } from '@/components/role-shell';
-import { Avatar } from '@/components/ui/person-row';
+import { Avatar } from '@/components/ui/avatar';
 import { DateField } from '@/components/ui/date-field';
 import { Button, ErrorBanner, Field, Switch, TextInput } from '@/components/ui/field';
 import { LineIcon } from '@/components/ui/line-icon';
 import { PasswordInput } from '@/components/ui/password-input';
-import { ResponsiveSheet } from '@/components/ui/responsive-sheet';
+import { LazyResponsiveSheet } from '@/components/ui/lazy-responsive-sheet';
+import { SkeletonText } from '@/components/ui/skeleton';
 import { rungShort, useLadder } from '@/components/ui/role-badge';
 import {
   FLOATING_SAVE_ROOM, FloatingSavePill, SaveStateLabel, useSaveState,
@@ -25,7 +25,7 @@ import { accountMessages } from '@/i18n/messages/account';
 import { accountLinkMessages } from '@/i18n/messages/account-links';
 import { removeLink } from '@/lib/account-links';
 import { api, toDisplayError, type ApiError } from '@/lib/api-client';
-import { readCalendarSettings, saveCalendarSettings } from '@/lib/calendar';
+import { readCalendarSettings, saveCalendarSettings } from '@/lib/calendar-settings';
 import { cn } from '@/lib/cn';
 import { heldBecause } from '@/lib/disabled-reason';
 import { myLeaderCode } from '@/lib/join';
@@ -33,6 +33,7 @@ import { genderLabels, workStatusLabels, type Gender, type WorkStatus } from '@/
 import {
   normalisedPhone, PHONE_COUNTRY_PREFIX, PHONE_NATIONAL_DIGITS, phoneFieldValue,
 } from '@/lib/phone-number';
+import { describeDevice } from '@/lib/device-name';
 import { CORE_LEADER_LABEL } from '@/lib/profile-line';
 import { readProfileFacts, type ProfileFacts } from '@/lib/profile';
 import { PASSWORD_MIN_LENGTH } from '@/lib/password';
@@ -42,6 +43,10 @@ import { useSignOut } from '@/lib/use-sign-out';
 
 /** The photo sheet, loaded the first time it opens (common.md: a sheet costs nothing until then). */
 const PhotoSheet = dynamic(() => import('@/components/profile/photo-sheet').then((m) => m.PhotoSheet), { ssr: false });
+/** *Perangkat yang masuk*'s list, loaded when its sheet first opens (the bundle, 2026-11-06), its lines standing in. */
+const SessionList = dynamic(() => import('@/components/session-list').then((m) => m.SessionList), {
+  loading: () => <SkeletonText lines={4} />,
+});
 
 /**
  * ***Profil saya*** — `/profile` (UI V1, 2026-10-30; UI-111; `profile-mobile`): **one page for your photo, your details
@@ -556,7 +561,7 @@ function PersonalForm({ me, facts, say }: { me: Me; facts: ProfileFacts | null; 
         <FloatingSavePill state={state} label={all.details.save} form={FORM_ID} disabled={held} />
       )}
       {/* Outside the details form: a form inside a form is not one. */}
-      <ResponsiveSheet
+      <LazyResponsiveSheet
         open={asking}
         title={t.emailSheetTitle}
         onClose={() => setAsking(false)}
@@ -579,7 +584,7 @@ function PersonalForm({ me, facts, say }: { me: Me; facts: ProfileFacts | null; 
             />
           </Field>
         </form>
-      </ResponsiveSheet>
+      </LazyResponsiveSheet>
     </CardBox>
   );
 }
@@ -907,7 +912,7 @@ function Settings({ me, say }: { me: Me; say: Say }) {
         )}
       </CardBox>
       {live && (
-        <ResponsiveSheet open={choosing} title={t.language} onClose={() => setChoosing(false)}>
+        <LazyResponsiveSheet open={choosing} title={t.language} onClose={() => setChoosing(false)}>
           <div role="radiogroup" aria-label={t.language} className="flex flex-col gap-1.5">
             {LANGUAGES.map((code) => {
               const on = code === language;
@@ -930,7 +935,7 @@ function Settings({ me, say }: { me: Me; say: Say }) {
               );
             })}
           </div>
-        </ResponsiveSheet>
+        </LazyResponsiveSheet>
       )}
     </>
   );
@@ -976,12 +981,12 @@ function Security({ me, say }: { me: Me; say: Say }) {
         />
         {linked && <LinkedLoginRow linked={linked} say={say} />}
       </CardBox>
-      <ResponsiveSheet open={open === 'password'} title={t.v1.changePassword} onClose={() => setOpen(null)}>
+      <LazyResponsiveSheet open={open === 'password'} title={t.v1.changePassword} onClose={() => setOpen(null)}>
         <PasswordForm />
-      </ResponsiveSheet>
-      <ResponsiveSheet open={open === 'devices'} title={t.sessions.heading} onClose={() => setOpen(null)}>
+      </LazyResponsiveSheet>
+      <LazyResponsiveSheet open={open === 'devices'} title={t.sessions.heading} onClose={() => setOpen(null)}>
         {open === 'devices' && <SessionList bare />}
-      </ResponsiveSheet>
+      </LazyResponsiveSheet>
     </>
   );
 }

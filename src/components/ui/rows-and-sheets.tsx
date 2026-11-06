@@ -41,9 +41,13 @@ export function RowMenu({ name, items }: { name: string; items: readonly ActionM
 /**
  * **The title row's add button** (UI-133): a 40px round *+* on a phone, named by its words; *+ Tambah perusahaan* — a
  * pill with its words — from 768px. It opens the page's add sheet; nothing is open until it is pressed.
+ *
+ * `phone` is the page's answer where the page has one: asked where the page mounts, before its read, so a button that
+ * arrives with the data is drawn at its size from its first frame (`use-media-query.ts`). Left out, it asks itself.
  */
-export function AddButton({ label, onClick }: { label: string; onClick: () => void }) {
-  const phone = useMediaQuery('phone');
+export function AddButton({ label, onClick, phone: asked }: { label: string; onClick: () => void; phone?: boolean }) {
+  const own = useMediaQuery('phone');
+  const phone = asked ?? own;
   if (phone) {
     return (
       <Button

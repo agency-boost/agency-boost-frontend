@@ -123,7 +123,8 @@ describe('P18.11-T20 a template’s checklist', () => {
       expect(await screen.findByText('2 sections changed')).toBeInTheDocument();
       await userEvent.click(screen.getByRole('button', { name: 'Publish all (2)' }));
 
-      const dialog = within(screen.getByRole('dialog', { name: 'Publish all changes?' }));
+      // The dialog loads on its first opening (the bundle, 2026-11-06).
+      const dialog = within(await screen.findByRole('dialog', { name: 'Publish all changes?' }));
       expect(dialog.getByText('These sections will be published:')).toBeInTheDocument();
       expect(dialog.getAllByRole('listitem').map((li) => li.textContent)).toEqual(['Lead pipeline', 'Events']);
       // *Amended 2026-11-05 (P19.4-T1, ADR-0208 §4):* existing offices may take it, asked after the publish.
@@ -146,7 +147,7 @@ describe('P18.11-T20 a template’s checklist', () => {
     it('Cancel publishes nothing', async () => {
       const { stub } = render();
       await userEvent.click(await screen.findByRole('button', { name: 'Publish all (2)' }));
-      await userEvent.click(within(screen.getByRole('dialog', { name: 'Publish all changes?' })).getByRole('button', { name: 'Cancel' }));
+      await userEvent.click(within(await screen.findByRole('dialog', { name: 'Publish all changes?' })).getByRole('button', { name: 'Cancel' }));
       expect(screen.queryByRole('dialog')).toBeNull();
       expect(stub.calls.some((c) => c.init.method === 'POST')).toBe(false);
     });
@@ -158,7 +159,7 @@ describe('P18.11-T20 a template’s checklist', () => {
         },
       });
       await userEvent.click(await screen.findByRole('button', { name: 'Publish all (2)' }));
-      await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Publish all' }));
+      await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Publish all' }));
       expect(await screen.findByText('You do not have permission to do that.')).toBeInTheDocument();
     });
   });
@@ -172,7 +173,7 @@ describe('P18.11-T20 a template’s checklist', () => {
       '/admin/companies/c1/templates/t-bsd/offices?kind=': { body: OFFICES.map((o) => ({ ...o, state: 'unchanged', kinds: [] })) },
     });
     await userEvent.click(await screen.findByRole('button', { name: '1 office is on an older version' }));
-    const dialog = within(screen.getByRole('dialog', { name: 'Apply to existing offices too?' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Apply to existing offices too?' }));
     expect(await dialog.findByText('KPM 0417 · BSD City Branch')).toBeInTheDocument();
     await userEvent.click(dialog.getByRole('button', { name: 'Not now' }));
     expect(screen.queryByRole('dialog')).toBeNull();
@@ -280,9 +281,12 @@ describe('P18.11-T20 a template’s checklist', () => {
     await rows();
     await clean();
     await userEvent.click(screen.getByRole('button', { name: 'Publish all (2)' }));
+    // Each dialog loads on its first opening (the bundle, 2026-11-06): axe reads it once it is drawn.
+    const asked = await screen.findByRole('dialog');
     await clean();
-    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }));
+    await userEvent.click(within(asked).getByRole('button', { name: 'Cancel' }));
     await userEvent.click(screen.getByRole('button', { name: '1 office is on an older version' }));
+    await screen.findByRole('dialog', { name: 'Apply to existing offices too?' });
     await clean();
   });
 });

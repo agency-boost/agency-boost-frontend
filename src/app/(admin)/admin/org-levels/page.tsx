@@ -117,6 +117,7 @@ function textOf(node: ReactNode): string {
 export default function OrgLevelsPage() {
   const belowLaptop = useMediaQuery(['phone', 'tablet']);
   const tablet = useMediaQuery('tablet');
+  const phone = useMediaQuery('phone');
   const t = useMessages(adminTemplateOrgLevelsMessages);
   const columns = columnsOf(t.columns);
   const tiers = tiersOf(t.tiers);
@@ -297,7 +298,7 @@ export default function OrgLevelsPage() {
       title={t.title}
       permission="org_level:crud"
       // The add button on the title row at every size (UI-133): `actions` alone is the row's at every width.
-      actions={companyId ? <AddButton label={t.add} onClick={() => { setError(null); setAdding(true); }} /> : undefined}
+      actions={companyId ? <AddButton label={t.add} phone={phone} onClick={() => { setError(null); setAdding(true); }} /> : undefined}
     >
       {error && !takenCode && !adding && !renaming && <ErrorBanner {...error} />}
 

@@ -1,4 +1,4 @@
-import type { FieldChrome } from '@/components/field-nav';
+import type { FieldChrome } from '@/components/field-chrome';
 import { fieldNav } from '@/lib/field-nav';
 import { makeMe } from './harness';
 

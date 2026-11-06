@@ -21,6 +21,7 @@ import { kept } from '@/i18n/kept';
  *
  * @moved app/profile/
  * @moved components/session-list.tsx
+ * @moved lib/device-name.ts
  */
 const en = {
   title: 'Your account',

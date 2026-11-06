@@ -4,7 +4,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import type { SummaryView } from '@/components/personal-summary';
 import { LineIcon } from '@/components/ui/line-icon';
-import { ResponsiveSheet } from '@/components/ui/responsive-sheet';
+import { LazyResponsiveSheet } from '@/components/ui/lazy-responsive-sheet';
 import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
 import { summaryMessages } from '@/i18n/messages/summary';
 import { cn } from '@/lib/cn';
@@ -151,7 +151,7 @@ function SummaryPeriodPill({
         <span className="truncate">{label(value)}</span>
         <LineIcon name="chevronDown" className="h-4 w-4" />
       </button>
-      <ResponsiveSheet open={open} title={name} onClose={() => setOpen(false)}>
+      <LazyResponsiveSheet open={open} title={name} onClose={() => setOpen(false)}>
         <ul aria-label={name} className="-mx-1 pb-2">
           {options.map((option) => {
             const on = option === value;
@@ -176,7 +176,7 @@ function SummaryPeriodPill({
             );
           })}
         </ul>
-      </ResponsiveSheet>
+      </LazyResponsiveSheet>
     </>
   );
 }

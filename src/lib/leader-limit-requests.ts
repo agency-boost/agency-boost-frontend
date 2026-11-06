@@ -68,7 +68,8 @@ export function canRequestApproval(error: Pick<ApiError, 'code' | 'details'> | n
 
 // ---- AgencyBoost's side (`/admin/leader-limit-requests`).
 
-export const readLeaderLimitQueue = () => api<LeaderLimitRequestRow[]>('/admin/leader-limit-requests');
+/** The queue's read and its change event are `leader-limit-queue.ts`'s, which the shell's count reads alone. */
+export { LEADER_LIMIT_QUEUE_CHANGED, readLeaderLimitQueue } from './leader-limit-queue';
 
 export const approveLeaderLimitRequest = (requestId: string) =>
   api<LeaderLimitRequestRow[]>(`/admin/leader-limit-requests/${requestId}/approve`, { method: 'POST' });
@@ -78,8 +79,6 @@ export const declineLeaderLimitRequest = (requestId: string, reason: string) =>
     method: 'POST', body: { reason },
   });
 
-/** Said after the console decides, so the nav's pending count reads afresh (`useLeaderLimitPending`). */
-export const LEADER_LIMIT_QUEUE_CHANGED = 'agencyboost:leader-limit-queue-changed';
 
 /**
  * What the request asks for, in a sentence: *Agent → Associate Agency Builder*, or *let in as AAB* — in the reader's

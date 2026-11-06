@@ -4,7 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeMe, renderWithSession, stubFetch } from '@test/harness';
 import { INBOX_CHANGED, type InboxChange } from '@/lib/notifications';
 import { useUnreadCount } from '@/lib/use-unread-count';
-import { NotificationBell, UnreadBadge, unreadBadgeText, withUnread } from './notification-bell';
+import { NotificationBell } from './notification-bell';
+import { UnreadBadge, unreadBadgeText, withUnread } from './unread-badge';
 
 const nav = vi.hoisted(() => ({ pathname: '/activity/log', push: vi.fn() }));
 vi.mock('next/navigation', () => ({
@@ -57,6 +58,8 @@ function renderBell(me = READER) {
 
 const bell = (name: string | RegExp = /^Notifications/) => screen.getByRole('button', { name });
 const popover = () => screen.queryByRole('dialog', { name: 'Notifications' });
+/** The popover's module loads on the bell's first tap (`notification-popover.tsx`, the bundle): a test waits for it. */
+const shown = () => screen.findByRole('dialog', { name: 'Notifications' });
 
 /** jsdom cannot navigate; next/link's href is where a link goes, and the click is what is under test. */
 const swallow = (event: Event) => event.preventDefault();
@@ -81,6 +84,7 @@ describe('the bell’s popover (P12.1-T2)', () => {
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
     expect(trigger).not.toHaveAttribute('href');
     await userEvent.click(trigger);
+    await shown();
 
     const open = popover()!;
     expect(open).toHaveFocus();
@@ -108,6 +112,7 @@ describe('the bell’s popover (P12.1-T2)', () => {
     renderBell();
 
     await userEvent.click(await screen.findByRole('button', { name: 'Notifications, 8 unread' }));
+    await shown();
     const rows = await within(popover()!).findAllByRole('button', { name: /^Unread: Notice / });
     // The day after each title (`1 Sep`, ADR-0167 §1) starts with a digit, so the title stops where the date begins.
     expect(rows.map((r) => r.textContent?.match(/Notice \d+(?= ?\d{1,2} [A-Z]| ?\d{2}\.\d{2})/)?.[0])).toEqual(eight.map((i) => i.title));
@@ -129,6 +134,7 @@ describe('the bell’s popover (P12.1-T2)', () => {
     renderBell();
 
     await userEvent.click(await screen.findByRole('button', { name: 'Notifications, 1 unread' }));
+    await shown();
     expect(within(popover()!).getByRole('status')).toHaveTextContent('Loading your notifications…');
     release?.();
     expect(await within(popover()!).findByRole('button', { name: 'Unread: You are in' })).toBeInTheDocument();
@@ -140,6 +146,7 @@ describe('the bell’s popover (P12.1-T2)', () => {
     renderBell();
 
     await userEvent.click(bell('Notifications'));
+    await shown();
     expect(await within(popover()!).findByText('Nothing yet. This is where you will hear about your unit.')).toBeInTheDocument();
     // Nothing unread, nothing to mark.
     expect(within(popover()!).queryByRole('button', { name: 'Mark all read' })).toBeNull();
@@ -156,6 +163,7 @@ describe('the bell’s popover (P12.1-T2)', () => {
     renderBell();
 
     await userEvent.click(await screen.findByRole('button', { name: 'Notifications, 1 unread' }));
+    await shown();
     expect(await within(popover()!).findByText('Something broke.')).toBeInTheDocument();
     await userEvent.click(within(popover()!).getByRole('button', { name: 'Try again' }));
     expect(await within(popover()!).findByRole('button', { name: 'Unread: You are in' })).toBeInTheDocument();
@@ -178,6 +186,7 @@ describe('the bell’s popover (P12.1-T2)', () => {
       renderBell();
 
       await userEvent.click(await screen.findByRole('button', { name: 'Notifications, 2 unread' }));
+      await shown();
       await userEvent.click(await within(popover()!).findByRole('button', { name: 'Mark all read' }));
 
       expect(await screen.findByRole('button', { name: 'Notifications' })).toBeInTheDocument();
@@ -202,6 +211,7 @@ describe('the bell’s popover (P12.1-T2)', () => {
     renderBell();
 
     await userEvent.click(await screen.findByRole('button', { name: 'Notifications, 1 unread' }));
+    await shown();
     const all = within(popover()!).getByRole('link', { name: 'See all notifications' });
     expect(all).toHaveAttribute('href', '/notifications');
     await userEvent.click(all);
@@ -213,6 +223,7 @@ describe('the bell’s popover (P12.1-T2)', () => {
     renderBell();
 
     await userEvent.click(await screen.findByRole('button', { name: 'Notifications, 1 unread' }));
+    await shown();
     await within(popover()!).findByRole('button', { name: 'Unread: You are in' });
     await userEvent.keyboard('{Escape}');
     expect(popover()).toBeNull();
@@ -225,6 +236,7 @@ describe('the bell’s popover (P12.1-T2)', () => {
     renderBell();
 
     await userEvent.click(await screen.findByRole('button', { name: 'Notifications, 1 unread' }));
+    await shown();
     await userEvent.click(within(popover()!).getByRole('heading', { name: 'Notifications' }));
     expect(popover()).not.toBeNull();
     await userEvent.click(screen.getByTestId('outside'));
@@ -236,6 +248,7 @@ describe('the bell’s popover (P12.1-T2)', () => {
     renderBell();
 
     await userEvent.click(bell('Notifications'));
+    await shown();
     await within(popover()!).findByText(/Nothing yet/);
     within(popover()!).getByRole('link', { name: 'See all notifications' }).focus();
     await userEvent.tab();
@@ -251,6 +264,7 @@ describe('the bell’s popover (P12.1-T2)', () => {
     renderBell();
 
     await userEvent.click(await screen.findByRole('button', { name: 'Notifications, 2 unread' }));
+    await shown();
     const link = await within(popover()!).findByRole('link', { name: 'Unread: Your coaching session was finalized' });
     expect(link).toHaveAttribute('href', '/coaching/me?session=s-0924');
     await userEvent.click(link);
@@ -268,6 +282,7 @@ describe('the bell’s popover (P12.1-T2)', () => {
     renderBell();
 
     await userEvent.click(await screen.findByRole('button', { name: 'Notifications, 1 unread' }));
+    await shown();
     await userEvent.click(await within(popover()!).findByRole('button', { name: 'Unread: You are in' }));
 
     const modal = screen.getByRole('dialog', { name: 'You are in' });
@@ -292,6 +307,7 @@ describe('the bell’s popover (P12.1-T2)', () => {
     renderBell();
 
     await userEvent.click(await screen.findByRole('button', { name: 'Notifications, 1 unread' }));
+    await shown();
     await within(popover()!).findByRole('link', { name: /Your coaching session/ });
     await userEvent.click(within(popover()!).getByRole('button', { name: 'Mark as read' }));
 
@@ -319,6 +335,7 @@ describe('the bell’s popover (P12.1-T2)', () => {
       });
       renderBell();
       await userEvent.click(await screen.findByRole('button', { name: 'Notifications, 2 unread' }));
+      await shown();
       await within(popover()!).findByRole('link', { name: /Your coaching session/ });
 
       await userEvent.click(within(popover()!).getAllByRole('button', { name: 'Mark as read' })[0]);
@@ -337,6 +354,7 @@ describe('the bell’s popover (P12.1-T2)', () => {
       });
       renderBell();
       await userEvent.click(await screen.findByRole('button', { name: 'Notifications, 1 unread' }));
+      await shown();
       await within(popover()!).findByRole('link', { name: /Your coaching session/ });
 
       await userEvent.click(within(popover()!).getByRole('button', { name: 'Mark as unread' }));
@@ -354,6 +372,7 @@ describe('the bell’s popover (P12.1-T2)', () => {
       });
       renderBell();
       await userEvent.click(await screen.findByRole('button', { name: 'Notifications, 2 unread' }));
+      await shown();
       await within(popover()!).findByRole('link', { name: /Your coaching session/ });
 
       await userEvent.click(within(popover()!).getAllByRole('button', { name: 'Mark as read' })[0]);
@@ -373,6 +392,7 @@ describe('the bell’s popover (P12.1-T2)', () => {
       });
       renderBell();
       await userEvent.click(await screen.findByRole('button', { name: 'Notifications, 2 unread' }));
+      await shown();
       await userEvent.click(await within(popover()!).findByRole('button', { name: 'Mark all read' }));
 
       expect(bell()).toHaveAccessibleName('Notifications');
@@ -397,6 +417,7 @@ describe('the bell’s popover (P12.1-T2)', () => {
       renderBell();
       expect((await screen.findByRole('button', { name: 'Notifications, 10 unread' })).textContent).toContain('9+');
       await userEvent.click(bell());
+      await shown();
       await within(popover()!).findByRole('button', { name: /Notice 10$/ });
 
       await userEvent.click(within(popover()!).getAllByRole('button', { name: 'Mark as read' })[0]);
@@ -413,6 +434,7 @@ describe('the bell’s popover (P12.1-T2)', () => {
     renderBell(SUPPORT);
 
     await userEvent.click(await screen.findByRole('button', { name: 'Notifications, 2 unread' }));
+    await shown();
     const row = await within(popover()!).findByRole('button', { name: 'Unread: You are in' });
     expect(within(popover()!).queryByRole('button', { name: /^Mark (as|all) / })).toBeNull();
 
@@ -439,6 +461,7 @@ describe('the bell’s popover (P12.1-T2)', () => {
     renderBell();
 
     await userEvent.click(await screen.findByRole('button', { name: 'Notifications, 1 unread' }));
+    await shown();
     const open = popover()!;
     // jsdom lays nothing out, so the classes that place it are what is checked.
     for (const phone of ['absolute', 'inset-x-0', 'top-full', 'max-h-[calc(100dvh-4.5rem)]']) expect(open).toHaveClass(phone);

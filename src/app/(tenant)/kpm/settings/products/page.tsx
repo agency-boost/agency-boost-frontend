@@ -15,7 +15,7 @@ import {
 import { InlineSaveStatus, useInlineSave } from '@/components/ui/inline-save-status';
 import { FilterChips, ListCard, ListRow, SearchPill } from '@/components/ui/list-rows';
 import { CONTROL_PHONE } from '@/components/ui/phone';
-import { ResponsiveSheet } from '@/components/ui/responsive-sheet';
+import { LazyResponsiveSheet } from '@/components/ui/lazy-responsive-sheet';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { SHOWN_FROM_DESKTOP } from '@/components/ui/tablet';
 import { TonePill, type PillTone } from '@/components/ui/tone-pill';
@@ -38,7 +38,7 @@ import {
 } from '@/lib/tenant-config';
 import { PROPOSAL_LIMITS, type FaqEntry, type ObjectionCard, type PlanHighlight } from '@/lib/admin';
 import { ObjectionCards, objectionsToSave } from '@/components/objection-cards';
-import { FaqList } from '@/components/product-proposal-editor';
+import { FaqList } from '@/components/faq-list';
 
 /**
  * The seven the override modal names, in its order (`KPM_Owner.html:1785-1791`); each one's label is the catalogue's
@@ -590,7 +590,7 @@ export default function KpmProductsPage() {
   function productSheet() {
     const product = sheetFor === null ? null : rows?.find((p) => p.productId === sheetFor) ?? null;
     return (
-      <ResponsiveSheet
+      <LazyResponsiveSheet
         open={product !== null}
         title={product?.displayName.value ?? ''}
         onClose={() => { setSheetFor(null); setOpen(null); setDraft({}); }}
@@ -606,7 +606,7 @@ export default function KpmProductsPage() {
             {open === product.productId && <div className="-mx-6">{panel(product)}</div>}
           </div>
         )}
-      </ResponsiveSheet>
+      </LazyResponsiveSheet>
     );
   }
 

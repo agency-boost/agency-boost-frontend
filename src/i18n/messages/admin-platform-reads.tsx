@@ -12,6 +12,7 @@ import { kept } from '@/i18n/kept';
  *
  * @moved app/(admin)/admin/members/
  * @moved app/(admin)/admin/tenants/[kpmId]/analytics/
+ * @moved components/advanced-analytics/look-as-advanced-tab.tsx
  * @moved app/(admin)/admin/companies/[companyId]/kpms/
  * @moved components/admin/platform-members.tsx
  * @moved components/admin/kpm-comparison.tsx

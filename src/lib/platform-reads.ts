@@ -1,15 +1,15 @@
 'use client';
 
 import { api } from './api-client';
-import type { KpmAnalyticsView, AnalyticsPeriod } from './kpm-analytics';
-import { analyticsQuery } from './kpm-analytics';
-import type { ComplianceSelection, ComplianceView } from './kpm-compliance';
-import { complianceQuery } from './kpm-compliance';
 
 /**
  * **The Super Admin's reads across KPMs** (ADR-0207; P19.4-T3): *All members*, the KPM comparison, *Lihat sebagai KPM*,
  * *Data bulanan* and the company's *KPM & data*. Every one is a `GET`, the Super Admin's alone, and audited by the server
  * per read — nothing here writes. The fields are ADR-0207 §2's, and nothing else: never an email or a phone.
+ *
+ * *Lihat sebagai KPM*'s two reads are beside the Owner's own, in `kpm-analytics.ts` and `kpm-compliance.ts` (the bundle,
+ * 2026-11-06): they build their queries there, and importing those modules here put both, their words and the campaigns'
+ * client in the first load of every page that reads a KPM's months or members.
  */
 
 export interface CompanyRef { id: string; name: string }
@@ -60,9 +60,6 @@ export function membersQuery(filters: MembersFilters): string {
   return params.toString();
 }
 
-/** A query helper's `?…` without its `?`: every call below writes the `?` literally (`check-api-consumers.py`). */
-const bare = (query: string) => query.replace(/^\?/, '');
-
 export const readMembers = (filters: MembersFilters = {}) => api<PlatformMembersPage>(`/admin/members?${membersQuery(filters)}`);
 
 /** A rate as the Overview serves it. */
@@ -107,14 +104,6 @@ export function keepTab(query: string, platformKpmId: string | undefined, tab: '
   if (platformKpmId === undefined) return query;
   return query ? `${query}&tab=${tab}` : `?tab=${tab}`;
 }
-
-/** *Lihat sebagai KPM*'s *Overview*: exactly what the KPM's Owner reads, read-only. */
-export const readKpmAnalyticsAsPlatform = (kpmId: string, period: AnalyticsPeriod, group: string | null) =>
-  api<KpmAnalyticsView>(`/admin/tenants/${encodeURIComponent(kpmId)}/analytics?${bare(analyticsQuery(period, group))}`);
-
-/** *Lihat sebagai KPM*'s *Compliance*. */
-export const readComplianceAsPlatform = (kpmId: string, selection: ComplianceSelection, group: string | null) =>
-  api<ComplianceView>(`/admin/tenants/${encodeURIComponent(kpmId)}/analytics/compliance?${bare(complianceQuery(selection, group))}`);
 
 /** A month of *Data bulanan*: *Lengkap · Belum · —*. */
 export interface KpmDataMonth { month: string; status: 'complete' | 'missing' | 'none' }

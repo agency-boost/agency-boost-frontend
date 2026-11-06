@@ -5,7 +5,7 @@ import { axe } from 'vitest-axe';
 import { atWidth, makeMe, renderLive, renderWithSession, resetLanguage, wears } from '@test/harness';
 import type { Me } from '@/lib/session';
 import { AgentShell } from './agent-shell';
-import { PageHeader } from './app-shell';
+import { PageHeader } from './page-header';
 import { Page } from './page';
 import { Shell } from './shell';
 

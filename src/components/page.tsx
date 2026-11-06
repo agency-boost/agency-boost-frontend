@@ -1,7 +1,7 @@
 'use client';
 
 import { useContext, type ReactNode } from 'react';
-import { PageHeader } from '@/components/app-shell';
+import { PageHeader } from '@/components/page-header';
 import { RequireSession, TitledPageContext } from '@/components/require-session';
 
 /**

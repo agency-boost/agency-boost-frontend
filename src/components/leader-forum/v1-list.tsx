@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useId } from 'react';
-import { Avatar } from '@/components/ui/person-row';
+import { Avatar } from '@/components/ui/avatar';
 import { LineIcon } from '@/components/ui/line-icon';
 import { TonePill } from '@/components/ui/tone-pill';
 import { useFigureLanguage, useMessages } from '@/i18n/language-provider';

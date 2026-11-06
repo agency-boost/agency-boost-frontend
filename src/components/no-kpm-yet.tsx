@@ -1,6 +1,6 @@
 'use client';
 
-import { PageHeader } from '@/components/app-shell';
+import { PageHeader } from '@/components/page-header';
 import { HomeChart } from '@/components/home/home-chart';
 import { HomeTiles } from '@/components/home/home-tiles';
 import { NoDataLine, SamplePreview, useSampleName } from '@/components/sample-preview';

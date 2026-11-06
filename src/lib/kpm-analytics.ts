@@ -305,6 +305,15 @@ export function analyticsQuery(period: AnalyticsPeriod, group: string | null): s
 export const readKpmAnalytics = (period: AnalyticsPeriod = DEFAULT_ANALYTICS_PERIOD, group: string | null = null) =>
   api<KpmAnalyticsView>('/kpm/analytics' + `?period=${period}${group ? `&group=${encodeURIComponent(group)}` : ''}`);
 
+/**
+ * ***Lihat sebagai KPM*'s *Overview*** (ADR-0207; P19.4-T3): exactly what the KPM's Owner reads, read-only, through the
+ * Super Admin's platform read. Here beside the Owner's own read rather than in `platform-reads.ts` (the bundle,
+ * 2026-11-06), whose other pages need none of this module. The query's `?` is written literally
+ * (`check-api-consumers.py`).
+ */
+export const readKpmAnalyticsAsPlatform = (kpmId: string, period: AnalyticsPeriod, group: string | null) =>
+  api<KpmAnalyticsView>(`/admin/tenants/${encodeURIComponent(kpmId)}/analytics?${analyticsQuery(period, group).replace(/^\?/, '')}`);
+
 /*
  * ── The prototype's words ───────────────────────────────────────────────────────────────────────
  */

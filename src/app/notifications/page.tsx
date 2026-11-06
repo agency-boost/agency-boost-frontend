@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { SubtitleOnPhone } from '@/components/app-shell';
+import { SubtitleOnPhone } from '@/components/page-header';
 import { NotificationList } from '@/components/notification-list';
 import { RoleShell } from '@/components/role-shell';
 import { EmptyState } from '@/components/ui/empty-state';

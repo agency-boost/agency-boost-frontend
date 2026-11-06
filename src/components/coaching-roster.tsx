@@ -86,7 +86,12 @@ export function branchesOf(rows: readonly RosterRow[]): Branch[] {
   return out;
 }
 
-export function CoachingRoster({ roster }: { roster: Roster }) {
+/**
+ * `tablet` is the page's answer when the page has one: it asks where it mounts, before its read (`use-media-query.ts`),
+ * so the roster that arrives with the data is drawn at its size from its first frame. A caller with no page around it
+ * (a sample, a spec) leaves it out and the roster asks for itself.
+ */
+export function CoachingRoster({ roster, tablet: asked }: { roster: Roster; tablet?: boolean }) {
   const t = useMessages(coachingMessages).roster;
   // The junior rung: a member on any other rung heads a unit of their own, nested or not, and carries its badge.
   const ladder = useLadder();
@@ -96,7 +101,8 @@ export function CoachingRoster({ roster }: { roster: Roster }) {
   const directId = useId();
   const unitsId = useId();
   // P19.1-T5 AC-1 (UI-115): the phone's rows on a tablet, no table. Phone and desktop draw what they drew.
-  const tablet = useMediaQuery('tablet');
+  const own = useMediaQuery('tablet');
+  const tablet = asked ?? own;
 
   return (
     <div data-roster="" className="overflow-hidden rounded-lg border border-card-edge bg-card">

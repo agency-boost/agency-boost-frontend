@@ -1,7 +1,7 @@
 'use client';
 
 import { kept } from '@/i18n/kept';
-import { brandingFileUrl, mascotUrl } from '@/lib/branding';
+import { brandingFileUrl, mascotUrl } from '@/lib/branding-files';
 import { cn } from '@/lib/cn';
 import { useContext } from 'react';
 import { SessionContext, type SessionBranding } from '@/lib/session';

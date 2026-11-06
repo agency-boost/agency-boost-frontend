@@ -66,13 +66,14 @@ describe('P19.4-T1 the template’s Training section', () => {
     const stub = render({ 'PUT /admin/companies/c1/templates/t-default/training/modules/REFERRALS/content': { body: saved } });
     await userEvent.click(await screen.findByRole('button', { name: 'Material for Daftar prospek' }));
     expect(screen.getByRole('button', { name: 'Material for Daftar prospek' })).toHaveTextContent('Material (1)');
-    const first = within(screen.getByRole('dialog', { name: 'Material: Daftar prospek' }));
+    // The dialog loads on its first opening (the bundle, 2026-11-06).
+    const first = within(await screen.findByRole('dialog', { name: 'Material: Daftar prospek' }));
     expect(first.getByText('Bacaan')).toBeInTheDocument();
     await clean();
     await userEvent.click(first.getByRole('button', { name: 'Cancel' }));
 
     await userEvent.click(screen.getByRole('button', { name: 'Material for Referensi' }));
-    const dialog = within(screen.getByRole('dialog', { name: 'Material: Referensi' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Material: Referensi' }));
     await userEvent.type(dialog.getByLabelText('Link name'), 'Panduan');
     await userEvent.type(dialog.getByLabelText('Address'), 'https://example.com/p');
     await userEvent.click(dialog.getByRole('button', { name: 'Add link' }));

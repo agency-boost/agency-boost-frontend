@@ -8,11 +8,11 @@ import { useMessages } from '@/i18n/language-provider';
 import { kpmComplianceMessages } from '@/i18n/messages/kpm-compliance';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import {
-  campaignOf, complianceQuery, firstModuleOf, readCompliance, searchTree, trainingPathOf, treeKindOf,
+  campaignOf, complianceQuery, firstModuleOf, readCompliance, readComplianceAsPlatform, searchTree, trainingPathOf, treeKindOf,
   type ComplianceCategory, type ComplianceSelection, type ComplianceTrainingCategory, type ComplianceView,
   type SortDirection,
 } from '@/lib/kpm-compliance';
-import { keepTab, readComplianceAsPlatform } from '@/lib/platform-reads';
+import { keepTab } from '@/lib/platform-reads';
 import { useSession } from '@/lib/session';
 import { useMediaQuery } from '@/lib/use-media-query';
 import { CampaignPicker, EventPicker, TooltipNote } from './compliance-pickers';

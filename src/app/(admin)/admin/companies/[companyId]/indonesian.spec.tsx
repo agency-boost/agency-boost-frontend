@@ -18,7 +18,18 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
   usePathname: () => '/admin/companies/c1',
 }));
-vi.mock('next/dynamic', () => ({ default: () => () => <div data-testid="lazy" /> }));
+// The parts their own specs cover, as doubles; what loads on demand since 2026-11-06 (the bundle) — a section's editor,
+// the checklist's dialogs — loads as it does in the app.
+vi.mock('next/dynamic', async () => {
+  const actual = await vi.importActual<typeof import('next/dynamic')>('next/dynamic');
+  return {
+    default: (load: () => Promise<unknown>, options?: Parameters<typeof actual.default>[1]) => {
+      const source = String(load);
+      const double = ['products-tab', 'recruitment-playbook-tab', 'analytics-editor'].some((name) => source.includes(name));
+      return double ? () => <div data-testid="lazy" /> : actual.default(load as Parameters<typeof actual.default>[0], options);
+    },
+  };
+});
 
 /**
  * **P18.11-T20, the KPM template in ID mode** (ADR-0185 §1): *Template KPM*, *Pengaturan perusahaan*, *Template bawaan
@@ -98,7 +109,8 @@ describe('P18.11-T20 the KPM template in Indonesian', () => {
     expect(screen.getByText('Dipakai 0 KPM')).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'Terbitkan semua (2)' }));
-    const dialog = within(screen.getByRole('dialog', { name: 'Terbitkan semua perubahan?' }));
+    // The dialog loads on the first tap (the bundle, 2026-11-06).
+    const dialog = within(await screen.findByRole('dialog', { name: 'Terbitkan semua perubahan?' }));
     expect(dialog.getByText('Bagian berikut akan diterbitkan:')).toBeInTheDocument();
     // *Amended 2026-11-05 (P19.4-T1, ADR-0208 §4):* existing KPMs are asked about after the publish.
     expect(dialog.getByText('Setelah itu, Anda memilih apakah KPM yang sudah ada ikut memakainya.')).toBeInTheDocument();

@@ -1,22 +1,33 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { Suspense, use, useEffect, useState } from 'react';
-import {
-  SectionBody, SectionTabs, ShellState, useAdvancedAnalyticsShell,
-} from '@/components/advanced-analytics/advanced-analytics-screen';
-import { ComplianceScreen } from '@/components/analytics/compliance-screen';
 import { KpmAnalytics } from '@/components/analytics/kpm-analytics';
 import { Page } from '@/components/page';
 import { RouteTabs } from '@/components/ui/route-tabs';
+import { SkeletonCards } from '@/components/ui/skeleton';
 import { useMessages } from '@/i18n/language-provider';
 import { adminPlatformReadsMessages } from '@/i18n/messages/admin-platform-reads';
 import { kpmAnalyticsMessages } from '@/i18n/messages/kpm-analytics';
 import { readTenant, type TenantRow } from '@/lib/admin';
 import { analyticsGroupFrom, analyticsPeriodFrom } from '@/lib/kpm-analytics';
 import { complianceSelectionFrom } from '@/lib/kpm-compliance';
-import { isSectionSlug } from '@/lib/advanced-analytics-page';
 import { useQuery } from '@/lib/use-query';
+
+/*
+ * **The two other tabs load when they are chosen** (the bundle, 2026-11-06; `performance-and-scale.md`): the page draws
+ * one tab at a time, *Overview* first, and *Compliance* and *Advanced analytics* were each heavier than it. Cards stand in
+ * while one arrives, as each tab's own loading state draws them.
+ */
+const ComplianceScreen = dynamic(
+  () => import('@/components/analytics/compliance-screen').then((m) => m.ComplianceScreen),
+  { loading: () => <SkeletonCards count={3} /> },
+);
+const AdvancedTab = dynamic(
+  () => import('@/components/advanced-analytics/look-as-advanced-tab').then((m) => m.LookAsAdvancedTab),
+  { loading: () => <SkeletonCards count={3} /> },
+);
 
 /**
  * ***Lihat sebagai KPM*** (`/admin/tenants/[kpmId]/analytics?tab=overview|compliance`; P19.4-T3 AC-4, P19.4-T2 AC-6; SA
@@ -98,29 +109,5 @@ function Tabs({ kpmId }: { kpmId: string }) {
         />
       )}
     </>
-  );
-}
-
-/**
- * ***Advanced analytics*** **as the KPM's Owner sees it** (P19.5-T3 AC-12; ADR-0215 §9): its tabs from the KPM's
- * template (`?section=`, the first that is on by default), each section's own screen over the platform read — no
- * target field, no *Mulai survei*, no *Unggah data* — and the survey sections as summaries (A-R9).
- */
-function AdvancedTab({ kpmId, section }: { kpmId: string; section: string | undefined }) {
-  const { shell, error } = useAdvancedAnalyticsShell(kpmId);
-  const base = `/admin/tenants/${kpmId}/analytics?tab=advanced&section=`;
-  return (
-    <ShellState error={error}>
-      {shell && (() => {
-        const on = shell.sections.find((s) => s.slug === section) ?? shell.sections[0];
-        if (!on || !isSectionSlug(on.slug)) return null;
-        return (
-          <>
-            <SectionTabs shell={shell} hrefOf={(slug) => `${base}${slug}`} activeHref={`${base}${on.slug}`} />
-            <SectionBody key={on.slug} slug={on.slug} shell={shell} platformKpmId={kpmId} />
-          </>
-        );
-      })()}
-    </ShellState>
   );
 }

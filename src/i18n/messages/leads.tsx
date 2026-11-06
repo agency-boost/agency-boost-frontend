@@ -6,8 +6,8 @@ import { kept } from '@/i18n/kept';
  * **Leads Management's own words** (P18.10-T4, field selling; `functional/leads.md`): `/leads`, the leads table the
  * coaching session's *Leads* card mounts too (`components/leads-table.tsx`) — its columns, its cards and the phone's
  * edit sheet, its search and filters, its ⋮ menu, its questions and toasts, the closed cards — the lead's details
- * dialog (`components/lead-details-dialog.tsx`), and `lib/leads.ts`' attention flags and why the 📞 and WhatsApp are
- * held, which Personal Summary's *Leads that need you* reads too.
+ * dialog (`components/lead-details-dialog.tsx`), and why `lib/leads.ts` holds the 📞 and WhatsApp. The attention flags'
+ * words are their own area's (`lead-flags.ts`), which Personal Summary's *Leads that need you* reads without this one.
  *
  * **English is the source** of the keys, the prototype's words as built (`Overall.html:2787-2846`, `:5432-5707`, the
  * coaching card's `:10809-10901`); the Indonesian is the approved glossary's (OD-237; §B.0's voice), with the words it
@@ -203,14 +203,10 @@ const en = {
     registered: ({ day }: { day: ReactNode }) => <>Registered {day}</>,
   },
 
-  /** What each attention flag is called on screen (`lib/leads.ts`' `FLAG_LABEL`): one place, so two screens agree. */
-  flags: {
-    overdue: 'Overdue',
-    noNextAction: 'No next action',
-    noRemarks: 'No remarks',
-    /** *Overdue 14 days* (`leads-management.md` §4): the server's count, in the office's days. */
-    overdueDays: ({ days }: { days: number }) => `Overdue ${days} ${days === 1 ? 'day' : 'days'}`,
-  },
+  /*
+   * *The attention flags' words are `messages/lead-flags.ts`'s since 2026-11-06* (the bundle): Personal Summary draws
+   * them, and loading this area for three words put all of Leads Management's in its first load.
+   */
   /** Why the 📞 and WhatsApp are held on a lead, and where to put it right (P18.7-T4 AC-3). */
   phoneHeld: {
     missing: 'No phone number yet — add one in Lead details.',
@@ -491,12 +487,6 @@ const id: MessagesOf<typeof en> = {
     registered: ({ day }) => <>Terdaftar {day}</>,
   },
 
-  flags: {
-    overdue: 'Terlambat',
-    noNextAction: 'Tanpa tindakan berikutnya',
-    noRemarks: 'Tanpa keterangan',
-    overdueDays: ({ days }) => `Terlambat ${days} hari`,
-  },
   phoneHeld: {
     missing: `Belum ada nomor telepon — tambahkan di Detail ${kept('lead')}.`,
     unusable: `Nomor ini tidak dapat dihubungi — periksa di Detail ${kept('lead')}.`,

@@ -5,7 +5,7 @@ import type { ReactNode } from 'react';
 import { LeadContactButtons } from '@/components/contact-buttons';
 import { PotensiBadge } from '@/components/potensi-switch';
 import { LineIcon } from '@/components/ui/line-icon';
-import { Avatar } from '@/components/ui/person-row';
+import { Avatar } from '@/components/ui/avatar';
 import { TonePill, type PillTone } from '@/components/ui/tone-pill';
 import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
 import { leadsMessages } from '@/i18n/messages/leads';

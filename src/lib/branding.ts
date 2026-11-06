@@ -1,7 +1,7 @@
 import { api } from './api-client';
-import { apiUrl } from './api';
+import { brandingFileUrl } from './branding-files';
 import type { BrandingPalette, SessionBranding } from './session';
-import { signedUploadForm, type SignedUpload } from './tenant-config';
+import { signedUploadForm, type SignedUpload } from './signed-upload';
 
 /**
  * **A KPM's branding in the browser** (P19.6-T1; ADR-0218 §6, §8, §10). The API derives every colour
@@ -60,17 +60,8 @@ export function paletteStyle(palette: BrandingPalette | null | undefined): Recor
   return style;
 }
 
-/** **One of a KPM's images, by version** (§4): a public address that never expires, so a reload draws it at once. */
-export function brandingFileUrl(kpmId: string, file: string, version: string): string {
-  return `${apiUrl(`/kpm-branding/${encodeURIComponent(kpmId)}/files/${file}`)}?v=${encodeURIComponent(version)}`;
-}
-
-/** The mascot's picture for a pose: its own when the KPM has one, else the default's (§2). */
-export function mascotUrl(branding: SessionBranding, pose: string, width: 120 | 240 | 360): string | null {
-  if (!branding.mascotPoses.includes('default')) return null;
-  const chosen = branding.mascotPoses.includes(pose) ? pose : 'default';
-  return brandingFileUrl(branding.kpmId, `mascot-${chosen}-${width}.webp`, branding.version);
-}
+/** A KPM's images' addresses (§4), in a module of their own that Boost and the shell import (`branding-files.ts`). */
+export { brandingFileUrl, mascotUrl } from './branding-files';
 
 // ----------------------------------------------------------------- the boot cache (§8)
 

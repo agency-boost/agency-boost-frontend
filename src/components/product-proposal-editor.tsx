@@ -1,7 +1,10 @@
 'use client';
 
 import { DateField } from '@/components/ui/date-field';
-import { Button, Field, Select, Textarea, TextInput } from '@/components/ui/field';
+import {
+  FaqList, PROPOSAL_CARD as CARD, PROPOSAL_H4 as H4, moveRow as move, replaceRow as replace, withoutRow as without,
+} from '@/components/faq-list';
+import { Button, Field, Select, TextInput } from '@/components/ui/field';
 import { ReorderArrows } from '@/components/ui/reorder-arrows';
 import { TonePill } from '@/components/ui/tone-pill';
 import { useMessages } from '@/i18n/language-provider';
@@ -57,23 +60,12 @@ export function proposalToSave(settings: ProposalSettings): ProposalSettings {
   };
 }
 
-const move = <T,>(rows: T[], from: number, by: -1 | 1): T[] => {
-  const to = from + by;
-  if (to < 0 || to >= rows.length) return rows;
-  const next = [...rows];
-  next.splice(to, 0, ...next.splice(from, 1));
-  return next;
-};
-const without = <T,>(rows: T[], at: number) => rows.filter((_, i) => i !== at);
-const replace = <T,>(rows: T[], at: number, row: T) => rows.map((r, i) => (i === at ? row : r));
 
 /** Whole rupiah as typed, as minor units; anything that is not a number is left out. */
 const amountsOf = (text: string) => text.split(',').map((part) => part.replace(/\D/g, ''))
   .filter((part) => part !== '').map((part) => Number(part) * 100);
 const rupiahOf = (minor: number[]) => minor.map((m) => String(Math.round(m / 100))).join(', ');
 
-const CARD = 'mt-3 rounded-md border border-hairline bg-card p-3';
-const H4 = 'text-sm font-semibold text-navy';
 
 /**
  * **A product's *Proposal* section** (P19.7-T1 AC-3, Acc. 8; ADR-0225 §1, §2, §5): what the agent fills in for the
@@ -488,58 +480,3 @@ export function ProductProposalEditor({
   );
 }
 
-/**
- * ***Tanya-jawab*, as a list of questions and answers** (ADR-0225 §1, §5): added, edited, removed and moved with ↑ / ↓ —
- * the Super Admin's on a product, and an office's own on its *Produk* settings, the same control.
- */
-export function FaqList({
-  idPrefix,
-  entries,
-  onChange,
-  disabled = false,
-  hint,
-}: {
-  idPrefix: string;
-  entries: FaqEntry[];
-  onChange: (next: FaqEntry[]) => void;
-  disabled?: boolean;
-  /** Under the heading: whose it is, on an office's settings. */
-  hint?: string;
-}) {
-  const t = useMessages(adminProductProposalMessages);
-  return (
-    <div data-faq-list="">
-      <h4 className={`mt-4 ${H4}`}>{t.faq}</h4>
-      <p className="text-sm text-muted">{hint ?? t.faqHint}</p>
-      <ol className="flex flex-col">
-        {entries.map((entry, at) => (
-          <li key={at} className={CARD}>
-            <div className="flex flex-wrap items-start gap-2">
-              <div className="min-w-60 flex-1">
-                <Field label={t.question({ n: at + 1 })} htmlFor={`${idPrefix}-${at}-q`}>
-                  <TextInput id={`${idPrefix}-${at}-q`} value={entry.question} maxLength={200} disabled={disabled}
-                    onChange={(e) => onChange(replace(entries, at, { ...entry, question: e.target.value }))} />
-                </Field>
-                <Field label={t.answer({ n: at + 1 })} htmlFor={`${idPrefix}-${at}-a`} className="mt-2">
-                  <Textarea id={`${idPrefix}-${at}-a`} rows={3} value={entry.answer} maxLength={1000} disabled={disabled}
-                    onChange={(e) => onChange(replace(entries, at, { ...entry, answer: e.target.value }))} />
-                </Field>
-              </div>
-              <span className="flex items-center">
-                <ReorderArrows label={t.questionName({ n: at + 1 })} index={at} count={entries.length} disabled={disabled}
-                  onMove={(by) => onChange(move(entries, at, by))} />
-                <Button variant="inlineDanger" disabled={disabled} onClick={() => onChange(without(entries, at))}>
-                  {t.removeQuestion({ n: at + 1 })}
-                </Button>
-              </span>
-            </div>
-          </li>
-        ))}
-      </ol>
-      <Button variant="inline" className="mt-2" disabled={disabled || entries.length >= PROPOSAL_LIMITS.FAQ}
-        onClick={() => onChange([...entries, { question: '', answer: '' }])}>
-        {t.addQuestion}
-      </Button>
-    </div>
-  );
-}

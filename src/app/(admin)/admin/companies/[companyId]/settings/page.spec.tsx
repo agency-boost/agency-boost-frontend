@@ -10,17 +10,25 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
   usePathname: () => '/admin/companies/c1/settings',
 }));
-// The two parts that load on demand, as the doubles they are here: their own specs are theirs.
-vi.mock('next/dynamic', () => ({
-  default: (load: () => Promise<unknown>) => {
-    const name = String(load).includes('products-tab') ? 'products' : 'recruitment';
-    return ({ onDirtyChange }: { onDirtyChange?: (dirty: boolean) => void }) => (
-      <div data-testid={name}>
-        {onDirtyChange && <button type="button" onClick={() => onDirtyChange(true)}>edit</button>}
-      </div>
-    );
-  },
-}));
+// The two parts that load on demand, as the doubles they are here: their own specs are theirs. Everything else loaded on
+// demand — the carrier rules' editor since 2026-11-06 (the bundle) — loads as it does in the app.
+vi.mock('next/dynamic', async () => {
+  const actual = await vi.importActual<typeof import('next/dynamic')>('next/dynamic');
+  return {
+    default: (load: () => Promise<unknown>, options?: Parameters<typeof actual.default>[1]) => {
+      const source = String(load);
+      if (!source.includes('products-tab') && !source.includes('recruitment-playbook-tab')) {
+        return actual.default(load as Parameters<typeof actual.default>[0], options);
+      }
+      const name = source.includes('products-tab') ? 'products' : 'recruitment';
+      return ({ onDirtyChange }: { onDirtyChange?: (dirty: boolean) => void }) => (
+        <div data-testid={name}>
+          {onDirtyChange && <button type="button" onClick={() => onDirtyChange(true)}>edit</button>}
+        </div>
+      );
+    },
+  };
+});
 
 const clean = async () =>
   expect((await axe(document.body, { rules: { 'color-contrast': { enabled: false }, region: { enabled: false } } })).violations ?? [])
@@ -94,7 +102,8 @@ describe('P18.11-T20 a company’s own settings', () => {
     const pills = within(screen.getByRole('navigation', { name: 'Campaigns parts' }));
     expect(pills.getAllByRole('link').map((l) => l.textContent))
       .toEqual(['Production club tiers', 'Maintenance of Contract', 'Promotion paths']);
-    expect(screen.getByText('President’s Club')).toBeInTheDocument();
+    // The editor loads with the part (the bundle, 2026-11-06).
+    expect(await screen.findByText('President’s Club')).toBeInTheDocument();
   });
 
   it('Campaigns: Publish asks first, because it reaches the offices that exist, then publishes the company’s rules', async () => {

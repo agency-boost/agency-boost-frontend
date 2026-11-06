@@ -3,7 +3,7 @@
 import dynamic from 'next/dynamic';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { useFieldContent } from '@/components/field-nav';
+import { useFieldContent } from '@/components/field-chrome';
 import { Button } from '@/components/ui/field';
 import { useLanguage, useMessages } from '@/i18n/language-provider';
 import { forumMessages } from '@/i18n/messages/forum';

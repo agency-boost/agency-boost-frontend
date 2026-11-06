@@ -10,9 +10,8 @@ import { forumMinutesMessages } from '@/i18n/messages/forum-minutes';
 import { forumStatsMessages } from '@/i18n/messages/forum-stats';
 import {
   type CompactUnit, formatCalendarDay, formatDecimalInput, formatMoneyUnit, formatMonth, formatMonthName, formatNumber, formatPercent,
-  parseDecimal, RUPIAH_PER_UNIT,
+  MINOR_UNITS_PER_MAJOR, parseDecimal, RUPIAH_PER_UNIT,
 } from './format';
-import { MINOR_UNITS_PER_MAJOR } from './goals';
 import type {
   ActionItem, ActionStatus, AgendaItem, AgendaSection, ColumnKey, ColumnPeriod, MeetingView, MeetingWriter, MonthlyTarget,
   RowKey, Scorecard, ScorecardCell, ScorecardDefinitions, ScorecardRow, TargetRowKey, YtdChange,

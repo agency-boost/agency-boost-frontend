@@ -15,6 +15,7 @@ import { kept } from '@/i18n/kept';
  *
  * @moved components/leader-limit-notice.tsx
  * @moved lib/leader-limit-requests.ts
+ * @moved lib/leader-limit-queue.ts
  */
 
 /** What was being done when the limit was met, and what the reader may do next: the sentence's two halves. */

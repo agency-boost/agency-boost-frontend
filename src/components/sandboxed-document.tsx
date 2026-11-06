@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { ResponsiveSheet } from '@/components/ui/responsive-sheet';
+import { LazyResponsiveSheet } from '@/components/ui/lazy-responsive-sheet';
 import { useMessages } from '@/i18n/language-provider';
 import { sandboxedDocumentMessages } from '@/i18n/messages/sandboxed-document';
 import { apiOrigin } from '@/lib/api';
@@ -120,8 +120,9 @@ export function SandboxedDocumentDialog({
   onClose: () => void;
 }) {
   const t = useMessages(sandboxedDocumentMessages);
+  // The sheet itself loads with the first opening (`LazyResponsiveSheet`): a page that lists documents draws none at first.
   return (
-    <ResponsiveSheet
+    <LazyResponsiveSheet
       open={shown !== null}
       title={shown?.title ?? ''}
       onClose={onClose}
@@ -139,7 +140,7 @@ export function SandboxedDocumentDialog({
           <p role="status" className="py-6 text-md text-muted">{t.opening}</p>
         )}
       </div>
-    </ResponsiveSheet>
+    </LazyResponsiveSheet>
   );
 }
 

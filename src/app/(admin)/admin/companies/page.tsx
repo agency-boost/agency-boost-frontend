@@ -85,6 +85,7 @@ export default function CompaniesPage() {
   const card = useMessages(adminTemplateMessages).card;
   const figures = useFigureLanguage();
   const rows = useMediaQuery(['phone', 'tablet']);
+  const phone = useMediaQuery('phone');
   const columns = columnsOf(t.columns);
   const [companies, setCompanies] = useState<Company[] | null>(null);
   const [counts, setCounts] = useState<Map<string, CompanyCard> | null>(null);
@@ -190,7 +191,7 @@ export default function CompaniesPage() {
   return (
     // The nav item's words (P18.7-T9 AC-2; UI-027): *Manage companies* (`Superadmin.html:177`). No sub-line (P19.2-T2
     // AC-7; UI-136). The add button on the title row at every size (UI-133): `actions` alone is the row's at every width.
-    <Page title={t.title} actions={<AddButton label={t.add} onClick={() => open({ mode: 'add' })} />}>
+    <Page title={t.title} actions={<AddButton label={t.add} phone={phone} onClick={() => open({ mode: 'add' })} />}>
       {library && (
         <Link
           href={companyHref(library._id)}

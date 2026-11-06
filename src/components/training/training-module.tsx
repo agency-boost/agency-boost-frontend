@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useId, useState } from 'react';
-import { PageLanguageSwitch } from '@/components/app-shell';
+import { PageLanguageSwitch } from '@/components/page-header';
 import { Page } from '@/components/page';
 import { NotFoundCard, ReadFailed, useTrainingCatalog } from '@/components/training/training-catalog';
 import { useSandboxedDocument } from '@/components/sandboxed-document';

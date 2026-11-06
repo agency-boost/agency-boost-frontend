@@ -1,19 +1,17 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { Suspense, use, useCallback, useEffect, useState } from 'react';
 import { Page } from '@/components/page';
 import { Dialog } from '@/components/ui/dialog';
-import { SaveAsTemplateDialog } from '@/components/save-as-template-dialog';
 import { ActivityBindingCard } from '@/components/activity-binding-card';
-import { KpmBillingTab } from '@/components/admin/kpm-billing-tab';
 import { KpmDataTab, KpmMonthGrid, KpmMonthGridSkeleton, useKpmData } from '@/components/admin/kpm-data-tab';
 import { KpmOwnerCard } from '@/components/admin/kpm-owner-card';
-import { PlatformMembers } from '@/components/admin/platform-members';
 import { RouteTabs } from '@/components/ui/route-tabs';
 import { Button, Card, ErrorBanner, Field, Select, TextInput } from '@/components/ui/field';
 import { ChoiceField, ChoicePill } from '@/components/ui/rows-and-sheets';
-import { SkeletonCards } from '@/components/ui/skeleton';
+import { SkeletonCards, SkeletonTable } from '@/components/ui/skeleton';
 import { StatusPill } from '@/components/ui/status-pill';
 import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
 import { adminOfficesMessages } from '@/i18n/messages/admin-offices';
@@ -38,6 +36,25 @@ import { useCan } from '@/lib/session';
 import { formatNumber } from '@/lib/format';
 import { useMediaQuery } from '@/lib/use-media-query';
 import { useQuery } from '@/lib/use-query';
+import { useOpenedOnce } from '@/lib/use-opened-once';
+
+/*
+ * **What the first paint does not draw loads when it is asked for** (the bundle, 2026-11-06; `performance-and-scale.md`):
+ * *Anggota* and *Billing* when their tab is chosen — the page draws one tab at a time, *Ringkasan* first — and *Simpan
+ * sebagai template*'s dialog when it first opens, mounted from then on as before (`useOpenedOnce`). Cards stand in while a
+ * tab arrives, as the tabs' own loading states draw them.
+ */
+const PlatformMembers = dynamic(
+  () => import('@/components/admin/platform-members').then((m) => m.PlatformMembers),
+  { loading: () => <MembersLoading /> },
+);
+const KpmBillingTab = dynamic(
+  () => import('@/components/admin/kpm-billing-tab').then((m) => m.KpmBillingTab),
+  { loading: () => <SkeletonCards count={3} /> },
+);
+const SaveAsTemplateDialog = dynamic(
+  () => import('@/components/save-as-template-dialog').then((m) => m.SaveAsTemplateDialog), { ssr: false },
+);
 
 export default function TenantDetailPage({ params }: { params: Promise<{ kpmId: string }> }) {
   const { kpmId } = use(params);
@@ -60,6 +77,7 @@ export default function TenantDetailPage({ params }: { params: Promise<{ kpmId: 
   const canBilling = useCan('billing:read_prices');
   /** What the last move said, once it is done. */
   const [moved, setMoved] = useState<string | null>(null);
+  const saveMounted = useOpenedOnce(saving);
 
   const load = useCallback(async () => {
     try {
@@ -105,16 +123,18 @@ export default function TenantDetailPage({ params }: { params: Promise<{ kpmId: 
         </div>
       )}
     >
-      <SaveAsTemplateDialog
-        open={saving}
-        kpm={kpm}
-        onClose={() => setSaving(false)}
-        onSaved={(template, company) => {
-          setSaving(false);
-          // With what it left out because it names something archived, in the API's words (exit review, finding 2).
-          setSaved(savedTemplateSentence(template, company?.name ?? kpm.companyName, language));
-        }}
-      />
+      {saveMounted && (
+        <SaveAsTemplateDialog
+          open={saving}
+          kpm={kpm}
+          onClose={() => setSaving(false)}
+          onSaved={(template, company) => {
+            setSaving(false);
+            // With what it left out because it names something archived, in the API's words (exit review, finding 2).
+            setSaved(savedTemplateSentence(template, company?.name ?? kpm.companyName, language));
+          }}
+        />
+      )}
       {/* Polite, and only once there is something to say: the dialog has closed on it. */}
       <p role="status" className={saved || moved ? 'mb-4 text-md text-navy' : 'sr-only'}>{saved ?? moved ?? ''}</p>
       <Suspense fallback={null}>
@@ -501,4 +521,10 @@ function StatusCard({
       />
     </Card>
   );
+}
+
+/** *Anggota* on its way: the members' table as the tab draws it while it reads (`platform-members.tsx`). */
+function MembersLoading() {
+  const t = useMessages(adminPlatformReadsMessages).members;
+  return <SkeletonTable caption={t.loading} columns={[t.columns.name, t.columns.kpm, t.columns.role, t.columns.status]} rows={5} />;
 }

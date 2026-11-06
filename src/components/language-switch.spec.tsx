@@ -10,7 +10,8 @@ import { getRequestLanguage } from '@/lib/api-client';
 import type { Me } from '@/lib/session';
 import { fieldChrome } from '@test/shell-fixtures';
 import { AgentShell } from './agent-shell';
-import { AppShell, PageHeader, type NavSection } from './app-shell';
+import { AppShell, type NavSection } from './app-shell';
+import { PageHeader } from './page-header';
 import { LanguageSwitch } from './language-switch';
 import { Shell } from './shell';
 

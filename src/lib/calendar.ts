@@ -300,14 +300,8 @@ export interface CalendarDownline {
   people: CalendarDownlinePerson[];
 }
 
-/**
- * `GET` and `PUT /calendar/settings`: the reader's own (ADR-0110). *Hide my personal activities*: on, a
- * leader comparing the reader's week is answered each entry the reader organised as a busy block, unless
- * that leader is on it. Off until the reader turns it on.
- */
-export interface CalendarSettings {
-  hideDetails: boolean;
-}
+/** The reader's own calendar settings (ADR-0110), in a module of their own that *Profil saya* reads (`calendar-settings.ts`). */
+export { readCalendarSettings, saveCalendarSettings, type CalendarSettings } from './calendar-settings';
 
 /** What a save sends, for either kind of timing. */
 export interface EntryInput {
@@ -403,13 +397,6 @@ export const readDownline = () => api<CalendarDownline>('/calendar/downline');
 /** *Block time* on a member the reader coaches: the reader's entry, the member placed on it (ADR-0098). */
 export const placeBlock = (input: EntryInput & { membershipId: string }) =>
   api<CalendarEntry>('/calendar/blocks', { method: 'POST', body: input });
-
-/** The reader's own calendar settings. Nobody reads anybody else's. */
-export const readCalendarSettings = () => api<CalendarSettings>('/calendar/settings');
-
-/** *Hide my personal activities*, sent whole; the answer is the setting as it is now stored. */
-export const saveCalendarSettings = (settings: CalendarSettings) =>
-  api<CalendarSettings>('/calendar/settings', { method: 'PUT', body: settings });
 
 /*
  * ── Limits ───────────────────────────────────────────────────────────────────────────────────────

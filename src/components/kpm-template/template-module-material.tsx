@@ -12,13 +12,14 @@ import {
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { isHtmlDocument } from '@/lib/html-document';
 import { formatFileSize } from '@/lib/recruitment-pitch';
-import { signedUploadForm } from '@/lib/tenant-config';
+import { signedUploadForm } from '@/lib/signed-upload';
 import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
 import { adminTemplateMessages } from '@/i18n/messages/admin-template';
 import { trainingSettingsMessages } from '@/i18n/messages/training-settings';
+import type { PayloadMaterial } from '@/components/kpm-template/material-count';
 
-/** A module's material as a template payload holds it: any of the three lists may be absent. */
-export type PayloadMaterial = Partial<TemplateMaterial> | undefined;
+/** The count lives with the section's page, which draws it without this dialog (`material-count.ts`). */
+export { materialCount, type PayloadMaterial } from '@/components/kpm-template/material-count';
 
 /** The three lists, always present, copied so the dialog's edits are its own until saved. */
 export const materialOf = (raw: PayloadMaterial): TemplateMaterial => ({
@@ -26,10 +27,6 @@ export const materialOf = (raw: PayloadMaterial): TemplateMaterial => ({
   videos: (raw?.videos ?? []).map((f) => ({ ...f })),
   links: (raw?.links ?? []).map((l) => ({ ...l })),
 });
-
-/** How many items a module's material holds: a module **has material** with one or more (ADR-0208 §1). */
-export const materialCount = (raw: PayloadMaterial) =>
-  (raw?.files?.length ?? 0) + (raw?.videos?.length ?? 0) + (raw?.links?.length ?? 0);
 
 /** An address's start, shown as the field's example: the same in both languages, never words. */
 const ADDRESS_EXAMPLE = 'https://';
