@@ -5,7 +5,7 @@ import { KEPT_ENGLISH } from '@/i18n/glossary';
 const KEPT: ReadonlySet<string> = new Set(Object.values(KEPT_ENGLISH).flat());
 
 /**
- * **Whether a screen read in Indonesian still shows English of ours** (P18.98-T4 AC-2): the words an area writes in
+ * **Whether a screen read in Indonesian still shows English of ours** (P18.10-T4 AC-2): the words an area writes in
  * English and not in Indonesian, and the ones of them a rendered screen still shows. A kept term reads the same in both
  * languages, so it is never among them; what an office typed is not a message, so it never is either.
  */
@@ -40,7 +40,7 @@ const ownText = (el: Element) =>
   [...el.childNodes].filter((n) => n.nodeType === Node.TEXT_NODE || isKeptMark(n)).map((n) => n.textContent ?? '').join('').trim();
 
 /**
- * **What a message missing at run time writes** (P18.98-T7 AC-1): a key read that is not there, written into a
+ * **What a message missing at run time writes** (P18.10-T7 AC-1): a key read that is not there, written into a
  * sentence (`undefined`), or a group of messages where words were meant (`[object Object]`). `tsc` refuses both in a
  * screen that reads its area by key; this is the run-time half, for a key built from a value.
  */
@@ -51,15 +51,17 @@ const MISSING = /\bundefined\b|\[object Object\]/;
  * description's or a placeholder's, or — a sentence of three words or more — anywhere in its text. **And any message
  * missing** (`MISSING`), reported as `missing message: …` with the words around it.
  *
- * An element's own text is read with a kept term's `<span lang="en">` put back into it (P18.98-T7 AC-2), so a message
+ * An element's own text is read with a kept term's `<span lang="en">` put back into it (P18.10-T7 AC-2), so a message
  * reads the same whether or not ID mode has marked its terms.
  */
 export function englishShown(root: Element, english: readonly string[]): string[] {
   const words = new Set(english.map((e) => e.trim()));
   const found = new Set<string>();
   for (const el of [root, ...root.querySelectorAll('*')]) {
-    const own = ownText(el);
-    if (words.has(own)) found.add(own);
+    // A `<code>` holds a value as typed — an agent code, a cell of the import's contract (`DD/MM/YYYY`, `Full-time`) —
+    // the same in both languages by definition (P19.3-T4, `i18n/messages/roster-import.tsx`); it is never a message.
+    const own = el.closest('code') ? '' : ownText(el);
+    if (own && words.has(own)) found.add(own);
     for (const attr of ['aria-label', 'title', 'placeholder', 'alt']) {
       const value = el.getAttribute(attr)?.trim();
       if (value && words.has(value)) found.add(value);
@@ -74,7 +76,7 @@ export function englishShown(root: Element, english: readonly string[]): string[
 }
 
 /**
- * **Every area's English-only words** (P18.98-T7 AC-1): what no Indonesian screen may show, whichever module wrote
+ * **Every area's English-only words** (P18.10-T7 AC-1): what no Indonesian screen may show, whichever module wrote
  * it. Every area under `src/i18n/messages/`, found by reading the directory as `catalogue.spec.ts` does; a word is left
  * out when any area writes it in Indonesian too (*Total*, *Status*), or the glossary keeps it — so a word one module
  * translates and another rightly keeps never fails the screen that keeps it.

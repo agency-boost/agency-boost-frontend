@@ -23,7 +23,7 @@ export interface ElsewhereLink {
 function UpcomingPill({ id }: { id?: string }) {
   const t = useMessages(pageFrameMessages).upcoming;
   return (
-    <span id={id} className="inline-flex whitespace-nowrap rounded-pill bg-navy/[0.06] px-2 py-0.5 font-body text-2xs font-bold uppercase tracking-wide text-muted">
+    <span id={id} className="inline-flex whitespace-nowrap rounded-pill bg-secondary/[0.06] px-2 py-0.5 font-body text-2xs font-bold uppercase tracking-wide text-muted">
       {t.pill}
     </span>
   );

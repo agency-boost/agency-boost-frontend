@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type FocusEvent, type ReactNode } from 'react';
 import { AutoMarker } from '@/components/ui/auto-marker';
 import { Button, Card, ErrorBanner } from '@/components/ui/field';
-import { LineIcon } from '@/components/ui/line-icon';
 import { NumberBadge } from '@/components/ui/number-badge';
 import { PhoneTip } from '@/components/ui/phone-tip';
 import {
@@ -23,7 +22,7 @@ import type { TermKey } from '@/lib/terms';
 import { PRONOUN_FORMS, type CoacheeSubject } from '@/lib/coaching';
 import { kept } from '@/i18n/kept';
 import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
-import { voiceOf } from '@/i18n/messages/goal-words';
+import { goalWordMessages, voiceOf } from '@/i18n/messages/goal-words';
 import { goalsMessages } from '@/i18n/messages/goals';
 import { formatDay, formatDayLong, formatDecimalInput, formatNumber, formatRupiahCompact, moneyPrefix, parseDecimal } from '@/lib/format';
 import {
@@ -37,7 +36,7 @@ import { useTenantConfig, type TenantConfig } from '@/lib/tenant-config-cache';
 /**
  * The goal calculator (P8-T3) — `/goals`, and the same tool inside a coachee's *Goal Setting* tab (P11-T7 AC-5).
  *
- * **Since UI V1 (P18.99-T5, 2026-10-30) the revision is its design** (ADR-0180 §1; the report's UI-014 to UI-022 and
+ * **Since UI V1 (P18.11-T5, 2026-10-30) the revision is its design** (ADR-0180 §1; the report's UI-014 to UI-022 and
  * the `goals-mobile` and `goals-desktop` mockups):
  *
  * - **The answer first** (UI-014): an orange *Monthly activity target* card with this month's APE in a navy pill and
@@ -51,8 +50,9 @@ import { useTenantConfig, type TenantConfig } from '@/lib/tenant-config-cache';
  *   foot of the sticky right column from 1024px (UI-022).
  * - **The save state compares, it does not remember** (UI-019): `useSaveState` against the plan as saved, so a mode
  *   switched and back, or a value changed and changed back, reads *Tersimpan* again.
- * - **Step 2's two prefilled figures look alike and look editable** (UI-020): a white pill in normal ink with ✎, the
- *   ⚡ where the figure fills itself in.
+ * - **Step 2's two prefilled figures are one field, drawn alike** (UI-020 + UI-122, *Conflicts* row 146): a white 48px
+ *   pill in normal ink, the same width, **no ✎** — the whole pill is the input — each with a ⚡ (the APE its ⓘ too),
+ *   short (*Rp 290 jt*, *2,1 bulan*) until focused. On a laptop the two side by side, then the two tiles (UI-114).
  * - **No description pill under *Sales meeting*** (UI-021): on a tablet and a desktop an ⓘ beside a result tile says
  *   which of the office's activities it counts, where that differs from its name; on a phone nothing.
  * - **Two columns on a desktop** (UI-022): the four steps on the left; the result, the commitment and the save in a
@@ -76,10 +76,11 @@ import { useTenantConfig, type TenantConfig } from '@/lib/tenant-config-cache';
  * frame and no ✎, so it no longer looks like a field; its ⚡ and ⓘ say whose it is.
  *
  * **Step 2's two pills, since the staging review of 2026-10-31** (the product owner tapped *2 bulan ✎* on a phone and
- * typed *3*, and got *23*): the whole pill — the figure, the unit and the ✎ — is the field's target, and a tap selects
- * the whole figure, so what is typed replaces it. **The APE produced is typed by whoever saves the plan** while the
+ * typed *3*, and got *23*): the whole pill — the figure and the unit; the ✎ went with UI-122 (P19.1-T4) — is the field's
+ * target, and a tap selects the whole figure, so what is typed replaces it. **The APE produced is typed by whoever saves the plan** while the
  * office holds no figure — the member on `/goals`, and since ADR-0183 a leader on the coachee's tab (the server stores
- * it on the same rule, `typedApeOf`).
+ * it on the same rule, `typedApeOf`). **It is the member's estimate** (UI-157, ADR-0195): one value with the Summary's
+ * *Isi produksi sementara*, labelled *perkiraan Anda* under its name, and replaced once the office uploads the year.
  *
  * **Its words are the catalogue's** (`i18n/messages/goals.tsx`; the marker's `goal-words.ts`; the save state's and the
  * ⚡'s `ui-v1.ts`), every figure in the reader's figures (`useFigureLanguage()`). The activities a tile's ⓘ names are
@@ -119,6 +120,7 @@ export function GoalCalculator({
 }) {
   const { me } = useSession();
   const t = useMessages(goalsMessages);
+  const words = useMessages(goalWordMessages);
   const confirmed = useMessages(confirmationMessages);
   const language = useLanguage();
   const figures = useFigureLanguage();
@@ -135,7 +137,7 @@ export function GoalCalculator({
   const [error, setError] = useState<ApiError | null>(null);
   const [previewError, setPreviewError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
-  /** *Goal saved ✓* once *Save goal* lands (P18.95-T1 AC-6; the shared toast, UI-070). */
+  /** *Goal saved ✓* once *Save goal* lands (P18.7-T1 AC-6; the shared toast, UI-070). */
   const { toast, show } = useToast();
 
   const load = useCallback(async () => {
@@ -267,11 +269,21 @@ export function GoalCalculator({
       layout={below ? 'row' : 'stacked'}
     />
   );
+  /*
+   * **The member's estimate is labelled as theirs** (UI-157 item 4, ADR-0195 §1): *perkiraan Anda* under the field's name
+   * while it holds one — the same value the Summary's *Isi produksi sementara* writes. A figure a coach typed is named by
+   * its ⓘ (ADR-0183 S2), and is nobody's estimate.
+   */
+  const estimateLabel = draft.apeAchievedMinor > 0 && !shown.achieved.typedBy
+    ? <span data-estimate-label="" className="text-sm font-medium text-muted">{words.produced.estimate({ who: voice })}</span>
+    : null;
   const producedField = producedTypable ? (
     <PillMoney
       id="goal-achieved"
       label={t.produced}
-      marker={null}
+      // UI-122: prefilled, so a ⚡, and the APE keeps its ⓘ — whose figure it is.
+      marker={<AutoMarker name={t.produced} explanation={produced} />}
+      sub={estimateLabel}
       value={draft.apeAchievedMinor}
       onChange={(apeAchievedMinor) => set({ apeAchievedMinor })}
       layout={below ? 'row' : 'stacked'}
@@ -290,7 +302,7 @@ export function GoalCalculator({
   const stepOne = (
     <Step n={1} title={mine ? t.target.mine : t.target.theirs} term="APE">
       {/*
-        * **Two segments, both visible** (`:2865-2868`), sharing the track on a phone (P18.95-T5 AC-7). Switching and
+        * **Two segments, both visible** (`:2865-2868`), sharing the track on a phone (P18.7-T5 AC-7). Switching and
         * switching back leaves the plan as saved (UI-019): both targets are kept in either mode.
         */}
       <Segmented
@@ -356,12 +368,22 @@ export function GoalCalculator({
           )}
         </>
       ) : (
-        <div className="grid grid-cols-4 items-end gap-2.5">
-          {monthsField}
-          {producedField}
-          {projected && <GoalTile label={t.remaining} value={money(projected.remainingApeMinor)} />}
-          {projected && <GoalTile variant="insight" label={t.monthlyTarget} value={money(projected.monthlyApeTargetMinor)} />}
-        </div>
+        /*
+         * **A laptop** (`goals-desktop-2026-11-02`; UI-114, *Conflicts* row 152): the two fields side by side, then the two
+         * result tiles side by side — not four across, which wrapped every label at 1024.
+         */
+        <>
+          <div data-step-two="fields" className="grid grid-cols-2 items-start gap-2.5">
+            {monthsField}
+            {producedField}
+          </div>
+          {projected && (
+            <div data-step-two="tiles" className="mt-2.5 grid grid-cols-2 gap-2.5">
+              <GoalTile label={t.remaining} value={money(projected.remainingApeMinor)} />
+              <GoalTile variant="insight" label={t.monthlyTarget} value={money(projected.monthlyApeTargetMinor)} />
+            </div>
+          )}
+        </>
       )}
     </Step>
   );
@@ -391,22 +413,24 @@ export function GoalCalculator({
           {policyTiles && <div className="mt-3 grid grid-cols-2 gap-2">{policyTiles}</div>}
         </>
       ) : (
-        <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)] items-center gap-3">
+        // A laptop (UI-114): the slider across, then its two tiles side by side, so no label wraps more than once.
+        <>
           {caseSizeSlider}
-          {policyTiles}
-        </div>
+          {policyTiles && <div data-step-three="tiles" className="mt-3 grid grid-cols-2 gap-2.5">{policyTiles}</div>}
+        </>
       )}
     </Step>
   );
 
   /*
    * **The two rates, 5 points a press** (UI-016): *Appointment to meeting* (the owner's name, as the ratio *Set
-   * appointment to meeting*) and *Closing rate*. Unsaved, each opens on the office's benchmark (ADR-0160 §3). Side by side
-   * on a desktop, one under the other below it.
+   * appointment to meeting*) and *Closing rate*. Unsaved, each opens on the office's benchmark (ADR-0160 §3). **One under
+   * the other at every size** since `goals-desktop-2026-11-02` (UI-114: side by side, *Appointment to meeting* was cut at
+   * 1280).
    */
   const stepFour = (
     <Step n={4} title={t.assumptions}>
-      <div className={cn('grid gap-2', !below && 'grid-cols-2')}>
+      <div data-step-four="" className="grid gap-2">
         <StepperRow
           label={t.appointmentToMeeting}
           value={draft.leadsToApptPct}
@@ -486,9 +510,9 @@ export function GoalCalculator({
    * tablet, nothing on a phone (the report's Appendix A).
    */
   const commitment = (
-    <div className="rounded-lg bg-navy px-4 py-3.5 text-sidebar-text">
+    <div className="rounded-lg bg-secondary px-4 py-3.5 text-sidebar-text">
       <div className="flex items-center gap-1">
-        <h2 className="text-xs font-bold uppercase tracking-[0.06em] text-amber">
+        <h2 className="text-xs font-bold uppercase tracking-[0.06em] text-primary-on-secondary">
           {t.commitment({ mine, date: goal.savedAt ? formatDay(goal.savedAt, figures) : null })}
         </h2>
         {below && (
@@ -498,12 +522,12 @@ export function GoalCalculator({
             tip={t.disclaimer}
             align="fit"
             className="-my-2 max-md:hidden"
-            face="text-on-navy-muted"
+            face="text-secondary-muted"
           />
         )}
       </div>
       {projected && !projected.targetMet && (
-        <p className="mt-1.5 text-[0.9375rem] font-medium leading-relaxed text-white">
+        <p className="mt-1.5 text-[0.9375rem] font-medium leading-relaxed text-secondary-contrast">
           {t.pledge({
             strong: (words) => <Figure>{words}</Figure>,
             monthly: money(projected.monthlyApeTargetMinor),
@@ -532,7 +556,7 @@ export function GoalCalculator({
         * is owed is knowing. On a coachee's tab it would describe the reader to themselves.
         */}
       {byLeader && (
-        <Card density="compact" className="border-amber/40 bg-amber/5">
+        <Card density="compact" className="border-primary/40 bg-primary/5">
           <p className="text-md text-navy">
             {t.setByLeader({
               strong: (words) => <strong>{words}</strong>,
@@ -619,7 +643,7 @@ function previewOf(goal: Goal): GoalPreview {
  * emphasis is semantic, and a reader who cannot see the colour still hears it.
  */
 function Figure({ children }: { children: ReactNode }) {
-  return <strong className="font-extrabold text-amber">{children}</strong>;
+  return <strong className="font-extrabold text-primary-on-secondary">{children}</strong>;
 }
 
 /**
@@ -628,10 +652,10 @@ function Figure({ children }: { children: ReactNode }) {
  */
 function ResultCard({ title, pill, children }: { title: string; pill: string | null; children: ReactNode }) {
   return (
-    <section aria-labelledby="goal-result-title" data-goal-result="" className="rounded-lg bg-amber p-3">
+    <section aria-labelledby="goal-result-title" data-goal-result="" className="rounded-lg bg-primary p-3">
       <div className="mb-2 flex items-center justify-between gap-2">
-        <h2 id="goal-result-title" className="text-[0.9375rem] font-bold text-navy">{title}</h2>
-        {pill && <span className="whitespace-nowrap rounded-pill bg-navy px-2.5 py-0.5 text-xs font-bold text-card">{pill}</span>}
+        <h2 id="goal-result-title" className="text-[0.9375rem] font-bold text-primary-contrast">{title}</h2>
+        {pill && <span className="whitespace-nowrap rounded-pill bg-secondary px-2.5 py-0.5 text-xs font-bold text-secondary-contrast">{pill}</span>}
       </div>
       {children}
     </section>
@@ -650,9 +674,9 @@ function ResultTile({ label, n, week, counts, hero = false }: {
     <div
       data-result-tile=""
       data-hero={hero ? 'true' : undefined}
-      className={cn('flex min-w-0 flex-col rounded-row px-2.5 py-2', hero ? 'bg-navy text-card' : 'bg-card text-ink')}
+      className={cn('flex min-w-0 flex-col rounded-row px-2.5 py-2', hero ? 'bg-secondary text-secondary-contrast' : 'bg-card text-ink')}
     >
-      <span className={cn('text-[1.875rem] font-extrabold leading-tight tabular-nums', hero && 'text-amber')}>{n}</span>
+      <span className={cn('text-[1.875rem] font-extrabold leading-tight tabular-nums', hero && 'text-primary-on-secondary')}>{n}</span>
       <span className="flex items-start gap-0.5 text-xs font-bold leading-snug">
         <span className="min-w-0">{label}</span>
         {counts && (
@@ -662,11 +686,11 @@ function ResultTile({ label, n, week, counts, hero = false }: {
             tip={counts}
             align="fit"
             className="-my-1.5 max-md:hidden"
-            face={hero ? 'text-on-navy-muted' : undefined}
+            face={hero ? 'text-secondary-muted' : undefined}
           />
         )}
       </span>
-      <span className={cn('mt-auto pt-0.5 text-xs font-medium', hero ? 'text-on-navy-muted' : 'text-muted')}>{week}</span>
+      <span className={cn('mt-auto pt-0.5 text-xs font-medium', hero ? 'text-secondary-muted' : 'text-muted')}>{week}</span>
     </div>
   );
 }
@@ -681,10 +705,10 @@ function GoalTile({ label, value, unit, variant = 'plain', className }: {
   return (
     <div
       data-variant={variant}
-      className={cn('min-w-0 rounded-row px-3 py-2.5', variant === 'plain' ? 'bg-base' : 'bg-amber/[0.14]', className)}
+      className={cn('min-w-0 rounded-row px-3 py-2.5', variant === 'plain' ? 'bg-base' : 'bg-primary/[0.14]', className)}
     >
       <span className="block text-base font-medium text-muted">{label}</span>
-      <span className={cn('text-[1.375rem] font-extrabold leading-tight', variant === 'plain' ? 'text-ink' : 'text-amber-deep')}>
+      <span className={cn('text-[1.375rem] font-extrabold leading-tight', variant === 'plain' ? 'text-ink' : 'text-primary-deep')}>
         {value}
         {unit ? <span className="ml-1 text-base font-semibold">{unit}</span> : null}
       </span>
@@ -724,20 +748,29 @@ function RupiahSlider({ label, track, value, onChange, info }: {
 /** The pill a prefilled figure stands in (UI-020): white, 48px, a 1.5px line, the figure 16px/700 in normal ink. */
 const PILL = cn(
   'inline-flex h-12 items-center gap-1.5 rounded-pill border-[1.5px] border-line bg-card px-3.5 text-lg font-bold text-ink',
-  'focus-within:border-amber focus-within:ring-2 focus-within:ring-amber focus-within:ring-offset-1',
+  'focus-within:border-primary focus-within:ring-2 focus-within:ring-focus-ring focus-within:ring-offset-1',
 );
 
-/** Where a pill's label goes: on its left in a 56px row below 1024px, above it from 1024px (UI-020). */
-function PillLine({ layout, label, children }: { layout: 'row' | 'stacked'; label: ReactNode; children: ReactNode }) {
+/**
+ * Where a pill's label goes: on its left in a 56px row below 1024px, above it from 1024px (UI-020). `sub` is a line under
+ * the label — *perkiraan Anda* (UI-157).
+ */
+function PillLine({ layout, label, sub, children }: {
+  layout: 'row' | 'stacked'; label: ReactNode; sub?: ReactNode; children: ReactNode;
+}) {
   return layout === 'row' ? (
     <div className="flex min-h-14 items-center justify-between gap-2">
-      <span className="flex min-w-0 items-center gap-1 text-md font-medium leading-snug text-ink">{label}</span>
+      <span className="flex min-w-0 flex-col">
+        <span className="flex min-w-0 items-center gap-1 text-md font-medium leading-snug text-ink">{label}</span>
+        {sub}
+      </span>
       <span className="shrink-0">{children}</span>
     </div>
   ) : (
     <div className="flex min-w-0 flex-col gap-1.5">
       <span className="flex items-center gap-1 text-base font-medium text-muted">{label}</span>
       {children}
+      {sub}
     </div>
   );
 }
@@ -769,15 +802,18 @@ function useSelectAll() {
 }
 
 /**
- * **The whole pill is the field's target** (the staging review of 2026-10-31): a `<label>` around the figure, the unit
- * and the ✎, 48px high, so a tap on any of them focuses the field — not only on the figure's own ~48px. The field is
- * named by the line's label alone (`aria-labelledby`), never by the unit or the figure the pill also holds.
+ * **The whole pill is the field's target** (the staging review of 2026-10-31; UI-122): a `<label>` around the figure and
+ * the unit, 48px high, so a tap anywhere on it focuses the field — not only on the figure's own ~48px. **No ✎** (UI-122,
+ * *Conflicts* row 146), and **one width for both** (`PILL_WIDTH` in a row; the column's from 1024px). The field is named by
+ * the line's label alone (`aria-labelledby`), never by the unit or the figure the pill also holds.
  */
-function PillField({ id, layout, width, children }: {
-  id: string; layout: 'row' | 'stacked'; width: string; children: ReactNode;
+const PILL_WIDTH = 'w-40';
+
+function PillField({ id, layout, children }: {
+  id: string; layout: 'row' | 'stacked'; children: ReactNode;
 }) {
   return (
-    <label htmlFor={id} className={cn(PILL, 'cursor-text', layout === 'row' ? width : 'w-full')}>
+    <label htmlFor={id} data-pill="" className={cn(PILL, 'cursor-text', layout === 'row' ? PILL_WIDTH : 'w-full')}>
       {children}
     </label>
   );
@@ -798,7 +834,7 @@ function PillDecimal({ id, label, marker, value, unit, onValueChange, layout }: 
   const nameId = useId();
   return (
     <PillLine layout={layout} label={<><label id={nameId} htmlFor={id}>{label}</label>{marker}</>}>
-      <PillField id={id} layout={layout} width="w-36">
+      <PillField id={id} layout={layout}>
         <input
           id={id}
           type="text"
@@ -825,7 +861,6 @@ function PillDecimal({ id, label, marker, value, unit, onValueChange, layout }: 
           className="w-full min-w-0 bg-transparent text-right font-bold text-ink outline-none [font-size:16px]"
         />
         <span className="shrink-0 font-bold">{unit}</span>
-        <LineIcon name="pencil" className="h-4 w-4 shrink-0 text-signal-grey" />
       </PillField>
     </PillLine>
   );
@@ -835,8 +870,8 @@ function PillDecimal({ id, label, marker, value, unit, onValueChange, layout }: 
  * **The APE already produced, typed** (UI-020; ADR-0183): short — *Rp 290 jt* — until tapped, then every digit,
  * grouped as it is typed (*290.000.000*), the currency mark beside it. Digits only, in either language's grouping.
  */
-function PillMoney({ id, label, marker, value, onChange, layout }: {
-  id: string; label: string; marker: ReactNode; value: number; onChange: (minor: number) => void;
+function PillMoney({ id, label, marker, sub, value, onChange, layout }: {
+  id: string; label: string; marker: ReactNode; sub?: ReactNode; value: number; onChange: (minor: number) => void;
   layout: 'row' | 'stacked';
 }) {
   const figures = useFigureLanguage();
@@ -844,8 +879,8 @@ function PillMoney({ id, label, marker, value, onChange, layout }: {
   const selectAll = useSelectAll();
   const nameId = useId();
   return (
-    <PillLine layout={layout} label={<><label id={nameId} htmlFor={id}>{label}</label>{marker}</>}>
-      <PillField id={id} layout={layout} width="w-40">
+    <PillLine layout={layout} label={<><label id={nameId} htmlFor={id}>{label}</label>{marker}</>} sub={sub}>
+      <PillField id={id} layout={layout}>
         {typing !== null && <span aria-hidden="true" className="shrink-0 font-bold text-muted">{moneyPrefix(figures)}</span>}
         <input
           id={id}
@@ -871,7 +906,6 @@ function PillMoney({ id, label, marker, value, onChange, layout }: {
           }}
           className="w-full min-w-0 bg-transparent text-right font-bold text-ink outline-none [font-size:16px]"
         />
-        <LineIcon name="pencil" className="h-4 w-4 shrink-0 text-signal-grey" />
       </PillField>
     </PillLine>
   );
@@ -945,7 +979,7 @@ const LABEL = {
 } as const;
 
 /**
- * **The names of the activities each stage counts** (P18.95-T5 AC-5): the office's own label for every code its
+ * **The names of the activities each stage counts** (P18.7-T5 AC-5): the office's own label for every code its
  * activity binding names for the stage, as Log Activity prints it — read from the published configuration by code
  * (invariant §4), so a renamed activity renames its ⓘ. A code with no active type behind it is not named; `null`
  * until the configuration arrives.
@@ -983,12 +1017,12 @@ function countsOf(names: readonly string[] | null, label: string): string | unde
 /**
  * One of the four steps: a filled navy ordinal (the mockups' `.num`), a question 16px/700, and what answers it. The
  * badge is `aria-hidden` (`NumberBadge`): the heading beside it is the name. `term` is a term the title uses, whose ⓘ
- * follows it (P18.95-T9 AC-3) — beside the heading, so its name stays the title.
+ * follows it (P18.7-T9 AC-3) — beside the heading, so its name stays the title.
  */
 function Step({ n, title, term, children }: { n: number; title: string; term?: TermKey; children: ReactNode }) {
   const heading = (
     <h2 className="flex items-center gap-2 text-lg font-bold text-ink">
-      <NumberBadge n={n} size="md" className="border-navy bg-navy text-card" />
+      <NumberBadge n={n} size="md" className="border-secondary bg-secondary text-secondary-contrast" />
       {title}
     </h2>
   );

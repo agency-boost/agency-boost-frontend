@@ -10,7 +10,7 @@ import { parse, renderable, sourceFiles, SRC, startOf } from '@test/copy-scan';
  * A phase number is our schedule, and a customer can do nothing with it (ADR-0062 §3). Every one of
  * them went stale on the day the roadmap was re-planned: *Arrives in phase 13* on a placeholder that
  * phase 15 builds, *from phase 12* on a fit check that phase 14 builds. Taking them out once is the
- * easy half; this is the other half, the structural one, in the spirit of P3.6-T5's `PasswordInput`
+ * easy half; this is the other half, the structural one, in the spirit of P3.2-T5's `PasswordInput`
  * scan (`components/ui/password-input.spec.tsx`): the guarantee is about how the copy is *written*.
  *
  * **It reads the syntax tree, not the text,** so a comment never counts. Comments are where a phase
@@ -31,7 +31,7 @@ import { parse, renderable, sourceFiles, SRC, startOf } from '@test/copy-scan';
  * where the acceptance criterion writes one space, and none at all before a hole: `{' '}` is the
  * space, and it was folded into the text on the way.
  *
- * **In both languages** (P18.98-T1 AC-6): the catalogue's messages are in the scan (`@test/copy-scan`), and the
+ * **In both languages** (P18.10-T1 AC-6): the catalogue's messages are in the scan (`@test/copy-scan`), and the
  * Indonesian says *fase {n}*, *fase berikutnya*.
  */
 const PATTERN = /\bphase\s*\{|\bphase\s+\d|\blater\s+phase\b|\bfase\s*\{|\bfase\s+\d|\bfase\s+(?:berikutnya|mendatang|selanjutnya)\b/i;
@@ -106,7 +106,7 @@ describe('no screen tells a customer our schedule', () => {
     expect(files).toContain('components/coming-in-phase.tsx');
   });
 
-  it('P18.98-T1 AC-6 reads the catalogue’s messages, both languages, where a moved module’s words are', () => {
+  it('P18.10-T1 AC-6 reads the catalogue’s messages, both languages, where a moved module’s words are', () => {
     expect(files).toContain('i18n/messages/shell.ts');
   });
 

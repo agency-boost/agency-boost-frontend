@@ -19,7 +19,7 @@ import { POPOVER_PAGE_SIZE } from '@/lib/notifications';
 import { useCanMark, useInbox } from '@/lib/use-inbox';
 
 /**
- * **The popover's rows, downloaded when it first has some to draw** (P18.99-T16, the bundle): the bell is on every page
+ * **The popover's rows, downloaded when it first has some to draw** (P18.11-T16, the bundle): the bell is on every page
  * from 768px and the rows only after a tap and a read, so the list — its rows, its notice dialog — was in every route's
  * first load for nothing. `/notifications` draws the same list, imported as before.
  */
@@ -55,7 +55,7 @@ const NotificationList = dynamic(() => import('@/components/notification-list').
  * **A read-only support session marks nothing** (roles-and-permissions §7.2; the Phase 12.1 exit
  * review, N2): no *Mark all read*, no toggle, and a row opens without reading itself (`useCanMark`).
  *
- * **Not on a phone's bar since 2026-10-27** (P18.95-T12, the product owner's request): below 768px the bar holds
+ * **Not on a phone's bar since 2026-10-27** (P18.7-T12, the product owner's request): below 768px the bar holds
  * the avatar alone, which wears this bell's `UnreadBadge` and whose menu holds *Notifications* (`SidebarUserMenu`).
  * The bell and its popover are the sidebar's, from 768px, exactly as before; the placement under the bar stays in
  * its classes for a shell with no account to hold the notices, which has no avatar menu.
@@ -127,9 +127,9 @@ export function NotificationBell({ href, unread }: { href: string; unread: numbe
         aria-label={withUnread(kept('Notifications'), unread, language)}
         onClick={() => setOpen((was) => !was)}
         className={cn(
-          // 44 × 44 on a phone (P18.95-T1 AC-10); 36 × 36 from 768 px, as before.
+          // 44 × 44 on a phone (P18.7-T1 AC-10); 36 × 36 from 768 px, as before.
           'relative flex h-9 w-9 shrink-0 items-center justify-center rounded-md', TAP_TARGET,
-          active ? 'bg-amber/15 text-white' : 'text-white/[0.78] hover:bg-white/[0.06]',
+          active ? 'bg-primary/15 text-white' : 'text-white/[0.78] hover:bg-white/[0.06]',
         )}
       >
         <svg
@@ -227,7 +227,7 @@ export function withUnread(name: string, unread: number, language: Language = SO
 }
 
 /**
- * **The red count on the bell's corner** — and, on a phone's bar, on the avatar's (P18.95-T12 AC-2), so the two are
+ * **The red count on the bell's corner** — and, on a phone's bar, on the avatar's (P18.7-T12 AC-2), so the two are
  * one badge: its classes, its tokens and its `9+`. Nothing at all while nothing is unread. Placed against its
  * control's box, which is `relative`; hidden from a screen reader, which hears the count in the control's name.
  */

@@ -1,7 +1,8 @@
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { makeMe, renderWithSession, stubFetch } from '@test/harness';
+import { atWidth, makeMe, renderWithSession, stubFetch } from '@test/harness';
+import { smallTargets } from '@test/touch-audit';
 import TrainingSettingsPage from './page';
 
 const push = vi.fn();
@@ -391,7 +392,8 @@ describe('Settings › Training (P5-T1)', () => {
     await saved(calls);
 
     await screen.findByText('Product');
-    expect(calls.filter((c) => c.url.includes('/kpm/settings/training')).length).toBe(2);
+    // The list's reads; *Sinkron dari template* reads its own address (P19.6-T4), which is not counted here.
+    expect(calls.filter((c) => c.url.includes('/kpm/settings/training') && !c.url.includes('template-sync')).length).toBe(2);
     expect(screen.queryByText(/not saved yet/)).not.toBeInTheDocument();
   });
 
@@ -444,5 +446,98 @@ describe('Settings › Training (P5-T1)', () => {
     const published = screen.getAllByRole('switch', { name: 'Published' });
     expect(published.length).toBeGreaterThan(0);
     published.forEach((s) => expect(s).toBeDisabled());
+  });
+});
+
+/**
+ * **No target under 44px on a phone or a tablet** (P19.2-T3 AC-4; UI-142: text links 17px tall, *Tampilkan yang
+ * diarsipkan* 13px, tab rows 38px, ⠿ 20px), inside the field shell's frame the Owner's pages wear (ADR-0197), which
+ * `data-surface` stands for here.
+ */
+describe('P19.2-T3 AC-4 the training catalogue’s targets (UI-142)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it.each([375, 768])('P19.2-T3 AC-4 at %ipx finds no target under 44px', async (px) => {
+    atWidth(px);
+    render();
+    const frame = document.body.firstElementChild!;
+    frame.setAttribute('data-surface', 'v1');
+    await screen.findByText('Sales');
+    await userEvent.click(screen.getByLabelText('Show archived'));
+    expect(smallTargets(frame, px)).toEqual([]);
+  });
+
+  /** P19.6-T4 (UI-161, ADR-0220 §1, §4): *Nama* and *Deskripsi singkat*, and *Sinkron dari template*. */
+  describe('short descriptions and Sinkron dari template (P19.6-T4)', () => {
+    const DESCRIBED = TREE.map((c) => (c.code !== 'SALES' ? c : {
+      ...c,
+      skills: c.skills.map((s) => (s.code !== 'PROSPECTING' ? s : {
+        ...s,
+        description: 'Temukan calon nasabah',
+        modules: s.modules.map((m) => (m.code === 'PROSPECT_LIST' ? { ...m, description: 'Daftar 100 nama' } : m)),
+      })),
+    }));
+    const renderDescribed = (sync: unknown = { template: null, templateVersions: {}, revision: 'r', differences: [] }) => {
+      const stub = stubFetch({
+        '/kpm/settings/training': { body: DESCRIBED },
+        '/kpm/settings/training/template-sync': { body: sync },
+        '/kpm/settings/publish-state': { body: PUBLISH_STATE },
+        '/kpm/settings/changes': { body: { training: [], version: 2 } },
+      });
+      renderWithSession(<TrainingSettingsPage />, { me: OWNER });
+      return stub;
+    };
+
+    it('P19.6-T4 AC-1 draws a skill’s and a module’s description in grey under its name', async () => {
+      renderDescribed();
+      await screen.findByText('Sales');
+      await openTab('Skills');
+      expect(within(rowOf('Prospecting')).getByText('Temukan calon nasabah')).toHaveClass('text-muted');
+      await openTab('Modules');
+      expect(within(rowOf('Building Your Prospect List')).getByText('Daftar 100 nama')).toHaveClass('text-muted');
+    });
+
+    it('P19.6-T4 AC-1 stages a skill’s new Deskripsi singkat, and only what changed', async () => {
+      const { calls } = renderDescribed();
+      await screen.findByText('Sales');
+      await openTab('Skills');
+      await userEvent.click(within(rowOf('Closing')).getByRole('button', { name: 'Edit' }));
+      await userEvent.type(screen.getByRole('textbox', { name: 'Short description' }), 'Ajak nasabah memutuskan');
+      await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+      expect(await saved(calls)).toEqual([
+        { op: 'trainingSkill.update', id: 's-closing', expectedVersion: 1, body: { description: 'Ajak nasabah memutuskan' } },
+      ]);
+    });
+
+    it('P19.6-T4 AC-1 a new skill can carry its description, at most 160 characters as typed', async () => {
+      const { calls } = renderDescribed();
+      await screen.findByText('Sales');
+      await openTab('Skills');
+      await userEvent.click(screen.getByRole('button', { name: '+ Add skill' }));
+      await userEvent.type(screen.getByRole('textbox', { name: 'Name' }), 'Fact finding');
+      const description = screen.getByRole('textbox', { name: 'Short description' });
+      expect(description).toHaveAttribute('maxLength', '160');
+      await userEvent.type(description, 'Menghitung kebutuhan');
+      await userEvent.click(screen.getByRole('button', { name: 'Add the skill' }));
+      expect(await saved(calls)).toEqual([{
+        op: 'trainingSkill.create',
+        body: { code: 'FACT_FINDING', categoryCode: 'SALES', label: 'Fact finding', description: 'Menghitung kebutuhan' },
+      }]);
+    });
+
+    it('P19.6-T4 AC-3 shows Sinkron dari template in the toolbar only when the template’s names differ', async () => {
+      renderDescribed();
+      await screen.findByText('Sales');
+      expect(screen.queryByRole('button', { name: 'Sync from template' })).toBeNull();
+      vi.unstubAllGlobals();
+      document.body.innerHTML = '';
+      renderDescribed({
+        template: { id: 't', name: 'Prudential template' },
+        templateVersions: { training_taxonomy: 2, capability_ladder: 1 },
+        revision: 'r',
+        differences: [{ level: 'skill', code: 'CLOSING', field: 'name', from: 'Closing', to: 'Closing dan keputusan' }],
+      });
+      expect(await screen.findByRole('button', { name: 'Sync from template' })).toBeInTheDocument();
+    });
   });
 });

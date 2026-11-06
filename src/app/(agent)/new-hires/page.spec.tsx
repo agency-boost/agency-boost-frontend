@@ -92,7 +92,7 @@ describe('/new-hires below 768px — UI V1 (UI-023 to UI-026, D-24)', () => {
     const row = (name: string) => within(own).getByRole('link', { name }).closest('[data-person-row]') as HTMLElement;
     expect(row('Dimas Saputra')).toHaveTextContent('ActivatedDimas SaputraFirst sale on day 3950%');
     expect(row('Lukman Hakim').querySelector('[data-status]')).toHaveAttribute('data-status', 'activated_late');
-    expect(within(row('Lukman Hakim')).getByText('First sale on day 96')).toHaveClass('text-amber-ink');
+    expect(within(row('Lukman Hakim')).getByText('First sale on day 96')).toHaveClass('text-primary-ink');
     expect(row('Fikri Ramadhan')).toHaveTextContent('Not yetFikri RamadhanDay 38No checklist');
     // UI-024: no join date, first-sale date, agent code or status chip on a row.
     expect(own).not.toHaveTextContent(/Join date|2026|Activated ·/);
@@ -157,11 +157,16 @@ describe('/new-hires below 768px — UI V1 (UI-023 to UI-026, D-24)', () => {
     expect(within(await group('Arief Hidayat')).getByRole('link', { name: 'Tari Wulandari' })).toBeInTheDocument();
   });
 
-  it('the empty year: Boost and the line, nothing else', async () => {
+  it('P19-T4 AC-3 the empty year: Aktivasi 3M at –, No data yet, the list as it will look, and Add your first agent', async () => {
     atWidth(375);
     show({ '/new-hires': notFound });
-    expect(await screen.findByText('No one you lead joined as a new hire in the last 12 months.')).toBeInTheDocument();
+    expect(await screen.findByText('No data yet')).toBeInTheDocument();
+    expect(screen.getByText('Example')).toBeInTheDocument();
+    expect(document.querySelector('[data-sample]')!.textContent).toContain('Sample agent 1');
+    // Its filter is the sample's, inert: none is offered to the reader.
     expect(screen.queryByRole('group', { name: 'Show' })).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Add your first agent' }));
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
   });
 
   it('a read-only support session is offered no + Add agent and no Menunggu bergabung', async () => {
@@ -173,10 +178,14 @@ describe('/new-hires below 768px — UI V1 (UI-023 to UI-026, D-24)', () => {
   });
 });
 
-describe('/new-hires from 768px — UI V1 (UI-024, D-24)', () => {
+/*
+ * *Changed 2026-11-05 (P19.1-T5 AC-2; UI-115):* the table and its right column from 1024px — a tablet draws the phone's
+ * page (`new-hires-tablet.spec.tsx`). This block read *from 768px* and pinned the table at 768 and 1280.
+ */
+describe('/new-hires from 1024px — UI V1 (UI-024, D-24)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it.each([768, 1280])('UI-024 at %ipx: the same tree as a table (Nama · Status · Checklist), every leader open', async (px) => {
+  it.each([1024, 1280])('UI-024 at %ipx: the same tree as a table (Nama · Status · Checklist), every leader open', async (px) => {
     atWidth(px);
     show();
     const table = await screen.findByRole('table', { name: 'New Hires' });

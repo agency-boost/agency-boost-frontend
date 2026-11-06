@@ -39,7 +39,7 @@ export function Dialog({
   message: string;
   /** Says what will happen — *Delete lead*, *Discard counts* — never *OK*. */
   confirmLabel: string;
-  /** *Cancel* in the reader's language where a caller names nothing else (P18.98-T4). */
+  /** *Cancel* in the reader's language where a caller names nothing else (P18.10-T4). */
   cancelLabel?: string;
   /** `danger` for something that destroys, which the prototype paints quieter, not louder. */
   tone?: 'primary' | 'danger';
@@ -102,7 +102,7 @@ export function Dialog({
         aria-label={message}
         onClick={(e) => e.stopPropagation()}
         onKeyDown={trap}
-        // Never taller than the screen (P18.96-T1 AC-2): a long question scrolls inside, and the two buttons stay.
+        // Never taller than the screen (P18.8-T1 AC-2): a long question scrolls inside, and the two buttons stay.
         className="flex max-h-[calc(100dvh-1.25rem-max(1.25rem,env(safe-area-inset-top)))] w-full max-w-[22.5rem] flex-col rounded-lg bg-card p-6 shadow-modal"
       >
         <p className="mb-4 min-h-0 overflow-y-auto overscroll-contain text-md leading-relaxed text-navy">{message}</p>

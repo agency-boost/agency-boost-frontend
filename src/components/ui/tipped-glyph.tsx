@@ -67,7 +67,7 @@ export function TippedGlyph({
   face,
 }: {
   /**
-   * What is drawn: a character (`✎`, `ⓘ`), or since P18.95-T4 an icon — a lead's WhatsApp held with its
+   * What is drawn: a character (`✎`, `ⓘ`), or since P18.7-T4 an icon — a lead's WhatsApp held with its
    * reason. Hidden from assistive technology either way; `name` is what is said.
    */
   glyph: ReactNode;
@@ -149,7 +149,7 @@ export function TippedGlyph({
           'absolute bottom-full z-10 mb-1',
           align === 'end' ? 'right-0 whitespace-nowrap' : 'w-max whitespace-normal text-left',
           align === 'fit' && (fit?.side === 'end' ? 'right-0' : 'left-0'),
-          'rounded-sm bg-navy px-2 py-1 text-xs font-semibold text-white shadow-modal',
+          'rounded-sm bg-secondary px-2 py-1 text-xs font-semibold text-secondary-contrast shadow-modal',
           // The bridge across the 4px gap, so the pointer can cross it without the bubble going.
           "before:absolute before:inset-x-0 before:top-full before:h-1 before:content-['']",
         )}

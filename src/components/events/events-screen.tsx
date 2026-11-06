@@ -10,12 +10,11 @@ import { eventsMessages } from '@/i18n/messages/events';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import {
-  cancelRsvp, canJoin, EVENT_FILTERS, goingToast, phoneGroups, readEvents, refusalOf, rsvpCall, rsvpEvent, sections,
+  audienceLine, cancelRsvp, EVENT_FILTERS, goingToast, phoneGroups, readEvents, refusalOf, rsvpCall, rsvpEvent,
   withdrawRsvp, type EventFilter, type EventsMeta, type GuestEvent, type GuestEventCan,
 } from '@/lib/events';
 import { OFFICE_TIME_ZONE } from '@/lib/format';
 import { usePhone } from '@/lib/use-phone';
-import { EventCard } from './event-card';
 import { PhoneEventCard } from './event-phone';
 
 /** What the modal beneath the list needs from it: how to close, how to say something, how to update a card. */
@@ -44,7 +43,7 @@ export function useEventsHost(): EventsHost {
 }
 
 /**
- * **KPM Events** (`/events`; `Overall.html:3423-3448`, logic `:8425-8771`; P18.5-T5 AC-4): the events the
+ * **KPM Events** (`/events`; `Overall.html:3423-3448`, logic `:8425-8771`; P18.2-T5 AC-4): the events the
  * reader is invited to, as the server resolves the audience at each event's start (ADR-0039) — *Going*,
  * *Upcoming* and *Past*, under the filter *All* · *Upcoming* · *Past*.
  *
@@ -55,19 +54,27 @@ export function useEventsHost(): EventsHost {
  * **The filter says which is on** (`aria-pressed`; ADR-0137 §2, a selection is navy). A running event
  * sits with the upcoming ones (F-42). The cards are one column on a phone (`:2159-2160`).
  *
- * **A card's *Join*** (P18.95-T10 AC-1) is the modal's *Join event* from the list: the same call, its answer
- * moving the card to *Going*, the same toast, and a refusal said under that card in the same words — a 409
- * meaning the event moved on, so the list is read again and the card says so. The focus follows the card to
- * its new section, onto its *View event*, since the *Join* it was on is gone.
+ * **A card's *Ikut*** is the modal's *Join event* from the list (P18.7-T10 AC-1, since UI-108 with *Tidak ikut*
+ * beside it): the same call, the same toast, and a refusal said under that card in the same words — a 409 meaning the
+ * event moved on, so the list is read again and the card says so.
  *
  * Its own states are Fills (L-01): a skeleton shaped like the cards, an error with a retry, and the
- * prototype's three empty rows for a section with nothing in it.
+ * prototype's empty line when the filter leaves nothing to show.
  *
  * **UI V1 on a phone** (UI-108; `campaign-event-mobile` 2; Mobile only): *Semua | Akan datang | Sudah lewat* as one
  * full-width segmented control; two groups, *Akan datang* and *Sudah lewat*, each with its count and hidden when empty
  * (D-08); compact cards (`PhoneEventCard`) with **Ikut and Tidak ikut both on an upcoming card** — tap the other to change,
  * the chosen one again to undo (`rsvpCall`: `POST …/rsvp`, `…/rsvp/cancel`, `…/rsvp/withdraw`), each answer the event
- * as it now is, a toast saying what changed. From 768px the list is as before.
+ * as it now is, a toast saying what changed.
+ *
+ * *Changed 2026-11-05 (P19.1-T5 AC-4, AC-5; UI-123, `campaign-event-tablet-desktop` 3 and 4):* **a tablet and a laptop
+ * draw the phone's list too** — *"Card content as UI-108"* — where they drew the prototype's *Going · Upcoming · Past*
+ * in small capitals, an empty *Going* with *"You haven't joined any upcoming events."*, and a pill with a dot (*• Not
+ * joined*; D-27). The segmented control as wide as its words; *Akan datang* and *Sudah lewat* in sentence case with
+ * their counts, an empty one hidden (D-08); **the cards two to a row**, `repeat(auto-fill, minmax(340px, 1fr))`, each
+ * with **the audience as a plain grey line above the title** (*KPM · Semua agent*), the title and the place wrapping,
+ * never cut. A joined event stays under *Akan datang* with *Ikut* filled, as on a phone, so there is no *Ikut* group to
+ * be empty. The phone's markup is what it was, to the byte (`events/events-wide.spec.tsx`).
  */
 export function EventsScreen({ children }: { children?: ReactNode }) {
   const t = useMessages(eventsMessages);
@@ -84,10 +91,9 @@ export function EventsScreen({ children }: { children?: ReactNode }) {
   const phone = usePhone();
   /** Whether this list pushed the modal's address — so closing it can go back rather than forward. */
   const openedHere = useRef(false);
-  /** The card whose *Join* is in flight, its refusal, and the card the focus follows once it has moved. */
+  /** The card whose answer is in flight, and its refusal. */
   const [joining, setJoining] = useState<string | null>(null);
   const [joinError, setJoinError] = useState<{ id: string; error: ApiError } | null>(null);
-  const [refocus, setRefocus] = useState<string | null>(null);
 
   useEffect(() => {
     let live = true;
@@ -123,24 +129,7 @@ export function EventsScreen({ children }: { children?: ReactNode }) {
 
   const reload = useCallback(() => setAttempt((n) => n + 1), []);
 
-  const join = async (id: string) => {
-    if (joining) return;
-    setJoining(id);
-    setJoinError(null);
-    try {
-      const next = await rsvpEvent(id);
-      replace(next);
-      show(goingToast(next.title, language));
-      setRefocus(id);
-    } catch (err) {
-      setJoinError({ id, error: refusalOf(err, language) });
-      if (err instanceof ApiRequestError && err.status === 409) reload();
-    } finally {
-      setJoining(null);
-    }
-  };
-
-  /** A phone's *Ikut* or *Tidak ikut* (UI-108): give the answer, change it, or take it back. */
+  /** *Ikut* or *Tidak ikut* on a card (UI-108; at every size since UI-123): give the answer, change it, or take it back. */
   const answer = async (event: GuestEvent, tapped: 'going' | 'notGoing') => {
     if (joining) return;
     setJoining(event.id);
@@ -158,12 +147,6 @@ export function EventsScreen({ children }: { children?: ReactNode }) {
     }
   };
 
-  // The joined card has moved to *Going* and its *Join* is gone: the focus goes to its *View event*.
-  useEffect(() => {
-    if (!refocus) return;
-    document.querySelector<HTMLElement>(`[data-open-event="${refocus.replace(/["\\]/g, '\\$&')}"]`)?.focus();
-    setRefocus(null);
-  }, [refocus, events]);
   const host = useMemo(
     () => ({ meta, metaError: meta ? null : error, reload, close, toast: show, replace }),
     [meta, error, reload, close, show, replace],
@@ -174,7 +157,7 @@ export function EventsScreen({ children }: { children?: ReactNode }) {
     <Host.Provider value={host}>
       {/* Behind the open modal the list takes no focus and no click: the dialog is modal (AC-5). */}
       <div className="min-w-0" inert={modalOpen || undefined}>
-        <FilterBar filter={filter} onChange={setFilter} />
+        <FilterBar filter={filter} onChange={setFilter} phone={phone} />
         {error && !events && (
           <div>
             <ErrorBanner {...error} />
@@ -182,7 +165,7 @@ export function EventsScreen({ children }: { children?: ReactNode }) {
           </div>
         )}
         {!events && !error && <EventsSkeleton />}
-        {events && meta && phone && (
+        {events && meta && (
           <PhoneGroups
             events={events}
             filter={filter}
@@ -192,14 +175,8 @@ export function EventsScreen({ children }: { children?: ReactNode }) {
             error={joinError}
             onOpen={open}
             onAnswer={(event, tapped) => void answer(event, tapped)}
-          />
-        )}
-        {events && meta && !phone && (
-          <Sections
-            events={events}
-            companyName={meta.companyName}
-            filter={filter}
-            card={{ can: meta.can, joining, joinError, onOpen: open, onJoin: (id) => void join(id) }}
+            // A tablet and a laptop (P19.1-T5 AC-4): the cards in a grid, the audience line on each.
+            wide={phone ? undefined : { companyName: meta.companyName }}
           />
         )}
       </div>
@@ -208,7 +185,7 @@ export function EventsScreen({ children }: { children?: ReactNode }) {
         * Above the modal (`z-50`), which is the whole screen on a phone: every toast the modal raises —
         * *"Joined ✓ — you're going to…"*, *"Pick a score from 0–10 first"* — would otherwise land behind it. A
         * positioned layer at 60 holds the toast's own fixed region in front of the dialog and its scrim.
-        * Inside the agent shell the toast is the shell's (P18.95-T1 AC-6), whose region is at 60 itself, and
+        * Inside the agent shell the toast is the shell's (P18.7-T1 AC-6), whose region is at 60 itself, and
         * this layer stays empty; it is the screen's own only where no shell holds one.
         */}
       <div data-layer="toast" className="relative z-[60]">
@@ -219,8 +196,30 @@ export function EventsScreen({ children }: { children?: ReactNode }) {
 }
 
 /** `#event-segmented` (`:3426-3430`, CSS `:2051-2056`): each button says whether it is the one on. */
-function FilterBar({ filter, onChange }: { filter: EventFilter; onChange: (f: EventFilter) => void }) {
+function FilterBar({ filter, onChange, phone }: { filter: EventFilter; onChange: (f: EventFilter) => void; phone: boolean }) {
   const t = useMessages(eventsMessages);
+  if (!phone) {
+    // A tablet and a laptop (P19.1-T5 AC-4; UI-123, `shared-2026-11-02.css`'s `.seg`): the phone's segmented control as
+    // wide as its words — 44px on a tablet, 40px on a laptop — where the prototype's boxed one was.
+    return (
+      <div role="group" aria-label={t.filterLabel} className="mb-1 inline-flex h-10 rounded-pill bg-card p-[3px] md:max-lg:h-11">
+        {EVENT_FILTERS.map((f) => (
+          <button
+            key={f}
+            type="button"
+            aria-pressed={filter === f}
+            onClick={() => onChange(f)}
+            className={cn(
+              'flex h-full items-center justify-center whitespace-nowrap rounded-pill px-3.5 text-md font-semibold',
+              filter === f ? 'bg-secondary text-secondary-contrast' : 'text-muted hover:text-navy',
+            )}
+          >
+            {t.filters[f]}
+          </button>
+        ))}
+      </div>
+    );
+  }
   return (
     // On a phone (UI-108): one full-width segmented control on a white pill track, the chosen third navy, each 44px.
     <div
@@ -236,14 +235,14 @@ function FilterBar({ filter, onChange }: { filter: EventFilter; onChange: (f: Ev
           onClick={() => onChange(f)}
           className={cn(
             'rounded-md px-4 py-[7px] text-md font-semibold',
-            filter === f ? 'bg-navy text-white max-md:bg-transparent max-md:text-white' : 'text-muted hover:text-navy',
+            filter === f ? 'bg-secondary text-secondary-contrast max-md:bg-transparent max-md:text-secondary-contrast' : 'text-muted hover:text-navy',
             'max-md:flex max-md:min-h-11 max-md:flex-1 max-md:rounded-pill max-md:p-[3px] max-md:text-base',
           )}
         >
           <span
             className={cn(
               'max-md:flex max-md:w-full max-md:items-center max-md:justify-center max-md:whitespace-nowrap max-md:rounded-pill',
-              filter === f && 'max-md:bg-navy',
+              filter === f && 'max-md:bg-secondary',
             )}
           >
             {t.filters[f]}
@@ -258,8 +257,11 @@ function FilterBar({ filter, onChange }: { filter: EventFilter; onChange: (f: Ev
  * **A phone's two groups** (UI-108): *Akan datang* — the events still open, joined or not, soonest first — and *Sudah
  * lewat*, latest first, each with its count; the filter shows one or both, and a group with nothing in it is not drawn
  * (D-08). With nothing to show at all, the prototype's empty line for what the filter asked.
+ *
+ * **`wide`, a tablet's and a laptop's** (P19.1-T5 AC-4; UI-123): the same groups, their cards in a grid of columns at
+ * least 340px wide — two to a row at 768, 1024 and 1280px — each card with its audience line.
  */
-function PhoneGroups({ events, filter, timezone, can, busy, error, onOpen, onAnswer }: {
+function PhoneGroups({ events, filter, timezone, can, busy, error, onOpen, onAnswer, wide }: {
   events: readonly GuestEvent[];
   filter: EventFilter;
   timezone: string;
@@ -268,8 +270,11 @@ function PhoneGroups({ events, filter, timezone, can, busy, error, onOpen, onAns
   error: { id: string; error: ApiError } | null;
   onOpen: (id: string) => void;
   onAnswer: (event: GuestEvent, tapped: 'going' | 'notGoing') => void;
+  /** A tablet's and a laptop's: the company's name, for each card's audience line. */
+  wide?: { companyName: string };
 }) {
   const t = useMessages(eventsMessages);
+  const language = useLanguage();
   const { upcoming, past } = phoneGroups(events);
   const groups = [
     { id: 'upcoming', label: t.sections.upcoming, items: filter === 'past' ? [] : upcoming },
@@ -286,7 +291,11 @@ function PhoneGroups({ events, filter, timezone, can, busy, error, onOpen, onAns
             <span id={`events-phone-${group.id}`}>{group.label}</span>
             <span className="text-sm font-semibold text-muted">{group.items.length}</span>
           </h2>
-          <ul className="m-0 flex list-none flex-col gap-2 p-0">
+          <ul
+            className={wide
+              ? 'm-0 grid list-none grid-cols-[repeat(auto-fill,minmax(min(100%,340px),1fr))] items-start gap-2.5 p-0'
+              : 'm-0 flex list-none flex-col gap-2 p-0'}
+          >
             {group.items.map((event) => (
               <li key={event.id} className="min-w-0">
                 <PhoneEventCard
@@ -297,6 +306,7 @@ function PhoneGroups({ events, filter, timezone, can, busy, error, onOpen, onAns
                   error={error?.id === event.id ? error.error : null}
                   onOpen={onOpen}
                   onAnswer={onAnswer}
+                  audience={wide ? audienceLine(event.audience, wide.companyName, language) : undefined}
                 />
               </li>
             ))}
@@ -304,70 +314,6 @@ function PhoneGroups({ events, filter, timezone, can, busy, error, onOpen, onAns
         </section>
       ))}
     </>
-  );
-}
-
-/** What every card is drawn with: what the reader may do, the *Join* in flight and its refusal. */
-interface CardActions {
-  can: GuestEventCan;
-  joining: string | null;
-  joinError: { id: string; error: ApiError } | null;
-  onOpen: (id: string) => void;
-  onJoin: (id: string) => void;
-}
-
-/** *Going*, *Upcoming* and *Past* (`:8546-8571`): *Upcoming* shows the first two, *Past* the last. */
-function Sections({ events, companyName, filter, card }: {
-  events: readonly GuestEvent[];
-  companyName: string;
-  filter: EventFilter;
-  card: CardActions;
-}) {
-  const t = useMessages(eventsMessages);
-  const { going, upcoming, past } = sections(events);
-  const showOpen = filter !== 'past';
-  const showPast = filter !== 'upcoming';
-  return (
-    <>
-      {showOpen && <Section id="going" label={t.sections.going} events={going} companyName={companyName} empty={t.emptyGoing} card={card} />}
-      {showOpen && <Section id="upcoming" label={t.sections.upcoming} events={upcoming} companyName={companyName} empty={t.emptyUpcoming} card={card} />}
-      {showPast && <Section id="past" label={t.sections.past} events={past} companyName={companyName} empty={t.emptyPast} card={card} />}
-    </>
-  );
-}
-
-function Section({ id, label, events, companyName, empty, card }: {
-  id: string;
-  label: string;
-  events: readonly GuestEvent[];
-  companyName: string;
-  empty: string;
-  card: CardActions;
-}) {
-  const headingId = `events-${id}`;
-  return (
-    <section aria-labelledby={headingId}>
-      <h2 id={headingId} className="mb-3 text-sm font-bold uppercase tracking-wide text-muted">{label}</h2>
-      {events.length === 0 ? (
-        <p className="mb-8 px-[18px] py-10 text-center text-md text-muted">{empty}</p>
-      ) : (
-        <ul className="mb-8 grid list-none grid-cols-1 gap-4 p-0 md:grid-cols-[repeat(auto-fill,minmax(280px,1fr))]">
-          {events.map((event) => (
-            <li key={event.id} className="min-w-0">
-              <EventCard
-                event={event}
-                companyName={companyName}
-                canJoin={canJoin(event, card.can)}
-                busy={card.joining === event.id}
-                error={card.joinError?.id === event.id ? card.joinError.error : null}
-                onOpen={card.onOpen}
-                onJoin={card.onJoin}
-              />
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
   );
 }
 
@@ -383,7 +329,7 @@ export function EventsSkeleton() {
             {[0, 1, 2].map((i) => (
               <div key={i} className="overflow-hidden rounded-lg border border-card-edge bg-card px-4 pb-4 pt-3.5">
                 <div className="flex items-start gap-2.5">
-                  {/* The type's icon, 32px, where the card's poster was (P18.95-T10 AC-1). */}
+                  {/* The type's icon, 32px, where the card's poster was (P18.7-T10 AC-1). */}
                   <SkeletonBar className="h-8 w-8 shrink-0 rounded-md" />
                   <div className="min-w-0 flex-1">
                     <SkeletonBar className="w-24" />

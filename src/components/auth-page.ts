@@ -1,5 +1,5 @@
 /**
- * **Where `/login` and `/register` put their title** (P18.95-T7 AC-3; the client's UI review of 2026-10-26, UI-030).
+ * **Where `/login` and `/register` put their title** (P18.7-T7 AC-3; the client's UI review of 2026-10-26, UI-030).
  *
  * Both centred their column in the window, so sign-in's short form put *AgencyBoost* a third of the way down a phone
  * and registration's long one put *Create your account* hard against the top: one kind of page, two places for its

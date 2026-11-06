@@ -4,7 +4,8 @@ import { inflateSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import { APPLE_TOUCH_ICON, PWA_BACKGROUND, PWA_ICONS } from '@/lib/pwa';
 import { metadata, viewport } from './layout';
-import manifest from './manifest';
+import { manifestFor } from '@/lib/manifest';
+const manifest = () => manifestFor();
 import { BOOST_WIDTHS } from '@/components/boost';
 
 const ROOT = join(__dirname, '..', '..');

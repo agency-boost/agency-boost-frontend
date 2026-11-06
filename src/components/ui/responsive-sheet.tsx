@@ -28,10 +28,13 @@ export function ResponsiveSheet({
   initialFocus,
   footer,
   className,
+  side = false,
   children,
 }: {
   open: boolean;
   title: string;
+  /** From 1024px a side panel at the screen's right edge, not a centred modal (UI-152's leader sheet). */
+  side?: boolean;
   /** A line under the title, read with it — a lead's name under *Isi nomor WhatsApp*. */
   description?: string;
   onClose: () => void;
@@ -49,7 +52,7 @@ export function ResponsiveSheet({
       description={description}
       onClose={onClose}
       initialFocus={initialFocus}
-      placement="responsive"
+      placement={side ? 'drawer' : 'responsive'}
       handle
       closeLabel={t.close}
       footer={footer}

@@ -17,7 +17,7 @@ import { useQuery } from '@/lib/use-query';
  * else — nothing, or a band out of range — is the brief with nothing chosen (P14-T8 AC-7), never an error
  * page. Gated by `product_catalog:read`, every field member's; the API answers the office's own shelf.
  *
- * **Under the tabs *Sales Attack Plan | Product Catalog*** (P18.8-T12, ADR-0161 §5): the sidebar's one *Sales
+ * **Under the tabs *Sales Attack Plan | Product Catalog*** (P18.5-T12, ADR-0161 §5): the sidebar's one *Sales
  * tools* entry opens here, and the strip reaches the catalog.
  */
 export default function AttackPlanPage() {
@@ -40,7 +40,7 @@ function AttackPlan() {
       ? { kind: 'product', code: product }
       : { kind: 'brief' };
   return (
-    // No sub-line: the brief's one line says it, at every size (P18.95-T7 AC-1, grey text row 10).
+    // No sub-line: the brief's one line says it, at every size (P18.7-T7 AC-1, grey text row 10).
     <Page title={t.title} permission="product_catalog:read">
       <SalesToolsTabs />
       <AttackPlanScreen address={address} />

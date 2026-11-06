@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { TextInput } from '@/components/ui/field';
 import { InlineSaveField, useInlineSave, type InlineSaveOutcome } from '@/components/ui/inline-save-status';
+import { LineIcon } from '@/components/ui/line-icon';
 import { TEXT_TAP } from '@/components/ui/phone';
 import { Toast, useToast } from '@/components/ui/toast';
 import { useLanguage, useMessages } from '@/i18n/language-provider';
@@ -13,20 +14,21 @@ import {
   parseTarget, recruitPill, saveRecruitTarget, targetValueWords, type OverviewRecruitment,
 } from '@/lib/kpm-overview';
 import { useCan, useSession } from '@/lib/session';
-import { OverviewCard } from './parts';
+import { OverviewPanel } from './parts';
 
-/** The *Target*'s own *Saving…* and *Couldn't save — retry* (P18.95-T1 AC-5): the one field on this card that saves itself. */
+/** The *Target*'s own *Saving…* and *Couldn't save — retry* (P18.7-T1 AC-5): the one field on this card that saves itself. */
 const TARGET_KEY = 'target';
 
 /**
- * *Recruitment pipeline* (`KPM_Owner.html:1049-1073`, CSS `:516-528`): four tiles and the pill.
+ * *Recruitment pipeline* (`KPM_Owner.html:1049-1073`, CSS `:516-528`): four tiles and the pill — *since P19.2-T3 AC-5
+ * (UI-143)* a small card of the Overview's last row, its four tiles two by two, its name the card's heading.
  *
  * **The tiles are figures, not links** (D-recruit): the prototype's alert lists candidates by name, and the
  * Owner and the Admin hold lead counts, never leads (roles §3.6).
  *
  * **The *Target* is the office's, for this month** (D-recruit): the prototype's input keeps nothing (`:1061`). Ours is
  * written for the office's current month, audited by the server with before and after, and carried into a month that
- * has none. **Since P18.97-T3 AC-7 it reads as a labelled value** — the tile's *Target* over *15*, or *No target set* —
+ * has none. **Since P18.9-T3 AC-7 it reads as a labelled value** — the tile's *Target* over *15*, or *No target set* —
  * **with *Edit*** for whoever holds `kpm_overview:set_recruit_target` (ADR-0176 §4, UI-020; parity I-506): *Edit* opens
  * the labelled number input in the value's place, which **saves itself on Enter or on leaving it** (OD-200's autosave),
  * reads as a value again and confirms with the toast ***Target saved ✓*** where the field's own *Saved ✓* would have
@@ -39,7 +41,21 @@ const TARGET_KEY = 'target';
  * Anybody without the permission reads the value. A read-only support session sees the member's *Edit* **disabled**
  * (roles §3.13: the member's screen as they see it, nothing written), and writes nothing.
  */
-export function Recruitment({ recruitment, month }: { recruitment: OverviewRecruitment; month: string }) {
+export function Recruitment({
+  recruitment, month, className, onOpenTarget, onSaved,
+}: {
+  recruitment: OverviewRecruitment;
+  month: string;
+  /** Where it sits in the page's grid. */
+  className?: string;
+  /**
+   * *Since P19.3-T2 (AC-1; UI-148, Overview R1: "Recruitment pipeline → recruitment target sheet"):* the card's ›, which
+   * opens the target's sheet — for whoever may set it.
+   */
+  onOpenTarget?: () => void;
+  /** A target this card saved, for the page: the setup card's step 7 ticks without a reload. */
+  onSaved?: (target: number) => void;
+}) {
   const t = useMessages(kpmOverviewMessages);
   const language = useLanguage();
   const { me } = useSession();
@@ -51,6 +67,8 @@ export function Recruitment({ recruitment, month }: { recruitment: OverviewRecru
   // the member's screen is shown.
   const showEdit = holds || (readOnly && !!(me?.membership?.isKpmOwner || me?.membership?.isKpmAdmin));
   const [saved, setSaved] = useState<number | null>(recruitment.target);
+  // A target the page's sheet saved arrives as the prop: the card reads it as its own.
+  useEffect(() => { setSaved(recruitment.target); }, [recruitment.target]);
   const [editing, setEditing] = useState(false);
   const [typed, setTyped] = useState('');
   /** Enter on an empty box: the reader asked to save nothing, so the box says what it takes. */
@@ -110,7 +128,7 @@ export function Recruitment({ recruitment, month }: { recruitment: OverviewRecru
   }, [clearInline]);
 
   const send = useCallback((value: number) => {
-    /** One write of `value`; its retry sends this same value again (P18.95-T1 AC-5). */
+    /** One write of `value`; its retry sends this same value again (P18.7-T1 AC-5). */
     const attempt = async (): Promise<InlineSaveOutcome> => {
       inFlight.current = true;
       refused.current = null;
@@ -118,6 +136,7 @@ export function Recruitment({ recruitment, month }: { recruitment: OverviewRecru
       try {
         const written = await saveRecruitTarget({ month, target: value });
         setSaved(written.target);
+        onSaved?.(written.target);
         if (!gone.current) {
           const hadFocus = typeof document !== 'undefined' && document.activeElement !== null && document.activeElement === input();
           close(hadFocus);
@@ -135,7 +154,7 @@ export function Recruitment({ recruitment, month }: { recruitment: OverviewRecru
     // Leaving the page as it saves: nowhere to say how it went.
     if (gone.current) void attempt();
     else void saveInline(TARGET_KEY, attempt);
-  }, [month, saveInline, close, show, input, t]);
+  }, [month, saveInline, close, show, input, t, onSaved]);
 
   /** Enter, or leaving the box: save what it holds, if it is a target and not the one kept. */
   const commit = (how: 'enter' | 'blur') => {
@@ -178,14 +197,29 @@ export function Recruitment({ recruitment, month }: { recruitment: OverviewRecru
   const pill = recruitPill(recruitment.expectedToClose, shownTarget, language);
 
   return (
-    <OverviewCard className="p-5">
-      <div className="mb-3.5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+    <OverviewPanel
+      title={t.recruitment}
+      className={className}
+      action={canSet && onOpenTarget && (
+        <button
+          type="button"
+          aria-haspopup="dialog"
+          aria-label={t.targetSheetTitle}
+          onClick={onOpenTarget}
+          className="-mr-1 inline-flex shrink-0 items-center justify-center rounded-sm text-signal-grey hover:text-navy max-lg:min-h-11 max-lg:min-w-11 lg:min-h-8 lg:min-w-8"
+        >
+          <LineIcon name="chevronRight" className="h-5 w-5" />
+        </button>
+      )}
+    >
+      {/* Two by two at every size since P19.2-T3 (UI-143): a small card of the last row, where it was a section's four across. */}
+      <div className="mb-2.5 grid grid-cols-2 gap-2">
         <RecruitTile label={t.expectedToClose}>
           <Value>{recruitment.expectedToClose}</Value>
         </RecruitTile>
         <RecruitTile label={t.target} htmlFor={editing ? inputId : undefined}>
           {editing ? (
-            // Its status on the line under it, inside the tile (P18.95-T1 AC-5); the refusal's reason stays below the tiles.
+            // Its status on the line under it, inside the tile (P18.7-T1 AC-5); the refusal's reason stays below the tiles.
             <InlineSaveField status={inline.statusOf(TARGET_KEY)} label={t.target}>
               <TextInput
                 id={inputId}
@@ -217,7 +251,7 @@ export function Recruitment({ recruitment, month }: { recruitment: OverviewRecru
                   aria-label={t.editTarget}
                   onClick={open}
                   className={cn(
-                    'text-sm font-semibold text-amber-ink underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:no-underline',
+                    'text-sm font-semibold text-primary-ink underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:no-underline',
                     TEXT_TAP,
                   )}
                 >
@@ -228,7 +262,8 @@ export function Recruitment({ recruitment, month }: { recruitment: OverviewRecru
           )}
         </RecruitTile>
         <RecruitTile label={t.lastMonth}>
-          <Value>{recruitment.closedLastMonth}</Value>
+          {/* P19.3-T1 AC-3 (D2): the upload's recruitment, *–* while last month is not uploaded — never a blank, never 0. */}
+          <Value>{recruitment.closedLastMonth ?? '–'}</Value>
         </RecruitTile>
         <RecruitTile label={t.pipelineNow}>
           <Value>{recruitment.pipelineNow}</Value>
@@ -257,14 +292,14 @@ export function Recruitment({ recruitment, month }: { recruitment: OverviewRecru
       </div>
       {/* *Target saved ✓* (OD-200's toast): the shell's region inside a shell, this card's own outside one. */}
       <Toast toast={toast} />
-    </OverviewCard>
+    </OverviewPanel>
   );
 }
 
 /** `.recruit-tile` (`:521-523`): a warm tile, its 11px label, its 22px figure. */
 function RecruitTile({ label, htmlFor, children }: { label: string; htmlFor?: string; children: ReactNode }) {
   return (
-    <div className="min-w-0 rounded-[10px] border border-hairline bg-base px-3 py-2.5">
+    <div className="min-w-0 rounded-[10px] border border-hairline bg-base px-2.5 py-2">
       {htmlFor
         ? <label htmlFor={htmlFor} className="mb-[3px] block text-xs text-muted">{label}</label>
         : <p className="mb-[3px] text-xs text-muted">{label}</p>}

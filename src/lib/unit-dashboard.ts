@@ -23,7 +23,7 @@ import type { MonthState } from './production';
  * Each interface is spelled out with named nested types, so `contract.spec.ts` can read its fields
  * against `backend/openapi.json`: it reads an interface's body up to the first `}`.
  *
- * **Its words are the catalogue's** (`i18n/messages/unit-dashboard.ts`, P18.98-T4): each function that writes one takes
+ * **Its words are the catalogue's** (`i18n/messages/unit-dashboard.ts`, P18.10-T4): each function that writes one takes
  * the reader's `language` — English, the source, when passed none, which its spec reads — and one that writes a figure
  * takes the figures' language after it (`figures`; Indonesian when passed none). A screen passes `useLanguage()` and
  * `useFigureLanguage()`.
@@ -159,6 +159,11 @@ export interface UnitRow {
   leadsCounts: LeadsCounts;
   /** *Closing* (UI V1, UI-028; O-4): their sales leads that reached *Paid and issued* in the period's window. */
   closings: number;
+  /**
+   * ***Proposal*** (P19.7-T2 AC-13; ADR-0221 §7): `PROPOSALS_MADE` — the proposals they first saved as a PDF in the
+   * period's window. A count and nothing else: no client, product or premium reaches a leader (decision 4).
+   */
+  proposalsMade: number;
   activity: UnitActivity;
   /** Coaching's own reading; `null` for *No 1:1 yet*, and on the reader's own row. */
   lastOneOnOne: LastOneOnOne | null;
@@ -166,14 +171,14 @@ export interface UnitRow {
   /** `PACING_TO_MAA`: the ✓. `null` without a target. */
   pacingToMaa: boolean | null;
   /**
-   * ***New hire*** (ADR-0172 §2–3, P18.96-T5 AC-3): a new hire with no first sale by today — the server's
+   * ***New hire*** (ADR-0172 §2–3, P18.8-T5 AC-3): a new hire with no first sale by today — the server's
    * `COUNTS_FOR_PRODUCTION`, never worked out here. The row carries the tag; every total above it leaves the person out
    * of its production and its *On pace to be active*. `false` from the first sale's day.
    */
   newHireBeforeFirstSale: boolean;
   followUp: FollowUp | null;
   /**
-   * *Chasing MDRT* (ADR-0122, P18.5-T7 AC-7): chasing `MDRT_QUALIFICATION`, not ended. `null` where the
+   * *Chasing MDRT* (ADR-0122, P18.2-T7 AC-7): chasing `MDRT_QUALIFICATION`, not ended. `null` where the
    * reader's `campaign_qualification:read` does not reach the person: a plain —.
    */
   chasingMdrt: boolean | null;
@@ -188,7 +193,7 @@ export interface ChasedRef {
 }
 
 /**
- * A total's goal, **paired** (ADR-0165 §1, P18.8-T15 AC-6): the targets and the production of the rows whose
+ * A total's goal, **paired** (ADR-0165 §1, P18.5-T15 AC-6): the targets and the production of the rows whose
  * production is held — every target when nobody's is, beside *Not uploaded yet*. `missing` counts the rows left
  * out, which the tooltip names; the shortfall and the excess are the server's, from the same pairs.
  */
@@ -218,6 +223,8 @@ export interface UnitTotal {
   leadsCounts: LeadsCounts;
   /** The rows' *Closing* summed (UI-028). */
   closings: number;
+  /** The rows' *Proposal* summed (P19.7-T2 AC-13), the server's. */
+  proposalsMade: number;
   touches: CountAgainst;
   potentialActive: PotentialActive;
   /** The new hires before a first sale whom `goal` leaves out (ADR-0172 §2), named in its ⓘ — in `potentialActive.of`. */
@@ -300,6 +307,12 @@ export interface UnitDashboardView {
   head: UnitHead;
   /** The head leads nobody: no rows, and the screen's empty state. */
   empty: boolean;
+  /**
+   * **Drawn as that leader sees it, with no write** (P19.3-T3 AC-3; UI-152's Appendix D row): the Owner or an Admin
+   * reading another leader's unit. The screen draws no *Update production* and no *+ Add agent*, and the server refuses
+   * a save that names this unit.
+   */
+  readOnly: boolean;
   tiles: UnitTiles;
   yourUnit: YourUnit;
   units: UnitGroup[];
@@ -329,16 +342,20 @@ const query = (params: Record<string, string | undefined>) => {
 export const readUnitDashboard = (params: { period?: UnitPeriod; for?: string } = {}) =>
   api<UnitDashboardView>('/unit/dashboard' + query({ period: params.period, for: params.for }));
 
-/** One row of *Update production*: only the cells that changed. */
+/**
+ * One row of *Update production*: this month's APE, when it changed. *Since P19.5-T2* (R4; ADR-0214 §10) the year to
+ * date is the sum of the months and is never sent — the server refuses one (`400 VALIDATION_FAILED`).
+ */
 export interface ProductionUpdateRow {
   membershipId: string;
   apeMonthlyMinor?: number;
-  apeYtdMinor?: number;
 }
 
 export interface ProductionUpdate {
   month: string;
   revision: number;
+  /** The unit the dashboard was read for (its `for`), sent whenever it has one (P19.3-T3 AC-3). */
+  for?: string;
   rows: ProductionUpdateRow[];
 }
 
@@ -359,7 +376,7 @@ export const updateUnitProduction = (body: ProductionUpdate) =>
 /*
  * ── The prototype's words ───────────────────────────────────────────────────────────────────────
  *
- * The catalogue's English, in the shapes the screens and the specs read them by before P18.98-T4. A screen reads the
+ * The catalogue's English, in the shapes the screens and the specs read them by before P18.10-T4. A screen reads the
  * reader's language instead: `useMessages(unitDashboardMessages)`.
  */
 
@@ -367,7 +384,7 @@ export const updateUnitProduction = (body: ProductionUpdate) =>
 export const PROTOTYPE_COPY = EN.prototype;
 
 /**
- * The activity breakdown's three, in the cascade's words (ADR-0160 §4; P18.9-T2's cleanup, 2026-10-26) — the
+ * The activity breakdown's three, in the cascade's words (ADR-0160 §4; P18.6-T2's cleanup, 2026-10-26) — the
  * Summary's chips'. The prototype reads *Leads contacted*, *Appointments* and *Closings* (`:7334-7336`). Kept in both
  * languages (§A.6).
  */
@@ -382,12 +399,12 @@ export const STATUS_TOOLTIP: Record<RosterStatus, string> = EN.statusTooltip;
  */
 export const OWN_COPY = {
   ...EN.own,
-  /** *produced Rp 29 jt*: `sum` written by the caller (P18.95-T3 AC-2). */
+  /** *produced Rp 29 jt*: `sum` written by the caller (P18.7-T3 AC-2). */
   produced: (sum: string) => EN.own.produced({ sum }),
 };
 
 /**
- * **A total's count of members on pace, in plain words** (P18.95-T9 AC-4; UI-028): *On pace to be active: 6/12*,
+ * **A total's count of members on pace, in plain words** (P18.7-T9 AC-4; UI-028): *On pace to be active: 6/12*,
  * where it read *6/12 potential active*. `POTENTIAL_MAA_COUNT_IN_UNIT`, a projection — not *Active this month*,
  * which is the analytics' `MAA_COUNT_IN_UNIT` (invariant §8).
  */
@@ -452,7 +469,7 @@ export function goalWords(
   const t = wordsIn(language);
   const { targetMinor: target, actualMinor: actual } = cell;
   const money = (minor: number) => formatRupiahCompact(minor, {}, figures);
-  // The production alone, with no target beside it, is labelled (P18.95-T3 AC-2): *produced Rp 29 jt*.
+  // The production alone, with no target beside it, is labelled (P18.7-T3 AC-2): *produced Rp 29 jt*.
   const produced = (sum: number) => t.own.produced({ sum: money(sum) });
   if (cell.set === false || target === null) {
     return { tone: 'none', line: t.own.noGoal, sub: actual === null ? null : produced(actual) };
@@ -477,7 +494,7 @@ export function goalWords(
 }
 
 /**
- * **A phone card's goal bar** (P18.95-T3 AC-1; the client's UI review, UI-010: *"one card per agent (name, status
+ * **A phone card's goal bar** (P18.7-T3 AC-1; the client's UI review, UI-010: *"one card per agent (name, status
  * chip, goal bar, …)"*): how far along the target the figures are, 0–100, or `null` where there is nothing to draw
  * — no target, none to measure against (a month made already), or no figure. An empty track would read as zero,
  * which *Not uploaded yet* is not (D-figures). The percentage is the server's; the table draws no bar.
@@ -571,7 +588,7 @@ export function missingWords(missing: number, names: readonly string[], language
 }
 
 /**
- * **A total's mark when it leaves out new hires before their first sale** (P18.96-T5 AC-4; ADR-0172 §2; UI-003, *"Unit
+ * **A total's mark when it leaves out new hires before their first sale** (P18.8-T5 AC-4; ADR-0172 §2; UI-003, *"Unit
  * totals and the 'ⓘ' explanations match the new rule"*): *"No first sale yet for Yanti Kusuma, a new hire, so not
  * counted in this total."* — by name where the rows below say who, as `missingWords` does. On the goal's mark beside
  * `missingWords`' own sentence, and alone beside *On pace to be active*. `null` when nobody is left out.
@@ -615,7 +632,7 @@ export function everyRow(view: Pick<UnitDashboardView, 'yourUnit' | 'units'>): U
 export const namesMissing = (rows: readonly UnitRow[], language: Language = SOURCE_LANGUAGE) =>
   rows.filter((r) => r.goal.actualMinor === null && !r.newHireBeforeFirstSale).map((r) => rowName(r, language));
 
-/** The names of the new hires before a first sale a total covers, whom it leaves out (P18.96-T5 AC-4). */
+/** The names of the new hires before a first sale a total covers, whom it leaves out (P18.8-T5 AC-4). */
 export const namesNewHires = (rows: readonly UnitRow[], language: Language = SOURCE_LANGUAGE) =>
   rows.filter((r) => r.newHireBeforeFirstSale).map((r) => rowName(r, language));
 
@@ -651,7 +668,7 @@ export function dialogGroups(
 export type ProductionCadence = 'monthly' | 'ytd';
 
 /**
- * A held figure as the dialog prefills it: whole rupiah, grouped in the reader's marks (P18.98-T3 AC-3) — `1.500.000`,
+ * A held figure as the dialog prefills it: whole rupiah, grouped in the reader's marks (P18.10-T3 AC-3) — `1.500.000`,
  * `1,500,000`; blank when nothing is held.
  */
 export const prefill = (cell: ProductionCell, language: Language = DEFAULT_LANGUAGE) =>
@@ -672,21 +689,18 @@ export function inputsOf(rows: readonly UnitRow[], language: Language = DEFAULT_
 }
 
 /**
- * The rows *Save all* sends: **only the cells that changed**. A box left as it was prefilled, or emptied,
+ * The rows *Save all* sends: **only the months that changed**. A box left as it was prefilled, or emptied,
  * is unchanged — a leader cannot clear a figure (ADR-0051) — and so is one typed back to the figure held.
- * Whole rupiah in, minor units out.
+ * Whole rupiah in, minor units out. **The year is never sent** (P19.5-T2; R4): it is the sum of the months, shown and
+ * not typed.
  */
 export function productionChanges(rows: readonly UnitRow[], inputs: ProductionInputs): ProductionUpdateRow[] {
   const changes: ProductionUpdateRow[] = [];
   for (const row of rows) {
     const typed = inputs[row.membershipId];
     if (!typed) continue;
-    const change: ProductionUpdateRow = { membershipId: row.membershipId };
     const monthly = changed(row.production.monthly, typed.monthly);
-    const ytd = changed(row.production.ytd, typed.ytd);
-    if (monthly !== null) change.apeMonthlyMinor = monthly;
-    if (ytd !== null) change.apeYtdMinor = ytd;
-    if (monthly !== null || ytd !== null) changes.push(change);
+    if (monthly !== null) changes.push({ membershipId: row.membershipId, apeMonthlyMinor: monthly });
   }
   return changes;
 }
@@ -698,19 +712,22 @@ function changed(cell: ProductionCell, typed: string): number | null {
 }
 
 /*
- * ── UI V1 (Phase 18.99 T4, 2026-10-30) ───────────────────────────────────────────────────────────
+ * ── UI V1 (Phase 18.11 T4, 2026-10-30) ───────────────────────────────────────────────────────────
  *
  * The owner's redesign of the page (`revisions/2026-10-30-ui-v1`, UI-001 to UI-012, UI-028): *Overview | Activities*,
  * the stat tiles, the roster's filter chips, its accordion on a phone and its compact tables, the row that opens the
  * person's Personal Summary, and the Activities tab's table and ratio card. Every figure is still the server's.
  */
 
-/** *Overview | Activities* (UI-001), kept in the address as `?tab=activities`. */
-export type UnitTab = 'overview' | 'activities';
+/**
+ * *Overview | Activities | Potensi* (UI-001; UI-155, P19.1-T6), kept in the address as `?tab=activities` and
+ * `?tab=potensi` — a query, not a route.
+ */
+export type UnitTab = 'overview' | 'activities' | 'potensi';
 
 export function tabFrom(value: string | string[] | null | undefined): UnitTab {
   const one = Array.isArray(value) ? value[0] : value;
-  return one === 'activities' ? 'activities' : 'overview';
+  return one === 'activities' || one === 'potensi' ? one : 'overview';
 }
 
 /** *Minggu | Bulan* (UI-001): a week Monday to Sunday, or a calendar month. */
@@ -860,3 +877,208 @@ export const goalShare = goalBar;
 
 /** Green from 100%, red under it (UI-005: *% colour follows the 100% rule only*), judged on the unrounded value. */
 export const goalMet = (attainmentPct: number) => attainmentPct >= 100;
+
+
+/*
+ * ── The *Potensi* tab (P19.1-T6, 2026-11-04) ─────────────────────────────────────────────────────────────────────────
+ *
+ * UI-155 and UI-159 item 4 (the 6 Nov handover; the Potensi stop-motion, frames 11–31; ADR-0193): two tiles that are the
+ * switch, *AA* and *Rekrut*, and one list design for both — per unit, the leader first. **Every figure is the server's**
+ * (`GET /unit/dashboard/potensi`, the three named metrics); this file orders the rows and picks the view's figures.
+ */
+
+/** A rung as the company's ladder names it: the role tag before a leader's name, *Agent Rina* on a button. */
+export interface PotensiRung {
+  code: string;
+  label: string;
+}
+
+/** A person's *AA* view: *n potensi*, the ✓ (`AA_THIS_MONTH`), and how many sales leads they switched on. */
+export interface PotensiAaCell {
+  potensi: number;
+  aa: boolean;
+  switched: number;
+}
+
+/** A person's *Rekrut* view: *n potensi*, *n rekrut ✓* (`REKRUT_THIS_MONTH`), and how many kandidat they switched on. */
+export interface PotensiRekrutCell {
+  potensi: number;
+  rekrut: number;
+  switched: number;
+}
+
+/** One person on the tab. */
+export interface PotensiPerson {
+  membershipId: string;
+  name: string;
+  photoUrl: string | null;
+  rung: PotensiRung;
+  /** The card's leader: first, with the navy role tag before the name. */
+  isLeader: boolean;
+  isReader: boolean;
+  /** Their sheet answers the reader (`lead:read`'s reach): the row opens it. */
+  opens: boolean;
+  aa: PotensiAaCell;
+  rekrut: PotensiRekrutCell;
+}
+
+export interface PotensiAaTotals {
+  potensi: number;
+  aa: number;
+  switchedPeople: number;
+  switchedPeopleAa: number;
+}
+
+export interface PotensiRekrutTotals {
+  potensi: number;
+  rekrut: number;
+  switchedPeople: number;
+  switchedPeopleRekrut: number;
+}
+
+/** A card's sums: its header, and an earlier month's row. */
+export interface PotensiTotals {
+  aa: PotensiAaTotals;
+  rekrut: PotensiRekrutTotals;
+}
+
+export interface PotensiLeader {
+  membershipId: string;
+  name: string;
+  rung: PotensiRung;
+}
+
+/** One card: a unit below the head (`unit`), or the head and their direct agents (`direct`), last. */
+export interface PotensiUnit {
+  kind: 'unit' | 'direct';
+  leader: PotensiLeader;
+  people: PotensiPerson[];
+  totals: PotensiTotals;
+}
+
+export interface PotensiHead {
+  membershipId: string;
+  name: string;
+  isReader: boolean;
+}
+
+export interface PotensiTiles {
+  aa: number;
+  rekrut: number;
+}
+
+/** `GET /unit/dashboard/potensi`. */
+export interface UnitPotensiView {
+  month: string;
+  /** The office's current month: an earlier `month` is drawn as one row per unit (AC-9). */
+  currentMonth: string;
+  today: string;
+  head: PotensiHead;
+  tiles: PotensiTiles;
+  units: PotensiUnit[];
+}
+
+/** A switched-on sales lead on the AA sheet: the client's name (Q-2), its next step and its stage. */
+export interface PotensiSalesLead {
+  id: string;
+  name: string;
+  statusCode: string | null;
+  nextActionDate: string | null;
+  nextActionNote: string | null;
+}
+
+/** A kandidat on the Rekrut sheet: *Potensi*, or *Rekrut ✓ {date}* with the membership they became where linked. */
+export interface PotensiKandidat {
+  leadId: string;
+  name: string;
+  statusCode: string | null;
+  state: 'potensi' | 'rekrut';
+  rekrutOn: string | null;
+  newHireMembershipId: string | null;
+}
+
+export interface PotensiSheetPerson {
+  membershipId: string;
+  name: string;
+  rung: PotensiRung;
+  phone: string | null;
+  isReader: boolean;
+}
+
+export interface PotensiSheetUnit {
+  name: string;
+  rung: PotensiRung;
+}
+
+/** `GET /unit/dashboard/potensi/:membershipId`: the read-only sheet a row opens. */
+export interface UnitPotensiPersonView {
+  month: string;
+  currentMonth: string;
+  person: PotensiSheetPerson;
+  unit: PotensiSheetUnit | null;
+  sales: PotensiSalesLead[];
+  kandidat: PotensiKandidat[];
+}
+
+/** The tab's read: a month (the office's current one when none) for the reader's unit or `for` a leader's below them. */
+export const readUnitPotensi = (params: { month?: string; for?: string } = {}) =>
+  api<UnitPotensiView>('/unit/dashboard/potensi' + query({ month: params.month, for: params.for }));
+
+/** A person's sheet for a month. A read of their leads, recorded by the server. */
+export const readPotensiPerson = (membershipId: string, params: { month?: string } = {}) =>
+  api<UnitPotensiPersonView>(`/unit/dashboard/potensi/${encodeURIComponent(membershipId)}` + query({ month: params.month }));
+
+/** The tile chosen, which is the list's view: *AA* on open. */
+export type PotensiView = 'aa' | 'rekrut';
+
+/** A person's *n potensi* in a view. */
+export const potensiOf = (person: Pick<PotensiPerson, 'aa' | 'rekrut'>, view: PotensiView) =>
+  (view === 'aa' ? person.aa.potensi : person.rekrut.potensi);
+
+/** A person's ✓ in a view: 1 for *AA ✓*, *n* for *n rekrut ✓*, 0 for none. */
+export const doneOf = (person: Pick<PotensiPerson, 'aa' | 'rekrut'>, view: PotensiView) =>
+  (view === 'aa' ? (person.aa.aa ? 1 : 0) : person.rekrut.rekrut);
+
+/** Which pills a row draws, left to right (AC-4): *n potensi*, then the ✓ — or ✕ alone with neither. */
+export function pillsOf(person: Pick<PotensiPerson, 'aa' | 'rekrut'>, view: PotensiView): { potensi: number; done: number; none: boolean } {
+  const potensi = potensiOf(person, view);
+  const done = doneOf(person, view);
+  return { potensi, done, none: potensi === 0 && done === 0 };
+}
+
+/**
+ * **A card's rows in their order** (AC-4; UI-155: *same in both*): the leader, then potensi only, then ✓ (with or
+ * without potensi), then ✕ — each group in the server's order, so a row moves down by itself when its ✓ arrives.
+ */
+export function orderedPeople(unit: Pick<PotensiUnit, 'people'>, view: PotensiView): PotensiPerson[] {
+  const rank = (p: PotensiPerson) => {
+    if (p.isLeader) return 0;
+    const { potensi, done } = pillsOf(p, view);
+    if (done > 0) return 2;
+    return potensi > 0 ? 1 : 3;
+  };
+  return unit.people.map((p, i) => ({ p, i })).sort((a, b) => rank(a.p) - rank(b.p) || a.i - b.i).map(({ p }) => p);
+}
+
+/** A card's header numbers in a view: *n potensi · n AA*, or *n potensi · n rekrut*. */
+export const cardCounts = (unit: Pick<PotensiUnit, 'totals'>, view: PotensiView) => (view === 'aa'
+  ? { potensi: unit.totals.aa.potensi, done: unit.totals.aa.aa }
+  : { potensi: unit.totals.rekrut.potensi, done: unit.totals.rekrut.rekrut });
+
+/** An earlier month's row (AC-9): *x* of the *y* people with a potensi got the ✓, and the card's ✓ in all. */
+export const pastCounts = (unit: Pick<PotensiUnit, 'totals'>, view: PotensiView) => (view === 'aa'
+  ? { x: unit.totals.aa.switchedPeopleAa, y: unit.totals.aa.switchedPeople, done: unit.totals.aa.aa }
+  : { x: unit.totals.rekrut.switchedPeopleRekrut, y: unit.totals.rekrut.switchedPeople, done: unit.totals.rekrut.rekrut });
+
+/** Nobody in the unit has a potensi or a ✓ in this view (AC-10): the empty state, never an error. */
+export const nothingIn = (view: Pick<UnitPotensiView, 'units'>, which: PotensiView) =>
+  view.units.every((u) => u.people.every((p) => pillsOf(p, which).none));
+
+/** The month picker's months: the office's current one first, then the eleven before it. */
+export function potensiMonths(currentMonth: string, count = 12): string[] {
+  const [y, m] = currentMonth.split('-').map(Number);
+  return Array.from({ length: count }, (_, i) => {
+    const at = new Date(Date.UTC(y, m - 1 - i, 1));
+    return `${at.getUTCFullYear()}-${String(at.getUTCMonth() + 1).padStart(2, '0')}`;
+  });
+}

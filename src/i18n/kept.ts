@@ -4,8 +4,8 @@ import type { KeptTerm } from './glossary';
 declare const KEPT: unique symbol;
 
 /**
- * **A kept-English term** (ADR-0179 §3, §8; P18.98-T1 AC-7): the same characters in both languages, and marked, so
- * that ID mode can give it `lang="en"` (P18.98-T7). A plain string to whatever renders it.
+ * **A kept-English term** (ADR-0179 §3, §8; P18.10-T1 AC-7): the same characters in both languages, and marked, so
+ * that ID mode can give it `lang="en"` (P18.10-T7). A plain string to whatever renders it.
  */
 export type Kept<T extends string = KeptTerm> = T & { readonly [KEPT]: T };
 
@@ -29,7 +29,7 @@ export function kept<const T extends KeptTerm>(term: T): Kept<T> {
   return term as Kept<T>;
 }
 
-/** Whether `text` is a kept term the app has named through `kept()` — what ID mode marks `lang="en"` (P18.98-T7). */
+/** Whether `text` is a kept term the app has named through `kept()` — what ID mode marks `lang="en"` (P18.10-T7). */
 export function isKept(text: unknown): text is Kept {
   return typeof text === 'string' && named.has(text);
 }

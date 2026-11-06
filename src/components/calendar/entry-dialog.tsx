@@ -17,13 +17,14 @@ import {
   blankForm, formFromEntry, formWords, toInput, validateForm, violationsToErrors, type EntryForm, type FormErrors, type Slot,
 } from '@/lib/calendar-form';
 import { cn } from '@/lib/cn';
+import { usePhone } from '@/lib/use-phone';
 import { Avatar } from './calendar-parts';
 import { InviteField, type Picked } from './invite-field';
 
 /** What the entry dialog is opened for (`openEventModal`, `:708-773`). */
 export type EditorState =
   /**
-   * `preset`: the new entry opened for somebody — `/new-hires`' *Schedule 1:1* (P18.96-T6 AC-4), a *1:1 coaching* entry
+   * `preset`: the new entry opened for somebody — `/new-hires`' *Schedule 1:1* (P18.8-T6 AC-4), a *1:1 coaching* entry
    * titled with their name and them invited. Every field can still be changed.
    */
   | { mode: 'new'; slot: Slot; preset?: { type: EntryType; title: string; invitee: Picked | null } }
@@ -63,6 +64,11 @@ function initial(state: EditorState, language: Language): EntryForm {
  * support session). It asks the detail popup's question in the same dialog — *Hapus "{judul}"?* — and deletes pinned
  * to the version this dialog last read (`base`), so an edit's own conflict re-read is the version the delete sends; a
  * stale one reads the entry again and says so, as a save does.
+ *
+ * **From 768px** (P19.1-T3 AC-10; UI-120, UI-112): no grey sub-line under *Event baru* or *Ubah event* — *Blok waktu*'s
+ * stays, since it prevents a mistake (the time is placed with no answer asked); *Tanggal* on a row of its own and *Mulai*
+ * | *Selesai* half and half under it, so *11:30* and *12:00* are never cut; the *Jenis* chips as wide as their words, one
+ * line each, wrapping as they need. The footer — *Batal · Simpan event* — is pinned (`Modal`). A phone keeps its layout.
  */
 export function EntryDialog({
   state,
@@ -83,6 +89,7 @@ export function EntryDialog({
   const t = useMessages(calendarMessages);
   const language = useLanguage();
   const figures = useFigureLanguage();
+  const phone = usePhone();
   const words = formWords(language, figures);
   const ids = useId();
   const [form, setForm] = useState<EntryForm>(() => initial(state, language));
@@ -107,9 +114,9 @@ export function EntryDialog({
   const title = state.mode === 'edit' ? t.editTitle
     : state.mode === 'block' ? t.blockTitle({ name: state.member.name })
       : t.newTitle;
-  const description = state.mode === 'edit' ? t.editSub
-    : state.mode === 'block' ? t.blockSub
-      : t.newSub;
+  const description = state.mode === 'block' ? t.blockSub
+    : !phone ? undefined
+      : state.mode === 'edit' ? t.editSub : t.newSub;
 
   async function save(e: FormEvent) {
     e.preventDefault();
@@ -291,8 +298,8 @@ export function EntryDialog({
               </div>
             </div>
           ) : (
-            <div className="flex flex-wrap gap-2.5">
-              <Field label={t.date} htmlFor={`${ids}-date`} error={errors.date} className="min-w-[8rem] flex-[1.4]">
+            <div data-timing="" className="flex flex-wrap gap-2.5">
+              <Field label={t.date} htmlFor={`${ids}-date`} error={errors.date} className="min-w-[8rem] flex-[1.4] md:basis-full">
                 <DateField id={`${ids}-date`} value={form.date} invalid={!!errors.date} onChange={(v) => set('date', v)} className="w-full" />
               </Field>
               <Field label={t.start} htmlFor={`${ids}-start`} className="min-w-[6rem] flex-1">
@@ -342,9 +349,11 @@ function TypeButton({ type, on, onPick }: { type: EntryType; on: boolean; onPick
       aria-pressed={on}
       onClick={onPick}
       className={cn(
-        'min-w-[88px] flex-[1_1_30%] rounded-[7px] border-[1.3px] px-1 py-2 text-sm font-semibold',
+        'rounded-[7px] border-[1.3px] py-2 text-sm font-semibold',
+        // A phone keeps its 3 + 2 rows; from 768px a chip is as wide as its words, on one line (UI-120), 44px on a tablet.
+        'max-md:min-w-[88px] max-md:flex-[1_1_30%] max-md:px-1 md:flex-none md:whitespace-nowrap md:px-3 md:max-lg:min-h-11',
         on
-          ? type === 'travel' ? 'border-teal bg-teal text-white' : 'border-navy bg-navy text-white'
+          ? type === 'travel' ? 'border-teal bg-teal text-white' : 'border-secondary bg-secondary text-secondary-contrast'
           : 'border-hairline bg-card text-muted hover:text-navy',
       )}
     >

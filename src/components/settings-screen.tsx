@@ -85,6 +85,8 @@ export function SettingsScreen({
           activeHref={activeHref}
           onSelect={onSelectTab}
           label={tabsLabel}
+          // 44px tall on a phone and a tablet (P19.2-T3 AC-4; UI-142).
+          touch
         />
       )}
 
@@ -100,6 +102,7 @@ export function SettingsScreen({
           onSelect={onSelectSubtab}
           label={subtabsLabel ?? t.sections({ title })}
           variant="subtabs"
+          touch
         />
       )}
 

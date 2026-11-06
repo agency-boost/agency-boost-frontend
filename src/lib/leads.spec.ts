@@ -164,26 +164,26 @@ describe('LEAD_ROWS_FIRST_SHOWN (P13.1-T4 AC-8)', () => {
   });
 });
 
-describe('callLink and phoneHeld (P18.95-T4 AC-3)', () => {
+describe('callLink and phoneHeld (P18.7-T4 AC-3)', () => {
   it.each([
     ['0812-1100-2200', 'tel:+6281211002200'],
     ['+62 812 1100 2200', 'tel:+6281211002200'],
     ['812 1100 2200', 'tel:+6281211002200'],
     ['0062 812 1100 2200', 'tel:+6281211002200'],
-  ])('P18.95-T4 AC-3 rings %s as %s — the number WhatsApp is given, with its +', (phone, link) => {
+  ])('P18.7-T4 AC-3 rings %s as %s — the number WhatsApp is given, with its +', (phone, link) => {
     expect(callLink(phone)).toBe(link);
     expect(whatsAppLink(phone)).toBe(`https://wa.me/${link.slice('tel:+'.length)}`);
     expect(phoneHeld(phone)).toBeNull();
   });
 
-  it.each([null, undefined, '', '   '])('P18.95-T4 AC-3 holds both for no phone at all (%j), and says to add one', (phone) => {
+  it.each([null, undefined, '', '   '])('P18.7-T4 AC-3 holds both for no phone at all (%j), and says to add one', (phone) => {
     expect(callLink(phone)).toBeNull();
     expect(whatsAppLink(phone)).toBeNull();
     expect(phoneHeld(phone)).toBe(PHONE_HELD.missing);
     expect(PHONE_HELD.missing).toBe('No phone number yet — add one in Lead details.');
   });
 
-  it.each(['123', 'Pak Budi', '0812-1100-2200-3344-55'])('P18.95-T4 AC-3 holds both for a number nobody could dial (%s), and says to check it', (phone) => {
+  it.each(['123', 'Pak Budi', '0812-1100-2200-3344-55'])('P18.7-T4 AC-3 holds both for a number nobody could dial (%s), and says to check it', (phone) => {
     expect(callLink(phone)).toBeNull();
     expect(whatsAppLink(phone)).toBeNull();
     expect(phoneHeld(phone)).toBe(PHONE_HELD.unusable);

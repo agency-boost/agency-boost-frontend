@@ -95,7 +95,7 @@ describe('the bell’s popover (P12.1-T2)', () => {
     expect(popover()).toBeNull();
   });
 
-  it('P18.95-T1 AC-10 is a 44 × 44 target on a phone and 36 × 36 from 768 px', async () => {
+  it('P18.7-T1 AC-10 is a 44 × 44 target on a phone and 36 × 36 from 768 px', async () => {
     stubFetch({ '/notifications': { body: page([item()]) } });
     renderBell();
     const trigger = await screen.findByRole('button', { name: 'Notifications, 1 unread' });
@@ -181,7 +181,7 @@ describe('the bell’s popover (P12.1-T2)', () => {
       await userEvent.click(await within(popover()!).findByRole('button', { name: 'Mark all read' }));
 
       expect(await screen.findByRole('button', { name: 'Notifications' })).toBeInTheDocument();
-      // The badge's move as it is clicked (P18.95-T1 AC-7), then the answer's count.
+      // The badge's move as it is clicked (P18.7-T1 AC-7), then the answer's count.
       expect(heard).toEqual([
         expect.objectContaining({ unread: 0, local: true }),
         expect.objectContaining({ unread: 0 }),
@@ -301,7 +301,7 @@ describe('the bell’s popover (P12.1-T2)', () => {
     expect(await screen.findByRole('button', { name: 'Notifications' })).toBeInTheDocument();
   });
 
-  describe('P18.95-T1 AC-7 — the bell’s count changes at once (the client’s UI review, 2026-10-26)', () => {
+  describe('P18.7-T1 AC-7 — the bell’s count changes at once (the client’s UI review, 2026-10-26)', () => {
     /** An answer that waits until the test gives it: the badge is read while the write is still out. */
     function later<T>() {
       let give!: (value: T) => void;
@@ -311,7 +311,7 @@ describe('the bell’s popover (P12.1-T2)', () => {
     const READ_AT = '2026-10-26T03:00:00.000Z';
     const refused = { error: { code: 'INTERNAL_ERROR', message: 'Something went wrong.', requestId: 'r' } };
 
-    it('P18.95-T1 AC-7: marking one read drops the count before the answer, and the answer settles it', async () => {
+    it('P18.7-T1 AC-7: marking one read drops the count before the answer, and the answer settles it', async () => {
       const answer = later<unknown>();
       stubFetch({
         'POST /notifications/n-2/read': { body: answer.promise },
@@ -329,7 +329,7 @@ describe('the bell’s popover (P12.1-T2)', () => {
       expect(await screen.findByRole('button', { name: 'Notifications, 1 unread' })).toBeInTheDocument();
     });
 
-    it('P18.95-T1 AC-7: marking one unread raises the count at once', async () => {
+    it('P18.7-T1 AC-7: marking one unread raises the count at once', async () => {
       const answer = later<unknown>();
       stubFetch({
         'POST /notifications/n-2/unread': { body: answer.promise },
@@ -346,7 +346,7 @@ describe('the bell’s popover (P12.1-T2)', () => {
       expect(await screen.findByRole('button', { name: 'Notifications, 2 unread' })).toBeInTheDocument();
     });
 
-    it('P18.95-T1 AC-7: a refused mark puts the count back where it was, and says why', async () => {
+    it('P18.7-T1 AC-7: a refused mark puts the count back where it was, and says why', async () => {
       const answer = later<unknown>();
       stubFetch({
         'POST /notifications/n-2/read': { status: 500, body: answer.promise },
@@ -364,7 +364,7 @@ describe('the bell’s popover (P12.1-T2)', () => {
       expect(bell()).toHaveAccessibleName('Notifications, 2 unread');
     });
 
-    it('P18.95-T1 AC-7: Mark all read empties the badge at once, and a refusal puts the count back', async () => {
+    it('P18.7-T1 AC-7: Mark all read empties the badge at once, and a refusal puts the count back', async () => {
       const first = later<unknown>();
       const second = later<unknown>();
       stubFetch({
@@ -387,7 +387,7 @@ describe('the bell’s popover (P12.1-T2)', () => {
       expect(await screen.findByRole('button', { name: 'Notifications, 2 unread' })).toBeInTheDocument();
     });
 
-    it('P18.95-T1 AC-7: shows 9+ past nine, and the number itself once a mark brings it to nine', async () => {
+    it('P18.7-T1 AC-7: shows 9+ past nine, and the number itself once a mark brings it to nine', async () => {
       const answer = later<unknown>();
       const many = Array.from({ length: 10 }, (_, i) => item({ notificationId: `n-${i + 10}`, title: `Notice ${i + 10}` }));
       stubFetch({
@@ -456,39 +456,39 @@ describe('the bell’s popover (P12.1-T2)', () => {
     nav.pathname = '/notifications';
     stubFetch({ '/notifications': { body: page([]) } });
     renderBell();
-    expect(await screen.findByRole('button', { name: 'Notifications' })).toHaveClass('bg-amber/15');
+    expect(await screen.findByRole('button', { name: 'Notifications' })).toHaveClass('bg-primary/15');
   });
 });
 
 /**
- * **The badge is one component** (P18.95-T12 AC-2): the bell's corner, and on a phone's bar the avatar's, draw
+ * **The badge is one component** (P18.7-T12 AC-2): the bell's corner, and on a phone's bar the avatar's, draw
  * `UnreadBadge`, so the two cannot drift in classes, tokens or the `9+` cap (L-13).
  */
-describe('UnreadBadge, the bell’s and the phone avatar’s count (P18.95-T12 AC-2)', () => {
-  it.each([[1, '1'], [9, '9'], [10, '9+'], [42, '9+']])('P18.95-T12 AC-2 reads %i as %s', (unread, text) => {
+describe('UnreadBadge, the bell’s and the phone avatar’s count (P18.7-T12 AC-2)', () => {
+  it.each([[1, '1'], [9, '9'], [10, '9+'], [42, '9+']])('P18.7-T12 AC-2 reads %i as %s', (unread, text) => {
     expect(unreadBadgeText(unread)).toBe(text);
     const { container } = render(<UnreadBadge unread={unread} />);
     const badge = container.firstElementChild!;
     expect(badge).toHaveTextContent(text);
     expect(badge).toHaveAttribute('aria-hidden', 'true');
-    // The bell's classes and tokens, as it drew them before P18.95-T12.
+    // The bell's classes and tokens, as it drew them before P18.7-T12.
     expect(badge.className).toBe(
       'absolute -right-0.5 -top-0.5 inline-flex h-[17px] min-w-[17px] items-center justify-center rounded-pill bg-alert px-1 text-2xs font-bold text-white',
     );
   });
 
-  it.each([0, -1])('P18.95-T12 AC-2 draws nothing at %i', (unread) => {
+  it.each([0, -1])('P18.7-T12 AC-2 draws nothing at %i', (unread) => {
     const { container } = render(<UnreadBadge unread={unread} />);
     expect(container).toBeEmptyDOMElement();
   });
 
-  it('P18.95-T12 AC-2 names a control with the exact count, and alone at none', () => {
+  it('P18.7-T12 AC-2 names a control with the exact count, and alone at none', () => {
     expect(withUnread('Notifications', 3)).toBe('Notifications, 3 unread');
     expect(withUnread('Account and notifications', 42)).toBe('Account and notifications, 42 unread');
     expect(withUnread('Account and notifications', 0)).toBe('Account and notifications');
   });
 
-  it('P18.95-T12 AC-2 is the badge the bell wears', async () => {
+  it('P18.7-T12 AC-2 is the badge the bell wears', async () => {
     stubFetch({ '/notifications': { body: page([item()], { unread: 12 }) } });
     renderWithSession(<NotificationBell href="/notifications" unread={12} />, { me: READER });
     const bell = screen.getByRole('button', { name: 'Notifications, 12 unread' });

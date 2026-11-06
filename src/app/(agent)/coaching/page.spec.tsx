@@ -105,7 +105,7 @@ describe('Coaching Session — the roster (P11-T6; UI V1, UI-033, UI-034)', () =
     const title = await screen.findByRole('heading', { level: 1, name: 'Coaching Session' });
     const pill = screen.getByRole('link', { name: 'My Coaching Notes' });
     expect(pill).toHaveAttribute('href', '/coaching/me');
-    expect(pill).toHaveClass('rounded-pill', 'border-amber', 'min-h-11');
+    expect(pill).toHaveClass('rounded-pill', 'border-primary', 'min-h-11');
     expect(title.closest('[data-title-row], div')?.parentElement).toContainElement(pill);
     expect(screen.queryByText('Your own coaching')).not.toBeInTheDocument();
   });
@@ -243,10 +243,29 @@ describe('Coaching Session — the roster (P11-T6; UI V1, UI-033, UI-034)', () =
     expect(calls.map((c) => c.url)).toEqual(['http://api.test/api/v1/coaching/coachees']);
   });
 
-  it('says so in one line when there is nobody to coach (L-01)', async () => {
+  it('P19-T4 AC-3 shows a leader with nobody to coach the roster as it will look: greyed, Example, one next step', async () => {
     render({ ...ROSTER, directAgents: [], units: [] });
-    expect(await screen.findByText('No one to coach yet.')).toBeInTheDocument();
+    expect(await screen.findByText('No data yet')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'My Coaching Notes' })).toBeInTheDocument();
+    const sample = document.querySelector('[data-sample]')!;
+    expect(sample).toHaveAttribute('aria-hidden', 'true');
+    expect(sample.textContent).toContain('Sample agent 1');
+    expect(screen.getByText('Example')).toBeInTheDocument();
+    // The sample is no roster: none of its rows is offered as a link, and the one step is live.
+    expect(screen.queryByRole('link', { name: /Sample agent/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Add your first agent' })).toHaveAttribute('href', '/new-hires');
+  });
+
+  it('says so in one line to an Agent with nobody to coach, on a typed address (L-01)', async () => {
+    render({ ...ROSTER, directAgents: [], units: [] }, makeMe({
+      permissions: ['coaching_session:read'],
+      membership: {
+        membershipId: 'mem-a', kpmId: 'kpm-1', orgLevelCode: 'AGENT', hierarchyRole: 'agent', status: 'active',
+        isKpmOwner: false, isKpmAdmin: false, directCount: 0,
+      },
+    }));
+    expect(await screen.findByText('No one to coach yet.')).toBeInTheDocument();
+    expect(document.querySelector('[data-sample-preview]')).toBeNull();
   });
 
   it('shows the shell’s permission-denied state to a reader without the grant, naming no permission code', () => {

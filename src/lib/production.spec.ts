@@ -1,77 +1,78 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { formatMoneyUnit } from './format';
+import { KODE_OF, V1_COLUMNS } from '@test/data-upload-fixtures';
 import {
-  CADENCE_GROUP_LABEL, FIGURE_COLUMNS, METRIC_COLUMN_LABEL, PRODUCTION_METRICS,
+  APE_KODE, cellKey, columnHeading, columnLabel, correctionKey, workbookFilename, ytdColumns,
 } from './production';
 
 /**
- * P13.1-T7 AC-3 — **the screen and the template agree**, read from the backend's own source.
- *
- * The month table's figures and the file's columns are drawn from two copies of one list — this
- * repository's `PRODUCTION_METRICS` and the backend's. A test that stubbed the template would compare the
- * screen with the stub; this reads what the API is built from, as `contract.spec.ts` reads its
- * OpenAPI document, so a column moved on one side fails here rather than in an operator's spreadsheet.
+ * **The screen and the server agree** (P13.1-T7 AC-3; since P19.5-T2 the columns are the template's), read from the
+ * backend's own source as `contract.spec.ts` reads its OpenAPI document: a rule moved on one side fails here rather than
+ * in an operator's spreadsheet.
  */
-const BACKEND = join(__dirname, '..', '..', '..', 'backend', 'src', 'modules', 'production');
+const BACKEND = join(__dirname, '..', '..', '..', 'backend', 'src');
 const source = (file: string) => readFileSync(join(BACKEND, file), 'utf8');
 
-/** The quoted strings of the first `NAME = [ … ]` array literal in a source file. */
-function arrayLiteral(src: string, name: string): string[] {
-  const body = new RegExp(`${name}\\s*=\\s*\\[([^\\]]*)\\]`, 's').exec(src);
-  if (!body) throw new Error(`no array ${name}`);
-  return [...body[1].matchAll(/'([^']*)'/g)].map((m) => m[1]);
-}
-
-/** `key: 'value'` pairs of the first `NAME … = { … }` object literal in a source file. */
-function objectLiteral(src: string, name: string): Record<string, string> {
-  const body = new RegExp(`${name}[^=]*=\\s*\\{([^}]*)\\}`, 's').exec(src);
-  if (!body) throw new Error(`no object ${name}`);
-  return Object.fromEntries([...body[1].matchAll(/(\w+):\s*'([^']*)'/g)].map((m) => [m[1], m[2]]));
-}
-
-describe('the month table and the template, side by side (P13.1-T7)', () => {
-  it('AC-3: lists the six metrics in the backend’s order', () => {
-    expect([...PRODUCTION_METRICS]).toEqual(arrayLiteral(source('monthly-agent-data.schema.ts'), 'PRODUCTION_METRICS'));
+describe('P19.5-T2 the Data upload’s columns, by kode, as the backend writes them', () => {
+  it('P19.5-T2 AC-1 version 1’s seven columns: the fixtures’ kodes, labels, units and years to date are the backend’s', () => {
+    const config = source('modules/config/analytics-config.ts');
+    const kodes = source('modules/config/analytics-config.ts').match(/KODE_OF_CELL = \{([^}]*)\}/s)![1];
+    for (const [name, kode] of Object.entries(KODE_OF)) expect(kodes).toContain(`${name}: '${kode}'`);
+    for (const c of V1_COLUMNS) {
+      const name = Object.keys(KODE_OF).find((k) => KODE_OF[k] === c.kode)!;
+      expect(config).toContain(`field('${name}', { id: '${c.label.id}', en: '${c.label.en}' }, '${c.unit}', '${c.ytd}'`);
+    }
   });
 
-  it('AC-3: heads each column as the file does, less the file’s Rp M — the table shows rupiah in full', () => {
-    const file = objectLiteral(source('production-template.ts'), 'METRIC_FILE_LABEL');
-    expect(Object.keys(file)).toEqual([...PRODUCTION_METRICS]);
-    for (const m of PRODUCTION_METRICS) expect(METRIC_COLUMN_LABEL[m]).toBe(file[m].replace(' (Rp M)', ''));
+  it('P19.5-T2 the kode the phone row reads, APE, is a system column: renamed, never deleted (R1)', () => {
+    expect(source('domain/constants/advanced-analytics.ts'))
+      .toMatch(new RegExp(`ANALYTICS_SYSTEM_KODES = \\[[^\\]]*'${APE_KODE}'`));
   });
 
-  it('AC-3: draws this month’s six, then the year’s — the file’s two runs, in the file’s order', () => {
-    const header = source('production-template.ts');
-    expect(header.indexOf('— This Month`')).toBeLessThan(header.indexOf('— YTD`'));
-    expect(FIGURE_COLUMNS.map((f) => `${f.metric} ${CADENCE_GROUP_LABEL[f.cadence]}`)).toEqual([
-      ...PRODUCTION_METRICS.map((m) => `${m} This Month`),
-      ...PRODUCTION_METRICS.map((m) => `${m} YTD`),
-    ]);
+  it('P19.5-T2 names an uploaded year to date’s cell as the backend does: <KODE>_YTD', () => {
+    expect(source('modules/production/upload-columns.ts')).toContain("export const YTD_SUFFIX = '_YTD';");
+    expect(cellKey('KOMISI', true)).toBe('KOMISI_YTD');
+    expect(cellKey('APE', false)).toBe('APE');
+  });
+
+  it('P19.5-T2 names a ticked correction as the commit reads it: membershipId:KODE, held:<CODE>:KODE', () => {
+    const service = source('modules/production/production-import.service.ts');
+    expect(service).toContain('`held:${heldCodeOf(r.agentCode)}`');
+    expect(correctionKey({ status: 'ready', membershipId: 'm1', agentCode: 'A' }, { kode: 'APE', ytd: false })).toBe('m1:APE');
+    expect(correctionKey({ status: 'held', membershipId: null, agentCode: 'abc' }, { kode: 'FYP', ytd: false })).toBe('held:ABC:FYP');
+  });
+
+  it('P19.5-T2 AC-1 saves the workbook named as the CSV is: <kpmCode>-agent-data-<YYYY-MM>.xlsx', () => {
+    expect(source('modules/production/production-template.ts'))
+      .toContain('return `${officeCode}-agent-data-${month}.${extension}`;');
+    expect(workbookFilename({ filename: '0417-agent-data-2026-09.csv' })).toBe('0417-agent-data-2026-09.xlsx');
   });
 });
 
-/**
- * **P18.98-T3 AC-4: a file is not words.** The production file's header *APE (Rp M)* is the carrier's **million** and
- * the import's contract, so it reads the same whatever language the person downloading it reads — and it is not the
- * screens' header unit (*Rp M* a *miliar* on a screen, *IDR B* in English), which the template never asks for.
- */
-describe('P18.98-T3 AC-4 the production file’s header is a file format, in no language', () => {
-  it('P18.98-T3 AC-4 keeps APE (Rp M) and FYP (Rp M) as the template writes them, with nothing that takes a language', () => {
-    const template = source('production-template.ts');
-    const file = objectLiteral(template, 'METRIC_FILE_LABEL');
-    expect(file.ape).toBe('APE (Rp M)');
-    expect(file.fyp).toBe('FYP (Rp M)');
-    // The template imports only the metrics' list: no formatter, no language.
-    expect([...template.matchAll(/^import .* from '([^']+)';$/gm)].map((m) => m[1])).toEqual(['./monthly-agent-data.schema']);
+describe('P19.5-T2 a column on the screen', () => {
+  it('P19.5-T2 names a column in the reader’s language, the ID label standing in for an empty EN one (ADR-0214 §2)', () => {
+    const persistency = V1_COLUMNS.find((c) => c.kode === 'PERSISTENCY')!;
+    expect(columnLabel(persistency, 'id')).toBe('Persistensi rolling');
+    expect(columnLabel(persistency, 'en')).toBe('Rolling persistency');
+    expect(columnLabel({ label: { id: 'Komisi', en: ' ' } }, 'en')).toBe('Komisi');
   });
 
-  it('P18.98-T3 AC-4 is not the screens’ unit: a screen’s M is a miliar, IDR B in English; the file’s is a million', () => {
-    expect(formatMoneyUnit('M', 'id')).toBe('Rp M');
-    expect(formatMoneyUnit('M', 'en')).toBe('IDR B');
-    expect(formatMoneyUnit('jt', 'en')).toBe('IDR M');
-    // The table drops the file's unit from its headings, in either language: its figures are written in full.
-    for (const m of PRODUCTION_METRICS) expect(METRIC_COLUMN_LABEL[m]).not.toMatch(/Rp|IDR/);
+  /*
+   * *Changed 2026-11-05 (P19.5-T2; ADR-0214 §5):* P18.10-T3 AC-4 held the file's header in no language. The template's
+   * header is now `<label> (<unit>) [KODE]` in the reader's language — the `[KODE]` is what an import matches, whatever
+   * the label says — so a header in Indonesian reads *Rp juta*, in English *Rp M*. The table still names no money unit:
+   * its figures are written in full.
+   */
+  it('P19.5-T2 heads the table by the column’s name, (%) for a percentage and no unit for money, which is shown in full', () => {
+    expect(source('modules/production/production-template.ts')).toContain("return language === 'id' ? 'Rp juta' : 'Rp M';");
+    expect(V1_COLUMNS.map((c) => columnHeading(c, 'en'))).toEqual([
+      'APE', 'Rolling persistency (%)', 'Recruitment', 'New active agents', 'FYP', '# of policy (case issued)', 'Unit persistency (%)',
+    ]);
+    for (const c of V1_COLUMNS) expect(columnHeading(c, 'id')).not.toMatch(/Rp|IDR/);
+  });
+
+  it('P19.5-T2 AC-7 the YTD side holds the columns with a year to date: five of version 1, never a persistency (R4)', () => {
+    expect(ytdColumns(V1_COLUMNS).map((c) => c.kode)).toEqual(['APE', 'RECRUITMENT', 'NEW_ACTIVE_AGENTS', 'FYP', 'POLICY_COUNT']);
   });
 });

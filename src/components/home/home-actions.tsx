@@ -89,7 +89,7 @@ function Row({
   return (
     <div
       data-action-row=""
-      className="relative flex min-h-[3.25rem] items-center gap-2 px-3 py-1.5 has-[a[data-row-main]:focus-visible]:outline has-[a[data-row-main]:focus-visible]:outline-2 has-[a[data-row-main]:focus-visible]:-outline-offset-2 has-[a[data-row-main]:focus-visible]:outline-amber lg:hover:bg-hover-row"
+      className="relative flex min-h-[3.25rem] items-center gap-2 px-3 py-1.5 has-[a[data-row-main]:focus-visible]:outline has-[a[data-row-main]:focus-visible]:outline-2 has-[a[data-row-main]:focus-visible]:-outline-offset-2 has-[a[data-row-main]:focus-visible]:outline-primary lg:hover:bg-hover-row"
     >
       {lead}
       <Link

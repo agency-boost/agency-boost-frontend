@@ -21,6 +21,8 @@ import {
   applyConfigChanges, listTraining, type TrainingCategoryRow,
 } from '@/lib/tenant-config';
 import { flattenTraining } from '@/lib/training-view';
+import { TRAINING_DESCRIPTION_MAX } from '@/lib/training-text';
+import { CHECK_LINE_TOUCH, TEXT_BUTTON_TOUCH } from '../../settings-touch';
 
 const BACK = '/kpm/settings/training#modules';
 
@@ -29,6 +31,8 @@ const NONE = '—';
 
 interface Form {
   title: string;
+  /** *Deskripsi singkat* (UI-161, ADR-0220 §1). */
+  description: string;
   categoryCode: string;
   skillCode: string;
   published: boolean;
@@ -48,6 +52,7 @@ const formOf = (tree: TrainingCategoryRow[], moduleId: string): Form | null => {
   const found = find(tree, moduleId);
   return found && {
     title: found.current.title,
+    description: found.current.description ?? '',
     categoryCode: found.category?.code ?? '',
     skillCode: found.current.skillCode,
     published: found.current.publishState === 'published',
@@ -126,6 +131,9 @@ export default function TrainingModulePage({
     const skills = flat.skills.filter((s) => s.status === 'active' && s.categoryCode === form.categoryCode);
     const changes: Record<string, unknown> = {
       ...(form.title.trim() !== current.title ? { title: form.title.trim() } : {}),
+      ...((form.description.trim() || null) !== (current.description ?? null)
+        ? { description: form.description.trim() || null }
+        : {}),
       ...(form.skillCode !== current.skillCode ? { skillCode: form.skillCode } : {}),
       ...((form.published ? 'published' : 'draft') !== current.publishState
         ? { publishState: form.published ? 'published' : 'draft' }
@@ -168,6 +176,7 @@ export default function TrainingModulePage({
             <dl className="grid gap-3 sm:grid-cols-2">
               {([
                 [t.moduleTitle, current.title],
+                [t.shortDescription, current.description ?? NONE],
                 [t.skill, found.skill?.label ?? current.skillCode],
                 [t.category, found.category?.label ?? NONE],
                 /*
@@ -197,6 +206,14 @@ export default function TrainingModulePage({
                   id="module-title"
                   value={form.title}
                   onChange={(e) => { setSaved(false); setForm({ ...form, title: e.target.value }); }}
+                />
+              </Field>
+              <Field label={t.shortDescription} htmlFor="module-description" hint={t.shortDescriptionHint({ max: TRAINING_DESCRIPTION_MAX })}>
+                <TextInput
+                  id="module-description"
+                  value={form.description}
+                  maxLength={TRAINING_DESCRIPTION_MAX}
+                  onChange={(e) => { setSaved(false); setForm({ ...form, description: e.target.value }); }}
                 />
               </Field>
               <div className="flex flex-wrap items-start gap-3">
@@ -249,12 +266,15 @@ export default function TrainingModulePage({
                   id="module-published"
                   type="checkbox"
                   role="switch"
-                  className="h-5 w-5 accent-amber"
+                  // Below 1024px the box is 24px and its name beside it a 44px line, the target a finger meets (UI-142).
+                  className="h-5 w-5 accent-primary max-lg:h-6 max-lg:w-6"
                   checked={form.published}
                   aria-describedby="module-published-hint"
                   onChange={(e) => { setSaved(false); setForm({ ...form, published: e.target.checked }); }}
                 />
-                <label htmlFor="module-published" className="text-md font-semibold text-navy">{t.published}</label>
+                <label htmlFor="module-published" className={`text-md font-semibold text-navy ${CHECK_LINE_TOUCH} max-lg:flex max-lg:items-center`}>
+                  {t.published}
+                </label>
                 <span id="module-published-hint" className="text-sm text-muted">
                   {form.published ? t.module.offeredOnPublish : t.module.aDraft}
                 </span>
@@ -289,7 +309,8 @@ export default function TrainingModulePage({
       title={title}
       subtitle={where}
       permission="training_settings:read"
-      actions={<Link href={BACK} className="text-md font-semibold text-navy underline">{t.module.back}</Link>}
+      // 44px tall below 1024px (P19.2-T3 AC-4; UI-142).
+      actions={<Link href={BACK} className={`text-md font-semibold text-navy underline ${TEXT_BUTTON_TOUCH}`}>{t.module.back}</Link>}
       error={error}
       bars={<PublishBar refreshKey={published} />}
     >

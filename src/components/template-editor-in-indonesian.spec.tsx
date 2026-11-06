@@ -22,7 +22,7 @@ import { settingsMessages } from '@/i18n/messages/settings';
 import type { TemplateLinkKinds } from '@/lib/admin';
 
 /**
- * **P18.98-T6, the Company template's editors in ID mode** (AC-1 as T4's AC-1 to AC-3; area "admin-template"): each kind
+ * **P18.10-T6, the Company template's editors in ID mode** (AC-1 as T4's AC-1 to AC-3; area "admin-template"): each kind
  * of preset in the approved glossary's Indonesian (`admin-template-editor.tsx`, and the office's settings' words it
  * shares), the tabs and stages a sentence names kept English (§A), what a template holds as typed (ADR-0179 §5), and its
  * figures in Indonesian (`InLanguage` is a chosen Indonesian: words and figures). The same editors in English are
@@ -39,7 +39,7 @@ const noEnglishLeft = () => expect(englishShown(document.body, ENGLISH)).toEqual
 
 const inIndonesian = (ui: React.ReactElement) => render(<InLanguage language="id">{ui}</InLanguage>);
 
-/** A template's taxonomy: what it holds is the platform's words, Indonesian since OD-238 (P18.98-T7's to migrate). */
+/** A template's taxonomy: what it holds is the platform's words, Indonesian since OD-238 (P18.10-T7's to migrate). */
 const TAXONOMY: TaxonomyPayload = {
   categories: [
     { code: 'SELLING', label: 'Penjualan', displayOrder: 1 },
@@ -52,7 +52,7 @@ const TAXONOMY: TaxonomyPayload = {
   ],
 };
 
-describe('P18.98-T6 the Company template’s editors in Indonesian', () => {
+describe('P18.10-T6 the Company template’s editors in Indonesian', () => {
   it('reads the English it is looking for, so a silent zero cannot pass', () => {
     expect(ENGLISH.length).toBeGreaterThan(150);
     expect(ENGLISH).toEqual(expect.arrayContaining(['Add a section', 'Edit binding', 'Production clubs', 'Reached by']));
@@ -108,7 +108,10 @@ describe('P18.98-T6 the Company template’s editors in Indonesian', () => {
       onChange={vi.fn()}
     />);
     await userEvent.click(screen.getByRole('button', { name: 'Tambah kategori' }));
-    expect(screen.getByLabelText('Kode')).toHaveAccessibleDescription('Diisi dari nama. Permanen setelah diterbitkan.');
+    // With its length against the limit since P19.4-T4 (AC-14, B1-9).
+    expect(screen.getByLabelText('Kode')).toHaveAccessibleDescription(
+      'Diisi dari nama. Permanen setelah diterbitkan. 0 dari 40 karakter.',
+    );
     expect(screen.getByLabelText('Deskripsi')).toHaveAccessibleDescription('Opsional. Agent membacanya di bawah kategori.');
     await userEvent.type(screen.getByLabelText('Kode'), 'SALES');
     expect(screen.getByLabelText('Kode')).toHaveAccessibleDescription(
@@ -218,7 +221,7 @@ describe('P18.98-T6 the Company template’s editors in Indonesian', () => {
         ],
       }],
     };
-    // The server's sentence for what completes an item is the server's, in the reader's language (P18.98-T5).
+    // The server's sentence for what completes an item is the server's, in the reader's language (P18.10-T5).
     const linkKinds: TemplateLinkKinds = {
       'feature:goals': { label: 'Goal Settings', route: '/goals', completesWhen: 'new hire sudah menyimpan goal', live: true },
       'feature:leads': { label: 'Leads Management', route: '/leads', completesWhen: 'new hire menambah lead', live: false },

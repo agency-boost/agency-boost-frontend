@@ -48,7 +48,7 @@ const columnsOf = ({ columns: c }: { columns: typeof adminsMessages.en.columns }
  * and is refused the writes with `PERM_OWNER_ONLY`. Knowing who else administers the
  * office is not a power; handing it out is.
  *
- * **Below 768px the list is a card per admin** (P18.97-T7 AC-1, ADR-0178 §4; the client's UI-034: the table, 425px on
+ * **Below 768px the list is a card per admin** (P18.9-T7 AC-1, ADR-0178 §4; the client's UI-034: the table, 425px on
  * a 375px screen): `usePhone`, asked where the screen mounts, before the list answers. From 768px the table it was.
  */
 export default function AdminsPage() {
@@ -81,7 +81,7 @@ export default function AdminsPage() {
       if (!mounted.current) return;
       setAdmins(delegated);
       /*
-       * **Only the office's active members other than the reader and its admins** (P18.97-T4 AC-5, ADR-0176 §5; the
+       * **Only the office's active members other than the reader and its admins** (P18.9-T4 AC-5, ADR-0176 §5; the
        * client's UI-026: the list offered Wilson, who was reading it). The tree is the office's active memberships, so
        * a removed one is never offered and a member who came back is offered once, by the membership she holds now;
        * the server refuses a removed one (`404`) and a pending one (`422`) whatever this offers.
@@ -129,7 +129,7 @@ export default function AdminsPage() {
       {error && <ErrorBanner {...error} />}
 
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-        {/* The client's one line for the paragraph it replaces, at every size (P18.97-T4 AC-5; the grey-text table, UI-026). */}
+        {/* The client's one line for the paragraph it replaces, at every size (P18.9-T4 AC-5; the grey-text table, UI-026). */}
         <p className="max-w-2xl text-md text-muted">{t.line}</p>
         <Field label={t.grantTo} htmlFor="grant-to" className="min-w-56">
           <Select
@@ -239,7 +239,7 @@ export default function AdminsPage() {
 }
 
 /**
- * **The admins as cards** (P18.97-T7 AC-1, ADR-0178 §4; UI-034), in the table's order and words through the shared card
+ * **The admins as cards** (P18.9-T7 AC-1, ADR-0178 §4; UI-034), in the table's order and words through the shared card
  * pieces (`components/ui/row-cards.tsx`): the name with the rung's badge after it, the agent code under it, then
  * *Admin since* and *Granted by* each under its heading (a — is not drawn), and the row's one action across the card —
  * *Revoke*, 44px tall on a phone, asking first as the table's does — or *Yours* for the Owner's own access.

@@ -29,7 +29,7 @@ export function leaderLimitWords(
   error: Pick<ApiError, 'details'> & Partial<Pick<ApiError, 'code'>>,
   audience: 'office' | 'platform',
   action: LeaderLimitAction,
-  /** The reader's language (P18.98-T4; `useLanguage()`): English, the source, when given none. */
+  /** The reader's language (P18.10-T4; `useLanguage()`): English, the source, when given none. */
   language: Language = SOURCE_LANGUAGE,
 ): { said: string; platformAdvice: boolean } {
   const read = Number((error.details as { maxLeaders?: number } | undefined)?.maxLeaders);

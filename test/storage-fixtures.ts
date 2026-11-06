@@ -1,7 +1,7 @@
 import type { SignedUpload } from '@/lib/tenant-config';
 
 /**
- * **A signed upload as the API answers it since Phase 18.7** (P18.7-T2, ADR-0153): a GCS V4 signed POST
+ * **A signed upload as the API answers it since Phase 18.4** (P18.4-T2, ADR-0153): a GCS V4 signed POST
  * policy. Every spec that signs, sends and attaches a file builds its answer here, so the shape the
  * browser is tested against is the one storage accepts, and a vendor change is one edit.
  *

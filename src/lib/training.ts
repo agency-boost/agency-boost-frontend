@@ -1,7 +1,7 @@
 import { api } from './api-client';
 
 /**
- * **Training, as the learner and the coach read it** (Phase 18.5, P18.5-T1 to T4;
+ * **Training, as the learner and the coach read it** (Phase 18.2, P18.2-T1 to T4;
  * `docs/02-specs/functional/training.md`): the shapes the four learner routes answer, the calls that ask
  * for them, and the words the screens draw them with — `/training/[categoryCode]`, the module page
  * `/training/[categoryCode]/[moduleCode]`, and the coaching *Training* tab, the person shell's and
@@ -29,6 +29,8 @@ export type TrainingItemKind = 'file' | 'video' | 'link';
 export interface TrainingModuleRow {
   code: string;
   title: string;
+  /** *Deskripsi singkat* (ADR-0220 §2): drawn in grey under the title, or `null`; absent read as none. */
+  description?: string | null;
   /** The kinds the module's live content holds, *File · Video · Link* order; empty draws *—*. */
   formats: TrainingItemKind[];
   status: TrainingStatus;
@@ -53,6 +55,8 @@ export interface TrainingArchivedModuleRow {
 export interface TrainingSkillProgress {
   code: string;
   label: string;
+  /** *Deskripsi singkat* (ADR-0220 §2): drawn in grey under the name, or `null`; absent read as none. */
+  description?: string | null;
   /** False only for a skill no longer offered that still holds D-history rows. */
   offered: boolean;
   /** `TRAINING_COMPLETION_PCT` over this scope, served (T2 AC-2): offered modules done, and offered modules. */
@@ -119,6 +123,8 @@ export interface TrainingModuleCan {
 export interface TrainingModulePage {
   code: string;
   title: string;
+  /** *Deskripsi singkat* (ADR-0220 §2), or `null`; absent read as none. */
+  description?: string | null;
   category: TrainingRef;
   skill: TrainingRef;
   /** Files, then videos, then links. */
@@ -180,7 +186,7 @@ export const MY_COACHING_TRAINING_HREF = '/coaching/me/training';
 
 /*
  * ── The words ─────────────────────────────────────────────────────────────────────────────────────
- * The screens' words are the catalogue's (`i18n/messages/training.ts`, P18.98-T4), in the reader's language: the
+ * The screens' words are the catalogue's (`i18n/messages/training.ts`, P18.10-T4), in the reader's language: the
  * prototype's verbatim (`Overall.html:3708-3778`, `:7625-7918`) and the module's own. Only the order is here.
  */
 
@@ -188,7 +194,7 @@ export const MY_COACHING_TRAINING_HREF = '/coaching/me/training';
 export const TRAINING_STATUSES: readonly TrainingStatus[] = ['not_started', 'in_progress', 'done'];
 
 /*
- * ── UI V1 (Phase 18.99 T10) ───────────────────────────────────────────────────────────────────────
+ * ── UI V1 (Phase 18.11 T10) ───────────────────────────────────────────────────────────────────────
  */
 
 /**

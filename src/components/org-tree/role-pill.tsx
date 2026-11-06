@@ -13,7 +13,7 @@ import type { HierarchyRole } from '@/lib/org';
  */
 export function roleTint(role: HierarchyRole, onNavy = false): string {
   if (onNavy) return 'bg-white/[0.16] text-white';
-  return role === 'agent' ? 'bg-pill-grey text-pill-grey-ink' : 'bg-amber/20 text-amber-ink';
+  return role === 'agent' ? 'bg-pill-grey text-pill-grey-ink' : 'bg-primary/20 text-primary-ink';
 }
 
 export function RolePill({

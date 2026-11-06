@@ -32,7 +32,7 @@ import { TermTip } from './term-tip';
 import { errorSentence } from './ui-words';
 
 /**
- * **The shared pieces in Indonesian** (P18.98-T4 AC-1 to AC-4; the shared pieces): every primitive's own words, the page
+ * **The shared pieces in Indonesian** (P18.10-T4 AC-1 to AC-4; the shared pieces): every primitive's own words, the page
  * frame's refusal, the page for an office that cannot be used, the sign for a route not built yet, the confirmations,
  * the glossary terms' tips and why a held button waits — the approved glossary's words, each kept term English, what a
  * caller hands a primitive (a row's name, a caption, a server's sentence) as it was handed, and none of the areas'
@@ -44,7 +44,7 @@ const id = (ui: React.ReactElement) => render(<InLanguage language="id">{ui}</In
 
 afterEach(() => vi.unstubAllGlobals());
 
-describe('P18.98-T4 the primitives in Indonesian', () => {
+describe('P18.10-T4 the primitives in Indonesian', () => {
   it('AC-1 the fields: Code, Choose a date, Show, Cancel', async () => {
     id(
       <div>
@@ -166,7 +166,7 @@ describe('P18.98-T4 the primitives in Indonesian', () => {
   });
 });
 
-describe('P18.98-T4 the page frame in Indonesian', () => {
+describe('P18.10-T4 the page frame in Indonesian', () => {
   it('AC-1 the refusal names no permission code, in Indonesian', () => {
     id(<NotAvailableToYou permission="kpm_analytics:read" />);
     const refusal = screen.getByRole('alert');
@@ -217,7 +217,7 @@ describe('P18.98-T4 the page frame in Indonesian', () => {
   });
 });
 
-describe('P18.98-T4 the words read outside a screen, in both languages', () => {
+describe('P18.10-T4 the words read outside a screen, in both languages', () => {
   it('AC-1 the confirmations: English as CONFIRMED was, Indonesian §B.2’s, Goal and Agent kept', () => {
     expect(CONFIRMED).toBe(confirmationMessages.en);
     expect(CONFIRMED.activityLogged).toBe('Activity logged ✓');

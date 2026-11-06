@@ -8,7 +8,7 @@ import {
  * P4-T25. Each of the five seeded benchmarks written the way `metrics-and-definitions.md`
  * states it — the defect was that the screens printed `0.15` for a success rate. The client's
  * benchmarks since ADR-0160 §2, and *Set appointment to meeting* a percent. **As typed since
- * ADR-0174 §2** (P18.97-T3 AC-2): *30%*, never *30,0%*; a number keeps its two places.
+ * ADR-0174 §2** (P18.9-T3 AC-2): *30%*, never *30,0%*; a number keeps its two places.
  */
 describe('formatBenchmark', () => {
   it.each([
@@ -20,11 +20,11 @@ describe('formatBenchmark', () => {
     // The prototype's, which an office that kept them still holds.
     ['a success rate at 15%', 0.15, 'percent', '15%'],
     ['Meeting per approach at 1.50', 1.5, 'decimal', '1,50'],
-  ] as const)('P18.97-T3 AC-2 writes %s as typed, %s', (_, value, unit, text) => {
+  ] as const)('P18.9-T3 AC-2 writes %s as typed, %s', (_, value, unit, text) => {
     expect(formatBenchmark(value, unit)).toBe(text);
   });
 
-  it('P18.97-T3 AC-2 keeps the places a percentage benchmark was typed with, and only those', () => {
+  it('P18.9-T3 AC-2 keeps the places a percentage benchmark was typed with, and only those', () => {
     expect(formatBenchmark(0.155, 'percent')).toBe('15,5%');
     expect(formatBenchmark(0.1525, 'percent')).toBe('15,25%');
     expect(formatBenchmark(0.57, 'percent')).toBe('57%');
@@ -57,14 +57,14 @@ describe('the input is typed the way it is shown', () => {
     expect(benchmarkFromInput('30', 'points')).toBe(30);
   });
 
-  it('P18.95-T1 AC-3 takes a comma or a point for the decimal', () => {
+  it('P18.7-T1 AC-3 takes a comma or a point for the decimal', () => {
     expect(benchmarkFromInput('1,5', 'decimal')).toBe(1.5);
     expect(benchmarkFromInput('15,5', 'percent')).toBe(0.155);
     expect(benchmarkFromInput('15.5', 'percent')).toBe(0.155);
     expect(benchmarkFromInput('22,5', 'points')).toBe(22.5);
   });
 
-  it('P18.95-T1 AC-3 reads a single point as a decimal, never as thousands — a benchmark is a small value', () => {
+  it('P18.7-T1 AC-3 reads a single point as a decimal, never as thousands — a benchmark is a small value', () => {
     expect(benchmarkFromInput('1.250', 'decimal')).toBe(1.25);
     expect(benchmarkFromInput('1,2,5', 'decimal')).toBeNaN();
   });
@@ -160,11 +160,11 @@ describe('formatRatioForStatus — a percentage is whole beside any status; a nu
 
 
 /**
- * **P18.98-T3: a ratio and its benchmark in each language** (ADR-0174 §6; the glossary's §E). Indonesian is every
+ * **P18.10-T3: a ratio and its benchmark in each language** (ADR-0174 §6; the glossary's §E). Indonesian is every
  * case above, unchanged; English writes the same figure with a point — *29.6%*, *0.30*, *±30 points* — to the same
- * places. The words beside a figure (*points*) are the catalogue's, and move with their screens (P18.98-T4).
+ * places. The words beside a figure (*points*) are the catalogue's, and move with their screens (P18.10-T4).
  */
-describe('P18.98-T3 a ratio in each language', () => {
+describe('P18.10-T3 a ratio in each language', () => {
   it.each([
     [0.3, 'percent', '30%', '30%'],
     [0.155, 'percent', '15,5%', '15.5%'],
@@ -172,7 +172,7 @@ describe('P18.98-T3 a ratio in each language', () => {
     [1.5, 'decimal', '1,50', '1.50'],
     [30, 'points', '±30 points', '±30 points'],
     [25.5, 'points', '±25,5 points', '±25.5 points'],
-  ] as const)('P18.98-T3 AC-1 writes a benchmark of %d (%s) as %s, and %s in English', (value, unit, id, en) => {
+  ] as const)('P18.10-T3 AC-1 writes a benchmark of %d (%s) as %s, and %s in English', (value, unit, id, en) => {
     expect(formatBenchmark(value, unit, 'id')).toBe(id);
     expect(formatBenchmark(value, unit, 'en')).toBe(en);
   });
@@ -185,7 +185,7 @@ describe('P18.98-T3 a ratio in each language', () => {
     expect(formatRatioValue(null, 'percent', 'en')).toBe('–');
   });
 
-  it('P18.98-T3 AC-2 adds the same place in both languages where the rounding would reach the benchmark', () => {
+  it('P18.10-T3 AC-2 adds the same place in both languages where the rounding would reach the benchmark', () => {
     // 8 ÷ 27 is 0.296: below 0.30, so neither language may write 0,30 or 0.30.
     expect(formatRatioForStatus(8 / 27, 'decimal', 0.3, 'alert', 'id')).toBe('0,296');
     expect(formatRatioForStatus(8 / 27, 'decimal', 0.3, 'alert', 'en')).toBe('0.296');
@@ -197,12 +197,12 @@ describe('P18.98-T3 a ratio in each language', () => {
     expect(formatRatioForStatus(0.31, 'percent', 0.3, 'success', 'en')).toBe('31%');
   });
 
-  it('P18.98-T3 AC-2 groups a figure past a thousand in each language’s mark, whole in both', () => {
+  it('P18.10-T3 AC-2 groups a figure past a thousand in each language’s mark, whole in both', () => {
     expect(formatRatioForStatus(123.45, 'percent', 124, 'alert', 'id')).toBe('12.345%');
     expect(formatRatioForStatus(123.45, 'percent', 124, 'alert', 'en')).toBe('12,345%');
   });
 
-  it('P18.98-T3 AC-3 puts a stored benchmark in its input in the reader’s mark, and reads either mark back', () => {
+  it('P18.10-T3 AC-3 puts a stored benchmark in its input in the reader’s mark, and reads either mark back', () => {
     expect(benchmarkToInput(0.155, 'percent', 'id')).toBe('15,5');
     expect(benchmarkToInput(0.155, 'percent', 'en')).toBe('15.5');
     expect(benchmarkToInput(0.3, 'decimal', 'en')).toBe('0.3');

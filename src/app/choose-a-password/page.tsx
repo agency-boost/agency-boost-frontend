@@ -13,7 +13,7 @@ import { PASSWORD_MIN_LENGTH } from '@/lib/password';
 /**
  * Where somebody lands when the password they signed in with is not theirs.
  *
- * An account created by the roster import (P3.6-T4) starts on a password an operator
+ * An account created by the roster import (P3.2-T4) starts on a password an operator
  * generated, read, and put in an email. Until it is replaced, `AuthGuard` refuses every
  * route but three — so this screen is not a suggestion or a nag, it is the only thing
  * that account can do.

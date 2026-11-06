@@ -15,7 +15,7 @@ import {
 import { MINOR_UNITS_PER_MAJOR } from './goals';
 import type {
   ActionItem, ActionStatus, AgendaItem, AgendaSection, ColumnKey, ColumnPeriod, MeetingView, MeetingWriter, MonthlyTarget,
-  RowKey, Scorecard, ScorecardCell, ScorecardRow, TargetRowKey, YtdChange,
+  RowKey, Scorecard, ScorecardCell, ScorecardDefinitions, ScorecardRow, TargetRowKey, YtdChange,
 } from './leader-meetings';
 
 /**
@@ -32,7 +32,7 @@ import type {
  */
 
 /**
- * **The tabs' words are the catalogue's** (P18.98-T4): *Overview & Stats*' in `i18n/messages/forum-stats.ts`, the
+ * **The tabs' words are the catalogue's** (P18.10-T4): *Overview & Stats*' in `i18n/messages/forum-stats.ts`, the
  * agenda's and the tracker's in `forum-minutes.ts`, English the source and Indonesian the approved glossary's. A screen
  * reads the reader's with `useMessages`; a function here that writes words takes the reader's language (`useLanguage()`)
  * as `words`, English when given none, and one that writes a figure too takes the figures' (`useFigureLanguage()`) as
@@ -90,6 +90,7 @@ export function listed(items: readonly string[], words: Language = SOURCE_LANGUA
 export const TABS_OWN_COPY = {
   notTracked: STATS.notTracked,
   unrecorded: STATS.unrecorded,
+  notUploaded: STATS.notUploaded,
   none: STATS.none satisfies Partial<Record<RowKey, string>>,
   partialMark: STATS.partialMark,
   title: (branch: string, month: string) => `${branch}: ${month}`,
@@ -127,7 +128,7 @@ export const accessNoteText = (note: MeetingView['accessNote'], words: Language 
 const shortYear = (month: string) => month.slice(2, 4);
 
 /**
- * **A column's two-line header** (P18.97-T1 AC-2, UI-002): its name — *Full Year 2025*, *YTD 2026*, *This Month* — and
+ * **A column's two-line header** (P18.9-T1 AC-2, UI-002): its name — *Full Year 2025*, *YTD 2026*, *This Month* — and
  * its period from the meeting's month, in the app's month abbreviations (ADR-0174 §6): *(Jan-Des '25)*, *(Jan-Okt '26)*,
  * *(Jan '26)* for a January's *YTD*, *(Okt-25)* for a single month, as the slide writes them.
  */
@@ -153,7 +154,7 @@ export function columnHeader(
 const ROW_MONEY_UNIT: Partial<Record<RowKey, CompactUnit>> = { ape: 'M', average_case_size: 'jt' };
 
 /**
- * **A row's name as the table heads it** (P18.98-T3 AC-1; the glossary's §E): a money row's unit in the reader's
+ * **A row's name as the table heads it** (P18.10-T3 AC-1; the glossary's §E): a money row's unit in the reader's
  * language — *APE (Rp M)* and *Avg. Case Size (Rp jt)* in Indonesian, *APE (IDR B)* and *Avg. Case Size (IDR M)* in
  * English, as the client's slide writes it. The name is a kept-English term (§A.4); the unit is a format
  * (`formatMoneyUnit`). Every other row reads its name.
@@ -183,9 +184,10 @@ export const SECTION_BEFORE: Partial<Record<RowKey, string>> = STATS.sections;
 export const OUTLINED_ROWS: readonly RowKey[] = ['ape', 'producing_agents', 'case_submission'];
 
 /**
- * **A numbered footnote, in our metric's words** (P18.97-T1 AC-12; ADR-0175 §5): the rows it is marked on, and what it
- * says — true of the figure beside it, where the slide's words describe metrics nobody computes. The slide's footnote 1,
- * *Net APE*, and its *new business only* wait with OD-231 (`NET_APE_FOOTNOTE`).
+ * **A numbered footnote, in our metric's words** (P18.9-T1 AC-12; ADR-0175 §5): the rows it is marked on, and what it
+ * says — true of the figure beside it, where the slide's words describe metrics nobody computes. **There is no *Net APE*
+ * footnote, ever** (P19.3-T1; ADR-0201 §1, OD-231 answered by D5: *"APE is APE"*): the slide's footnote 1 is not drawn,
+ * and no footnote says *new business only*.
  */
 export interface Footnote {
   rows: readonly RowKey[];
@@ -193,14 +195,20 @@ export interface Footnote {
 }
 
 /**
- * The slide's footnote 1 — *"Net APE includes Saver, SPI, Top Up, and PRUWorks"* — **not drawn until the client answers
- * OD-231**: the file's APE is not known to be net. `null` here, so the numbering below starts at *Annual Active
- * Agents*; the day OD-231 is answered it is a `Footnote` on `ape`, and every number after it moves up one.
+ * Which rows each footnote is marked on, **by the definitions the scorecard was computed with** (P19.3-T1; ADR-0202 §4),
+ * in the catalogue's order: the data sources' six (`forumStatsMessages.footnotes`) — *FLC*, the three of before, and
+ * *Cases/producing agents* per active agent per month — or a scorecard kept before them, its four
+ * (`footnotesReferenceSlide`), so a footnote never describes a figure it is not.
  */
-export const NET_APE_FOOTNOTE: Footnote | null = null;
-
-/** Which rows each of the four footnotes is marked on, in the catalogue's order (`forumStatsMessages.footnotes`). */
 const FOOTNOTE_ROWS: Record<keyof typeof STATS.footnotes, readonly RowKey[]> = {
+  flc: ['flc'],
+  producing_agents: ['producing_agents'],
+  new_agent_3m: ['new_agent_3m'],
+  avg_monthly_aa: ['avg_monthly_aa'],
+  case_submission: ['case_submission', 'average_case_size'],
+  cases_per_producing_agent: ['cases_per_producing_agent'],
+};
+const FOOTNOTE_ROWS_REFERENCE_SLIDE: Record<keyof typeof STATS.footnotesReferenceSlide, readonly RowKey[]> = {
   producing_agents: ['producing_agents'],
   new_agent_3m: ['new_agent_3m'],
   avg_monthly_aa: ['avg_monthly_aa'],
@@ -208,18 +216,21 @@ const FOOTNOTE_ROWS: Record<keyof typeof STATS.footnotes, readonly RowKey[]> = {
 };
 
 /**
- * **The four the table draws, in a language** (P18.98-T4): "the monthly production file" says what *the office's file*
- * does, in none of the six words. The day OD-231 is answered, `NET_APE_FOOTNOTE` takes its words in both.
+ * **The footnotes the table draws, in a language, for the definitions its rows follow** (P18.10-T4; P19.3-T1): "the
+ * monthly production file" says what *the office's file* does, in none of the six words. `data_sources` unless told.
  */
-export function footnotesIn(words: Language = SOURCE_LANGUAGE): readonly Footnote[] {
-  const notes = messagesIn(forumStatsMessages, words).footnotes;
-  return [
-    ...(NET_APE_FOOTNOTE ? [NET_APE_FOOTNOTE] : []),
-    ...(Object.keys(FOOTNOTE_ROWS) as (keyof typeof FOOTNOTE_ROWS)[]).map((key) => ({ rows: FOOTNOTE_ROWS[key], text: notes[key] })),
-  ];
+export function footnotesIn(
+  words: Language = SOURCE_LANGUAGE, definitions: ScorecardDefinitions = 'data_sources',
+): readonly Footnote[] {
+  const own = messagesIn(forumStatsMessages, words);
+  if (definitions === 'reference_slide') {
+    return (Object.keys(FOOTNOTE_ROWS_REFERENCE_SLIDE) as (keyof typeof FOOTNOTE_ROWS_REFERENCE_SLIDE)[])
+      .map((key) => ({ rows: FOOTNOTE_ROWS_REFERENCE_SLIDE[key], text: own.footnotesReferenceSlide[key] }));
+  }
+  return (Object.keys(FOOTNOTE_ROWS) as (keyof typeof FOOTNOTE_ROWS)[]).map((key) => ({ rows: FOOTNOTE_ROWS[key], text: own.footnotes[key] }));
 }
 
-/** The four, English: the source. */
+/** The data sources' six, English: the source. */
 export const FOOTNOTES: readonly Footnote[] = footnotesIn(SOURCE_LANGUAGE);
 
 /**
@@ -265,7 +276,7 @@ function monthsOf({ from, to }: ColumnPeriod): string[] {
  * **One *(\*)* note per partial period, in the client's words** (AC-12; ADR-0175 §5): *"(\*) Full Year 2025 covers
  * Agu–Des 2025 only; earlier months not uploaded"* — its months held being the period's months its figures leave none
  * of out. Later months not uploaded read so; a gap in between is named. The months in the figures' `language`, the
- * words in the reader's (`words`, P18.98-T4).
+ * words in the reader's (`words`, P18.10-T4).
  */
 export function partialNotes(
   scorecard: Pick<Scorecard, 'periods' | 'partialPeriods'>,
@@ -286,7 +297,7 @@ export function partialNotes(
 }
 
 /**
- * **One decimal** (ADR-0174 §5, UI-012): *5,8*, *17,6*, *0,1* — *5.8*, *17.6*, *0.1* in English (P18.98-T3) — the *two
+ * **One decimal** (ADR-0174 §5, UI-012): *5,8*, *17,6*, *0,1* — *5.8*, *17.6*, *0.1* in English (P18.10-T3) — the *two
  * below 1* rule gone, and **a figure that is not zero and rounds to *0,0* reads *< 0,1*** (*< 0.1*), so a small sum is
  * never shown as none. The threshold is the figure's own tenth, written by the same formatter.
  */
@@ -303,7 +314,7 @@ const inRowUnit = (row: Pick<ScorecardRow, 'key'>, minor: number) =>
   minor / MINOR_UNITS_PER_MAJOR / RUPIAH_PER_UNIT[ROW_MONEY_UNIT[row.key] ?? 'M'];
 
 /**
- * A figure as the table writes it — **for display only**; the served value is exact (P18.97-T1 AC-15). Money from
+ * A figure as the table writes it — **for display only**; the served value is exact (P18.9-T1 AC-15). Money from
  * minor units, through the one conversion (`MINOR_UNITS_PER_MAJOR`), in its header's unit to one decimal; a
  * percentage whole (ADR-0174 §1); *Cases/producing agents* to a tenth; counts and the averages whole, half up, a
  * thousand with a dot.
@@ -326,7 +337,7 @@ export function cellText(
 ): string {
   if (cell.kind === 'figure') return formatFigure(row, cell.value, language);
   if (cell.kind === 'pending') return messagesIn(forumStatsMessages, words).pending;
-  if (cell.kind === 'none' || cell.kind === 'unrecorded') return NONE;
+  if (cell.kind === 'none' || cell.kind === 'unrecorded' || cell.kind === 'not_uploaded') return NONE;
   return '';
 }
 
@@ -337,14 +348,16 @@ export const isPartial = (cell: ScorecardCell) => cell.kind === 'figure' && cell
 export function noneWords(row: Pick<ScorecardRow, 'key'>, cell: ScorecardCell, words: Language = SOURCE_LANGUAGE): string {
   const own = messagesIn(forumStatsMessages, words);
   if (cell.kind === 'unrecorded') return own.unrecorded;
+  // P19.3-T1 (ADR-0203 §8): last year's column with no month of it uploaded.
+  if (cell.kind === 'not_uploaded') return own.notUploaded;
   return (own.none as Partial<Record<RowKey, string>>)[row.key] ?? own.unrecorded;
 }
 
 /**
  * A phone's card's change (AC-17), as the server computed it: *+18%*, *-9%*, *0%* — a percentage of last year's — or,
- * on a row whose own figure is a percentage, **the difference in percentage points** (P18.97-T8 F1, parity F-256):
+ * on a row whose own figure is a percentage, **the difference in percentage points** (P18.9-T8 F1, parity F-256):
  * *+15 points*, *-40 points*, *+1 point* — *+15 poin* in Indonesian (§B.7) — whole, as the app writes points
- * (`formatRatioValue`). *—* where there is none. The figure in `language`, the word in `words` (P18.98-T4).
+ * (`formatRatioValue`). *—* where there is none. The figure in `language`, the word in `words` (P18.10-T4).
  */
 export function changeText(change: YtdChange, language: Language = DEFAULT_LANGUAGE, words: Language = SOURCE_LANGUAGE): string {
   if (change.kind === 'none') return NONE;
@@ -367,7 +380,7 @@ export function asOfText(asOf: Scorecard['asOf'], language: Language = DEFAULT_L
 }
 
 /*
- * ── A *Monthly Target*, as a rate per unit (P18.97-T1 AC-10, ADR-0175 §4) ──────────────────────────
+ * ── A *Monthly Target*, as a rate per unit (P18.9-T1 AC-10, ADR-0175 §4) ──────────────────────────
  */
 
 /**
@@ -381,7 +394,7 @@ const TARGET_RATE_SCALE = 10 ** LEADER_MEETING_TARGET_RATE_DECIMALS;
 
 /**
  * A rate as typed into its field: *APE*'s in *miliar*, the reader's decimal mark — a comma, a point in English — and no
- * thousands mark, so `parseDecimal` reads it back in either language (P18.98-T3 AC-3).
+ * thousands mark, so `parseDecimal` reads it back in either language (P18.10-T3 AC-3).
  */
 export function rateText(row: Pick<ScorecardRow, 'key'>, rate: number, language: Language = DEFAULT_LANGUAGE): string {
   const inUnit = row.key === 'ape' ? inRowUnit(row, rate) : rate;
@@ -440,7 +453,7 @@ export const nextStatus = (status: ActionStatus): ActionStatus =>
  */
 export const STATUS_TONE: Record<ActionStatus, string> = {
   not_planned: 'bg-alert/10 text-alert',
-  planned: 'bg-amber/15 text-navy',
+  planned: 'bg-primary/15 text-navy',
   implemented: 'bg-success/10 text-success',
 };
 

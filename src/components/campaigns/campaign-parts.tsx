@@ -125,7 +125,7 @@ export function PromotionLabel({ className }: { className?: string }) {
  * not chasing draws the button disabled and an ⓘ beside it whose name and tooltip are the reason (ADR-0062 §2,
  * form 2). A chaser whose rung has changed can still drop the chase. The caller draws no control at all where
  * the reader may not chase (`can.chase`: a support session) **or the campaign has ended** (`showsChase`;
- * P18.95-T10 AC-2, UI-024 — it was drawn disabled with an ⓘ until then); the `ended` branch below stays as the
+ * P18.7-T10 AC-2, UI-024 — it was drawn disabled with an ⓘ until then); the `ended` branch below stays as the
  * guard should a caller draw one anyway.
  */
 export function ChaseButton({

@@ -7,7 +7,7 @@ import { coachingSessionMessages } from '@/i18n/messages/coaching-session';
 import type { ActivitySection, SubPeriodTarget } from '@/lib/activity';
 
 /*
- * **The Activity drill, in a module of its own** (P18.99-T16, the bundle): the session's tiles and the record's panel load
+ * **The Activity drill, in a module of its own** (P18.11-T16, the bundle): the session's tiles and the record's panel load
  * it with `next/dynamic` on the first *7 hari terakhir ›*, so neither carries it in its first load.
  */
 
@@ -38,7 +38,7 @@ export function ActivityDrill({
           <table className="relative w-full border-collapse text-left text-base">
             <caption className="sr-only">{t.caption({ name })}</caption>
             <thead>
-              <tr className="bg-navy/[0.04] text-2xs uppercase text-muted">
+              <tr className="bg-secondary/[0.04] text-2xs uppercase text-muted">
                 <th scope="col" className="px-4 py-2.5 font-semibold">{t.columns.category}</th>
                 <th scope="col" className="px-4 py-2.5 font-semibold">{t.columns.logged}</th>
                 <th scope="col" className="px-4 py-2.5 font-semibold">{t.columns.target}</th>

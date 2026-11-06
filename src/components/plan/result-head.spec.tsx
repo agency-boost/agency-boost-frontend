@@ -7,7 +7,7 @@ import { FitPill, ResultHead } from './result-head';
 describe('ResultHead and FitPill', () => {
   it('draws the tag, the title as the result’s heading, the tagline and the pill', () => {
     render(<ResultHead tag="Retirement income · Conventional" title="PRUMapan" tagline="A line." pill={{ label: 'Good fit', tone: 'success' }} />);
-    expect(screen.getByText('Retirement income · Conventional')).toHaveClass('text-amber-ink');
+    expect(screen.getByText('Retirement income · Conventional')).toHaveClass('text-primary-ink');
     expect(screen.getByRole('heading', { level: 2, name: 'PRUMapan' })).toBeInTheDocument();
     expect(screen.getByText('A line.')).toBeInTheDocument();
     expect(screen.getByText('Good fit')).toHaveAttribute('data-tone', 'success');

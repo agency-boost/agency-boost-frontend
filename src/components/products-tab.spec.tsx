@@ -1,7 +1,9 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { makeMe, renderWithSession, stubFetch } from '@test/harness';
+import { axe } from 'vitest-axe';
+import { atWidth, makeMe, renderWithSession, stubFetch, wears } from '@test/harness';
+import { smallTargets } from '@test/touch-audit';
 import { ProductsTab } from './products-tab';
 
 const SUPER_ADMIN = makeMe({
@@ -18,8 +20,7 @@ const plan = (over: Record<string, unknown> = {}) => ({
   opening: 'Menyiapkan dana pensiun memang tidak mudah.',
   benefits: ['Dana Mapan tiap tahun dari usia 55'],
   fullScript: 'Menyiapkan dana pensiun memang tidak mudah. Boleh saya siapkan ilustrasinya?',
-  objectionTheySay: 'Pensiun masih lama.',
-  objectionYouSay: 'Pilihan pensiun paling terjangkau.',
+  objections: [{ objection: 'Pensiun masih lama.', answer: 'Pilihan pensiun paling terjangkau.' }],
   nextAction: 'Boleh saya siapkan ilustrasinya?',
   ...over,
 });
@@ -32,6 +33,9 @@ const product = (over: Record<string, unknown> = {}) => ({
   tagline: 'Proteksi jiwa dengan manfaat pensiun',
   channel: 'conventional',
   category: 'life',
+  kind: 'base',
+  attachesTo: [],
+  currencies: ['IDR'],
   primaryNeeds: ['retirement'],
   eligibleAgeBands: [1, 2, 3],
   eligibleBudgetBands: [1, 2, 3],
@@ -58,12 +62,17 @@ function render(rows: unknown[] = [product(), SECOND], extra: Record<string, unk
   return stub;
 }
 
-/** Open a product for editing and hand back the panel it opened. */
+/**
+ * Open a product from its row and hand back the sheet or side panel it opened (P19.2-T2 AC-2; UI-131: *row tap opens the
+ * edit sheet / side panel*). The row's target is named by the product, and the sheet by its title.
+ */
 async function open(name: string) {
-  const row = (await screen.findByText(name)).closest('li')!;
-  await userEvent.click(within(row).getByRole('button', { name: 'Edit' }));
-  return row;
+  await userEvent.click(await screen.findByRole('button', { name }));
+  return screen.getByRole('dialog', { name });
 }
+
+/** A product's row: the laptop's table row (jsdom's width, as every spec here but the AC-2 ones), or a phone's line. */
+const rowOf = async (name: string) => (await screen.findByRole('button', { name })).closest('tr, li') as HTMLElement;
 
 /**
  * The Company template's Products tab (P5-T4, ADR-0033).
@@ -78,13 +87,15 @@ describe('the Products tab', () => {
   it('reads the company’s catalog and shows each product with its identity and state', async () => {
     render();
 
-    expect(await screen.findByText('PRUMapan')).toBeInTheDocument();
-    const row = (await screen.findByText('PRUMapan')).closest('li')!;
+    const row = await rowOf('PRUMapan');
     expect(within(row).getByText('PRUMapan')).toBeInTheDocument();
     expect(within(row).getByText('Conventional')).toBeInTheDocument();
     expect(within(row).getByText('Life')).toBeInTheDocument();
     expect(within(row).getByText('Active')).toBeInTheDocument();
-    expect(within(row).getByText('Active by default')).toBeInTheDocument();
+    // *Active by default* is the laptop table's *Default in a new office* column since P19.2-T2 AC-2 (UI-131).
+    const byDefault = screen.getAllByRole('columnheader').findIndex((h) => h.textContent === 'Default in a new office');
+    expect(within(row).getAllByRole('cell')[byDefault]).toHaveTextContent('Yes');
+    expect(within(await rowOf('PRUSmart Plan')).getAllByRole('cell')[byDefault]).toHaveTextContent('–');
   });
 
   it('says the catalog is live, and offers no draft and no publish', async () => {
@@ -113,20 +124,20 @@ describe('the Products tab', () => {
     expect(within(row).getByLabelText('Code')).toHaveAttribute('readonly');
   });
 
-  it('opens the seven attack-plan fields the Owner’s own override modal names', async () => {
+  it('opens the attack-plan fields the Owner’s own override modal names, the objections as cards', async () => {
     render();
     const row = await open('PRUMapan');
 
-    const labels = [
-      '0 · Good fit for', '1 · Opening line', '2 · Lead with these benefits', '3 · Full script',
-      '4a · If they push back — they say', '4b · If they push back — you say', '5 · Next action',
-    ];
+    const labels = ['0 · Good fit for', '1 · Opening line', '2 · Lead with these benefits', '3 · Full script', '5 · Next action'];
     for (const label of labels) expect(within(row).getByLabelText(label)).toBeInTheDocument();
+    // *4* is the cards since P19.4-T4 (AC-1): one card here, its two sides.
+    expect(within(row).getByRole('group', { name: '4 · If they push back' })).toBeInTheDocument();
+    expect(within(row).getByLabelText('Objection 1 — they say')).toHaveValue('Pensiun masih lama.');
 
     // **In the modal's own order.** They were rendered 0, 1, 3, 4a, 4b, 5, 2 — the numbers are
     // the reader's map through the script, and one out of place reads as a form that lost a field.
-    const onScreen = within(row).getAllByText(/^[0-9]+[ab]? · /).map((el) => el.textContent);
-    expect(onScreen).toEqual(labels);
+    const onScreen = within(row).getAllByText(/^[0-9]+ · /).map((el) => el.textContent);
+    expect(onScreen).toEqual([...labels.slice(0, 4), '4 · If they push back', '5 · Next action']);
   });
 
   it('saves the whole product, turning each typed line into one benefit', async () => {
@@ -156,9 +167,10 @@ describe('the Products tab', () => {
     });
     const row = await open('PRUMapan');
 
-    // Seven budget bands, not five: the scale of the copy the ERD records — in the reader's figures since P18.98-T6,
+    // Seven budget bands, not five: the scale of the copy the ERD records — in the reader's figures since P18.10-T6,
     // English here as every spec reads (*< Rp 500 rb* in Indonesian).
-    expect(within(row).getAllByRole('checkbox', { name: /IDR/ })).toHaveLength(6);
+    // The six sums only — the *Currency* box's *IDR* is a code, not a band (P19.4-T4 AC-12).
+    expect(within(row).getAllByRole('checkbox', { name: /IDR\s/ })).toHaveLength(6);
     await userEvent.click(within(row).getByRole('checkbox', { name: 'Lump-sum' }));
     await userEvent.click(within(row).getByRole('checkbox', { name: '65+' }));
     await userEvent.click(within(row).getByRole('checkbox', { name: 'health' }));
@@ -216,7 +228,7 @@ describe('the Products tab', () => {
       await userEvent.click(within(row).getByRole('button', { name: '+ Add year' }));
       await userEvent.type(within(row).getByLabelText('Rate for year 1'), '30');
       await userEvent.click(within(row).getByRole('button', { name: '+ Add year' }));
-      // A comma or a point (ADR-0167 §1, P18.95-T1 AC-3): *12,5* is twelve and a half per cent.
+      // A comma or a point (ADR-0167 §1, P18.7-T1 AC-3): *12,5* is twelve and a half per cent.
       await userEvent.type(within(row).getByLabelText('Rate for year 2'), '12,5');
       await userEvent.click(within(row).getByRole('button', { name: 'Save product' }));
 
@@ -356,10 +368,14 @@ describe('the Products tab', () => {
 
     const sent = stub.calls.find((c) => c.url.includes('/withdraw'))!;
     expect(JSON.parse(String(sent.init.body))).toEqual({ replacedByProductId: 'p2' });
-    expect(await within(row).findByText('Withdrawn')).toBeInTheDocument();
+    // Hidden once withdrawn (P19.4-T4 AC-13), and there behind *Show withdrawn*.
+    // Its sheet goes with its row.
+    await waitFor(() => expect(screen.queryByText('PRUMapan')).not.toBeInTheDocument());
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Show withdrawn' }));
+    expect(within(await rowOf('PRUMapan')).getByText('Withdrawn')).toBeInTheDocument();
   });
 
-  it('offers Reopen, and never a delete', async () => {
+  it('offers Reopen on a product in run-off, and no delete: only a withdrawn product is deleted', async () => {
     render([product({ lifecycle: 'closed_to_new_business' })]);
     const row = await open('PRUMapan');
 
@@ -371,11 +387,12 @@ describe('the Products tab', () => {
     const stub = render(undefined, {
       '/admin/companies/c1/products/reorder': { body: [SECOND, product()] },
     });
-    await screen.findByText('PRUMapan');
+    await rowOf('PRUMapan');
 
-    const row = (await screen.findByText('PRUMapan')).closest('li')!;
-    // The handle is the keyboard path as well as the grab affordance: focus it, press ↓.
-    within(row).getByRole('button', { name: /^Reorder PRUMapan\./ }).focus();
+    // In *Change order* since P19.2-T2 AC-2 (UI-131: *reordering only in an "Ubah urutan" mode*). The handle is the
+    // keyboard path as well as the grab affordance: focus it, press ↓.
+    await userEvent.click(screen.getByRole('button', { name: 'Change order' }));
+    screen.getByRole('button', { name: /^Reorder PRUMapan\./ }).focus();
     await userEvent.keyboard('{ArrowDown}');
 
     await waitFor(() => expect(stub.calls.some((c) => c.url.includes('/reorder'))).toBe(true));
@@ -443,5 +460,306 @@ describe('the Products tab', () => {
     render([]);
 
     expect(await screen.findByText(/This company has no products yet/)).toBeInTheDocument();
+  });
+});
+
+describe('P19.2-T2 AC-7 Produk’s long explanation (UI-136, Appendix A)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('P19.2-T2 AC-7 is not drawn on a phone, and is behind ⓘ on a tablet and a laptop, its words unchanged', async () => {
+    render();
+    await screen.findByText('PRUMapan');
+
+    const line = screen.getByText('This catalog is live.').parentElement!;
+    expect(wears(line, 375)).toContain('hidden');
+    expect(wears(line, 768)).not.toContain('hidden');
+    expect(wears(line, 1280)).not.toContain('hidden');
+    // The rest is the ⓘ's bubble: hidden until the ⓘ is pressed.
+    expect(screen.getByText(/^It has no draft/)).not.toBeVisible();
+    await userEvent.click(within(line).getByRole('button', { name: 'About this catalog' }));
+    expect(screen.getByText(/^It has no draft/)).toBeVisible();
+  });
+});
+
+/**
+ * **Produk, one line per product** (P19.2-T2 AC-2; UI-131 — `admin-mobile` screen 3, `admin-desktop` screen 2): below
+ * 1024px a 52px line per product (the name, the channel's pill, the status's pill, ›) under the search pill, the chips
+ * *Semua n · Konvensional · Syariah* and the filter button; from 1024px a 52px table row (*# · Produk · Kanal · Kategori ·
+ * Status · Default di KPM baru · ›*) under the search and the category chips. A row opens the product: a sheet below
+ * 1024px, a side panel from it. Reordering only in *Ubah urutan*. The count line stays.
+ */
+describe('P19.2-T2 AC-2 Produk, one line per product (UI-131)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const SYARIAH = product({
+    id: 'p3', code: 'PRUCINTA', name: 'PRUCinta', channel: 'syariah', category: 'health', sortOrder: 3, activeByDefault: false,
+  });
+  const WITHDRAWN = product({
+    id: 'p4', code: 'PGB', name: 'PRULink Generasi Baru (PGB)', category: 'investment', lifecycle: 'withdrawn', sortOrder: 4,
+  });
+  const SHELF = [product(), SECOND, SYARIAH, WITHDRAWN];
+  const lines = () => within(screen.getByRole('list', { name: 'Products' })).getAllByRole('listitem');
+  const names = () => Array.from(document.querySelectorAll('[data-row-main]')).map((el) => el.textContent);
+
+  it.each([375, 768])('P19.2-T2 AC-2 at %ipx draws a 52px line per product — the name, the channel, the status, › — and no table', async (px) => {
+    atWidth(px);
+    render(SHELF);
+    await screen.findByRole('list', { name: 'Products' });
+
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    // Withdrawn hidden by default (P19.4-T4 AC-13), as before.
+    expect(lines()).toHaveLength(3);
+    for (const line of lines()) {
+      expect(wears(line, px)).toContain('min-h-[3.25rem]');
+      expect(wears(line, px)).not.toContain('min-h-14');
+    }
+    // One line: the name and the two pills, nothing else — the description and *Active by default* are in its sheet.
+    const mapan = lines()[0];
+    expect(mapan.textContent).toBe('PRUMapanConventionalActive');
+    expect(within(mapan).getByRole('button', { name: 'PRUMapan' })).toHaveAttribute('aria-haspopup', 'dialog');
+    expect(within(mapan).getByText('Conventional')).toHaveAttribute('data-tone', 'grey');
+    expect(within(mapan).getByText('Active')).toHaveAttribute('data-tone', 'green');
+    expect(within(lines()[2]).getByText('Syariah')).toHaveAttribute('data-tone', 'blue');
+
+    expect(screen.getByRole('searchbox', { name: 'Search products' })).toBeInTheDocument();
+    const chips = screen.getByRole('group', { name: 'Filter by channel' });
+    expect(within(chips).getAllByRole('button').map((b) => b.textContent)).toEqual(['All3', 'Conventional', 'Syariah']);
+    expect(screen.getByRole('button', { name: 'Filter' })).toHaveAttribute('aria-haspopup', 'dialog');
+    // The laptop's kind toggle and box are in the filter sheet here.
+    expect(screen.queryByRole('group', { name: 'Kind' })).not.toBeInTheDocument();
+  });
+
+  it('P19.2-T2 AC-2 at 375px narrows by the channel’s chips and by Search products, by name or by code', async () => {
+    atWidth(375);
+    render(SHELF);
+    await screen.findByRole('list', { name: 'Products' });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Syariah' }));
+    expect(names()).toEqual(['PRUCinta']);
+    await userEvent.click(screen.getByRole('button', { name: /^All/ }));
+    expect(names()).toEqual(['PRUMapan', 'PRUSmart Plan', 'PRUCinta']);
+
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Search products' }), 'smart');
+    expect(names()).toEqual(['PRUSmart Plan']);
+    await userEvent.clear(screen.getByRole('searchbox', { name: 'Search products' }));
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Search products' }), 'prucinta');
+    expect(names()).toEqual(['PRUCinta']);
+  });
+
+  it('P19.2-T2 AC-2 at 375px opens the category sheet from the filter button — Life … Investment — with the kind and the withdrawn', async () => {
+    atWidth(375);
+    render(SHELF);
+    await screen.findByRole('list', { name: 'Products' });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Filter' }));
+    const sheet = screen.getByRole('dialog', { name: 'Filter' });
+    const categories = within(sheet).getByRole('radiogroup', { name: 'Category' });
+    expect(within(categories).getAllByRole('radio').map((r) => r.textContent))
+      .toEqual(['All', 'Life', 'Health', 'Critical illness', 'Education', 'Investment']);
+    await userEvent.click(within(categories).getByRole('radio', { name: 'Health' }));
+    // The riders spec's kinds (P19.4-T4 AC-9) and *Show withdrawn* (AC-13), in the same sheet below 1024px.
+    expect(within(within(sheet).getByRole('radiogroup', { name: 'Kind' })).getAllByRole('radio').map((r) => r.textContent))
+      .toEqual(['All', 'Base products', 'Riders']);
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Close' }));
+    expect(names()).toEqual(['PRUCinta']);
+    // The button says a filter is on.
+    await userEvent.click(screen.getByRole('button', { name: 'Filter, a filter is on' }));
+    await userEvent.click(within(screen.getByRole('dialog', { name: 'Filter' })).getByRole('radio', { name: 'Investment' }));
+    await userEvent.click(within(screen.getByRole('dialog', { name: 'Filter' })).getByRole('checkbox', { name: 'Show withdrawn' }));
+    await userEvent.click(within(screen.getByRole('dialog', { name: 'Filter' })).getByRole('button', { name: 'Close' }));
+    expect(names()).toEqual(['PRULink Generasi Baru (PGB)']);
+    expect(within(lines()[0]).getByText('Withdrawn')).toHaveAttribute('data-tone', 'red');
+  });
+
+  it.each([375, 768])('P19.2-T2 AC-2 at %ipx opens a product’s edit sheet from its row: the description and Active by default, saved as before', async (px) => {
+    atWidth(px);
+    const stub = render(SHELF, { 'PATCH /admin/companies/c1/products/p1': { body: product({ activeByDefault: false, version: 2 }) } });
+    await userEvent.click(await screen.findByRole('button', { name: 'PRUMapan' }));
+
+    const sheet = screen.getByRole('dialog', { name: 'PRUMapan' });
+    expect(sheet.closest('[data-modal-root]')).toHaveAttribute('data-placement', 'drawer');
+    expect(within(sheet).getByLabelText('Tagline')).toHaveValue('Proteksi jiwa dengan manfaat pensiun');
+    expect(within(sheet).getByRole('group', { name: 'Kind of PRUMapan' })).toBeInTheDocument();
+    const byDefault = within(sheet).getByRole('checkbox', { name: /Active by default/ });
+    expect(byDefault).toBeChecked();
+    await userEvent.click(byDefault);
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Save product' }));
+
+    await waitFor(() => expect(stub.calls.some((c) => c.init.method === 'PATCH')).toBe(true));
+    expect(JSON.parse(String(stub.calls.find((c) => c.init.method === 'PATCH')!.init.body)))
+      .toMatchObject({ activeByDefault: false, expectedVersion: 1 });
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'PRUMapan' })).not.toBeInTheDocument());
+  });
+
+  it.each([1024, 1280])('P19.2-T2 AC-2 at %ipx draws the table — # · Product · Channel · Category · Status · Default in a new office · › — under the search and the category chips', async (px) => {
+    atWidth(px);
+    render(SHELF);
+    const table = await screen.findByRole('table', { name: 'Products' });
+
+    expect(screen.queryByRole('list', { name: 'Products' })).not.toBeInTheDocument();
+    expect(within(table).getAllByRole('columnheader').map((h) => h.textContent))
+      .toEqual(['#', 'Product', 'Channel', 'Category', 'Status', 'Default in a new office', 'Open']);
+    const [, first, , third] = within(table).getAllByRole('row');
+    expect(within(first).getAllByRole('cell').map((c) => c.textContent))
+      .toEqual(['1', 'PRUMapan', 'Conventional', 'Life', 'Active', 'Yes', '']);
+    expect(within(third).getAllByRole('cell').map((c) => c.textContent))
+      .toEqual(['3', 'PRUCinta', 'Syariah', 'Health', 'Active', '–', '']);
+    expect(wears(first, px)).toContain('h-[3.25rem]');
+
+    expect(screen.getByRole('searchbox', { name: 'Search products' })).toBeInTheDocument();
+    const chips = screen.getByRole('group', { name: 'Filter by category' });
+    expect(within(chips).getAllByRole('button').map((b) => b.textContent))
+      .toEqual(['All3', 'Life', 'Health', 'Critical illness', 'Education', 'Investment']);
+    await userEvent.click(within(chips).getByRole('button', { name: 'Health' }));
+    expect(names()).toEqual(['PRUCinta']);
+    // The channel's chips and the filter sheet are the phone's and the tablet's; the kind and the box stay here.
+    expect(screen.queryByRole('group', { name: 'Filter by channel' })).not.toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Kind' })).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: 'Show withdrawn' })).toBeInTheDocument();
+  });
+
+  it.each([1024, 1280])('P19.2-T2 AC-2 at %ipx a row opens its side panel, and Escape closes it without saving', async (px) => {
+    atWidth(px);
+    const stub = render(SHELF);
+    await userEvent.click(await screen.findByRole('button', { name: 'PRUSmart Plan' }));
+
+    const panel = screen.getByRole('dialog', { name: 'PRUSmart Plan' });
+    expect(panel.closest('[data-modal-root]')).toHaveAttribute('data-placement', 'drawer');
+    expect(within(panel).getByRole('checkbox', { name: /Active by default/ })).not.toBeChecked();
+    await userEvent.type(within(panel).getByLabelText('Name'), ' Baru');
+    await userEvent.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog', { name: 'PRUSmart Plan' })).not.toBeInTheDocument();
+    expect(stub.calls.some((c) => c.init.method === 'PATCH')).toBe(false);
+  });
+
+  it.each([375, 768, 1024, 1280])('P19.2-T2 AC-2 at %ipx keeps the count line, and reorders only in Change order', async (px) => {
+    atWidth(px);
+    const stub = render(SHELF, { '/admin/companies/c1/products/reorder': { body: [SECOND, product(), SYARIAH, WITHDRAWN] } });
+    await screen.findByRole('button', { name: 'PRUMapan' });
+
+    expect(screen.getByText('4 products · 3 active · 2 active by default in a new office')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Reorder / })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Move PRUMapan down' })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Change order' }));
+    // The rows open nothing while the list is being reordered.
+    expect(screen.queryByRole('button', { name: 'PRUMapan' })).not.toBeInTheDocument();
+    if (px < 1024) {
+      // ↑ and ↓ below 1024px, where a drag never starts.
+      expect(screen.queryByRole('button', { name: /^Reorder / })).not.toBeInTheDocument();
+      await userEvent.click(screen.getByRole('button', { name: 'Move PRUMapan down' }));
+    } else {
+      screen.getByRole('button', { name: /^Reorder PRUMapan\./ }).focus();
+      await userEvent.keyboard('{ArrowDown}');
+    }
+    await waitFor(() => expect(stub.calls.some((c) => c.url.includes('/reorder'))).toBe(true));
+    expect(JSON.parse(String(stub.calls.find((c) => c.url.includes('/reorder'))!.init.body)))
+      .toEqual({ productIds: ['p2', 'p1', 'p3', 'p4'] });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Done' }));
+    expect(await screen.findByRole('button', { name: 'PRUMapan' })).toBeInTheDocument();
+    expect(screen.getByText('4 products · 3 active · 2 active by default in a new office')).toBeInTheDocument();
+  });
+
+  it('P19.2-T2 AC-2 at 1280px drags a row onto another in Change order, and sends the whole shelf', async () => {
+    atWidth(1280);
+    const stub = render(SHELF, { '/admin/companies/c1/products/reorder': { body: [product(), SYARIAH, SECOND, WITHDRAWN] } });
+    await screen.findByRole('button', { name: 'PRUMapan' });
+    await userEvent.click(screen.getByRole('button', { name: 'Change order' }));
+
+    const handle = screen.getByRole('button', { name: /^Reorder PRUCinta\./ });
+    const onto = screen.getByRole('button', { name: /^Reorder PRUSmart Plan\./ }).closest('tr')!;
+    fireEvent.dragStart(handle, { dataTransfer: { setDragImage: vi.fn(), effectAllowed: '' } });
+    fireEvent.dragOver(onto);
+    fireEvent.drop(onto);
+
+    await waitFor(() => expect(stub.calls.some((c) => c.url.includes('/reorder'))).toBe(true));
+    expect(JSON.parse(String(stub.calls.find((c) => c.url.includes('/reorder'))!.init.body)))
+      .toEqual({ productIds: ['p1', 'p3', 'p2', 'p4'] });
+  });
+
+  it('P19.2-T2 AC-2 fits 32 products in 2,000px at 375 with All: 32 lines of 52px under three 44px controls', async () => {
+    atWidth(375);
+    const shelf = Array.from({ length: 32 }, (_, i) => product({
+      id: `p${i + 1}`, code: `P${i + 1}`, name: `Produk ${i + 1}`, sortOrder: i + 1, channel: i % 4 === 0 ? 'syariah' : 'conventional',
+    }));
+    render(shelf);
+    await screen.findByRole('list', { name: 'Products' });
+
+    expect(lines()).toHaveLength(32);
+    // jsdom lays nothing out: the heights are the classes each box wears at 375 (T4's walk measures the pixels).
+    const px = (el: Element) => {
+      const token = wears(el, 375).split(' ').find((c) => /^(min-)?h-/.test(c)) ?? '';
+      const step = /^(?:min-)?h-(\d+)$/.exec(token);
+      if (step) return Number(step[1]) * 4;
+      const rem = /^(?:min-)?h-\[(\d+(?:\.\d+)?)rem\]$/.exec(token);
+      return rem ? Number(rem[1]) * 16 : NaN;
+    };
+    // Every line one line tall: no meta line under a plain IDR product.
+    for (const line of lines()) {
+      expect(px(line)).toBe(52);
+      expect(line.querySelector('.mt-0\\.5')).toBeNull();
+    }
+    const controls = [
+      screen.getByRole('searchbox', { name: 'Search products' }).closest('label')!,
+      screen.getByRole('button', { name: 'Filter' }),
+      screen.getByRole('button', { name: 'Change order' }),
+    ];
+    const above = controls.reduce((sum, el) => sum + px(el), 0) + 3 * 12;
+    expect(32 * 52 + above).toBeLessThanOrEqual(2000);
+  });
+});
+
+describe('P19.2-T2 AC-4 AC-5 Produk’s controls (UI-134, UI-135)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it.each([375, 768])('P19.2-T2 AC-4 at %ipx draws no native select on the list, nor in the add sheet: the channel and the category are choice rows', async (px) => {
+    atWidth(px);
+    const stub = render();
+    await screen.findByRole('list', { name: 'Products' });
+    expect(document.querySelector('select')).toBeNull();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Add a product' }));
+    const sheet = screen.getByRole('dialog', { name: 'Add a product' });
+    expect(document.querySelector('select')).toBeNull();
+    await userEvent.type(within(sheet).getByLabelText('Name'), 'PRUCinta');
+    await userEvent.click(within(within(sheet).getByRole('radiogroup', { name: 'Channel' })).getByRole('radio', { name: 'Syariah' }));
+    const categories = within(sheet).getByRole('radiogroup', { name: 'Category' });
+    expect(within(categories).getAllByRole('radio')).toHaveLength(5);
+    await userEvent.click(within(categories).getByRole('radio', { name: 'Education' }));
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Add' }));
+
+    expect(JSON.parse(String(stub.calls.find((c) => c.init.method === 'POST')!.init.body)))
+      .toEqual({ code: 'PRUCINTA', name: 'PRUCinta', channel: 'syariah', category: 'education' });
+  });
+
+  it.each([375, 768])('P19.2-T2 AC-5 at %ipx finds no target under 44px on the list, in Change order and in the filter sheet', async (px) => {
+    atWidth(px);
+    render([product(), SECOND, product({ id: 'p3', code: 'R', name: 'Rider Plus', kind: 'rider', attachesTo: ['p1'], sortOrder: 3 })]);
+    // Inside the field shell's frame, as every `/admin` page is since P19.2-T1 (ADR-0197).
+    const frame = document.body.firstElementChild!;
+    frame.setAttribute('data-surface', 'v1');
+    await screen.findByRole('list', { name: 'Products' });
+    expect(smallTargets(frame, px)).toEqual([]);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Change order' }));
+    expect(smallTargets(frame, px)).toEqual([]);
+    await userEvent.click(screen.getByRole('button', { name: 'Done' }));
+
+    await userEvent.click(screen.getByRole('button', { name: 'Filter' }));
+    expect(smallTargets(screen.getByRole('dialog', { name: 'Filter' }), px)).toEqual([]);
+  });
+
+  it.each([375, 1280])('P19.2-T2 AC-2 at %ipx has no axe violations: the list, the filter or the category chips, and a product opened', async (px) => {
+    atWidth(px);
+    render([product(), SECOND, product({ id: 'p3', code: 'R', name: 'Rider Plus', kind: 'rider', attachesTo: ['p1'], sortOrder: 3 })]);
+    await screen.findByRole('button', { name: 'Rider Plus' });
+    const clean = async () => expect(
+      (await axe(document.body, { rules: { 'color-contrast': { enabled: false }, region: { enabled: false } } })).violations,
+    ).toEqual([]);
+    await clean();
+    await userEvent.click(screen.getByRole('button', { name: 'PRUMapan' }));
+    await screen.findByRole('dialog', { name: 'PRUMapan' });
+    await clean();
   });
 });

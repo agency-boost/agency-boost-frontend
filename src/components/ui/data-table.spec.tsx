@@ -17,7 +17,7 @@ async function compile(classes: string): Promise<string> {
 async function compactTableCss() {
   const { container } = render(
     <DataTable caption="Activity" columns={['Activity']} density="compact">
-      <Row className="bg-amber/[0.16]">
+      <Row className="bg-primary/[0.16]">
         <Cell>Total — all categories</Cell>
       </Row>
     </DataTable>,

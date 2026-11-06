@@ -7,7 +7,7 @@ import { languageMessages } from '@/i18n/messages/language';
 import { cn } from '@/lib/cn';
 
 /**
- * **The *ID | EN* switch** (ADR-0179 §2; P18.98-T2 AC-3; the product owner's UI-041 of 2026-10-27).
+ * **The *ID | EN* switch** (ADR-0179 §2; P18.10-T2 AC-3; the product owner's UI-041 of 2026-10-27).
  *
  * - **Two options, *ID* and *EN*, each a 44 × 44 px target** at every size, as every target on a phone and a tablet.
  * - **A group named *Language*** (*Bahasa* in ID mode), **the current option pressed** (`aria-pressed`), so a screen
@@ -58,8 +58,8 @@ export function LanguageSwitch({ tone, className }: { tone: 'bar' | 'page'; clas
             className={cn(
               'flex h-11 w-11 items-center justify-center rounded-md text-sm font-bold tracking-wide',
               tone === 'bar'
-                ? current ? 'bg-amber text-navy' : 'text-white/[0.78] hover:bg-white/[0.06] hover:text-white'
-                : current ? 'bg-navy text-white' : 'text-muted hover:text-navy',
+                ? current ? 'bg-primary text-primary-contrast' : 'text-secondary-contrast/[0.78] hover:bg-secondary-contrast/[0.06] hover:text-secondary-contrast'
+                : current ? 'bg-secondary text-secondary-contrast' : 'text-muted hover:text-navy',
             )}
           >
             {code.toUpperCase()}

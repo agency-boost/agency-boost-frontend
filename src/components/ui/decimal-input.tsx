@@ -6,7 +6,7 @@ import { useFigureLanguage } from '@/i18n/language-provider';
 import { formatDecimalInput, parseDecimal } from '@/lib/format';
 
 /**
- * **A field that takes a decimal, typed with a comma or a point** (ADR-0167 §1, P18.95-T1 AC-3; parity I-395).
+ * **A field that takes a decimal, typed with a comma or a point** (ADR-0167 §1, P18.7-T1 AC-3; parity I-395).
  *
  * `id-ID` writes a decimal with a comma, *1,4*, and a `type="number"` field refuses one in most browsers — it
  * answers an empty value, so an agent typing their closing rate the way every figure around it is written saw
@@ -15,7 +15,7 @@ import { formatDecimalInput, parseDecimal } from '@/lib/format';
  * while the text is not a number yet.
  *
  * A value set from outside — a reload, a reset — replaces the text, written in the reader's mark: a comma in
- * Indonesian, a point in English (P18.98-T3 AC-3, `formatDecimalInput`), the figures' language (`useFigureLanguage`:
+ * Indonesian, a point in English (P18.10-T3 AC-3, `formatDecimalInput`), the figures' language (`useFigureLanguage`:
  * Indonesian for a reader with no choice). **Either mark is read in either language** (`parseDecimal`), and what the
  * reader typed stays as typed when the language changes.
  */

@@ -1,5 +1,6 @@
 import { api } from './api-client';
 import type { RatioDisplayUnit } from './ratio-format';
+import type { FaqEntry, ObjectionCard, PlanHighlight } from './admin';
 
 export interface ActivityTypeRow {
   id: string;
@@ -261,10 +262,17 @@ export interface TrainingModuleRow {
   /** Its category is this skill's, and is not stored on the module (ADR-0029). */
   skillCode: string;
   title: string;
+  /** *Deskripsi singkat* (ADR-0220 §1): the grey line under the title, or `null`; absent read as none. */
+  description?: string | null;
   publishState: TrainingPublishState;
   displayOrder: number;
   version: number;
   status: 'active' | 'archived';
+  /**
+   * The settings list only (ADR-0208 §1; UI-162): where the material agents are shown comes from — `own`, the office's
+   * replacement; `company`, the template's; `none`, no file, video or link. What *x / y modul punya materi* counts.
+   */
+  material?: 'own' | 'company' | 'none';
 }
 
 export interface TrainingSkillRow {
@@ -272,6 +280,8 @@ export interface TrainingSkillRow {
   code: string;
   categoryCode: string;
   label: string;
+  /** *Deskripsi singkat* (ADR-0220 §1): the grey line under the name, or `null`; absent read as none. */
+  description?: string | null;
   displayOrder: number;
   version: number;
   status: 'active' | 'archived';
@@ -399,7 +409,7 @@ export interface ActivationLink {
    */
   live: boolean;
   /**
-   * The form a hand tick opens — `closing` or `one_on_one` — for a data-backed item's kind (P18.96-T4), `null` for every
+   * The form a hand tick opens — `closing` or `one_on_one` — for a data-backed item's kind (P18.8-T4), `null` for every
    * other link. Absent from a fixture written before it, which reads as `null`.
    */
   form?: 'closing' | 'one_on_one' | null;
@@ -411,7 +421,7 @@ export interface ActivationItem {
   displayOrder: number;
   /** As stored: what a draft saves back — `null` for the three data-backed items, whose kind their code binds. */
   autoLink: string | null;
-  /** What completes the item, resolved — for the three data-backed items, their bound kind (P18.96-T7 G2). */
+  /** What completes the item, resolved — for the three data-backed items, their bound kind (P18.8-T7 G2). */
   link: ActivationLink | null;
 }
 
@@ -522,7 +532,7 @@ export interface SignedUpload {
  * reads the form up to `file` and ignores whatever follows, so a field appended after the file is one
  * storage never sees and a policy condition the upload then fails.
  *
- * There is no fallback for an answer without `fields` (Phase 18.7, ADR-0153). The one there was rebuilt
+ * There is no fallback for an answer without `fields` (Phase 18.4, ADR-0153). The one there was rebuilt
  * the previous vendor's two fields from `storageKey` and `signature`, which the current one refuses;
  * an answer without them is a contract break to fix on the server, not a case to paper over here.
  *
@@ -586,6 +596,11 @@ export interface ProductDocumentSlotView {
   label: string;
   storageKey: string | null;
   filename: string | null;
+  /**
+   * What the slot holds (P19.6-T2): `application/pdf`, or `text/html` — a page the preview draws only in the sandboxed
+   * window (ADR-0217 §4); `null` for an empty slot. Optional so a fixture that is about something else need not.
+   */
+  mimeType?: string | null;
   /** The prototype's own *"Uploaded by KPM"* against *"From the catalog"*. */
   source: 'kpm' | 'company' | 'none';
 }
@@ -599,8 +614,15 @@ export interface KpmProductRow {
   companyName: string;
   channel: string;
   category: string;
+  /**
+   * *Produk dasar* or *Rider* (P19.4-T4 AC-8; ADR-0209 §6). A rider is listed under its bases with no switch of its own:
+   * `active` is derived — on exactly when one of its bases is — and the API refuses any write about it.
+   */
+  kind: 'base' | 'rider';
+  /** A rider's base products, by id; `[]` for a base. */
+  attachesTo: string[];
   lifecycle: string;
-  /** False once the company withdraws it, whatever this office decided. */
+  /** False once the company withdraws it, whatever this office decided — and for a rider no base offers. */
   sellable: boolean;
   active: EffectiveField<boolean>;
   displayName: EffectiveField<string>;
@@ -609,7 +631,15 @@ export interface KpmProductRow {
    * tagline. Held for approval with the script, so agents read the effective read's instead.
    */
   description: EffectiveField<string>;
-  script: Record<string, EffectiveField<string | string[]>>;
+  /** The script fields: text, the benefits a list, the objections a list of cards (ADR-0209 §9). */
+  script: Record<string, EffectiveField<string | string[] | ObjectionCard[]>>;
+  /**
+   * **The proposal's *Tanya-jawab*** (P19.7-T1 AC-3; ADR-0225 §5): this office's draft — the whole list — else the
+   * company's. Held for approval with the script. Optional, so an older answer reads as none.
+   */
+  faq?: EffectiveField<FaqEntry[]>;
+  /** The company's plans, each with its highlights as this office drafted them, else the company's. */
+  plans?: { name: string; popular: boolean; highlights: EffectiveField<PlanHighlight[]> }[];
   reviewState: ScriptReviewState;
   rejectionReason: string | null;
   documents: ProductDocumentSlotView[];
@@ -745,13 +775,13 @@ export interface RequirementView {
   /** `idr_minor` means integer sen. */
   unit: string;
   /**
-   * A campaign's requirement only (P18.5-T8, D-evaluable): `false` for one stored before the evaluable set,
+   * A campaign's requirement only (P18.2-T8, D-evaluable): `false` for one stored before the evaluable set,
    * naming a metric a campaign cannot measure — the badge *Not measured yet*.
    */
   measured?: boolean;
 }
 
-/** P18.5-T7, D-fields: the agent's card draws each of these. */
+/** P18.2-T7, D-fields: the agent's card draws each of these. */
 export type CampaignKindCode = 'seasonal' | 'structural';
 export type CampaignSubtypeCode = 'promotion' | 'ongoing';
 export type CampaignWindowCode = 'campaign_dates' | 'calendar_year' | 'rolling_12m';
@@ -913,11 +943,12 @@ export interface MetricDefinition {
   name: string;
   /** `idr_minor` means integer sen. */
   unit: string;
-  phase: number;
+  /** The roadmap phase, as the roadmap writes it (`'18.11'`; ADR-0188). No screen reads it. */
+  phase: string;
   /** Whether it is measured by the time campaigns are evaluated — the server's answer, never derived from `phase`. */
   computed: boolean;
   /**
-   * Whether a campaign requirement may name it (P18.5-T8 AC-1, D-evaluable): the Owner's picker offers only
+   * Whether a campaign requirement may name it (P18.2-T8 AC-1, D-evaluable): the Owner's picker offers only
    * these. A carrier rule may name any metric, so the Company template reads every row.
    */
   campaign: boolean;

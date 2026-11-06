@@ -49,7 +49,7 @@ import { usePhone } from '@/lib/use-phone';
  * last answer — the browser's clock would let an agent in another zone ask for a day that has not
  * happened in the office yet, which the server refuses anyway.
  *
- * **Below 768px, each item's total, and a tap for its days** (P18.95-T3 AC-6, ADR-0167 §6; the client's UI
+ * **Below 768px, each item's total, and a tap for its days** (P18.7-T3 AC-6, ADR-0167 §6; the client's UI
  * review, UI-012: *Total* and every day off the screen to the right). `PhoneTotals`: the table's rows in its
  * order, each a button holding the item's name and total, opening that item's count for each of the period's
  * columns. Asked of the window (`usePhone`) when the panel mounts, before the first answer, so a phone never draws
@@ -72,7 +72,7 @@ export interface DashboardSubject {
  */
 const RANGES = ['ROLLING_7D', 'ROLLING_30D', 'CUSTOM'] as const;
 
-/** The module's words, in the reader's language (`messages/activity.tsx`; P18.98-T4). */
+/** The module's words, in the reader's language (`messages/activity.tsx`; P18.10-T4). */
 type ActivityWords = MessagesOf<typeof activityMessages.en>;
 
 /**
@@ -84,7 +84,7 @@ const SETTLE_MS = 400;
 
 /**
  * Why a custom range cannot be asked for, or null. Only what needs no server number: the rest is the server's. In the
- * reader's words, its day in the reader's figures (P18.98-T4).
+ * reader's words, its day in the reader's figures (P18.10-T4).
  */
 function invalid(from: string, to: string, today: string, t: ActivityWords, figures: Language): string | null {
   if (!from || !to) return t.dashboard.chooseBoth;
@@ -113,7 +113,7 @@ export function ActivityDashboardPanel({ subject }: { subject?: DashboardSubject
   const phone = usePhone();
   /**
    * Whether the window has answered (`usePhone` answers in an effect): until then neither layout is drawn, so a phone
-   * never paints the table's skeleton for a frame (P18.95-T3 AC-6).
+   * never paints the table's skeleton for a frame (P18.7-T3 AC-6).
    */
   const [settled, setSettled] = useState(false);
   useEffect(() => setSettled(true), []);
@@ -185,7 +185,7 @@ export function ActivityDashboardPanel({ subject }: { subject?: DashboardSubject
               onClick={() => choose(id)}
               className={cn(
                 'flex min-h-11 items-center gap-1 rounded-pill px-3 text-base font-semibold',
-                range === id ? 'bg-navy text-white' : 'bg-card text-muted hover:text-navy',
+                range === id ? 'bg-secondary text-secondary-contrast' : 'bg-card text-muted hover:text-navy',
               )}
             >
               {t.dashboard.phoneRanges[id]}
@@ -277,7 +277,7 @@ export function ActivityDashboardPanel({ subject }: { subject?: DashboardSubject
               )}
             </div>
 
-            {/* Shaped like what is coming: on a phone, its lines (P18.95-T3 AC-6). */}
+            {/* Shaped like what is coming: on a phone, its lines (P18.7-T3 AC-6). */}
             {!view && !error && (phone ? (
               <SkeletonCards count={3} label={t.dashboard.loadingList({ caption })} />
             ) : (
@@ -315,7 +315,7 @@ function RangeLabel({ view }: { view: ActivityDashboard }) {
 
 /**
  * A column's heading: the day, or the block and its dates (`Overall.html:5000-5050`) — its words the reader's, its
- * weekday and days in the reader's figures (P18.98-T4).
+ * weekday and days in the reader's figures (P18.10-T4).
  */
 function heading(bucket: DashboardBucket, index: number, t: ActivityWords, figures: Language): { label: string; detail: string } {
   const dates = bucket.from === bucket.to
@@ -368,13 +368,13 @@ function Dashboard({
   const totals = new Map(view.sections
     .filter((s) => s.standing === 'shown')
     .map((s) => [s.code, s.total]));
-  // Which activity first names each term, the table's rows in order (P18.95-T9 AC-3). Not on a phone: its rows are buttons.
+  // Which activity first names each term, the table's rows in order (P18.7-T9 AC-3). Not on a phone: its rows are buttons.
   const termsIn = activityTermMentions(view.sections);
   const tiles = summaryTiles(
     config?.activity ?? [],
     subject?.rungCode ?? me?.membership?.orgLevelCode ?? '',
     (category) => totals.get(category.code) ?? 0,
-    // What a touch is, once, on the strip's total (P18.95-T9 AC-3; UI-028).
+    // What a touch is, once, on the strip's total (P18.7-T9 AC-3; UI-028).
     { label: t.dashboard.totalTouches, value: view.total, term: 'TOUCHES' },
   );
 
@@ -410,9 +410,9 @@ function Dashboard({
             * the strip's total says the same number above the table on every range.
             */}
           {view.range === 'ROLLING_30D' && (
-            <Row className="bg-amber/[0.16] font-bold">
+            <Row className="bg-primary/[0.16] font-bold">
               <Cell className="font-display">{t.dashboard.totalAll}</Cell>
-              <Cell className="bg-amber/[0.28] text-center">{view.total}</Cell>
+              <Cell className="bg-primary/[0.28] text-center">{view.total}</Cell>
               {view.counts.map((n, i) => (
                 <Cell key={i} className="text-center">{n}</Cell>
               ))}
@@ -442,20 +442,20 @@ function SectionRows({
   section: ActivityDashboard['sections'][number];
   count: (n: number, key: string) => ReactNode;
   subject?: DashboardSubject;
-  /** Which of this section's words first name a term on the screen (`activityTermMentions`, P18.95-T9 AC-3). */
+  /** Which of this section's words first name a term on the screen (`activityTermMentions`, P18.7-T9 AC-3). */
   terms?: Map<string, TermKey[]>;
 }) {
   const t = useMessages(activityMessages);
   return (
     <>
-      <Row className="bg-navy/5 font-bold">
+      <Row className="bg-secondary/5 font-bold">
         <Cell className="font-display">
           {section.label}
           {section.standing !== 'shown' && (
             <ConfigBadge tone="navy" className="ml-2 align-middle">{standingNote(section.standing, t, subject)}</ConfigBadge>
           )}
         </Cell>
-        <Cell className="bg-amber/[0.12] text-center">{section.total}</Cell>
+        <Cell className="bg-primary/[0.12] text-center">{section.total}</Cell>
         {section.counts.map((n, i) => (
           <Cell key={i} className="text-center">{n}</Cell>
         ))}
@@ -478,7 +478,7 @@ function SectionRows({
               </span>
             </span>
           </Cell>
-          <Cell className="bg-amber/[0.06] text-center font-bold">{type.total}</Cell>
+          <Cell className="bg-primary/[0.06] text-center font-bold">{type.total}</Cell>
           {type.counts.map((n, i) => count(n, String(i)))}
         </Row>
       ))}
@@ -487,7 +487,7 @@ function SectionRows({
 }
 
 /*
- * ── On a phone: UI V1's dashboard (UI-106), the item's days a tap away (P18.95-T3 AC-6) ─────────────────────────────
+ * ── On a phone: UI V1's dashboard (UI-106), the item's days a tap away (P18.7-T3 AC-6) ─────────────────────────────
  */
 
 /** What one line of a phone's card holds: a row of the table. */
@@ -505,7 +505,7 @@ interface PhoneItem {
  * saying what counts — then **the group totals as one strip** (the office's summary tiles: *Leads Gen · Selling ·
  * Recruitment · Development* on the seed), then **the same group cards as the log**, each item's count on the right and
  * a zero in grey. No item numbers, no per-row ⌄: **a tap on an item shows its count for each column of the period** (a
- * day, or under a longer range a week and the days remaining), as P18.95-T3 AC-6 built it.
+ * day, or under a longer range a week and the days remaining), as P18.7-T3 AC-6 built it.
  */
 function PhoneDashboard({
   view, tiles, subject, caption,
@@ -525,14 +525,14 @@ function PhoneDashboard({
 
   return (
     <div data-phone-dashboard="">
-      <div className="mt-2 flex items-center gap-1.5 rounded-lg bg-navy px-3.5 py-2.5 text-white">
+      <div className="mt-2 flex items-center gap-1.5 rounded-lg bg-secondary px-3.5 py-2.5 text-secondary-contrast">
         <span className="text-md font-semibold">{t.dashboard.totalTouches}</span>
         <TippedGlyph
           glyph="ⓘ"
           name={termQuestion('TOUCHES', language)}
           tip={termDefinition('TOUCHES', language)}
           align="fit"
-          face="text-on-navy-muted hover:bg-white/10 hover:text-white"
+          face="text-secondary-muted hover:bg-secondary-contrast/10 hover:text-secondary-contrast"
         />
         <strong className="ml-auto text-[1.375rem] font-bold tabular-nums">{view.total}</strong>
       </div>

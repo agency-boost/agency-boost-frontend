@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import AgentLayout from '@/app/(agent)/layout';
@@ -13,7 +13,7 @@ vi.mock('next/navigation', () => ({
 }));
 
 /**
- * **Goal Settings** (P8-T3), as UI V1 draws it (P18.99-T5; the report's UI-014 to UI-022, `goals-mobile` and
+ * **Goal Settings** (P8-T3), as UI V1 draws it (P18.11-T5; the report's UI-014 to UI-022, `goals-mobile` and
  * `goals-desktop`). jsdom has no width, so a spec reads the desktop unless it says otherwise (`atWidth`).
  */
 
@@ -64,7 +64,7 @@ const goal = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
-/** `POST /goals/:period/preview`'s answer (P18.99-T5): the plan the inputs on screen would make, saved nowhere. */
+/** `POST /goals/:period/preview`'s answer (P18.11-T5): the plan the inputs on screen would make, saved nowhere. */
 const previewOf = (over: Record<string, unknown> = {}) => ({
   period: PERIOD,
   monthsLeft: 5,
@@ -124,7 +124,7 @@ const save = () => userEvent.click(screen.getByRole('button', { name: 'Save goal
 
 afterEach(() => vi.unstubAllGlobals());
 
-describe('Goal Settings (P8-T3) as UI V1 draws it (P18.99-T5)', () => {
+describe('Goal Settings (P8-T3) as UI V1 draws it (P18.11-T5)', () => {
   describe('UI-014 — the result first', () => {
     it('UI-014 puts the result card above four numbered steps, and the commitment after them — no step 5', async () => {
       atWidth(375);
@@ -151,11 +151,11 @@ describe('Goal Settings (P8-T3) as UI V1 draws it (P18.99-T5)', () => {
       const hero = tile(card, 'Submission polis');
       expect(hero).toHaveTextContent(/^6Submission polis≈ 1\.4\/week$/);
       expect(hero).toHaveAttribute('data-hero', 'true');
-      expect(hero).toHaveClass('bg-navy');
-      expect(hero.firstElementChild).toHaveClass('text-amber');
+      expect(hero).toHaveClass('bg-secondary');
+      expect(hero.firstElementChild).toHaveClass('text-primary-on-secondary');
       // The accent's words are navy, never white (parity I-542).
-      expect(card).toHaveClass('bg-amber');
-      expect(within(card).getByRole('heading')).toHaveClass('text-navy');
+      expect(card).toHaveClass('bg-primary');
+      expect(within(card).getByRole('heading')).toHaveClass('text-primary-contrast');
     });
 
     it('UI-014 AC-2 renders what the server answered — the recomputed figure, not the stored snapshot', async () => {
@@ -321,7 +321,7 @@ describe('Goal Settings (P8-T3) as UI V1 draws it (P18.99-T5)', () => {
       const monthly = screen.getByText("This month's APE target").closest('[data-variant]')!;
       expect(monthly).toHaveAttribute('data-variant', 'insight');
       expect(monthly).toHaveTextContent('IDR 100M');
-      expect(monthly.lastElementChild).toHaveClass('text-[1.375rem]', 'font-extrabold', 'text-amber-deep');
+      expect(monthly.lastElementChild).toHaveClass('text-[1.375rem]', 'font-extrabold', 'text-primary-deep');
       expect(screen.getByText('Remaining needed')).toHaveClass('text-base', 'font-medium');
       expect(screen.getByText('Policies per month').closest('[data-variant]')).toHaveTextContent('6policies');
       // One decimal (ADR-0160 §5).
@@ -339,7 +339,7 @@ describe('Goal Settings (P8-T3) as UI V1 draws it (P18.99-T5)', () => {
       );
       expect([...sentence.querySelectorAll('strong')].map((s) => s.textContent))
         .toEqual(['IDR 100M', 'IDR 500M', '67 Set appointment', '20 Sales meeting', '6 Submission polis']);
-      for (const strong of sentence.querySelectorAll('strong')) expect(strong).toHaveClass('text-amber');
+      for (const strong of sentence.querySelectorAll('strong')) expect(strong).toHaveClass('text-primary-on-secondary');
       expect(screen.queryByText(/will contact|appointments, and close/)).not.toBeInTheDocument();
     });
 
@@ -359,7 +359,7 @@ describe('Goal Settings (P8-T3) as UI V1 draws it (P18.99-T5)', () => {
     it('UI-017 dates the commitment from the goal, and keeps the disclaimer (L-29)', async () => {
       render({ '/goals': { body: goal({ savedAt: '2026-09-13T04:00:00.000Z' }) } });
 
-      expect(await screen.findByRole('heading', { name: 'My commitment (as of 13 Sep 2026)' })).toHaveClass('text-amber', 'uppercase');
+      expect(await screen.findByRole('heading', { name: 'My commitment (as of 13 Sep 2026)' })).toHaveClass('text-primary-on-secondary', 'uppercase');
       expect(screen.getByText('Estimates for personal planning — assumptions vary per individual.')).toBeInTheDocument();
     });
   });
@@ -444,12 +444,26 @@ describe('Goal Settings (P8-T3) as UI V1 draws it (P18.99-T5)', () => {
       expect(screen.getByRole('group', { name: 'Closing rate' }).parentElement).not.toHaveClass('grid-cols-2');
     });
 
-    it('UI-022 a desktop lays step 2 out four across and step 4’s two rates side by side', async () => {
-      render({ '/goals': { body: goal() } });
-      await resultCard();
+    it('P19.1-T4 AC-4 a laptop: step ②’s two fields side by side, then its two tiles; step ③’s tiles two across; step ④ stacked', async () => {
+      // *Changed 2026-11-05 (UI-114, UI-122; `goals-desktop-2026-11-02`, Conflicts row 152):* step 2 was four across.
+      for (const px of [1024, 1280]) {
+        atWidth(px);
+        render({ '/goals': { body: goal() } });
+        await resultCard();
 
-      expect(screen.getByText('Remaining needed').closest('.grid')).toHaveClass('grid-cols-4');
-      expect(screen.getByRole('group', { name: 'Closing rate' }).parentElement).toHaveClass('grid-cols-2');
+        const fields = document.querySelector('[data-step-two="fields"]')!;
+        expect(fields).toHaveClass('grid-cols-2');
+        expect(within(fields as HTMLElement).getByRole('textbox', { name: 'Months left this year' })).toBeInTheDocument();
+        expect(within(fields as HTMLElement).getByRole('textbox', { name: 'APE already produced this year' })).toBeInTheDocument();
+        const tiles = document.querySelector('[data-step-two="tiles"]')!;
+        expect(tiles).toHaveClass('grid-cols-2');
+        expect(tiles).toHaveTextContent('Remaining needed');
+        expect(tiles).toHaveTextContent("This month's APE target");
+        expect(document.querySelector('[data-step-three="tiles"]')).toHaveClass('grid-cols-2');
+        expect(screen.getByRole('group', { name: 'Closing rate' }).parentElement).not.toHaveClass('grid-cols-2');
+        cleanup();
+        vi.unstubAllGlobals();
+      }
     });
   });
 
@@ -507,7 +521,7 @@ describe('Goal Settings (P8-T3) as UI V1 draws it (P18.99-T5)', () => {
   });
 
   describe('UI-020 — the two prefilled figures look alike, and editable', () => {
-    it('UI-020 both in one white pill, the figure in normal ink with ✎; the months the office’s, marked ⚡', async () => {
+    it('P19.1-T4 AC-1, AC-2 both in one white pill, the same width, the figure in normal ink, no ✎; each marked ⚡, the APE with its ⓘ', async () => {
       render({ '/goals': { body: goal({ apeAchievedMinor: 290_000_000_00, monthsLeft: 2.1 }) } });
       await resultCard();
 
@@ -520,13 +534,56 @@ describe('Goal Settings (P8-T3) as UI V1 draws it (P18.99-T5)', () => {
       for (const field of [months, produced]) {
         expect(field).toHaveClass('text-ink', 'font-bold');
         expect(field.parentElement).toHaveClass('h-12', 'rounded-pill', 'border-[1.5px]', 'bg-card');
+        // UI-122 (Conflicts row 146): no ✎ — the pill holds the figure and its unit alone.
+        expect(field.closest('label')!.querySelector('svg')).toBeNull();
       }
       expect(months.parentElement).toHaveTextContent('months');
-      // The ⚡ while the figure fills itself in (D-25), no *OTOMATIS* chip; none on the agent's own typed figure.
+      // The ⚡ on both (D-25), no *OTOMATIS* chip; the APE keeps its ⓘ, saying whose the figure is.
       const monthsLabel = screen.getByText('Months left this year').parentElement!;
       expect(monthsLabel.querySelector('[data-auto-marker]')).not.toBeNull();
       expect(screen.queryByText(/^auto$|^OTOMATIS$/i)).not.toBeInTheDocument();
-      expect(screen.getByText('APE already produced this year').parentElement!.querySelector('[data-auto-marker]')).toBeNull();
+      const producedMarker = screen.getByText('APE already produced this year').parentElement!.querySelector('[data-auto-marker]');
+      expect(producedMarker).not.toBeNull();
+      expect(within(producedMarker as HTMLElement).getByRole('button', { name: /APE already produced this year/ })).toBeInTheDocument();
+    });
+
+    it('P19.1-T4 AC-1 the two pills are the same width, in a row below 1024px and in their column from it', async () => {
+      for (const px of [375, 768, 1024, 1280]) {
+        atWidth(px);
+        render({ '/goals': { body: goal({ apeAchievedMinor: 290_000_000_00, monthsLeft: 2 }) } });
+        await resultCard();
+        const pills = ['Months left this year', 'APE already produced this year']
+          .map((name) => screen.getByRole('textbox', { name }).closest('label')!);
+        const width = px < 1024 ? 'w-40' : 'w-full';
+        for (const pill of pills) expect(pill).toHaveClass(width);
+        cleanup();
+        vi.unstubAllGlobals();
+      }
+    });
+
+    it('P19.1-T4 AC-2 values read short until focused: 2 months, IDR 290M — and 2 months whole at 1024', async () => {
+      atWidth(1024);
+      render({ '/goals': { body: goal({ apeAchievedMinor: 290_000_000_00, monthsLeft: 2 }) } });
+      await resultCard();
+      const months = screen.getByRole('textbox', { name: 'Months left this year' });
+      expect(months).toHaveValue('2');
+      expect(months.closest('label')).toHaveTextContent('months');
+      // The pill takes the column's whole width from 1024px, two to a row: the figure and its unit never share 1/4 of it.
+      expect(months.closest('label')).toHaveClass('w-full');
+      expect(document.querySelector('[data-step-two="fields"]')).toHaveClass('grid-cols-2');
+      expect(screen.getByRole('textbox', { name: 'APE already produced this year' })).toHaveValue('IDR 290M');
+    });
+
+    it('P19.1-T4 AC-10 the APE produced is the reader’s estimate, labelled your estimate under its name', async () => {
+      render({ '/goals': { body: goal({ apeAchievedMinor: 120_000_000_00 }) } });
+      await resultCard();
+      expect(document.querySelector('[data-estimate-label]')).toHaveTextContent('your estimate');
+    });
+
+    it('P19.1-T4 AC-10 nothing typed is no estimate: no label', async () => {
+      render({ '/goals': { body: goal({ apeAchievedMinor: 0 }) } });
+      await resultCard();
+      expect(document.querySelector('[data-estimate-label]')).toBeNull();
     });
 
     it('UI-020 the months: null while the office’s, the typed figure once overridden, null again once cleared', async () => {
@@ -577,7 +634,7 @@ describe('Goal Settings (P8-T3) as UI V1 draws it (P18.99-T5)', () => {
    * a tap, the ✎ and the unit were decorations, and a tap left the caret at the end, so typing *3* over *2* made *23*.
    */
   describe('staging review 2026-10-31 — the whole pill is the field, and a tap selects the figure', () => {
-    it('a tap on the ✎ or the unit focuses the field: the pill is a label for it, 48px high', async () => {
+    it('P19.1-T4 AC-1 a tap on the unit or anywhere on the pill focuses the field: the pill is a label for it, 48px high', async () => {
       render({ '/goals': { body: goal({ monthsLeft: 2 }) } });
       await resultCard();
       const months = screen.getByRole('textbox', { name: 'Months left this year' });
@@ -587,7 +644,7 @@ describe('Goal Settings (P8-T3) as UI V1 draws it (P18.99-T5)', () => {
       // Named by its line's label alone, never by the unit or the figure in the pill.
       expect(months).toHaveAccessibleName('Months left this year');
 
-      await userEvent.click(pill.querySelector('svg')!);
+      await userEvent.click(pill);
       expect(months).toHaveFocus();
       await userEvent.tab();
       await userEvent.click(within(pill).getByText('months'));
@@ -599,7 +656,7 @@ describe('Goal Settings (P8-T3) as UI V1 draws it (P18.99-T5)', () => {
       await resultCard();
       const months = screen.getByRole('textbox', { name: 'Months left this year' }) as HTMLInputElement;
 
-      await userEvent.click(months.closest('label')!.querySelector('svg')!);
+      await userEvent.click(within(months.closest('label')!).getByText('months'));
       await waitFor(() => expect([months.selectionStart, months.selectionEnd]).toEqual([0, months.value.length]));
       expect(months.value).toBe('2');
       await userEvent.keyboard('3');
@@ -615,7 +672,7 @@ describe('Goal Settings (P8-T3) as UI V1 draws it (P18.99-T5)', () => {
       await resultCard();
       const produced = screen.getByRole('textbox', { name: 'APE already produced this year' }) as HTMLInputElement;
 
-      await userEvent.click(produced.closest('label')!.querySelector('svg')!);
+      await userEvent.click(produced.closest('label')!);
       expect(produced).toHaveFocus();
       await waitFor(() => expect([produced.selectionStart, produced.selectionEnd]).toEqual([0, produced.value.length]));
       expect(produced.value).toBe('290,000,000');
@@ -671,7 +728,7 @@ describe('Goal Settings (P8-T3) as UI V1 draws it (P18.99-T5)', () => {
       expect(within(tile(card, 'Submission polis')).getByRole('button', { name: 'Closing polis' })).toBeInTheDocument();
     });
 
-    it('UI-021 P18.9-T2 a stage bound to a replaced activity and its replacement names both, from the API’s binding', async () => {
+    it('UI-021 P18.6-T2 a stage bound to a replaced activity and its replacement names both, from the API’s binding', async () => {
       const replaced = [
         category('LEADS_GENERATION', 'Leads Generation', 1, [type('LEADS_CONTACTED', 'LEADS_GENERATION', 'Set Appointment', 3)]),
         category('SELLING', 'Selling', 2, [
@@ -721,14 +778,13 @@ describe('Goal Settings (P8-T3) as UI V1 draws it (P18.99-T5)', () => {
   });
 
   describe('UI-004 and the report’s Appendix A — the title row', () => {
-    it('Appendix A keeps the prototype’s title and line, the line on a desktop alone', async () => {
+    // *Changed 2026-11-04 (P19.1-T1 AC-1; UI-112, Conflicts row 150 names Goals):* the line is drawn at no size.
+    it('Appendix A, P19.1-T1 AC-1 keeps the prototype’s title; its line is drawn at no size', async () => {
       render({ '/goals': { body: goal() } });
 
       expect(screen.getByRole('heading', { level: 1, name: 'Goal Settings' })).toBeInTheDocument();
       const line = screen.getByText('Turn your annual target into this month\'s activity numbers.');
-      expect(wears(line, 375)).toContain('hidden');
-      expect(wears(line, 768)).toContain('hidden');
-      expect(wears(line, 1024)).not.toContain('hidden');
+      for (const px of [375, 768, 1024, 1280]) expect(wears(line, px)).toContain('hidden');
       await resultCard();
     });
   });
@@ -819,7 +875,7 @@ describe('Goal Settings — what a requirement keeps', () => {
     expect(calls.filter((c) => c.url.includes('/history'))).toHaveLength(0);
   });
 
-  it('P18.95-T5 AC-7 the two ways to set it share the track on a phone, their words wrapping', async () => {
+  it('P18.7-T5 AC-7 the two ways to set it share the track on a phone, their words wrapping', async () => {
     render({ '/goals': { body: goal() } });
     const list = await screen.findByRole('tablist', { name: 'How you want to set it' });
     for (const tab of within(list).getAllByRole('tab')) {
@@ -876,11 +932,11 @@ describe('Goal Settings — the APE already produced, once the office holds prod
 });
 
 /**
- * **P18.98-T3: the screen's figures follow the reader's language** (AC-1, AC-3). Every spec above reads English, the
+ * **P18.10-T3: the screen's figures follow the reader's language** (AC-1, AC-3). Every spec above reads English, the
  * harness's default (ADR-0179 §9); an Indonesian reader sees the same figures in Indonesian, the field's prefix *Rp*.
  */
-describe('P18.98-T3 Goal Settings in each language', () => {
-  it('P18.98-T3 AC-3 in Indonesian: the sums in juta, a typed figure’s prefix Rp and its digits 120.000.000', async () => {
+describe('P18.10-T3 Goal Settings in each language', () => {
+  it('P18.10-T3 AC-3 in Indonesian: the sums in juta, a typed figure’s prefix Rp and its digits 120.000.000', async () => {
     stubFetch({ ...base, '/goals': { body: goal() } } as Parameters<typeof stubFetch>[0]);
     renderWithSession(<InLanguage language="id"><AgentLayout><GoalSettingsPage /></AgentLayout></InLanguage>, { me: AGENT });
 
@@ -893,7 +949,7 @@ describe('P18.98-T3 Goal Settings in each language', () => {
     expect((await screen.findByText('Polis per minggu')).closest('[data-variant]')).toHaveTextContent('≈ 1,4');
   });
 
-  it('P18.98-T3 AC-3 in English: the sums in millions, a typed figure’s prefix IDR and its digits 120,000,000', async () => {
+  it('P18.10-T3 AC-3 in English: the sums in millions, a typed figure’s prefix IDR and its digits 120,000,000', async () => {
     stubFetch({ ...base, '/goals': { body: goal() } } as Parameters<typeof stubFetch>[0]);
     renderWithSession(<InLanguage language="en"><AgentLayout><GoalSettingsPage /></AgentLayout></InLanguage>, { me: AGENT });
 

@@ -56,11 +56,11 @@ const NOTE = 'Tahap seseorang = tahap tertinggi yang semua milestone-nya sudah d
 const ENGLISH = /\b(The ladder|Milestones|Needs \d|Add a milestone|Add an item|Rename|Archive|Restore|Show archived|Only for somebody|No (stages|milestones|skill grids) yet)\b/;
 
 /**
- * **P18.98-T4, Settings › Capability Mapping in ID mode**: the screen's words the approved glossary's Indonesian, its
+ * **P18.10-T4, Settings › Capability Mapping in ID mode**: the screen's words the approved glossary's Indonesian, its
  * title and tabs English (§A), the office's stages, milestones, grids and items as typed, and the ladder's grey
- * sentence with its verdict per size (P18.97-T4 AC-6). In English: `page.spec.tsx`.
+ * sentence with its verdict per size (P18.9-T4 AC-6). In English: `page.spec.tsx`.
  */
-describe('P18.98-T4 Settings › Capability Mapping in Indonesian', () => {
+describe('P18.10-T4 Settings › Capability Mapping in Indonesian', () => {
   afterEach(() => { vi.unstubAllGlobals(); window.location.hash = ''; });
 
   it('AC-2 says the ladder in Indonesian, its title and tabs kept English', async () => {
@@ -122,8 +122,8 @@ describe('P18.98-T4 Settings › Capability Mapping in Indonesian', () => {
   });
 });
 
-/** **The ladder's grey sentence per size, in Indonesian** (P18.97-T4 AC-6; UI-027, *ⓘ · ⓘ · Show*). */
-describe('P18.98-T4 the ladder’s grey text per size, in Indonesian', () => {
+/** **The ladder's grey sentence per size, in Indonesian** (P18.9-T4 AC-6; UI-027, *ⓘ · ⓘ · Show*). */
+describe('P18.10-T4 the ladder’s grey text per size, in Indonesian', () => {
   afterEach(() => { vi.unstubAllGlobals(); window.location.hash = ''; });
 
   async function drawnAt(px: number) {

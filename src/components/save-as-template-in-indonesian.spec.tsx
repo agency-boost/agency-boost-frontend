@@ -10,7 +10,7 @@ import { ActivityBindingCard } from './activity-binding-card';
 import { SaveAsTemplateDialog } from './save-as-template-dialog';
 
 /**
- * **P18.98-T6, an office's *Save as template* and *Activity binding* in ID mode** (AC-1 as T4's AC-1 to AC-3; area
+ * **P18.10-T6, an office's *Save as template* and *Activity binding* in ID mode** (AC-1 as T4's AC-1 to AC-3; area
  * "admin-template"): the two pieces of the Company template drawn on `/admin/tenants/[kpmId]`, whose own words are
  * another area's — their words the approved glossary's Indonesian (`admin-template.tsx`), an office's code, a company's
  * name and an activity type's label as stored, the three cascade stages kept English (§A.6). Their English is the
@@ -31,7 +31,7 @@ const SUPER_ADMIN = makeMe({
   permissions: ['kpm:list_all', 'company_template:write', 'activity_binding:read', 'activity_binding:write'],
 });
 
-describe('P18.98-T6 Save as template and the activity binding in Indonesian', () => {
+describe('P18.10-T6 Save as template and the activity binding in Indonesian', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it('AC-1, AC-4 Save as template: its fields in Indonesian, the office’s code and the companies as stored', async () => {

@@ -31,7 +31,7 @@ import { formatPercent } from '@/lib/format';
  * reader's own — so the four readers are served one computation, and the prototype's constants, which
  * drew every item done for both people (`:6490-6493`), are gone.
  *
- * **Its words are the activation's catalogue** (`messages/activation.ts`, its `record`; P18.98-T4), in the reader's
+ * **Its words are the activation's catalogue** (`messages/activation.ts`, its `record`; P18.10-T4), in the reader's
  * language, and its percentage in `useFigureLanguage()`'s.
  */
 export function ActivationRecord({ view }: { view: ActivationView }) {
@@ -49,9 +49,9 @@ export function ActivationRecord({ view }: { view: ActivationView }) {
           aria-valuemax={100}
           aria-valuenow={width}
           aria-valuetext={complete}
-          className="h-1.5 overflow-hidden rounded-sm bg-navy/[0.08]"
+          className="h-1.5 overflow-hidden rounded-sm bg-secondary/[0.08]"
         >
-          <div className="h-full rounded-sm bg-navy-soft" style={{ width: `${width}%` }} />
+          <div className="h-full rounded-sm bg-secondary-hover" style={{ width: `${width}%` }} />
         </div>
       </SummaryCard>
       {view.aspects.map((aspect, i) => (

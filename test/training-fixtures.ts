@@ -4,7 +4,7 @@ import type {
 } from '@/lib/training';
 
 /**
- * **Training as the contract serves it** (`scratchpad/p185/contract-training.md`, P18.5-T1 to T4), shaped on
+ * **Training as the contract serves it** (`scratchpad/p185/contract-training.md`, P18.2-T1 to T4), shaped on
  * the demo seed's Rina (`Overall.html:7756-7759`): four Sales modules done, *Asking the Right Discovery
  * Questions* in progress. One fixture for the learner's pages, the coaching tab and the axe run, so the
  * screens are tested against one shape.

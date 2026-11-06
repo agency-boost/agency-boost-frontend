@@ -26,6 +26,11 @@ export interface PitchFile {
   bytes: number;
   /** `YYYY-MM-DD`, a day of the office's calendar the server resolved. */
   uploadedOn: string;
+  /**
+   * What storage holds (P19.6-T2): `application/pdf`, or `text/html` — a page drawn only in the sandboxed window, never
+   * opened in a tab (ADR-0217 §4). The API always sends it; optional so a fixture that is about something else need not.
+   */
+  mimeType?: string;
 }
 
 export interface PitchChecklistItem {
@@ -113,10 +118,10 @@ export const UNDER_A_KILOBYTE = '< 1 KB';
 
 /**
  * `2,4 MB`, as the prototype writes a file's size (`:768`) with `id-ID`'s comma (ADR-0167 §1); a small file in KB
- * rather than `0,0 MB`; and **a file under 1 KB as `< 1 KB`** (ADR-0177 §4, P18.97-T5 AC-4; parity I-521), where it
+ * rather than `0,0 MB`; and **a file under 1 KB as `< 1 KB`** (ADR-0177 §4, P18.9-T5 AC-4; parity I-521), where it
  * read `1 KB` — the seed's one-page demonstration PDFs, which looked like placeholders. The size is the one storage
  * reported, which the server serves; nothing here rounds it up. The one size formatter: the training modules'
- * files use it too. In the reader's `language` (P18.98-T4): `2.4 MB` in English, Indonesian when none is passed; *MB*
+ * files use it too. In the reader's `language` (P18.10-T4): `2.4 MB` in English, Indonesian when none is passed; *MB*
  * and *KB* are the same in both.
  */
 export function formatFileSize(bytes: number, language: Language = DEFAULT_LANGUAGE): string {
@@ -129,15 +134,15 @@ export function formatFileSize(bytes: number, language: Language = DEFAULT_LANGU
 export const pitchRing = (done: number, total: number) => `${done}/${total}`;
 
 /** The pitch's words in English: the catalogue's source (`messages/recruitment-pitch.ts`), which a screen reads in the
- * reader's language with `useMessages(recruitmentPitchMessages)` (P18.98-T4). */
+ * reader's language with `useMessages(recruitmentPitchMessages)` (P18.10-T4). */
 const EN = recruitmentPitchMessages.en;
 
 /**
  * **The pitch's words, in English** (`Recruitment_Section.html:681-818`; D-copy) — for code with no reader to ask, as
- * the screens' words were before P18.98-T4 moved them into the catalogue, where they are written once. *Uploaded ·
- * needs confirmation* is the client's (UI-029; ADR-0177 §1, P18.97-T5 AC-1; parity I-519), *Optional* the tag on
+ * the screens' words were before P18.10-T4 moved them into the catalogue, where they are written once. *Uploaded ·
+ * needs confirmation* is the client's (UI-029; ADR-0177 §1, P18.9-T5 AC-1; parity I-519), *Optional* the tag on
  * *Company Profile* and *Agency Profile* (UI-042; ADR-0177 §2; I-520), *Not uploaded yet* and the incomplete line the
- * client's at every size (P18.95-T7 AC-1, grey text rows 11 and 12).
+ * client's at every size (P18.7-T7 AC-1, grey text rows 11 and 12).
  */
 export const PITCH_COPY = {
   settingsTitle: kept('Recruitment pitch'),

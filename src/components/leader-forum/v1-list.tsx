@@ -50,7 +50,7 @@ export function V1ForumList({
             onClick={() => onFilter(f)}
             className={cn(
               'flex min-w-0 flex-1 items-center justify-center whitespace-nowrap rounded-pill px-2 text-base font-semibold',
-              filter === f ? 'bg-navy text-white' : 'text-muted hover:text-navy',
+              filter === f ? 'bg-secondary text-secondary-contrast' : 'text-muted hover:text-navy',
             )}
           >
             {t.filters[f]}
@@ -104,7 +104,7 @@ function Card({ meeting }: { meeting: MeetingCard }) {
       >
         <span aria-hidden="true" className="flex h-[52px] w-12 shrink-0 flex-col items-center justify-center rounded-row bg-hover-row leading-tight">
           <span className="text-lg font-bold text-navy">{block.day}</span>
-          <span className="text-xs font-bold uppercase text-amber-ink">{block.month}</span>
+          <span className="text-xs font-bold uppercase text-primary-ink">{block.month}</span>
         </span>
         <span className="min-w-0 flex-1">
           <span id={titleId} className="block break-words text-md font-bold leading-snug text-ink">{meeting.title}</span>

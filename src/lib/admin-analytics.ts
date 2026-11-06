@@ -80,13 +80,13 @@ export const readPlatformAnalytics = () => api<PlatformAnalyticsView>('/admin/an
 /**
  * A count as the console writes one: `1.340` — `id-ID`'s grouping since ADR-0167 §1, where the Platform
  * Overview's tiles wrote `1,340` (`Superadmin.html:313`). One grouping for every number on every screen; `1,340` in
- * English figures (P18.98-T3), the figures' `language` passed last.
+ * English figures (P18.10-T3), the figures' `language` passed last.
  */
 export const formatCount = (n: number, language: Language = DEFAULT_LANGUAGE) => formatNumber(n, {}, language);
 
 /**
  * The share of `of` that `part` is, a whole percent rounded half up in integers (`percentOf`, the server's `rateOver`
- * rule — P18.97-T3, parity F-254: 23 of 40 is 58%, where `Math.round` read 57); `null` over nobody, which the screen
+ * rule — P18.9-T3, parity F-254: 23 of 40 is 58%, where `Math.round` read 57); `null` over nobody, which the screen
  * leaves unsaid rather than printing a percentage of zero people.
  */
 export function shareOf(part: number, of: number): number | null {
@@ -129,7 +129,7 @@ const STATE_PARTS: Record<string, Pick<TenantRow, 'status' | 'subscriptionState'
  * An office's state, **as *All KPMs* shows it** (T8 AC-2): the word and the pill's tone. Accepts the
  * state's code or the word itself, in either language, since either names the same thing; anything else is
  * printed as it came, in the neutral tone, rather than read as a state it is not. The word in the reader's
- * `language` (P18.98-T6), English, the source, when given none.
+ * `language` (P18.10-T6), English, the source, when given none.
  */
 export function officeState(
   state: string,
@@ -141,7 +141,7 @@ export function officeState(
 }
 
 /**
- * Every string the screen writes, in English — the catalogue's source (`i18n/messages/admin-analytics.ts`, P18.98-T6).
+ * Every string the screen writes, in English — the catalogue's source (`i18n/messages/admin-analytics.ts`, P18.10-T6).
  * The title is the nav item's, verbatim (`Superadmin.html:204`); the rest are ours, and use none of OD-39's six words
  * (D-copy): the table's rows are *branches*, which is what *All KPMs*' *Branch* column calls them.
  */
@@ -159,7 +159,7 @@ export const PLATFORM_ANALYTICS_HEADINGS: readonly string[] = analyticsHeadings(
 /**
  * The headings once the read says which month *this month* is: *"Joined in October 2026"* (data honesty —
  * a reader on the first of a month should not have to guess which month the two columns count). The month in the
- * figures' language, the words in the words' (P18.98-T6).
+ * figures' language, the words in the words' (P18.10-T6).
  */
 export function platformHeadings(
   month: string | null,
@@ -173,7 +173,7 @@ export function platformHeadings(
   return headings.map((h, i) => (i === 6 ? t.joinedIn({ month: name }) : i === 7 ? t.leftIn({ month: name }) : h));
 }
 
-/** A company's total row's label: *Prudential — Total (2 branches)*, the count in the figures' language. */
+/** A company's total row's label: *Prudential — Total (2 KPMs)*, the count in the figures' language. */
 export function companyTotalWords(
   name: string,
   branches: number,
@@ -183,7 +183,7 @@ export function companyTotalWords(
   return messagesIn(adminAnalyticsMessages, language).companyTotal({ name, n: branches, branches: formatCount(branches, figures) });
 }
 
-/** The platform's total row's label: *Platform — Total (2 companies, 3 branches)*. */
+/** The platform's total row's label: *Platform — Total (2 companies, 3 KPMs)*. */
 export function platformTotalWords(
   companies: number,
   branches: number,

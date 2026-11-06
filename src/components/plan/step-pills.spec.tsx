@@ -30,6 +30,6 @@ describe('StepPills', () => {
 
   it('puts navy on the current step’s amber, where the prototype’s white is 2.2:1', () => {
     const { container } = render(<StepPills label="Steps" steps={['A', 'B']} current={0} />);
-    expect(container.querySelector('[aria-current="step"] [aria-hidden="true"]')).toHaveClass('bg-amber', 'text-navy');
+    expect(container.querySelector('[aria-current="step"] [aria-hidden="true"]')).toHaveClass('bg-primary', 'text-primary-contrast');
   });
 });

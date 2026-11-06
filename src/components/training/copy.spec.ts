@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { catalogueTexts, parse, renderable, sourceFiles, SRC } from '@test/copy-scan';
 
 /**
- * **Training's own strings** (P18.5-T1 AC-10, T4 AC-2; the contract's *Module strings*): none of OD-39's
+ * **Training's own strings** (P18.2-T1 AC-10, T4 AC-2; the contract's *Module strings*): none of OD-39's
  * six words — *office*, *KPM*, *reports to*, *tagged to*, *untagged*, *unassigned* — no phase, and, per
  * OD-150 (ADR-0140), no promise of the reader's *Skill Tracker*, which the prototype's two footers made
  * (`Overall.html:3730`, `:3763`) and nothing keeps. The office's own words (a category's label and
@@ -73,12 +73,12 @@ describe('training’s own copy', () => {
 });
 
 /**
- * **P18.98-T4: training's words are the catalogue's now** (`i18n/messages/training.ts`), so the rules are held there,
- * language by language (P18.98-T1 AC-6, `catalogueTexts`): none of the six words in the English or in the Indonesian —
+ * **P18.10-T4: training's words are the catalogue's now** (`i18n/messages/training.ts`), so the rules are held there,
+ * language by language (P18.10-T1 AC-6, `catalogueTexts`): none of the six words in the English or in the Indonesian —
  * not *KPM*, ID mode's word for *office* (§B.9), since the learner's words name no office, and not *kantor* — no phase
  * (*fase*), and no *Skill Tracker* in either language (*Pelacak skill* is its Indonesian, the coaching card's).
  */
-describe('P18.98-T4 training’s catalogue, language by language', () => {
+describe('P18.10-T4 training’s catalogue, language by language', () => {
   const AREA = 'i18n/messages/training.ts';
   const texts = catalogueTexts(AREA, readFileSync(join(SRC, AREA), 'utf8'));
 
@@ -95,11 +95,11 @@ describe('P18.98-T4 training’s catalogue, language by language', () => {
 });
 
 /**
- * P18.5-T1 AC-8, the settings leak closed: `GET /kpm/settings/training` and its module reads are the office's
+ * P18.2-T1 AC-8, the settings leak closed: `GET /kpm/settings/training` and its module reads are the office's
  * administration's (`training_settings:read`), and **no field screen calls them** — the learner reads only
  * what is offered, through `/training/*`. The API refuses a field rung 403 whatever this finds.
  */
-describe('no field screen calls the training settings reads (P18.5-T1 AC-8)', () => {
+describe('no field screen calls the training settings reads (P18.2-T1 AC-8)', () => {
   const SETTINGS_READS = /\blistTraining\b|\breadModuleContent\b|\bmoduleContentUrl\b|\/kpm\/settings\/training/;
   const field = sourceFiles().filter((f) =>
     (f.startsWith('app/(agent)/') || f.startsWith('components/training/') || f === 'lib/training.ts') && !/\.spec\.tsx?$/.test(f));

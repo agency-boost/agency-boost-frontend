@@ -78,7 +78,7 @@ src/
 ├── app/<route>/page.tsx      cross-family routes only — /, /join, /notifications, /profile.
 │                             These render RoleShell, which picks the chrome by the reader
 ├── app/screens.a11y.spec.tsx every screen through axe, in its populated state
-├── components/               app-shell, admin-shell, session-provider, require-session
+├── components/               shell, app-shell (one for every role, ADR-0197), session-provider, require-session
 ├── components/ui/            the primitives — field, data-table, status-pill, role-badge, skeleton
 │                             every wait is a Skeleton shaped like what is coming, never `Loading…`
 ├── lib/                      api.ts (URLs) · api-client.ts (fetch, tokens) · session.ts · admin.ts

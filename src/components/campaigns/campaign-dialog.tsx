@@ -20,7 +20,7 @@ import { ChaseButton, DialogTags, Poster, PromotionLabel } from './campaign-part
 const FOCUSABLE = 'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 /**
- * **The routed dialog** (`/campaigns/[campaignCode]`; P18.5-T7 AC-4): the list's host closes it — Back, or
+ * **The routed dialog** (`/campaigns/[campaignCode]`; P18.2-T7 AC-4): the list's host closes it — Back, or
  * the list's own address — and takes each chase made in it.
  */
 export function RoutedCampaignDialog({ code }: { code: string }) {
@@ -63,7 +63,7 @@ export function CampaignDialog({
   const box = useRef<HTMLDivElement>(null);
   const titleId = useId();
 
-  // The page behind holds still while it is open (P18.96-T1 AC-2); the box scrolls, never past the screen.
+  // The page behind holds still while it is open (P18.8-T1 AC-2); the box scrolls, never past the screen.
   useScrollLock(true);
 
   useEffect(() => {
@@ -198,7 +198,7 @@ export function CampaignDialog({
                 <p className="mb-5 whitespace-pre-line text-[0.84375rem] leading-relaxed text-navy">{campaign.description}</p>
               )}
               {campaign.reward && (
-                <div className="mb-5 flex items-start gap-2.5 rounded-[10px] border border-amber/35 bg-amber/10 px-3.5 py-3">
+                <div className="mb-5 flex items-start gap-2.5 rounded-[10px] border border-primary/35 bg-primary/10 px-3.5 py-3">
                   <span aria-hidden="true" className="shrink-0 text-lg">🏆</span>
                   <div className="min-w-0">
                     {/* Navy on the amber wash, where the prototype's amber-dark title is 2.6:1 (row 44). */}
@@ -210,7 +210,7 @@ export function CampaignDialog({
               {campaign.requirements.length > 0 && (
                 <Requirements campaign={campaign} />
               )}
-              {/* No chase once the campaign has ended (P18.95-T10 AC-2): its tag says *Ended*. */}
+              {/* No chase once the campaign has ended (P18.7-T10 AC-2): its tag says *Ended*. */}
               {showsChase(campaign, campaign.can) && (
                 <div className="flex flex-wrap items-center gap-2.5">
                   <ChaseButton
@@ -239,7 +239,7 @@ export function CampaignDialog({
 function Requirements({ campaign }: { campaign: CampaignDetail }) {
   const t = useMessages(campaignsMessages);
   const headingId = useId();
-  // A ratio requirement in the office's unit for it, as the card writes it (P18.97-T7; ADR-0174 §2).
+  // A ratio requirement in the office's unit for it, as the card writes it (P18.9-T7; ADR-0174 §2).
   const { config } = useTenantConfig();
   const ratioUnits = useMemo(() => ratioUnitsOf(config?.ratios), [config]);
   // One progress row per requirement, in the requirements' order: by position, never by metric, so two

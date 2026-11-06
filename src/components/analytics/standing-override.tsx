@@ -43,7 +43,7 @@ const CHOICES: readonly OverrideStatus[] = ['qualified', 'not_met'];
 
 /**
  * The campaigns' *Achieved* column (`KPM_Owner.html:3886-3900`): the prototype's pill — *Achieved*, *Not
- * achieved* or *—* by the registry's labels — and the override of a final standing (P18.6-T2 AC-8; ADR-0144 §4;
+ * achieved* or *—* by the registry's labels — and the override of a final standing (P18.3-T2 AC-8; ADR-0144 §4;
  * D-override), which the prototype does not draw (contradiction 11).
  *
  * **The smallest footprint** (ADR-0062 §2). The pill of a stored final standing becomes the button that opens
@@ -58,7 +58,7 @@ const CHOICES: readonly OverrideStatus[] = ['qualified', 'not_met'];
  * **The toast is the cell's own**, mounted with the first one (`ToastHost`), so a page whose shell holds none
  * gains a live region only when a cell has something to say.
  *
- * **Its words are the reader's** (P18.98-T4; `kpmComplianceMessages.override`), the day it was set in the figures'
+ * **Its words are the reader's** (P18.10-T4; `kpmComplianceMessages.override`), the day it was set in the figures'
  * language; the campaign's title, the member's name and the reason are shown as typed.
  */
 export function AchievedCell(props: AchievedCellProps) {
@@ -249,7 +249,7 @@ function OverrideDialog({
                   checked={status === code}
                   disabled={!offered.includes(code)}
                   onChange={() => setStatus(code)}
-                  className="accent-navy"
+                  className="accent-secondary"
                 />
                 {achieved[code].label}
               </label>

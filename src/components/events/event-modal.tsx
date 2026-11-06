@@ -20,7 +20,7 @@ import { useEventsHost } from './events-screen';
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 /**
- * **One event, over the list** (`/events/[eventId]`; `:8594-8652`, overlay `:4707-4709`; P18.5-T5 AC-5): the
+ * **One event, over the list** (`/events/[eventId]`; `:8594-8652`, overlay `:4707-4709`; P18.2-T5 AC-5): the
  * poster, the tag and the audience, the title, *📅 {date} · {time}* and *📍 {place}*, the description, and
  * then what the reader can do — *Join event*, or *You're going* and *Cancel RSVP*, while the event has not
  * wrapped up; and once it has, the feedback form, the didn't-join block or the thanks (T6).
@@ -38,7 +38,7 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), texta
  * the reader is not invited to, an archived one, or none at all — one answer for all three, as the server
  * gives one (404).
  *
- * **Never taller than the screen** (P18.96-T1 AC-1; the client's findings, UI-043): from 640px the box is at most
+ * **Never taller than the screen** (P18.8-T1 AC-1; the client's findings, UI-043): from 640px the box is at most
  * the dynamic viewport less its margins and scrolls inside itself, the poster with its ✕ held at the top and
  * *Submit feedback* at the foot; below 640px it is the whole screen, `100dvh`, the same way. While the feedback
  * form shows, the poster is the card's size, not the 190px banner. The page behind does not scroll while it is
@@ -57,7 +57,7 @@ export function EventModal({ id }: { id: string }) {
   const box = useRef<HTMLDivElement>(null);
   const titleId = useId();
 
-  // The list behind holds still while the event is open (P18.96-T1 AC-1).
+  // The list behind holds still while the event is open (P18.8-T1 AC-1).
   useScrollLock(true);
 
   useEffect(() => {
@@ -195,7 +195,7 @@ export function EventModal({ id }: { id: string }) {
             <div data-state="not-found" className="px-5 pb-6 pt-14 sm:px-[26px]">
               <p className="m-0 text-md font-semibold text-navy">{t.notFound}</p>
               <p className="m-0 mt-1 text-base text-muted">{t.notFoundHint}</p>
-              <button type="button" onClick={close} className="mt-3 rounded-sm text-base font-semibold text-amber-ink hover:underline">
+              <button type="button" onClick={close} className="mt-3 rounded-sm text-base font-semibold text-primary-ink hover:underline">
                 {t.backToEvents}
               </button>
             </div>
@@ -277,7 +277,7 @@ function EventDetail({ event, meta, form, onClose, titleId, busy, writeError, on
                 )}
               </>
             ) : (
-              // One rule for the modal's *Join event* and the card's *Join* (P18.95-T10 AC-1).
+              // One rule for the modal's *Join event* and the card's *Join* (P18.7-T10 AC-1).
               canJoin(event, meta.can) && (
                 <Button aria-disabled={busy || undefined} onClick={onJoin}>{t.joinEvent}</Button>
               )

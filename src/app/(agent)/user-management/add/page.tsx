@@ -5,11 +5,12 @@ import { InviteShareBlock } from '@/components/invite-share-block';
 import { LeaderLimitNotice, LeaderLimitWaiting, isLeaderLimit } from '@/components/leader-limit-notice';
 import { RolePill } from '@/components/org-tree/role-pill';
 import { Page } from '@/components/page';
+import { NoDataLine, SamplePreview, useSampleName } from '@/components/sample-preview';
 import { USER_MANAGEMENT_TITLE, UserManagementTabs } from '@/components/user-management-tabs';
 import { ActionMenu } from '@/components/ui/action-menu';
 import { DestructiveRow, destructiveLast } from '@/components/ui/destructive-action';
 import { EmptyState } from '@/components/ui/empty-state';
-import { Button, Card, ErrorBanner, Field, TextInput } from '@/components/ui/field';
+import { Button, ButtonLink, Card, ErrorBanner, Field, TextInput } from '@/components/ui/field';
 import { LineIcon } from '@/components/ui/line-icon';
 import { Avatar, PersonRow } from '@/components/ui/person-row';
 import { REMOVED_ON_PHONE } from '@/components/ui/phone';
@@ -18,6 +19,7 @@ import { TippedGlyph } from '@/components/ui/tipped-glyph';
 import { useToast } from '@/components/ui/toast';
 import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
 import { uiV1Messages } from '@/i18n/messages/ui-v1';
+import { samplePreviewMessages } from '@/i18n/messages/sample-preview';
 import { userManagementMessages } from '@/i18n/messages/user-management';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
@@ -60,18 +62,18 @@ import {
  * anywhere in `prototype/` is for KPM Admin access.
  *
  * We had built both, plus a use limit, an expiry and a list of spent codes — none of it
- * registered as a divergence, which by this project's own rule made it a defect. P3.6-T1
+ * registered as a divergence, which by this project's own rule made it a defect. P3.2-T1
  * removed it: the code comes with the membership and lasts as long as it does.
  *
  * Anyone who uses it joins **with no approval**. That is what the sentence under the
  * panel says, and it is the whole reason the code is worth guarding.
  *
- * Its words are the catalogue's (`user-management.ts`; P18.98-T4); a role change's sentence is `lib/org.ts`'
+ * Its words are the catalogue's (`user-management.ts`; P18.10-T4); a role change's sentence is `lib/org.ts`'
  * (`roleChangeExplanation`) and the leader limit's `leader-limit.tsx`', each handed the reader's language. *REMOVE*, the
  * word the server checks, is the same in both languages; names, agent codes, the leader code and its link are shown
  * as stored.
  *
- * **UI V1 (2026-10-30, Phase 18.99 T9).** *Undang seseorang* is the shared invite share block (UI-084, UI-090): the code
+ * **UI V1 (2026-10-30, Phase 18.11 T9).** *Undang seseorang* is the shared invite share block (UI-084, UI-090): the code
  * and one row of pill buttons with WhatsApp on a phone, the link · the code · WhatsApp · the QR from 768px, a copy
  * toasting *Tersalin ✓*. *Cari orang yang sudah ada di sini* is 64px divided rows with a round + on a phone (UI-082),
  * as it was from 768px. *Tim Anda* is the shared person rows with a role pill below 1024px and a compact table from
@@ -305,7 +307,7 @@ export default function AddAgentsPage() {
       aria-label={t.changeRoleOf({ name: member.fullName, role: rungLabel(member) })}
       disabled={busy !== null}
       onClick={() => openRoleSheet(member)}
-      className="flex h-11 items-center rounded-pill focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber disabled:opacity-60 lg:h-8"
+      className="flex h-11 items-center rounded-pill focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus-ring disabled:opacity-60 lg:h-8"
     >
       <RolePill role={member.role} className="h-8 px-2.5 text-base font-semibold">
         {rungLabel(member)}
@@ -428,7 +430,7 @@ export default function AddAgentsPage() {
                     aria-label={t.addToMyUnit}
                     disabled={busy !== null}
                     onClick={() => setConfirming(member.membershipId)}
-                    className="flex h-11 w-11 items-center justify-center rounded-full bg-navy text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber disabled:opacity-60"
+                    className="flex h-11 w-11 items-center justify-center rounded-full bg-secondary text-secondary-contrast focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus-ring disabled:opacity-60"
                   >
                     <LineIcon name="plus" className="h-5 w-5" />
                   </button>
@@ -496,7 +498,11 @@ export default function AddAgentsPage() {
           <SkeletonPeople count={3} label={t.loadingUnit} className="mt-3" />
         )}
 
-        {team?.length === 0 && <EmptyState title={t.nobodyReports} />}
+        {/*
+          * Nobody reports to the reader yet (P19-T4 AC-3; D-37, UI-159 item 3): *Belum ada data*, and the list as it will
+          * look — this card's own rows over three sample agents — greyed and labelled *Contoh*, with *Undang agen*.
+          */}
+        {team?.length === 0 && <EmptyTeam reportsToYou={t.reportsToYou} />}
 
         {/* A phone and a tablet: 64px divided rows, the role pill at the right (UI-083). */}
         <ul className="mt-2 flex flex-col lg:hidden" data-testid="team-rows">
@@ -592,7 +598,7 @@ export default function AddAgentsPage() {
                         key={rung.code}
                         className={cn(
                           'flex min-h-[3.25rem] cursor-pointer items-center gap-3 rounded-pill px-4 text-md text-ink',
-                          chosen ? 'border-2 border-amber bg-amber/[0.12] font-semibold' : 'border-2 border-transparent bg-base',
+                          chosen ? 'border-2 border-primary bg-primary/[0.12] font-semibold' : 'border-2 border-transparent bg-base',
                         )}
                       >
                         <input
@@ -602,7 +608,7 @@ export default function AddAgentsPage() {
                           checked={chosen}
                           disabled={busy !== null}
                           onChange={() => setProposal(value === current ? null : { member: sheetMember, toRole: value })}
-                          className="h-5 w-5 accent-amber"
+                          className="h-5 w-5 accent-primary"
                         />
                         {rung.label}
                       </label>
@@ -728,5 +734,36 @@ export default function AddAgentsPage() {
         )}
       </ResponsiveSheet>
     </Page>
+  );
+}
+
+/** *Tim Anda* with nobody in it yet: the card's own 64px rows over sample agents, inert, and the next step. */
+function EmptyTeam({ reportsToYou }: { reportsToYou: string }) {
+  const next = useMessages(samplePreviewMessages).next;
+  const { person } = useSampleName();
+  return (
+    <>
+      <NoDataLine />
+      <SamplePreview
+        sample={(
+          <ul className="flex flex-col rounded-lg bg-card px-3">
+            {[1, 2, 3].map((n) => (
+              <li key={n} className="border-t border-divider first:border-t-0">
+                <PersonRow
+                  name={person(n)}
+                  seed={`sample-${n}`}
+                  height={64}
+                  avatarSize={40}
+                  className="px-0"
+                  nameClassName="text-md"
+                  meta={<span className="truncate">{`00000 · ${reportsToYou}`}</span>}
+                />
+              </li>
+            ))}
+          </ul>
+        )}
+        action={<ButtonLink href="/new-hires">{next.inviteAgent}</ButtonLink>}
+      />
+    </>
   );
 }

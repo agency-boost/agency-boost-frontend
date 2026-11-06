@@ -5,6 +5,7 @@ import { Page } from '@/components/page';
 import { Cell, DataTable, Row } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button, Card, ErrorBanner, Field, FieldRow, TextInput } from '@/components/ui/field';
+import { ListCard, ListRow } from '@/components/ui/list-rows';
 import { rungShort } from '@/components/ui/role-badge';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { StatusPill } from '@/components/ui/status-pill';
@@ -15,6 +16,7 @@ import {
   approveLeaderLimitRequest, declineLeaderLimitRequest, LEADER_LIMIT_QUEUE_CHANGED, readLeaderLimitQueue,
   requestedChange, type LeaderLimitRequestRow,
 } from '@/lib/leader-limit-requests';
+import { useMediaQuery } from '@/lib/use-media-query';
 
 /** *13 / 10*, or the count alone for an office with no limit any more. */
 const countOf = (row: Pick<LeaderLimitRequestRow, 'leadersUsed' | 'maxLeaders'>, used = row.leadersUsed) =>
@@ -41,6 +43,11 @@ export default function LeaderLimitRequestsPage() {
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [reason, setReason] = useState<Record<string, string>>({});
+  /**
+   * **Below 1024px the decided requests are rows** (P19.2-T2 AC-1; UI-126): the member, *office · change · asked by*
+   * under the name, the reason a decline gave; the state on the right. Read only, as the table is. From 1024px the table.
+   */
+  const rowsBelowLaptop = useMediaQuery(['phone', 'tablet']);
 
   const load = useCallback(async () => {
     try {
@@ -74,13 +81,12 @@ export default function LeaderLimitRequestsPage() {
 
   const pending = rows?.filter((r) => r.status === 'pending') ?? [];
   const decided = rows?.filter((r) => r.status !== 'pending') ?? [];
-  // The badge's name (P18.95-T9 AC-1): *Agent → AAB*.
+  // The badge's name (P18.7-T9 AC-1): *Agent → AAB*.
   const label = (code: string) => rungShort(code);
 
   return (
     <Page
       title={t.limit.title}
-      subtitle={t.limit.subtitle}
       permission="leader_limit_request:decide"
     >
       {error && <ErrorBanner {...error} />}
@@ -141,7 +147,27 @@ export default function LeaderLimitRequestsPage() {
         </Card>
       ))}
 
-      {decided.length > 0 && (
+      {decided.length > 0 && rowsBelowLaptop && (
+        <>
+          <h2 className="mb-3 mt-6 font-display text-lg font-bold text-navy">{t.decided}</h2>
+          <ListCard label={t.limit.caption}>
+            {decided.map((row) => (
+              <ListRow
+                key={row.requestId}
+                data-row={row.requestId}
+                title={row.subjectName}
+                meta={t.limit.rowMeta({ office: officeOf(row), change: requestedChange(row, label, language), name: row.requestedByName })}
+                note={row.declineReason ? <span className="text-muted">{row.declineReason}</span> : undefined}
+                trailing={(
+                  <StatusPill status={row.status === 'approved' ? 'success' : 'neutral'} label={t.status[row.status]} />
+                )}
+              />
+            ))}
+          </ListCard>
+        </>
+      )}
+
+      {decided.length > 0 && !rowsBelowLaptop && (
         <>
           <h2 className="mb-3 mt-6 font-display text-lg font-bold text-navy">{t.decided}</h2>
           <DataTable

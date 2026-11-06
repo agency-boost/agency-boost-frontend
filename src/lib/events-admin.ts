@@ -6,7 +6,7 @@ import type { EventPhase, NpsConstants } from './events';
 import { OFFICE_TIME_ZONE, zoneOffsetMs } from './format';
 
 /**
- * **The office's side of its events** (P18.5-T5 AC-7, AC-10; P18.5-T6 AC-5): the roll call and the *Feedback
+ * **The office's side of its events** (P18.2-T5 AC-7, AC-10; P18.2-T6 AC-5): the roll call and the *Feedback
  * Summary* that *View feedback* opens on a past row of Settings › Events (`KPM_Owner.html:1655`; D-rollcall),
  * and the people *Chosen people* and *Chosen leaders* are picked from (D-picker).
  *
@@ -131,7 +131,7 @@ export const readInvitees = () => api<EventInviteeList>('/kpm/settings/events/in
  * ── The words ───────────────────────────────────────────────────────────────────────────────────
  */
 
-/** The office's events' words in a language (`i18n/messages/events-office.ts`; P18.98-T4), English when none is passed. */
+/** The office's events' words in a language (`i18n/messages/events-office.ts`; P18.10-T4), English when none is passed. */
 export const officeWordsIn = (language: Language = SOURCE_LANGUAGE) => messagesIn(eventsOfficeMessages, language);
 
 const EN = officeWordsIn(SOURCE_LANGUAGE);
@@ -172,7 +172,7 @@ export const npsFigure = (nps: number | null) => (nps === null ? '—' : String(
  */
 export const ADMIN_COPY = {
   rollCall: EN.rollCall,
-  // *View feedback*'s two tabs (P18.8-T13, ADR-0161 §6): *Roll call* above, and this; the strip's name.
+  // *View feedback*'s two tabs (P18.5-T13, ADR-0161 §6): *Roll call* above, and this; the strip's name.
   feedbackSummaryTab: EN.feedbackSummaryTab,
   feedbackParts: EN.feedbackParts,
   name: EN.name,
@@ -201,7 +201,7 @@ export const ADMIN_COPY = {
   loadingPeople: EN.loadingPeople,
   /** A chosen leader the graph no longer shows leading anybody: kept, never dropped. */
   leadsNobodyNow: EN.leadsNobodyNow,
-  // The settings panel (P18.5-T5 AC-9), the spec's own words for `EVENT_HAS_RESPONSES`.
+  // The settings panel (P18.2-T5 AC-9), the spec's own words for `EVENT_HAS_RESPONSES`.
   hasResponses: EN.hasResponses,
 } as const;
 

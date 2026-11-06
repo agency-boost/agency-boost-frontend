@@ -35,7 +35,7 @@ describe('sales tools: the words and the addresses (Phase 14)', () => {
         .toEqual(Object.entries(record(catalogConstants, 'PRODUCT_BUDGET_BAND_LABELS')));
     });
 
-    it('P18.95-T6 AC-3 the lump-sum option and its encoding: the backend’s band, asked apart from the six monthly ones', () => {
+    it('P18.7-T6 AC-3 the lump-sum option and its encoding: the backend’s band, asked apart from the six monthly ones', () => {
       const backend = /export const PRODUCT_LUMP_SUM_BUDGET_BAND = (\d+);/.exec(catalogConstants);
       expect(Number(backend?.[1])).toBe(LUMP_SUM_BUDGET);
       expect(MONTHLY_BUDGET_CHOICES.map((c) => c.value)).toEqual([1, 2, 3, 4, 5, 6]);
@@ -96,7 +96,7 @@ describe('sales tools: the words and the addresses (Phase 14)', () => {
     });
   });
 
-  describe('P18.95-T6 AC-4 catalog search, by product name (UI-023)', () => {
+  describe('P18.7-T6 AC-4 catalog search, by product name (UI-023)', () => {
     it.each([
       ['PRUMapan', 'mapan', true],
       ['PRUMapan', 'MAPAN', true],
@@ -106,17 +106,17 @@ describe('sales tools: the words and the addresses (Phase 14)', () => {
       ['PRUMapan', '   ', true],
       ['PRUMapan', 'future', false],
       ['PRUMapan', 'pru mapan', false],
-    ])('P18.95-T6 AC-4 %s, searched for %o: %s', (name, term, found) => {
+    ])('P18.7-T6 AC-4 %s, searched for %o: %s', (name, term, found) => {
       expect(matchesSearch(name, term)).toBe(found);
     });
 
-    it('P18.95-T6 AC-4 ignores accents either side, so a name typed without them is found', () => {
+    it('P18.7-T6 AC-4 ignores accents either side, so a name typed without them is found', () => {
       expect(matchesSearch('PRUCinta Syariah', 'cinta')).toBe(true);
       expect(matchesSearch('Café Plan', 'cafe')).toBe(true);
       expect(matchesSearch('Cafe Plan', 'café')).toBe(true);
     });
 
-    it('P18.95-T6 AC-4 catalog search and empty result: the line names what was searched for, trimmed', () => {
+    it('P18.7-T6 AC-4 catalog search and empty result: the line names what was searched for, trimmed', () => {
       expect(OWN_COPY.noSearchMatch('  zzz ')).toBe('No products match “zzz”.');
       expect([OWN_COPY.searchName, OWN_COPY.searchPlaceholder]).toEqual(['Search products by name', 'Search products…']);
     });
@@ -137,7 +137,7 @@ describe('sales tools: the words and the addresses (Phase 14)', () => {
         .toBe('Retirement income · Conventional');
     });
 
-    it('P14-T7 AC-5, P18.97-T3 AC-2 prints a stored proportion as the percentage, with the places it was stored with (OD-135)', () => {
+    it('P14-T7 AC-5, P18.9-T3 AC-2 prints a stored proportion as the percentage, with the places it was stored with (OD-135)', () => {
       expect([formatRate(0.4), formatRate(0.125), formatRate(0.025), formatRate(0)]).toEqual(['40%', '12,5%', '2,5%', '0%']);
       // A commission rate is a rule: the places it was stored with and no ,0 (ADR-0174 §3) — the rate read is the rate stored.
       expect(formatRate(0.0725)).toBe('7,25%');

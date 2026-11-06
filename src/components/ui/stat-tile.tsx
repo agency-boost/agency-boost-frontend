@@ -64,7 +64,7 @@ export function StatTile({
       <div className="flex items-start gap-2">
         <p className="min-w-0 flex-1 text-sm leading-snug text-muted">{label}</p>
         {badge !== undefined && (
-          <span className="shrink-0 rounded-pill bg-navy/[0.08] px-2 text-sm font-semibold text-navy">{badge}</span>
+          <span className="shrink-0 rounded-pill bg-secondary/[0.08] px-2 text-sm font-semibold text-navy">{badge}</span>
         )}
         {href !== undefined && <LineIcon name="chevronRight" className="-mr-1 h-4 w-4 text-signal-grey" />}
       </div>
@@ -79,7 +79,7 @@ export function StatTile({
       </div>
       {bar !== undefined && bar !== null && (
         <div className="mb-1 mt-0.5 h-1.5 overflow-hidden rounded-sm bg-base" aria-hidden="true">
-          <div className="h-full rounded-sm bg-navy" style={{ width: `${Math.min(100, Math.max(0, bar))}%` }} />
+          <div className="h-full rounded-sm bg-secondary" style={{ width: `${Math.min(100, Math.max(0, bar))}%` }} />
         </div>
       )}
       {sub !== undefined && <p className="text-sm text-signal-grey">{sub}</p>}
@@ -111,7 +111,7 @@ function Ring({ percent, label, said }: { percent: number | null; label: string;
       {filled > 0 && (
         <circle
           cx="19" cy="19" r={r} fill="none" strokeWidth="4" strokeLinecap="round"
-          strokeDasharray={`${filled} ${length}`} transform="rotate(-90 19 19)" className="stroke-amber"
+          strokeDasharray={`${filled} ${length}`} transform="rotate(-90 19 19)" className="stroke-primary"
         />
       )}
       <text x="19" y="23" textAnchor="middle" className="fill-ink text-[0.75rem] font-semibold">{label}</text>

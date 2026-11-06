@@ -65,7 +65,7 @@ describe('MultiChoiceGroup', () => {
 
   it('a chosen chip is navy with white text, an open one navy on the warm ground — the words the same', () => {
     render(<Harness initial={['leadership']} />);
-    expect(chip('Building a team / leadership')).toHaveClass('bg-navy', 'text-white');
+    expect(chip('Building a team / leadership')).toHaveClass('bg-secondary', 'text-secondary-contrast');
     expect(chip('Full career change')).toHaveClass('bg-base', 'text-navy');
   });
 

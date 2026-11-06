@@ -1,7 +1,8 @@
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { makeMe, renderWithSession, routeParams, stubFetch } from '@test/harness';
+import { atWidth, makeMe, renderWithSession, routeParams, stubFetch } from '@test/harness';
+import { smallTargets } from '@test/touch-audit';
 import TrainingModulePage from './page';
 
 vi.mock('next/navigation', () => ({
@@ -199,5 +200,23 @@ describe('a training module’s page (P5-T1)', () => {
     expect(screen.getByRole('heading', { name: 'Videos' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Links' })).toBeInTheDocument();
     expect(screen.queryByText(/Arrives in phase 5/)).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * **No target under 44px on a phone or a tablet** (P19.2-T3 AC-4; UI-142: text links 17px tall, *Tampilkan yang
+ * diarsipkan* 13px, tab rows 38px, ⠿ 20px), inside the field shell's frame the Owner's pages wear (ADR-0197), which
+ * `data-surface` stands for here.
+ */
+describe('P19.2-T3 AC-4 the training module’s targets (UI-142)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it.each([375, 768])('P19.2-T3 AC-4 at %ipx finds no target under 44px', async (px) => {
+    atWidth(px);
+    render();
+    const frame = document.body.firstElementChild!;
+    frame.setAttribute('data-surface', 'v1');
+    await screen.findByLabelText('Title');
+    expect(smallTargets(frame, px)).toEqual([]);
   });
 });

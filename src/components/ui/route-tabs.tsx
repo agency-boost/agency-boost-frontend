@@ -18,7 +18,7 @@ export interface RouteTab {
   readonly badge?: ReactNode;
   /**
    * Current on every address beneath its own as well — the catalog's tab over a product's drawer,
-   * `/product-catalog/{code}` (P18.8-T12). A prefix is not a parent: `/product-catalogs` is not beneath it.
+   * `/product-catalog/{code}` (P18.5-T12). A prefix is not a parent: `/product-catalogs` is not beneath it.
    */
   readonly nested?: boolean;
 }
@@ -46,17 +46,25 @@ export function RouteTabs({
   label,
   tabs,
   className,
+  activeHref,
 }: {
   /** Names the group for a screen reader — *"User Management"*, *"Activity management"*. */
   label: string;
   tabs: readonly RouteTab[];
   className?: string;
+  /**
+   * **Tabs in the query, on one page** (`/admin/tenants/[kpmId]?tab=…`, P19.4-T3; the route registry fixes them so): the
+   * href of the tab the page is on. Absent, the current tab is the address's path, as every other strip reads it.
+   */
+  activeHref?: string;
 }) {
   const pathname = usePathname();
-  const row = useTabRow<HTMLElement>(pathname);
+  const row = useTabRow<HTMLElement>(activeHref ?? pathname);
   // 44px tall below 1024px, its words at the foot as before (UI V1, UI-010).
   const TAB = cn('-mb-px border-b-2 px-0.5 pb-3 text-md font-semibold', TAB_TOUCH, TAB_PHONE);
-  const current = (tab: RouteTab) => pathname === tab.href || (tab.nested === true && pathname.startsWith(`${tab.href}/`));
+  const current = (tab: RouteTab) => (activeHref !== undefined
+    ? tab.href === activeHref
+    : pathname === tab.href || (tab.nested === true && pathname.startsWith(`${tab.href}/`)));
 
   return (
     <nav
@@ -82,7 +90,7 @@ export function RouteTabs({
             aria-current={current(tab) ? 'page' : undefined}
             className={cn(
               TAB,
-              current(tab) ? 'border-amber text-navy' : 'border-transparent text-muted',
+              current(tab) ? 'border-primary text-navy' : 'border-transparent text-muted',
             )}
           >
             <span className="flex items-center gap-1.5">

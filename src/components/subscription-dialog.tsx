@@ -3,18 +3,22 @@
 import { useEffect, useId, useState } from 'react';
 import { Modal } from '@/components/ui/modal';
 import { DateField } from '@/components/ui/date-field';
-import { Button, ErrorBanner, Field, Switch, TextInput } from '@/components/ui/field';
+import { Button, ErrorBanner, Field, Select, Switch, TextInput } from '@/components/ui/field';
+import { ChoiceField } from '@/components/ui/rows-and-sheets';
 import type { Language } from '@/i18n/language';
 import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
 import { adminOfficesMessages } from '@/i18n/messages/admin-offices';
-import { updateSubscription, type TenantRow } from '@/lib/admin';
+import { updateSubscription, type SubscriptionPlan, type TenantRow } from '@/lib/admin';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
-import { costMissingWords, subscriptionCosts } from '@/lib/billing';
+import { costMissingWords, planEnd, planPeriodOf, subscriptionCosts } from '@/lib/billing';
 import { dayInZone, formatCalendarDay, moneyPrefix } from '@/lib/format';
 import { formatRupiah, groupDigits, parseDigits, toMajor, toMinor } from '@/lib/goals';
+import { useMediaQuery } from '@/lib/use-media-query';
 
 /** The five fields, as typed. Money and the limit are text until saved: an empty box is "none". */
 interface Draft {
+  /** *Paket* (ADR-0211 §1): `''` for none. */
+  plan: SubscriptionPlan | '';
   startDate: string;
   endDate: string;
   price: string;
@@ -22,11 +26,12 @@ interface Draft {
   keepActiveAfterEnd: boolean;
 }
 
-type FieldName = 'startDate' | 'endDate' | 'pricePerLeaderMinor' | 'maxLeaders' | 'keepActiveAfterEnd';
+type FieldName = 'plan' | 'startDate' | 'endDate' | 'pricePerLeaderMinor' | 'maxLeaders' | 'keepActiveAfterEnd';
 
 function draftOf(row: TenantRow, language: Language): Draft {
   const s = row.subscription;
   return {
+    plan: s?.plan ?? '',
     startDate: s?.startDate ?? '',
     endDate: s?.endDate ?? '',
     price: s?.pricePerLeaderMinor === null || s?.pricePerLeaderMinor === undefined
@@ -77,7 +82,7 @@ export function SubscriptionDialog({
     setDraft(draftOf(row, language));
     setError(null);
     setFieldError(null);
-    // A change of language leaves an open form as it was typed (P18.98-T2 AC-3): only opening it again resets it.
+    // A change of language leaves an open form as it was typed (P18.10-T2 AC-3): only opening it again resets it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, row]);
 
@@ -100,6 +105,18 @@ export function SubscriptionDialog({
   // The office's today, in its own zone — never the browser's (invariant §9).
   const today = dayInZone(row.timezone, new Date());
   const endPassed = draft.endDate !== '' && draft.endDate < today;
+
+  /**
+   * *Paket* chosen (ADR-0211 §1): it **proposes the end date** — the start plus six or twelve months, less a day, as the
+   * calculator dates a quote — from the start typed, or the office's today when none is. Both dates stay editable.
+   */
+  function choosePlan(plan: SubscriptionPlan | '') {
+    setDraft((d) => {
+      if (plan === '') return { ...d, plan };
+      const startDate = d.startDate || today;
+      return { ...d, plan, startDate, endDate: planEnd(startDate, planPeriodOf(plan)) };
+    });
+  }
 
   function refuse(field: FieldName, message: string) {
     setFieldError({ field, message });
@@ -133,6 +150,7 @@ export function SubscriptionDialog({
         pricePerLeaderMinor: draft.price.trim() === '' ? null : toMinor(parseDigits(draft.price)),
         maxLeaders: max,
         keepActiveAfterEnd: draft.keepActiveAfterEnd,
+        plan: draft.plan === '' ? null : draft.plan,
       });
       onSaved(saved);
     } catch (err) {
@@ -149,6 +167,9 @@ export function SubscriptionDialog({
   }
 
   const errorOf = (field: FieldName) => (fieldError?.field === field ? fieldError.message : undefined);
+  /** **No native select below 1024px** (P19.2-T2 AC-4; UI-134: *choice rows for 2–5 options*): *Paket*'s three. */
+  const belowLaptop = useMediaQuery(['phone', 'tablet']);
+  const planError = errorOf('plan');
 
   return (
     <Modal
@@ -167,6 +188,35 @@ export function SubscriptionDialog({
       <form id={`${id}-form`} onSubmit={save} className="flex flex-col gap-4" noValidate>
         {error && <ErrorBanner {...error} />}
 
+        {belowLaptop ? (
+          <ChoiceField<SubscriptionPlan | ''>
+            id={`${id}-plan`}
+            label={w.plan}
+            hint={w.planHint}
+            error={planError}
+            value={draft.plan}
+            onChange={choosePlan}
+            disabled={busy}
+            options={[
+              { key: '', label: w.planNone },
+              { key: 'six_months', label: w.planSixMonths },
+              { key: 'annual', label: w.planAnnual },
+            ]}
+          />
+        ) : (
+          <Field label={w.plan} htmlFor={`${id}-plan`} hint={w.planHint} error={planError}>
+            <Select
+              id={`${id}-plan`}
+              value={draft.plan}
+              onChange={(e) => choosePlan(e.target.value as SubscriptionPlan | '')}
+            >
+              <option value="">{w.planNone}</option>
+              <option value="six_months">{w.planSixMonths}</option>
+              <option value="annual">{w.planAnnual}</option>
+            </Select>
+          </Field>
+        )}
+
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label={w.startDate} htmlFor={`${id}-start`} error={errorOf('startDate')}>
             <DateField
@@ -174,7 +224,7 @@ export function SubscriptionDialog({
               value={draft.startDate}
               invalid={Boolean(errorOf('startDate'))}
               onChange={(v) => set('startDate', v)}
-              className="w-full"
+              className="w-full max-lg:min-h-11"
             />
           </Field>
           <Field
@@ -188,7 +238,7 @@ export function SubscriptionDialog({
               value={draft.endDate}
               invalid={Boolean(errorOf('endDate'))}
               onChange={(v) => set('endDate', v)}
-              className="w-full"
+              className="w-full max-lg:min-h-11"
             />
           </Field>
         </div>
@@ -252,6 +302,9 @@ export function SubscriptionDialog({
           label={w.keepActive}
           checked={draft.keepActiveAfterEnd}
           onChange={(next) => set('keepActiveAfterEnd', next)}
+          // 44px below 1024px (P19.2-T2 AC-5; UI-135).
+          phoneTarget
+          tabletTarget
         />
 
         {/* Said as the values change, so a reader who cannot see the box still hears it. */}

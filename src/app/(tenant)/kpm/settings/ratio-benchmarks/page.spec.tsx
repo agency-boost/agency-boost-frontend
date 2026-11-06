@@ -1,7 +1,8 @@
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { makeMe, renderWithSession, stubFetch } from '@test/harness';
+import { atWidth, makeMe, renderWithSession, stubFetch, wears } from '@test/harness';
+import { smallTargets } from '@test/touch-audit';
 import { TenantConfigProvider } from '@/lib/tenant-config-cache';
 import RatioBenchmarksPage from './page';
 
@@ -138,7 +139,7 @@ describe('the office ratio benchmarks (P4-T2)', () => {
     expect(screen.getByText(/On track within/)).toBeInTheDocument();
   });
 
-  it('writes each benchmark in its own unit, as typed — 15%, never 15,0% — not as the stored number (P4-T25, P18.97-T3 AC-2)', async () => {
+  it('writes each benchmark in its own unit, as typed — 15%, never 15,0% — not as the stored number (P4-T25, P18.9-T3 AC-2)', async () => {
     /*
      * Every card printed the stored value, so a success rate read `0.15` where the registry
      * and the prototype both say `15.0%`. The unit comes from the API because it cannot be
@@ -148,7 +149,7 @@ describe('the office ratio benchmarks (P4-T2)', () => {
     await screen.findByRole('heading', { name: 'Selling success rate' });
     expect(screen.getByText('15%')).toBeInTheDocument();
     expect(screen.getByText('±30 points')).toBeInTheDocument();
-    // The figures in the spec's language since P18.98-T4 wired them (the harness's English is a chosen English).
+    // The figures in the spec's language since P18.10-T4 wired them (the harness's English is a chosen English).
     expect(screen.getByText('0.50')).toBeInTheDocument();
     expect(screen.queryByText('0,15')).not.toBeInTheDocument();
     expect(screen.queryByText('0.15')).not.toBeInTheDocument();
@@ -178,7 +179,7 @@ describe('the office ratio benchmarks (P4-T2)', () => {
       .toMatchObject({ benchmark: 0.5, displayUnit: 'percent' });
   });
 
-  it('P18.95-T1 AC-3 takes a benchmark typed with a comma, as the card writes it, and shows it back with one', async () => {
+  it('P18.7-T1 AC-3 takes a benchmark typed with a comma, as the card writes it, and shows it back with one', async () => {
     const { calls } = render();
     await userEvent.click((await screen.findAllByRole('button', { name: 'Edit' }))[0]);
     const field = screen.getByLabelText('Benchmark');
@@ -188,7 +189,7 @@ describe('the office ratio benchmarks (P4-T2)', () => {
     await userEvent.clear(field);
     await userEvent.type(field, '17,5');
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
-    // Written back in the spec's language since P18.98-T4: a point in English, the comma `indonesian.spec.tsx`'s.
+    // Written back in the spec's language since P18.10-T4: a point in English, the comma `indonesian.spec.tsx`'s.
     expect(await screen.findByText('17.5%')).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
@@ -622,5 +623,79 @@ describe('the office ratio benchmarks (P4-T2)', () => {
         'Percentage points either side of an even split: each side between 35% and 65%.',
       );
     });
+  });
+});
+
+/**
+ * **A ratio on a phone: one line, and its card in its sheet; the repeated sentence said once** (P19.2-T3 AC-3; UI-141:
+ * *the 30-word "Disediakan dengan standar perusahaan Anda. Semuanya boleh Anda ubah …" repeated on every ratio card*,
+ * 4.1 screens at 375).
+ */
+describe('P19.2-T3 AC-3 the ratio benchmarks on a phone (UI-141)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const STANDARD = /^Provisioned with your company’s standard/;
+
+  it('P19.2-T3 AC-3 at 375px draws each ratio as a 56px row — its name and its benchmark — and the sentence once, behind ⓘ by the title', async () => {
+    atWidth(375);
+    render();
+    const row = (await screen.findByRole('button', { name: 'Selling success rate' })).closest('li')!;
+    expect(wears(row, 375).split(' ')).toContain('min-h-14');
+    expect(row).toHaveTextContent('On track at or above 15%');
+    expect(document.querySelectorAll('[data-list-row]')).toHaveLength(3);
+    // Never on a row; once, as an ⓘ (its bubble is the only element holding it).
+    expect(screen.queryAllByText(STANDARD).filter((el) => el.tagName === 'P')).toHaveLength(0);
+    const tip = screen.getByRole('button', { name: 'About the standard ratios' });
+    await userEvent.click(tip);
+    expect(screen.getByRole('tooltip', { hidden: true })).toHaveTextContent(STANDARD);
+    // No editor on the page until a ratio is opened.
+    expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
+    expect(screen.queryByRole('combobox')).toBeNull();
+  });
+
+  it('P19.2-T3 AC-3 at 375px opens the ratio’s sheet, where its card’s edits still stage', async () => {
+    atWidth(375);
+    render();
+    await userEvent.click(await screen.findByRole('button', { name: 'Referral rate' }));
+    const sheet = await screen.findByRole('dialog', { name: 'Referral rate' });
+    expect(within(sheet).getByText(/^Your office’s own/)).toBeInTheDocument();
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Edit' }));
+    const benchmark = within(sheet).getByLabelText('Benchmark');
+    await userEvent.clear(benchmark);
+    await userEvent.type(benchmark, '0.6');
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Save' }));
+    expect(within(sheet).getByText('Edited — not saved yet')).toBeInTheDocument();
+  });
+
+  it.each([768, 1280])('P19.2-T3 AC-3 at %ipx keeps a card per ratio, its sentence on it, and no ⓘ by the title', async (px) => {
+    atWidth(px);
+    render();
+    await screen.findByText('Selling success rate');
+    expect(document.querySelectorAll('[data-list-row]')).toHaveLength(0);
+    expect(screen.getAllByText(STANDARD).filter((el) => el.tagName === 'P')).toHaveLength(2);
+    expect(screen.queryByRole('button', { name: 'About the standard ratios' })).toBeNull();
+  });
+});
+
+describe('P19.2-T3 AC-4 the ratio benchmarks’ targets (UI-142)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it.each([375, 768])('P19.2-T3 AC-4 at %ipx finds no target under 44px, the archived shown and a ratio staged', async (px) => {
+    atWidth(px);
+    stubFetch({
+      '/kpm/settings/ratio-benchmarks': { body: RATIOS },
+      '/kpm/settings/activity-types': { body: TAXONOMY },
+      '/kpm/config': { body: { activity: TAXONOMY, ratios: RATIOS, leadPipelines: [], version: 1 } },
+      '/kpm/org-levels': { body: LADDER },
+      '/kpm/settings/publish-state': {
+        body: { publishedVersion: 1, workingVersion: 1, hasUnpublishedChanges: false, publishedAt: null },
+      },
+    });
+    const { container } = renderWithSession(
+      <div data-surface="v1"><TenantConfigProvider><RatioBenchmarksPage /></TenantConfigProvider></div>,
+      { me: OWNER },
+    );
+    await screen.findByText('Selling success rate');
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Show archived' }));
+    expect(smallTargets(container, px)).toEqual([]);
   });
 });

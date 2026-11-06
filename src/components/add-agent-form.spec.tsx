@@ -19,10 +19,10 @@ const open = (props: Partial<Parameters<typeof AddAgentDialog>[0]> = {}) => {
   return { onAdded, onClose };
 };
 
-describe('+ Add agent, the one form (P18.96-T3 AC-1)', () => {
+describe('+ Add agent, the one form (P18.8-T3 AC-1)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('P18.96-T3 AC-1 asks for the agent code, the name, the WhatsApp number and the join date — today, and not after it', () => {
+  it('P18.8-T3 AC-1 asks for the agent code, the name, the WhatsApp number and the join date — today, and not after it', () => {
     stubFetch({});
     open();
     const dialog = screen.getByRole('dialog', { name: 'Add agent' });
@@ -34,7 +34,7 @@ describe('+ Add agent, the one form (P18.96-T3 AC-1)', () => {
     expect(date).toHaveAttribute('max', TODAY);
   });
 
-  it('P18.96-T3 AC-1 holds Add agent until every field is given, and says which are missing', async () => {
+  it('P18.8-T3 AC-1 holds Add agent until every field is given, and says which are missing', async () => {
     stubFetch({});
     open();
     expect(screen.getByRole('button', { name: 'Add & send invite' })).toBeDisabled();
@@ -44,7 +44,7 @@ describe('+ Add agent, the one form (P18.96-T3 AC-1)', () => {
     expect(screen.getByRole('button', { name: 'Add & send invite' })).toBeEnabled();
   });
 
-  it('P18.96-T3 AC-1 says a code with letters, a number WhatsApp cannot open and a later day under their own fields', async () => {
+  it('P18.8-T3 AC-1 says a code with letters, a number WhatsApp cannot open and a later day under their own fields', async () => {
     stubFetch({});
     open();
     await fill({ code: 'PRU-1', phone: '123' });
@@ -56,7 +56,7 @@ describe('+ Add agent, the one form (P18.96-T3 AC-1)', () => {
     expect(screen.getByRole('button', { name: 'Add & send invite' })).toBeDisabled();
   });
 
-  it('P18.96-T3 AC-2 an invite turns the dialog into its share step: WhatsApp with the message, the link to copy, a QR', async () => {
+  it('P18.8-T3 AC-2 an invite turns the dialog into its share step: WhatsApp with the message, the link to copy, a QR', async () => {
     const { calls } = stubFetch({ '/join/my-code': { body: { code: 'ME01', url: 'https://app.test/join?code=ME01' } }, 'POST /new-hires/agents': { body: { outcome: 'invited', ...shared({ leader: { membershipId: 'mem-me', name: 'Me' } }) } } });
     const { onAdded, onClose } = open();
     await fill();
@@ -80,7 +80,7 @@ describe('+ Add agent, the one form (P18.96-T3 AC-1)', () => {
     expect(onClose).toHaveBeenCalled();
   });
 
-  it('P18.96-T3 AC-3 a linked account and a transfer requested close the dialog, for the screen to say so', async () => {
+  it('P18.8-T3 AC-3 a linked account and a transfer requested close the dialog, for the screen to say so', async () => {
     stubFetch({
       'POST /new-hires/agents': [
         { body: { outcome: 'linked', member: { membershipId: 'mem-putri', fullName: 'Putri Anggraini' } } },
@@ -98,7 +98,7 @@ describe('+ Add agent, the one form (P18.96-T3 AC-1)', () => {
     expect(onClose).toHaveBeenCalledTimes(2);
   });
 
-  it('P18.96-T3 AC-2 a refusal stays in the dialog, in the server’s words', async () => {
+  it('P18.8-T3 AC-2 a refusal stays in the dialog, in the server’s words', async () => {
     stubFetch({
       'POST /new-hires/agents': {
         status: 409,
@@ -113,7 +113,7 @@ describe('+ Add agent, the one form (P18.96-T3 AC-1)', () => {
     expect(screen.getByRole('dialog', { name: 'Add agent' })).toBeInTheDocument();
   });
 
-  it('P18.96-T3 AC-1 for the Owner or an Admin on somebody’s unit: titled with it, and sends whose unit', async () => {
+  it('P18.8-T3 AC-1 for the Owner or an Admin on somebody’s unit: titled with it, and sends whose unit', async () => {
     const { calls } = stubFetch({ '/join/my-code': { body: { code: 'ME01', url: 'https://app.test/join?code=ME01' } }, 'POST /new-hires/agents': { body: { outcome: 'invited', ...shared() } } });
     open({ leader: { membershipId: 'mem-sari', name: 'Sari Puspita' } });
     expect(screen.getByRole('dialog', { name: 'Add agent to Sari Puspita’s unit' })).toBeInTheDocument();
@@ -123,7 +123,7 @@ describe('+ Add agent, the one form (P18.96-T3 AC-1)', () => {
     expect(JSON.parse(post.init.body as string)).toMatchObject({ leaderMembershipId: 'mem-sari' });
   });
 
-  it('P18.96-T3 AC-2 an invite for an existing account says the link asks them to sign in, and a number WhatsApp cannot open offers no button', async () => {
+  it('P18.8-T3 AC-2 an invite for an existing account says the link asks them to sign in, and a number WhatsApp cannot open offers no button', async () => {
     stubFetch({ 'POST /new-hires/agents': { body: { outcome: 'invited', ...shared({ existingAccount: true, phone: '12345678' }) } } });
     open();
     await fill({ phone: '0812-8077-7001' });

@@ -41,7 +41,7 @@ export function actionDay(day: string, language: Language, today = dayInZone(OFF
  * - **`invalid`** (UI-060): a row *Finalkan* refused for its missing date — tinted red, the date's prompt
  *   (`emptyText`, *Pilih tanggal*) in red with a red underline, the picker `aria-invalid`.
  * - **`editor`** stands in the text's place where the words are typed — the Coaching Session's *Lainnya* — a box that
- *   wraps as the words do, never cut; `text` still names the row's controls. *(Both added by Phase 18.99 T8.)*
+ *   wraps as the words do, never cut; `text` still names the row's controls. *(Both added by Phase 18.11 T8.)*
  */
 export function ActionRow({
   date,
@@ -138,7 +138,7 @@ function Control({ control, text }: { control: ActionRowControl; text: string })
             disabled={control.disabled}
             onChange={(e) => control.onChange(e.target.checked)}
             aria-label={t.action.done({ text })}
-            className="h-5 w-5 cursor-pointer accent-navy"
+            className="h-5 w-5 cursor-pointer accent-secondary"
           />
         </label>
       );

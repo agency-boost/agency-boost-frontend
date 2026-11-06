@@ -44,12 +44,12 @@ const SIX_WORDS = /\boffice\b|\bKPM\b|reports to|tagged to|untagged|unassigned/i
 const ENGLISH = /\b(Missing|Complete|Uploaded|needs confirmation|Optional|Not uploaded yet|updated|View PDF|Replace|Upload PDF|is (complete|incomplete)|needs checking|Confirm this PDF)\b/;
 
 /**
- * **P18.98-T4, the recruitment pitch in ID mode** — *Settings › Recruitment pitch* and the agents' *Pitch Materials*,
+ * **P18.10-T4, the recruitment pitch in ID mode** — *Settings › Recruitment pitch* and the agents' *Pitch Materials*,
  * one component: the cards' and the banner's words the approved glossary's Indonesian, *Recruitment pitch* and
  * *Recruitment Pitch* kept English (§A), the server's titles and labels and the office's file names as typed, a file's
  * size and day in Indonesian figures, and none of OD-39's six words. In English: `page.spec.tsx`.
  */
-describe('P18.98-T4 the recruitment pitch in Indonesian', () => {
+describe('P18.10-T4 the recruitment pitch in Indonesian', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it('AC-2 says the office’s page in Indonesian, its figures Indonesian and the server’s words as served', async () => {
@@ -100,7 +100,8 @@ describe('P18.98-T4 the recruitment pitch in Indonesian', () => {
 
     expect(await within(card('FAQ')).findByText('“besar.pdf” berukuran 26,0 MB. Ukuran PDF maksimal 25 MB.')).toBeInTheDocument();
     await userEvent.upload(picker, new File(['x'], 'scan.pdf', { type: 'image/png' }));
-    expect(await within(card('FAQ')).findByText('“scan.pdf” bukan PDF. Hanya PDF yang dapat diunggah di sini.')).toBeInTheDocument();
+    // P19.6-T2 (ADR-0217 §1): a page is accepted too.
+    expect(await within(card('FAQ')).findByText('“scan.pdf” bukan PDF atau halaman HTML. Hanya PDF atau halaman HTML yang dapat diunggah di sini.')).toBeInTheDocument();
   });
 
   it('AC-1 says a stale tick in Indonesian', async () => {
@@ -130,10 +131,10 @@ describe('P18.98-T4 the recruitment pitch in Indonesian', () => {
 });
 
 /**
- * **P18.98-T3's rule on the pitch, now that P18.98-T4 wired it**: under the app's own provider a reader who chose
+ * **P18.10-T3's rule on the pitch, now that P18.10-T4 wired it**: under the app's own provider a reader who chose
  * nothing, while the switch is not live, reads English words and Indonesian figures — the cards as they were.
  */
-describe('P18.98-T4 the pitch’s figures follow the reader’s choice', () => {
+describe('P18.10-T4 the pitch’s figures follow the reader’s choice', () => {
   afterEach(() => { vi.unstubAllGlobals(); resetLanguage(); });
 
   it('not live and unchosen: English words, the size and the day Indonesian', async () => {

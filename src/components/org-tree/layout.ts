@@ -1,3 +1,4 @@
+import { matchesAgent } from '@/lib/agent-search';
 import type { OrgTree, OrgTreeNode } from '@/lib/org';
 
 /**
@@ -178,7 +179,7 @@ export function defaultCollapsed(tree: OrgTree): Set<string> {
 }
 
 /**
- * **What is open when the phone's list first draws** (P18.95-T8 AC-3): the reader's own line, one level
+ * **What is open when the phone's list first draws** (P18.7-T8 AC-3): the reader's own line, one level
  * down — their direct reports shown, every unit below those closed — and every line above the reader,
  * so the reader is in view however deep they stand (an Admin's office-wide tree). With no reader in the
  * tree, the roots open one level instead. Nothing is measured, as the canvas measures nothing.
@@ -194,4 +195,37 @@ export function defaultOpenInList(tree: OrgTree): Set<string> {
     at = at.leaderId ? byId.get(at.leaderId) : undefined;
   }
   return open;
+}
+
+/**
+ * **What the Org tree's search finds** (OWN UI-026, ADR-0205; OWN case 8, *"Lukman"*): every person whose name, preferred
+ * name or agent code holds `query` — the same match as Group Tree's *Cari agen* (`matchesAgent`, D-05) — and every
+ * leader above them, whose units are opened so the path down to each is in view. `null` while nothing is typed.
+ *
+ * Unlike Group Tree's filter, nobody is hidden: the office's tree keeps its whole shape, the path opens and the person is
+ * highlighted. Read from the tree the page already holds, so a match deep in a closed unit is found too.
+ */
+export function searchTree(tree: OrgTree, query: string): { matches: Set<string>; path: Set<string> } | null {
+  if (!query.trim()) return null;
+  const byId = new Map(tree.nodes.map((n) => [n.membershipId, n]));
+  const matches = new Set<string>();
+  const path = new Set<string>();
+  for (const node of tree.nodes) {
+    if (!matchesAgent(query, node)) continue;
+    matches.add(node.membershipId);
+    const seen = new Set<string>();
+    let up = node.leaderId ? byId.get(node.leaderId) : undefined;
+    // A cycle is prevented server-side; a walk that could loop on bad data would hang the tab.
+    while (up && !seen.has(up.membershipId)) {
+      seen.add(up.membershipId);
+      path.add(up.membershipId);
+      up = up.leaderId ? byId.get(up.leaderId) : undefined;
+    }
+  }
+  return { matches, path };
+}
+
+/** ***Buka semua*** (OWN UI-026): every unit open — each leader's — on the canvas and in the list alike. */
+export function everyUnit(tree: OrgTree): Set<string> {
+  return new Set(tree.nodes.filter((n) => n.isLeader).map((n) => n.membershipId));
 }

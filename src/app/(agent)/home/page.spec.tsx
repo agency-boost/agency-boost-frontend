@@ -121,7 +121,7 @@ describe('UI-100 Home', () => {
     const bars = chart.querySelectorAll('.grid-cols-7')[0].children;
     expect([...bars].map((b) => b.textContent)).toEqual(['0', '0', '3', '6', '4', '5', '0']);
     expect(bars[6]).toHaveAttribute('data-today', 'true');
-    expect(bars[6].className).toContain('text-amber-ink');
+    expect(bars[6].className).toContain('text-primary-ink');
     const days = chart.querySelectorAll('.grid-cols-7')[1].children;
     expect([...days].map((d) => d.textContent)).toEqual(['Sat', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Today']);
     // A screen reader hears each day and its count.

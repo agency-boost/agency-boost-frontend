@@ -5,12 +5,12 @@ import type { ReactNode } from 'react';
 import { LineIcon } from '@/components/ui/line-icon';
 import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
 import { calendarMessages } from '@/i18n/messages/calendar';
-import { itemsOnDay, tripDay } from '@/lib/calendar-layout';
+import { agendaBands, itemsOnDay, tripDay } from '@/lib/calendar-layout';
 import {
   entryName, isBusy, isHiddenTask, titleOf, type CalendarEntry, type CalendarItem, type CalendarJoinedItem,
   type CalendarRead, type CalendarTask,
 } from '@/lib/calendar';
-import { formatTimeSpan, formatWeekdayDay } from '@/lib/format';
+import { formatTimeSpan, formatWeekdayDay, formatWeekdayRange } from '@/lib/format';
 import { cn } from '@/lib/cn';
 import { Avatar, ENTRY_TONE } from './calendar-parts';
 import { EVENT_TONE, PersonTaskGroup, SourceIcon, TaskChecklist, type TaskPerson } from './calendar-tasks';
@@ -33,7 +33,7 @@ const keyOf = (line: AgendaLine, i: number) => {
 };
 
 /**
- * **The Agenda** (P18.95-T8 AC-1; UI V1, 2026-10-30, UI-104 points 2, 8, 9 and 10). The owner likes it as it was — a
+ * **The Agenda** (P18.7-T8 AC-1; UI V1, 2026-10-30, UI-104 points 2, 8, 9 and 10). The owner likes it as it was — a
  * bordered list, grey day bands, cards with a 3px coloured left border, the time, the title and the type — and keeps
  * it; what UI V1 adds:
  *
@@ -46,8 +46,11 @@ const keyOf = (line: AgendaLine, i: number) => {
  *   tasks grouped per person with one WhatsApp to them, no checkbox; a person who hides their details shows *Sibuk*
  *   at the time and their tasks as a count.
  *
- * A day with nothing on it says so. Its region is named as before, *Calendar, {range}*, and takes the focus after a
- * delete (m7).
+ * A day with nothing on it says so, and **consecutive empty days are one band** (P19.1-T3 AC-7, AC-9; UI-119, UI-144):
+ * *Senin, 2 Nov – Sabtu, 7 Nov* and *Tidak ada event*, today's band always its own — so an empty week draws two bands,
+ * not seven. *Empty* is everybody's: a compared person's things on a day keep it a day. Today's band is today's shade and
+ * ink (UI-154), at every size. Its region is named as before, *Calendar, {range}*, and takes the focus after a delete
+ * (m7).
  */
 export function AgendaPane({
   read,
@@ -65,10 +68,43 @@ export function AgendaPane({
   return (
     <div className={cn('overflow-hidden bg-card', className)}>
       <div role="region" aria-label={regionLabel} tabIndex={-1} className="bg-card">
-        {read.days.map(({ date }) => (
-          <AgendaDay key={date} read={read} others={others} date={date} onOpen={onOpen} />
+        {agendaBands(read.days.map((d) => d.date), read.today, (date) => linesOn(read, others, date).empty).map((band) => (
+          band.from === band.to
+            ? <AgendaDay key={band.from} read={read} others={others} date={band.from} onOpen={onOpen} />
+            : <EmptyDays key={band.from} from={band.from} to={band.to} />
         ))}
       </div>
+    </div>
+  );
+}
+
+/** What a day holds, everybody's: its trips, its timed things, the reader's tasks and each compared person's. */
+function linesOn(read: CalendarRead, others: readonly AgendaPerson[], date: string) {
+  const all: AgendaLine[] = [
+    ...itemsOnDay(read.entries, date).map((item): AgendaLine => ({ kind: 'entry', item, who: null })),
+    ...itemsOnDay(read.events, date).map((item): AgendaLine => ({ kind: 'event', item, who: null })),
+    ...others.flatMap(({ person, read: theirs }) => (theirs ? [
+      ...itemsOnDay(theirs.entries, date).map((item): AgendaLine => ({ kind: 'entry', item, who: person })),
+      ...itemsOnDay(theirs.events, date).map((item): AgendaLine => ({ kind: 'event', item, who: person })),
+    ] : [])),
+  ];
+  const trips = all.filter((line) => line.item.allDay);
+  const timed = all.filter((line) => !line.item.allDay).sort((a, b) => startOf(a).localeCompare(startOf(b)));
+  const mine = read.tasks.filter((task): task is CalendarTask => !isHiddenTask(task) && task.date === date);
+  const theirs = others
+    .map(({ person, read: r }) => ({ person, tasks: (r?.tasks ?? []).filter((task) => task.date === date) }))
+    .filter((o) => o.tasks.length > 0);
+  return { trips, timed, mine, theirs, empty: trips.length + timed.length + mine.length + theirs.length === 0 };
+}
+
+/** A run of days with nothing on them (UI-119): one band, *Senin, 2 Nov – Sabtu, 7 Nov*, and *Tidak ada event*. */
+function EmptyDays({ from, to }: { from: string; to: string }) {
+  const t = useMessages(calendarMessages);
+  const language = useFigureLanguage();
+  return (
+    <div data-day={from} data-days={`${from}/${to}`} className="border-b border-hairline last:border-b-0">
+      <h2 className="bg-base px-3.5 py-2 text-sm font-bold text-navy">{formatWeekdayRange(from, to, language)}</h2>
+      <p className="px-3.5 py-2.5 text-sm text-muted">{t.noEvents}</p>
     </div>
   );
 }
@@ -86,29 +122,14 @@ export function AgendaDay({
   const language = useFigureLanguage();
   const today = date === read.today;
   const heading = `agenda-${read.subject.membershipId}-${date}`;
-
-  const all: AgendaLine[] = [
-    ...itemsOnDay(read.entries, date).map((item): AgendaLine => ({ kind: 'entry', item, who: null })),
-    ...itemsOnDay(read.events, date).map((item): AgendaLine => ({ kind: 'event', item, who: null })),
-    ...others.flatMap(({ person, read: theirs }) => (theirs ? [
-      ...itemsOnDay(theirs.entries, date).map((item): AgendaLine => ({ kind: 'entry', item, who: person })),
-      ...itemsOnDay(theirs.events, date).map((item): AgendaLine => ({ kind: 'event', item, who: person })),
-    ] : [])),
-  ];
-  const trips = all.filter((line) => line.item.allDay);
-  const timed = all.filter((line) => !line.item.allDay).sort((a, b) => startOf(a).localeCompare(startOf(b)));
-  const mine = read.tasks.filter((task): task is CalendarTask => !isHiddenTask(task) && task.date === date);
-  const theirs = others
-    .map(({ person, read: r }) => ({ person, tasks: (r?.tasks ?? []).filter((task) => task.date === date) }))
-    .filter((o) => o.tasks.length > 0);
-  const empty = trips.length + timed.length + mine.length + theirs.length === 0;
+  const { trips, timed, mine, theirs, empty } = linesOn(read, others, date);
 
   return (
     <div data-day={date} className="border-b border-hairline last:border-b-0">
       <h2
         id={heading}
         aria-current={today ? 'date' : undefined}
-        className={cn('px-3.5 py-2 text-sm', today ? 'bg-amber/[0.08] font-bold text-amber-ink' : 'bg-base font-bold text-navy')}
+        className={cn('px-3.5 py-2 text-sm', today ? 'bg-today font-bold text-today-ink' : 'bg-base font-bold text-navy')}
       >
         {formatWeekdayDay(date, language)}
         {today && <> · {t.today}</>}

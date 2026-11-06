@@ -44,7 +44,7 @@ const tile = (label: string) => screen.getByText(label).closest('li') as HTMLEle
 const sent = (calls: { url: string; init: RequestInit }[], fragment: string, method: string) =>
   calls.filter((c) => c.url.includes(fragment) && (c.init.method ?? 'GET') === method);
 
-describe('/training/[categoryCode]/[moduleCode], a module’s page (P18.5-T1)', () => {
+describe('/training/[categoryCode]/[moduleCode], a module’s page (P18.2-T1)', () => {
   beforeEach(() => {
     nav.replace.mockReset();
     nav.push.mockReset();
@@ -65,7 +65,7 @@ describe('/training/[categoryCode]/[moduleCode], a module’s page (P18.5-T1)', 
       expect(screen.queryByRole('navigation', { name: 'Training' })).not.toBeInTheDocument();
     });
 
-    it('P18.5-T1 AC-5, P18.95-T9 AC-2 links back to the category’s list by that page’s title, Back to Training Modules', async () => {
+    it('P18.2-T1 AC-5, P18.7-T9 AC-2 links back to the category’s list by that page’s title, Back to Training Modules', async () => {
       show();
       await ready();
       const back = screen.getByRole('link', { name: 'Back to Training Modules' });
@@ -98,7 +98,7 @@ describe('/training/[categoryCode]/[moduleCode], a module’s page (P18.5-T1)', 
       expect(screen.queryByText('Closing Techniques That Work.pdf')).not.toBeInTheDocument();
       // The accent's button, full width below 1024px and at the row's end from 1024px; navy words on it (I-542).
       const button = within(file).getByRole('button', { name: /^Open File/ });
-      expect(wears(button, 375).split(' ')).toEqual(expect.arrayContaining(['w-full', 'h-[52px]', 'bg-amber', 'text-navy']));
+      expect(wears(button, 375).split(' ')).toEqual(expect.arrayContaining(['w-full', 'h-[52px]', 'bg-primary', 'text-primary-contrast']));
       expect(wears(button, 1280).split(' ')).toEqual(expect.arrayContaining(['w-auto', 'h-12']));
     });
 
@@ -132,14 +132,14 @@ describe('/training/[categoryCode]/[moduleCode], a module’s page (P18.5-T1)', 
       expect(within(tile('Closing in practice')).queryByText('Opened')).not.toBeInTheDocument();
     });
 
-    it('P18.5-T1 AC-5 says “Nothing to open in this module yet.” for a module holding nothing', async () => {
+    it('P18.2-T1 AC-5 says “Nothing to open in this module yet.” for a module holding nothing', async () => {
       show({ [PAGE]: { body: modulePage({ items: [], openedItemIds: [] }) } });
       await ready();
       expect(screen.getByText('Nothing to open in this module yet.')).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: /Open File|Play Video/ })).not.toBeInTheDocument();
     });
 
-    it('P18.5-T1 AC-5, OD-150 draws no footer: nothing promises a Skill Tracker', async () => {
+    it('P18.2-T1 AC-5, OD-150 draws no footer: nothing promises a Skill Tracker', async () => {
       show();
       await ready();
       expect(document.body.textContent).not.toMatch(/Skill Tracker/i);
@@ -147,7 +147,7 @@ describe('/training/[categoryCode]/[moduleCode], a module’s page (P18.5-T1)', 
   });
 
   describe('opening (AC-6)', () => {
-    it('P18.5-T1 AC-6 opens a file’s tab as the click lands, then points it at the signed address', async () => {
+    it('P18.2-T1 AC-6 opens a file’s tab as the click lands, then points it at the signed address', async () => {
       const tab = { opener: {}, location: { href: '' }, close: vi.fn() };
       const open = vi.spyOn(window, 'open').mockReturnValue(tab as unknown as Window);
       const { calls } = show({
@@ -165,7 +165,7 @@ describe('/training/[categoryCode]/[moduleCode], a module’s page (P18.5-T1)', 
       expect(sent(calls, '/items/it-file/open', 'POST')).toHaveLength(1);
     });
 
-    it('P18.5-T1 AC-6 opens a link straight from its anchor, then records it, the ✓ and the toast following', async () => {
+    it('P18.2-T1 AC-6 opens a link straight from its anchor, then records it, the ✓ and the toast following', async () => {
       const open = vi.spyOn(window, 'open');
       const { calls } = show({
         [OPEN_LINK]: { body: { url: 'https://example.com/closing', openedItemIds: ['it-file', 'it-link'], recorded: true } },
@@ -184,7 +184,7 @@ describe('/training/[categoryCode]/[moduleCode], a module’s page (P18.5-T1)', 
       expect(open).not.toHaveBeenCalled();
     });
 
-    it('P18.5-T1 AC-6 says why a file cannot open (409 ASSET_NOT_CONFIRMED), and closes the empty tab', async () => {
+    it('P18.2-T1 AC-6 says why a file cannot open (409 ASSET_NOT_CONFIRMED), and closes the empty tab', async () => {
       const tab = { opener: {}, location: { href: '' }, close: vi.fn() };
       vi.spyOn(window, 'open').mockReturnValue(tab as unknown as Window);
       show({
@@ -198,7 +198,7 @@ describe('/training/[categoryCode]/[moduleCode], a module’s page (P18.5-T1)', 
       expect(tab.close).toHaveBeenCalled();
     });
 
-    it('P18.5-T1 AC-6 says nothing when a link opened and only its record failed: no “Couldn’t open”, no ✓, no toast', async () => {
+    it('P18.2-T1 AC-6 says nothing when a link opened and only its record failed: no “Couldn’t open”, no ✓, no toast', async () => {
       show({ [OPEN_LINK]: { status: 500, body: { error: { code: 'INTERNAL_ERROR', message: 'Something went wrong.', requestId: 'r-4' } } } });
       await ready();
 
@@ -213,7 +213,7 @@ describe('/training/[categoryCode]/[moduleCode], a module’s page (P18.5-T1)', 
       expect(screen.queryByText('Marked as opened.')).not.toBeInTheDocument();
     });
 
-    it('P18.5-T1 AC-6 in a support session re-opening an item the member opened says nothing: the session recorded nothing', async () => {
+    it('P18.2-T1 AC-6 in a support session re-opening an item the member opened says nothing: the session recorded nothing', async () => {
       const tab = { opener: {}, location: { href: '' }, close: vi.fn() };
       vi.spyOn(window, 'open').mockReturnValue(tab as unknown as Window);
       show({
@@ -229,7 +229,7 @@ describe('/training/[categoryCode]/[moduleCode], a module’s page (P18.5-T1)', 
       expect(screen.queryByText('Marked as opened.')).not.toBeInTheDocument();
     });
 
-    it('P18.5-T1 AC-6 the member re-opening an item toasts again, as the prototype does', async () => {
+    it('P18.2-T1 AC-6 the member re-opening an item toasts again, as the prototype does', async () => {
       const tab = { opener: {}, location: { href: '' }, close: vi.fn() };
       vi.spyOn(window, 'open').mockReturnValue(tab as unknown as Window);
       show({ [OPEN_FILE]: { body: { url: 'https://cdn.example/signed.pdf', openedItemIds: ['it-file'], recorded: false } } });
@@ -239,7 +239,7 @@ describe('/training/[categoryCode]/[moduleCode], a module’s page (P18.5-T1)', 
       expect(await screen.findByText('Marked as opened.')).toBeInTheDocument();
     });
 
-    it('P18.5-T1 AC-6 in a support session opens the file and shows no ✓ and no toast: nothing is recorded', async () => {
+    it('P18.2-T1 AC-6 in a support session opens the file and shows no ✓ and no toast: nothing is recorded', async () => {
       const tab = { opener: {}, location: { href: '' }, close: vi.fn() };
       vi.spyOn(window, 'open').mockReturnValue(tab as unknown as Window);
       show({
@@ -254,7 +254,7 @@ describe('/training/[categoryCode]/[moduleCode], a module’s page (P18.5-T1)', 
       expect(screen.queryByText('Marked as opened.')).not.toBeInTheDocument();
     });
 
-    it('P18.5-T1 AC-6 names each button by its words, the item, and that it leaves the page', async () => {
+    it('P18.2-T1 AC-6 names each button by its words, the item, and that it leaves the page', async () => {
       show();
       await ready();
       expect(within(tile('closing-techniques.pdf')).getByRole('button', { name: 'Open File: closing-techniques.pdf (opens in a new tab)' }))
@@ -275,9 +275,9 @@ describe('/training/[categoryCode]/[moduleCode], a module’s page (P18.5-T1)', 
         ['Not started', 'false'], ['In progress', 'true'], ['Done', 'false'],
       ]);
       // The report's orange, with navy words on it (I-542); each with its line icon.
-      expect(buttons[1].className).toContain('bg-amber');
-      expect(buttons[1].className).toContain('text-navy');
-      expect(buttons[0].className).not.toContain('bg-amber');
+      expect(buttons[1].className).toContain('bg-primary');
+      expect(buttons[1].className).toContain('text-primary-contrast');
+      expect(buttons[0].className).not.toContain('bg-primary');
       buttons.forEach((b) => expect(b.querySelector('svg')).not.toBeNull());
     });
 
@@ -312,7 +312,7 @@ describe('/training/[categoryCode]/[moduleCode], a module’s page (P18.5-T1)', 
       expect(screen.getByRole('button', { name: 'Not started' })).toHaveAttribute('aria-pressed', 'true');
     });
 
-    it('P18.5-T1 AC-7 sets the status it names, never toggles, toasts the prototype’s sentence, and re-reads the list', async () => {
+    it('P18.2-T1 AC-7 sets the status it names, never toggles, toasts the prototype’s sentence, and re-reads the list', async () => {
       const { calls } = show({
         [PUT]: ({ body }) => ({ body: modulePage({ status: (body as { status: 'done' }).status }) }),
       });
@@ -328,7 +328,7 @@ describe('/training/[categoryCode]/[moduleCode], a module’s page (P18.5-T1)', 
       await waitFor(() => expect(sent(calls, '/training/progress', 'GET')).toHaveLength(2));
     });
 
-    it('P18.5-T1 AC-7 moves freely, Done back to Not started included (`Overall.html:7905-7911`)', async () => {
+    it('P18.2-T1 AC-7 moves freely, Done back to Not started included (`Overall.html:7905-7911`)', async () => {
       const { calls } = show({
         [PAGE]: { body: modulePage({ status: 'done' }) },
         [PUT]: ({ body }) => ({ body: modulePage({ status: (body as { status: 'not_started' }).status }) }),
@@ -339,7 +339,7 @@ describe('/training/[categoryCode]/[moduleCode], a module’s page (P18.5-T1)', 
       expect(JSON.parse(sent(calls, '/progress', 'PUT')[0].init.body as string)).toEqual({ status: 'not_started' });
     });
 
-    it('P18.5-T1 AC-7 says why a write was refused, and keeps the status as it was', async () => {
+    it('P18.2-T1 AC-7 says why a write was refused, and keeps the status as it was', async () => {
       show({ [PUT]: { status: 500, body: { error: { code: 'INTERNAL_ERROR', message: 'Something went wrong.', requestId: 'r-3' } } } });
       await ready();
       await userEvent.click(screen.getByRole('button', { name: 'In progress' }));
@@ -347,7 +347,7 @@ describe('/training/[categoryCode]/[moduleCode], a module’s page (P18.5-T1)', 
       expect(screen.getByRole('button', { name: 'Not started' })).toHaveAttribute('aria-pressed', 'true');
     });
 
-    it('P18.5-T1 AC-7 draws no toggle where the server says the reader may not set it: a support session (D-support, F-123)', async () => {
+    it('P18.2-T1 AC-7 draws no toggle where the server says the reader may not set it: a support session (D-support, F-123)', async () => {
       const { calls } = show({ [PAGE]: { body: modulePage({ can: { update: false } }) } }, SUPPORT);
       await ready();
       expect(screen.queryByRole('group', { name: /^Status/ })).not.toBeInTheDocument();
@@ -357,7 +357,7 @@ describe('/training/[categoryCode]/[moduleCode], a module’s page (P18.5-T1)', 
       expect(sent(calls, '/progress', 'PUT')).toHaveLength(0);
     });
 
-    it('P18.5-T3 AC-2 reads the session again when Done may have completed the reader’s activation item', async () => {
+    it('P18.2-T3 AC-2 reads the session again when Done may have completed the reader’s activation item', async () => {
       const hire = { ...LEARNER, activation: { open: true, complete: false } };
       const { session } = show({ [PUT]: { body: modulePage({ status: 'done' }) } }, hire);
       await ready();
@@ -366,7 +366,7 @@ describe('/training/[categoryCode]/[moduleCode], a module’s page (P18.5-T1)', 
       expect(session.reload).toHaveBeenCalledTimes(1);
     });
 
-    it('P18.5-T3 AC-2 leaves the session alone for a reader with no open activation', async () => {
+    it('P18.2-T3 AC-2 leaves the session alone for a reader with no open activation', async () => {
       const { session } = show({ [PUT]: { body: modulePage({ status: 'done' }) } });
       await ready();
       await userEvent.click(screen.getByRole('button', { name: 'Done' }));
@@ -376,27 +376,27 @@ describe('/training/[categoryCode]/[moduleCode], a module’s page (P18.5-T1)', 
   });
 
   describe('not offered, and the address (AC-3)', () => {
-    it('P18.5-T1 AC-3 says a module the office does not offer cannot be found, with the way to the reader’s training', async () => {
+    it('P18.2-T1 AC-3 says a module the office does not offer cannot be found, with the way to the reader’s training', async () => {
       show({ [PAGE]: NOT_FOUND });
       expect(await screen.findByRole('heading', { name: 'This module can’t be found.' })).toBeInTheDocument();
       expect(screen.getByText('It may have been withdrawn, or the address may be mistyped.')).toBeInTheDocument();
       expect(within(screen.getByRole('main')).getByRole('link', { name: 'Training modules' })).toHaveAttribute('href', '/training');
     });
 
-    it('P18.5-T1 AC-3 says so when a module stops being offered under a write (404)', async () => {
+    it('P18.2-T1 AC-3 says so when a module stops being offered under a write (404)', async () => {
       show({ [PUT]: NOT_FOUND });
       await ready();
       await userEvent.click(screen.getByRole('button', { name: 'Done' }));
       expect(await screen.findByRole('heading', { name: 'This module can’t be found.' })).toBeInTheDocument();
     });
 
-    it('P18.5-T1 AC-4 moves an address naming another category to the module’s own', async () => {
+    it('P18.2-T1 AC-4 moves an address naming another category to the module’s own', async () => {
       show({}, LEARNER, { categoryCode: 'PRODUCT', moduleCode: 'CLOSING_TECHNIQUES' });
       await ready();
       await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('/training/SALES/CLOSING_TECHNIQUES'));
     });
 
-    it('P18.5-T1 AC-5 shows why the read failed, and asks again', async () => {
+    it('P18.2-T1 AC-5 shows why the read failed, and asks again', async () => {
       const failed = { status: 500, body: { error: { code: 'INTERNAL_ERROR', message: 'Something went wrong.', requestId: 'r-9' } } };
       show({ [PAGE]: [failed, { body: modulePage() }] });
       expect(await screen.findByRole('alert')).toHaveTextContent('Something went wrong.');
@@ -413,4 +413,13 @@ describe('/training/[categoryCode]/[moduleCode], a module’s page (P18.5-T1)', 
       expect(shapes.some((c) => c.includes('grid-cols-[minmax(0,1fr)_300px]'))).toBe(true);
     });
   });
+
+  it('P19.6-T4 AC-1 draws the module’s description under its title, in the lesson card’s own grey', async () => {
+    show({ [PAGE]: { body: modulePage({ description: 'Ajak nasabah memutuskan hari ini' }) } });
+    await ready();
+    const line = screen.getByText('Ajak nasabah memutuskan hari ini');
+    expect(line).toHaveClass('text-on-navy-muted');
+    expect(line.previousElementSibling).toHaveTextContent('Closing Techniques That Work');
+  });
 });
+

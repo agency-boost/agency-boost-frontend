@@ -132,7 +132,7 @@ describe('the shared tenant configuration (P4-T7)', () => {
     await waitFor(() => expect(screen.getByText('vnone')).toBeInTheDocument());
   });
 
-  describe('P18.95-T5 AC-3: the configuration settles on its own', () => {
+  describe('P18.7-T5 AC-3: the configuration settles on its own', () => {
     /*
      * The two reads were one `Promise.all`, so `loading` — which Log Activity's skeleton reads — waited for the
      * ladder too, and a ladder that failed threw away a configuration that had arrived (UI-030).
@@ -142,7 +142,7 @@ describe('the shared tenant configuration (P4-T7)', () => {
       return <p>{ladder.length ? `rungs ${ladder.length}` : 'no rungs'}</p>;
     }
 
-    it('P18.95-T5 AC-3: stops loading once the configuration answers, the ladder still on its way', async () => {
+    it('P18.7-T5 AC-3: stops loading once the configuration answers, the ladder still on its way', async () => {
       const { mock } = stubFetch({ '/kpm/config': { body: CONFIG }, '/kpm/org-levels': { body: LADDER } });
       let release!: () => void;
       const held = new Promise<void>((resolve) => { release = resolve; });
@@ -158,7 +158,7 @@ describe('the shared tenant configuration (P4-T7)', () => {
       expect(await screen.findByText('rungs 1')).toBeInTheDocument();
     });
 
-    it('P18.95-T5 AC-3: keeps a configuration that arrived when the ladder fails', async () => {
+    it('P18.7-T5 AC-3: keeps a configuration that arrived when the ladder fails', async () => {
       stubFetch({
         '/kpm/config': { body: CONFIG },
         '/kpm/org-levels': { status: 500, body: { error: { code: 'INTERNAL_ERROR', message: 'x', requestId: 'r' } } },
@@ -168,7 +168,7 @@ describe('the shared tenant configuration (P4-T7)', () => {
       expect(screen.getByText('no rungs')).toBeInTheDocument();
     });
 
-    it('P18.95-T5 AC-3: still waits for both before a settings screen’s refresh resolves', async () => {
+    it('P18.7-T5 AC-3: still waits for both before a settings screen’s refresh resolves', async () => {
       const { mock } = stubFetch({ '/kpm/config': { body: CONFIG }, '/kpm/org-levels': { body: LADDER } });
       let release!: () => void;
       const held = new Promise<void>((resolve) => { release = resolve; });

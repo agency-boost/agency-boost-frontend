@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useId, useMemo, useState } from 'react';
+import { createContext, useContext, useEffect, useId, useMemo, useState } from 'react';
 import { ActivityPill } from '@/components/ui/activity-pill';
 import { LineIcon } from '@/components/ui/line-icon';
 import { Avatar, PersonRow, TreeIndent, TreeNode, TreeToggle, type PersonRowTone } from '@/components/ui/person-row';
@@ -19,7 +19,7 @@ import { defaultOpenInList } from './layout';
 import { RolePill } from './role-pill';
 
 /*
- * **The Group Tree as rows** (UI V1, 2026-10-30, Phase 18.99 T9: UI-058, UI-059, UI-072 to UI-075; mockups
+ * **The Group Tree as rows** (UI V1, 2026-10-30, Phase 18.11 T9: UI-058, UI-059, UI-072 to UI-075; mockups
  * `group-tree-mobile`, `-tablet`, `-desktop`). The office's *Org Tree* (`/people/org-tree`) keeps the canvas
  * (`org-tree.tsx`); this is `/group-tree` only.
  *
@@ -224,9 +224,17 @@ function TreeList({ tree, personHref, model }: {
   );
 }
 
+/**
+ * **Whose tree a reader is looking at, when it is not their own** (P19.3-T3; `/group-tree/[membershipId]`, read-only,
+ * *"as that leader sees it"*): the upline card's words for that leader's leader — *Leader Sari* where the reader's own
+ * reads *Leader Anda*. Absent, the reader's own tree.
+ */
+export const GroupTreeUplineLabel = createContext<string | null>(null);
+
 /** The reader's own leader: muted, not a link, *AB · Leader Anda* (UI-059, UI-072); no pill. */
 function Upline({ leader, ladder }: { leader: NonNullable<OrgTree['leader']>; ladder: OrgLevel[] }) {
   const t = useMessages(groupTreeMessages);
+  const label = useContext(GroupTreeUplineLabel) ?? t.yourLeader;
   return (
     <div data-upline="">
       <PersonRow
@@ -234,7 +242,7 @@ function Upline({ leader, ladder }: { leader: NonNullable<OrgTree['leader']>; la
         seed={leader.membershipId}
         tone="muted"
         nameClassName="text-base"
-        meta={<span>{rungShort(leader.role.toUpperCase(), ladder)} · {t.yourLeader}</span>}
+        meta={<span>{rungShort(leader.role.toUpperCase(), ladder)} · {label}</span>}
       />
     </div>
   );
@@ -247,6 +255,7 @@ function TreeTable({ tree, personHref, model }: {
   model: Model;
 }) {
   const t = useMessages(groupTreeMessages);
+  const uplineLabel = useContext(GroupTreeUplineLabel);
   const ladder = useLadder();
   const figures = useFigureLanguage();
   const prefix = useId();
@@ -273,9 +282,9 @@ function TreeTable({ tree, personHref, model }: {
           className={cn(
             GRID,
             'relative h-[52px] border-b border-divider px-5 text-md',
-            self ? 'mx-2 my-1 rounded-row border-0 bg-navy px-3 text-white' : tinted ? 'bg-amber/[0.12]' : 'bg-card',
-            href && 'cursor-pointer has-[[data-row-main]:focus-visible]:outline has-[[data-row-main]:focus-visible]:outline-2 has-[[data-row-main]:focus-visible]:-outline-offset-2 has-[[data-row-main]:focus-visible]:outline-amber',
-            href && (self ? 'hover:bg-navy-soft' : tinted ? 'hover:bg-amber/20' : 'hover:bg-hover-row'),
+            self ? 'mx-2 my-1 rounded-row border-0 bg-secondary px-3 text-secondary-contrast' : tinted ? 'bg-primary/[0.12]' : 'bg-card',
+            href && 'cursor-pointer has-[[data-row-main]:focus-visible]:outline has-[[data-row-main]:focus-visible]:outline-2 has-[[data-row-main]:focus-visible]:-outline-offset-2 has-[[data-row-main]:focus-visible]:outline-primary',
+            href && (self ? 'hover:bg-secondary-hover' : tinted ? 'hover:bg-primary/20' : 'hover:bg-hover-row'),
           )}
         >
           <div className="flex h-full min-w-0 items-center gap-2.5">
@@ -341,7 +350,7 @@ function TreeTable({ tree, personHref, model }: {
           <div className="flex min-w-0 items-center gap-2.5">
             <Avatar name={tree.leader.fullName} seed={tree.leader.membershipId} size={24} className="opacity-60" />
             <span className="min-w-0 truncate font-bold uppercase tracking-[0.2px]">{tree.leader.fullName}</span>
-            <span className="shrink-0">{t.yourLeader}</span>
+            <span className="shrink-0">{uplineLabel ?? t.yourLeader}</span>
           </div>
           <span>{rungShort(tree.leader.role.toUpperCase(), ladder)}</span>
           <span />
@@ -371,7 +380,7 @@ export function TreeSearch({
   return (
     <label
       className={cn(
-        'flex h-10 items-center gap-1.5 rounded-pill bg-card px-3.5 text-muted focus-within:outline focus-within:outline-2 focus-within:outline-amber md:max-lg:h-11',
+        'flex h-10 items-center gap-1.5 rounded-pill bg-card px-3.5 text-muted focus-within:outline focus-within:outline-2 focus-within:outline-focus-ring md:max-lg:h-11',
         className,
       )}
     >

@@ -44,7 +44,7 @@ const FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabi
  *
  * Every field saves as it is left, exactly as a cell of the table does, and whatever the server refuses
  * is shown here while the dialog is open and beneath the lead once it is closed. **And says so under the
- * box** — *Saving…*, *Saved ✓*, *Couldn't save — retry* — as a cell does (P18.95-T1 AC-5). **Read-only** under a
+ * box** — *Saving…*, *Saved ✓*, *Couldn't save — retry* — as a cell does (P18.7-T1 AC-5). **Read-only** under a
  * finalized coaching session's lock: the boxes hold what is stored and save nothing.
  */
 export function LeadDetailsDialog({
@@ -77,7 +77,7 @@ export function LeadDetailsDialog({
   const titleId = useId();
   const id = useId();
 
-  // The table behind holds still while it is open (P18.96-T1 AC-2).
+  // The table behind holds still while it is open (P18.8-T1 AC-2).
   useScrollLock(true);
 
   useEffect(() => {

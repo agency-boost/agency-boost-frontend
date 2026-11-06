@@ -20,9 +20,9 @@ export const TEMPLATE_NAME_MAX = 80;
  * Super Admin is about to start offices from it, and a ratio quietly missing is the thing they would not
  * think to look for.
  *
- * **In the reader's `language`** (P18.98-T6): the words `admin-template.tsx`'s, its caller passing `useLanguage()` —
+ * **In the reader's `language`** (P18.10-T6): the words `admin-template.tsx`'s, its caller passing `useLanguage()` —
  * English when none is passed, as before. The template's and the company's names are as stored, and each reason is
- * the API's sentence, in the language the API wrote it in (P18.98-T5).
+ * the API's sentence, in the language the API wrote it in (P18.10-T5).
  */
 export function savedTemplateSentence(
   template: SavedOfficeTemplate,

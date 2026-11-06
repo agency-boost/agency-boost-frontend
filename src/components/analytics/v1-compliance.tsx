@@ -8,12 +8,14 @@ import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-pro
 import { kpmComplianceMessages } from '@/i18n/messages/kpm-compliance';
 import { cn } from '@/lib/cn';
 import {
-  complianceLabels, dayWords, pillOf, sortRows, trainingPathOf, treeKindOf,
+  campaignOf, complianceLabels, dayWords, pillOf, sortRows, trainingPathOf, treeKindOf,
   type ComplianceCategory, type ComplianceRow, type ComplianceSection, type ComplianceTrainingCategory,
   type ComplianceView, type PillWords, type SortDirection,
 } from '@/lib/kpm-compliance';
 import { useSession } from '@/lib/session';
 import { CampaignPicker, EventPicker } from './compliance-pickers';
+import { AchievedCell } from './standing-override';
+import { PersonLink } from './compliance-parts';
 
 /**
  * **KPM Analytics' Compliance on a phone, in the field shell** (UI V1, 2026-10-30; UI-109; `kpm-mobile` 3):
@@ -31,7 +33,7 @@ import { CampaignPicker, EventPicker } from './compliance-pickers';
  * campaign standing included (the Owner's and the Admins', who read it there).
  */
 export function V1Compliance({
-  view, fresh, category, selected, emptyCategory, direction, onCategory, onTraining, onItem, onToggle,
+  view, fresh, category, selected, emptyCategory, direction, onCategory, onTraining, onItem, onToggle, onChanged,
 }: {
   view: ComplianceView;
   fresh: boolean;
@@ -43,6 +45,8 @@ export function V1Compliance({
   onTraining: (category: ComplianceTrainingCategory) => void;
   onItem: (item: string) => void;
   onToggle: () => void;
+  /** A standing the reader overrode (the *Achieved* cell): the tree is read again. */
+  onChanged?: () => void;
 }) {
   const t = useMessages(kpmComplianceMessages);
   const headId = useId();
@@ -51,7 +55,7 @@ export function V1Compliance({
   return (
     <div className="min-w-0" data-v1-compliance="">
       {view.units > 0 && <h2 id={headId} className="mx-0.5 mb-2 mt-1 text-md font-bold text-navy">{t.v1.head({ people: view.people, units: view.units })}</h2>}
-      <div role="group" aria-label={t.chipsName} className="grid grid-cols-3 gap-2">
+      <div role="group" aria-label={t.chipsName} className="grid grid-cols-3 gap-2 lg:grid-cols-6">
         {view.summary.map((chip) => (
           <Tile
             key={chip.category}
@@ -82,7 +86,7 @@ export function V1Compliance({
               {t.sort[kind][direction]}
             </button>
           </div>
-          <Sections view={view} kind={kind} direction={direction} labelledBy={listId} />
+          <Sections view={view} kind={kind} direction={direction} labelledBy={listId} onChanged={onChanged} />
         </>
       )}
     </div>
@@ -97,7 +101,7 @@ function barTone(done: number, of: number, thresholds: ComplianceView['threshold
 }
 
 const BAR: Record<ReturnType<typeof barTone>, string> = {
-  red: 'bg-signal-red', green: 'bg-signal-green', accent: 'bg-amber', none: 'bg-transparent',
+  red: 'bg-signal-red', green: 'bg-signal-green', accent: 'bg-primary', none: 'bg-transparent',
 };
 
 function Bar({ done, of, thresholds, className }: { done: number; of: number; thresholds: ComplianceView['thresholds']; className?: string }) {
@@ -121,7 +125,7 @@ function Tile({
       type="button"
       aria-pressed={on}
       onClick={onChoose}
-      className={cn('min-h-11 rounded-lg bg-card p-2.5 text-left', on && 'ring-2 ring-inset ring-navy')}
+      className={cn('min-h-11 rounded-lg bg-card p-2.5 text-left', on && 'ring-2 ring-inset ring-secondary')}
     >
       <span className="block truncate text-sm text-muted">{label}</span>
       <span className="mt-0.5 block whitespace-nowrap text-xl font-bold leading-tight text-ink">
@@ -166,8 +170,11 @@ function Picker({
   return null;
 }
 
-/** *Modul Training · {module} ⌄*: a 44px field opening the sheet of every category › skill › module. */
-function ModulePicker({
+/**
+ * *Modul Training · {module} ⌄*: a 44px field opening the sheet of every category › skill › module — **at every size**
+ * since P19.3-T3 (UI-098: *"UI-109's single module picker at every size"*), the desktop's three chip rows gone.
+ */
+export function ModulePicker({
   catalog, selected, emptyCategory, onTraining, onItem,
 }: {
   catalog: readonly ComplianceTrainingCategory[];
@@ -191,7 +198,7 @@ function ModulePicker({
         className="mt-2 flex min-h-11 w-full items-center gap-2 rounded-row bg-card px-3 py-1 text-left"
         data-module-picker=""
       >
-        <svg aria-hidden="true" viewBox="0 0 24 24" className="h-[18px] w-[18px] shrink-0 text-amber-ink" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <svg aria-hidden="true" viewBox="0 0 24 24" className="h-[18px] w-[18px] shrink-0 text-primary-ink" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
           <path d="M3 9l9-5 9 5-9 5-9-5zM7 11.2V16c0 1 2.2 2.5 5 2.5s5-1.5 5-2.5v-4.8M21 9v6" />
         </svg>
         <span className="min-w-0 flex-1">
@@ -228,7 +235,7 @@ function ModulePicker({
                           onClick={() => { setOpen(false); onItem(m.code); }}
                           className={cn(
                             'flex min-h-11 items-center rounded-row px-3 text-left text-base',
-                            on ? 'bg-amber/[0.12] font-semibold text-ink ring-[1.5px] ring-inset ring-amber' : 'bg-hover-row text-ink',
+                            on ? 'bg-primary/[0.12] font-semibold text-ink ring-[1.5px] ring-inset ring-primary' : 'bg-hover-row text-ink',
                           )}
                         >
                           {m.title}
@@ -248,8 +255,10 @@ function ModulePicker({
 
 /** The AB rows, sorted *needs attention first* by the share done (or the other way), each opening to its units. */
 function Sections({
-  view, kind, direction, labelledBy,
-}: { view: ComplianceView; kind: ReturnType<typeof treeKindOf>; direction: SortDirection; labelledBy: string }) {
+  view, kind, direction, labelledBy, onChanged,
+}: {
+  view: ComplianceView; kind: ReturnType<typeof treeKindOf>; direction: SortDirection; labelledBy: string; onChanged?: () => void;
+}) {
   const { me } = useSession();
   const mine = me?.membership?.membershipId ?? null;
   const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set(mine ? [mine] : []));
@@ -277,6 +286,7 @@ function Sections({
           isReader={section.head.membershipId === mine}
           open={open.has(section.head.membershipId)}
           onToggle={() => flip(section.head.membershipId)}
+          onChanged={onChanged}
         />
       ))}
     </ul>
@@ -284,7 +294,7 @@ function Sections({
 }
 
 function SectionRow({
-  section, view, kind, direction, isReader, open, onToggle,
+  section, view, kind, direction, isReader, open, onToggle, onChanged,
 }: {
   section: ComplianceSection;
   view: ComplianceView;
@@ -293,6 +303,7 @@ function SectionRow({
   isReader: boolean;
   open: boolean;
   onToggle: () => void;
+  onChanged?: () => void;
 }) {
   const t = useMessages(kpmComplianceMessages);
   const panelId = useId();
@@ -333,7 +344,7 @@ function SectionRow({
               </p>
               <ul>
                 {sortRows(unit.rows, kind, direction).map((row) => (
-                  <PersonLine key={row.membershipId} row={row} view={view} kind={kind} />
+                  <PersonLine key={row.membershipId} row={row} view={view} kind={kind} onChanged={onChanged} />
                 ))}
               </ul>
             </div>
@@ -352,7 +363,9 @@ function V1Pill({ words }: { words: PillWords }) {
 }
 
 /** A person: 44px, the name (*Pribadi* on a leader's own line), the pill or pills, the day it was done. */
-function PersonLine({ row, view, kind }: { row: ComplianceRow; view: ComplianceView; kind: ReturnType<typeof treeKindOf> }) {
+function PersonLine({ row, view, kind, onChanged }: {
+  row: ComplianceRow; view: ComplianceView; kind: ReturnType<typeof treeKindOf>; onChanged?: () => void;
+}) {
   const t = useMessages(kpmComplianceMessages);
   const language = useLanguage();
   const figures = useFigureLanguage();
@@ -366,16 +379,29 @@ function PersonLine({ row, view, kind }: { row: ComplianceRow; view: ComplianceV
       : [pillOf(labels.campaigns.chasing, cell.status), pillOf(labels.campaigns.achieved, cell.second)];
   const columns = kind === 'status' ? null : t.columns[kind];
   const day = kind === 'status' && cell.done === true && cell.on ? dayWords(cell.on, view.today, figures) : null;
+  /*
+   * **The campaign standing's override stays the Owner's and the Admins' at every size** (P18.3-T2; kept by P19.3-T3,
+   * which brings this layout to them): the *Achieved* cell, the tree's own control, in the second pill's place.
+   */
+  const campaign = kind === 'campaigns' ? campaignOf(view.catalog.campaigns, view.selected.item) : null;
   return (
     <li className="flex min-h-11 items-center gap-2 border-t border-divider px-3 text-base" data-row={row.membershipId}>
       <span className="min-w-0 flex-1 truncate text-ink">
-        {row.name}
+        {/* UI-095: a name opens the person — a leader's Unit Dashboard, anybody else's page — in the same tab. */}
+        <PersonLink person={row} className="text-ink" />
         {row.personal && <span className="ml-1 text-sm font-semibold text-muted">{t.personal}</span>}
       </span>
       {pills.map((words, i) => (
         <span key={i} className="shrink-0">
           {columns && <span className="sr-only">{i === 0 ? columns.first : columns.second}: </span>}
-          <V1Pill words={words} />
+          {i === 1 && campaign && view.can.override ? (
+            <AchievedCell
+              row={{ membershipId: row.membershipId, name: row.name, cell: row.cell }}
+              campaign={{ code: campaign.code, title: campaign.title }}
+              canOverride
+              onChanged={onChanged ?? (() => undefined)}
+            />
+          ) : <V1Pill words={words} />}
         </span>
       ))}
       {kind === 'status' && <span className="w-11 shrink-0 text-right text-sm text-muted">{day ?? ''}</span>}

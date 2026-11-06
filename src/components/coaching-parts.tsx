@@ -12,7 +12,7 @@ import type { ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import { useOpenedOnce } from '@/lib/use-opened-once';
 
-/** The drill, downloaded when it is first opened and mounted from then on (`useOpenedOnce`; P18.99-T16). */
+/** The drill, downloaded when it is first opened and mounted from then on (`useOpenedOnce`; P18.11-T16). */
 const ActivityDrill = dynamic(() => import('@/components/coaching-activity-drill').then((m) => m.ActivityDrill), { ssr: false });
 
 /**
@@ -22,15 +22,15 @@ const ActivityDrill = dynamic(() => import('@/components/coaching-activity-drill
  * workspace's finalized state, `Overall.html:1389-1417`, is the idiom all three follow.
  *
  * Coaching's own strings use none of ADR-0084's six words, and none names a phase, an id or a code. Its words are the
- * catalogue's (`messages/coaching-session.tsx`, P18.98-T4), its figures in `useFigureLanguage()`'s.
+ * catalogue's (`messages/coaching-session.tsx`, P18.10-T4), its figures in `useFigureLanguage()`'s.
  *
- * **What only the record draws is in `coaching-record-parts.tsx`** (P18.99-T16, the bundle): the frozen snapshot's tags,
+ * **What only the record draws is in `coaching-record-parts.tsx`** (P18.11-T16, the bundle): the frozen snapshot's tags,
  * goal row, ratio lines and Activity panel, which the live workspace never shows and no longer loads.
  */
 
 export function NumberDot({ n }: { n: number }) {
   return (
-    <span aria-hidden="true" className="mt-px flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-navy text-2xs font-bold text-white">
+    <span aria-hidden="true" className="mt-px flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-secondary text-2xs font-bold text-secondary-contrast">
       {n}
     </span>
   );
@@ -168,7 +168,7 @@ function WeekTile({ target }: { target: SubPeriodTarget }) {
           aria-valuetext={t.of({ logged: target.logged, target: target.target })}
           className="mt-2 h-1.5 overflow-hidden rounded-pill bg-hairline"
         >
-          <div className="h-full rounded-pill bg-amber" style={{ width: `${pct}%` }} />
+          <div className="h-full rounded-pill bg-primary" style={{ width: `${pct}%` }} />
         </div>
       )}
     </div>

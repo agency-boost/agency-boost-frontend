@@ -1,7 +1,7 @@
 import { defineMessages, type MessagesOf } from '@/i18n/catalogue';
 
 /**
- * **A section's *Summary tile*, refused** (ADR-0064, OD-101; P18.98-T4): what `lib/summary-tiles.ts` says when a typed
+ * **A section's *Summary tile*, refused** (ADR-0064, OD-101; P18.10-T4): what `lib/summary-tiles.ts` says when a typed
  * tile name cannot be kept, and the server's two tile refusals in the reader's words — on the office's *Activity
  * types* screen and the Super Admin's Company template, which pass the reader's language (`planSummaryTile`,
  * `tileRefusal`). A tile's name and a section's are the office's, shown as typed (ADR-0179 §5).

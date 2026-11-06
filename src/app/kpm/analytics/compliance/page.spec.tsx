@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { makeMe, renderInIndonesian, renderInLayout, stubFetch, type StubReply } from '@test/harness';
+import { atWidth, makeMe, renderInIndonesian, renderInLayout, stubFetch, type StubReply } from '@test/harness';
 import { ADMIN_ME, CORE_LEADER_ME, OWNER_ME, SHELL_STUBS } from '@test/kpm-analytics-fixtures';
 import { TOWN_HALL_SUMMARY } from '@test/events-fixtures';
 import {
@@ -22,8 +22,14 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(nav.search),
 }));
 
-/** The address's query (`useQuery`, `lib/use-query.ts`): each test names its own, and starts from none. */
-beforeEach(() => { nav.search = ''; });
+/**
+ * The address's query (`useQuery`, `lib/use-query.ts`): each test names its own, and starts from none. **A laptop's
+ * 1280px** unless a test says otherwise: below 1024px every reader reads UI-109's layout since P19.3-T3.
+ */
+beforeEach(() => {
+  nav.search = '';
+  atWidth(1280);
+});
 
 const READ = 'GET /kpm/analytics/compliance';
 const FEEDBACK = 'GET /kpm/settings/events/';
@@ -63,25 +69,26 @@ const spoken = (el: Element): string => [...el.childNodes].map((n) => {
 }).join('');
 
 /**
- * *Compliance, Events, and Campaigns* (P18.6-T1, P18.6-T2): the six chips, Training's tabs, the single-item
+ * *Compliance, Events, and Campaigns* (P18.3-T1, P18.3-T2): the six chips, Training's tabs, the single-item
  * categories, the event and campaign pickers, search, sort and the tree — over `GET /kpm/analytics/compliance`,
  * the selection in the address.
  */
-describe('KPM analytics › Compliance, Events, and Campaigns (P18.6-T1, P18.6-T2)', () => {
+describe('KPM analytics › Compliance, Events, and Campaigns (P18.3-T1, P18.3-T2)', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     nav.replace.mockClear();
   });
 
-  describe('P18.6-T1 AC-1 who reads it (the screen’s half)', () => {
-    it('keeps the page’s title and tabs, this one current, and heads its panel as the prototype does', async () => {
+  describe('P18.3-T1 AC-1 who reads it (the screen’s half)', () => {
+    it('P19.3-T3 AC-14 keeps the page’s title and tabs, this one current, with no repeated heading (UI-098, D-35)', async () => {
       open();
       await tree();
       expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^KPM Analytics$/);
       const tabs = within(screen.getByRole('navigation', { name: 'KPM Analytics' }));
-      // UI-109: the tab is *Compliance* (renamed); the panel's heading keeps the content's full name.
+      // UI-109, UI-098: the tab is *Compliance*, and the panel's heading is its counted line, not the full name again.
       expect(tabs.getByRole('link', { name: 'Compliance' })).toHaveAttribute('aria-current', 'page');
-      expect(screen.getByRole('heading', { level: 2, name: 'Compliance, Events, and Campaigns' })).toBeInTheDocument();
+      expect(screen.queryByRole('heading', { name: 'Compliance, Events, and Campaigns' })).not.toBeInTheDocument();
+      expect(screen.getByRole('heading', { level: 2, name: '11 people · 3 AB units' })).toBeInTheDocument();
     });
 
     it('gives the Admin the same screen', async () => {
@@ -89,7 +96,7 @@ describe('KPM analytics › Compliance, Events, and Campaigns (P18.6-T1, P18.6-T
       expect((await tree()).length).toBeGreaterThan(0);
     });
 
-    it('P18.8-T5 AC-5 refuses an Agent as their own field app does, never in the console’s chrome, and asks the API for nothing', async () => {
+    it('P18.5-T5 AC-5 refuses an Agent as their own field app does, never in the console’s chrome, and asks the API for nothing', async () => {
       // The product owner's report, 2026-10-11: an Agent here was refused inside the Owner's chrome. The route wears the
       // reader's own shell since ADR-0159 §3.
       nav.replace.mockClear();
@@ -99,7 +106,7 @@ describe('KPM analytics › Compliance, Events, and Campaigns (P18.6-T1, P18.6-T
       expect(reads(calls)).toEqual([]);
     });
 
-    it('P18.8-T5 AC-4 a Core Leader reads the tree in their own shell; one who is not is refused without a read', async () => {
+    it('P18.5-T5 AC-4 a Core Leader reads the tree in their own shell; one who is not is refused without a read', async () => {
       open(undefined, { me: CORE_LEADER_ME });
       expect((await tree()).length).toBeGreaterThan(0);
       expect(screen.queryByText('KPM OWNER')).not.toBeInTheDocument();
@@ -118,7 +125,7 @@ describe('KPM analytics › Compliance, Events, and Campaigns (P18.6-T1, P18.6-T
     });
   });
 
-  describe('P18.6-T1 AC-2 one read, the selection in the address', () => {
+  describe('P18.3-T1 AC-2 one read, the selection in the address', () => {
     it('reads Training when the address names nothing, once', async () => {
       const { calls } = open();
       await tree();
@@ -147,17 +154,18 @@ describe('KPM analytics › Compliance, Events, and Campaigns (P18.6-T1, P18.6-T
     it('writes a choice into the address and reads it', async () => {
       const { calls } = open();
       await tree();
-      await userEvent.click(within(screen.getByRole('group', { name: 'Skills' })).getByRole('button', { name: 'Closing' }));
+      await userEvent.click(screen.getByRole('button', { name: /Training module/ }));
+      await userEvent.click(within(await screen.findByRole('dialog', { name: 'Training module' })).getByRole('radio', { name: 'Closing Techniques That Work' }));
       expect(nav.replace).toHaveBeenLastCalledWith('/kpm/analytics/compliance?category=training&item=CLOSING_TECHNIQUES', { scroll: false });
       await waitFor(() => expect(reads(calls)).toContain('/kpm/analytics/compliance?category=training&item=CLOSING_TECHNIQUES'));
     });
   });
 
-  describe('P18.6-T1 AC-3 the summary, verbatim', () => {
-    it('counts the sub-line’s people and units (contradiction 1)', async () => {
+  describe('P18.3-T1 AC-3 the summary, verbatim', () => {
+    it('counts the sub-line’s people and units (contradiction 1), as the heading UI-098 leaves', async () => {
       open();
       await tree();
-      expect(screen.getByText("Every AB's unit in this KPM — 11 people across 3 units")).toBeInTheDocument();
+      expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent('11 people · 3 AB units');
     });
 
     it('draws six chips in order, each “{n} / {of}” over its label, the one shown pressed', async () => {
@@ -169,8 +177,8 @@ describe('KPM analytics › Compliance, Events, and Campaigns (P18.6-T1, P18.6-T
       ]);
       expect(chips.map((c) => c.getAttribute('aria-pressed'))).toEqual(['true', 'false', 'false', 'false', 'false', 'false']);
       // A selection is navy (ADR-0137 §2): the prototype's ring, in navy rather than amber.
-      expect(chips[0]).toHaveClass('border-navy', 'ring-navy');
-      expect(chips[1]).not.toHaveClass('ring-navy');
+      expect(chips[0]).toHaveClass('border-secondary', 'ring-secondary');
+      expect(chips[1]).not.toHaveClass('ring-secondary');
       expect(chips[0].className).not.toMatch(/amber/);
     });
 
@@ -207,44 +215,37 @@ describe('KPM analytics › Compliance, Events, and Campaigns (P18.6-T1, P18.6-T
     });
   });
 
-  describe('P18.6-T1 AC-4 Training', () => {
-    it('draws the three rows: the categories, the skills holding a module, their modules', async () => {
+  describe('P18.3-T1 AC-4 Training', () => {
+    it('P19.3-T3 AC-14 draws one module picker for the three chip rows, every category › skill › module inside (UI-098)', async () => {
       open();
       await tree();
-      const names = (group: string) => within(screen.getByRole('group', { name: group })).getAllByRole('button')
-        .map((b) => [b.textContent, b.getAttribute('aria-pressed')]);
-      expect(names('Training categories')).toEqual([['Sales', 'true'], ['Product', 'false']]);
-      expect(names('Skills')).toEqual([['Prospecting', 'true'], ['Closing', 'false']]);
-      expect(names('Modules')).toEqual([['Building Your Prospect List', 'true'], ['Referral Generation Techniques', 'false']]);
+      // The three rows are gone, at every size.
+      for (const group of ['Training categories', 'Skills', 'Modules']) expect(screen.queryByRole('group', { name: group })).not.toBeInTheDocument();
+      const picker = screen.getByRole('button', { name: /Training module/ });
+      expect(picker).toHaveTextContent('Building Your Prospect List');
+      await userEvent.click(picker);
+      const sheet = await screen.findByRole('dialog', { name: 'Training module' });
+      expect(within(sheet).getAllByRole('heading', { level: 3 }).map((h) => h.textContent)).toEqual(['Sales', 'Product']);
+      expect(within(sheet).getAllByRole('radiogroup').map((g) => g.getAttribute('aria-label'))).toEqual(['Prospecting', 'Closing']);
+      expect(within(sheet).getByRole('radio', { name: 'Building Your Prospect List' })).toHaveAttribute('aria-checked', 'true');
+      expect(within(sheet).getByRole('radio', { name: 'Referral Generation Techniques' })).toHaveAttribute('aria-checked', 'false');
     });
 
-    it('paints the chosen category and skill navy, and keeps the chosen module’s amber rule (ADR-0137 §2, §3)', async () => {
-      open();
-      await tree();
-      const pressed = (group: string) => within(screen.getByRole('group', { name: group })).getByRole('button', { pressed: true });
-      expect(pressed('Training categories')).toHaveClass('bg-navy');
-      expect(pressed('Skills')).toHaveClass('bg-navy');
-      expect(pressed('Modules')).toHaveClass('border-amber', 'text-navy');
-      expect(pressed('Modules')).not.toHaveClass('bg-navy');
-    });
-
-    it('draws the category with no module muted, and pressing it says its modules are coming soon, reading nothing', async () => {
+    it('P19.3-T3 AC-14 a category with no module says its modules are coming soon, reading nothing', async () => {
       const { calls } = open();
       await tree();
-      const product = within(screen.getByRole('group', { name: 'Training categories' })).getByRole('button', { name: 'Product' });
-      expect(product).toHaveClass('text-muted/[0.86]');
-      await userEvent.click(product);
-      expect(product).toHaveAttribute('aria-pressed', 'true');
-      expect(screen.getByText('Modules for Product are coming soon.')).toBeInTheDocument();
-      expect(screen.queryByRole('group', { name: 'Skills' })).not.toBeInTheDocument();
+      await userEvent.click(screen.getByRole('button', { name: /Training module/ }));
+      await userEvent.click(within(await screen.findByRole('dialog', { name: 'Training module' })).getByRole('button', { name: 'Modules for Product are coming soon.' }));
+      expect(screen.getAllByText('Modules for Product are coming soon.').length).toBeGreaterThan(0);
       expect(screen.queryAllByRole('region')).toHaveLength(0);
       expect(reads(calls)).toHaveLength(1);
     });
 
-    it('reads a module chosen from its tab', async () => {
+    it('reads a module chosen from the picker', async () => {
       const { calls } = open();
       await tree();
-      await userEvent.click(within(screen.getByRole('group', { name: 'Modules' })).getByRole('button', { name: 'Referral Generation Techniques' }));
+      await userEvent.click(screen.getByRole('button', { name: /Training module/ }));
+      await userEvent.click(within(await screen.findByRole('dialog', { name: 'Training module' })).getByRole('radio', { name: 'Referral Generation Techniques' }));
       await waitFor(() => expect(reads(calls)).toContain('/kpm/analytics/compliance?category=training&item=REFERRALS'));
     });
 
@@ -258,7 +259,7 @@ describe('KPM analytics › Compliance, Events, and Campaigns (P18.6-T1, P18.6-T
     });
   });
 
-  describe('P18.6-T1 AC-5, AC-6, AC-7 the single-item categories', () => {
+  describe('P18.3-T1 AC-5, AC-6, AC-7 the single-item categories', () => {
     it.each(['goals', 'activity', 'activation'])('%s draws no item label, as the prototype draws none for one item (:3609-3611)', async (category) => {
       open(undefined, { query: { category } });
       await tree();
@@ -306,13 +307,17 @@ describe('KPM analytics › Compliance, Events, and Campaigns (P18.6-T1, P18.6-T
     });
   });
 
-  describe('P18.6-T1 AC-8 the tree', () => {
+  describe('P18.3-T1 AC-8 the tree', () => {
     it('draws one section per agency in the read’s order, each with its total overall', async () => {
       open();
       const regions = await tree();
       expect(regions.map((r) => r.getAttribute('data-section'))).toEqual(['mem-hendra', 'mem-maya', 'mem-owner']);
       expect(section('mem-hendra')).toHaveTextContent('4 / 7 done overall');
-      expect(within(section('mem-hendra').firstElementChild as HTMLElement).getByText('AB', { selector: 'span' })).toBeInTheDocument();
+      // UI-098: each AB a collapsed row — its name, its AB tag, its total and a bar — on the native disclosure.
+      const head = section('mem-hendra').querySelector('summary') as HTMLElement;
+      expect(within(head).getByText('AB', { selector: 'span' })).toBeInTheDocument();
+      expect(head).toHaveTextContent('4 / 7 done overall');
+      expect(head.querySelector('[data-section-bar]')).not.toBeNull();
     });
 
     it('draws the AB’s own card first, then each AAB’s, each titled, tagged and totalled', async () => {
@@ -320,7 +325,8 @@ describe('KPM analytics › Compliance, Events, and Campaigns (P18.6-T1, P18.6-T
       await tree();
       const cards = [...section('mem-hendra').querySelectorAll('[data-unit]')];
       expect(cards.map((c) => c.getAttribute('data-unit'))).toEqual(['mem-hendra', 'mem-ika']);
-      expect(within(unit('mem-ika')).getByRole('heading', { level: 4 })).toHaveAccessibleName("Ika Wirawan's Unit (opens their Unit Dashboard in a new tab)");
+      // UI-095: the same tab, so no new-tab hint.
+      expect(within(unit('mem-ika')).getByRole('heading', { level: 4 })).toHaveAccessibleName("Ika Wirawan's Unit");
       expect(within(unit('mem-ika')).getByRole('link', { name: /^Ika Wirawan's Unit/ })).toHaveAttribute('href', '/unit/dashboard/mem-ika');
       expect(unit('mem-ika')).toHaveTextContent('AAB');
       expect(unit('mem-ika')).toHaveTextContent('2 / 3 done');
@@ -331,7 +337,7 @@ describe('KPM analytics › Compliance, Events, and Campaigns (P18.6-T1, P18.6-T
       open(undefined, { query: { category: 'activation' } });
       await tree();
       // Maya Halim has no activation, and her card holds nobody else: nobody to count.
-      for (const el of [unit('mem-maya').firstElementChild!, section('mem-maya').firstElementChild!]) {
+      for (const el of [unit('mem-maya').firstElementChild!, section('mem-maya').querySelector('summary')!]) {
         expect(el.textContent).not.toMatch(/0 \/ 0/);
         expect(el).toHaveTextContent(/— done/);
         expect(spoken(el)).toContain('No rate: nobody to count');
@@ -395,15 +401,14 @@ describe('KPM analytics › Compliance, Events, and Campaigns (P18.6-T1, P18.6-T
       expect(screen.queryAllByRole('region')).toHaveLength(0);
     });
 
-    it('drills by link: a leader to their Unit Dashboard in a new tab, the reader to their own, anybody else to their page', async () => {
+    it('P19.3-T3 AC-11 drills by link in the same tab: a leader to their Unit Dashboard, the reader to their own, anybody else to their page', async () => {
       open();
       await tree();
-      const hendra = within(row('mem-hendra')).getByRole('link', { name: 'Hendra Wibowo (opens their Unit Dashboard in a new tab)' });
+      // UI-095: on a phone or a home-screen app a new tab left the app, and Back did not return.
+      const hendra = within(row('mem-hendra')).getByRole('link', { name: 'Hendra Wibowo' });
       expect(hendra).toHaveAttribute('href', '/unit/dashboard/mem-hendra');
-      expect(hendra).toHaveAttribute('target', '_blank');
-      expect(hendra).toHaveAttribute('rel', 'noopener noreferrer');
-      expect(within(row('mem-owner')).getByRole('link', { name: 'Wilson Tanoto (opens your Unit Dashboard in a new tab)' }))
-        .toHaveAttribute('href', '/unit/dashboard');
+      expect(hendra).not.toHaveAttribute('target');
+      expect(within(row('mem-owner')).getByRole('link', { name: 'Wilson Tanoto' })).toHaveAttribute('href', '/unit/dashboard');
       const rina = within(row('mem-rina')).getByRole('link', { name: 'Rina Agustina' });
       expect(rina).toHaveAttribute('href', '/people/members/mem-rina');
       expect(rina).not.toHaveAttribute('target');
@@ -433,7 +438,7 @@ describe('KPM analytics › Compliance, Events, and Campaigns (P18.6-T1, P18.6-T
     });
   });
 
-  describe('P18.6-T1 AC-10 accessibility, phones, states', () => {
+  describe('P18.3-T1 AC-10 accessibility, phones, states', () => {
     it('words every status: no pill is colour alone', async () => {
       open();
       await tree();
@@ -556,8 +561,8 @@ describe('KPM analytics › Compliance, Events, and Campaigns (P18.6-T1, P18.6-T
     it('names no phase, and uses none of OD-39’s six words but the prototype’s own sub-line', async () => {
       open();
       await tree();
-      const text = document.querySelector('[data-part="compliance"]')!.textContent!.replace("Every AB's unit in this KPM", '');
-      expect(main().textContent).toContain("Every AB's unit in this KPM");
+      const text = document.querySelector('[data-part="compliance"]')!.textContent!;
+      expect(main().textContent).toContain('11 people · 3 AB units');
       expect(text).not.toMatch(/\bphase\b/i);
       expect(text).not.toMatch(SIX_WORDS);
     });
@@ -569,7 +574,7 @@ describe('KPM analytics › Compliance, Events, and Campaigns (P18.6-T1, P18.6-T
     });
   });
 
-  describe('P18.6-T2 AC-1 the event picker', () => {
+  describe('P18.3-T2 AC-1 the event picker', () => {
     it('groups the year’s events: Upcoming soonest first, a running one among them, Past latest first', async () => {
       open(undefined, { query: { category: 'events' } });
       await tree();
@@ -594,7 +599,7 @@ describe('KPM analytics › Compliance, Events, and Campaigns (P18.6-T1, P18.6-T
     });
   });
 
-  describe('P18.6-T2 AC-2 the events rows', () => {
+  describe('P18.3-T2 AC-2 the events rows', () => {
     it('upcoming: Joined · Feedback, Registered or Not registered, — for anybody outside the audience', async () => {
       open(undefined, { query: { category: 'events', item: 'ev-kickoff' } });
       await tree();
@@ -638,7 +643,7 @@ describe('KPM analytics › Compliance, Events, and Campaigns (P18.6-T1, P18.6-T
     });
   });
 
-  describe('P18.6-T2 AC-3 the Feedback Summary', () => {
+  describe('P18.3-T2 AC-3 the Feedback Summary', () => {
     it('mounts a past event’s card above its tree, with its own read', async () => {
       const { calls } = open(undefined, { query: { category: 'events', item: 'ev-townhall' } });
       expect(await screen.findByRole('heading', { name: 'August Town Hall — Feedback Summary' })).toBeInTheDocument();
@@ -660,7 +665,7 @@ describe('KPM analytics › Compliance, Events, and Campaigns (P18.6-T1, P18.6-T
     });
   });
 
-  describe('P18.6-T2 AC-4 the campaign picker', () => {
+  describe('P18.3-T2 AC-4 the campaign picker', () => {
     it('groups the year’s campaigns, an upcoming one under Ongoing, each with its date label', async () => {
       open(undefined, { query: { category: 'campaigns' } });
       await tree();
@@ -704,7 +709,7 @@ describe('KPM analytics › Compliance, Events, and Campaigns (P18.6-T1, P18.6-T
     });
   });
 
-  describe('P18.6-T2 AC-6 the campaigns rows', () => {
+  describe('P18.3-T2 AC-6 the campaigns rows', () => {
     it('Chasing · Achieved: Chasing, Not chasing, — when not eligible; — achieved while not ended', async () => {
       open(undefined, { query: { category: 'campaigns' } });
       await tree();
@@ -746,14 +751,15 @@ describe('KPM analytics › Compliance, Events, and Campaigns (P18.6-T1, P18.6-T
 });
 
 /**
- * **P18.98-T4 the compliance tree in Indonesian** (`i18n/messages/kpm-compliance.ts`; ADR-0179): the heading and the six
+ * **P18.10-T4 the compliance tree in Indonesian** (`i18n/messages/kpm-compliance.ts`; ADR-0179): the heading and the six
  * chips kept English (§A.3), every status, column, verb, picker and state the approved glossary's, the office's own
  * names — categories, modules, events, campaigns, people — as typed, and the dates Indonesian.
  */
-describe('P18.98-T4 Compliance, Events, and Campaigns in Indonesian', () => {
+describe('P18.10-T4 Compliance, Events, and Campaigns in Indonesian', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   function openInIndonesian(query: Record<string, string> = {}, reply: StubReply = answer()) {
+    atWidth(1280);
     stubFetch({ ...SHELL_STUBS, [READ]: reply, [FEEDBACK]: { body: TOWN_HALL_SUMMARY } });
     nav.search = new URLSearchParams(query).toString();
     renderInIndonesian(<KpmAnalyticsLayout><KpmAnalyticsCompliancePage /></KpmAnalyticsLayout>, { me: OWNER_ME });
@@ -761,17 +767,16 @@ describe('P18.98-T4 Compliance, Events, and Campaigns in Indonesian', () => {
 
   const tree = () => screen.findAllByRole('region');
 
-  it('P18.98-T4 keeps the heading and the chips, and writes the sub-line, statuses and dates in Indonesian', async () => {
+  it('P18.10-T4 keeps the heading and the chips, and writes the sub-line, statuses and dates in Indonesian', async () => {
     openInIndonesian();
     await tree();
-    expect(screen.getByRole('heading', { level: 2, name: 'Compliance, Events, and Campaigns' })).toBeInTheDocument();
-    expect(screen.getByText(/^Setiap unit AB di KPM ini — \d+ orang di \d+ units?$/)).toBeInTheDocument();
+    // UI-098: the heading is the counted line, not the content's full name again.
+    expect(screen.getByRole('heading', { level: 2, name: '11 orang · 3 unit AB' })).toBeInTheDocument();
     const chips = within(screen.getByRole('group', { name: 'Kategori' }));
     for (const name of ['Training', 'Goal Setting', 'Activity Mgmt', 'Activation', 'Events', 'Campaigns']) {
       expect(chips.getByRole('button', { name: new RegExp(`${name}$`) })).toBeInTheDocument();
     }
-    expect(screen.getByRole('group', { name: 'Kategori Training' })).toBeInTheDocument();
-    expect(screen.getByRole('group', { name: 'Modules' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Modul Training/ })).toBeInTheDocument();
     expect(row('mem-hendra')).toHaveTextContent(/Selesai\s*1 Sep$/);
     expect(row('mem-ika')).toHaveTextContent(/Selesai\s*20 Des 2025$/);
     expect(row('mem-rina')).toHaveTextContent(/Berjalan\s*—$/);
@@ -786,7 +791,7 @@ describe('P18.98-T4 Compliance, Events, and Campaigns in Indonesian', () => {
     expect(englishShown(document.body, englishOnly(kpmComplianceMessages))).toEqual([]);
   });
 
-  it('P18.98-T4 writes the single-item categories, Activity’s note and an expired activation in Indonesian', async () => {
+  it('P18.10-T4 writes the single-item categories, Activity’s note and an expired activation in Indonesian', async () => {
     openInIndonesian({ category: 'activity' });
     await tree();
     expect(row('mem-rina')).toHaveTextContent(/Tercatat\s*10 Okt$/);
@@ -801,7 +806,7 @@ describe('P18.98-T4 Compliance, Events, and Campaigns in Indonesian', () => {
     expect(row('mem-sinta')).toHaveTextContent(/Selesai\s*1 Agu$/);
   });
 
-  it('P18.98-T4 writes the event picker and its rows in Indonesian, each event’s title as typed', async () => {
+  it('P18.10-T4 writes the event picker and its rows in Indonesian, each event’s title as typed', async () => {
     openInIndonesian({ category: 'events' });
     await tree();
     const picker = screen.getByRole('combobox', { name: 'Event' });
@@ -812,7 +817,7 @@ describe('P18.98-T4 Compliance, Events, and Campaigns in Indonesian', () => {
     expect(screen.getByRole('button', { name: /lebih dulu$/ })).toHaveTextContent('↓ Belum ikut lebih dulu');
   });
 
-  it('P18.98-T4 writes the campaign picker, its rows and the override’s control in Indonesian', async () => {
+  it('P18.10-T4 writes the campaign picker, its rows and the override’s control in Indonesian', async () => {
     openInIndonesian({ category: 'campaigns', item: 'PERSISTENCY_PUSH' });
     await tree();
     const picker = screen.getByRole('combobox', { name: 'Campaign' });
@@ -825,7 +830,7 @@ describe('P18.98-T4 Compliance, Events, and Campaigns in Indonesian', () => {
     expect(englishShown(document.body, englishOnly(kpmComplianceMessages))).toEqual([]);
   });
 
-  it('P18.98-T4 says a team with no AB, and a year with nothing to show, in Indonesian', async () => {
+  it('P18.10-T4 says a team with no AB, and a year with nothing to show, in Indonesian', async () => {
     openInIndonesian({}, { body: NO_AB });
     expect(await screen.findByText('Belum ada AB.')).toBeInTheDocument();
     vi.unstubAllGlobals();

@@ -4,12 +4,12 @@ import { kept } from '@/i18n/kept';
 import type { Voice } from './goal-words';
 
 /**
- * **Goal Settings' own words** (P18.98-T4, field selling; `functional/goals.md`): `/goals` and the calculator a coachee's
+ * **Goal Settings' own words** (P18.10-T4, field selling; `functional/goals.md`): `/goals` and the calculator a coachee's
  * *Goal Setting* tab mounts too (`components/goal-calculator.tsx`) — its five steps, their fields and tiles, *Save goal*
  * and its status, the cascade, the commitment, the disclaimer, and the states a plan can be in. The marker beside the
  * APE produced and the months left in words are `lib/goals.ts`' (`goal-words.ts`).
  *
- * **UI V1 (P18.99-T5, 2026-10-30)**: the result card on top (UI-014), the commitment in the report's shorter sentence
+ * **UI V1 (P18.11-T5, 2026-10-30)**: the result card on top (UI-014), the commitment in the report's shorter sentence
  * built from the result card's own three names (UI-017), the save state the shared one's (`save-state.tsx`, UI-019) and
  * the ⚡ the shared marker's (`auto-marker.tsx`, UI-020) — so this area no longer holds a status, an *auto* badge or a
  * per-month line.

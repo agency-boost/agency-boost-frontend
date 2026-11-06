@@ -1,22 +1,16 @@
 'use client';
 
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Suspense, use, useEffect, useId, useState } from 'react';
+import { Suspense, use, useEffect, useState } from 'react';
 import { Page } from '@/components/page';
 import { Button, ButtonLink, Card, ErrorBanner, Field, TextInput } from '@/components/ui/field';
 import { useMessages } from '@/i18n/language-provider';
 import { supportSessionMessages } from '@/i18n/messages/support-session';
-import { readTenant, startImpersonation, type ImpersonationPurpose } from '@/lib/admin';
+import { readTenant, startImpersonation } from '@/lib/admin';
 import { setAccessToken, setImpersonating, toDisplayError } from '@/lib/api-client';
 import { useSession } from '@/lib/session';
 
 const MAX_MINUTES = 60;
-
-/**
- * The two reasons to start a session (ADR-0162), in the order the office's *Open as Owner* puts them: the
- * one it opens with first. Each hint is the whole of what that kind may do (the catalogue's words).
- */
-const PURPOSES: readonly ImpersonationPurpose[] = ['setup', 'support'];
 
 /** Who the session acts as, when the office it was opened from names them (`?kpmId=`). */
 interface Person {
@@ -30,11 +24,15 @@ interface Person {
  * Deliberately a screen and not a button in a list: a reason is mandatory, it is
  * recorded permanently, and the consequences are worth reading once before agreeing to
  * them.
+ *
+ * **One kind of session, *Hanya melihat*** (P19.4-T2 AC-1, AC-7; UI-151; ADR-0206 §3): the screen says so, with no
+ * choice to make — the radio of *Penyiapan* and *Hanya melihat* (ADR-0162, superseded) is gone, nothing sends a
+ * `purpose`, and an old address's `?purpose=setup` is ignored. The server refuses every write of the session.
  */
 export default function ImpersonatePage({ params }: { params: Promise<{ userId: string }> }) {
   const { userId } = use(params);
   return (
-    // `useSearchParams` needs a boundary: *Open as Owner* says what the session is for in the address.
+    // `useSearchParams` needs a boundary: *Open as Owner* names the office it came from in the address.
     <Suspense fallback={null}>
       <StartSession userId={userId} />
     </Suspense>
@@ -47,15 +45,11 @@ function StartSession({ userId }: { userId: string }) {
   const t = useMessages(supportSessionMessages).start;
   const { reload } = useSession();
   const fromOffice = search.get('kpmId');
-  const [purpose, setPurpose] = useState<ImpersonationPurpose>(
-    search.get('purpose') === 'setup' ? 'setup' : 'support',
-  );
   const [person, setPerson] = useState<Person | null>(null);
   const [reason, setReason] = useState('');
   const [minutes, setMinutes] = useState(String(MAX_MINUTES));
   const [error, setError] = useState<{ code: string; message: string; requestId: string } | null>(null);
   const [busy, setBusy] = useState(false);
-  const id = useId();
 
   /*
    * **The person, by name** (ADR-0162 §1), read from the office the button was on — its Owner, when that is
@@ -83,7 +77,7 @@ function StartSession({ userId }: { userId: string }) {
     setBusy(true);
     setError(null);
     try {
-      const { accessToken } = await startImpersonation(userId, reason.trim(), duration, purpose);
+      const { accessToken } = await startImpersonation(userId, reason.trim(), duration);
       setAccessToken(accessToken);
       setImpersonating(true);
       await reload();
@@ -100,7 +94,7 @@ function StartSession({ userId }: { userId: string }) {
   }
 
   return (
-    <Page title={t.title} subtitle={t.subtitle}>
+    <Page title={t.title}>
       <Card className="max-w-xl">
         <ul className="mb-4 flex list-disc flex-col gap-1 pl-5 text-md text-muted">
           <li>
@@ -120,28 +114,12 @@ function StartSession({ userId }: { userId: string }) {
         <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
           {error && <ErrorBanner {...error} />}
 
-          <fieldset className="flex flex-col gap-2">
-            <legend className="mb-1 text-sm font-semibold text-navy">{t.purpose}</legend>
-            {PURPOSES.map((value) => (
-              <label key={value} className="flex items-start gap-2 text-md text-navy">
-                <input
-                  type="radio"
-                  name={`${id}-purpose`}
-                  value={value}
-                  checked={purpose === value}
-                  onChange={() => setPurpose(value)}
-                  className="mt-1 accent-navy"
-                  aria-describedby={`${id}-${value}-hint`}
-                />
-                <span>
-                  {value === 'setup' ? t.setup : t.support}
-                  <span id={`${id}-${value}-hint`} className="block text-sm text-muted">
-                    {value === 'setup' ? t.setupHint : t.supportHint}
-                  </span>
-                </span>
-              </label>
-            ))}
-          </fieldset>
+          {/* The kind of session, said and not chosen (ADR-0206 §3): where the radio was, one line and its hint. */}
+          <p className="text-md text-navy">
+            <span className="text-sm font-semibold">{t.kind}</span>{' '}
+            <strong>{t.viewOnly}</strong>
+            <span className="block text-sm text-muted">{t.viewOnlyHint}</span>
+          </p>
 
           <Field label={t.reason} htmlFor="reason" hint={t.reasonHint}>
             <TextInput

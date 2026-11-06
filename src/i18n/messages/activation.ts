@@ -2,11 +2,11 @@ import { defineMessages, type MessagesOf } from '@/i18n/catalogue';
 import { kept } from '@/i18n/kept';
 
 /**
- * **The 90-day activation's own words** (`lib/activation.ts`; P18.98-T4, new hires and activation;
+ * **The 90-day activation's own words** (`lib/activation.ts`; P18.10-T4, new hires and activation;
  * `functional/activation.md`, *The module's own strings*): the hire's `/activation` — its title and line, the progress
  * card, a row, the *Auto* and *Ticked by hand* badges, who ticked what, a data-backed item's two forms, the leader's
  * note and the page's states — the parts the leader's `/new-hires/[membershipId]` draws the same way, the coaching
- * record's (`record`, which `components/activation-record.tsx` reads in the reader's language since P18.98-T4's coaching
+ * record's (`record`, which `components/activation-record.tsx` reads in the reader's language since P18.10-T4's coaching
  * and unit), and the office's checklist settings' badge and
  * *From {data}* (`autoBadge`, `byHandBadge`, `fromDataWords`). The roster's and the detail's own words are
  * `new-hires.ts`'.
@@ -21,7 +21,7 @@ import { kept } from '@/i18n/kept';
  *
  * **Typed content stays as typed**: an aspect's name, an item's label, a note, a name. **The server's words are passed
  * in as they come**: a link's label (*Sales data*, *Goal Settings*) and what it completes on (`completesWhen`), which
- * are the API's (P18.98-T5). **A figure is never a message's**: a date or a percentage is written by the caller in the
+ * are the API's (P18.10-T5). **A figure is never a message's**: a date or a percentage is written by the caller in the
  * figures' language and passed in.
  *
  * @moved lib/activation.ts
@@ -32,15 +32,15 @@ import { kept } from '@/i18n/kept';
  * @moved components/activation-record.tsx
  */
 const en = {
-  /** The hire's page: its title, the nav item's words (P18.95-T9 AC-2), and its line. */
+  /** The hire's page: its title, the nav item's words (P18.7-T9 AC-2), and its line. */
   title: kept('Your 90-Day Activation'),
   subtitle: 'Your first 90 days, checklist by checklist.',
 
   /** The progress card's head (`:3280-3349`). */
   progressHeading: 'Your activation progress',
-  /** One name for the one date (P18.96-T2 AC-5, ADR-0169 §7). */
+  /** One name for the one date (P18.8-T2 AC-5, ADR-0169 §7). */
   joinDate: 'Join date',
-  /** *Mark checklist complete* (P18.96-T6 AC-5, ADR-0173 §4), and why it waits: `n` the checklist's own total. */
+  /** *Mark checklist complete* (P18.8-T6 AC-5, ADR-0173 §4), and why it waits: `n` the checklist's own total. */
   graduate: 'Mark checklist complete',
   graduateLocked: ({ n }: { n: number }) => `Unlocks when all ${n} items are done`,
   /** Its confirmation (OD-28, D-copy) and its toast (`:6683-6688`). */
@@ -79,7 +79,7 @@ const en = {
   byHand: 'Ticked by hand',
   byHandTip: 'This link does not complete the item on its own, so the hire or one of their leaders ticks it.',
   byHandName: 'Ticked by hand — this link does not complete the item on its own, so the hire or one of their leaders ticks it',
-  /** What a data-backed item completes from, in the office's settings' select (P18.96-T7 G2). */
+  /** What a data-backed item completes from, in the office's settings' select (P18.8-T7 G2). */
   fromData: ({ label }: { label: string }) => `From ${label}`,
 
   /** Who ticked a done item and when (OD-121, T4 AC-5): `who` a name or `you`, `when` a day already written. */
@@ -89,7 +89,7 @@ const en = {
     `Completed from ${label} by ${who} · ${when}`,
   completedFrom: ({ label, when }: { label: string; when: string }) => `Completed from ${label} · ${when}`,
   completedAutomatically: ({ when }: { when: string }) => `Completed automatically · ${when}`,
-  /** A data-backed item ticked by hand, not yet confirmed by its data (P18.96-T4 AC-4). */
+  /** A data-backed item ticked by hand, not yet confirmed by its data (P18.8-T4 AC-4). */
   waitingForData: ({ who }: { who: string }) => `Ticked by ${who}, waiting for data`,
   /** The join date's correction (OD-118, ADR-0169 §2). */
   correctedBy: ({ who, when }: { who: string; when: string }) => `Join date corrected by ${who} · ${when}`,
@@ -98,7 +98,7 @@ const en = {
   saving: 'Saving…',
   tryAgain: 'Try again',
 
-  /** A data-backed item's two forms (P18.96-T4 AC-3; the client's own *Which case?*, *Log 1:1*). */
+  /** A data-backed item's two forms (P18.8-T4 AC-3; the client's own *Which case?*, *Log 1:1*). */
   whichCase: 'Which case?',
   newClosing: 'Log a new closing',
   closingName: 'Sold to',
@@ -129,7 +129,7 @@ const en = {
 
   /**
    * **The coaching *Activation* tab** (`components/activation-record.tsx`, `:6464-6489`; P13-T9): the card, an item's
-   * state, its wait and a person with none, in the reader's language (P18.98-T4, coaching and unit).
+   * state, its wait and a person with none, in the reader's language (P18.10-T4, coaching and unit).
    */
   record: {
     title: kept('90-Day Activation'),

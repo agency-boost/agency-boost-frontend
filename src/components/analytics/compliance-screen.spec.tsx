@@ -1,8 +1,8 @@
 import { Suspense } from 'react';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { renderWithSession, stubFetch, type StubReply } from '@test/harness';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { atWidth, renderWithSession, stubFetch, type StubReply } from '@test/harness';
 import { OWNER_ME } from '@test/kpm-analytics-fixtures';
 import { complianceView, SERVER_ERROR } from '@test/kpm-compliance-fixtures';
 import type { ComplianceSelection } from '@/lib/kpm-compliance';
@@ -34,7 +34,9 @@ function open(replies: StubReply[], selection: ComplianceSelection) {
 
 const reads = (calls: { url: string }[]) => calls.filter((c) => c.url.includes('/kpm/analytics/compliance')).map((c) => c.url);
 
-describe('the compliance screen’s reads (P18.6-T1 AC-10, P18.6-T2 AC-8)', () => {
+describe('the compliance screen’s reads (P18.3-T1 AC-10, P18.3-T2 AC-8)', () => {
+  // The laptop's tree (P19.3-T3: below 1024px every reader reads UI-109's layout).
+  beforeEach(() => { atWidth(1280); });
   afterEach(() => vi.unstubAllGlobals());
 
   it('re-reads the tree when the Achieved cell says a standing changed, the tree staying on screen meanwhile', async () => {

@@ -7,7 +7,7 @@ import { api } from './api-client';
 import { whatsAppNumber } from './phone-number';
 
 /**
- * **+ Add agent, its invites and its transfers** (P18.96-T3; ADR-0170; `functional/org-hierarchy.md`, *Adding an
+ * **+ Add agent, its invites and its transfers** (P18.8-T3; ADR-0170; `functional/org-hierarchy.md`, *Adding an
  * agent*): the one form a leader adds somebody through — on `/new-hires` and the Unit Dashboard — the invites it makes
  * for somebody not in the app yet, the transfer it asks for when they report to another leader, and the link the
  * invitee opens. The server decides which, by the agent code; this says what it answered.
@@ -66,7 +66,7 @@ export interface TransferView {
 /**
  * **A transfer request as whoever asked sees it** — *+ Add agent*'s answer and *Transfer requested* on `/new-hires`:
  * the name they typed, the code, the unit they asked for. Never the account's own name nor the leader it reports to,
- * which the server does not send (the P18.96 exit review, M3).
+ * which the server does not send (the P18.8 exit review, M3).
  */
 export interface RequestedTransferView {
   transferId: string;
@@ -95,6 +95,8 @@ export interface AddAgentInput {
   joinDate: string;
   /** The Owner's or an Admin's choice of unit; a leader's own needs none. */
   leaderMembershipId?: string;
+  /** The recruitment lead *Tambahkan ke unit ›* came from (P19.1-T6 AC-7): linked to the membership the form makes. */
+  recruitLeadId?: string;
 }
 
 /** What an invite link opens before anybody is signed in. */
@@ -108,6 +110,11 @@ export interface InviteBanner {
   fullName: string;
   existingAccount: boolean;
   expiresAt: string;
+  /**
+   * **The KPM's marks for the invitation's pages** (P19.6-T1 AC-13; ADR-0218 §9): its name, version, palette and logo
+   * size, with its id for the files; `null` for AgencyBoost's. Optional so a fixture that is about something else need not.
+   */
+  branding?: { kpmId: string; name: string; version: string; palette: import('./session').BrandingPalette | null; logo: { width: number; height: number } | null } | null;
 }
 
 export const addAgent = (input: AddAgentInput) =>
@@ -145,9 +152,9 @@ export const declineTransfer = (transferId: string, reason?: string) =>
   });
 
 /**
- * **The language the invite is written to the invitee in** (P18.98-T4): theirs, and they have chosen none — so the
+ * **The language the invite is written to the invitee in** (P18.10-T4): theirs, and they have chosen none — so the
  * language a reader with no choice reads, Bahasa Indonesia (`DEFAULT_LANGUAGE`, ADR-0179 §1), whichever language the
- * leader's own screen is in. As the client wrote the message (P18.96-T3 AC-2).
+ * leader's own screen is in. As the client wrote the message (P18.8-T3 AC-2).
  */
 export const INVITEE_LANGUAGE: Language = DEFAULT_LANGUAGE;
 

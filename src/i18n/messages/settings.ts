@@ -2,7 +2,7 @@ import { defineMessages, type MessagesOf } from '@/i18n/catalogue';
 import { kept } from '@/i18n/kept';
 
 /**
- * **The office's settings screens: their frame, and the words every one of them shares** (P18.98-T4, the office's
+ * **The office's settings screens: their frame, and the words every one of them shares** (P18.10-T4, the office's
  * settings A; the approved glossary's §B.1–§B.5). The block order every settings screen is drawn in
  * (`components/settings-screen.tsx`), its tab rows (`settings-tabs.tsx`), the two bars — what is held in this browser
  * (`staged-changes-bar.tsx`) and what agents are on (`publish-bar.tsx`) — and the mark a staged row wears

@@ -31,7 +31,7 @@ describe('the roster’s words (P11-T6)', () => {
     expect(lastOneOnOneText(last(12))).toBe('12 days ago');
   });
 
-  it('P18.8-T15 AC-7 says overdue in the words when the server marks it, and nothing more otherwise', () => {
+  it('P18.5-T15 AC-7 says overdue in the words when the server marks it, and nothing more otherwise', () => {
     expect(lastOneOnOneLine(last(14, true))).toBe('14 days ago · overdue');
     expect(lastOneOnOneLine(last(1, true))).toBe('1 day ago · overdue');
     expect(lastOneOnOneLine(last(30, false))).toBe('30 days ago');
@@ -381,11 +381,11 @@ describe('the record after the meeting (P11-T10)', () => {
 });
 
 /**
- * **P18.98-T4 (coaching and unit): the words in Indonesian.** Each function takes the reader's language last, English
+ * **P18.10-T4 (coaching and unit): the words in Indonesian.** Each function takes the reader's language last, English
  * when passed none — every case above — and writes the approved glossary's Indonesian when asked: one form for one and
  * many, *dia* whatever the pronoun (§B.0 rule 8), the kept terms English, names and labels as typed.
  */
-describe('P18.98-T4 coaching’s words in Indonesian', () => {
+describe('P18.10-T4 coaching’s words in Indonesian', () => {
   it('words Last 1:1, its overdue and a status pill', () => {
     expect(lastOneOnOneText(null, 'id')).toBe('Belum ada 1:1');
     expect(lastOneOnOneText(last(0), 'id')).toBe('Hari ini');
@@ -453,12 +453,13 @@ describe('P18.98-T4 coaching’s words in Indonesian', () => {
 });
 
 /*
- * ── UI V1 (Phase 18.99 T8): the tabs in the owner's order, the way back, the session's Leads card ──────────────────
+ * ── UI V1 (Phase 18.11 T8): the tabs in the owner's order, the way back, the session's Leads card ──────────────────
  */
-describe('UI V1 — coaching (P18.99-T8)', () => {
+describe('UI V1 — coaching (P18.11-T8)', () => {
   it('UI-029 orders the tabs as the owner does, Coaching Session first, and knows the new Leads tab by its address', async () => {
     const { COACHING_TABS } = await import('./coaching');
-    expect(COACHING_TABS).toEqual(['session', 'activity', 'leads', 'goal-setting', 'summary', 'activation', 'training', 'leader-notes']);
+    // *Survei* since P19.5-T4 (ADR-0216 §7): between *Activation* and *Training*.
+    expect(COACHING_TABS).toEqual(['session', 'activity', 'leads', 'goal-setting', 'summary', 'activation', 'survey', 'training', 'leader-notes']);
     expect(coachingTabOf('/coaching/mem-rina/leads', 'mem-rina')).toBe('leads');
     expect(coachingTabHref('mem-rina', 'leads')).toBe('/coaching/mem-rina/leads');
   });

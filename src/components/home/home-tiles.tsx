@@ -26,7 +26,12 @@ export const calendarToday = (today: string) => `/calendar?view=agenda&date=${to
  *
  * **A chip whose count is 0 is hidden; the tile stays** (UI-100). A split chip is hidden only when its scope holds
  * nobody: *Unit 0/4* is the Unit Dashboard's own chip, and Home shows that tile exactly (parity row). Two by two on a
- * phone and from 1024px, four in a row on a tablet. *Active Agent {Bulan}* and *dari 12* are the dashboard's words.
+ * phone and from 1024px. *Active Agent {Bulan}* and *dari 12* are the dashboard's words.
+ *
+ * *Changed 2026-11-04 (P19.1-T1 AC-5, ADR-0196; UI-124, `home-tablet`):* **two by two on a tablet too, across the full
+ * width** — four in a row there wrapped *Active Agent November* onto two lines. From 1024px the tiles stay two by two in
+ * Home's wider column, as `home-desktop` draws them: four across there would wrap the same label (the report's *4 across
+ * from 1024* is the tablet held sideways; the phase file's T5 keeps the laptop unchanged).
  */
 export function HomeTiles({ view, className }: { view: HomeView; className?: string }) {
   const t = useMessages(homeMessages).tiles;
@@ -34,13 +39,16 @@ export function HomeTiles({ view, className }: { view: HomeView; className?: str
   const figures = useFigureLanguage();
   const number = (n: number) => formatNumber(n, {}, figures);
   const { activity, schedule, leader } = view;
+  // The two team tiles once there is a team to count (P19-T4): a leader with nobody yet has *Tim saya* below, at zero
+  // with its calls to action, rather than two rings of *0 dari 0* here.
+  const withTeam = leader !== null && leader.members > 0;
   const chip = (key: string, label: string, n: number): StatChip[] =>
     n > 0 ? [{ key, label: <>{label} <b>{number(n)}</b></> }] : [];
 
   return (
     <div
       data-home-tiles=""
-      className={cn('grid grid-cols-2 gap-2 lg:gap-2.5', leader && 'md:max-lg:grid-cols-4', className)}
+      className={cn('grid grid-cols-2 gap-2 lg:gap-2.5', className)}
     >
       <StatTile
         href="/activity/log"
@@ -56,7 +64,7 @@ export function HomeTiles({ view, className }: { view: HomeView; className?: str
         unit={t.meetings({ n: schedule.meetings })}
         chips={chip('tasks', t.tasks, schedule.tasks)}
       />
-      {leader && (
+      {withTeam && (
         <>
           <StatTile
             href="/unit/dashboard"
@@ -101,7 +109,7 @@ function LogPill({ label }: { label: string }) {
   return (
     <span
       data-log-pill=""
-      className="inline-flex h-[2.375rem] items-center gap-1 rounded-pill bg-amber px-4 text-md font-bold leading-none text-navy"
+      className="inline-flex h-[2.375rem] items-center gap-1 rounded-pill bg-primary px-4 text-md font-bold leading-none text-primary-contrast"
     >
       <LineIcon name="plus" className="h-4 w-4" />
       {label}

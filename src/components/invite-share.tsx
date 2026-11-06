@@ -10,12 +10,12 @@ import { formatOfficeDay, OFFICE_TIME_ZONE } from '@/lib/format';
 import { inviteWhatsAppLink, type SharedInvite } from '@/lib/invites';
 
 /**
- * **An invite's three ways out** (P18.96-T3 AC-2, ADR-0170 §2): *Share on WhatsApp* — the invitee's chat with the
+ * **An invite's three ways out** (P18.8-T3 AC-2, ADR-0170 §2): *Share on WhatsApp* — the invitee's chat with the
  * message and the link filled in — *Copy link*, and a QR of the same link, the leader code panel's own pieces
  * (`/user-management/add`). Shown once, in the answer that made the token: *+ Add agent* and *Resend*. The link is
  * never shown again, because only its hash is kept.
  *
- * **Its words are the catalogue's** (`add-agent.ts`' `share`; P18.98-T4), the day the link stops working written in
+ * **Its words are the catalogue's** (`add-agent.ts`' `share`; P18.10-T4), the day the link stops working written in
  * the figures' language. **The WhatsApp message is the invitee's**, in Bahasa Indonesia whatever the reader's screen
  * (`inviteMessage`).
  */

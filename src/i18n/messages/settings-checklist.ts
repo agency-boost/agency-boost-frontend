@@ -6,9 +6,9 @@ import { kept } from '@/i18n/kept';
 const words = (...parts: ReactNode[]) => createElement(Fragment, null, ...parts);
 
 /**
- * **Settings › Activation checklist** (`/kpm/settings/activation-checklist`, P5-T3; P18.98-T4): the office's 90-day
+ * **Settings › Activation checklist** (`/kpm/settings/activation-checklist`, P5-T3; P18.10-T4): the office's 90-day
  * checklist, drafted and published as versions. The frame and the controls every settings screen shares are
- * `settings.ts`'. The two grey sentences keep their verdict per size in both languages (P18.97-T4 AC-6): shown from
+ * `settings.ts`'. The two grey sentences keep their verdict per size in both languages (P18.9-T4 AC-6): shown from
  * 1024px, behind an ⓘ at 768–1023px, and below 768px the first behind its ⓘ and the second removed.
  *
  * **Content, shown as typed** (ADR-0179 §5): an aspect's name, an item's label, a training module's title. **Kept
@@ -28,6 +28,8 @@ const en = {
   newVersions: 'New versions apply to new hires only.',
   addAspect: '+ Add aspect',
   addItem: '+ Add item',
+  /** The accordion's name below 1024px (P19.2-T3 AC-3; UI-141). */
+  aspects: 'The checklist’s aspects',
 
   /** A version as the card names it, in bold where a sentence points at it. */
   version: ({ n }: { n: number }) => `version ${n}`,
@@ -96,6 +98,7 @@ const id: MessagesOf<typeof en> = {
   newVersions: `Versi baru hanya berlaku untuk ${kept('new hire')}.`,
   addAspect: '+ Tambah aspek',
   addItem: '+ Tambah item',
+  aspects: 'Aspek checklist',
 
   version: ({ n }) => `versi ${n}`,
   published: ({ version, draft }) => words(

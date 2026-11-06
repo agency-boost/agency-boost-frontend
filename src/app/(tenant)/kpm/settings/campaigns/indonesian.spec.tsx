@@ -9,7 +9,7 @@ import { settingsCampaignsMessages } from '@/i18n/messages/settings-campaigns';
 import CampaignsSettingsPage from './page';
 
 /**
- * **Settings › Campaigns in Indonesian** (P18.98-T4 AC-1 to AC-4, events, campaigns and the calendar): the campaigns'
+ * **Settings › Campaigns in Indonesian** (P18.10-T4 AC-1 to AC-4, events, campaigns and the calendar): the campaigns'
  * rows with their phase and requirements, the panel with its requirement rows, and the carrier's tiers and MOC with the
  * line saying whose they are. The approved glossary's words, the title, tabs, *Target* and the metrics' names kept (§A),
  * what the office and the company typed as typed, and none of the module's English left. English is `page.spec.tsx`'s.
@@ -58,7 +58,7 @@ function render(campaigns: unknown[] = [campaign()]) {
   stubFetch({
     '/kpm/settings/campaigns/rules': { body: [tier, moc] },
     '/kpm/settings/campaigns': { body: campaigns },
-    '/metrics': { body: [{ key: 'APE_ACHIEVED', name: 'APE achieved', unit: 'idr_minor', phase: 9, computed: true, campaign: true }] },
+    '/metrics': { body: [{ key: 'APE_ACHIEVED', name: 'APE achieved', unit: 'idr_minor', phase: '9', computed: true, campaign: true }] },
     '/kpm/settings/publish-state': {
       body: { publishedVersion: 1, workingVersion: 1, hasUnpublishedChanges: false, publishedAt: null },
     },
@@ -68,8 +68,8 @@ function render(campaigns: unknown[] = [campaign()]) {
 
 afterEach(() => vi.unstubAllGlobals());
 
-describe('P18.98-T4 Settings › Campaigns in Indonesian', () => {
-  it('P18.98-T4 AC-1 to AC-4 a campaign’s row: phase, KPM ini, requirements in words, its prize as typed', async () => {
+describe('P18.10-T4 Settings › Campaigns in Indonesian', () => {
+  it('P18.10-T4 AC-1 to AC-4 a campaign’s row: phase, KPM ini, requirements in words, its prize as typed', async () => {
     render();
     expect(await screen.findByText('Year-End Star Club Drive')).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 1, name: 'Campaigns' })).toBeInTheDocument();
@@ -85,7 +85,7 @@ describe('P18.98-T4 Settings › Campaigns in Indonesian', () => {
     noEnglishLeft();
   });
 
-  it('P18.98-T4 AC-1 the panel and its requirement rows, the money field’s mark the reader’s', async () => {
+  it('P18.10-T4 AC-1 the panel and its requirement rows, the money field’s mark the reader’s', async () => {
     render();
     await userEvent.click(await screen.findByRole('button', { name: 'Ubah' }));
     for (const label of ['Judul', 'Kode', 'Jenis', 'Mulai', 'Selesai', 'Emoji poster', 'Warna poster', 'Kalimat kartu', 'Deskripsi', 'Hadiah']) {
@@ -104,7 +104,7 @@ describe('P18.98-T4 Settings › Campaigns in Indonesian', () => {
     noEnglishLeft();
   });
 
-  it('P18.98-T4 AC-1 the carrier’s tiers and MOC: whose they are, the rules in words, what they wait on', async () => {
+  it('P18.10-T4 AC-1 the carrier’s tiers and MOC: whose they are, the rules in words, what they wait on', async () => {
     render();
     await screen.findByText('Year-End Star Club Drive');
     await userEvent.click(screen.getByRole('link', { name: 'Production club tiers' }));
@@ -118,7 +118,7 @@ describe('P18.98-T4 Settings › Campaigns in Indonesian', () => {
     noEnglishLeft();
   });
 
-  it('P18.98-T4 AC-1 an empty list, in Indonesian', async () => {
+  it('P18.10-T4 AC-1 an empty list, in Indonesian', async () => {
     render([]);
     expect(await screen.findByText(/^Belum ada campaign\. Campaign adalah program/)).toBeInTheDocument();
     noEnglishLeft();

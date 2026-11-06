@@ -25,8 +25,8 @@ function strings(copy: object): string[] {
   });
 }
 
-describe('the compliance tree’s rules (P18.6-T1, T2)', () => {
-  describe('P18.6-T1 AC-2 the selection in the address', () => {
+describe('the compliance tree’s rules (P18.3-T1, T2)', () => {
+  describe('P18.3-T1 AC-2 the selection in the address', () => {
     it('reads the category and the item from the address', () => {
       expect(complianceSelectionFrom({ category: 'events', item: 'ev-1' })).toEqual({ category: 'events', item: 'ev-1' });
       expect(complianceSelectionFrom({ category: ['campaigns', 'goals'], item: [' APE_SPRINT '] })).toEqual({ category: 'campaigns', item: 'APE_SPRINT' });
@@ -51,7 +51,7 @@ describe('the compliance tree’s rules (P18.6-T1, T2)', () => {
     });
   });
 
-  describe('P18.6-T1 AC-3 to AC-7, P18.6-T2 AC-2, AC-6 the labels', () => {
+  describe('P18.3-T1 AC-3 to AC-7, P18.3-T2 AC-2, AC-6 the labels', () => {
     it('maps every cell code to the prototype’s words (CATEGORIES, :3013-3020)', () => {
       const words = (map: Record<string, { label: string }>) => Object.fromEntries(Object.entries(map).map(([k, v]) => [k, v.label]));
       expect(words(COMPLIANCE_LABELS.training)).toEqual({ done: 'Completed', in_progress: 'In progress', not_started: 'Not started' });
@@ -89,14 +89,14 @@ describe('the compliance tree’s rules (P18.6-T1, T2)', () => {
     });
   });
 
-  describe('P18.6-T1 AC-3 the sub-line, computed (contradiction 1)', () => {
+  describe('P18.3-T1 AC-3 the sub-line, computed (contradiction 1)', () => {
     it('counts both, in the prototype’s words', () => {
       expect(PROTOTYPE_COPY.sub(28, 5)).toBe("Every AB's unit in this KPM — 28 people across 5 units");
       expect(PROTOTYPE_COPY.sub(1, 1)).toBe("Every AB's unit in this KPM — 1 person across 1 unit");
     });
   });
 
-  describe('P18.6-T1 AC-8 sort, as the prototype does it', () => {
+  describe('P18.3-T1 AC-8 sort, as the prototype does it', () => {
     it('ranks worst-first per category (STATUS_ORDER, eventOrderValue, the chase order)', () => {
       const s = (status: string | null) => rankOf('status', { status, done: null, on: null });
       expect([s('not_started'), s('in_progress'), s('done')]).toEqual([0, 1, 2]);
@@ -145,7 +145,7 @@ describe('the compliance tree’s rules (P18.6-T1, T2)', () => {
     });
   });
 
-  describe('P18.6-T1 AC-8 search, as the prototype does it (:4017-4071)', () => {
+  describe('P18.3-T1 AC-8 search, as the prototype does it (:4017-4071)', () => {
     const view = complianceView('training');
 
     it('keeps everything for an empty or blank search', () => {
@@ -179,7 +179,7 @@ describe('the compliance tree’s rules (P18.6-T1, T2)', () => {
     });
   });
 
-  describe('P18.6-T1 AC-4 Training’s tabs', () => {
+  describe('P18.3-T1 AC-4 Training’s tabs', () => {
     const { training } = complianceView().catalog;
 
     it('finds the default — the first module of the first skill holding one — and a module’s place', () => {
@@ -192,7 +192,7 @@ describe('the compliance tree’s rules (P18.6-T1, T2)', () => {
     });
   });
 
-  describe('P18.6-T2 AC-1, AC-4 the pickers', () => {
+  describe('P18.3-T2 AC-1, AC-4 the pickers', () => {
     it('groups events: Upcoming soonest first with a running one among them, Past latest first', () => {
       const shuffled = [EVENTS[3], EVENTS[1], EVENTS[0], EVENTS[2]];
       const groups = eventGroups(shuffled);
@@ -239,7 +239,7 @@ describe('the compliance tree’s rules (P18.6-T1, T2)', () => {
     });
   });
 
-  describe('P18.6-T1 AC-10 the module’s own strings', () => {
+  describe('P18.3-T1 AC-10 the module’s own strings', () => {
     it('hold none of OD-39’s six words, no phase and no code', () => {
       for (const text of strings(OWN_COPY)) {
         expect(text).not.toMatch(SIX_WORDS);
@@ -262,7 +262,7 @@ describe('the compliance tree’s rules (P18.6-T1, T2)', () => {
     });
   });
 
-  describe('P18.6-T1 AC-10 tokens', () => {
+  describe('P18.3-T1 AC-10 tokens', () => {
     const SRC = join(__dirname, '..');
     const files = ['compliance-screen.tsx', 'compliance-summary.tsx', 'compliance-pickers.tsx', 'compliance-tree.tsx', 'compliance-parts.tsx']
       .map((f) => readFileSync(join(SRC, 'components', 'analytics', f), 'utf8'));

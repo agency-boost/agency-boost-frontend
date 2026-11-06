@@ -9,19 +9,20 @@ import { type DemoAccount } from '@/lib/demo-accounts';
 import { DemoAccountsPanel } from '@/components/demo-accounts-panel';
 import { SignInWelcome, SIGN_IN_PAGE } from '@/components/sign-in-welcome';
 import { Button, ErrorBanner, Field, TextInput } from '@/components/ui/field';
-import { resendVerification } from '@/lib/sessions';
 import { destinationAfterSignIn, sessionEndedIn } from '@/lib/return-path';
 import { PasswordInput } from '@/components/ui/password-input';
 import { PublicTitle } from '@/components/public-title';
 import { useMessages } from '@/i18n/language-provider';
 import { authMessages } from '@/i18n/messages/auth';
+import { LinkBranding } from '@/components/branding/link-branding';
 
 /**
- * **Sign in** (`/login`; UI V1, UI-102, D-11 and D-12; Phase 18.99 T11): **a welcome screen, not a form card** — soft
+ * **Sign in** (`/login`; UI V1, UI-102, D-11 and D-12; Phase 18.11 T11): **a welcome screen, not a form card** — soft
  * warm-grey and peach shapes behind, Boost pointing on his peach circle in the middle with the three icon cards floating
  * around him, the app's name and one short line under it, then the form, and **one big pill *Sign in*** (52px) near the
- * thumb. **Today's method and today's words**: email and password, *Forgot your password?*, *Create an account*, the
- * verification resend and the development accounts — only the look changes (`SignInWelcome`).
+ * thumb. **Today's method and today's words**: email and password, *Forgot your password?*, *Create an account* and
+ * the development accounts — only the look changes (`SignInWelcome`). The verification resend moved to the shells'
+ * banner when sign-in stopped refusing an unverified address (P19-T1, ADR-0190).
  */
 export default function LoginPage() {
   const { signIn } = useSession();
@@ -30,7 +31,6 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<ApiError | null>(null);
-  const [resent, setResent] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const attempt = useCallback(
@@ -70,16 +70,15 @@ export default function LoginPage() {
 
   const credentialsRejected = error?.code === 'AUTH_INVALID_CREDENTIALS';
   /*
-   * The one refusal a person can act on from here (P4-T13).
-   *
-   * Login refuses an unverified account, and until `resend-verification` existed the only
-   * advice was "check your inbox" — for an email that, before `P4-T14`, had never been
-   * sent. Both halves are real now, so the screen offers the action instead of the advice.
+   * *Removed 2026-11-04 (P19-T1 AC-4; UI-163, ADR-0190 §4):* the *Send the verification email again* button this page
+   * offered when sign-in refused an unverified address (`AUTH_EMAIL_NOT_VERIFIED`, P4-T13). Sign-in no longer refuses
+   * one; every shell offers *Kirim ulang* on its banner until the address is verified (`VerifyEmailBanner`).
    */
-  const notVerified = error?.code === 'AUTH_EMAIL_NOT_VERIFIED';
 
   return (
     <main className={SIGN_IN_PAGE}>
+      {/* P19.6-T1 AC-13 (ADR-0218 §9): `?kpm=<id>`'s logo above the welcome, its colours on the page. */}
+      <Suspense fallback={null}><LinkBranding /></Suspense>
       <SignInWelcome />
       <PublicTitle>
         <h1 className="w-full text-center font-display text-3xl font-bold text-navy">{t.title}</h1>
@@ -92,29 +91,6 @@ export default function LoginPage() {
       <div className="relative">
         <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
           {error && <ErrorBanner {...error} />}
-          {notVerified && (
-            <div className="flex flex-wrap items-center gap-3">
-              <Button
-                variant="secondary"
-                disabled={resent || busy}
-                onClick={async () => {
-                  try {
-                    await resendVerification(email);
-                    setResent(true);
-                  } catch (err) {
-                    setError(toDisplayError(err));
-                  }
-                }}
-              >
-                {t.resend}
-              </Button>
-              {resent && (
-                <p role="status" className="text-md text-muted">
-                  {t.resent}
-                </p>
-              )}
-            </div>
-          )}
 
           <Field label={t.email} htmlFor="email">
             <TextInput

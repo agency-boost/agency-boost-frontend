@@ -22,12 +22,12 @@ function record(src: string, name: string): Record<string, string> {
 }
 
 /**
- * **P18.98-T4, Sales tools' words in both languages** (field selling): `lib/product-catalog.ts`' functions read the
+ * **P18.10-T4, Sales tools' words in both languages** (field selling): `lib/product-catalog.ts`' functions read the
  * catalogue — the words in the reader's words' language, English when none is passed; a figure in the figures' language,
  * Indonesian when none is passed — and the three areas hold OD-39's six words to each language. In English, as before:
  * `product-catalog.spec.ts`.
  */
-describe('P18.98-T4 sales tools’ words, language by language', () => {
+describe('P18.10-T4 sales tools’ words, language by language', () => {
   it('AC-1 the English is the source, unchanged: the views the specs read are the catalogue’s English', () => {
     expect(NEED_CHOICES).toEqual(needChoices('en'));
     expect(CHANNEL_LABELS).toEqual({ conventional: 'Conventional', syariah: 'Syariah' });
@@ -48,7 +48,7 @@ describe('P18.98-T4 sales tools’ words, language by language', () => {
       .toEqual(['Dana pensiun', 'Retirement income', undefined]);
   });
 
-  it('P18.98-T3 figures: a budget band’s sums in the figures’ language, its words in the words’ — four combinations', () => {
+  it('P18.10-T3 figures: a budget band’s sums in the figures’ language, its words in the words’ — four combinations', () => {
     expect(budgetChoices('id', 'id').map((c) => c.label)).toEqual([
       '< Rp 500 rb', 'Rp 500 rb–Rp 2 jt', 'Rp 2 jt–Rp 5 jt', 'Rp 5 jt–Rp 10 jt', 'Rp 10 jt–Rp 20 jt', '> Rp 20 jt', 'Sekaligus',
     ]);
@@ -82,7 +82,7 @@ describe('P18.98-T4 sales tools’ words, language by language', () => {
     expect([channelLabel('conventional', 'id'), channelLabel('syariah', 'id')]).toEqual(['Konvensional', 'Syariah']);
   });
 
-  it('P18.98-T3 figures: a commission rate in the figures’ language, Indonesian when none is passed', () => {
+  it('P18.10-T3 figures: a commission rate in the figures’ language, Indonesian when none is passed', () => {
     expect([formatRate(0.125, 'en'), formatRate(0.0725, 'en'), formatRate(0.4, 'en')]).toEqual(['12.5%', '7.25%', '40%']);
     expect([formatRate(0.125, 'id'), formatRate(0.125)]).toEqual(['12,5%', '12,5%']);
   });
@@ -97,7 +97,7 @@ describe('P18.98-T4 sales tools’ words, language by language', () => {
   });
 
   /**
-   * **D-copy in both languages** (ADR-0084's rule; P18.98-T1 AC-6): the module's words use none of OD-39's six words —
+   * **D-copy in both languages** (ADR-0084's rule; P18.10-T1 AC-6): the module's words use none of OD-39's six words —
    * but for the prototype's *"Not uploaded by KPM yet."*, which goes to the client with OD-39 — and the Indonesian says
    * *KPM* there alone, the kept term (§A.5), never *kantor*.
    */

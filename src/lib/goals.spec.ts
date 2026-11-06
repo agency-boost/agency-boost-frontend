@@ -22,7 +22,7 @@ describe('producedFrom', () => {
       .toBe('From your office’s upload, Sep 2026');
   });
 
-  it('P18.95-T7 AC-1 says the office’s year to date in the client’s words, As of its month (grey text row 18)', () => {
+  it('P18.7-T7 AC-1 says the office’s year to date in the client’s words, As of its month (grey text row 18)', () => {
     expect(producedFrom({ provenance: 'imported', month: '2026-08' }, 'year')).toBe('As of Agu 2026');
     expect(producedFrom({ provenance: 'imported', month: '2026-10' }, 'year')).toBe('As of Okt 2026');
     // The month's own figure, a correction and a coachee's keep their words.
@@ -31,11 +31,12 @@ describe('producedFrom', () => {
       .toBe('Corrected by hand, year to date as of Agu 2026');
   });
 
-  it('names the agent’s own figure, which has no month — and whose it is when a leader reads it', () => {
-    expect(producedFrom({ provenance: 'self_reported', month: null }, 'year')).toBe('Your own figure, entered in Goal Settings');
+  it('P19.1-T4 AC-10 names the agent’s own figure as their estimate, which has no month — and whose it is when a leader reads it', () => {
+    // UI-157 (ADR-0195): the typed figure is the member's estimate, entered on Goal Settings or the Summary.
+    expect(producedFrom({ provenance: 'self_reported', month: null }, 'year')).toBe('Your own estimate, not uploaded');
     // The *Whose plan* picker passed `false` here for *Their*; the picker went in P11-T7 (D-picker), and
     // a leader reads somebody else's figure on that person's coaching tabs, in their own pronoun.
-    expect(producedFrom({ provenance: 'self_reported', month: null }, 'year', 'they')).toBe('Their own figure, entered in Goal Settings');
+    expect(producedFrom({ provenance: 'self_reported', month: null }, 'year', 'they')).toBe('Their own estimate, not uploaded');
   });
 
   it('names the source alone when the payload carries no month for it', () => {
@@ -61,9 +62,10 @@ describe('producedFrom', () => {
 describe('producedFrom, about a coachee', () => {
   it('P11-T7 AC-4 names a coachee’s own figure in their pronoun', () => {
     const own = { provenance: 'self_reported', month: null } as const;
-    expect(producedFrom(own, 'year', 'she')).toBe('Her own figure, entered in Goal Settings');
-    expect(producedFrom(own, 'year', 'he')).toBe('His own figure, entered in Goal Settings');
-    expect(producedFrom(own, 'month', 'they')).toBe('Their own figure, entered in Goal Settings');
+    // P19.1-T4 AC-12: the member's estimate, labelled as theirs on their coach's reading of their plan (ADR-0195 §4).
+    expect(producedFrom(own, 'year', 'she')).toBe('Her own estimate, not uploaded');
+    expect(producedFrom(own, 'year', 'he')).toBe('His own estimate, not uploaded');
+    expect(producedFrom(own, 'month', 'they')).toBe('Their own estimate, not uploaded');
   });
 
   it('P11-T7 AC-4 names the upload and a correction of it without ADR-0084’s six words', () => {
@@ -123,10 +125,10 @@ describe('saving a plan from a coaching session (P11-T8 AC-4)', () => {
 });
 
 /**
- * Months left in words (P18.95-T5 AC-5; the client's UI review, UI-018): the nearest whole month, a half rounding
+ * Months left in words (P18.7-T5 AC-5; the client's UI review, UI-018): the nearest whole month, a half rounding
  * up, and *less than a month* below half of one (`metrics-and-definitions.md`, `MONTHS_LEFT_IN_YEAR`, *Display*).
  */
-describe('P18.95-T5 AC-5: monthsLeftInWords', () => {
+describe('P18.7-T5 AC-5: monthsLeftInWords', () => {
   it.each([
     [2.2, 'about 2 months'],
     [2.5, 'about 3 months'],
@@ -136,27 +138,27 @@ describe('P18.95-T5 AC-5: monthsLeftInWords', () => {
     [0.5, 'about 1 month'],
     [11.9, 'about 12 months'],
     [12, 'about 12 months'],
-  ])('P18.95-T5 AC-5: %s months reads %s', (months, words) => {
+  ])('P18.7-T5 AC-5: %s months reads %s', (months, words) => {
     expect(monthsLeftInWords(months)).toBe(words);
   });
 
-  it.each([0.49, 0.1, 0, -1, Number.NaN])('P18.95-T5 AC-5: %s months — below half a month — reads less than a month', (months) => {
+  it.each([0.49, 0.1, 0, -1, Number.NaN])('P18.7-T5 AC-5: %s months — below half a month — reads less than a month', (months) => {
     expect(monthsLeftInWords(months)).toBe('less than a month');
   });
 });
 
 /**
- * **P18.98-T3: a goal's figures in the reader's language** (AC-1, AC-3): the provenance marker's month and a money
+ * **P18.10-T3: a goal's figures in the reader's language** (AC-1, AC-3): the provenance marker's month and a money
  * field's grouping. Indonesian when nothing is passed, as every case above; the words move with the screen (T4).
  */
-describe('P18.98-T3 a goal in each language', () => {
-  it('P18.98-T3 AC-1 writes the marker’s month in the reader’s language', () => {
+describe('P18.10-T3 a goal in each language', () => {
+  it('P18.10-T3 AC-1 writes the marker’s month in the reader’s language', () => {
     expect(producedFrom({ provenance: 'imported', month: '2026-10' }, 'year', undefined, 'en')).toBe('As of Oct 2026');
     expect(producedFrom({ provenance: 'imported', month: '2026-08' }, 'month', undefined, 'en')).toBe('From your office’s upload, Aug 2026');
     expect(producedFrom({ provenance: 'imported', month: '2026-10' }, 'year', undefined, 'id')).toBe('As of Okt 2026');
   });
 
-  it('P18.98-T3 AC-3 groups a money field’s digits in the reader’s marks', () => {
+  it('P18.10-T3 AC-3 groups a money field’s digits in the reader’s marks', () => {
     expect(groupDigits(500_000_000)).toBe('500.000.000');
     expect(groupDigits(500_000_000, 'en')).toBe('500,000,000');
   });

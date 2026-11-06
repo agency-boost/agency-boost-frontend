@@ -8,7 +8,7 @@ import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
 import { dataUploadMessages } from '@/i18n/messages/data-upload';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
-import { formatDayLong } from '@/lib/format';
+import { formatCalendarDay, formatDayLong } from '@/lib/format';
 import {
   readHistory, revertImport, type BatchView, type ImportResult, type MonthState,
 } from '@/lib/production';
@@ -102,6 +102,10 @@ export function ImportHistory({
                     figures: b.cellCount,
                     notTaken: b.issueCount,
                   })}
+                  {/* P19.5-T2 AC-12 (R6): the template version it was read against; D8's *as of*; its held rows. */}
+                  {` · ${t.templateVersion({ version: b.templateVersion })}`}
+                  {b.asOf ? ` · ${t.perDay({ day: formatCalendarDay(b.asOf, figures) })}` : ''}
+                  {b.heldRowCount ? ` · ${t.importedHeld({ n: b.heldRowCount })}` : ''}
                 </p>
                 {b.status === 'reverted' && (
                   <p className="text-sm text-muted">
@@ -118,7 +122,7 @@ export function ImportHistory({
                 <span
                   className={cn(
                     'rounded-pill px-2 py-0.5 text-2xs font-bold uppercase tracking-wide',
-                    b.status === 'committed' ? 'bg-navy/[0.06] text-navy' : 'bg-hairline/60 text-muted',
+                    b.status === 'committed' ? 'bg-secondary/[0.06] text-navy' : 'bg-hairline/60 text-muted',
                   )}
                 >
                   {b.status === 'committed' ? t.standing : t.revertedTag}

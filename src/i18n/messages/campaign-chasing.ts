@@ -2,7 +2,7 @@ import { defineMessages, type MessagesOf } from '@/i18n/catalogue';
 import { kept } from '@/i18n/kept';
 
 /**
- * **What a person is chasing, in words** (P18.98-T4, events, campaigns and the calendar; `functional/campaigns.md`):
+ * **What a person is chasing, in words** (P18.10-T4, events, campaigns and the calendar; `functional/campaigns.md`):
  * the Summary's chased rows and their empty line (`components/campaigns/chasing-card.tsx`), the coachee's and the Unit
  * Dashboard's *Campaigns they're chasing* with its empty line, and the Unit Dashboard roster's *Chasing MDRT* and its
  * cells' sentences. **Apart from `campaigns.ts`** so the Summary's and the Unit Dashboard's routes, which draw these and

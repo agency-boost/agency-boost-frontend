@@ -78,11 +78,11 @@ const card = (name: string) => screen.getByRole('heading', { name }).closest('di
 const ENGLISH = /\b(On track|Applies to|Everyone|Change who it applies to|Edit|Archive|Show archived|Add a ratio|Calculated on|Provisioned with|Your office|This is not your company|Agents see|points?)\b/;
 
 /**
- * **P18.98-T4, Settings › Ratio benchmarks in ID mode**: the screen's words the approved glossary's Indonesian, its
+ * **P18.10-T4, Settings › Ratio benchmarks in ID mode**: the screen's words the approved glossary's Indonesian, its
  * title, tabs, *ratio* and *benchmark* English (§A), the office's names as typed — and **its figures in the reader's
- * language** (P18.98-T3): *15,5%*, *0,50*, *±25 poin*, *37,5%*. In English: `page.spec.tsx`.
+ * language** (P18.10-T3): *15,5%*, *0,50*, *±25 poin*, *37,5%*. In English: `page.spec.tsx`.
  */
-describe('P18.98-T4 Settings › Ratio benchmarks in Indonesian', () => {
+describe('P18.10-T4 Settings › Ratio benchmarks in Indonesian', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it('AC-2 says every card in Indonesian, its figures written as Indonesian writes them', async () => {
@@ -187,11 +187,11 @@ describe('P18.98-T4 Settings › Ratio benchmarks in Indonesian', () => {
 });
 
 /**
- * **P18.98-T3's rule on this screen, now that P18.98-T4 wired it**: under the app's own provider, a reader who chose
+ * **P18.10-T3's rule on this screen, now that P18.10-T4 wired it**: under the app's own provider, a reader who chose
  * nothing while the switch is not live reads English words and **Indonesian figures** — the screen as it was — and
  * one who chose English reads English figures too.
  */
-describe('P18.98-T4 Ratio benchmarks’ figures follow the reader’s choice', () => {
+describe('P18.10-T4 Ratio benchmarks’ figures follow the reader’s choice', () => {
   afterEach(() => { vi.unstubAllGlobals(); resetLanguage(); });
 
   it('not live and unchosen: English words, Indonesian figures, as before the phase', async () => {

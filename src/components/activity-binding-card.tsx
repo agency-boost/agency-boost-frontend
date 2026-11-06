@@ -10,14 +10,17 @@ import {
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { useCan } from '@/lib/session';
 import { useMessages } from '@/i18n/language-provider';
+import { activityBindingMessages } from '@/i18n/messages/activity-binding';
 import { adminTemplateMessages } from '@/i18n/messages/admin-template';
 
 const same = (a: ActivityBinding, b: ActivityBinding) =>
   BINDING_ROLES.every((role) => a[role].length === b[role].length && a[role].every((code, i) => code === b[role][i]));
 
 /**
- * **The office's activity binding, kept by the Super Admin** (ADR-0163 §3; P18.9-T2 AC-3) — a card on
- * `/admin/tenants/[kpmId]` beside the office's other provisioning cards.
+ * **The office's activity binding, read by the Super Admin** (ADR-0163 §3; P18.6-T2 AC-3) — a card on
+ * `/admin/tenants/[kpmId]` beside the office's other provisioning cards. *Read-only since P19.4-T3* (ADR-0206 §1): the
+ * KPM's Owner and Admin set it on their *Activity types* page (`ActivityBindingSheet`), and the card says so; the save
+ * below shows only to a reader who holds `activity_binding:write`, which no Super Admin does now.
  *
  * The product owner's request of 2026-10-26: when an activity is deleted or replaced, bind the summary to it again
  * so it stays right. Replacing is adding the new activity beside the old — the old one's history keeps counting —
@@ -31,6 +34,7 @@ export function ActivityBindingCard({ kpmId }: { kpmId: string }) {
 function BindingCard({ kpmId }: { kpmId: string }) {
   const all = useMessages(adminTemplateMessages);
   const t = all.binding;
+  const { setByOffice } = useMessages(activityBindingMessages);
   // Convenience: the API refuses anybody without it (`activity_binding:write`, the Super Admin's).
   const canWrite = useCan('activity_binding:write');
   const [view, setView] = useState<OfficeActivityBinding | null>(null);
@@ -72,6 +76,8 @@ function BindingCard({ kpmId }: { kpmId: string }) {
     <Card>
       <h2 className="font-display text-lg font-bold text-navy">{t.title}</h2>
       <p className="mt-1 text-md text-muted">{t.lead}</p>
+      {/* P19.4-T3 (ADR-0206 §1): the office's Owner or Admin sets it now; the Super Admin reads it here. */}
+      {!canWrite && <p className="mt-1 text-md text-muted">{setByOffice}</p>}
       <div className="mt-3 flex flex-col gap-3">
         {error && <ErrorBanner {...error} />}
         {view === null || draft === null ? (

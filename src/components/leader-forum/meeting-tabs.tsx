@@ -84,11 +84,11 @@ export function MeetingTabs({
                 className={v1
                   ? cn(
                     'flex min-w-0 flex-1 items-center justify-center whitespace-nowrap rounded-pill px-2 text-base font-semibold',
-                    on ? 'bg-navy text-white' : 'text-muted hover:text-navy',
+                    on ? 'bg-secondary text-secondary-contrast' : 'text-muted hover:text-navy',
                   )
                   : cn(
                     'shrink-0 border-b-2 px-1 py-2.5 text-md font-semibold',
-                    on ? 'border-amber text-navy' : 'border-transparent text-muted hover:text-navy',
+                    on ? 'border-primary text-navy' : 'border-transparent text-muted hover:text-navy',
                   )}
               >
                 {v1 && tab === 'overview' ? t.v1.overviewTab : t.tabs[tab]}

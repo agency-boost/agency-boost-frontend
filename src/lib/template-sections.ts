@@ -1,19 +1,23 @@
-import type { NamedTemplate, OfficeTemplateKind, TemplateKind } from '@/lib/admin';
+import type { NamedTemplate, NamedTemplateKind, TemplateKind } from '@/lib/admin';
 
 /**
- * **A template's six sections** (ADR-0185 §3): the seven kinds a named template holds, grouped as an Owner's settings
+ * **A template's seven sections** (ADR-0185 §3; ADR-0210 §1): the eight kinds a named template holds, grouped as an Owner's settings
  * group them — *Activities & ratios* is the activity taxonomy (with its activity binding) and the ratio set together,
  * as the Owner's *Activity types* holds its *Ratio benchmarks* (`KPM_Owner.html:1329-1330`). The order is the Owner's
- * sidebar's, which ADR-0018 made this screen mirror.
+ * sidebar's, which ADR-0018 made this screen mirror — then ***Rekrutmen***, the recruitment playbook (ADR-0210 §1;
+ * the 11-03 handover's B1-11), moved here from *Pengaturan perusahaan* and published after the others.
  *
  * Each section's **parts** are its pills: a part is a kind, or one half of a kind's payload (*Sales* and *Recruitment*
  * are both `lead_pipeline`). The words are the catalogue's (`admin-template.tsx`, `sections` and `pills`), by key.
  */
-export type SectionSlug = 'activity' | 'leads' | 'activation' | 'training' | 'capability' | 'events';
+export type SectionSlug =
+  | 'activity' | 'leads' | 'activation' | 'training' | 'capability' | 'events' | 'recruitment' | 'analytics' | 'branding';
 
 export type PillKey =
   | 'activityTypes' | 'ratios' | 'sales' | 'recruitment' | 'categories' | 'skills' | 'modules' | 'ladder'
-  | 'tiers' | 'moc' | 'promotion';
+  | 'tiers' | 'moc' | 'promotion'
+  // P19.5-T1 (ADR-0214 §1): *Advanced analytics*' four pill tabs — Bagian · Data upload · Survei · Ambang & benchmark.
+  | 'bagian' | 'data' | 'survei' | 'ambang';
 
 export interface SectionPart {
   /**
@@ -29,7 +33,7 @@ export interface SectionPart {
 export interface TemplateSection {
   slug: SectionSlug;
   /** The kinds, in the order *Publish* sends them: the taxonomy before the ratios checked against it. */
-  kinds: OfficeTemplateKind[];
+  kinds: NamedTemplateKind[];
   parts: SectionPart[];
 }
 
@@ -66,6 +70,24 @@ export const TEMPLATE_SECTIONS: readonly TemplateSection[] = [
     ],
   },
   { slug: 'events', kinds: ['event_types'], parts: [{ key: 'only', kind: 'event_types' }] },
+  // ADR-0210 §1: read live by every KPM made from the template — so nothing is pushed after it is published.
+  { slug: 'recruitment', kinds: ['recruitment_playbook'], parts: [{ key: 'only', kind: 'recruitment_playbook' }] },
+  // P19.6-T1 (ADR-0218 §3): *Tampilan* — the KPMs' default logo, colours and mascot, read live, never pushed.
+  { slug: 'branding', kinds: ['branding'], parts: [{ key: 'only', kind: 'branding' }] },
+  /*
+   * P19.5-T1 (ADR-0214 §1): the eighth section, *Advanced analytics* — read live by every KPM on the template, so
+   * nothing is pushed after it is published. Its four tabs are halves of the one payload.
+   */
+  {
+    slug: 'analytics',
+    kinds: ['advanced_analytics'],
+    parts: [
+      { key: 'bagian', kind: 'advanced_analytics', half: 'sections' },
+      { key: 'data', kind: 'advanced_analytics', half: 'upload' },
+      { key: 'survei', kind: 'advanced_analytics', half: 'surveys' },
+      { key: 'ambang', kind: 'advanced_analytics', half: 'thresholds' },
+    ],
+  },
 ];
 
 /** The company's carrier rules (ADR-0026): *Campaigns* on *Company settings*, its three headings each a pill. */
@@ -94,8 +116,8 @@ export const sectionOfKind = (kind: TemplateKind): TemplateSection | null =>
  */
 export function sectionState(template: Pick<NamedTemplate, 'sections'>, section: TemplateSection): {
   state: 'draft' | 'published' | 'partial' | 'empty';
-  versions: { kind: OfficeTemplateKind; version: number | null }[];
-  /** Every kind has a published version — what *x/6 bagian terbit* counts, a waiting draft or not. */
+  versions: { kind: NamedTemplateKind; version: number | null }[];
+  /** Every kind has a published version — what *x/7 bagian terbit* counts, a waiting draft or not. */
   allPublished: boolean;
 } {
   const versions = section.kinds.map((kind) => ({ kind, version: template.sections?.[kind]?.publishedVersion ?? null }));
@@ -106,7 +128,7 @@ export function sectionState(template: Pick<NamedTemplate, 'sections'>, section:
   return { state, versions, allPublished };
 }
 
-/** *x/6 bagian terbit* and *n perubahan belum terbit*: counted by section, the rows a reader sees (ADR-0185 §3). */
+/** *x/7 bagian terbit* and *n perubahan belum terbit*: counted by section, the rows a reader sees (ADR-0185 §3). */
 export function templateProgress(template: Pick<NamedTemplate, 'sections'>): {
   published: number; total: number; waiting: number;
 } {
@@ -145,10 +167,11 @@ const SECTION_OF: Record<string, [SectionSlug, string]> = {
   'capability-ladder': ['capability', '#ladder'],
   'capability-skills': ['capability', '#skills'],
   events: ['events', ''],
+  // ADR-0210 §1: the playbook was the company's own tab; it is a template's section now.
+  recruitment: ['recruitment', ''],
 };
 const SETTINGS_OF: Record<string, string> = {
   products: '#products',
-  recruitment: '#recruitment',
   campaigns: '#campaigns',
   'campaign-tiers': '#campaigns',
   'campaign-moc': '#campaigns',

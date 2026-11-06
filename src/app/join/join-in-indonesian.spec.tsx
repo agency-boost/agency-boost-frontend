@@ -6,7 +6,7 @@ import { joinMessages } from '@/i18n/messages/join';
 import JoinPage from './page';
 
 /**
- * **`/join` in Indonesian** (P18.98-T4 AC-1 to AC-4, public and account): a leader's code checked, for somebody signed
+ * **`/join` in Indonesian** (P18.10-T4 AC-1 to AC-4, public and account): a leader's code checked, for somebody signed
  * out, with no office, or already in one, and a leader's invite to one person. The approved glossary's words
  * (`i18n/messages/join.tsx`; the §A.2 titles, *office* is *KPM*, *reports to* *melapor ke*), *KPM* and *leader* kept,
  * the office's label, a leader's name, a branch, a company and an agent code as stored, the join date in the reader's
@@ -43,7 +43,7 @@ afterEach(() => {
   resetLanguage();
 });
 
-describe('P18.98-T4 /join in Indonesian', () => {
+describe('P18.10-T4 /join in Indonesian', () => {
   it('reads the English it is looking for, so a silent zero cannot pass', () => {
     expect(ENGLISH.length).toBeGreaterThan(20);
     expect(ENGLISH).toEqual(expect.arrayContaining(['Join an office', 'Check this invite']));
@@ -114,7 +114,7 @@ describe('P18.98-T4 /join in Indonesian', () => {
     noEnglishLeft();
   });
 
-  it('P18.98-T3 a visitor who chose nothing reads English words and the join date in Indonesian while not live', async () => {
+  it('P18.10-T3 a visitor who chose nothing reads English words and the join date in Indonesian while not live', async () => {
     query = new URLSearchParams('invite=kpm-1.secret');
     stubFetch({ '/invites/kpm-1.secret': { body: BANNER } });
     renderWithLanguage(<JoinPage />, { me: null }, { live: false });

@@ -19,7 +19,7 @@ import {
 } from '@/lib/unit-dashboard';
 
 /**
- * **The *Activities* tab** (UI V1, Phase 18.99 T4; UI-001, D-17; `unit-dashboard-mobile` screen 3,
+ * **The *Activities* tab** (UI V1, Phase 18.11 T4; UI-001, D-17; `unit-dashboard-mobile` screen 3,
  * `unit-dashboard-desktop` *Activities*): one read, `GET /unit/dashboard/activities`.
  *
  * - **Controls**: `[‹] 26 Okt – 1 Nov 2026 [›]` — ‹ › one period, › disabled on the current one, the date a picker —
@@ -132,8 +132,8 @@ export function Segmented<T extends string>({
           className={cn(
             'min-h-11 flex-1 whitespace-nowrap rounded-pill px-3 text-sm font-semibold lg:min-h-8',
             onNavy
-              ? value === option.id ? 'bg-white text-navy' : 'text-white'
-              : value === option.id ? 'bg-navy text-white' : 'text-muted hover:text-navy',
+              ? value === option.id ? 'bg-white text-navy' : 'text-secondary-contrast'
+              : value === option.id ? 'bg-secondary text-secondary-contrast' : 'text-muted hover:text-navy',
           )}
         >
           {option.label}
@@ -204,7 +204,7 @@ function Controls({
 }
 
 /** The heat map's tints, by step: none, light, middle, strong — the accent, never a raw hex. */
-const HEAT = ['', 'bg-amber/10', 'bg-amber/25', 'bg-amber/45'] as const;
+const HEAT = ['', 'bg-primary/10', 'bg-primary/25', 'bg-primary/45'] as const;
 
 /** The sticky columns: *Aktivitas* at the left edge, *Total* right of it. */
 const ACTIVITY_COL = 'sticky left-0 z-[1] w-[7.5rem] bg-card lg:w-[12.5rem]';
@@ -262,9 +262,9 @@ function ActivityTable({ view, scope }: { view: UnitActivitiesView; scope: UnitS
             />
           ))}
           <tfoot>
-            <tr className="h-10 bg-navy text-white">
-              <th scope="row" className={cn(ACTIVITY_COL, 'bg-navy px-2.5 text-left font-semibold')}>{t.v1.total}</th>
-              <td className={cn(TOTAL_COL, 'bg-navy font-semibold')}>{n(totals.total)}</td>
+            <tr className="h-10 bg-secondary text-secondary-contrast">
+              <th scope="row" className={cn(ACTIVITY_COL, 'bg-secondary px-2.5 text-left font-semibold')}>{t.v1.total}</th>
+              <td className={cn(TOTAL_COL, 'bg-secondary font-semibold')}>{n(totals.total)}</td>
               {people.map((person) => (
                 <td key={person.membershipId} className="text-center tabular-nums">{n(person.total)}</td>
               ))}
@@ -335,7 +335,7 @@ function ActivitiesSkeleton() {
       <div className="rounded-lg bg-card p-3">
         {[0, 1, 2, 3, 4, 5].map((i) => <SkeletonBar key={i} className="mt-3 h-4 first:mt-0" />)}
       </div>
-      <div className="mt-3 h-40 rounded-lg bg-navy/20 lg:max-w-xl" />
+      <div className="mt-3 h-40 rounded-lg bg-secondary/20 lg:max-w-xl" />
     </Skeleton>
   );
 }

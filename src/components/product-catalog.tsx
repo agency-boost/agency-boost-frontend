@@ -11,6 +11,7 @@ import { useLanguage, useMessages } from '@/i18n/language-provider';
 import { productCatalogMessages } from '@/i18n/messages/product-catalog';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
+import { formatCurrencies } from '@/lib/format';
 import {
   catalogHref, categoryTabs, drawerHref, filtersFrom, matchesSearch, productCount, readCatalog,
   type CatalogCard, type CatalogFilters, type ProductChannel,
@@ -35,21 +36,28 @@ export function useCatalogDrawerHost(): CatalogDrawerHost {
 /** The channel tag's words and tint (`.tag.conv`, `.tag.syar`), and the run-off tag (`.tag.runoff`). */
 const TAG = 'rounded-pill px-2 py-[3px] text-2xs font-bold uppercase tracking-wide';
 const CHANNEL_TAG: Record<ProductChannel, string> = {
-  conventional: 'bg-navy/[0.08] text-navy',
+  conventional: 'bg-secondary/[0.08] text-navy',
   // Navy words on the amber wash, where the prototype's amber-dark is 2.6:1 (`product-catalog.spec.ts`).
-  syariah: 'bg-amber/[0.14] text-navy',
+  syariah: 'bg-primary/[0.14] text-navy',
 };
 
 /**
  * The tags above a product's name: its channel, and *In run-off* where it is (`Overall.html:10174-10178`).
  * A `<span>`, never a `<div>`: it sits inside the card's `<button>`, whose content is phrasing content only.
  */
-export function ProductTags({ channel, runOff }: { channel: ProductChannel; runOff: boolean }) {
+export function ProductTags({ channel, runOff, currencies }: {
+  channel: ProductChannel;
+  runOff: boolean;
+  /** What it is sold in (P19.4-T4 AC-12): *IDR*, *USD*, *IDR + USD* — a code, the same in both languages. */
+  currencies: readonly string[];
+}) {
   const t = useMessages(productCatalogMessages);
+  const codes = formatCurrencies(currencies);
   return (
     <span className="flex flex-wrap gap-1.5">
       <span className={cn(TAG, CHANNEL_TAG[channel])}>{t.channel[channel]}</span>
       {runOff && <span className={cn(TAG, 'bg-alert/[0.08] text-alert')}>{t.runOff}</span>}
+      {codes && <span className={cn(TAG, 'bg-secondary/[0.08] text-navy')} aria-label={t.currenciesLabel({ codes })}>{codes}</span>}
     </span>
   );
 }
@@ -70,13 +78,13 @@ export function ProductTags({ channel, runOff }: { channel: ProductChannel; runO
  * The states the prototype lacks are Fills (P14-T7 AC-10): a skeleton while the shelf loads, an error with
  * a retry, and the empty shelf — an office whose company has no catalog, or which keeps nothing on.
  *
- * **A search by product name** above the filters, at every size (P18.95-T6 AC-4; the client's review, UI-023:
+ * **A search by product name** above the filters, at every size (P18.7-T6 AC-4; the client's review, UI-023:
  * 31 products and no search). It filters the shelf already loaded — the one read answers it whole — together
  * with the category and the channel, and is held by the grid rather than the address: it stays while a drawer
  * opens and closes over it, as the grid's scroll does. **On a phone the category pills are one row that scrolls
  * sideways** (UI-015: three lines), fading on the side that has more, the chosen one in view (`use-tab-row.ts`).
  *
- * **Its words are the catalogue's** (P18.98-T4; ADR-0179 §4), `messages/product-catalog.ts`, in the reader's language:
+ * **Its words are the catalogue's** (P18.10-T4; ADR-0179 §4), `messages/product-catalog.ts`, in the reader's language:
  * the categories, the channels and the states are Indonesian in ID mode (the categories since UI V1, UI-107), and a
  * product's name is the company's or the office's, shown as typed (ADR-0179 §5) — its line the platform's Indonesian
  * where the company still holds the platform's words (the server's, UI-107).
@@ -167,18 +175,18 @@ function FilterBar({ filters, onChange }: { filters: CatalogFilters; onChange: (
   // On a phone (UI-107): white pills, the chosen one navy, borderless; 44px to the touch through a 4px reach above and below.
   const tab = (on: boolean) => cn(
     'rounded-md border px-3.5 py-2 text-base font-semibold',
-    on ? 'border-navy bg-navy text-white' : 'border-hairline bg-card text-muted hover:text-navy max-md:border-transparent max-md:text-navy',
+    on ? 'border-secondary bg-secondary text-secondary-contrast' : 'border-hairline bg-card text-muted hover:text-navy max-md:border-transparent max-md:text-navy',
     'max-md:flex max-md:h-9 max-md:items-center max-md:rounded-pill max-md:py-0',
   );
   const toggle = (on: boolean) => cn(
     'rounded-[6px] px-[13px] py-[7px] text-base font-semibold',
-    on ? 'bg-navy text-white' : 'text-muted hover:text-navy',
+    on ? 'bg-secondary text-secondary-contrast' : 'text-muted hover:text-navy',
     'max-md:flex max-md:min-h-[2.375rem] max-md:items-center max-md:rounded-pill max-md:px-3 max-md:py-0 max-md:text-sm',
   );
   const channels: ['all' | ProductChannel, string][] = [
     ['all', t.all], ['conventional', t.channel.conventional], ['syariah', t.channel.syariah],
   ];
-  // On a phone the pills are one row that scrolls inside its own box (P18.95-T6 AC-4), the chosen one in view.
+  // On a phone the pills are one row that scrolls inside its own box (P18.7-T6 AC-4), the chosen one in view.
   const row = useTabRow<HTMLDivElement>(filters.category);
   return (
     <div className="mb-6 flex flex-wrap items-center justify-between gap-3 max-md:mb-1 max-md:gap-2">
@@ -220,7 +228,7 @@ function FilterBar({ filters, onChange }: { filters: CatalogFilters; onChange: (
 
 /**
  * A section per category, in the tabs' order, each hidden when the filter leaves it empty (`:10161-10186`) — the
- * search's too (P18.95-T6 AC-4), so a section's count is what it shows. Nothing left: the prototype's line for a
+ * search's too (P18.7-T6 AC-4), so a section's count is what it shows. Nothing left: the prototype's line for a
  * filter, or, while a search is typed, one that names what was searched for.
  */
 function Shelf({ products, filters, term, onOpen }: {
@@ -270,15 +278,15 @@ function Shelf({ products, filters, term, onOpen }: {
                 onClick={() => onOpen(p.code)}
                 className={cn(
                   'flex flex-col gap-2 rounded-lg border border-card-edge bg-card px-[18px] py-4 text-left',
-                  'transition-[border-color,box-shadow] hover:border-navy hover:shadow-modal',
+                  'transition-[border-color,box-shadow] hover:border-secondary hover:shadow-modal',
                   // Faded as drawn (`.prod-card.legacy`): the tag says it, the fade only repeats it.
                   p.lifecycle === 'closed_to_new_business' && 'opacity-60',
                 )}
               >
-                <ProductTags channel={p.channel} runOff={p.lifecycle === 'closed_to_new_business'} />
+                <ProductTags channel={p.channel} runOff={p.lifecycle === 'closed_to_new_business'} currencies={p.currencies} />
                 <span className="m-0 text-lg font-bold text-navy">{p.name}</span>
                 <span className="m-0 text-base leading-snug text-muted">{p.tagline}</span>
-                <span className="mt-auto pt-1 text-base font-semibold text-amber-ink">{t.viewDetail}</span>
+                <span className="mt-auto pt-1 text-base font-semibold text-primary-ink">{t.viewDetail}</span>
               </button>
             ))}
           </div>
@@ -343,6 +351,13 @@ function PhoneSection({ section, onOpen }: {
                         <span className="rounded-pill bg-teal/[0.12] px-[7px] py-px text-sm font-bold text-teal-ink">{t.channel.syariah}</span>
                       )}
                       {runOff && <span className="rounded-pill bg-pill-grey px-[7px] py-px text-sm font-bold text-pill-grey-ink">{t.runOff}</span>}
+                      {/* What it is sold in, as the wider card says it (P19.4-T4 AC-12). */}
+                      <span
+                        className="rounded-pill bg-secondary/[0.08] px-[7px] py-px text-sm font-bold text-navy"
+                        aria-label={t.currenciesLabel({ codes: formatCurrencies(p.currencies) })}
+                      >
+                        {formatCurrencies(p.currencies)}
+                      </span>
                     </span>
                     <span className="mt-0.5 line-clamp-2 text-sm leading-snug text-muted">{p.tagline}</span>
                   </span>

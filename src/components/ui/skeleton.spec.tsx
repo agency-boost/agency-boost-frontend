@@ -16,7 +16,7 @@ import {
 } from './skeleton';
 
 /**
- * P3.5-T14 Stage 3. Two things have to hold at once and they pull in opposite directions:
+ * P3.1-T14 Stage 3. Two things have to hold at once and they pull in opposite directions:
  * a wait must be *announced*, and a grid of blank bars must not be *read out*.
  */
 describe('skeleton', () => {

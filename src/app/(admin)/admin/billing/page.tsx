@@ -1,91 +1,123 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
-import { PageLanguageSwitch, usePageLanguageSwitch } from '@/components/app-shell';
+import Link from 'next/link';
+import { useCallback, useEffect, useState } from 'react';
 import { Page } from '@/components/page';
-import { Button, ErrorBanner } from '@/components/ui/field';
-import { Skeleton, SkeletonBar } from '@/components/ui/skeleton';
+import { Cell, DataTable, Row, type Column } from '@/components/ui/data-table';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Button, ErrorBanner, Field, Select } from '@/components/ui/field';
+import { ListCard, ListRow } from '@/components/ui/list-rows';
+import { Skeleton, SkeletonBar, SkeletonTable } from '@/components/ui/skeleton';
+import { StatusPill } from '@/components/ui/status-pill';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
-import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
+import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
 import { billingMessages } from '@/i18n/messages/billing';
 import {
-  defaultDates, maskAmount, officeToday, priceQuote, readBillingPrices,
-  type BillingPrices, type CalculatorInput, type QuoteDetails,
+  listBillingKpms, readBillingPrices, tierLabel,
+  type BillingKpmRow, type BillingKpmSort, type BillingKpmStatus, type BillingPrices,
 } from '@/lib/billing';
-import { printAs, restorePrintTitle } from '@/lib/print';
-import { Estimate, TierCards } from './editor';
-import { QuoteDialog } from './quote-dialog';
-import { QuoteSheet, type GeneratedQuote } from './quote-sheet';
+import { formatShortDay } from '@/lib/format';
+import { useMediaQuery } from '@/lib/use-media-query';
+import { ChoicePill } from '@/components/ui/rows-and-sheets';
+import { TierCards } from './editor';
 
 /**
- * **Billing & subscription** — the quote tool (ADR-0111; `functional/billing.md`), from
- * `AgencyBoost_Billing_Subscription.html`, verbatim.
+ * **Billing & subscription — one row per KPM** (P19.4-T3 AC-10; ADR-0211 §3; SA UI-015, SA R6, SA case 8).
  *
- * **It stores nothing.** Its one request is `GET /admin/billing/prices`; the calculator, the dialog and
- * the quote live in this page's state, and the PDF is the browser's print. Leaving the page loses the
- * quote, as it does in the prototype; the PDF the Super Admin saves is the only copy (ADR-0111 §2).
+ * The page lists the KPMs — *KPM · Perusahaan · Leader · Tingkat · Paket · Perpanjangan · Status* — filterable by
+ * company and sortable by a column, both on the server (`GET /admin/billing/kpms`); a row opens the KPM's *Billing*
+ * tab (`/admin/tenants/[kpmId]?tab=billing`), where the calculator moved, filled with that KPM's leaders and plan.
+ * **The price tiers stay as a reference strip** above the list (`GET /admin/billing/prices`), with no *"TINGKAT
+ * ANDA"*: no KPM is chosen here.
  *
  * The Super Admin's alone (`billing:read_prices`): the route's own gate, inside the console's.
+ *
+ * **Below 1024px a row per KPM** (P19.2-T2 AC-1, AC-4; UI-126, UI-134): *code · branch* opening its *Billing* tab, the
+ * company, *Leaders · Tier · Plan · Renewal* after their columns' words, the state on the right; the company filter and the
+ * sort are pills — a column as its heading's first press, the same one again the other way. From 1024px the table, at
+ * the content's width.
  */
 export default function BillingPage() {
+  const COPY = useMessages(billingMessages).prototype;
   return (
-    <Page permission="billing:read_prices">
+    // **The title through the shared header** (P19.2-T2 AC-9; UI-138).
+    <Page title={COPY.title} permission="billing:read_prices">
       <Billing />
     </Page>
   );
 }
 
-/**
- * The page's title and launch line (`:229-232`), on the screen and on the paper, as the prototype prints them. On the
- * screen, once the language switch is live, the switch at its top right as every page header has it (P18.98-T2 AC-3);
- * never on the paper, which is outside the shell.
- */
-function Heading() {
+/** The launch line under the title (`:229-232`). Copy only: no date in code reads the cut-off (ADR-0111 §6). */
+function LaunchLine() {
   const COPY = useMessages(billingMessages).prototype;
-  const withLanguage = usePageLanguageSwitch();
-  const words = (
-    <>
-      <h1 className="font-display text-3xl font-bold text-navy">{COPY.title}</h1>
-      {/* Copy only: no date in code reads the cut-off (ADR-0111 §6). Amber-ink, where the prototype's 12.5px amber-dark is about 3:1. */}
-      <p className="mt-1.5 text-sm font-semibold text-amber-ink">{COPY.launch}</p>
-    </>
-  );
-  if (!withLanguage) return <div className="mb-[18px]">{words}</div>;
-  return (
-    <div className="mb-[18px] flex flex-wrap items-start justify-between gap-4">
-      <div>{words}</div>
-      <PageLanguageSwitch />
-    </div>
-  );
+  return <p className="-mt-1 mb-[18px] text-sm font-semibold text-primary-ink">{COPY.launch}</p>;
 }
 
-const INITIAL: CalculatorInput = { leaders: '8', period: 'sixMonth', discountType: 'percent', discount: '0' };
-const NO_NAMES = { kpm: '', pic: '', sales: '' };
+/** The offices list's tones for the same states (`tenantStatusTone`): ended is alert, kept active a watch. */
+const STATUS_TONE: Record<BillingKpmStatus, 'success' | 'alert' | 'watch' | 'neutral'> = {
+  active: 'success', ended: 'alert', ended_kept_active: 'watch', none: 'neutral',
+};
 
 function Billing() {
-  const OWN = useMessages(billingMessages).own;
+  const { own: OWN, perKpm: T } = useMessages(billingMessages);
+  const figures = useFigureLanguage();
   const [prices, setPrices] = useState<BillingPrices | null>(null);
+  const [pricesError, setPricesError] = useState<ApiError | null>(null);
+  const [rows, setRows] = useState<BillingKpmRow[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
+  /** The companies to filter by: every company with a KPM, from the first unfiltered read. */
+  const [companies, setCompanies] = useState<{ id: string; name: string }[]>([]);
+  const [companyId, setCompanyId] = useState('');
+  const belowLaptop = useMediaQuery(['phone', 'tablet']);
+  const [sort, setSort] = useState<{ key: BillingKpmSort; dir: 'asc' | 'desc' }>({ key: 'kpm', dir: 'asc' });
 
-  const load = useCallback(() => {
-    setError(null);
-    readBillingPrices()
-      .then(setPrices)
-      .catch((err) => setError(toDisplayError(err)));
+  const loadPrices = useCallback(() => {
+    setPricesError(null);
+    readBillingPrices().then(setPrices).catch((err) => setPricesError(toDisplayError(err)));
   }, []);
-  useEffect(load, [load]);
+  useEffect(loadPrices, [loadPrices]);
+
+  const loadRows = useCallback(() => {
+    setError(null);
+    setRows(null);
+    listBillingKpms({ companyId: companyId || undefined, sort: sort.key, dir: sort.dir })
+      .then((read) => {
+        setRows(read);
+        if (!companyId) {
+          const seen = new Map(read.map((r) => [r.company.id, r.company.name]));
+          setCompanies([...seen].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name)));
+        }
+      })
+      .catch((err) => setError(toDisplayError(err)));
+  }, [companyId, sort]);
+  useEffect(loadRows, [loadRows]);
+
+  /** A heading the reader sorts by: ascending first, then the other way. */
+  /** The sort pill's choices below 1024px: the sortable columns, the one sorted by carrying ↑ or ↓. */
+  const sortChoices = (list: readonly [BillingKpmSort, string][]) => list.map(([key, label]) => ({
+    key, label: key === sort.key ? `${label} ${sort.dir === 'asc' ? '↑' : '↓'}` : label,
+  }));
+  const sortable = (label: string, key: BillingKpmSort): Column => ({
+    label,
+    sort: sort.key === key ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none',
+    onSort: () => setSort((s) => (s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' })),
+  });
+  const c = T.columns;
+  const columns: Column[] = [
+    sortable(c.kpm, 'kpm'), sortable(c.company, 'company'), sortable(c.leaders, 'leaders'), sortable(c.tier, 'tier'),
+    sortable(c.plan, 'plan'), sortable(c.renewal, 'renewal'), sortable(c.status, 'status'),
+  ];
 
   return (
     <div className="max-w-[68.75rem]">
-      <Heading />
+      <LaunchLine />
+      {/* The reference strip (ADR-0211 §3): the five tiers, no *"Your tier"*, no *Talk to us*. */}
       {prices ? (
-        <QuoteTool prices={prices} />
-      ) : error ? (
-        // Nothing is priced from nothing: no card, no calculator, until the table has been read (a Fill).
-        <div>
-          <ErrorBanner code={error.code} message={OWN.failed} requestId={error.requestId} />
-          <Button variant="secondary" className="mt-3" onClick={load}>{OWN.retry}</Button>
+        <TierCards tiers={prices.tiers} label={T.tiers} />
+      ) : pricesError ? (
+        <div className="mb-6">
+          <ErrorBanner code={pricesError.code} message={OWN.failed} requestId={pricesError.requestId} />
+          <Button variant="secondary" className="mt-3" onClick={loadPrices}>{OWN.retry}</Button>
         </div>
       ) : (
         <Skeleton label={OWN.loading}>
@@ -93,136 +125,109 @@ function Billing() {
             {Array.from({ length: 5 }, (_, i) => (
               <div key={i} className="flex flex-col gap-2 rounded-lg border border-card-edge bg-card p-4">
                 <SkeletonBar className="w-2/3" />
-                <SkeletonBar className="w-1/2" />
                 <SkeletonBar className="h-5 w-4/5" />
               </div>
             ))}
           </div>
-          <div className="space-y-3 rounded-lg border border-card-edge bg-card p-5 md:p-7">
-            <SkeletonBar className="h-4 w-1/3" />
-            <SkeletonBar className="h-10 w-full max-w-[220px]" />
-            {Array.from({ length: 5 }, (_, i) => <SkeletonBar key={i} className="w-full" />)}
-          </div>
         </Skeleton>
       )}
-    </div>
-  );
-}
 
-function QuoteTool({ prices }: { prices: BillingPrices }) {
-  const { prototype: COPY, own: OWN } = useMessages(billingMessages);
-  const language = useLanguage();
-  const figures = useFigureLanguage();
-  const [input, setInput] = useState<CalculatorInput>(INITIAL);
-  const pricing = useMemo(() => priceQuote(prices, input, figures, language), [prices, input, figures, language]);
-
-  /*
-   * An amount is grouped as it is typed, in the figures' marks: when the reader switches language, what was typed is
-   * grouped again in the new marks, so *25.000* reads *25,000* and is still the amount, never a refused one.
-   */
-  useEffect(() => {
-    setInput((i) => (i.discountType === 'flat' ? { ...i, discount: maskAmount(i.discount, figures) } : i));
-  }, [figures]);
-
-  const [discountOpen, setDiscountOpen] = useState(false);
-  const [focusDiscount, setFocusDiscount] = useState(0);
-  const [names, setNames] = useState(NO_NAMES);
-  const [dialog, setDialog] = useState<Pick<QuoteDetails, 'start' | 'end'> | null>(null);
-  const [quote, setQuote] = useState<GeneratedQuote | null>(null);
-  const [printing, setPrinting] = useState(false);
-  const opener = useRef<HTMLElement | null>(null);
-  const quoteHeading = useRef<HTMLHeadingElement>(null);
-
-  /**
-   * *Confirm plan*, *Send custom quote*, *Send quote* and *Talk to us*. **A discount out of bounds
-   * generates nothing** (ADR-0111 §5): the dialog stays shut, *Manual override* opens, and the focus
-   * goes to the field whose sentence says why.
-   */
-  const openDialog = () => {
-    if (pricing.discountError) {
-      setDiscountOpen(true);
-      setFocusDiscount((n) => n + 1);
-      return;
-    }
-    opener.current = document.activeElement as HTMLElement | null;
-    setDialog(defaultDates(input.period));
-  };
-
-  const generate = (details: QuoteDetails) => {
-    setQuote({ pricing, details, generatedOn: officeToday() });
-    setDialog(null);
-  };
-
-  // The quote replaces the editor, and the focus goes to its title; *Back to editor* gives it back to
-  // the button that opened the dialog, once the editor is shown again.
-  const shown = useRef(false);
-  useEffect(() => {
-    if (quote) quoteHeading.current?.focus();
-    else if (shown.current) opener.current?.focus();
-    shown.current = quote !== null;
-  }, [quote]);
-  const back = () => setQuote(null);
-
-  // Printed once the print view is on the page, and taken off it once the window closes.
-  useEffect(() => {
-    if (printing && quote) printAs(OWN.printTitle({ kpm: quote.details.kpm.trim() }), () => setPrinting(false));
-  }, [printing, quote, OWN]);
-  // Leaving the page puts the title back, for a browser whose `afterprint` never came.
-  useEffect(() => restorePrintTitle, []);
-
-  return (
-    <>
-      {/* The editor stays mounted while the quote shows, as the prototype hides it (`:691`), so
-          *Back to editor* finds the calculator as it was. */}
-      <div hidden={quote !== null}>
-        <TierCards tiers={prices.tiers} current={pricing.tier} onTalkToUs={openDialog} />
-        <Estimate
-          input={input}
-          pricing={pricing}
-          onInput={setInput}
-          onOpenDialog={openDialog}
-          discountOpen={discountOpen}
-          onDiscountOpen={setDiscountOpen}
-          focusDiscount={focusDiscount}
-        />
+      <div className={belowLaptop ? 'mb-3 flex flex-wrap gap-1.5' : 'mb-3 max-w-[18rem]'}>
+        {/* **No native select below 1024px** (P19.2-T2 AC-4; UI-134: *a pill that opens a sheet for long lists
+            (company)*): the filter a pill, navy once it narrows the list, as the audit's chips are; a laptop keeps its
+            select. */}
+        {belowLaptop ? (
+          <>
+            <ChoicePill
+              name={T.company}
+              options={[{ key: '', label: T.allCompanies }, ...companies.map((co) => ({ key: co.id, label: co.name }))]}
+              value={companyId}
+              onChange={setCompanyId}
+              narrows={companyId !== ''}
+            />
+            {/* The headings sort on a laptop; below it the sort is a pill (P19.2-T2 AC-4). */}
+            <ChoicePill
+              name={T.sort}
+              options={sortChoices([
+                ['kpm', c.kpm], ['company', c.company], ['leaders', c.leaders], ['tier', c.tier], ['plan', c.plan],
+                ['renewal', c.renewal], ['status', c.status],
+              ])}
+              value={sort.key}
+              onChange={(key) => setSort((s) => (s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' }))}
+              narrows={false}
+              shows="value"
+            />
+          </>
+        ) : (
+          <Field label={T.company} htmlFor="billing-company">
+            <Select id="billing-company" value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
+              <option value="">{T.allCompanies}</option>
+              {companies.map((co) => <option key={co.id} value={co.id}>{co.name}</option>)}
+            </Select>
+          </Field>
+        )}
       </div>
 
-      {quote && (
-        <QuoteSheet
-          quote={quote}
-          headingRef={quoteHeading}
-          actions={(
-            <>
-              <Button onClick={() => setPrinting(true)}>{COPY.print}</Button>
-              <Button variant="secondary" onClick={back}>{COPY.back}</Button>
-            </>
-          )}
-        />
+      {error ? (
+        <div>
+          <ErrorBanner code={error.code} message={T.failed} requestId={error.requestId} />
+          <Button variant="secondary" className="mt-3" onClick={loadRows}>{OWN.retry}</Button>
+        </div>
+      ) : rows === null ? (
+        <SkeletonTable caption={T.loading} columns={columns} rows={4} />
+      ) : rows.length === 0 ? (
+        <div className="rounded-lg border border-card-edge bg-card"><EmptyState title={T.empty} /></div>
+      ) : belowLaptop ? (
+        <ListCard label={T.caption}>
+          {rows.map((row) => (
+            <ListRow
+              key={row.kpmId}
+              data-row={row.kpmId}
+              href={`/admin/tenants/${row.kpmId}?tab=billing`}
+              ariaLabel={T.openRow({ code: row.code, branch: row.branch })}
+              title={`${row.code} · ${row.branch}`}
+              meta={row.company.name}
+              note={(
+                <span className="text-muted">
+                  {[
+                    `${c.leaders} ${row.leadersUsed}`, `${c.tier} ${tierLabel(row.tier)}`,
+                    `${c.plan} ${row.plan ? T.plan[row.plan] : '—'}`,
+                    `${c.renewal} ${row.renewalDate ? formatShortDay(row.renewalDate, { year: true }, figures) : '—'}`,
+                  ].join(' · ')}
+                </span>
+              )}
+              trailing={<StatusPill status={STATUS_TONE[row.status]} label={T.status[row.status]} />}
+            />
+          ))}
+        </ListCard>
+      ) : (
+        // Seven columns at the content's width (P19.2-T2 AC-1): a phone and a tablet draw rows, so the 46rem minimum that
+        // kept a phone's table scrolling inside its box is gone.
+        <DataTable caption={T.caption} columns={columns}>
+          {rows.map((row) => (
+            <Row key={row.kpmId}>
+              <Cell className="font-semibold">
+                <Link
+                  href={`/admin/tenants/${row.kpmId}?tab=billing`}
+                  className="underline"
+                  aria-label={T.openRow({ code: row.code, branch: row.branch })}
+                >
+                  {row.code}
+                </Link>
+                <span className="block text-sm font-normal text-muted">{row.branch}</span>
+              </Cell>
+              <Cell>{row.company.name}</Cell>
+              <Cell className="whitespace-nowrap">{row.leadersUsed}</Cell>
+              <Cell className="whitespace-nowrap">{tierLabel(row.tier)}</Cell>
+              <Cell className="whitespace-nowrap">{row.plan ? T.plan[row.plan] : '—'}</Cell>
+              <Cell className="whitespace-nowrap">
+                {row.renewalDate ? formatShortDay(row.renewalDate, { year: true }, figures) : '—'}
+              </Cell>
+              <Cell><StatusPill status={STATUS_TONE[row.status]} label={T.status[row.status]} /></Cell>
+            </Row>
+          ))}
+        </DataTable>
       )}
-
-      {dialog && (
-        <QuoteDialog
-          period={input.period}
-          names={names}
-          dates={dialog}
-          onNames={setNames}
-          onCancel={() => setDialog(null)}
-          onGenerate={generate}
-        />
-      )}
-
-      {/*
-        * **The paper** (ADR-0111 §7): the page's title and launch line above the quote, as the prototype
-        * prints them (`:186-189`), and nothing else — no rail, top bar, bell, support banner or buttons.
-        * Off the screen, and while it is mounted the only thing printed (`globals.css`, `[data-print-view]`).
-        */}
-      {printing && quote && createPortal(
-        <div data-print-view="" className="hidden bg-card font-body text-navy print:block">
-          <Heading />
-          <QuoteSheet quote={quote} />
-        </div>,
-        document.body,
-      )}
-    </>
+    </div>
   );
 }

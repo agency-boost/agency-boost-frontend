@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { TERMS } from '@/lib/terms';
 import { TermText, TermTip } from './term-tip';
 
-describe('P18.95-T9 AC-3 TermTip', () => {
+describe('P18.7-T9 AC-3 TermTip', () => {
   it('is an ⓘ named What is {term}?, its bubble the term’s one line', async () => {
     render(<p>Annual APE <TermTip term="APE" /> target</p>);
     const tip = screen.getByRole('button', { name: 'What is APE?' });
@@ -17,7 +17,7 @@ describe('P18.95-T9 AC-3 TermTip', () => {
   });
 });
 
-describe('P18.95-T9 AC-3 TermText', () => {
+describe('P18.7-T9 AC-3 TermText', () => {
   it('puts the ⓘ after the first time a listed term appears, and the words stay whole around it', () => {
     const { container } = render(<p><TermText text="Affordable whole-life, with optional CI premium waiver." terms={['CI_PREMIUM_WAIVER']} /></p>);
     const tip = screen.getByRole('button', { name: 'What is a CI premium waiver?' });

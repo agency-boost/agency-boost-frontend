@@ -15,7 +15,7 @@ import type { RatioDisplayUnit } from './ratio-format';
  * it does no date arithmetic, because a day counted in the browser's zone is the defect invariant §9
  * exists to prevent.
  *
- * **Its words are the catalogue's** (`i18n/messages/coaching.ts`, P18.98-T4): each function that writes one takes the
+ * **Its words are the catalogue's** (`i18n/messages/coaching.ts`, P18.10-T4): each function that writes one takes the
  * reader's `language` last — English, the source, when passed none, which its spec reads — and its caller passes
  * `useLanguage()`. A figure inside a sentence is written by the caller, in the figures' language, and handed in.
  */
@@ -91,7 +91,7 @@ export const readRoster = () => api<Roster>('/coaching/coachees');
 /** The pill's words, verbatim (`Overall.html:10624`), and ADR-0080's *No goal set*: the catalogue's English. */
 export const ROSTER_STATUS_LABEL: Record<RosterStatus, string> = wordsIn(SOURCE_LANGUAGE).status;
 
-/** A status's pill in the reader's `language` (P18.98-T4): *On track*, *Sesuai target*. */
+/** A status's pill in the reader's `language` (P18.10-T4): *On track*, *Sesuai target*. */
 export const rosterStatusLabel = (status: RosterStatus, language: Language = SOURCE_LANGUAGE): string =>
   wordsIn(language).status[status];
 
@@ -107,7 +107,7 @@ export function lastOneOnOneText(last: LastOneOnOne | null, language: Language =
 }
 
 /**
- * **The cell's words, *overdue* among them when it is** (P18.8-T15 AC-7; the client's UI review, UI-011):
+ * **The cell's words, *overdue* among them when it is** (P18.5-T15 AC-7; the client's UI review, UI-011):
  * *14 days ago · overdue*. Red was the only mark on screen, with *, overdue* told to a screen reader alone — and on a
  * phone that text wrapped onto a line of its own, *, overdue* with its stray comma. Said in words, the colour is no
  * longer the only cue. *No 1:1 yet* says it already.
@@ -180,10 +180,11 @@ export const readCoachee = (membershipId: string) =>
  * address, `leader-notes`; only its name changed.
  */
 export type CoachingTab =
-  | 'session' | 'activity' | 'leads' | 'goal-setting' | 'summary' | 'activation' | 'training' | 'leader-notes';
+  | 'session' | 'activity' | 'leads' | 'goal-setting' | 'summary' | 'activation' | 'survey' | 'training' | 'leader-notes';
 
+/** *Survei* (`survey`) since P19.5-T4 (ADR-0216 §7): between *Activation* and *Training*. */
 export const COACHING_TABS: readonly CoachingTab[] = [
-  'session', 'activity', 'leads', 'goal-setting', 'summary', 'activation', 'training', 'leader-notes',
+  'session', 'activity', 'leads', 'goal-setting', 'summary', 'activation', 'survey', 'training', 'leader-notes',
 ];
 
 export const coachingTabHref = (membershipId: string, tab: CoachingTab) =>
@@ -207,7 +208,7 @@ export function coachingTabOf(pathname: string | null, membershipId: string): Co
 export function coacheeUnitLine(
   coachee: Pick<Coachee, 'rung' | 'direct' | 'leader'>, language: Language = SOURCE_LANGUAGE,
 ): string {
-  // The rung by its badge's name, *AAB · Direct unit* (P18.95-T9 AC-1, ADR-0167 §10).
+  // The rung by its badge's name, *AAB · Direct unit* (P18.7-T9 AC-1, ADR-0167 §10).
   const rung = shortOfRung(coachee.rung);
   const t = wordsIn(language).unitLine;
   if (coachee.direct) return t.direct({ rung });

@@ -118,13 +118,15 @@ describe('a shell admits only its own family (2026-10-11)', () => {
       expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     });
 
-    it('an Admin on /kpm/overview stays, in the console', async () => {
+    it('P19.2-T1 AC-6 an Admin on /kpm/overview stays, in the office view of the one shell', async () => {
       nav.pathname = '/kpm/overview';
       stubShell({ '/kpm/overview': { body: overviewView() } });
       renderInLayout(TenantLayout, <KpmOverviewPage />, { me: ADMIN });
 
       expect(await screen.findByRole('navigation', { name: 'Main' })).toBeInTheDocument();
-      expect(screen.getByText('KPM OWNER')).toBeInTheDocument();
+      // The office view's menu (ADR-0198 §2): its groups in the one shell's sidebar; no console tag any more.
+      expect(screen.getByRole('link', { name: 'Data upload' })).toHaveAttribute('href', '/kpm/data-upload');
+      expect(screen.queryByText('KPM OWNER')).not.toBeInTheDocument();
       expect(nav.replace).not.toHaveBeenCalled();
     });
 
@@ -149,13 +151,14 @@ describe('a shell admits only its own family (2026-10-11)', () => {
       expect(sidebar()).not.toBeInTheDocument();
     });
 
-    it('the Owner on /summary stays: the field view is theirs too (ADR-0114)', async () => {
+    it('P19.2-T1 AC-6 the Owner on /summary stays, in Akun saya: the field menu, without the office’s groups', async () => {
       nav.pathname = '/summary';
       stubShell({ '/summary': { status: 500, body: { error: { code: 'INTERNAL_ERROR', message: 'x', requestId: 'r' } } } });
       renderInLayout(AgentLayout, <PersonalSummaryPage />, { me: OWNER });
 
       expect(await screen.findByRole('navigation', { name: 'Main' })).toBeInTheDocument();
-      // The field view's identity menu offers the way back to the console.
+      // *Akun saya* (ADR-0198 §2): the field menu the rung gives, and none of the office view's groups.
+      expect(screen.queryByRole('link', { name: 'Data upload' })).not.toBeInTheDocument();
       expect(screen.queryByText('KPM OWNER')).not.toBeInTheDocument();
       expect(nav.replace).not.toHaveBeenCalled();
     });
@@ -179,7 +182,8 @@ describe('a shell admits only its own family (2026-10-11)', () => {
       stubShell();
       renderInLayout(AdminLayout, <AdminOverviewPage />, { me: OWNER });
 
-      await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('/kpm/overview'));
+      // Their own landing: Home, where an Owner signs in since P19.2-T1 (UI-169 item 1).
+      await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('/home'));
       expect(sidebar()).not.toBeInTheDocument();
       expect(screen.queryByText('SUPERADMIN')).not.toBeInTheDocument();
       expect(screen.queryByRole('alert')).not.toBeInTheDocument();

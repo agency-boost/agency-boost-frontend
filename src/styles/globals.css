@@ -59,6 +59,36 @@
   /* The only amber that clears 4.5:1 as small text (4.90:1 on card) — the leads Type word. */
   --color-amber-ink: #a85e1b;
   /*
+   * **A KPM's two colours: the semantic tokens** (P19.6-T1 AC-1; ADR-0218 §6, §7; `tokens.md`, *Brand tokens*). Every
+   * brand use in the app reads one of these, never `amber` or `navy` (a guard spec, `styles/brand-sweep.spec.ts`, fails
+   * otherwise). **Each default is today's token**, so a KPM with no branding is drawn exactly as before. A KPM's palette —
+   * derived by the API (`backend/src/domain/branding/palette.ts`) — is set on `<html>` by the shell and the boot script
+   * (`lib/branding.ts`, `public/branding-boot.js`) and replaces these defaults, and nothing else.
+   * - **The primary** (*Warna utama*): an action's fill and its hover, the words on it, the primary as a word on white
+   *   (`-ink`), on its own tint (`-deep`) and on a secondary surface (`-on-secondary`), and two tints.
+   * - **The secondary** (*Warna kedua*): a header or hero card, a selection, a decoration; its hover, the words on it, as
+   *   a word on white, and two tints.
+   * - **The focus ring**: the primary where it reads 3:1 on white, else its ink.
+   * Text stays `--color-navy` (fixed), and status, role and feature colours stay their own tokens (§7).
+   */
+  --color-primary: var(--color-amber);
+  --color-primary-hover: var(--color-amber-dark);
+  --color-primary-contrast: var(--color-navy);
+  --color-primary-ink: var(--color-amber-ink);
+  --color-primary-deep: var(--color-amber-deep);
+  --color-primary-on-secondary: var(--color-amber);
+  --color-primary-50: color-mix(in srgb, var(--color-primary) 8%, #ffffff);
+  --color-primary-100: color-mix(in srgb, var(--color-primary) 16%, #ffffff);
+  --color-secondary: var(--color-navy);
+  --color-secondary-hover: var(--color-navy-soft);
+  --color-secondary-contrast: #ffffff;
+  --color-secondary-ink: var(--color-navy);
+  /* A quieter word on a secondary surface: the on-navy muted grey, and a KPM's contrast colour. */
+  --color-secondary-muted: var(--color-on-navy-muted);
+  --color-secondary-50: color-mix(in srgb, var(--color-secondary) 8%, #ffffff);
+  --color-secondary-100: color-mix(in srgb, var(--color-secondary) 16%, #ffffff);
+  --color-focus-ring: var(--color-amber);
+  /*
    * The Chairman's Club badge (`KPM_Owner.html:348`, a raw `#5B3CC4` there): its own words on its own 12%
    * tint read 6.03:1, so it is drawn as the prototype draws it, as a token (Phase 18, parity).
    */
@@ -67,7 +97,7 @@
    * MDRT's gold (`Overall.html:8013`, the *MDRT Qualification* poster, a raw `#C9A227` there): **a poster's
    * fill only**, under an emoji and the white-washed tags. As a mark on white it is 2.42:1, short of the 3:1 a
    * graphic needs, so the roster's *Chasing MDRT* ✓ (`:1655`) is `gold-ink`, the same hue darkened to 4.03:1
-   * on the card. Both pinned in `campaigns-contrast.spec.ts` (P18.5-T7, row 44).
+   * on the card. Both pinned in `campaigns-contrast.spec.ts` (P18.2-T7, row 44).
    */
   --color-gold: #c9a227;
   --color-gold-ink: #9a7b12;
@@ -118,7 +148,7 @@
   --color-lavender: #6b6fa0;
 
   /*
-   * **The shared components' few colours of their own** (UI V1, Phase 18.99 T2 — W1-B):
+   * **The shared components' few colours of their own** (UI V1, Phase 18.11 T2 — W1-B):
    * - On navy, the ratio card's *Target X* (6.79:1 on navy) and the line between its rows (UI-053).
    * - WhatsApp's button (UI-081): the mockups' green, under a white line icon at 3.25:1, over the 3:1 a graphic needs.
    * - The Group Tree's *Anda* pill on the reader's own navy row (UI-059): 6.42:1.
@@ -174,6 +204,45 @@
   --color-teal-ink: #24665f;
 
   /*
+   * **The calendar's *Tugas* blue and *today's* shade** (P19.1-T3; UI-154, the 6 Nov handover's values; `tokens.md`,
+   * *November 2026 tokens*). One token per meaning, so a *Tugas* — a lead's next action, an open coaching item — is blue
+   * in every view at every size (*Decisions* 6). Not the entry type *Task*, whose type colour stays (AC-11).
+   * - `tugas` a count pill's ground; `tugas-ink` its words, the checklist's heading, a ticked box's fill and an unticked
+   *   box's edge — 6.72:1 on the pill, 7.99:1 on white, white ✓ on it 7.99:1; `tugas-edge` the checklist's dashed border
+   *   (decoration: the heading and the boxes say what it is).
+   * - `today` a phone's today — the 3 Hari and Week column, the Month cell — and the Agenda's *Hari ini* band; `today-ink`
+   *   its date and the band's words: 4.57:1 on the shade, 5.07:1 on white (`amber-ink` is 4.41:1 there). From 768px today
+   *   is the amber circle with a navy number (OD-252).
+   * Pinned in `components/calendar/calendar-tokens.spec.ts`.
+   */
+  --color-tugas: #e3ecfb;
+  --color-tugas-ink: #1f4e9c;
+  --color-tugas-edge: #b9cdee;
+  --color-today: #fdf1e6;
+  --color-today-ink: #a85a16;
+
+  /*
+   * **The *Potensi* switch, the avatar badges, the *n potensi* pill and a kandidat's avatar** (P19.1-T2, P19.1-T6;
+   * UI-153, UI-155; `tokens.md`, *November 2026 tokens*). Orange stays status (UI-153 item 2), so none of these is amber.
+   * - `switch-off` the switch card's ground when off (navy label 12.66:1); `switch-off-edge` its dashed border and the
+   *   off track — 3.42:1 on the card, 3.80:1 on white; the stop-motion's `#9AA6BF` and `#C8C6BE` miss 3:1 (a *Fix*).
+   *   On, the card is `navy` and the track `info`.
+   * - `badge-potensi` the yellow ✓ disc, its ✓ navy (7.13:1; white would be 1.97:1, a *Fix*); `badge-won` the green ✓
+   *   disc, its ✓ white (4.32:1). The two differ by 2.19:1, so each carries an accessible name and a tooltip.
+   * - `pill-potensi` / `-ink` the *n potensi* and *Potensi* pills, 5.53:1; `avatar-kandidat` / `-ink` a kandidat's
+   *   initials before they are rekrut, 6.84:1.
+   * Pinned in `components/lead-potensi-tokens.spec.ts`.
+   */
+  --color-switch-off: #f1f3f8;
+  --color-switch-off-edge: #78839c;
+  --color-badge-potensi: #e2b232;
+  --color-badge-won: #3b8a2e;
+  --color-pill-potensi: #fbefc4;
+  --color-pill-potensi-ink: #7a5a12;
+  --color-avatar-kandidat: #e1f2ef;
+  --color-avatar-kandidat-ink: #1f5a55;
+
+  /*
    * Typography. **One family, Inter** (UI V1, UI-008; O-2): the headings' second family is gone, and `font-display` names the
    * body's family, so every `font-display` class reads Inter without a sweep.
    */
@@ -226,18 +295,35 @@
   --color-card-edge: transparent;
   --radius-card: 16px;
   --radius-row: 14px;
+  /*
+   * **The field shell's icon rail is 64px** (P19.1-T1 AC-4, ADR-0196; UI-114, `shared-2026-11-02.css`'s `.rail`): its
+   * default from 1024 to 1279px — every role's since P19.2-T1 (ADR-0197), whose frame is always V1, so the consoles'
+   * 56px below is no longer drawn.
+   */
+  --sidebar-rail-width: 64px;
 }
 
-/** The title's 22px on a tablet and 24px on a desktop (UI-004, UI-008; `--text-title`). */
-@media (min-width: 768px) {
-  :root {
-    --text-title: 1.375rem;
-  }
-}
-
+/*
+ * **The title's 24px on a desktop** (UI-004, UI-008; `--text-title`), **and 20px up to it** (P19.1-T1 AC-1, ADR-0196;
+ * UI-112 and `shared-2026-11-02.css`'s `.tb .title h1`: the phase file's *Decisions* 7). It was 22px from 768px, the
+ * report's token table; UI-112's mockups draw the tablet's title at the phone's size. Every `text-title` is the field
+ * shell's — the consoles take it below 768px only.
+ */
 @media (min-width: 1024px) {
   :root {
     --text-title: 1.5rem;
+  }
+}
+
+/*
+ * **The title's 22px on a tablet on the Owner's, the Admin's and the Super Admin's pages** (P19.2-T1 AC-1; UI-146,
+ * UI-138 and the report's token table; ADR-0197 §2): `/admin`, `/kpm` and `/people`, whose frame the shell marks
+ * `data-title-size='office'`. Every other page keeps the field pages' 20px there (UI-112, ADR-0196 §1), which UI-146 keeps
+ * *exactly as before*; one size for all only if the owner chooses it.
+ */
+@media (min-width: 768px) and (max-width: 1023.98px) {
+  :root:has([data-title-size='office']) {
+    --text-title: 1.375rem;
   }
 }
 
@@ -268,7 +354,7 @@ body {
 }
 
 /*
- * **A page prerendered in another language than the reader's is held back** (P18.98-T1 AC-3, ADR-0179 §8): no word
+ * **A page prerendered in another language than the reader's is held back** (P18.10-T1 AC-3, ADR-0179 §8): no word
  * paints in the wrong language. `i18n/pre-paint.ts` sets the attribute before the body is parsed, and
  * `LanguageProvider` clears it once the page is written in the reader's language, before the first paint after
  * hydration. A reader whose language is the page's is never held. Should the app never start, the page shows after
@@ -280,7 +366,7 @@ html[data-lang-pending] body {
 }
 
 /*
- * **Held back only where a word would paint** (P18.98-T2). Every signed-in route is prerendered as the session's wait —
+ * **Held back only where a word would paint** (P18.10-T2). Every signed-in route is prerendered as the session's wait —
  * a skeleton, nothing in it words (`Skeleton`'s `sessionWait`) — and its shell arrives with the session, after the
  * language is known. So a page that is only that wait is shown at once, and a reader whose language is not the one the
  * pages are prerendered in waits for nothing there; the public pages, which paint words before the app starts, are still
@@ -308,7 +394,7 @@ h3 {
  * `outline: none` without a replacement is a blocking accessibility defect.
  */
 :focus-visible {
-  outline: 2px solid var(--color-amber);
+  outline: 2px solid var(--color-focus-ring);
   outline-offset: 1px;
 }
 
@@ -384,7 +470,7 @@ h3 {
 }
 
 /**
- * **Below 1024px, a tab row that is one row there too fades as a phone's does** (P18.97-T6 AC-4; ADR-0178 §2, the
+ * **Below 1024px, a tab row that is one row there too fades as a phone's does** (P18.9-T6 AC-4; ADR-0178 §2, the
  * client's UI-038): `/people/members`' tabs, which scroll on a tablet as well as on a phone. Only a row that says so,
  * `data-tab-row='below-desktop'` (`tablet.ts`) — every other strip wraps from 768px and keeps no mask there, as
  * before. The masks are the phone's, above; this is the query a `max-lg:` class compiles to (`theme.spec.ts`).

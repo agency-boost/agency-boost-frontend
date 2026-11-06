@@ -63,7 +63,7 @@ describe('manage KPM admins (P3-T10)', () => {
   });
 
   /*
-   * *Amended 2026-10-28 (P18.97-T4 AC-5; the client's grey-text table, UI-026):* the 40-word paragraph — the one thing
+   * *Amended 2026-10-28 (P18.9-T4 AC-5; the client's grey-text table, UI-026):* the 40-word paragraph — the one thing
    * an Admin does not get, and that admin access is not a hierarchy role — is the client's one line, at every size.
    * The role beside each name (AC-2 above) still says the second half.
    */
@@ -206,13 +206,13 @@ describe('a read that lands after the page is gone (CI, 2026-10-27)', () => {
 });
 
 /**
- * **Who *Grant admin access to* offers** (P18.97-T4 AC-5, ADR-0176 §5; the client's KPM Owner review of 2026-10-27,
+ * **Who *Grant admin access to* offers** (P18.9-T4 AC-5, ADR-0176 §5; the client's KPM Owner review of 2026-10-27,
  * UI-026: the list offered *Wilson Tanoto (yourself)* and *Yanti Kusuma (removed)*). Only the office's active members
  * other than the reader and its admins: the tree holds the active memberships, so a removed one is never offered and
  * Yanti, who came back, is offered once — by the membership she holds now. The server's refusals are
  * `directory-admins.int.spec.ts`'s (backend).
  */
-describe('P18.97-T4 AC-5 the grant offers only active members other than the reader and the admins', () => {
+describe('P18.9-T4 AC-5 the grant offers only active members other than the reader and the admins', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   const YANTI_BACK = node({ membershipId: 'mem-yanti-2', fullName: 'Yanti Kusuma' });
@@ -224,7 +224,7 @@ describe('P18.97-T4 AC-5 the grant offers only active members other than the rea
     return stub;
   }
 
-  it('P18.97-T4 AC-5 never offers the reader, nor anybody who already administers the office', async () => {
+  it('P18.9-T4 AC-5 never offers the reader, nor anybody who already administers the office', async () => {
     openWith();
     await screen.findByRole('table');
     const picker = screen.getByLabelText('Grant admin access to');
@@ -234,7 +234,7 @@ describe('P18.97-T4 AC-5 the grant offers only active members other than the rea
     expect(offered).not.toContain('Maya Halim');
   });
 
-  it('P18.97-T4 AC-5 offers a member who came back once, by the membership she holds now', async () => {
+  it('P18.9-T4 AC-5 offers a member who came back once, by the membership she holds now', async () => {
     const { calls } = openWith();
     await screen.findByRole('table');
     const picker = screen.getByLabelText('Grant admin access to');
@@ -244,7 +244,7 @@ describe('P18.97-T4 AC-5 the grant offers only active members other than the rea
     expect(calls.find((c) => c.init.method === 'POST')!.url).toContain('/members/mem-yanti-2/admin');
   });
 
-  it('P18.97-T4 AC-5 offers nobody, and holds Grant access, when everybody left is the reader or an admin', async () => {
+  it('P18.9-T4 AC-5 offers nobody, and holds Grant access, when everybody left is the reader or an admin', async () => {
     openWith({ ...OFFICE, nodes: OFFICE.nodes.filter((n) => (n as { membershipId?: string }).membershipId !== 'mem-agus') });
     // Once the reads have answered: the picker is held while they are out as well.
     await screen.findByRole('table');
@@ -253,7 +253,7 @@ describe('P18.97-T4 AC-5 the grant offers only active members other than the rea
     expect(screen.getByRole('button', { name: 'Grant access' })).toBeDisabled();
   });
 
-  it('P18.97-T4 AC-5 says the server’s refusal of a membership that is no longer active, in its words', async () => {
+  it('P18.9-T4 AC-5 says the server’s refusal of a membership that is no longer active, in its words', async () => {
     stubFetch({
       '/members/admins': { body: [admin()] },
       '/members/tree': { body: WITH_YANTI },
@@ -268,11 +268,11 @@ describe('P18.97-T4 AC-5 the grant offers only active members other than the rea
     await userEvent.click(screen.getByRole('button', { name: 'Grant access' }));
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent('They have not joined the office yet.');
-    // A server's answer keeps its code and request id, which support asks for (P18.97-T4 AC-10).
+    // A server's answer keeps its code and request id, which support asks for (P18.9-T4 AC-10).
     expect(alert).toHaveTextContent('ORG_ADMIN_TARGET_NOT_ACTIVE · r-9');
   });
 
-  it('P18.97-T4 AC-5 explains admin access in the client’s one line, and no paragraph', async () => {
+  it('P18.9-T4 AC-5 explains admin access in the client’s one line, and no paragraph', async () => {
     openWith();
     await screen.findByRole('table');
     const line = screen.getByText('Admins can do everything except manage admins.');
@@ -282,11 +282,11 @@ describe('P18.97-T4 AC-5 the grant offers only active members other than the rea
 });
 
 /**
- * **The admins as cards on a phone** (P18.97-T7 AC-1, ADR-0178 §4; the client's KPM Owner review of 2026-10-27,
+ * **The admins as cards on a phone** (P18.9-T7 AC-1, ADR-0178 §4; the client's KPM Owner review of 2026-10-27,
  * UI-034: *Manage KPM Admins*, 425px). Below 768px a card per admin, each label above its value, through the shared
  * card pieces (`components/ui/row-cards.tsx`); at 768px and wider the table it was, to the byte.
  */
-describe('P18.97-T7 AC-1 the admins as cards on a phone (UI-034)', () => {
+describe('P18.9-T7 AC-1 the admins as cards on a phone (UI-034)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   const ADMINS = [
@@ -295,24 +295,40 @@ describe('P18.97-T7 AC-1 the admins as cards on a phone (UI-034)', () => {
     admin({ membershipId: 'mem-agus', fullName: 'Agus Prasetyo', agentCode: 'KPM0417-003', role: 'aab', grantedAt: '2026-03-02T00:00:00.000Z' }),
   ];
 
-  /** The list's markup on the build before P18.97-T7, rendered from this fixture on 2026-10-28. */
+  /** The list's markup on the build before P18.9-T7, rendered from this fixture on 2026-10-28. */
   const BEFORE_T7: Record<768 | 1280, string> = {
     // Re-recorded 2026-10-30 (UI V1): UI-008's card edge (`border-card-edge`) and UI-010's 44px/48px targets below 1024px.
     768: '804eefb8539e4da72b5844d311104867b5334e5a7ed2b77feead3a3041ba2e60',
     1280: '804eefb8539e4da72b5844d311104867b5334e5a7ed2b77feead3a3041ba2e60',
   };
 
-  it.each([768, 1280] as const)('P18.97-T7 AC-1 at %ipx draws the table it drew, to the byte', async (px) => {
+  /*
+   * *Changed 2026-11-05 (P19.2-T3 AC-4; UI-142, ADR-0197):* the Owner's pages are drawn in the shared shell, whose frame
+   * gives its buttons and fields their 44px and 48px below 1024px — so at 768px the table's *Revoke* is 44px tall and no
+   * longer what it drew. From 1024px it is, to the byte.
+   */
+  it.each([1024, 1280] as const)('P18.9-T7 AC-1 at %ipx draws the table it drew, to the byte', async (px) => {
     atWidth(px);
     open(ADMINS);
     const table = await screen.findByRole('table', { name: 'KPM Admins' });
-    expect(digestAt(table.parentElement!, px)).toBe(BEFORE_T7[px]);
+    expect(digestAt(table.parentElement!, px)).toBe(BEFORE_T7[1280]);
+  });
+
+  it('P19.2-T3 AC-4 at 768px keeps the table, its Revoke 44px tall and the grant’s field 48px, as the shell draws them', async () => {
+    atWidth(768);
+    open(ADMINS);
+    const table = await screen.findByRole('table', { name: 'KPM Admins' });
+    for (const revoke of within(table).getAllByRole('button', { name: 'Revoke' })) {
+      expect(wears(revoke, 768).split(' ')).toContain('h-11');
+    }
+    expect(wears(screen.getByRole('combobox', { name: 'Grant admin access to' }), 768).split(' ')).toContain('h-12');
+    expect(wears(screen.getByRole('button', { name: 'Grant access' }), 768).split(' ')).toContain('h-11');
   });
   /** An admin's card, by the name on its first line (the name also stands under *Granted by* on others). */
   const cardOf = (name: string) => screen.getAllByRole('listitem')
     .find((li) => li.querySelector('p > span')?.textContent === name)!;
 
-  it.each([375, 767])('P18.97-T7 AC-1 at %ipx draws a card per admin and no table, each value under its heading', async (px) => {
+  it.each([375, 767])('P18.9-T7 AC-1 at %ipx draws a card per admin and no table, each value under its heading', async (px) => {
     atWidth(px);
     open(ADMINS);
     const list = await screen.findByRole('list', { name: 'KPM Admins' });
@@ -332,7 +348,7 @@ describe('P18.97-T7 AC-1 the admins as cards on a phone (UI-034)', () => {
     expect(wilson.querySelector('dl')).toBeNull();
   });
 
-  it('P18.97-T7 AC-1 revokes from the card after asking, its button across the card and 44px tall on a phone', async () => {
+  it('P18.9-T7 AC-1 revokes from the card after asking, its button across the card and 44px tall on a phone', async () => {
     atWidth(375);
     const { calls } = open(ADMINS, { 'DELETE /members/mem-admin/admin': { body: [ADMINS[0], ADMINS[2]] } });
     await screen.findByRole('list', { name: 'KPM Admins' });

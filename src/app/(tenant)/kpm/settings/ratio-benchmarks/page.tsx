@@ -7,7 +7,11 @@ import {
   Button, Card, Field, FieldRow, Select, TextInput,
 } from '@/components/ui/field';
 import { EmptyState } from '@/components/ui/empty-state';
+import { ListCard, ListRow } from '@/components/ui/list-rows';
+import { PhoneTip } from '@/components/ui/phone-tip';
+import { ResponsiveSheet } from '@/components/ui/responsive-sheet';
 import { SkeletonCards } from '@/components/ui/skeleton';
+import { TonePill } from '@/components/ui/tone-pill';
 import { kept } from '@/i18n/kept';
 import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
 import type { Language } from '@/i18n/language';
@@ -16,14 +20,17 @@ import { ratioWordMessages } from '@/i18n/messages/ratio-words';
 import { settingsMessages } from '@/i18n/messages/settings';
 import { ratioBenchmarksMessages } from '@/i18n/messages/settings-ratio-benchmarks';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
+import { cn } from '@/lib/cn';
 import { useCan } from '@/lib/session';
+import { usePhone } from '@/lib/use-phone';
 import {
   benchmarkFromInput, benchmarkToInput, displayUnitLabels, formatBenchmark, reexpress, unitFor,
   type RatioDisplayUnit,
 } from '@/lib/ratio-format';
 import { balanceSideNames, formatBalanceBand } from '@/lib/ratio-balance';
-import { projectStaged, unstageRow } from '@/lib/staged-projection';
+import { projectStaged, unstageRow, type StagedMark } from '@/lib/staged-projection';
 import { useTenantConfig } from '@/lib/tenant-config-cache';
+import { ARCHIVED_SWITCH_ROW, CHECK_LINE_TOUCH, TEXT_BUTTON_TOUCH } from '../settings-touch';
 import {
   applyConfigChanges,
   stageChange,
@@ -198,6 +205,14 @@ export default function RatioBenchmarksPage() {
     displayUnit: 'decimal' as RatioDisplayUnit,
   };
   const [form, setForm] = useState(blank);
+  /*
+   * **Below 768px a ratio is one line, and its card is its sheet** (P19.2-T3 AC-3; UI-141: *the 30-word "Disediakan dengan
+   * standar perusahaan Anda. Semuanya boleh Anda ubah …" repeated on every ratio card*, 4.1 screens at 375). The sentence
+   * is said once, behind ⓘ beside the title; from 768px the cards are as they were.
+   */
+  const phone = usePhone();
+  /** The ratio whose sheet is open, on a phone. */
+  const [sheetFor, setSheetFor] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -283,12 +298,374 @@ export default function RatioBenchmarksPage() {
         .map((c) => ladder.find((l) => l.code === c)?.label ?? c)
         .join(' · '));
 
+  /**
+   * **The ratios on a phone** (P19.2-T3 AC-3; UI-141): one 56px line each — its name, its benchmark (or *archived*), a
+   * staged mark when it has one — whose › opens the ratio's sheet, which holds the card it was.
+   */
+  function phoneRatios() {
+    return (
+      <ListCard label={kept('Ratio benchmarks')}>
+        {visible.map(({ row: ratio, staged: mark }) => (
+          <ListRow
+            key={ratio.id}
+            data-row={ratio.id}
+            title={ratio.label}
+            meta={ratio.status === 'archived'
+              ? s.archivedLine
+              : `${ratio.comparison === 'band' ? t.onTrackWithin : t.onTrackAtOrAbove}${
+                formatBenchmark(ratio.benchmark, unitFor(ratio), figures, language)}`}
+            trailing={mark ? <TonePill tone="amber">{s.staged.mark[mark]}</TonePill> : undefined}
+            haspopup
+            onSelect={() => setSheetFor(ratio.id)}
+          />
+        ))}
+      </ListCard>
+    );
+  }
+
+  /** A ratio opened from its line, on a phone: the card it was, its edits in place, in a sheet. */
+  function ratioSheet() {
+    const found = sheetFor === null ? null : visible.find(({ row }) => row.id === sheetFor) ?? null;
+    return (
+      <ResponsiveSheet
+        open={found !== null}
+        title={found?.row.label ?? ''}
+        onClose={() => { setSheetFor(null); setEditing(null); setScoping(null); }}
+      >
+        {found && <div className="pb-2">{ratioBody(found.row, found.staged)}</div>}
+      </ResponsiveSheet>
+    );
+  }
+
+  /** One ratio's card: its name, where it came from, its formula, who it applies to, its benchmark, and their edits. */
+  function ratioBody(ratio: RatioRow, mark: StagedMark | null) {
+    return (
+      <>
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="font-display text-lg font-bold text-navy">
+          {ratio.label}
+          {ratio.status === 'archived' && (
+            <span className="ml-2 text-sm font-normal text-muted">{s.archivedLine}</span>
+          )}
+        </h2>
+        {/* One cell, so the heading stays hard left however many of these show. */}
+        <span className="flex items-center gap-3">
+          {mark && (
+            <>
+              <span className="rounded-full bg-primary/20 px-2 py-0.5 text-sm text-navy">
+                {s.staged.mark[mark]}
+              </span>
+              {/* Undo belongs on the row, not only in the bar: the bar discards
+                  every staged change at once, which is not what a reader who
+                  mistyped one benchmark is asking for. */}
+              <button
+                type="button"
+                className={cn('text-sm font-semibold text-navy underline', TEXT_BUTTON_TOUCH)}
+                onClick={() => setStaged((now) => unstageRow(now, 'ratio', ratio.id))}
+              >
+                {s.undo}
+              </button>
+            </>
+          )}
+        </span>
+      </div>
+
+      <p className="mt-1 text-sm text-muted">
+        {ratio.origin === 'platform' ? t.fromStandard : t.ownRatio}
+      </p>
+
+      {/*
+        * Named on the card, never left to be discovered (ADR-0024). An office may
+        * now measure itself however it likes; a comparison across offices computes
+        * the formula this office was *seeded* with, so the two can differ and a
+        * reader has to be told which one they are looking at.
+        */}
+      {ratio.divergesFromStandard
+        && ratio.standardNumerator && ratio.standardDenominator && (
+        <p className="mt-3 rounded-md border border-primary bg-primary/10 p-3 text-sm text-navy">
+          <strong>{t.notStandard}</strong>{' '}
+          <span className="text-muted">
+            {t.setUpAs({
+              numerator: ratio.standardNumerator.map((c) => labelFor(c) ?? c).join(' + '),
+              denominator: ratio.standardDenominator.map((c) => labelFor(c) ?? c).join(' + '),
+            })}
+          </span>
+        </p>
+      )}
+
+      {/*
+        * A real fraction — numerator, a rule, denominator underneath
+        * (`ratio-fraction`). Two side-by-side lists headed *Counts* and *Out of*
+        * said the same thing and read as two unrelated sets; "this over that" is
+        * what a ratio *is*, and the prototype is right about it.
+        *
+        * The balance ratio is not a fraction — it is a difference over a sum — so
+        * it renders as two labelled sides with a sentence saying how it reads, as the
+        * prototype does and for the reason its own comment gives.
+        *
+        * **Each side is named by what it counts** (P13.1-T6): the section its
+        * activity types share, or *Side A* / *Side B* where they span sections or both
+        * sides share one. The prototype's *Selling side* and *Recruitment side* were
+        * right for the one balance it had and wrong for any other an office builds;
+        * its *−100% to +100%* sentence described a scale agents no longer see.
+        */}
+      {ratio.comparison === 'band' ? (
+        <BalanceFormula ratio={ratio} taxonomy={taxonomy} labelFor={labelFor} />
+      ) : (
+        <div className="mt-3 inline-flex flex-col items-start">
+          <div className="flex flex-wrap items-center gap-1.5 py-0.5">
+            {ratio.numerator.map((code) => (
+              <Chip key={code} code={code} label={labelFor(code)} />
+            ))}
+          </div>
+          <div className="my-0.5 h-0.5 w-full min-w-32 bg-secondary" aria-hidden />
+          <div className="flex flex-wrap items-center gap-1.5 py-0.5">
+            {ratio.denominator.map((code) => (
+              <Chip key={code} code={code} label={labelFor(code)} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-hairline pt-3">
+        {scoping === ratio.id ? (
+          <>
+            <fieldset className="min-w-0">
+              <legend className="text-sm font-semibold text-navy">{s.appliesTo}</legend>
+              {/* Checkboxes, not a multi-select: every rung is visible at once, and
+                  the empty state — nothing ticked — is the one that means everyone,
+                  which a collapsed control would hide. */}
+              <ul className="mt-1 flex flex-wrap gap-3">
+                {ladder.map((rung) => (
+                  <li key={rung.code}>
+                    <label className={cn('flex items-center gap-1.5 text-md text-navy', CHECK_LINE_TOUCH)}>
+                      <input
+                        type="checkbox"
+                        checked={rungs.includes(rung.code)}
+                        onChange={(e) => setRungs((current) => (e.target.checked
+                          ? [...current, rung.code]
+                          : current.filter((c) => c !== rung.code)))}
+                      />
+                      {rung.label}
+                    </label>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-1 text-sm text-muted">{t.scopeHint}</p>
+            </fieldset>
+            <Button
+              disabled={busy}
+              onClick={() => {
+                stage({
+                  op: 'ratio.update',
+                  id: ratio.id,
+                  expectedVersion: ratio.version,
+                  body: { appliesToOrgLevelCodes: rungs },
+                });
+                setScoping(null);
+              }}
+            >
+              {s.save}
+            </Button>
+            <Button variant="secondary" onClick={() => setScoping(null)}>{s.cancel}</Button>
+          </>
+        ) : (
+          <>
+            <p className="text-md text-navy">
+              {/* The label, then who: a label and its value, in that order in both languages. */}
+              <span className="text-muted">{s.appliesTo}{' '}</span>
+              <strong>{appliesTo(ratio.appliesToOrgLevelCodes)}</strong>
+            </p>
+            {canWrite && (
+              <Button
+                variant="inline"
+                onClick={() => {
+                  setScoping(ratio.id);
+                  setRungs(ratio.appliesToOrgLevelCodes);
+                }}
+              >
+                {s.changeWhoItAppliesTo}
+              </Button>
+            )}
+          </>
+        )}
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-start gap-3 border-t border-hairline pt-3">
+        {editing === ratio.id ? (
+          <>
+            {/* Every ratio, not only the office's own (ADR-0024). */}
+            <div className="flex w-full flex-wrap gap-4">
+                {/* The balance ratio is not a division — it is a difference over a
+                    sum — so its two sides are *Side A* and *Side B*, as the Add-a-ratio
+                    form calls them, rather than a numerator and a denominator. Not the
+                    card's section names: ticking a box here can change them. */}
+                {sideHeadings(ratio.comparison, t, w)
+                  .map(([heading, side]) => (
+                    <fieldset key={side} className="min-w-0 flex-1">
+                      <legend className="text-sm font-semibold text-navy">{heading}</legend>
+                      <ul className="mt-1 flex flex-wrap gap-3">
+                        {taxonomy
+                          .flatMap((c) => c.types)
+                          .filter((t) => t.status === 'active')
+                          .map((type) => (
+                            <li key={type.code}>
+                              <label className={cn('flex items-center gap-1.5 text-md text-navy', CHECK_LINE_TOUCH)}>
+                                <input
+                                  type="checkbox"
+                                  checked={sides[side].includes(type.code)}
+                                  onChange={(e) => setSides((now) => ({
+                                    ...now,
+                                    [side]: e.target.checked
+                                      ? [...now[side], type.code]
+                                      : now[side].filter((c) => c !== type.code),
+                                  }))}
+                                />
+                                {type.label}
+                              </label>
+                            </li>
+                          ))}
+                      </ul>
+                    </fieldset>
+                  ))}
+            </div>
+            {/* The name too. It was read-only on every card, which made the
+                office-ratio copy — *"the name… is yours"* — false for the one
+                field a reader would try first. An office may rename a platform
+                ratio as well: the code is the identity, the label is what their
+                people call it (invariant §4). */}
+            <Field label={s.name} htmlFor={`label-${ratio.id}`} className="min-w-60 flex-1">
+              <TextInput
+                id={`label-${ratio.id}`}
+                value={draftLabel}
+                onChange={(e) => setDraftLabel(e.target.value)}
+              />
+            </Field>
+            <Field
+              label={kept('Benchmark')}
+              htmlFor={`benchmark-${ratio.id}`}
+              hint={ratio.comparison === 'band'
+                ? bandHint(draft, t, figures)
+                : draftUnit === 'percent'
+                  ? t.percentHint
+                  : t.atOrAboveHint}
+              className="min-w-40"
+            >
+              <TextInput
+                id={`benchmark-${ratio.id}`}
+                type="text"
+                inputMode="decimal"
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+              />
+            </Field>
+            {/* On a platform ratio too: how a number is written is presentation,
+                not formula, so ADR-0021 has nothing to say about it. */}
+            {ratio.comparison === 'gte' && (
+              <Field label={t.shownAs} htmlFor={`unit-${ratio.id}`} className="min-w-48">
+                <Select
+                  id={`unit-${ratio.id}`}
+                  value={draftUnit}
+                  onChange={(e) => {
+                    const next = e.target.value as RatioDisplayUnit;
+                    setDraft((d) => reexpress(d, draftUnit, next, figures));
+                    setDraftUnit(next);
+                  }}
+                >
+                  <option value="percent">{units.percent}</option>
+                  <option value="decimal">{units.decimal}</option>
+                </Select>
+              </Field>
+            )}
+            <Button
+              disabled={busy
+                || Number.isNaN(benchmarkFromInput(draft, draftUnit))
+                || draftLabel.trim() === ''
+                || sides.numerator.length === 0
+                || sides.denominator.length === 0}
+              onClick={() => {
+                stage({
+                  op: 'ratio.update',
+                  id: ratio.id,
+                  expectedVersion: ratio.version,
+                  body: {
+                    label: draftLabel.trim(),
+                    benchmark: benchmarkFromInput(draft, draftUnit),
+                    // Only when it moved, so an edit to the number alone sends only
+                    // the number — and the row keeps a unit nobody touched.
+                    ...(draftUnit !== unitFor(ratio) ? { displayUnit: draftUnit } : {}),
+                    numerator: sides.numerator,
+                    denominator: sides.denominator,
+                  },
+                });
+                setEditing(null);
+              }}
+            >
+              {s.save}
+            </Button>
+            <Button variant="secondary" onClick={() => setEditing(null)}>{s.cancel}</Button>
+          </>
+        ) : (
+          <>
+            <p className="text-md text-navy">
+              <span className="text-muted">
+                {ratio.comparison === 'band' ? t.onTrackWithin : t.onTrackAtOrAbove}
+              </span>
+              <strong>{formatBenchmark(ratio.benchmark, unitFor(ratio), figures, language)}</strong>
+            </p>
+            {canWrite && (
+              <>
+                <Button
+                  variant="inline"
+                  onClick={() => {
+                    setEditing(ratio.id);
+                    setDraft(benchmarkToInput(ratio.benchmark, unitFor(ratio), figures));
+                    setDraftUnit(unitFor(ratio));
+                    setDraftLabel(ratio.label);
+                    setSides({
+                      numerator: ratio.numerator,
+                      denominator: ratio.denominator,
+                    });
+                  }}
+                >
+                  {s.edit}
+                </Button>
+                {ratio.status === 'active' ? (
+                  <Button
+                    variant="inlineDanger"
+                    disabled={busy}
+                    onClick={() => void run(() => archiveRatio(ratio.id))}
+                  >
+                    {s.archive}
+                  </Button>
+                ) : (
+                  <Button
+                    variant="inline"
+                    disabled={busy}
+                    onClick={() => void run(() => restoreRatio(ratio.id))}
+                  >
+                    {s.restore}
+                  </Button>
+                )}
+              </>
+            )}
+          </>
+        )}
+      </div>
+      </>
+    );
+  }
+
   return (
     <SettingsScreen
       title={kept('Ratio benchmarks')}
       subtitle={t.subtitle}
       permission="tenant_config:read"
       tabs={ACTIVITY_SETTINGS_TABS}
+      // On a phone the platform ratios' one sentence is said once, behind ⓘ beside the title (P19.2-T3 AC-3; UI-141).
+      actions={phone && (ratios ?? []).some((r) => r.origin === 'platform')
+        ? <PhoneTip text={t.fromStandard} name={t.aboutStandard} />
+        : undefined}
       error={error}
       /*
        * The two bars are adjacent now. They were separated by this screen's hint and its
@@ -314,7 +691,7 @@ export default function RatioBenchmarksPage() {
         hint: t.window,
         actions: (
           <>
-            <label className="flex items-center gap-2 text-md text-navy">
+            <label className={cn('flex items-center gap-2 text-md text-navy', ARCHIVED_SWITCH_ROW)}>
               <input
                 type="checkbox"
                 checked={showArchived}
@@ -432,7 +809,7 @@ export default function RatioBenchmarksPage() {
                   <ul className="mt-1 flex flex-wrap gap-3">
                     {taxonomy.flatMap((c) => c.types).filter((t) => t.status === 'active').map((type) => (
                       <li key={type.code}>
-                        <label className="flex items-center gap-1.5 text-md text-navy">
+                        <label className={cn('flex items-center gap-1.5 text-md text-navy', CHECK_LINE_TOUCH)}>
                           <input
                             type="checkbox"
                             checked={form[side].includes(type.code)}
@@ -543,323 +920,14 @@ export default function RatioBenchmarksPage() {
               ) : undefined}
             />
           )}
-          {visible.map(({ row: ratio, staged: mark }) => (
-            <Card key={ratio.id} className={mark ? 'border-amber' : undefined}>
-              <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <h2 className="font-display text-lg font-bold text-navy">
-                  {ratio.label}
-                  {ratio.status === 'archived' && (
-                    <span className="ml-2 text-sm font-normal text-muted">{s.archivedLine}</span>
-                  )}
-                </h2>
-                {/* One cell, so the heading stays hard left however many of these show. */}
-                <span className="flex items-center gap-3">
-                  {mark && (
-                    <>
-                      <span className="rounded-full bg-amber/20 px-2 py-0.5 text-sm text-navy">
-                        {s.staged.mark[mark]}
-                      </span>
-                      {/* Undo belongs on the row, not only in the bar: the bar discards
-                          every staged change at once, which is not what a reader who
-                          mistyped one benchmark is asking for. */}
-                      <button
-                        type="button"
-                        className="text-sm font-semibold text-navy underline"
-                        onClick={() => setStaged((now) => unstageRow(now, 'ratio', ratio.id))}
-                      >
-                        {s.undo}
-                      </button>
-                    </>
-                  )}
-                </span>
-              </div>
-
-              <p className="mt-1 text-sm text-muted">
-                {ratio.origin === 'platform' ? t.fromStandard : t.ownRatio}
-              </p>
-
-              {/*
-                * Named on the card, never left to be discovered (ADR-0024). An office may
-                * now measure itself however it likes; a comparison across offices computes
-                * the formula this office was *seeded* with, so the two can differ and a
-                * reader has to be told which one they are looking at.
-                */}
-              {ratio.divergesFromStandard
-                && ratio.standardNumerator && ratio.standardDenominator && (
-                <p className="mt-3 rounded-md border border-amber bg-amber/10 p-3 text-sm text-navy">
-                  <strong>{t.notStandard}</strong>{' '}
-                  <span className="text-muted">
-                    {t.setUpAs({
-                      numerator: ratio.standardNumerator.map((c) => labelFor(c) ?? c).join(' + '),
-                      denominator: ratio.standardDenominator.map((c) => labelFor(c) ?? c).join(' + '),
-                    })}
-                  </span>
-                </p>
-              )}
-
-              {/*
-                * A real fraction — numerator, a rule, denominator underneath
-                * (`ratio-fraction`). Two side-by-side lists headed *Counts* and *Out of*
-                * said the same thing and read as two unrelated sets; "this over that" is
-                * what a ratio *is*, and the prototype is right about it.
-                *
-                * The balance ratio is not a fraction — it is a difference over a sum — so
-                * it renders as two labelled sides with a sentence saying how it reads, as the
-                * prototype does and for the reason its own comment gives.
-                *
-                * **Each side is named by what it counts** (P13.1-T6): the section its
-                * activity types share, or *Side A* / *Side B* where they span sections or both
-                * sides share one. The prototype's *Selling side* and *Recruitment side* were
-                * right for the one balance it had and wrong for any other an office builds;
-                * its *−100% to +100%* sentence described a scale agents no longer see.
-                */}
-              {ratio.comparison === 'band' ? (
-                <BalanceFormula ratio={ratio} taxonomy={taxonomy} labelFor={labelFor} />
-              ) : (
-                <div className="mt-3 inline-flex flex-col items-start">
-                  <div className="flex flex-wrap items-center gap-1.5 py-0.5">
-                    {ratio.numerator.map((code) => (
-                      <Chip key={code} code={code} label={labelFor(code)} />
-                    ))}
-                  </div>
-                  <div className="my-0.5 h-0.5 w-full min-w-32 bg-navy" aria-hidden />
-                  <div className="flex flex-wrap items-center gap-1.5 py-0.5">
-                    {ratio.denominator.map((code) => (
-                      <Chip key={code} code={code} label={labelFor(code)} />
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-hairline pt-3">
-                {scoping === ratio.id ? (
-                  <>
-                    <fieldset className="min-w-0">
-                      <legend className="text-sm font-semibold text-navy">{s.appliesTo}</legend>
-                      {/* Checkboxes, not a multi-select: every rung is visible at once, and
-                          the empty state — nothing ticked — is the one that means everyone,
-                          which a collapsed control would hide. */}
-                      <ul className="mt-1 flex flex-wrap gap-3">
-                        {ladder.map((rung) => (
-                          <li key={rung.code}>
-                            <label className="flex items-center gap-1.5 text-md text-navy">
-                              <input
-                                type="checkbox"
-                                checked={rungs.includes(rung.code)}
-                                onChange={(e) => setRungs((current) => (e.target.checked
-                                  ? [...current, rung.code]
-                                  : current.filter((c) => c !== rung.code)))}
-                              />
-                              {rung.label}
-                            </label>
-                          </li>
-                        ))}
-                      </ul>
-                      <p className="mt-1 text-sm text-muted">{t.scopeHint}</p>
-                    </fieldset>
-                    <Button
-                      disabled={busy}
-                      onClick={() => {
-                        stage({
-                          op: 'ratio.update',
-                          id: ratio.id,
-                          expectedVersion: ratio.version,
-                          body: { appliesToOrgLevelCodes: rungs },
-                        });
-                        setScoping(null);
-                      }}
-                    >
-                      {s.save}
-                    </Button>
-                    <Button variant="secondary" onClick={() => setScoping(null)}>{s.cancel}</Button>
-                  </>
-                ) : (
-                  <>
-                    <p className="text-md text-navy">
-                      {/* The label, then who: a label and its value, in that order in both languages. */}
-                      <span className="text-muted">{s.appliesTo}{' '}</span>
-                      <strong>{appliesTo(ratio.appliesToOrgLevelCodes)}</strong>
-                    </p>
-                    {canWrite && (
-                      <Button
-                        variant="inline"
-                        onClick={() => {
-                          setScoping(ratio.id);
-                          setRungs(ratio.appliesToOrgLevelCodes);
-                        }}
-                      >
-                        {s.changeWhoItAppliesTo}
-                      </Button>
-                    )}
-                  </>
-                )}
-              </div>
-
-              <div className="mt-3 flex flex-wrap items-start gap-3 border-t border-hairline pt-3">
-                {editing === ratio.id ? (
-                  <>
-                    {/* Every ratio, not only the office's own (ADR-0024). */}
-                    <div className="flex w-full flex-wrap gap-4">
-                        {/* The balance ratio is not a division — it is a difference over a
-                            sum — so its two sides are *Side A* and *Side B*, as the Add-a-ratio
-                            form calls them, rather than a numerator and a denominator. Not the
-                            card's section names: ticking a box here can change them. */}
-                        {sideHeadings(ratio.comparison, t, w)
-                          .map(([heading, side]) => (
-                            <fieldset key={side} className="min-w-0 flex-1">
-                              <legend className="text-sm font-semibold text-navy">{heading}</legend>
-                              <ul className="mt-1 flex flex-wrap gap-3">
-                                {taxonomy
-                                  .flatMap((c) => c.types)
-                                  .filter((t) => t.status === 'active')
-                                  .map((type) => (
-                                    <li key={type.code}>
-                                      <label className="flex items-center gap-1.5 text-md text-navy">
-                                        <input
-                                          type="checkbox"
-                                          checked={sides[side].includes(type.code)}
-                                          onChange={(e) => setSides((now) => ({
-                                            ...now,
-                                            [side]: e.target.checked
-                                              ? [...now[side], type.code]
-                                              : now[side].filter((c) => c !== type.code),
-                                          }))}
-                                        />
-                                        {type.label}
-                                      </label>
-                                    </li>
-                                  ))}
-                              </ul>
-                            </fieldset>
-                          ))}
-                    </div>
-                    {/* The name too. It was read-only on every card, which made the
-                        office-ratio copy — *"the name… is yours"* — false for the one
-                        field a reader would try first. An office may rename a platform
-                        ratio as well: the code is the identity, the label is what their
-                        people call it (invariant §4). */}
-                    <Field label={s.name} htmlFor={`label-${ratio.id}`} className="min-w-60 flex-1">
-                      <TextInput
-                        id={`label-${ratio.id}`}
-                        value={draftLabel}
-                        onChange={(e) => setDraftLabel(e.target.value)}
-                      />
-                    </Field>
-                    <Field
-                      label={kept('Benchmark')}
-                      htmlFor={`benchmark-${ratio.id}`}
-                      hint={ratio.comparison === 'band'
-                        ? bandHint(draft, t, figures)
-                        : draftUnit === 'percent'
-                          ? t.percentHint
-                          : t.atOrAboveHint}
-                      className="min-w-40"
-                    >
-                      <TextInput
-                        id={`benchmark-${ratio.id}`}
-                        type="text"
-                        inputMode="decimal"
-                        value={draft}
-                        onChange={(e) => setDraft(e.target.value)}
-                      />
-                    </Field>
-                    {/* On a platform ratio too: how a number is written is presentation,
-                        not formula, so ADR-0021 has nothing to say about it. */}
-                    {ratio.comparison === 'gte' && (
-                      <Field label={t.shownAs} htmlFor={`unit-${ratio.id}`} className="min-w-48">
-                        <Select
-                          id={`unit-${ratio.id}`}
-                          value={draftUnit}
-                          onChange={(e) => {
-                            const next = e.target.value as RatioDisplayUnit;
-                            setDraft((d) => reexpress(d, draftUnit, next, figures));
-                            setDraftUnit(next);
-                          }}
-                        >
-                          <option value="percent">{units.percent}</option>
-                          <option value="decimal">{units.decimal}</option>
-                        </Select>
-                      </Field>
-                    )}
-                    <Button
-                      disabled={busy
-                        || Number.isNaN(benchmarkFromInput(draft, draftUnit))
-                        || draftLabel.trim() === ''
-                        || sides.numerator.length === 0
-                        || sides.denominator.length === 0}
-                      onClick={() => {
-                        stage({
-                          op: 'ratio.update',
-                          id: ratio.id,
-                          expectedVersion: ratio.version,
-                          body: {
-                            label: draftLabel.trim(),
-                            benchmark: benchmarkFromInput(draft, draftUnit),
-                            // Only when it moved, so an edit to the number alone sends only
-                            // the number — and the row keeps a unit nobody touched.
-                            ...(draftUnit !== unitFor(ratio) ? { displayUnit: draftUnit } : {}),
-                            numerator: sides.numerator,
-                            denominator: sides.denominator,
-                          },
-                        });
-                        setEditing(null);
-                      }}
-                    >
-                      {s.save}
-                    </Button>
-                    <Button variant="secondary" onClick={() => setEditing(null)}>{s.cancel}</Button>
-                  </>
-                ) : (
-                  <>
-                    <p className="text-md text-navy">
-                      <span className="text-muted">
-                        {ratio.comparison === 'band' ? t.onTrackWithin : t.onTrackAtOrAbove}
-                      </span>
-                      <strong>{formatBenchmark(ratio.benchmark, unitFor(ratio), figures, language)}</strong>
-                    </p>
-                    {canWrite && (
-                      <>
-                        <Button
-                          variant="inline"
-                          onClick={() => {
-                            setEditing(ratio.id);
-                            setDraft(benchmarkToInput(ratio.benchmark, unitFor(ratio), figures));
-                            setDraftUnit(unitFor(ratio));
-                            setDraftLabel(ratio.label);
-                            setSides({
-                              numerator: ratio.numerator,
-                              denominator: ratio.denominator,
-                            });
-                          }}
-                        >
-                          {s.edit}
-                        </Button>
-                        {ratio.status === 'active' ? (
-                          <Button
-                            variant="inlineDanger"
-                            disabled={busy}
-                            onClick={() => void run(() => archiveRatio(ratio.id))}
-                          >
-                            {s.archive}
-                          </Button>
-                        ) : (
-                          <Button
-                            variant="inline"
-                            disabled={busy}
-                            onClick={() => void run(() => restoreRatio(ratio.id))}
-                          >
-                            {s.restore}
-                          </Button>
-                        )}
-                      </>
-                    )}
-                  </>
-                )}
-              </div>
+          {phone ? phoneRatios() : visible.map(({ row: ratio, staged: mark }) => (
+            <Card key={ratio.id} className={mark ? 'border-primary' : undefined}>
+              {ratioBody(ratio, mark)}
             </Card>
           ))}
         </div>
       )}
+      {phone && ratioSheet()}
     </SettingsScreen>
   );
 }

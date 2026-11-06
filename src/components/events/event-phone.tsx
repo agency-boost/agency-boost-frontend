@@ -28,8 +28,13 @@ import {
  *
  * Each of the two answers is 34px to the eye in a stack 72px tall, and takes a 44px tap through an invisible reach into
  * the card's padding above or below it, meeting the other's at the gap.
+ *
+ * *Changed 2026-11-05 (P19.1-T5 AC-4; UI-123, `campaign-event-tablet-desktop` 3 and 4):* **the card of a tablet and a
+ * laptop too**, two to a row. There it carries **`audience`, a plain grey line above the title** — *KPM · Semua agent*,
+ * not the small capitals the prototype's card drew — and the time line then names no audience a second time. The title
+ * and the place wrap; neither is cut. A phone passes no `audience`, and draws what it drew.
  */
-export function PhoneEventCard({ event, timezone, can, busy, error, onOpen, onAnswer }: {
+export function PhoneEventCard({ event, timezone, can, busy, error, onOpen, onAnswer, audience }: {
   event: GuestEvent;
   timezone: string;
   can: GuestEventCan;
@@ -37,6 +42,8 @@ export function PhoneEventCard({ event, timezone, can, busy, error, onOpen, onAn
   error: ApiError | null;
   onOpen: (id: string) => void;
   onAnswer: (event: GuestEvent, tapped: 'going' | 'notGoing') => void;
+  /** A tablet's and a laptop's: who the event is for, *KPM · Semua agent* (`audienceLine`). */
+  audience?: string;
 }) {
   const t = useMessages(eventsMessages);
   const figures = useFigureLanguage();
@@ -60,14 +67,15 @@ export function PhoneEventCard({ event, timezone, can, busy, error, onOpen, onAn
       <div className="flex items-center gap-2.5">
         <span aria-hidden="true" className="flex h-[3.25rem] w-12 shrink-0 flex-col items-center justify-center rounded-[12px] bg-hover-row leading-tight">
           <b className="text-xl text-navy">{day}</b>
-          <span className="text-sm font-bold uppercase text-amber-ink">{month}</span>
+          <span className="text-sm font-bold uppercase text-primary-ink">{month}</span>
         </span>
         <div className="min-w-0 flex-1">
+          {audience !== undefined && <p data-audience="" className="m-0 mb-0.5 text-sm font-semibold text-muted">{audience}</p>}
           <h3 id={titleId} className="m-0 break-words text-lg font-bold leading-snug text-ink">{event.title}</h3>
           <p className="m-0 mt-0.5 flex flex-wrap items-center gap-1 text-sm text-muted">
             <PlanIcon name="clock" className="h-3.5 w-3.5" />
             <span className="whitespace-nowrap">{timeSpanOf(event, timezone, figures)}</span>
-            {scope && <span>· {t.scopes[scope]}</span>}
+            {scope && audience === undefined && <span>· {t.scopes[scope]}</span>}
           </p>
           <p className="m-0 mt-0.5 flex items-center gap-1 text-sm text-muted">
             <PlanIcon name={isOnline(event) ? 'video' : 'pin'} className="h-3.5 w-3.5" />
@@ -130,8 +138,8 @@ function Answer({ on, tone, busy, reach, onClick, children }: {
         "after:absolute after:inset-x-0 after:content-['']",
         reach === 'top' ? 'after:-bottom-0.5 after:-top-2' : 'after:-bottom-2 after:-top-0.5',
         !on && 'border-hairline bg-card text-navy',
-        on && tone === 'going' && 'border-amber bg-amber text-navy',
-        on && tone === 'notGoing' && 'border-navy bg-navy text-white',
+        on && tone === 'going' && 'border-primary bg-primary text-primary-contrast',
+        on && tone === 'notGoing' && 'border-secondary bg-secondary text-secondary-contrast',
         busy && 'opacity-60',
       )}
     >

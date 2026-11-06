@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { ProductTags, useCatalogDrawerHost } from '@/components/product-catalog';
 import { ProductScript } from '@/components/product-script';
+import { RidersLine } from '@/components/riders-line';
+import { useSandboxedDocument } from '@/components/sandboxed-document';
 import { Button, ButtonLink, ErrorBanner } from '@/components/ui/field';
 import { TAP_AREA, TEXT_TAP } from '@/components/ui/phone';
 import { Skeleton, SkeletonBar, SkeletonText } from '@/components/ui/skeleton';
@@ -12,6 +14,7 @@ import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
 import { productCatalogMessages } from '@/i18n/messages/product-catalog';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
+import { isHtmlDocument } from '@/lib/html-document';
 import { useScrollLock } from '@/lib/use-scroll-lock';
 import { CONTENT_TERM_KEYS, firstMentions, type TermKey } from '@/lib/terms';
 import {
@@ -46,9 +49,9 @@ const TABS: readonly DrawerTab[] = ['details', 'plan', 'documents'];
  * The drawer's own states are Fills (P14-T7 AC-10): a skeleton while the product loads, an error with a
  * retry, and the not-found state for a product the office does not keep on, or that does not exist.
  *
- * **Its words are the catalogue's** (P18.98-T4; ADR-0179 §4), `messages/product-catalog.ts`, in the reader's language;
+ * **Its words are the catalogue's** (P18.10-T4; ADR-0179 §4), `messages/product-catalog.ts`, in the reader's language;
  * the tabs and *Commission rate* stay English (§A.3, §A.4). A commission rate is the reader's figures
- * (`useFigureLanguage()`, P18.98-T3). Everything the server answers is shown as served.
+ * (`useFigureLanguage()`, P18.10-T3). Everything the server answers is shown as served.
  */
 export function ProductDrawer({ code }: { code: string }) {
   const t = useMessages(productCatalogMessages);
@@ -61,7 +64,7 @@ export function ProductDrawer({ code }: { code: string }) {
   const box = useRef<HTMLDivElement>(null);
   const titleId = useId();
 
-  // The catalog behind holds still while the drawer is open (P18.96-T1 AC-2); a dialog over it nests the lock.
+  // The catalog behind holds still while the drawer is open (P18.8-T1 AC-2); a dialog over it nests the lock.
   useScrollLock(true);
 
   useEffect(() => {
@@ -110,7 +113,7 @@ export function ProductDrawer({ code }: { code: string }) {
   };
 
   /*
-   * **Which of the company's words first names each term** (P18.95-T9 AC-3; UI-028: *CI premium waiver*, *as-billed*):
+   * **Which of the company's words first names each term** (P18.7-T9 AC-3; UI-028: *CI premium waiver*, *as-billed*):
    * the tagline, then *Details*' benefits, what stands out and the best fit, in reading order. The card on the
    * catalog is one button, so the ⓘ is here, on the product's own page.
    */
@@ -161,7 +164,7 @@ export function ProductDrawer({ code }: { code: string }) {
             <div data-state="not-found">
               <p className="m-0 text-md font-semibold text-navy">{t.drawer.notFound}</p>
               <p className="m-0 mt-1 text-base text-muted">{t.drawer.notFoundHint}</p>
-              <button type="button" onClick={close} className={cn('mt-3 rounded-sm text-base font-semibold text-amber-ink hover:underline', TEXT_TAP)}>
+              <button type="button" onClick={close} className={cn('mt-3 rounded-sm text-base font-semibold text-primary-ink hover:underline', TEXT_TAP)}>
                 {t.drawer.backToCatalog}
               </button>
             </div>
@@ -169,10 +172,16 @@ export function ProductDrawer({ code }: { code: string }) {
 
           {product && (
             <>
-              <ProductTags channel={product.channel} runOff={product.lifecycle === 'closed_to_new_business'} />
+              <ProductTags
+                channel={product.channel}
+                runOff={product.lifecycle === 'closed_to_new_business'}
+                currencies={product.currencies}
+              />
               <h2 id={titleId} className="mb-1.5 mt-3 break-words text-2xl font-bold text-navy">{product.name}</h2>
               {/* An ⓘ after a term the company's copy uses (*CI premium waiver*, *as-billed*), the first time (AC-3). */}
               <p className="mb-[22px] text-md text-muted"><TermText text={product.tagline} terms={terms[0]} /></p>
+              {/* *"Bisa ditambah: …"* under the base, whichever tab is open (P19.4-T4 AC-5; ADR-0209 §3). */}
+              <RidersLine riders={product.riders} className="-mt-3 mb-[22px]" />
               <DrawerTabs active={tab} onSelect={setTab}>
                 {(active) => (
                   <>
@@ -233,7 +242,7 @@ function DrawerTabs({ active, onSelect, children }: {
               }}
               className={cn(
                 '-mb-px mr-[18px] border-b-2 px-0.5 pb-2.5 text-md font-semibold',
-                on ? 'border-amber text-navy' : 'border-transparent text-muted hover:text-navy',
+                on ? 'border-primary text-navy' : 'border-transparent text-muted hover:text-navy',
               )}
             >
               {t.drawer[tab]}
@@ -297,14 +306,15 @@ function DetailsTab({ product, terms }: { product: CatalogProduct; terms: TermKe
         <ul className="m-0 flex list-none flex-col gap-[9px] p-0">
           {product.benefits.map((b, i) => (
             <li key={`${i}-${b}`} className="flex items-start gap-[9px] text-base text-navy">
-              <span aria-hidden="true" className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber" />
+              <span aria-hidden="true" className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
               <span className="min-w-0"><TermText text={b} terms={benefitTerms(i)} /></span>
             </li>
           ))}
         </ul>
       </DetailBlock>
       <DetailBlock label={t.drawer.standsOut}>
-        <p className="m-0 text-base leading-normal text-navy"><TermText text={product.differentiator} terms={standsOut} /></p>
+        {/* On as many lines as the company typed it (P19-T6 AC-1). */}
+        <p className="m-0 whitespace-pre-line text-base leading-normal text-navy"><TermText text={product.differentiator} terms={standsOut} /></p>
       </DetailBlock>
       <DetailBlock label={t.drawer.bestFit}>
         <p className="m-0 text-base leading-normal text-navy"><TermText text={product.bestFit} terms={bestFit} /></p>
@@ -337,7 +347,7 @@ function PlanTab({ product }: { product: CatalogProduct }) {
       <ProductScript script={product.script} place="drawer" />
       <Link
         href={productPlanHref(product.code)}
-        className={cn('mt-4 inline-block rounded-sm text-sm font-semibold text-amber-ink hover:underline', TEXT_TAP)}
+        className={cn('mt-4 inline-block rounded-sm text-sm font-semibold text-primary-ink hover:underline', TEXT_TAP)}
       >
         {t.drawer.openInPlan}
       </Link>
@@ -358,18 +368,29 @@ function DocumentsTab({ product }: { product: CatalogProduct }) {
  * One slot. **The link is signed when it is asked for** and opened in a new tab (P14-T7 AC-7): a link
  * held on the page would outlive its 300 seconds. The tab is opened as the click lands, so a browser
  * that blocks windows opened later lets it through, and it is cut from this page before it navigates.
+ *
+ * **An HTML page opens in the window over the drawer, never a tab** (P19.6-T2, ADR-0217 §4): the same *Open link →*,
+ * described as opening here.
  */
 function DocumentRow({ code, doc }: { code: string; doc: CatalogDocument }) {
   const t = useMessages(productCatalogMessages);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const labelId = useId();
+  const page = useSandboxedDocument();
+  const html = isHtmlDocument(doc.mimeType);
 
   const open = async () => {
     // Ignored while it signs, rather than disabled: a disabled button drops the focus out of the modal.
     if (busy) return;
     setBusy(true);
     setError(null);
+    if (html) {
+      await page.open(doc.label, async () => (await openDocumentLink(code, doc.slot)).url)
+        .catch((err: unknown) => setError(toDisplayError(err)))
+        .finally(() => setBusy(false));
+      return;
+    }
     const tab = window.open('', '_blank');
     if (tab) tab.opener = null;
     try {
@@ -388,14 +409,18 @@ function DocumentRow({ code, doc }: { code: string; doc: CatalogDocument }) {
     <div className="border-b border-hairline py-3.5 last:border-b-0" data-slot={doc.slot}>
       <p className="mb-1.5 text-base font-semibold text-navy">{doc.label}</p>
       {/* The link's description: which document, and that it leaves this page. Its name stays the visible words. */}
-      {doc.available && <span id={labelId} className="sr-only">{t.drawer.opensInNewTab({ label: doc.label })}</span>}
+      {doc.available && (
+        <span id={labelId} className="sr-only">
+          {html ? t.drawer.opensHere({ label: doc.label }) : t.drawer.opensInNewTab({ label: doc.label })}
+        </span>
+      )}
       {doc.available ? (
         <button
           type="button"
           onClick={() => void open()}
           aria-disabled={busy || undefined}
           aria-describedby={labelId}
-          className={cn('rounded-sm text-base font-semibold text-amber-ink hover:underline aria-disabled:opacity-60', TEXT_TAP)}
+          className={cn('rounded-sm text-base font-semibold text-primary-ink hover:underline aria-disabled:opacity-60', TEXT_TAP)}
         >
           {busy ? t.drawer.opening : t.drawer.openLink}
         </button>
@@ -408,6 +433,7 @@ function DocumentRow({ code, doc }: { code: string; doc: CatalogDocument }) {
           <ErrorBanner {...error} />
         </div>
       )}
+      {html && page.dialog}
     </div>
   );
 }

@@ -176,7 +176,7 @@ describe('redeeming an invite (P3-T4)', () => {
   });
 });
 
-describe('a leader’s invite to one person, for an account that exists (P18.96-T3 AC-4, ADR-0170 §4)', () => {
+describe('a leader’s invite to one person, for an account that exists (P18.8-T3 AC-4, ADR-0170 §4)', () => {
   const BANNER = {
     leaderName: 'Agus Prasetyo', kpm: { code: '0417', branchName: 'BSD City Branch' }, companyId: 'co-1', companyName: 'Prudential',
     agentCode: '20001', joinDate: '2026-10-27', fullName: 'Yoga Pratama', existingAccount: true, expiresAt: '2026-11-10T03:00:00.000Z',
@@ -187,7 +187,7 @@ describe('a leader’s invite to one person, for an account that exists (P18.96-
     vi.unstubAllGlobals();
   });
 
-  it('P18.96-T3 AC-4 shows whose team and which office, and accepts with one button, then goes to the landing', async () => {
+  it('P18.8-T3 AC-4 shows whose team and which office, and accepts with one button, then goes to the landing', async () => {
     query = new URLSearchParams('invite=kpm-1.secret');
     const reload = vi.fn(async () => undefined);
     const { calls } = stubFetch({
@@ -205,7 +205,7 @@ describe('a leader’s invite to one person, for an account that exists (P18.96-
     expect(reload).toHaveBeenCalled();
   });
 
-  it('P18.96-T3 AC-4 signed out, it says to sign in and comes back here after', async () => {
+  it('P18.8-T3 AC-4 signed out, it says to sign in and comes back here after', async () => {
     query = new URLSearchParams('invite=kpm-1.secret');
     stubFetch({ '/invites/kpm-1.secret': { body: BANNER } });
     renderWithSession(<JoinPage />, { me: null });
@@ -215,7 +215,7 @@ describe('a leader’s invite to one person, for an account that exists (P18.96-
     expect(screen.queryByRole('button', { name: 'Accept and join' })).not.toBeInTheDocument();
   });
 
-  it('P18.96-T3 AC-4 a refusal — another account’s code, or somebody already in an office — is said in the server’s words', async () => {
+  it('P18.8-T3 AC-4 a refusal — another account’s code, or somebody already in an office — is said in the server’s words', async () => {
     query = new URLSearchParams('invite=kpm-1.secret');
     stubFetch({
       '/invites/kpm-1.secret/accept': {
@@ -230,7 +230,7 @@ describe('a leader’s invite to one person, for an account that exists (P18.96-
     expect(replace).not.toHaveBeenCalled();
   });
 
-  it('P18.96-T3 AC-4 a link that opens nothing says so plainly', async () => {
+  it('P18.8-T3 AC-4 a link that opens nothing says so plainly', async () => {
     query = new URLSearchParams('invite=kpm-1.secret');
     stubFetch({
       '/invites/kpm-1.secret': { status: 404, body: { error: { code: 'NOT_FOUND', message: 'This invite was already used. Sign in instead.', requestId: 'r' } } },

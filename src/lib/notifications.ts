@@ -78,7 +78,7 @@ export const INBOX_CHANGED = 'agencyboost:inbox-changed';
  *   reading its notice) makes the badge read the count itself.
  * - `origin`: which list made the change, so that list does not read itself again on hearing its own
  *   announcement, while the other one (the popover over the page, or the page under the popover) does.
- * - `delta`: how far the count moves, **said before the server has answered** (P18.95-T1 AC-7; the client's
+ * - `delta`: how far the count moves, **said before the server has answered** (P18.7-T1 AC-7; the client's
  *   UI review of 2026-10-26, UI-008: the bell's count stayed as it was after notices were marked read). The
  *   badge moves by it at once; `-1` for one read, `+1` for one unread, and the opposite to put it back.
  * - `local`: the change is the screen's own, not yet the server's — the badge moving ahead of an answer, or
@@ -111,7 +111,7 @@ export interface NoticeRun {
 }
 
 /**
- * **Repeats of one notice, in a row, as one line** (P18.95-T7 AC-4; the client's UI review of 2026-10-26, UI-030 —
+ * **Repeats of one notice, in a row, as one line** (P18.7-T7 AC-4; the client's UI review of 2026-10-26, UI-030 —
  * *Wilson updated your goal · 7×*). Items next to each other on the page that say the same thing about the same
  * thing — one template, the same words and the same address — are one run; any other item between them starts a new
  * one. The server composes the words from who acted and on what (ADR-0010), so identical words are the same actor

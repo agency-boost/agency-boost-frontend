@@ -3,7 +3,7 @@ import { dirname, join, normalize, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 /**
- * **What a route's first load must not carry** (P18.99-T16, the bundle, 2026-10-30; the 200 kB budget in
+ * **What a route's first load must not carry** (P18.11-T16, the bundle, 2026-10-30; the 200 kB budget in
  * `docs/02-specs/nfr/performance-and-scale.md`).
  *
  * Importing one export loads the whole module it lives in, and everything that module imports; a dialog imported
@@ -105,13 +105,16 @@ const HELD_BACK: readonly [page: string, modules: readonly string[]][] = [
   ['app/(admin)/admin/companies/[companyId]/templates/[templateId]/page.tsx', [
     'components/template-editor.tsx', 'components/products-tab.tsx', 'components/recruitment-playbook-tab.tsx',
   ]],
-  ['app/(admin)/admin/companies/[companyId]/templates/[templateId]/[section]/page.tsx', ['lib/activation.ts']],
+  // P19.4-T5: the Rekrutmen section's editor loads when that section is opened, never with the others.
+  ['app/(admin)/admin/companies/[companyId]/templates/[templateId]/[section]/page.tsx', [
+    'lib/activation.ts', 'components/recruitment-playbook-tab.tsx',
+  ]],
   ['app/(admin)/admin/companies/[companyId]/settings/page.tsx', [
     'lib/activation.ts', 'components/products-tab.tsx', 'components/recruitment-playbook-tab.tsx',
   ]],
 ];
 
-describe('a route loads at first only what its first paint draws (P18.99-T16, the bundle)', () => {
+describe('a route loads at first only what its first paint draws (P18.11-T16, the bundle)', () => {
   it.each(HELD_BACK)('%s reaches none of the modules it fetches on demand', (page, modules) => {
     const entry = join(SRC, page);
     expect(existsSync(entry), page).toBe(true);

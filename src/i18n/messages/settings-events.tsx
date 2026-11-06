@@ -3,7 +3,7 @@ import { defineMessages, type MessagesOf } from '@/i18n/catalogue';
 import { kept } from '@/i18n/kept';
 
 /**
- * **Settings › Events, in words** (P18.98-T4, events, campaigns and the calendar; `functional/events.md`,
+ * **Settings › Events, in words** (P18.10-T4, events, campaigns and the calendar; `functional/events.md`,
  * `functional/tenant-config.md`): the screen's line, its two tabs, an event's row and its phase, the add-and-edit panel,
  * the event types' list and form, and the toolbar. The frame every settings screen draws, and its shared controls —
  * *Save*, *Cancel*, *Edit*, *Archive*, *Restore*, *Show archived*, *Code*, *Name* — are `settings.ts`'; *View feedback*

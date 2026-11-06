@@ -2,7 +2,7 @@ import { defineMessages, type MessagesOf } from '@/i18n/catalogue';
 import { kept } from '@/i18n/kept';
 
 /**
- * **The recruitment pitch's documents** (P17-T4 to T6, ADR-0177; P18.98-T4): the banner and the six cards, drawn the
+ * **The recruitment pitch's documents** (P17-T4 to T6, ADR-0177; P18.10-T4): the banner and the six cards, drawn the
  * same on the office's *Settings › Recruitment pitch* and the agents' *Recruitment › Pitch Materials*
  * (`components/recruitment/`), and the PDF upload the pitch and the products page share (`pdf-upload.tsx`). The
  * prototype's words verbatim in English (`Recruitment_Section.html:681-818`, D-copy), but where a dated line said
@@ -10,7 +10,7 @@ import { kept } from '@/i18n/kept';
  *
  * **Content, shown as typed** (ADR-0179 §5): a slot's title, its checklist's labels and a file's name — the server's
  * and the office's. **Kept English** (§A): the settings page's title (§A.1), *Recruitment* and *Pitch* (§A.6). **A
- * message never writes a figure** (P18.98-T3): a file's size and day are written in the reader's figures and handed in.
+ * message never writes a figure** (P18.10-T3): a file's size and day are written in the reader's figures and handed in.
  * *Missing*, *Complete* (a document), *Replace*, *document*, *candidate* and *tick* are *Belum ada*, *Lengkap*,
  * *Ganti*, *dokumen*, *kandidat* and *centang* (for approval, the glossary for approval's §B.10).
  *
@@ -33,9 +33,13 @@ const en = {
   updated: ({ size, day }: { size: string; day: string }) => `${size} · updated ${day}`,
   /** The file's icon, drawn as words. */
   fileIcon: 'PDF',
+  /** An HTML page's icon (P19.6-T2, ADR-0217): what it is, as the PDF's says. */
+  fileIconPage: 'HTML',
   /** The checklist's legend. */
   checklist: 'Confirm this PDF actually includes',
   viewPdf: 'View PDF',
+  /** An HTML page's *View PDF*: it opens in the window, never a tab (ADR-0217 §4). */
+  viewPage: 'View page',
   replace: 'Replace',
   uploadPdf: 'Upload PDF',
 
@@ -56,10 +60,12 @@ const en = {
   /** The ring's name: the figure alone says nothing to somebody who cannot see the ring. */
   ringName: ({ done, total }: { done: number; total: number }) => `${done} of ${total} documents complete`,
   viewName: ({ title }: { title: string }) => `View PDF, ${title} — opens in a new tab`,
+  viewPageName: ({ title }: { title: string }) => `View page, ${title} — opens in this window`,
   uploadName: ({ title }: { title: string }) => `Upload PDF, ${title}`,
   replaceName: ({ title }: { title: string }) => `Replace, ${title}`,
   opening: 'Opening…',
   linkFailed: 'Could not open this PDF.',
+  pageLinkFailed: 'Could not open this page.',
   tickFailed: 'Could not save that tick.',
   /** A tick refused with `409`: the file it was made against has been replaced since. */
   replacedSince: 'This PDF was replaced while the page was open, so its ticks were cleared. Check the new file, then '
@@ -82,7 +88,8 @@ const en = {
   uploading: ({ name }: { name: string }) => `Uploading “${name}”…`,
   tooLarge: ({ name, size, max }: { name: string; size: string; max: string }) =>
     `“${name}” is ${size}. A PDF can be ${max} MB at most.`,
-  notPdf: ({ name }: { name: string }) => `“${name}” is not a PDF. Only a PDF can be uploaded here.`,
+  notPdf: ({ name }: { name: string }) =>
+    `“${name}” is not a PDF or an HTML page. Only a PDF or an HTML page can be uploaded here.`,
   sendFailed: ({ name }: { name: string }) => `“${name}” did not finish uploading. Check your connection and try again.`,
 };
 
@@ -95,8 +102,10 @@ const id: MessagesOf<typeof en> = {
   noFile: 'Belum diunggah',
   updated: ({ size, day }) => `${size} · diperbarui ${day}`,
   fileIcon: 'PDF',
+  fileIconPage: 'HTML',
   checklist: 'Pastikan PDF ini benar-benar memuat',
   viewPdf: 'Lihat PDF',
+  viewPage: 'Lihat halaman',
   replace: 'Ganti',
   uploadPdf: 'Unggah PDF',
 
@@ -113,10 +122,12 @@ const id: MessagesOf<typeof en> = {
   tryAgain: 'Coba lagi',
   ringName: ({ done, total }) => `${done} dari ${total} dokumen lengkap`,
   viewName: ({ title }) => `Lihat PDF, ${title} — terbuka di tab baru`,
+  viewPageName: ({ title }) => `Lihat halaman, ${title} — terbuka di jendela ini`,
   uploadName: ({ title }) => `Unggah PDF, ${title}`,
   replaceName: ({ title }) => `Ganti, ${title}`,
   opening: 'Membuka…',
   linkFailed: 'Tidak dapat membuka PDF ini.',
+  pageLinkFailed: 'Tidak dapat membuka halaman ini.',
   tickFailed: 'Tidak dapat menyimpan centang itu.',
   replacedSince: 'PDF ini diganti saat halaman sedang terbuka, jadi centangnya dihapus. Periksa file baru, lalu centang '
     + 'lagi.',
@@ -130,7 +141,7 @@ const id: MessagesOf<typeof en> = {
 
   uploading: ({ name }) => `Mengunggah “${name}”…`,
   tooLarge: ({ name, size, max }) => `“${name}” berukuran ${size}. Ukuran PDF maksimal ${max} MB.`,
-  notPdf: ({ name }) => `“${name}” bukan PDF. Hanya PDF yang dapat diunggah di sini.`,
+  notPdf: ({ name }) => `“${name}” bukan PDF atau halaman HTML. Hanya PDF atau halaman HTML yang dapat diunggah di sini.`,
   sendFailed: ({ name }) => `“${name}” tidak selesai diunggah. Periksa koneksi Anda, lalu coba lagi.`,
 };
 

@@ -4,9 +4,9 @@ import type {
 } from '@/lib/campaigns';
 
 /**
- * **Campaigns, as the field reads answer them** (P18.5-T7 to T9): the list, one campaign, the chases —
+ * **Campaigns, as the field reads answer them** (P18.2-T7 to T9): the list, one campaign, the chases —
  * shaped as `scratchpad/p185/contract-campaigns.md` and the campaigns module's response DTOs document them,
- * with the seed's campaigns (`phase-18.5-agent-enablement.md`, *Seed*) on a run in October 2026.
+ * with the seed's campaigns (`phase-18.2-agent-enablement.md`, *Seed*) on a run in October 2026.
  */
 
 export const CAMPAIGN_PERMISSIONS = ['campaign:read_list', 'campaign:chase', 'campaign_qualification:read', 'personal_summary:read'];
@@ -126,7 +126,7 @@ export function detail(over: Partial<CampaignDetail> = {}): CampaignDetail {
   };
 }
 
-/** The server's `runs` for a fixture card (`runsWords`, P18.95-T7 AC-1): a calendar year, the rolling window, or the sprint's. */
+/** The server's `runs` for a fixture card (`runsWords`, P18.7-T7 AC-1): a calendar year, the rolling window, or the sprint's. */
 const runsOf = (c: CampaignCard) => (c.window === 'calendar_year'
   ? 'Runs Jan – Des'
   : c.window === 'rolling_12m' ? 'Runs over the last 12 months' : 'Runs Okt – Des 2026');

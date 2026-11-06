@@ -3,11 +3,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Page } from '@/components/page';
 import { ActivityTabs, useActivityTitle } from '@/components/activity-tabs';
-import { SummaryStrip } from '@/components/summary-strip';
 import { DateField } from '@/components/ui/date-field';
 import { Button, Card, ErrorBanner, Field, TextInput } from '@/components/ui/field';
 import { SkeletonCards } from '@/components/ui/skeleton';
-import { ConfigBadge } from '@/components/ui/config-badge';
 import { TermText, TermTip } from '@/components/ui/term-tip';
 import { LineIcon } from '@/components/ui/line-icon';
 import { SaveStateLabel } from '@/components/ui/save-state';
@@ -15,11 +13,8 @@ import { TippedGlyph } from '@/components/ui/tipped-glyph';
 import { TAP_AREA } from '@/components/ui/phone';
 import { uiMessages } from '@/i18n/messages/ui';
 import { Dialog } from '@/components/ui/dialog';
-import { NumberBadge } from '@/components/ui/number-badge';
-import { SaveStatus } from '@/components/ui/save-status';
-import { SectionCard } from '@/components/ui/section-card';
-import { Stepper } from '@/components/ui/stepper';
 import { Toast, useToast } from '@/components/ui/toast';
+import { ColumnFlow } from '@/components/ui/columns';
 import { FLOATING_BAR_BUTTON, FLOATING_BAR_ROOM, FloatingBar } from '@/components/ui/floating-bar';
 import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
 import { activityMessages } from '@/i18n/messages/activity';
@@ -29,7 +24,7 @@ import { confirmationMessages } from '@/i18n/messages/confirmations';
 import { formatCalendarDay, formatNumber, formatShortDay, formatWeekday } from '@/lib/format';
 import { activityTermMentions, type TermKey } from '@/lib/terms';
 import { useSession } from '@/lib/session';
-import { sectionTiles, shownSections } from '@/lib/summary-tiles';
+import { shownSections } from '@/lib/summary-tiles';
 import { useTenantConfig } from '@/lib/tenant-config-cache';
 import { usePhone } from '@/lib/use-phone';
 import {
@@ -53,16 +48,22 @@ import {
  * 2026-09-29. What stays beyond the prototype is a frozen day's reason field (ADR-0042), the
  * empty-configuration card and the unsaved-counts dialog, each only when it is needed.
  *
- * **On a phone** (P18.95-T5 AC-1, the client's UI review of 2026-10-26, UI-017): the five tiles that filled
+ * **On a phone** (P18.7-T5 AC-1, the client's UI review of 2026-10-26, UI-017): the five tiles that filled
  * the first screen are one line, *Today: 3 touches*, and *Save activity* — 2,260px down the page — is in a
  * bar fixed to the bottom of the screen with its *Saved* / *Not yet saved* beside it. At 768px and wider
  * nothing changes (ADR-0167 §12). **At every size the tiles are the sections below them** (AC-2), one each.
+ *
+ * *Changed 2026-11-04 (P19.1-T1 AC-1, AC-2, ADR-0196; UI-112, UI-113, `activity-tablet-desktop`):* **a tablet and a laptop
+ * draw the phone's log in two columns**: the title *Activity*, no sub-line; one control row — the three views, the date
+ * pill and *Hari ini: n aktivitas* — where the *Tanggal* field stood with the save status stacked under it; the phone's
+ * section cards, each row the name and − n + with the examples behind ⓘ, filled down two columns (`ColumnFlow`); and the
+ * phone's save pill, floating above the tab bar on a tablet and standing under the lists on a laptop. The tile strip,
+ * the item numbers and the italic notes under each name go with the old layout, as the approved mockup draws it.
  */
 export default function LogActivityPage() {
   const t = useMessages(activityMessages).log;
   const title = useActivityTitle();
   const confirmed = useMessages(confirmationMessages);
-  const figures = useFigureLanguage();
   const { config, loading: configLoading, error: configError } = useTenantConfig();
   const { me } = useSession();
   const phone = usePhone();
@@ -77,7 +78,7 @@ export default function LogActivityPage() {
   const [error, setError] = useState<ApiError | null>(null);
   /** The date a pending confirmation would move to, or `null` when nothing is pending. */
   const [confirmDate, setConfirmDate] = useState<string | null>(null);
-  /** *Activity logged ✓* once a save lands (P18.95-T1 AC-6); the shell's toast, beneath its chrome. */
+  /** *Activity logged ✓* once a save lands (P18.7-T1 AC-6); the shell's toast, beneath its chrome. */
   const { toast, show } = useToast();
 
   const load = useCallback(async (on?: string) => {
@@ -118,7 +119,7 @@ export default function LogActivityPage() {
 
   /**
    * Save the day, or correct a closed one. **Either is the log's whole-form save**, so either says
-   * *Activity logged ✓* when it lands (P18.95-T1 AC-6), beside the *Saved · {n} touches* it has always
+   * *Activity logged ✓* when it lands (P18.7-T1 AC-6), beside the *Saved · {n} touches* it has always
    * shown under the date; a refusal toasts nothing and stays in the banner.
    */
   async function run(action: () => Promise<ActivityDay>) {
@@ -163,17 +164,13 @@ export default function LogActivityPage() {
    */
   const rung = me?.membership?.orgLevelCode ?? '';
   const categories = config?.activity ?? [];
-  /** The configuration's read failed and there is none to draw from (P18.95-T5 AC-3): its error, not *not set up*. */
+  /** The configuration's read failed and there is none to draw from (P18.7-T5 AC-3): its error, not *not set up*. */
   const configFailed = configError !== null && config === null;
   /*
-   * **One list for the cards and the tiles** (P18.95-T5 AC-2; UI-017). The strip counted the office's
-   * *Summary tiles* (ADR-0064), so the seed's Personal and Team Development were one *Development* tile over
-   * two cards: four tiles, five groups. Now both are drawn from this list, in its order.
+   * **One list for the cards** (P18.7-T5 AC-2; UI-017), in its order — and, until P19.1-T1, for the strip of tiles above
+   * them from 768px, which the 2 November layout does not draw.
    */
   const sections = shownSections(categories, rung);
-  const sectionTotal = (section: (typeof categories)[number]) => section.types
-    .filter((ty) => ty.status === 'active')
-    .reduce((sum, ty) => sum + (Number(counts[ty.code]) || 0), 0);
   /*
    * **The loaded day's own entry decides the status**, as the prototype's `refreshSaveStatus` reads
    * `savedEntries[date]` (`:4937-4958`). It was a message set by Save and never cleared, so a saved
@@ -192,24 +189,15 @@ export default function LogActivityPage() {
   /** The buttons are drawn: on a phone, in the bar fixed to the bottom of the screen (AC-1). */
   const saving = sections.length > 0 && !unloggedAndClosed;
   /*
-   * **One save status, where the reader is looking** (AC-1): under the date, as the prototype stacks them, and
-   * on a phone in the bar, beside the button it answers for. Never both: it is the screen's live region.
-   */
-  const saveStatus = savedTotal !== null ? (
-    <SaveStatus state="saved">{t.saved({ n: savedTotal })}</SaveStatus>
-  ) : (
-    <SaveStatus state="unsaved">{t.notSaved}</SaveStatus>
-  );
-  /*
    * **Which activity first names each term**, in reading order — every section's types, each label then its note
-   * (P18.95-T9 AC-3; UI-028: *NPA*, *JFW*, *BOP* unexplained). *Touch* has its own ⓘ above the cards.
+   * (P18.7-T9 AC-3; UI-028: *NPA*, *JFW*, *BOP* unexplained). *Touch* has its own ⓘ above the cards.
    */
   const termsIn = activityTermMentions(sections);
   /** A closed day's reason field, below the cards: then it is the last thing above the bar. */
   const reasonShown = sections.length > 0 && frozen && !unloggedAndClosed;
   /**
-   * Room under whatever is last above the floating bar on a phone, so its last line is never behind it
-   * (`FLOATING_BAR_ROOM`). From 768px the bar is a row in the page and needs none.
+   * Room under whatever is last above the floating bar on a phone and a tablet, so its last line is never behind it
+   * (`FLOATING_BAR_ROOM`, below 1024px). From 1024px the bar stands in the page and needs none.
    */
   const roomUnderCards = saving && !reasonShown;
 
@@ -221,14 +209,14 @@ export default function LogActivityPage() {
   const unsaved = dirty || savedTotal === null;
   const added = Math.max(0, total - (savedTotal ?? 0));
   const barState = busy ? 'saving' as const : unsaved ? 'unsaved' as const : 'saved' as const;
-  /** *Batal* and the save: in the floating bar on a phone, right-aligned under the cards from 768px. */
+  /** *Batal* and the save, in the floating bar at every size (P19.1-T1 AC-2): its pill's two buttons. */
   const barActions = (
     <>
       <Button
         variant="secondary"
         disabled={busy}
         onClick={() => void load(date)}
-        className={cn(phone && 'min-h-11 shrink-0 rounded-pill border-0 bg-pill-grey px-3.5 text-pill-grey-ink')}
+        className="min-h-11 shrink-0 rounded-pill border-0 bg-pill-grey px-3.5 text-pill-grey-ink"
       >
         {t.cancel}
       </Button>
@@ -238,7 +226,7 @@ export default function LogActivityPage() {
           onClick={() => void run(
             () => correctActivityDay({ date, counts, reason: reason.trim() }),
           )}
-          className={cn(phone && SAVE_ON_PHONE)}
+          className={SAVE_ON_PHONE}
         >
           {busy ? t.saving : t.saveCorrection}
         </Button>
@@ -246,7 +234,7 @@ export default function LogActivityPage() {
         <Button
           disabled={busy}
           onClick={() => void run(() => saveActivityDay({ date, counts }))}
-          className={cn(phone && SAVE_ON_PHONE)}
+          className={SAVE_ON_PHONE}
         >
           {busy ? t.saving : t.saveActivity}
         </Button>
@@ -254,47 +242,59 @@ export default function LogActivityPage() {
     </>
   );
 
+  /** The section cards, the phone's (UI-106), in the one list every size draws; `className` from 768px (P19.1-T1). */
+  const sectionCards = (className?: string) => sections.map((section) => {
+    const types = section.types.filter((ty) => ty.status === 'active');
+    const mentions = termsIn.get(section.code);
+    return (
+      <PhoneSection
+        key={section.code}
+        className={className}
+        title={section.label}
+        count={t.items({ n: types.length })}
+        rows={types.map((type) => ({
+          code: type.code,
+          label: type.label,
+          description: type.description,
+          terms: mentions?.get(`${type.code}:label`) ?? [],
+          value: counts[type.code] ?? 0,
+          saved: day?.entries.find((e) => e.activityTypeCode === type.code)?.count ?? 0,
+        }))}
+        disabled={busy || unloggedAndClosed}
+        onChange={(code, next) => {
+          setCounts({ ...counts, [code]: next });
+          setDirty(true);
+        }}
+      />
+    );
+  });
+
   return (
     <Page
       title={title}
       subtitle={t.subtitle}
-      // The client's *Remove* on a phone, as every reviewed sub-line (P18.95-T7 AC-1, grey text row 25).
+      // The client's *Remove* on a phone, as every reviewed sub-line (P18.7-T7 AC-1, grey text row 25); from 768px the
+      // field shell draws none (P19.1-T1 AC-1).
       subtitleOnPhone={false}
-      actions={phone ? undefined : (
-        /*
-         * The date sits in the topbar beside the title, with the save status under it, as the
-         * prototype's `.date-field` stacks them (`:2700-2704`, CSS `:91`) — it is what the whole
-         * screen is about, not one field of the form. On a phone it is the date pill below the views (UI-106).
-         */
-        <div className="flex flex-col gap-1.5">
-          <Field label={t.date} htmlFor="activity-date" className="w-44">
-            {/* The shared date field (P18.96-T2 AC-4): the day as the app writes it, the device's picker to choose. */}
-            <DateField id="activity-date" value={date} onChange={goTo} />
-          </Field>
-          {saveStatus}
+    >
+      {/*
+        * **From 768px, one control row** (P19.1-T1 AC-1; UI-112, `activity-tablet-desktop`): the three views, the date
+        * pill and *Hari ini: n aktivitas* — no *Tanggal* label, and the save state in the bar, not stacked under the date.
+        * On a phone the views, then the date pill's own row below, as UI-106 draws them.
+        */}
+      {phone ? <ActivityTabs /> : (
+        <div data-control-row="" className="mb-1 flex flex-wrap items-center gap-2">
+          <ActivityTabs />
+          <DayPill date={date} today={today} onChange={goTo} />
+          {sections.length > 0 && <DayCount date={date} today={today} savedTotal={savedTotal} />}
         </div>
       )}
-    >
-      <ActivityTabs />
       {error && <ErrorBanner {...error} />}
       {/*
-        * **A configuration that did not arrive says so** (P18.95-T5 AC-3). It read as an office with nothing set
+        * **A configuration that did not arrive says so** (P18.7-T5 AC-3). It read as an office with nothing set
         * up — *Ask your KPM Owner* — which sent the reader to the wrong person about a request that failed.
         */}
       {configFailed && <ErrorBanner {...toDisplayError(configError)} />}
-
-      {/* A tile per section, then the total (`:2720-2726`; P18.95-T5 AC-2). Not on a phone: the date row below. */}
-      {sections.length > 0 && !phone && (
-        <SummaryStrip
-          className="max-md:hidden"
-          tiles={sectionTiles(sections, sectionTotal, {
-            label: t.totalToday,
-            value: total,
-            // What an activity counts, once (P18.95-T9 AC-3; UI-028): the strip is where the word first shows.
-            term: 'TOUCHES',
-          })}
-        />
-      )}
 
       {/*
         * **On a phone, the date pill and the day's count on one line** (UI-106): *‹ Jum, 30 Okt ›*, the › held on the
@@ -304,18 +304,7 @@ export default function LogActivityPage() {
       {phone && (
         <div className="mb-0.5 mt-2.5 flex items-center gap-2">
           <DayPill date={date} today={today} onChange={goTo} />
-          {sections.length > 0 && (
-            <p className="ml-auto flex min-w-0 items-center gap-1 text-base text-muted">
-              <span className="min-w-0">
-                {t.dayLine({
-                  day: date === today ? t.today : formatCalendarDay(date, figures),
-                  count: <strong className="font-semibold text-ink">{formatNumber(savedTotal ?? 0, {}, figures)}</strong>,
-                  n: savedTotal ?? 0,
-                })}
-              </span>
-              <TermTip term="TOUCHES" />
-            </p>
-          )}
+          {sections.length > 0 && <DayCount date={date} today={today} savedTotal={savedTotal} />}
         </div>
       )}
 
@@ -327,90 +316,18 @@ export default function LogActivityPage() {
 
       {phone ? (
         <div className={cn(roomUnderCards && FLOATING_BAR_ROOM)}>
-          {sections.map((section) => {
-            const types = section.types.filter((ty) => ty.status === 'active');
-            const mentions = termsIn.get(section.code);
-            return (
-              <PhoneSection
-                key={section.code}
-                title={section.label}
-                count={t.items({ n: types.length })}
-                rows={types.map((type) => ({
-                  code: type.code,
-                  label: type.label,
-                  description: type.description,
-                  terms: mentions?.get(`${type.code}:label`) ?? [],
-                  value: counts[type.code] ?? 0,
-                  saved: day?.entries.find((e) => e.activityTypeCode === type.code)?.count ?? 0,
-                }))}
-                disabled={busy || unloggedAndClosed}
-                onChange={(code, next) => {
-                  setCounts({ ...counts, [code]: next });
-                  setDirty(true);
-                }}
-              />
-            );
-          })}
+          {sectionCards()}
         </div>
       ) : (
         /*
-         * **Two columns, as the prototype has them** (`.categories`, `:112`). One card per category
-         * stacked full-width put three activities on a screen; side by side a reader sees the whole
-         * day at once, which is what "in 1 minute" depends on.
+         * **Two columns from 768px, the phone's cards in them** (P19.1-T1 AC-2; UI-113, `activity-tablet-desktop`): down
+         * the first column, then the second, each card whole (`ColumnFlow`), so the five groups read *Leads Generation,
+         * Selling | Recruitment, Personal Development, Team Development* — the whole day on one screen, which is what *in
+         * 1 minute* depends on.
          */
-        <div className="mb-5 grid items-start gap-4 lg:grid-cols-2">
-          {sections.map((section) => {
-            const types = section.types.filter((ty) => ty.status === 'active');
-            const mentions = termsIn.get(section.code);
-            return (
-              <SectionCard
-                key={section.code}
-                title={section.label}
-                meta={
-                  <ConfigBadge tone="navy" className="normal-case tracking-normal">
-                    {t.items({ n: types.length })}
-                  </ConfigBadge>
-                }
-              >
-                {types.map((type) => (
-                  <SectionCard.Row
-                    key={type.code}
-                    control={
-                      <Stepper
-                        value={counts[type.code] ?? 0}
-                        label={type.label}
-                        max={999}
-                        disabled={busy || unloggedAndClosed}
-                        onChange={(next) => {
-                          setCounts({ ...counts, [type.code]: next });
-                          setDirty(true);
-                        }}
-                      />
-                    }
-                  >
-                    <NumberBadge n={type.displayOrder} />
-                    <span className="min-w-0">
-                      {/* An ⓘ after a term the office's words use (*Proses NPA*), the first time on the screen (AC-3). */}
-                      <span className="block text-md text-navy">
-                        <TermText text={type.label} terms={mentions?.get(`${type.code}:label`) ?? []} />
-                      </span>
-                      {/*
-                        * The italic sub-note the prototype pulls out of the label's trailing
-                        * parenthetical (`splitLabel`, `:4778`). Ours is a field the office fills in, so
-                        * there is nothing to parse — and nothing was rendering it.
-                        */}
-                      {type.description && (
-                        <span className="mt-0.5 block text-xs italic text-muted">
-                          <TermText text={type.description} terms={mentions?.get(`${type.code}:description`) ?? []} />
-                        </span>
-                      )}
-                    </span>
-                  </SectionCard.Row>
-                ))}
-              </SectionCard>
-            );
-          })}
-        </div>
+        <ColumnFlow className={cn('mt-3', roomUnderCards && FLOATING_BAR_ROOM)}>
+          {sectionCards('mt-0')}
+        </ColumnFlow>
       )}
 
       {/*
@@ -427,7 +344,7 @@ export default function LogActivityPage() {
           label={t.why}
           htmlFor="correction-reason"
           hint={corrections > 0 ? t.closedCorrected({ n: corrections }) : t.closed}
-          className={cn('mb-4 max-w-xl max-md:mt-4', phone && FLOATING_BAR_ROOM)}
+          className={cn('mb-4 max-w-xl max-md:mt-4', FLOATING_BAR_ROOM)}
         >
           {/* Required, and capped where the API caps it (`activity.dto.ts`, 500), so a reason is never
               refused far from the field a phone user is looking at. */}
@@ -451,20 +368,19 @@ export default function LogActivityPage() {
         * words navy on the accent (I-542). **In Goal Setting's pill** (`FloatingBar`; the product owner's staging review,
         * 2026-10-31), not the full-width strip it was. The floating bar lifts the shell's toast above it (`toast.tsx`), so
         * *Activity logged ✓* never covers the button it confirms. `data-action-bar` names the row at every width.
+        *
+        * *Changed 2026-11-04 (P19.1-T1 AC-2; UI-113, `activity-tablet-desktop`: *save bar always visible*):* **the same pill
+        * at every size** — floating above the tab bar on a tablet, as on a phone, and standing under the lists from 1024px
+        * (`wide="pill"`). It was a row of two buttons from 768px, the save state stacked under the date.
         */}
-      {saving && phone && (
-        <FloatingBar data-action-bar="" pillClassName="gap-2">
+      {saving && (
+        <FloatingBar data-action-bar="" wide="pill" pillClassName="gap-2">
           <span className="flex min-w-0 flex-1 flex-col">
             <SaveStateLabel state={barState} />
             {barState === 'unsaved' && added > 0 && <span className="text-sm text-muted">{t.newCount({ n: added })}</span>}
           </span>
           {barActions}
         </FloatingBar>
-      )}
-      {saving && !phone && (
-        <div data-action-bar="" className="flex flex-wrap items-center justify-end gap-2.5">
-          {barActions}
-        </div>
       )}
 
       <Dialog
@@ -541,6 +457,28 @@ function DayPill({ date, today, onChange }: { date: string; today: string | null
   );
 }
 
+/**
+ * **The day's saved count beside the date pill** (UI-106): *Hari ini: n aktivitas ⓘ* — the day as saved, so the unsaved
+ * taps are the bar's to count; another day is named rather than called *today*. On a phone its own row under the views;
+ * from 768px the end of the control row (P19.1-T1 AC-1).
+ */
+function DayCount({ date, today, savedTotal }: { date: string; today: string | null; savedTotal: number | null }) {
+  const t = useMessages(activityMessages).log;
+  const figures = useFigureLanguage();
+  return (
+    <p className="ml-auto flex min-w-0 items-center gap-1 text-base text-muted">
+      <span className="min-w-0">
+        {t.dayLine({
+          day: date === today ? t.today : formatCalendarDay(date, figures),
+          count: <strong className="font-semibold text-ink">{formatNumber(savedTotal ?? 0, {}, figures)}</strong>,
+          n: savedTotal ?? 0,
+        })}
+      </span>
+      <TermTip term="TOUCHES" />
+    </p>
+  );
+}
+
 /** One activity type's row on a phone: its words, its term, its examples, and its count as typed and as saved. */
 interface PhoneRow {
   code: string;
@@ -558,8 +496,10 @@ interface PhoneRow {
  * numbers. Each row 44px tall at least.
  */
 function PhoneSection({
-  title, count, rows, disabled, onChange,
+  title, count, rows, disabled, onChange, className,
 }: {
+  /** From 768px the column's own gap stands in for the phone's 8px above (`ColumnFlow`). */
+  className?: string;
   title: string;
   count: string;
   rows: readonly PhoneRow[];
@@ -567,7 +507,7 @@ function PhoneSection({
   onChange: (code: string, next: number) => void;
 }) {
   return (
-    <section data-phone-section="" className="mt-2 overflow-hidden rounded-lg bg-card">
+    <section data-phone-section="" className={cn('mt-2 overflow-hidden rounded-lg bg-card', className)}>
       <div className="flex items-center justify-between gap-2 bg-hover-row px-3 py-[7px]">
         <h2 className="min-w-0 font-body text-base font-bold text-navy">{title}</h2>
         <span className="shrink-0 text-xs font-semibold text-muted">{count}</span>
@@ -638,9 +578,9 @@ function PhoneCounter({
         onWheel={(e) => e.currentTarget.blur()}
         className={cn(
           'w-8 bg-transparent text-center font-bold tabular-nums [appearance:textfield] focus:outline-none',
-          'focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-amber',
+          'focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-focus-ring',
           '[&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none',
-          value === 0 ? 'text-signal-grey' : changed ? 'text-amber-ink' : 'text-ink',
+          value === 0 ? 'text-signal-grey' : changed ? 'text-primary-ink' : 'text-ink',
         )}
       />
       <button
@@ -648,7 +588,7 @@ function PhoneCounter({
         aria-label={t.increase({ label })}
         disabled={disabled || value >= 999}
         onClick={() => set(value + 1)}
-        className={cn(CIRCLE, 'bg-amber/[0.12] text-amber-ink')}
+        className={cn(CIRCLE, 'bg-primary/[0.12] text-primary-ink')}
       >
         <LineIcon name="plus" className="h-[18px] w-[18px]" />
       </button>

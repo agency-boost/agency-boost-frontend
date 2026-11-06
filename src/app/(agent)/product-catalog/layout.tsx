@@ -21,15 +21,15 @@ import { PRODUCT_CATALOG_HREF } from '@/lib/product-catalog';
  * it through their field view (ADR-0114). The API answers the office's own shelf whatever this decides.
  * The grid reads its filters from the address, which needs the boundary below.
  *
- * **Under the tabs *Sales Attack Plan | Product Catalog*** (P18.8-T12, ADR-0161 §5), the catalog's current over its
+ * **Under the tabs *Sales Attack Plan | Product Catalog*** (P18.5-T12, ADR-0161 §5), the catalog's current over its
  * drawer too. Behind an open drawer the strip, like the grid, takes no focus and no click: the dialog is modal.
  */
 export default function ProductCatalogLayout({ children }: { children: ReactNode }) {
   const t = useMessages(productCatalogMessages);
   const drawerOpen = usePathname() !== PRODUCT_CATALOG_HREF;
   return (
-    // The sub-line is not drawn on a phone: the client's *Remove* (P18.95-T7 AC-1, grey text row 13), its search above
-    // the grid since P18.95-T6.
+    // The sub-line is not drawn on a phone: the client's *Remove* (P18.7-T7 AC-1, grey text row 13), its search above
+    // the grid since P18.7-T6.
     <Page
       title={t.title}
       subtitle={t.subtitle}

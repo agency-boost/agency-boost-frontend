@@ -16,35 +16,37 @@ import type { ApiError } from '@/lib/api-client';
 import { listMetrics, type MetricDefinition } from '@/lib/tenant-config';
 import { useHashTab } from '@/lib/use-hash-tab';
 import { CAMPAIGN_PARTS } from '@/lib/template-sections';
+import { isTemplateLibrary, type Company } from '@/lib/admin';
 import { useMessages } from '@/i18n/language-provider';
 import { adminTemplateMessages } from '@/i18n/messages/admin-template';
+import { adminTemplateCompaniesMessages } from '@/i18n/messages/admin-template-companies';
 
 /*
- * **Products and Recruitment load when they are opened** (P18.98-T6, the bundle): each reads and writes its own data
- * and draws four card skeletons until it has it, the skeleton below being the one it would draw first anyway.
+ * **Products load when they are opened** (P18.10-T6, the bundle): the tab reads and writes its own data and draws four
+ * card skeletons until it has it, the skeleton below being the one it would draw first anyway.
  */
 const ProductsTab = dynamic(
   () => import('@/components/products-tab').then((m) => m.ProductsTab),
   { loading: () => <SkeletonCards count={4} /> },
 );
-const RecruitmentPlaybookTab = dynamic(
-  () => import('@/components/recruitment-playbook-tab').then((m) => m.RecruitmentPlaybookTab),
-  { loading: () => <SkeletonCards count={4} /> },
-);
 
-const TABS = ['products', 'campaigns', 'recruitment'] as const;
+/**
+ * *Produk · Campaign* (ADR-0210 §3; the 11-03 handover's B1-11): *Rekrutmen* is a template's section since P19.4-T5, so
+ * an old link to `#recruitment` here opens *Produk*, and the company's templates hold the playbook.
+ */
+const TABS = ['products', 'campaigns'] as const;
 type Tab = (typeof TABS)[number];
 
 /**
- * **A company's page, tab *Pengaturan perusahaan*** (ADR-0185 §2; P18.99-T20 AC-1): what is the company's rather than a
- * template's — its products (ADR-0033), its carrier rules (ADR-0026) and its recruitment playbook (ADR-0125) — read
- * live by every office it has, said once: *Berlaku langsung untuk semua KPM perusahaan ini.*
+ * **A company's page, tab *Pengaturan perusahaan*** (ADR-0185 §2; P18.11-T20 AC-1): what is the company's rather than a
+ * template's — its products (ADR-0033) and its carrier rules (ADR-0026) — read live by every office it has, said once:
+ * *Berlaku langsung untuk semua KPM perusahaan ini.* The recruitment playbook left for the templates (ADR-0210 §3).
  *
  * *Campaign* keeps a draft and a *Terbitkan*, saved as it is made like a template's sections, and asks before it
- * publishes because publishing reaches the offices that exist. *Produk* and *Rekrutmen* save as they always did. **A
- * part once opened stays mounted**, hidden when another is shown, so moving between them never loses an edit.
+ * publishes because publishing reaches the offices that exist. *Produk* saves as it always did. **A part once opened
+ * stays mounted**, hidden when another is shown, so moving between them never loses an edit.
  *
- * Super Admin only: `company_template:read` to see it; the playbook's writes are `recruitment_playbook:write`.
+ * Super Admin only: `company_template:read` to see it.
  */
 export default function CompanySettingsPage({ params }: { params: Promise<{ companyId: string }> }) {
   const { companyId } = use(params);
@@ -54,7 +56,6 @@ export default function CompanySettingsPage({ params }: { params: Promise<{ comp
   const [tab, selectTab] = useHashTab(TABS.map((x) => ({ href: `#${x}` })));
   const current = (TABS.find((x) => `#${x}` === tab) ?? TABS[0]) as Tab;
   const [opened, setOpened] = useState<ReadonlySet<Tab>>(new Set([TABS[0]]));
-  const [playbookDirty, setPlaybookDirty] = useState(false);
 
   useEffect(() => {
     setOpened((was) => (was.has(current) ? was : new Set([...was, current])));
@@ -63,8 +64,11 @@ export default function CompanySettingsPage({ params }: { params: Promise<{ comp
   return (
     <CompanyFrame companyId={companyId} company={company} permission="company_template:read">
       <p className="mb-4 text-md font-semibold text-navy">{t.line}</p>
+      {company && !isTemplateLibrary(company) && <CompanyFacts company={company} />}
+      {/* 44px below 1024px (P19.2-T2 AC-5; UI-135: *tabs Produk/Campaign/Rekrutmen 25px* → 44px). */}
       <SettingsTabs
         variant="subtabs"
+        touch
         label={words.companyPage.settings}
         tabs={TABS.map((x) => ({ label: t[x], href: `#${x}` }))}
         activeHref={`#${current}`}
@@ -76,14 +80,32 @@ export default function CompanySettingsPage({ params }: { params: Promise<{ comp
       {opened.has('campaigns') && (
         <div hidden={current !== 'campaigns'}><CampaignRules companyId={companyId} /></div>
       )}
-      {opened.has('recruitment') && (
-        <div hidden={current !== 'recruitment'}>
-          <RecruitmentPlaybookTab companyId={companyId} onDirtyChange={setPlaybookDirty} />
-        </div>
-      )}
-      {/* The playbook saves on its own button: an edit not saved is asked about before the page is left. */}
-      <LeaveGuard active={playbookDirty} />
     </CompanyFrame>
+  );
+}
+
+/**
+ * **The company's slug, currency and time zone** (P19.2-T2 AC-1; UI-126: *Slug, Mata uang and Zona waktu move to the
+ * company page (same for every company in v1)*): the three the companies list showed as columns, read here as one line of
+ * labelled values. Read, not edited: the slug is changed from the list's *Ubah*, and v1 has one currency and one time zone
+ * (ADR-0016). An insurer's; the built-in templates' company holds no office.
+ */
+function CompanyFacts({ company }: { company: Company }) {
+  const t = useMessages(adminTemplateCompaniesMessages);
+  const facts = [
+    [t.columns.slug, company.slug],
+    [t.columns.currency, company.defaultCurrency],
+    [t.columns.timeZone, company.defaultTimezone],
+  ] as const;
+  return (
+    <dl aria-label={t.facts} data-company-facts="" className="mb-4 flex flex-wrap gap-x-6 gap-y-1 text-md">
+      {facts.map(([label, value]) => (
+        <div key={label} className="flex items-baseline gap-1.5">
+          <dt className="text-muted">{label}</dt>
+          <dd className="font-semibold text-navy">{value}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 
@@ -126,6 +148,7 @@ function CampaignRules({ companyId }: { companyId: string }) {
     <>
       <SettingsTabs
         variant="subtabs"
+        touch
         label={words.editor.parts({ section: words.settings.campaigns })}
         tabs={CAMPAIGN_PARTS.map((p) => ({ label: words.pills[p.key as keyof typeof words.pills], href: `#${p.key}` }))}
         activeHref={`#${part.key}`}
@@ -149,6 +172,7 @@ function CampaignRules({ companyId }: { companyId: string }) {
             saveError={drafts.error}
             publishError={publishError}
             onRetry={() => void drafts.flush()}
+            onReload={drafts.retryLoad}
             onPublish={() => setAsking(true)}
           />
           <KindEditor

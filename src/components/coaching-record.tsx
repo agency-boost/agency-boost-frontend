@@ -37,7 +37,7 @@ import { formatCalendarDayLong, formatDay, formatRupiahCompact, formatShortDay }
 import { useCan, useSession } from '@/lib/session';
 import { useOpenedOnce } from '@/lib/use-opened-once';
 
-/** *Edit again*'s dialog, downloaded when it is first opened and mounted from then on (`useOpenedOnce`; P18.99-T16). */
+/** *Edit again*'s dialog, downloaded when it is first opened and mounted from then on (`useOpenedOnce`; P18.11-T16). */
 const ReopenDialog = dynamic(() => import('@/components/coaching-reopen-dialog').then((m) => m.ReopenDialog), { ssr: false });
 
 /**
@@ -61,7 +61,7 @@ const ReopenDialog = dynamic(() => import('@/components/coaching-reopen-dialog')
  * the ticks drawn and inert. The archive is a screen the prototype only promised — its rows toasted
  * *"coming next"* (`:10712-10715`) — so its header, the earlier versions and its not-found and draft
  * states are ours, in that idiom (parity L-04). Coaching's own strings use none of ADR-0084's six words. They are the
- * catalogue's (`messages/coaching-record.tsx`, with what a session agreed from `coaching-session.tsx`; P18.98-T4), and
+ * catalogue's (`messages/coaching-record.tsx`, with what a session agreed from `coaching-session.tsx`; P18.10-T4), and
  * every figure is written in `useFigureLanguage()`'s.
  */
 
@@ -546,7 +546,7 @@ export type MyCoachingTab = 'session' | 'activation' | 'training';
 export function MyCoachingHeader({ current }: { current: MyCoachingTab }) {
   const { me } = useSession();
   const { person: t } = useMessages(coachingMessages);
-  // The rung by its badge's name, *AB · Your own coaching* (P18.95-T9 AC-1).
+  // The rung by its badge's name, *AB · Your own coaching* (P18.7-T9 AC-1).
   const rung = useRoleShort(me?.membership?.orgLevelCode ?? '');
   const name = me?.user.fullName ?? '';
   const leads = useLeadsSomebody();
@@ -560,7 +560,7 @@ export function MyCoachingHeader({ current }: { current: MyCoachingTab }) {
           { key: 'goal-setting', label: t.tabs.goalSetting, href: '/goals' },
           // P13.1-T9: the person shell's *Activity* tab, mirrored as the two before it are — the reader's own screen.
           { key: 'activity', label: t.tabs.activity, href: '/activity/dashboard' },
-          // P18.5-T4 AC-3: the reader's own training, in the coaching renderer's form.
+          // P18.2-T4 AC-3: the reader's own training, in the coaching renderer's form.
           { key: 'training', label: t.tabs.training, href: MY_COACHING_TRAINING_HREF, current: current === 'training' },
           { key: 'activation', label: t.tabs.activation, href: MY_COACHING_ACTIVATION_HREF, current: current === 'activation' },
           { key: 'session', label: t.tabs.session, href: myCoachingHref(), current: current === 'session' },
@@ -579,7 +579,7 @@ export function MyCoachingHeader({ current }: { current: MyCoachingTab }) {
  *   way back to the roster only for a reader who leads somebody: for anybody else the roster is empty.
  * - **The tabs**, without *🔒 Leader Notes*: *Personal Summary* and *Goal Setting* open the reader's own
  *   `/summary` and `/goals`, and *Activity* their own `/activity/dashboard` (P13.1-T9); *Training* opens
- *   the reader's own training (P18.5-T4 AC-3); *Activation*
+ *   the reader's own training (P18.2-T4 AC-3); *Activation*
  *   opens the reader's own checklist (P13-T9 AC-4); *Coaching Session* is this page.
  * - **One finalized session**: the latest, or the one the address names (`?session=`, the finalize
  *   notice's address). *View past sessions ▾* lists the others, each *Coached by {leader}*

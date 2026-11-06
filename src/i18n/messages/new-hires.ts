@@ -2,7 +2,7 @@ import { defineMessages, type MessagesOf } from '@/i18n/catalogue';
 import { kept } from '@/i18n/kept';
 
 /**
- * **New Hires** (P18.98-T4, new hires and activation; `functional/activation.md`, *3M activation and `/new-hires`*;
+ * **New Hires** (P18.10-T4, new hires and activation; `functional/activation.md`, *3M activation and `/new-hires`*;
  * `functional/org-hierarchy.md`, *Adding an agent*): the leader's `/new-hires` — the **3M activation %** with its
  * filter and its units, the three sections as tables and as a phone's cards, a row's result, *Schedule 1:1* and *Mark
  * left* — one hire's `/new-hires/[membershipId]` — the way back, the join date's correction, the coaching note, how an
@@ -27,15 +27,15 @@ import { kept } from '@/i18n/kept';
  * @moved app/(agent)/new-hires/
  */
 const en = {
-  /** The roster's title, the nav item's words (P18.95-T9 AC-2), and its line (`:3354-3361`). */
+  /** The roster's title, the nav item's words (P18.7-T9 AC-2), and its line (`:3354-3361`). */
   title: kept('New Hires'),
   subtitle: "Track your new agents' 90-day activation progress.",
   loading: 'Loading your new hires…',
-  /** Nobody who joined as a new hire in the year it lists (P18.96-T6). */
+  /** Nobody who joined as a new hire in the year it lists (P18.8-T6). */
   empty: 'No one you lead joined as a new hire in the last 12 months.',
 
   /**
-   * The 3M activation % (P18.96-T6 AC-2, AC-3): its counts, a share over nobody decided, its filter. **UI V1 (UI-023)**:
+   * The 3M activation % (P18.8-T6 AC-2, AC-3): its counts, a share over nobody decided, its filter. **UI V1 (UI-023)**:
    * *Aktivasi 3M*, the percentage alone — the counts and the month filter are no longer drawn.
    */
   activation3M: '3M activation rate',
@@ -67,11 +67,11 @@ const en = {
   },
   /** A new hire with no checklist: an AB or an AAB placed as one (ADR-0103). */
   noChecklist: 'No checklist',
-  /** A phone's card (P18.95-T3 AC-4; UI-012): the day in words, and the two dates, each written or *—*. */
+  /** A phone's card (P18.7-T3 AC-4; UI-012): the day in words, and the two dates, each written or *—*. */
   dayOf: ({ day, of }: { day: string; of: number }) => `Day ${day} of ${of}`,
   cardDates: ({ join, firstSale }: { join: string; firstSale: string }) => `Join date ${join} · First sale ${firstSale}`,
 
-  /** *Schedule 1:1* (P18.96-T6 AC-4; UI-027's detail button): its name begins with its visible words (WCAG 2.5.3). */
+  /** *Schedule 1:1* (P18.8-T6 AC-4; UI-027's detail button): its name begins with its visible words (WCAG 2.5.3). */
   scheduleOneOnOne: 'Schedule 1:1',
   scheduleOneOnOneName: ({ name }: { name: string }) => `Schedule 1:1 with ${name}`,
   cancel: 'Cancel',

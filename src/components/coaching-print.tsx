@@ -45,10 +45,10 @@ interface Paper {
  * for the coachee and the day, so the PDF is saved as *Coaching Session – Rina Wijaya – October 2, 2026*.
  * It leaves the page once the window closes.
  *
- * **Its words are the catalogue's** (`messages/coaching-session.tsx`, P18.98-T4) in the reader's language, the paper's
+ * **Its words are the catalogue's** (`messages/coaching-session.tsx`, P18.10-T4) in the reader's language, the paper's
  * as the screen's; its figures in `useFigureLanguage()`'s. *Coaching Session*, its title, is kept in both (§A.2).
  *
- * **The paper is fetched with the read** (P18.99-T16, the bundle): `SessionPrintView` lives in `coaching-print-view.tsx`
+ * **The paper is fetched with the read** (P18.11-T16, the bundle): `SessionPrintView` lives in `coaching-print-view.tsx`
  * and comes with the print's answer, both awaited before anything is put on the page, so the print window still opens on
  * a page that holds it.
  */

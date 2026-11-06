@@ -9,7 +9,7 @@ import {
 } from '@/lib/leader-meetings';
 
 /**
- * A meeting as the server answers it (P18.1-T2, P18.97-T1): 0417's **#14**, upcoming, as the seed writes it — the
+ * A meeting as the server answers it (P18.1-T2, P18.9-T1): 0417's **#14**, upcoming, as the seed writes it — the
  * prototype's ten agenda items (`KPM_Owner.html:2500-2513`), its four tracker rows (`:2516-2521`) and *Monthly
  * Target* as rates — with a scorecard the server computed in the reference slide's shape: *Full Year*, both *YTD*s and
  * *This Month, Last Year* held, this year's *YTD* leaving August out, *This Month* not yet uploaded, FLC *pending data*
@@ -117,12 +117,13 @@ export function makeScorecard(overrides: Partial<Scorecard> = {}): Scorecard {
     asOf: { kind: 'date', date: '2026-09-05' },
     partialPeriods: [{ column: 'ytd', leavesOut: ['2026-08'] }],
     frozenAt: null,
+    definitions: 'data_sources',
     ...overrides,
   };
 }
 
 /**
- * **A scorecard kept before the reference slide's table** (P18.97-T1 AC-19), as the server reads it tolerantly: *YTD
+ * **A scorecard kept before the reference slide's table** (P18.9-T1 AC-19), as the server reads it tolerantly: *YTD
  * {Y−1}* and *Cases/producing agents* *unrecorded*, *AS OF* unrecorded, *# of units* the five it was kept with.
  */
 export function makeScorecardKeptBefore(): Scorecard {
@@ -143,6 +144,8 @@ export function makeScorecardKeptBefore(): Scorecard {
     })),
     asOf: { kind: 'unrecorded' },
     frozenAt: '2026-09-13T02:00:00.000Z',
+    // Kept before the data sources of 3 November: it stores none, and is served as the reference slide's (P19.3-T1).
+    definitions: 'reference_slide',
   };
 }
 
@@ -277,7 +280,7 @@ export function renderTab(
   meeting: MeetingView = makeMeetingView(),
   routes: Record<string, StubReply | StubReply[]> = {},
   /**
-   * The reader's language (P18.98-T3): one a spec asks for (`InLanguage`, words and figures), or `{ live }`, the app's
+   * The reader's language (P18.10-T3): one a spec asks for (`InLanguage`, words and figures), or `{ live }`, the app's
    * own provider, where nothing is chosen but what the browser chose (`browserChose`) — not live, English words and
    * Indonesian figures. English, every spec's default, when none is given.
    */

@@ -49,14 +49,14 @@ const stayPut = (e: MouseEvent) => {
 };
 
 /*
- * **The Unit Dashboard, UI V1** (Phase 18.99 T4; the owner's report of 2026-10-30): each ticket's *Done when* below, by
+ * **The Unit Dashboard, UI V1** (Phase 18.11 T4; the owner's report of 2026-10-30): each ticket's *Done when* below, by
  * its id — UI-001 (the tabs, the Activities table and its ratio card), UI-002 (the phone's accordion), UI-003 (the
  * tiles), UI-005 (the pill), UI-007 (one ⓘ), UI-009 (the tablet's and the desktop's tables), UI-011 (a row opens the
  * person), UI-012 (the search pill), UI-028 (the lead counts and *Last updated*). The P15 tests of the states, who sees
  * what and *Update production* stand; those of the roster's old columns, its ⌄ and detail, *Chasing MDRT* and the
  * phone's cards were retired with what they tested (UI-002, UI-009, UI-011).
  */
-describe('the Unit Dashboard (P15-T2; UI V1, Phase 18.99 T4)', () => {
+describe('the Unit Dashboard (P15-T2; UI V1, Phase 18.11 T4)', () => {
   beforeEach(() => {
     nav.replace.mockClear();
     nav.push.mockClear();
@@ -67,7 +67,7 @@ describe('the Unit Dashboard (P15-T2; UI V1, Phase 18.99 T4)', () => {
     document.removeEventListener('click', stayPut);
   });
 
-  describe('UI-001 Overview | Activities (Phase 18.99 T4)', () => {
+  describe('UI-001 Overview | Activities (Phase 18.11 T4)', () => {
     const ACTIVITIES = (view = activities()) => ({ 'GET /unit/dashboard/activities': { body: view } });
 
     it('UI-001 draws the two tabs under the title, Overview first, and switches without a reload, the tab in the address', async () => {
@@ -162,11 +162,11 @@ describe('the Unit Dashboard (P15-T2; UI V1, Phase 18.99 T4)', () => {
       const row = within(grid).getByRole('rowheader', { name: 'Set Appointment' }).closest('tr')!;
       const [, agus, indah] = within(row).getAllByRole('cell');
       expect(agus).toHaveTextContent('·0');
-      expect(agus.className).not.toMatch(/bg-amber/);
+      expect(agus.className).not.toMatch(/bg-primary/);
       // Indah's 9 is the table's largest: the strongest tint; Agus's 1 on the next row the lightest.
-      expect(indah.className).toMatch(/bg-amber\/45/);
+      expect(indah.className).toMatch(/bg-primary\/45/);
       expect(within(within(grid).getByRole('rowheader', { name: 'Mendapatkan calon prospek baru' }).closest('tr')!).getAllByRole('cell')[1].className)
-        .toMatch(/bg-amber\/10/);
+        .toMatch(/bg-primary\/10/);
       // Leads generation and Selling open; Recruitment closed, its total beside its name.
       const closed = within(grid).getByRole('button', { name: 'Show Recruitment' });
       expect(closed).toHaveAttribute('aria-expanded', 'false');
@@ -238,13 +238,20 @@ describe('the Unit Dashboard (P15-T2; UI V1, Phase 18.99 T4)', () => {
   });
 
   describe('UI-005, UI-007, UI-009, UI-028 the roster on a desktop', () => {
-    it('UI-009 heads the table Name · Goal progress · Sales leads · Closing · Recruitment leads · Potential recruits · Activity · Last 1:1 · Status · ›', async () => {
+    it('UI-009, P19.7-T2 AC-13 heads the table Name · Goal progress · Sales leads · Closing · Recruitment leads · Potential recruits · Proposal · Activity · Last 1:1 · Status · ›', async () => {
       render();
       const grid = await table();
+      // P19.1-T1 AC-3 (UI-114): the leads columns grouped — *Sales leads → Leads | Closing*, *Recruitment leads → Leads |
+      // Potensi* — a short name with its ⓘ for the long one, so no header breaks inside a word at 1024.
       expect(within(grid).getAllByRole('columnheader').map(heading)).toEqual([
-        'Name', 'Goal progress', 'Sales leads', 'Closing', 'Recruitment leads', 'Potential recruits', 'Activity', 'Last 1:1',
-        'Status', 'Details',
+        // P19.7-T2 AC-13 (ADR-0221 §7): *Proposal*, after *Potensi rekrut*.
+        'Name', 'Goal progress', 'Sales leads', 'Recruitment leads', 'Proposal', 'Activity', 'Last 1:1', 'Status', 'Details',
+        'Leads', 'Closing', 'Leads', 'Potensi',
       ]);
+      const [sales, recruit] = within(grid).getAllByRole('columnheader').slice(2, 4);
+      expect(sales).toHaveAttribute('colspan', '2');
+      expect(recruit).toHaveAttribute('colspan', '2');
+      expect(within(grid).getByRole('button', { name: 'Potential recruits' })).toBeInTheDocument();
       // No sideways scroll: a fixed table the card's width, its header sticky.
       expect(grid).toHaveClass('w-full', 'table-fixed');
       expect(grid.className).not.toMatch(/min-w-/);
@@ -290,7 +297,8 @@ describe('the Unit Dashboard (P15-T2; UI V1, Phase 18.99 T4)', () => {
     it('UI-005 the status pill: red, amber, green, grey, in its words, never a dot; the % red under 100 and green from it', async () => {
       render();
       await table();
-      const pill = (name: string) => within(rowOf(name)).getAllByRole('cell')[7].querySelector('[data-tone]')!;
+      // The ninth cell since *Proposal* (P19.7-T2 AC-13) joined the row after *Potensi rekrut*.
+      const pill = (name: string) => within(rowOf(name)).getAllByRole('cell')[8].querySelector('[data-tone]')!;
       expect([pill('Siti Rahma'), pill('Dimas Pratama'), pill('Indah Lestari'), pill('Sari Wulandari')].map((p) => [p.textContent, p.getAttribute('data-tone')]))
         .toEqual([['Needs attention', 'red'], ['Watch closely', 'amber'], ['On track', 'green'], ['No goal set', 'grey']]);
       expect(within(rowOf('Dimas Pratama')).getByText('82%')).toHaveClass('text-signal-red');
@@ -309,7 +317,9 @@ describe('the Unit Dashboard (P15-T2; UI V1, Phase 18.99 T4)', () => {
       render();
       const grid = await table();
       expect(screen.getAllByRole('button', { name: 'How is status decided?' })).toHaveLength(1);
-      expect(within(within(grid).getAllByRole('columnheader')[8]).getByRole('button', { name: 'How is status decided?' })).toBeInTheDocument();
+      // The Status heading is the eighth of the first header row since the laptop's grouped headers (UI-114) and *Proposal*
+      // (P19.7-T2 AC-13).
+      expect(within(within(grid).getAllByRole('columnheader')[7]).getByRole('button', { name: 'How is status decided?' })).toBeInTheDocument();
     });
 
     it('UI-002, UI-009 the chips filter the rows; their counts are the statuses’', async () => {
@@ -430,14 +440,59 @@ describe('the Unit Dashboard (P15-T2; UI V1, Phase 18.99 T4)', () => {
   });
 
   describe('UI-009 the roster on a tablet', () => {
-    it('UI-009 Name · Goal progress · Activity · Status, every row a link', async () => {
+    it('UI-009, P19.7-T2 AC-13 Name · Goal progress · Proposal · Activity · Status, every row a link', async () => {
       atWidth(800);
       render();
       const grid = await table();
-      expect(within(grid).getAllByRole('columnheader').map(heading)).toEqual(['Name', 'Goal progress', 'Activity', 'Status', 'Details']);
+      expect(within(grid).getAllByRole('columnheader').map(heading)).toEqual(['Name', 'Goal progress', 'Proposal', 'Activity', 'Status', 'Details']);
       expect(grid).toHaveClass('table-fixed');
       expect(within(rowOf('Dimas Pratama')).getAllByRole('cell')[0]).toHaveTextContent('82%IDR 65.6M / 80M');
       expect(screen.getByRole('link', { name: 'Dimas Pratama' })).toHaveAttribute('href', '/coaching/mem-dimas/summary?from=%2Funit%2Fdashboard');
+    });
+  });
+
+  /*
+   * **P19.7-T2 AC-13 — how many proposals each person made, and nothing about the clients** (ADR-0221 §7; the proposal
+   * spec's decision 4): `proposalsMade` (`PROPOSALS_MADE`) as a *Proposal* column on a laptop and a tablet, its unit's sum
+   * on the header row, and on a phone the document icon with the count beside the name, only above zero.
+   */
+  describe('P19.7-T2 AC-13 the proposals each person made', () => {
+    const withProposals = () => {
+      const view = dashboard();
+      view.yourUnit.rows = view.yourUnit.rows.map((r) => (r.membershipId === 'mem-dimas' ? { ...r, proposalsMade: 3 } : r));
+      view.yourUnit.total = { ...view.yourUnit.total, proposalsMade: 3 };
+      return view;
+    };
+
+    it('P19.7-T2 AC-13 a laptop draws Proposal after Potensi rekrut: each person’s count, the unit’s sum, a light · for none', async () => {
+      render(withProposals());
+      const grid = await table();
+      const proposalCell = (tr: Element) => tr.querySelector('td[data-proposals-made]')!;
+      expect(proposalCell(rowOf('Dimas Pratama'))).toHaveAttribute('data-proposals-made', '3');
+      expect(proposalCell(rowOf('Dimas Pratama'))).toHaveTextContent('3');
+      expect(proposalCell(rowOf('Indah Lestari'))).toHaveTextContent('·');
+      const header = within(grid).getByRole('button', { name: 'Your Unit · 4' }).closest('tr')!;
+      expect(proposalCell(header)).toHaveAttribute('data-proposals-made', '3');
+      // Nothing about a client, a product or a premium: the cell holds the count alone.
+      expect(proposalCell(rowOf('Dimas Pratama')).textContent).toBe('3');
+    });
+
+    it('P19.7-T2 AC-13 a tablet draws the same column, before Aktivitas', async () => {
+      atWidth(800);
+      render(withProposals());
+      const grid = await table();
+      expect(within(grid).getAllByRole('columnheader').map(heading)).toContain('Proposal');
+      expect(rowOf('Dimas Pratama').querySelector('td[data-proposals-made="3"]')).not.toBeNull();
+    });
+
+    it('P19.7-T2 AC-13 a phone shows the document icon and the count beside the name only above zero, heard as “3 proposals”', async () => {
+      atWidth(375);
+      render(withProposals());
+      await screen.findByRole('button', { name: /^Your Unit · 4/ });
+      const dimas = screen.getByRole('link', { name: 'Dimas Pratama' }).closest('[data-person-row]')!;
+      expect(within(dimas as HTMLElement).getByRole('img', { name: '3 proposals' })).toHaveAttribute('data-proposals-made', '3');
+      const indah = screen.getByRole('link', { name: 'Indah Lestari' }).closest('[data-person-row]')!;
+      expect(indah.querySelector('[data-proposals-made]')).toBeNull();
     });
   });
 
@@ -454,8 +509,8 @@ describe('the Unit Dashboard (P15-T2; UI V1, Phase 18.99 T4)', () => {
     });
   });
 
-  describe('a new hire before a first sale (P18.96-T5, ADR-0172)', () => {
-    it('P18.96-T5 AC-3 tags her New hire, named for a screen reader; the production’s ⓘ names her', async () => {
+  describe('a new hire before a first sale (P18.8-T5, ADR-0172)', () => {
+    it('P18.8-T5 AC-3 tags her New hire, named for a screen reader; the production’s ⓘ names her', async () => {
       render(NEW_HIRE_VIEW);
       await table();
       expect(within(rowOf('Yanti Puspita')).getByText(/^New hire/)).toHaveTextContent('New hire, no first sale yet');
@@ -488,19 +543,20 @@ describe('the Unit Dashboard (P15-T2; UI V1, Phase 18.99 T4)', () => {
       ]);
     });
 
-    it('P15-T2 AC-8 shows somebody who leads nobody an empty unit in plain words, pointing to their own screens', async () => {
-      const { container } = (() => {
-        stubFetch({ 'GET /unit/dashboard': { body: EMPTY } });
-        return renderWithSession(<UnitDashboardPage />, { me: AGUS_ME });
-      })();
-      expect(await screen.findByText('Nobody is in your unit yet.')).toBeInTheDocument();
-      expect(screen.getByRole('link', { name: 'Personal summary' })).toHaveAttribute('href', '/summary');
-      expect(screen.getByRole('link', { name: 'Activity management' })).toHaveAttribute('href', '/activity/log');
-      expect(screen.queryByRole('table')).not.toBeInTheDocument();
-      expect(screen.queryByRole('combobox', { name: 'Period' })).not.toBeInTheDocument();
+    it('P15-T2 AC-8, P19-T4 AC-3 shows a leader who leads nobody the normal layout at zero, No data yet and the Example', async () => {
+      stubFetch({ 'GET /unit/dashboard': { body: EMPTY } });
+      renderWithSession(<UnitDashboardPage />, { me: AGUS_ME });
+      expect(await screen.findByText('No data yet')).toBeInTheDocument();
+      // The normal layout: the period pill, and the sample of the roster under the Example label, greyed and inert.
+      expect(screen.getByRole('combobox', { name: 'Period' })).toBeInTheDocument();
+      const sample = document.querySelector('[data-sample]')!;
+      expect(sample).toHaveAttribute('aria-hidden', 'true');
+      expect(sample.hasAttribute('inert')).toBe(true);
+      expect(sample.textContent).toContain('Sample agent 1');
+      expect(screen.getByText('Example')).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: 'Update production' })).not.toBeInTheDocument();
-      expect(container.textContent).not.toMatch(/\d|phase/i);
-      expect(container.textContent).not.toMatch(/office|KPM|reports to|tagged to|untagged|unassigned/i);
+      // No realistic person: every name the sample draws says it is one.
+      expect(sample.textContent).not.toMatch(/Agus|Rina|Sari|Dewi/);
     });
   });
 
@@ -571,12 +627,17 @@ describe('Update production (P15-T3)', () => {
   };
   const box = (dialog: HTMLElement, which: 'Month' | 'Year', name: string) =>
     within(dialog).getByRole('textbox', { name: `${which} achieved (IDR), ${name}` });
+  /** *Since P19.5-T2* (R4) the year is the months' sum: read-only, under its heading, never a box. */
+  const year = (dialog: HTMLElement, name: string) =>
+    within(dialog).getByText(name).closest('tr')!.querySelector('[data-year-read-only]')!;
 
   it('P15-T3 AC-3 opens the dialog verbatim, its first box focused', async () => {
     render();
     const dialog = await open();
+    // P19.5-T2 (R4): the prototype's *"month and year are updated independently"* is no longer true — the year is the
+    // months' sum (a parity row says why).
     expect(dialog).toHaveAccessibleDescription(
-      'Enter the latest figures from the company report — month and year are updated independently.',
+      'Enter the latest month’s figures from the company report — the year is the sum of the months.',
     );
     expect(within(dialog).getAllByRole('columnheader').map((h) => h.textContent))
       .toEqual(['Name', 'Month achieved (IDR)', 'Year achieved (IDR)']);
@@ -592,9 +653,11 @@ describe('Update production (P15-T3)', () => {
     expect(within(dialog).getAllByRole('rowheader').filter((h) => h.getAttribute('scope') === 'rowgroup').map((h) => h.textContent))
       .toEqual(['Your direct agents', 'Arief Wibowo’s unit', 'Dewi Kartika’s unit', 'Sari Wulandari’s unit']);
     expect(box(dialog, 'Month', 'Dimas Pratama')).toHaveValue('65,600,000');
-    expect(box(dialog, 'Year', 'Dimas Pratama')).toHaveValue('620,000,000');
+    expect(year(dialog, 'Dimas Pratama')).toHaveTextContent('620,000,000');
     expect(box(dialog, 'Month', 'Yanti Puspita')).toHaveValue('');
-    expect(box(dialog, 'Year', 'Yanti Puspita')).toHaveValue('120,000,000');
+    expect(year(dialog, 'Yanti Puspita')).toHaveTextContent('120,000,000');
+    // P19.5-T2 (R4): no box for the year at all.
+    expect(within(dialog).queryByRole('textbox', { name: /^Year achieved/ })).not.toBeInTheDocument();
     // Nested beneath their head, one step further in for each level.
     expect((within(dialog).getByText('Tono Saputra') as HTMLElement).style.paddingLeft).toBe('36px');
   });
@@ -609,7 +672,7 @@ describe('Update production (P15-T3)', () => {
     expect(box(dialog, 'Month', 'Dimas Pratama')).toHaveValue('70,000,000');
     await userEvent.type(box(dialog, 'Month', 'Yanti Puspita'), '12500000');
     // Emptied: unchanged, not cleared.
-    await userEvent.clear(box(dialog, 'Year', 'Budi Santoso'));
+    await userEvent.clear(box(dialog, 'Month', 'Budi Santoso'));
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save all' }));
 
     expect(await screen.findByText('Production updated for 2 agents.')).toBeInTheDocument();
@@ -678,7 +741,7 @@ describe('Update production (P15-T3)', () => {
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save all' }));
     expect(await within(dialog).findByRole('alert')).toHaveTextContent('That figure is out of range.');
     expect(box(dialog, 'Month', 'Yanti Puspita')).toHaveAttribute('aria-invalid', 'true');
-    expect(box(dialog, 'Year', 'Yanti Puspita')).not.toHaveAttribute('aria-invalid');
+    expect(box(dialog, 'Month', 'Dimas Pratama')).not.toHaveAttribute('aria-invalid');
   });
 
   it('P15-T3 AC-3 reads the dashboard again behind a stale revision, and pins the next save to the new one', async () => {
@@ -751,6 +814,7 @@ describe('Update production (P15-T3)', () => {
     render(dashboard({ units: [UNITS[2]] }));
     const dialog = await open();
     expect(box(dialog, 'Month', 'Wulan Sari')).toBeInTheDocument();
-    expect(box(dialog, 'Year', 'Tono Saputra')).toBeInTheDocument();
+    expect(box(dialog, 'Month', 'Tono Saputra')).toBeInTheDocument();
+    expect(year(dialog, 'Tono Saputra')).toBeInTheDocument();
   });
 });

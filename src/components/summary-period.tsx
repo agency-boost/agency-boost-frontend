@@ -14,7 +14,7 @@ import {
 } from '@/lib/summary';
 
 /**
- * **Which period a Summary page shows, kept in its address** (P18.8-T11, ADR-0161 §4) — `/summary` and a coachee's
+ * **Which period a Summary page shows, kept in its address** (P18.5-T11, ADR-0161 §4) — `/summary` and a coachee's
  * *Personal Summary* tab alike, so a refresh, a link or Back keeps it.
  *
  * - **The view follows the address**: `?year=` opens on *Yearly*, `?month=` on *Monthly*, neither on *Monthly*.
@@ -100,7 +100,7 @@ export function SummaryPeriodBar({
               onClick={() => onView(option.id as SummaryView)}
               className={cn(
                 'whitespace-nowrap rounded-pill px-3 py-2 text-base font-semibold transition-colors max-lg:min-h-11 lg:px-3.5',
-                on ? 'bg-navy text-white' : 'text-navy hover:bg-hover-row',
+                on ? 'bg-secondary text-secondary-contrast' : 'text-navy hover:bg-hover-row',
               )}
             >
               {option.label}
@@ -115,7 +115,7 @@ export function SummaryPeriodBar({
 }
 
 /**
- * **The month pill under *Monthly*, the year pill under *Yearly*** (P18.8-T11 AC-2; UI V1, UI-051): *Okt 2026 ⌄*, opening
+ * **The month pill under *Monthly*, the year pill under *Yearly*** (P18.5-T11 AC-2; UI V1, UI-051): *Okt 2026 ⌄*, opening
  * a sheet of the office's months from its first to this one — or its years — newest first, the one on the page ticked.
  * A bottom sheet on a phone and a tablet, a centred modal on a desktop (`ResponsiveSheet`). Choosing closes it.
  *

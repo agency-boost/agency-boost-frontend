@@ -152,7 +152,7 @@ describe('Activity Ratios (P10-T2, P10-T3; UI V1, UI-106)', () => {
     expect(ssr).toHaveTextContent('Your office has set its own formula for this ratio.');
   });
 
-  it('P18.95-T7 AC-1 keeps the sub-line from 768px and draws it nowhere on a phone (grey text row 25)', async () => {
+  it('P18.7-T7 AC-1 keeps the sub-line from 768px and draws it nowhere on a phone (grey text row 25)', async () => {
     stubFetch({ '/activity/ratios': { body: AGENT_VIEW } });
     renderWithSession(<ActivityRatioPage />, { me: AGENT });
     await row('SELLING_SUCCESS_RATE');

@@ -11,10 +11,10 @@ import { FeedbackSummarySection } from './feedback-summary';
 import { RollCallSection } from './roll-call';
 
 /**
- * **What *View feedback* opens on a past event's row** (`KPM_Owner.html:1655`, an `alert()` there; P18.5-T5
- * AC-7, P18.5-T6 AC-5; D-rollcall): the roll call and the *Feedback Summary* — one dialog, named by the event.
+ * **What *View feedback* opens on a past event's row** (`KPM_Owner.html:1655`, an `alert()` there; P18.2-T5
+ * AC-7, P18.2-T6 AC-5; D-rollcall): the roll call and the *Feedback Summary* — one dialog, named by the event.
  *
- * **As tabs, *Roll call | Feedback summary*** (P18.8-T13, ADR-0161 §6, the client's request of 2026-10-26), where
+ * **As tabs, *Roll call | Feedback summary*** (P18.5-T13, ADR-0161 §6, the client's request of 2026-10-26), where
  * they were stacked. `Segmented`, the tablist that switches a panel in place: the dialog's address does not
  * change. The roll call is the first tab because the summary depends on it: the NPS counts confirmed attendees
  * only, so saving the roll call reads the summary again, and an answer waiting on a confirmation moves into the
@@ -32,7 +32,7 @@ import { RollCallSection } from './roll-call';
  */
 export function FeedbackDialog({ eventId, title, onClose }: { eventId: string; title: string; onClose: () => void }) {
   const t = useMessages(eventsOfficeMessages);
-  /** The dialog's two parts, as tabs (P18.8-T13, ADR-0161 §6). */
+  /** The dialog's two parts, as tabs (P18.5-T13, ADR-0161 §6). */
   const parts = [
     { id: 'roll-call', label: t.rollCall },
     { id: 'feedback', label: t.feedbackSummaryTab },

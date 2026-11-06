@@ -6,7 +6,7 @@ import type { SectionChip } from '@/lib/summary';
 import type { TermKey } from '@/lib/terms';
 
 /*
- * **The card the Summary and every coaching screen draw, on its own** (P18.98-T4, the bundle, 2026-10-29). `SummaryCard`
+ * **The card the Summary and every coaching screen draw, on its own** (P18.10-T4, the bundle, 2026-10-29). `SummaryCard`
  * and `SectionChips` lived in `personal-summary.tsx`, so a coaching screen that drew one card loaded the whole Summary
  * with it — its cards, its catalogue in both languages and the campaigns' chasing card, about 17 kB — and three coaching
  * routes went past their 200 kB budget. Here they take only what they draw, and no words of their own:
@@ -25,7 +25,7 @@ export function SummaryCard({
   id: string;
   /** The heading. A node where the prototype puts a link beside the words (*Activity → view full dashboard*). */
   title: ReactNode;
-  /** A term the heading uses, whose ⓘ follows it (P18.95-T9 AC-3) — beside the heading, so its name stays the title. */
+  /** A term the heading uses, whose ⓘ follows it (P18.7-T9 AC-3) — beside the heading, so its name stays the title. */
   term?: TermKey;
   icon?: NavIconName;
   tag?: ReactNode;
@@ -53,7 +53,7 @@ export function SummaryCard({
         ) : heading}
         {tag && <span className="whitespace-nowrap rounded-pill bg-base px-2.5 py-0.5 text-2xs font-semibold text-muted">{tag}</span>}
         {badge && (
-          <span className="whitespace-nowrap rounded-pill bg-navy px-2.5 py-0.5 text-2xs font-bold uppercase tracking-wide text-white">{badge}</span>
+          <span className="whitespace-nowrap rounded-pill bg-secondary px-2.5 py-0.5 text-2xs font-bold uppercase tracking-wide text-secondary-contrast">{badge}</span>
         )}
         {aside}
       </div>

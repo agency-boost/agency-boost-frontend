@@ -3,7 +3,7 @@ import { defineMessages, type MessagesOf } from '@/i18n/catalogue';
 import { kept } from '@/i18n/kept';
 
 /**
- * **One member** — `/people/members/[membershipId]`, the prototype's person modal as a page (P18.98-T4, people and
+ * **One member** — `/people/members/[membershipId]`, the prototype's person modal as a page (P18.10-T4, people and
  * forum; `functional/org-hierarchy.md`, *Changing what somebody is*, *Removing somebody*): their details, their unit,
  * their tags, a role change, a removal, and who reports to them.
  *
@@ -33,11 +33,35 @@ const en = {
   role: 'Role',
   reportsTo: 'Reports to',
   topOfTree: 'Nobody — top of the tree',
-  joinDate: 'Join date',
+  /**
+   * The two join dates, each said whose (OWN UI-025, ADR-0205 §4): `memberships.joinDate`, the office's, and
+   * `users.companyJoinMonth`, the insurer's — `company` the office's company by name, *Prudential*.
+   */
+  joinDate: 'Joined AgencyBoost',
   dateOfBirth: 'Date of birth',
   gender: 'Gender',
-  companyJoinMonth: 'Company join month',
+  companyJoinMonth: ({ company }: { company: string | null }) => (company ? `Joined ${company}` : 'Joined the company'),
   workStatus: 'Work status',
+  /**
+   * **The four tiles under the name** (OWN UI-020, OWN R4; ADR-0205 §1) and *See dashboard ›*. The source's words are
+   * Indonesian (*Aktivitas 7 hari*, *Produksi tahun ini*, *1:1 terakhir*, *Leads*); these are the English.
+   */
+  tiles: {
+    heading: 'How they are doing',
+    loading: 'Loading how they are doing…',
+    unavailable: 'How they are doing cannot be shown right now. The sections below are unaffected.',
+    activity: 'Activity, last 7 days',
+    production: 'Production this year',
+    /** `pct` written in the reader's figures. */
+    ofGoal: ({ pct }: { pct: string }) => `${pct}% of goal`,
+    noGoal: 'No goal set',
+    notUploaded: 'Not uploaded yet',
+    lastOneOnOne: 'Last 1:1',
+    never: 'Never',
+    leads: 'Leads',
+    closing: ({ n }: { n: string }) => `${n} closing`,
+    seeDashboard: 'See dashboard',
+  },
   /** *Unit*: whom they lead. */
   unit: kept('Unit'),
   directReports: 'Direct reports',
@@ -68,7 +92,7 @@ const en = {
   saveTags: 'Save tags',
   saving: 'Saving…',
   cancel: 'Cancel',
-  /** *Change their role* (P3.5-T13). */
+  /** *Change their role* (P3.1-T13). */
   changeRole: 'Change their role',
   newRole: 'New role',
   /** `ab` the AB rung's badge name. */
@@ -110,11 +134,26 @@ const id: MessagesOf<typeof en> = {
   role: 'Peran',
   reportsTo: 'Melapor ke',
   topOfTree: 'Tidak ada — puncak pohon',
-  joinDate: 'Tanggal bergabung',
+  joinDate: 'Bergabung di AgencyBoost',
   dateOfBirth: 'Tanggal lahir',
   gender: 'Jenis kelamin',
-  companyJoinMonth: 'Bulan bergabung di perusahaan',
+  companyJoinMonth: ({ company }) => (company ? `Bergabung di ${company}` : 'Bergabung di perusahaan'),
   workStatus: 'Status kerja',
+  tiles: {
+    heading: 'Kinerjanya',
+    loading: 'Memuat kinerjanya…',
+    unavailable: 'Kinerjanya tidak dapat ditampilkan saat ini. Bagian di bawah tidak terpengaruh.',
+    activity: 'Aktivitas 7 hari',
+    production: 'Produksi tahun ini',
+    ofGoal: ({ pct }) => `${pct}% dari ${kept('goal')}`,
+    noGoal: `${kept('Goal')} belum diatur`,
+    notUploaded: 'Belum diunggah',
+    lastOneOnOne: `${kept('1:1')} terakhir`,
+    never: 'Belum pernah',
+    leads: kept('Leads'),
+    closing: ({ n }) => `${n} ${kept('closing')}`,
+    seeDashboard: `Lihat ${kept('dashboard')}`,
+  },
   unit: kept('Unit'),
   directReports: 'Bawahan langsung',
   wholeUnit: `Seluruh ${kept('unit')}`,

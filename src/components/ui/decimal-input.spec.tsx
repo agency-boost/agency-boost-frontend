@@ -6,7 +6,7 @@ import { browserChose, InLanguage, resetLanguage } from '@test/harness';
 import { LanguageProvider } from '@/i18n/language-provider';
 import { DecimalInput } from './decimal-input';
 
-/** P18.95-T1 AC-3 (ADR-0167 §1): a decimal typed with a comma or a point. */
+/** P18.7-T1 AC-3 (ADR-0167 §1): a decimal typed with a comma or a point. */
 describe('DecimalInput', () => {
   function Harness({ initial = null as number | null, onValue = (_: number | null) => {} }) {
     const [value, setValue] = useState<number | null>(initial);
@@ -61,21 +61,21 @@ describe('DecimalInput', () => {
     expect(screen.getByRole('status')).toHaveTextContent('5.2');
   });
 
-  it('P18.98-T3 AC-3 writes a value set from outside in the reader’s mark: a point in English, the specs’ default', async () => {
+  it('P18.10-T3 AC-3 writes a value set from outside in the reader’s mark: a point in English, the specs’ default', async () => {
     render(<Harness initial={3.1} />);
     expect(screen.getByLabelText('Closing rate')).toHaveValue('3.1');
     await userEvent.click(screen.getByRole('button', { name: 'Reset' }));
     expect(screen.getByLabelText('Closing rate')).toHaveValue('42.5');
   });
 
-  it('P18.98-T3 AC-3 writes a value set from outside with a comma in Indonesian, as before', async () => {
+  it('P18.10-T3 AC-3 writes a value set from outside with a comma in Indonesian, as before', async () => {
     render(<InLanguage language="id"><Harness initial={3.1} /></InLanguage>);
     expect(screen.getByLabelText('Closing rate')).toHaveValue('3,1');
     await userEvent.click(screen.getByRole('button', { name: 'Reset' }));
     expect(screen.getByLabelText('Closing rate')).toHaveValue('42,5');
   });
 
-  it.each(['id', 'en'] as const)('P18.98-T3 AC-3 reads a comma and a point alike in %s, keeping what was typed', async (language) => {
+  it.each(['id', 'en'] as const)('P18.10-T3 AC-3 reads a comma and a point alike in %s, keeping what was typed', async (language) => {
     const onValue = vi.fn();
     render(<InLanguage language={language}><Harness onValue={onValue} /></InLanguage>);
     const field = screen.getByLabelText('Closing rate');
@@ -90,11 +90,11 @@ describe('DecimalInput', () => {
 });
 
 /**
- * **P18.98-T3 figures: a value set from outside in the figures' mark** — the reader's chosen language, and Indonesian
+ * **P18.10-T3 figures: a value set from outside in the figures' mark** — the reader's chosen language, and Indonesian
  * with no choice, whether or not the switch is live (`useFigureLanguage`). Until it is, a reader with no choice sees
  * *3,1* in a field whose label is English, as before T3. Under the app's own provider.
  */
-describe('P18.98-T3 figures DecimalInput', () => {
+describe('P18.10-T3 figures DecimalInput', () => {
   afterEach(() => resetLanguage());
 
   function Rate() {
@@ -119,14 +119,14 @@ describe('P18.98-T3 figures DecimalInput', () => {
     return screen.getByLabelText('Closing rate');
   }
 
-  it('P18.98-T3 figures, unchosen and not live: 3,1 and 42,5 with a comma, under an English label', async () => {
+  it('P18.10-T3 figures, unchosen and not live: 3,1 and 42,5 with a comma, under an English label', async () => {
     const field = open(false);
     expect(field).toHaveValue('3,1');
     await userEvent.click(screen.getByRole('button', { name: 'Reset' }));
     expect(field).toHaveValue('42,5');
   });
 
-  it('P18.98-T3 figures, chosen English by the browser, not live: 3.1 and 42.5 with a point', async () => {
+  it('P18.10-T3 figures, chosen English by the browser, not live: 3.1 and 42.5 with a point', async () => {
     browserChose('en');
     const field = open(false);
     expect(field).toHaveValue('3.1');
@@ -134,12 +134,12 @@ describe('P18.98-T3 figures DecimalInput', () => {
     expect(field).toHaveValue('42.5');
   });
 
-  it('P18.98-T3 figures, chosen Indonesian by the browser, not live: 3,1', () => {
+  it('P18.10-T3 figures, chosen Indonesian by the browser, not live: 3,1', () => {
     browserChose('id');
     expect(open(false)).toHaveValue('3,1');
   });
 
-  it('P18.98-T3 figures, live and unchosen: 3,1, in a screen whose language is Indonesian', () => {
+  it('P18.10-T3 figures, live and unchosen: 3,1, in a screen whose language is Indonesian', () => {
     expect(open(true)).toHaveValue('3,1');
     expect(document.documentElement.lang).toBe('id');
   });

@@ -2,7 +2,7 @@ import { defineMessages, type MessagesOf } from '@/i18n/catalogue';
 import { kept } from '@/i18n/kept';
 
 /**
- * **The agents' *Event List*, in words** (P18.98-T4, events, campaigns and the calendar; `functional/events.md`, *The
+ * **The agents' *Event List*, in words** (P18.10-T4, events, campaigns and the calendar; `functional/events.md`, *The
  * module's own strings*): the page's title and line, the filter, the three sections and their empty lines, a card — its
  * audience line, its pill and *Join* — the event's modal with its RSVP, and a past event's block: the feedback form,
  * the didn't-join block and the thanks; the toasts and the two refusals the screen words itself (`lib/events.ts`).
@@ -53,7 +53,7 @@ const en = {
   answerName: ({ title }: { title: string }) => `Your answer for ${title}`,
   declined: ({ title }: { title: string }) => `You're not going to ${title}`,
   withdrawn: ({ title }: { title: string }) => `Your answer for ${title} is withdrawn`,
-  /** The card's *Join* (P18.95-T10 AC-1), and its name with its event's title. */
+  /** The card's *Join* (P18.7-T10 AC-1), and its name with its event's title. */
   join: 'Join',
   joinName: ({ title }: { title: string }) => `Join ${title}`,
   /** The audience line (`:8532`): *"{issuer} | {scope}"*. The company's issuer is *{company} Event*, kept (§C5). */

@@ -13,7 +13,7 @@ import {
 import EventsSettingsPage from './page';
 
 /**
- * **Settings › Events in Indonesian** (P18.98-T4 AC-1 to AC-4, events, campaigns and the calendar): the list with its
+ * **Settings › Events in Indonesian** (P18.10-T4 AC-1 to AC-4, events, campaigns and the calendar): the list with its
  * phases and lines, the panel with the picker, the event types, and what *View feedback* opens — the roll call and the
  * *Feedback Summary*. The approved glossary's words, the title and tabs kept (§A), what the office and its members typed
  * as typed, and none of the module's English left. English is `page.spec.tsx`'s, unchanged.
@@ -61,8 +61,8 @@ function render(types: unknown[] = [type()], events: unknown[] = [event()]) {
 
 afterEach(() => vi.unstubAllGlobals());
 
-describe('P18.98-T4 Settings › Events in Indonesian', () => {
-  it('P18.98-T4 AC-1 to AC-4 the list: title and tabs kept, phases, the line and the row’s actions in Indonesian', async () => {
+describe('P18.10-T4 Settings › Events in Indonesian', () => {
+  it('P18.10-T4 AC-1 to AC-4 the list: title and tabs kept, phases, the line and the row’s actions in Indonesian', async () => {
     render([type()], [
       event({ audience: { issuer: 'kpm', scope: 'select_agents', inviteeMembershipIds: ['mem-budi', 'mem-rina'] } }),
       event({ id: 'e2', code: 'NOW', title: 'Happening', phase: 'running' }),
@@ -85,7 +85,7 @@ describe('P18.98-T4 Settings › Events in Indonesian', () => {
     noEnglishLeft();
   });
 
-  it('P18.98-T4 AC-1 the panel: its fields, the audience choices and the picker, in Indonesian', async () => {
+  it('P18.10-T4 AC-1 the panel: its fields, the audience choices and the picker, in Indonesian', async () => {
     render();
     await userEvent.click(await screen.findByRole('button', { name: 'Tambah event' }));
     for (const label of ['Judul', 'Kode', 'Jenis', 'Satu kalimat tentang event ini', 'Mulai', 'Selesai', 'Tempat', 'Diadakan oleh', 'Siapa yang diundang']) {
@@ -103,7 +103,7 @@ describe('P18.98-T4 Settings › Events in Indonesian', () => {
     noEnglishLeft();
   });
 
-  it('P18.98-T4 AC-1 the event types: a type’s count, its form, and an empty list', async () => {
+  it('P18.10-T4 AC-1 the event types: a type’s count, its form, and an empty list', async () => {
     render([type(), type({ id: 't2', code: 'NIGHT', label: 'Recognition night', events: 1 })]);
     await userEvent.click(await screen.findByRole('link', { name: 'Event types' }));
     expect(await screen.findByText('3 events')).toBeInTheDocument();
@@ -116,7 +116,7 @@ describe('P18.98-T4 Settings › Events in Indonesian', () => {
     noEnglishLeft();
   });
 
-  it('P18.98-T4 AC-1 no active type: the sentence with its kept tab name bold, and the empty list', async () => {
+  it('P18.10-T4 AC-1 no active type: the sentence with its kept tab name bold, and the empty list', async () => {
     render([type({ status: 'archived' })], []);
     const line = await screen.findByText(/Anda belum punya jenis event yang aktif/);
     expect(within(line).getByText('Event types', { selector: 'strong' })).toBeInTheDocument();
@@ -124,7 +124,7 @@ describe('P18.98-T4 Settings › Events in Indonesian', () => {
     noEnglishLeft();
   });
 
-  it('P18.98-T4 AC-1 to AC-4 View feedback: the roll call and the Feedback Summary in Indonesian, answers as typed', async () => {
+  it('P18.10-T4 AC-1 to AC-4 View feedback: the roll call and the Feedback Summary in Indonesian, answers as typed', async () => {
     render([type()], [event({ id: 'e3', code: 'LAST', title: 'Last month', phase: 'past' })]);
     await userEvent.click(await screen.findByRole('button', { name: 'Lihat masukan' }));
     const box = await screen.findByRole('dialog', { name: 'Last month' });
@@ -152,7 +152,7 @@ describe('P18.98-T4 Settings › Events in Indonesian', () => {
   });
 });
 
-describe('P18.98-T4 lib/events-admin.ts in each language', () => {
+describe('P18.10-T4 lib/events-admin.ts in each language', () => {
   it('writes its sentences in the language passed, English when none is', () => {
     expect(summaryTitle('Kickoff', 'id')).toBe('Kickoff — Ringkasan masukan');
     expect(npsFormula(NPS, 'id')).toBe('= % Promotor (9–10) − % Detraktor (0–6)');

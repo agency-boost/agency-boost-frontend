@@ -26,7 +26,7 @@ export const LINKS = {
     kind: 'feature:activity', label: 'Activity Management', route: '/activity/log',
     completesWhen: 'the hire has logged activity in four consecutive weeks', live: true, form: null,
   },
-  // P18.96-T4 (ADR-0171 §3): the three data-backed items, bound by their codes on the server.
+  // P18.8-T4 (ADR-0171 §3): the three data-backed items, bound by their codes on the server.
   'sales:first': {
     kind: 'sales:first', label: 'Sales data', route: null,
     completesWhen: 'the hire has a first sale since joining: a sales lead paid and issued, or a policy in the production file',
@@ -79,7 +79,7 @@ export function rinaItems(): ActivationItemProgress[][] {
     ],
     [
       item('JOINT_FIELD_WORK', 'Joint Field Work with leader'),
-      // P18.96-T4: completed from her sales data, naming the lead.
+      // P18.8-T4: completed from her sales data, naming the lead.
       item('FIRST_CASE_CLOSED', 'Close first case independently', {
         link: LINKS['sales:first'], done: true, doneAt: '2026-09-20T03:00:00.000Z', source: 'link', doneBy: RINA,
         record: { collection: 'leads', id: 'lead-ratna' },
@@ -182,7 +182,7 @@ const share = (activated: number, notActivated: number, inProgress: number, pct:
   ({ activated, notActivated, late, inProgress, pct });
 
 /**
- * Agus's `/new-hires` on the seed (P18.96-T6; UI V1, UI-023): a year of new hires by their status — his own unit,
+ * Agus's `/new-hires` on the seed (P18.8-T6; UI V1, UI-023): a year of new hires by their status — his own unit,
  * Arief's and Sari's — with *Aktivasi 3M* at the top, overall and by join month, and each unit's. Rule A: Novi, Rina,
  * Dimas and Indah activated by day 90; Kemal past day 90 with none; Lukman's day-96 sale in amber and in neither part;
  * Tari (marked left — it decides nothing), Budi and Fikri inside their 90 days with none. 4 of 5 decided: 80%.
@@ -258,7 +258,7 @@ export const SARI_ME = makeMe({
     membershipId: 'mem-sari', kpmId: 'kpm-1', orgLevelCode: 'AAB', hierarchyRole: 'aab', status: 'active',
     isKpmOwner: false, isKpmAdmin: false, directCount: 3,
   },
-  // An AAB runs coaching sessions, so she logs a 1:1 and names a closing for her hires (P18.96-T4 AC-3).
+  // An AAB runs coaching sessions, so she logs a 1:1 and names a closing for her hires (P18.8-T4 AC-3).
   permissions: [...LEADER_PERMISSIONS, 'coaching_session:create', 'coaching_session:finalize'],
   newHires: true,
 });
@@ -276,7 +276,7 @@ export const SHELL_STUBS = {
 export const notFound = { status: 404, body: { error: { code: 'NOT_FOUND', message: 'Not found', requestId: 'r-404' } } };
 
 /**
- * P18.96-T4 AC-4: *Weekly 1-on-1 check-in* ticked by Sari with a 1:1 she logged, waiting for the fourth — on `items`,
+ * P18.8-T4 AC-4: *Weekly 1-on-1 check-in* ticked by Sari with a 1:1 she logged, waiting for the fourth — on `items`,
  * Rina's own by default.
  */
 export function withWaitingCheckIn(items = rinaItems()): ActivationItemProgress[][] {

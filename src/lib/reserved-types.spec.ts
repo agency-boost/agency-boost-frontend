@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { reservedRefusal } from './reserved-types';
 
-describe('reservedRefusal (P13.2-T6 AC-3; ACTIVITY_TYPE_BOUND since P18.9-T2)', () => {
+describe('reservedRefusal (P13.2-T6 AC-3; ACTIVITY_TYPE_BOUND since P18.6-T2)', () => {
   it('drops the batch’s change number and op, and keeps the API’s sentence', () => {
     expect(reservedRefusal({
       code: 'ACTIVITY_TYPE_BOUND', requestId: 'r',

@@ -16,6 +16,7 @@ import { Segmented } from './ui/segmented';
 import { CascadeRow } from './ui/cascade-row';
 import { Dialog } from './ui/dialog';
 import { Field, TextInput } from './ui/field';
+import { fieldChrome } from '@test/shell-fixtures';
 
 /**
  * WCAG 2.1 AA, checked by axe on every primitive and on the shell.
@@ -63,7 +64,7 @@ async function expectNoViolations(ui: React.ReactElement) {
 }
 
 describe('accessibility', () => {
-  it('P18.95-T9 AC-3 an ⓘ beside a term, in a line of words and in a sentence somebody wrote, has no violations', async () => {
+  it('P18.7-T9 AC-3 an ⓘ beside a term, in a line of words and in a sentence somebody wrote, has no violations', async () => {
     await expectNoViolations(
       <div>
         <p>Today: 3 touches <TermTip term="TOUCHES" /></p>
@@ -77,6 +78,7 @@ describe('accessibility', () => {
   it('the app shell has no violations', async () => {
     await expectNoViolations(
       <AppShell
+        field={fieldChrome()}
         sections={SECTIONS}
         user={{ name: 'Rina Wijaya', role: 'Agent · KPM 0417', initials: 'RW' }}
         title="Log Activity"
@@ -489,7 +491,7 @@ describe('accessibility', () => {
         expect(ratio(over(NAVY, 0.32, CARD), CARD)).toBeLessThan(3);
       });
 
-      it('P18.95-T8 the popup’s Join link is navy on its 12% wash and its 20% hover; the agenda’s today heading amber-ink on today’s tint', () => {
+      it('P18.7-T8 the popup’s Join link is navy on its 12% wash and its 20% hover; the agenda’s today heading amber-ink on today’s tint', () => {
         // The detail dialog is the card; the link sits in *Location / notes* (UI-020).
         for (const alpha of [0.12, 0.2]) expect(ratio(NAVY, over(NAVY_SOFT, alpha, CARD))).toBeGreaterThanOrEqual(4.5);
         // The agenda's other headings are navy on the base ground; an empty day's line muted on the card.

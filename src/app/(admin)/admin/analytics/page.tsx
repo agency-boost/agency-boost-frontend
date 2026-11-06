@@ -6,6 +6,7 @@ import { Page } from '@/components/page';
 import { Cell, DataTable, Row, type Column } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button, ErrorBanner } from '@/components/ui/field';
+import { ListCard, ListRow } from '@/components/ui/list-rows';
 import { SkeletonTable } from '@/components/ui/skeleton';
 import { StatusPill } from '@/components/ui/status-pill';
 import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
@@ -15,6 +16,9 @@ import {
   readPlatformAnalytics, rungWords, signedInWords, tableRows, type Adoption, type PlatformAnalyticsView,
 } from '@/lib/admin-analytics';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
+import { useCan } from '@/lib/session';
+import { useMediaQuery } from '@/lib/use-media-query';
+import { KpmComparison } from '@/components/admin/kpm-comparison';
 
 /**
  * **Cross-platform analytics** (P18-T8), the console's last nav item (`Superadmin.html:204`), which the
@@ -29,18 +33,21 @@ import { toDisplayError, type ApiError } from '@/lib/api-client';
  * The route's own gate (`platform_analytics:read`), inside the console's; the read sits below it, so a
  * reader the gate refuses asks the API for nothing.
  */
-/**
- * **A minimum width, so the table scrolls inside its card** on a phone rather than squashing ten
- * columns into 360px, and the page body never scrolls sideways. The card itself is `relative` as well
- * as the table, so nothing positioned inside it escapes the scroll box.
+/*
+ * *Removed 2026-11-06 (P19.2-T2 AC-1; UI-126):* `TABLE_WIDTH`, a 64rem minimum so the table scrolled inside its card on
+ * a phone. A phone and a tablet draw rows now, and on a laptop the minimum was wider than the content (it scrolled at
+ * 1024 and 1280), so the table takes the content's width and its cells wrap.
  */
-const TABLE_WIDTH = 'min-w-[64rem]';
 
 export default function PlatformAnalyticsPage() {
   const COPY = useMessages(adminAnalyticsMessages);
+  const canCompare = useCan('platform_kpm_figures:read');
   return (
-    <Page title={COPY.title} subtitle={COPY.subtitle} permission="platform_analytics:read">
+    <Page title={COPY.title} permission="platform_analytics:read">
       <PlatformAnalytics />
+      {/* P19.4-T3 AC-3 (SA UI-013, SA R4): the adoption figures stay above; the KPMs compared on the Overview's own
+          figures follow, for a reader who holds the comparison's grant (the API refuses anybody else). */}
+      {canCompare && <KpmComparison />}
     </Page>
   );
 }
@@ -50,6 +57,8 @@ function PlatformAnalytics() {
   const language = useLanguage();
   const figures = useFigureLanguage();
   const COLUMNS: readonly Column[] = analyticsHeadings(language);
+  /** **Below 1024px rows** (P19.2-T2 AC-1; UI-126): an office, a company's total, the platform's, in the table's order. */
+  const rows = useMediaQuery(['phone', 'tablet']);
   const [view, setView] = useState<PlatformAnalyticsView | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
 
@@ -83,8 +92,44 @@ function PlatformAnalytics() {
     );
   }
 
+  const headings = platformHeadings(view.month, figures, language);
+  if (rows) {
+    return (
+      <ListCard label={COPY.caption}>
+        {tableRows(view).map((row) => {
+          if (row.kind === 'office') {
+            const { office } = row;
+            const state = officeState(office.state, language);
+            return (
+              <ListRow
+                key={`office-${office.kpmId}`}
+                data-row={office.kpmId}
+                href={`/admin/tenants/${office.kpmId}`}
+                title={`${office.code} · ${office.branch}`}
+                meta={office.company.name}
+                note={<FigureLines figures={office} headings={headings} />}
+                trailing={<StatusPill status={state.tone} label={state.word} />}
+              />
+            );
+          }
+          const total = row.kind === 'company' ? row.company : row.platform;
+          return (
+            <ListRow
+              key={row.kind === 'company' ? `company-${row.company.id}` : 'platform'}
+              className={row.kind === 'company' ? 'bg-base' : 'bg-secondary/5'}
+              title={row.kind === 'company'
+                ? companyTotalWords(row.company.name, row.company.offices, figures, language)
+                : platformTotalWords(row.platform.companies, row.platform.offices, figures, language)}
+              note={<FigureLines figures={total} headings={headings} />}
+            />
+          );
+        })}
+      </ListCard>
+    );
+  }
+
   return (
-    <DataTable caption={COPY.caption} columns={platformHeadings(view.month, figures, language)} className="relative" tableClassName={TABLE_WIDTH}>
+    <DataTable caption={COPY.caption} columns={headings} className="relative">
       {tableRows(view).map((row) => {
         if (row.kind === 'office') {
           const { office } = row;
@@ -116,13 +161,29 @@ function PlatformAnalytics() {
         }
         const { platform } = row;
         return (
-          <Row key="platform" className="bg-navy/5 font-bold">
+          <Row key="platform" className="bg-secondary/5 font-bold">
             <Cell colSpan={4}>{platformTotalWords(platform.companies, platform.offices, figures, language)}</Cell>
             <Figures figures={platform} />
           </Row>
         );
       })}
     </DataTable>
+  );
+}
+
+/**
+ * **A row's six figures below 1024px**, each after its heading's words, in the headings' order: *Members 49 · AB 3 ·
+ * AAB 6 · Agent 40*, *Joined in Nov 2026 2 · Left in Nov 2026 1*, *Signed in within 7 days 30 (61%) · within 30 days …*.
+ */
+function FigureLines({ figures: row, headings }: { figures: Adoption; headings: readonly string[] }) {
+  const figures = useFigureLanguage();
+  const h = headings.slice(4);
+  return (
+    <span className="flex flex-col text-muted">
+      <span>{`${h[0]} ${formatCount(row.members, figures)} · ${rungWords(row.byRung, figures)}`}</span>
+      <span>{`${h[2]} ${formatCount(row.joinedThisMonth, figures)} · ${h[3]} ${formatCount(row.leftThisMonth, figures)}`}</span>
+      <span>{`${h[4]} ${signedInWords(row.signedIn7d, row.members, figures)} · ${h[5]} ${signedInWords(row.signedIn30d, row.members, figures)}`}</span>
+    </span>
   );
 }
 

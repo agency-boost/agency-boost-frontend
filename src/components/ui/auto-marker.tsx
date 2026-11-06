@@ -29,7 +29,7 @@ export function AutoMarker({
   const t = useMessages(uiV1Messages);
   return (
     <span data-auto-marker="" className={cn('inline-flex items-center gap-0.5 align-middle', className)}>
-      <span className="inline-flex text-amber-ink">
+      <span className="inline-flex text-primary-ink">
         <LineIcon name="bolt" className="h-3.5 w-3.5" />
         <span className="sr-only">{t.auto.marker}</span>
       </span>

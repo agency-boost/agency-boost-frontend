@@ -12,9 +12,9 @@ import {
 } from '@/lib/training';
 
 /**
- * **The parts the learner's list and a person's *Training* tab share** (`Overall.html:7768-7810`; redrawn by Phase 18.99
+ * **The parts the learner's list and a person's *Training* tab share** (`Overall.html:7768-7810`; redrawn by Phase 18.11
  * T10 after the UI V1 report, UI-064 to UI-066): the skill list, its rows, the status pill and the *Format* labels. One
- * component per part, so the coach's tab and the learner's list cannot draw the same module two ways (P18.5-T4 AC-4).
+ * component per part, so the coach's tab and the learner's list cannot draw the same module two ways (P18.2-T4 AC-4).
  *
  * - **Below 1024px — a phone and a tablet — one white card for every skill** (UI-065, UI-066's tablet): a 40px header
  *   per skill on the hover ground (its number in a navy ring, its name, *done/total*), then a row per module at least
@@ -88,8 +88,16 @@ export function FormatChips({ formats }: { formats: readonly TrainingItemKind[] 
  */
 export function TrainingStatusPill({ status }: { status: TrainingStatus }) {
   const label = useMessages(trainingMessages).status[status];
-  if (status === 'in_progress') return <TonePill tone="grey" className="bg-amber/15 text-navy">{label}</TonePill>;
+  if (status === 'in_progress') return <TonePill tone="grey" className="bg-primary/15 text-navy">{label}</TonePill>;
   return <TonePill tone={status === 'done' ? 'green' : 'grey'}>{label}</TonePill>;
+}
+
+/**
+ * **A skill's or a module's *Deskripsi singkat*** (UI-161, ADR-0220 §2): the grey line under its name, in the row's own
+ * cell, so the row is still one link and its name is read first.
+ */
+function Description({ text }: { text: string }) {
+  return <span className="block text-sm font-normal leading-snug text-muted">{text}</span>;
 }
 
 /** A skill's number among the cards (UI-065): in a 1.5px navy ring, never a filled dot. */
@@ -97,7 +105,7 @@ function SkillNumber({ n }: { n: number }) {
   return (
     <span
       aria-hidden="true"
-      className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full border-[1.5px] border-navy text-xs font-semibold text-navy lg:h-6 lg:w-6"
+      className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full border-[1.5px] border-secondary text-xs font-semibold text-navy lg:h-6 lg:w-6"
     >
       {n}
     </span>
@@ -108,6 +116,8 @@ function SkillNumber({ n }: { n: number }) {
 interface Row {
   code: string;
   title: string;
+  /** *Deskripsi singkat* (ADR-0220 §2): an offered module's; a withdrawn one's history row carries none. */
+  description?: string | null;
   formats: readonly TrainingItemKind[];
   status: TrainingStatus;
   archived: boolean;
@@ -139,7 +149,11 @@ function SkillHead({ n, skill, level, className }: { n: number; skill: TrainingS
   return (
     <Heading className={cn('flex items-center gap-2.5 font-semibold text-navy', className)}>
       <SkillNumber n={n} />
-      <span className="min-w-0">{skill.label}</span>
+      {/* One short line, its *Deskripsi singkat* under it in grey (UI-161, ADR-0220 §2). */}
+      <span className="min-w-0">
+        {skill.label}
+        {skill.description && <Description text={skill.description} />}
+      </span>
       <span className="ml-auto shrink-0 text-xs font-medium text-signal-grey">{skill.done}/{skill.total}</span>
     </Heading>
   );
@@ -164,12 +178,15 @@ function SkillListCompact({
         return (
           // Not a landmark: the list under the heading is named by its skill already (`tableCaption`).
           <div key={skill.code} data-skill={skill.code}>
-            <SkillHead n={i + 1} skill={skill} level={level} className="h-10 bg-hover-row px-4 text-md" />
+            <SkillHead n={i + 1} skill={skill} level={level} className="min-h-10 bg-hover-row px-4 py-1.5 text-md" />
             <ul role="list" aria-label={t.tableCaption({ skill: skill.label })}>
               {rowsOf(skill, withArchived).map((row) => {
                 const content = (
                   <>
-                    <span className="min-w-0 flex-1 break-words leading-snug">{row.title}</span>
+                    <span className="min-w-0 flex-1 break-words leading-snug">
+                      {row.title}
+                      {row.description && <Description text={row.description} />}
+                    </span>
                     <StatusCell row={row} />
                   </>
                 );
@@ -205,6 +222,9 @@ const COLUMNS = 'grid grid-cols-[minmax(0,1fr)_130px_110px_16px] items-center ga
  * **From 1024px: a card per skill, two to a row** (UI-066). The header row names the columns for the eye (12px/600);
  * each row is one link, so its name is what it says — the module, its format and its status — and a screen reader hears
  * the same three a sighted reader scans.
+ *
+ * *Changed 2026-11-04 (P19.1-T1 AC-6, ADR-0196; UI-114: module names wrapped to 2–3 lines in half-width cards):* **one
+ * full-width card per skill from 1024 to 1279px**, as `training-desktop` draws each card; **two to a row from 1280px**.
  */
 function SkillGridWide({
   skills, categoryCode, withArchived, level,
@@ -216,7 +236,7 @@ function SkillGridWide({
 }) {
   const t = useMessages(trainingMessages);
   return (
-    <div className="grid grid-cols-2 items-start gap-4" data-skill-list="wide">
+    <div className="grid items-start gap-4 xl:grid-cols-2" data-skill-list="wide">
       {skills.map((skill, i) => {
         return (
           <div key={skill.code} data-skill={skill.code} className="rounded-lg border border-card-edge bg-card px-5 py-4">
@@ -232,7 +252,10 @@ function SkillGridWide({
                 const linked = categoryCode !== undefined && !row.archived;
                 const cells = (
                   <>
-                    <span className="min-w-0 break-words leading-snug">{row.title}</span>
+                    <span className="min-w-0 break-words leading-snug">
+                      {row.title}
+                      {row.description && <Description text={row.description} />}
+                    </span>
                     <FormatChips formats={row.formats} />
                     <StatusCell row={row} />
                     {linked ? <LineIcon name="chevronRight" className="h-4 w-4 text-signal-grey" /> : <span />}

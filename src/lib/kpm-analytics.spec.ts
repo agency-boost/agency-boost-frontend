@@ -1,16 +1,17 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { stubFetch } from '@test/harness';
-import { MOC_MET, MOC_NOT_MET, MOC_UNKNOWN, analyticsView, rp } from '@test/kpm-analytics-fixtures';
+import { DEWI, HENDRA, MOC_MET, MOC_NOT_MET, MOC_UNKNOWN, analyticsView, leader, leaders, rp } from '@test/kpm-analytics-fixtures';
 import {
-  activeWords, agentsSub, analyticsPeriodFrom, chartBars, CLUB_TERM_KEYS, clubTermFirsts, criterionValue, criterionVerdict,
-  headName, leadsWords, manpowerSub, mocButtonName, mocTermName, mocTip, moneyWords, orgTreeHref, OWN_COPY, periodWords,
-  PROTOTYPE_COPY, rateWords, readKpmAnalytics, shortMonth, unitDashboardHref,
+  activeWords, analyticsGroupFrom, analyticsPeriodFrom, analyticsQuery, chartBars, CLUB_TERM_KEYS, clubTermFirsts,
+  criterionPair, criterionValue, criterionVerdict, firstName, groupSplit, groupTreeHref, headName, leaderManpower, leadersIn,
+  leadsWords, manpowerSplit, memberPageHref, mocButtonName, mocTermName, mocTip, moneyWords, orgTreeHref, OWN_COPY,
+  periodWords, PROTOTYPE_COPY, rateWords, readKpmAnalytics, shortMonth, unitDashboardHref,
 } from './kpm-analytics';
 import { TERMS } from './terms';
 
 /** A row's *Producing* figures as the server serves them: the count, its share, and the manpower beside it. */
 const producing = (activeAgents: number | null, activePct: number | null, total: number) =>
-  ({ activeAgents, activePct, manpower: { aab: 0, agents: total, total } });
+  ({ activeAgents, activePct, manpower: { ab: 0, aab: 0, agents: total, total } });
 
 describe('KPM analytics’ client (P18-T2)', () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -36,7 +37,7 @@ describe('KPM analytics’ client (P18-T2)', () => {
     ]);
   });
 
-  it('P18-T2 AC-3, P18.97-T3 AC-1, AC-3 writes an APE cell: the figure and "of {target} target" compact, the pill whole', () => {
+  it('P18-T2 AC-3, P18.9-T3 AC-1, AC-3 writes an APE cell: the figure and "of {target} target" compact, the pill whole', () => {
     expect(moneyWords({ achievedMinor: rp(620), targetMinor: rp(1500), pct: 41 }, 70)).toEqual({
       actual: 'Rp 620 jt',
       uploaded: true,
@@ -45,7 +46,7 @@ describe('KPM analytics’ client (P18-T2)', () => {
     });
   });
 
-  it('P18.97-T3 AC-3 writes the table’s Rp 5.672.500.000 as Rp 5,7 M (UI-019): compact in a table too', () => {
+  it('P18.9-T3 AC-3 writes the table’s Rp 5.672.500.000 as Rp 5,7 M (UI-019): compact in a table too', () => {
     expect(moneyWords({ achievedMinor: rp(5_672.5), targetMinor: rp(6_000), pct: 95 }, 70)).toMatchObject({
       actual: 'Rp 5,7 M', of: 'of Rp 6 M target', pill: { text: '95%', tone: 'success' },
     });
@@ -77,8 +78,6 @@ describe('KPM analytics’ client (P18-T2)', () => {
       total: 23,
       sub: '15 sales (9 potential) · 8 recruit (5 potential)',
     });
-    expect(manpowerSub({ aab: 2, agents: 29, total: 31 })).toBe('2 AAB · 29 Agents');
-    expect(agentsSub({ aab: 0, agents: 8, total: 9 })).toBe('8 Agents');
   });
 
   it('P18-T2 AC-2 counts the ABs the prototype typed (contradiction 11)', () => {
@@ -87,34 +86,34 @@ describe('KPM analytics’ client (P18-T2)', () => {
     expect(PROTOTYPE_COPY.total(1)).toBe('Total — all 1 AB');
   });
 
-  it('P18.97-T3 AC-9 names the column for what it counts — Producing this month, Producing last month (UI-021)', () => {
-    expect(PROTOTYPE_COPY.headActive('this_month')).toBe('Producing this month');
-    expect(PROTOTYPE_COPY.headActive('previous_month')).toBe('Producing last month');
-    // Never the Overview's logging card's word, nor the prototype's *Active* (ADR-0127, ADR-0176 §3).
-    for (const period of ['this_month', 'previous_month'] as const) expect(PROTOTYPE_COPY.headActive(period)).not.toMatch(/Active|logged/);
+  it('P19.3-T3 (T1 AC-9, ADR-0200 §1) names the columns as the mockups do: Active this month, Active last month, APE YTD', () => {
+    expect(PROTOTYPE_COPY.headActive('this_month')).toBe('Active this month');
+    expect(PROTOTYPE_COPY.headActive('previous_month')).toBe('Active last month');
+    // *Active* is production in the upload (D1), never a logging count, and the year to date is never *Annual*.
+    expect(PROTOTYPE_COPY.headApeAnnual).toBe('APE YTD');
+    expect(Object.values(PROTOTYPE_COPY).filter((v) => typeof v === 'string').join(' ')).not.toMatch(/Annual|Producing|Net APE/);
   });
 
-  it('P18.97-T3 AC-10 writes the server’s share and divides nothing: 23 of 40 served as 58 reads 58%, never 57%', () => {
+  it('P18.9-T3 AC-10 writes the server’s share and divides nothing: 23 of 40 served as 58 reads 58%, never 57%', () => {
     expect(activeWords(producing(23, 58, 40))).toEqual({ main: '23 / 40', pct: '58%' });
     // Whatever the screen could divide, it writes what it was served (invariant §7).
     expect(activeWords(producing(23, 41, 40)).pct).toBe('41%');
     expect(activeWords(producing(5, null, 0)).pct).toBe('—');
   });
 
-  it('P18.97-T3 AC-4 the total’s APE says what it counts: Current members only', () => {
-    expect(OWN_COPY.currentMembersOnly).toBe('Current members only');
-    // Its ⓘ still names the sum it leaves out.
-    expect(OWN_COPY.leaversLeftOut('Rp 98 jt')).toBe('Leaves out Rp 98 jt produced this year by members who have since left; the Overview’s year counts it.');
+  it('P19.3-T3 AC-5 the rows say once what they count — Current members — and nothing names a sum the total leaves out', () => {
+    expect(OWN_COPY.currentMembersOnly).toBe('Current members');
+    expect(Object.keys(OWN_COPY)).not.toContain('leaversLeftOut');
   });
 
-  it('P18.97-T3 AC-8 the MOC ⓘ says what MOC is — the glossary’s line — above the company’s rules', () => {
+  it('P18.9-T3 AC-8 the MOC ⓘ says what MOC is — the glossary’s line — above the company’s rules', () => {
     expect(mocTermName).toBe('What is MOC?');
     expect(mocTip('AAB: Net APE ≥ Rp 200 jt.')).toBe(`${TERMS.MOC.definition}\n\nAAB: Net APE ≥ Rp 200 jt.`);
     // A company with no MOC rule still has the term explained.
     expect(mocTip('')).toBe(TERMS.MOC.definition);
   });
 
-  it('P18.97-T3 AC-8 each club’s ⓘ goes on the first badge that shows it, read from the badge’s own words', () => {
+  it('P18.9-T3 AC-8 each club’s ⓘ goes on the first badge that shows it, read from the badge’s own words', () => {
     const row = (id: string, club: { code: string; label: string } | null) =>
       ({ head: { membershipId: id, name: id, isReader: false, leads: true }, club });
     const firsts = clubTermFirsts([
@@ -157,10 +156,11 @@ describe('KPM analytics’ client (P18-T2)', () => {
   });
 
   it('P18-T2 AC-4 writes each criterion in its own unit, and never Gap for a figure nobody has', () => {
+    expect(criterionValue('MOC_APE', rp(600))).toBe('Rp 600 jt');
+    // P19.3-T1 AC-5: a stored `NET_APE` reads as rupiah all the same; P19.3-T1 AC-14, *Monthly2 AA* is an average.
     expect(criterionValue('NET_APE', rp(600))).toBe('Rp 600 jt');
-    // Compact only where that loses nothing: a figure it would round is written in full (ADR-0167 §1).
-    expect(criterionValue('NET_APE', rp(599.96))).toBe('Rp 599.960.000');
-    // A persistency keeps the places it has and no ,0 (P18.97-T3 AC-2): the rule's 75%, the carrier's 74,96%.
+    expect(criterionValue('MONTHLY2_AA_DU', 7 / 3)).toBe('2,33');
+    // A persistency keeps the places it has and no ,0 (P18.9-T3 AC-2): the rule's 75%, the carrier's 74,96%.
     expect(criterionValue('MOC_PERSISTENCY', 75)).toBe('75%');
     expect(criterionValue('MOC_PERSISTENCY', 75.55)).toBe('75,55%');
     expect(criterionValue('MOC_PERSISTENCY', 74.96)).toBe('74,96%');
@@ -210,7 +210,7 @@ describe('KPM analytics’ client (P18-T2)', () => {
  */
 describe('OD-235 the Producing cell over the share’s own base', () => {
   const based = (activeAgents: number | null, activePct: number | null, activeOf: number, total: number) =>
-    ({ activeAgents, activePct, activeOf, manpower: { aab: 0, agents: total, total } });
+    ({ activeAgents, activePct, activeOf, manpower: { ab: 0, aab: 0, agents: total, total } });
 
   it('OD-235 writes a past month’s count over the base it was served, never over today’s manpower', () => {
     expect(activeWords(based(4, 80, 5, 3))).toEqual({ main: '4 / 5', pct: '80%' });
@@ -228,11 +228,11 @@ describe('OD-235 the Producing cell over the share’s own base', () => {
 });
 
 /**
- * **P18.98-T4 the module's words in Indonesian** (`i18n/messages/kpm-analytics.ts`): the functions outside React write
+ * **P18.10-T4 the module's words in Indonesian** (`i18n/messages/kpm-analytics.ts`): the functions outside React write
  * the reader's words, and their figures in the figures' language — each passed apart, as the screen passes them.
  */
-describe('P18.98-T4 KPM analytics’ words, language by language', () => {
-  it('P18.98-T4 writes an APE cell in Indonesian words and figures: dari target Rp 1,5 M, Belum diunggah, Goal belum diatur', () => {
+describe('P18.10-T4 KPM analytics’ words, language by language', () => {
+  it('P18.10-T4 writes an APE cell in Indonesian words and figures: dari target Rp 1,5 M, Belum diunggah, Goal belum diatur', () => {
     expect(moneyWords({ achievedMinor: rp(620), targetMinor: rp(1500), pct: 41 }, 70, 'id', 'id')).toEqual({
       actual: 'Rp 620 jt', uploaded: true, of: 'dari target Rp 1,5 M', pill: { text: '41%', tone: 'alert' },
     });
@@ -240,21 +240,22 @@ describe('P18.98-T4 KPM analytics’ words, language by language', () => {
       .toMatchObject({ actual: 'Belum diunggah', of: 'Goal belum diatur' });
   });
 
-  it('P18.98-T4 keeps words and figures apart: English words with Indonesian figures, as an unchosen reader reads them', () => {
+  it('P18.10-T4 keeps words and figures apart: English words with Indonesian figures, as an unchosen reader reads them', () => {
     expect(moneyWords({ achievedMinor: rp(620), targetMinor: rp(1500), pct: 41 }, 70, 'en', 'id').of).toBe('of Rp 1,5 M target');
     expect(moneyWords({ achievedMinor: rp(620), targetMinor: rp(1500), pct: 41 }, 70, 'en', 'en').of).toBe('of IDR 1.5B target');
   });
 
-  it('P18.98-T4 writes the lines and names in Indonesian, the roles kept and a kept noun in its English plural', () => {
+  it('P18.10-T4 writes the lines and names in Indonesian, the roles kept and a kept noun in its English plural', () => {
     expect(leadsWords({ sales: 15, salesPotential: 9, recruit: 8, recruitPotential: 5 }, 'id').sub)
       .toBe('15 penjualan (9 potensial) · 8 rekrut (5 potensial)');
-    expect(manpowerSub({ aab: 2, agents: 29, total: 31 }, 'id')).toBe('2 AAB · 29 Agents');
-    expect(agentsSub({ aab: 0, agents: 1, total: 1 }, 'id')).toBe('1 Agent');
+    expect(manpowerSplit({ ab: 0, aab: 2, agents: 29 }, 'id')).toBe('2 AAB · 29 Agents');
+    expect(manpowerSplit({ ab: 0, aab: 0, agents: 1 }, 'id')).toBe('0 AAB · 1 Agent');
+    expect(leaderManpower({ ab: 5, aab: 4, agents: 19, total: 28 }, 'id')).toBe('9 leader · 19 agent');
     expect(headName({ membershipId: 'm', name: 'Wilson Tanoto', isReader: true, leads: true }, 'id')).toBe('Wilson Tanoto (Anda)');
     expect(activeWords(producing(null, null, 31), 'id')).toEqual({ main: 'Belum diunggah', pct: null });
   });
 
-  it('P18.98-T4 names MOC’s button and its verdicts in Indonesian, the server’s sentence as it came', () => {
+  it('P18.10-T4 names MOC’s button and its verdicts in Indonesian, the server’s sentence as it came', () => {
     expect(mocButtonName(MOC_MET, 'Hendra Wibowo', 'id')).toBe('Syarat MOC terpenuhi untuk Hendra Wibowo');
     expect(mocButtonName(MOC_NOT_MET, 'Budi Santoso', 'id')).toBe('Syarat MOC belum terpenuhi untuk Budi Santoso');
     expect(mocButtonName(MOC_UNKNOWN, 'Wilson Tanoto', 'id')).toBe('MOC untuk Wilson Tanoto — Not uploaded yet: Rolling Persistency — DU/DG.');
@@ -262,12 +263,69 @@ describe('P18.98-T4 KPM analytics’ words, language by language', () => {
       .toEqual(['Terpenuhi', 'Gap', 'Belum diunggah']);
   });
 
-  it('P18.98-T4 writes a criterion, a period and a bar in the figures’ language alone', () => {
-    expect(criterionValue('NET_APE', rp(600), 'en')).toBe('IDR 600M');
+  it('P18.10-T4 writes a criterion, a period and a bar in the figures’ language alone', () => {
+    expect(criterionValue('MOC_APE', rp(600), 'en')).toBe('IDR 600M');
     expect(criterionValue('MOC_PERSISTENCY', 74.96, 'en')).toBe('74.96%');
     expect(periodWords('2026-08..2026-09', 'en')).toBe('Aug – Sep 2026');
     expect(shortMonth('2026-10', 'en')).toBe('Oct');
     expect(chartBars([{ month: '2026-08', apeMinor: null }, { month: '2026-09', apeMinor: rp(800) }], 'id', 'en')
       .map((b) => b.value)).toEqual(['Belum diunggah', 'IDR 800M']);
+  });
+});
+
+/**
+ * **P19.3-T3 the Leader list's words and drills** (UI-152, UI-094, UI-095, UI-096; `kpm-leaders` mockups): the reads
+ * carry the period and the group; one split in one format; the drills in the same tab.
+ */
+describe('P19.3-T3 KPM Analytics — every leader', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('P19.3-T3 AC-15 reads the group from the address, and asks for it beside the period', async () => {
+    expect(analyticsGroupFrom('grp-core')).toBe('grp-core');
+    expect(analyticsGroupFrom(['grp-core', 'x'])).toBe('grp-core');
+    expect(analyticsGroupFrom(undefined)).toBeNull();
+    expect(analyticsGroupFrom('')).toBeNull();
+    expect(analyticsQuery('this_month', null)).toBe('');
+    expect(analyticsQuery('previous_month', 'grp-core')).toBe('?period=previous_month&group=grp-core');
+    const { calls } = stubFetch({ '/kpm/analytics': { body: analyticsView() } });
+    await readKpmAnalytics('this_month', 'grp core');
+    expect(calls.map((c) => c.url)).toEqual(['http://api.test/api/v1/kpm/analytics?period=this_month&group=grp%20core']);
+  });
+
+  it('P19.3-T3 AC-10 writes one split in one format, every AAB counted, the leader taken off once (UI-094)', () => {
+    expect(manpowerSplit({ ab: 5, aab: 4, agents: 19 })).toBe('5 AB · 4 AAB · 19 Agents');
+    expect(manpowerSplit({ ab: 0, aab: 1, agents: 3 })).toBe('1 AAB · 3 Agents');
+    // Hendra, an AB: his Group is himself, another AB, three AAB and 26 agents.
+    expect(groupSplit(leader(HENDRA, 'ab', { manpower: { ab: 2, aab: 3, agents: 26, total: 31 } }))).toBe('1 AB · 3 AAB · 26 Agents');
+    // Dewi, an AAB who leads nobody: nobody below her, said in the same format.
+    expect(groupSplit(leader(DEWI, 'aab', { manpower: { ab: 0, aab: 1, agents: 0, total: 1 } }))).toBe('0 AAB · 0 Agents');
+  });
+
+  it('P19.3-T3 AC-4 writes Manpower’s line as the mockup does: n leader · n agent', () => {
+    expect(leaderManpower({ ab: 5, aab: 4, agents: 19, total: 28 })).toBe('9 leader · 19 agent');
+  });
+
+  it('P19.3-T3 AC-1 counts the chips over the list, and filters it by class', () => {
+    const list = leaders();
+    expect([leadersIn(list, 'all').length, leadersIn(list, 'ab').length, leadersIn(list, 'aab').length]).toEqual([7, 4, 3]);
+    expect(leadersIn(list, 'aab').every((l) => l.role === 'aab')).toBe(true);
+    expect(firstName('Agus Prasetyo')).toBe('Agus');
+    expect(firstName('  Sari  ')).toBe('Sari');
+  });
+
+  it('P19.3-T3 AC-11 drills to a leader’s Unit Dashboard, Group Tree and member page, the reader to their own', () => {
+    expect(unitDashboardHref({ membershipId: 'mem-sari', isReader: false })).toBe('/unit/dashboard/mem-sari');
+    expect(groupTreeHref({ membershipId: 'mem-sari', isReader: false })).toBe('/group-tree/mem-sari');
+    expect(groupTreeHref({ membershipId: 'mem-owner', isReader: true })).toBe('/group-tree');
+    expect(memberPageHref('mem-sari')).toBe('/people/members/mem-sari');
+  });
+
+  it('P19.3-T3 AC-12 the MOC dialog writes money with the shared formatter: Rp 3,1 M / Rp 600 jt (UI-096)', () => {
+    expect(criterionPair('MOC_APE', 3_094_500_000 * 100, rp(600))).toEqual(['Rp 3,1 M', 'Rp 600 jt']);
+    expect(criterionPair('MOC_APE', 3_094_500_000 * 100, rp(600), 'en')).toEqual(['IDR 3.1B', 'IDR 600M']);
+    // Two different sums that compact writing would make equal are written in full (ADR-0167 §1 kept).
+    expect(criterionPair('MOC_APE', rp(599.96), rp(600))).toEqual(['Rp 599.960.000', 'Rp 600 jt']);
+    expect(criterionPair('MOC_APE', null, rp(600))).toEqual(['—', 'Rp 600 jt']);
+    expect(criterionPair('MOC_PERSISTENCY', 74.96, 75)).toEqual(['74,96%', '75%']);
   });
 });

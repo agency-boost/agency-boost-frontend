@@ -39,7 +39,7 @@ const ANSWER_GLYPH: Record<Answer, { glyph: string; name: 'accepted' | 'declined
  *
  * The prototype's, verbatim: the badge, the title, *When*, *Location / notes* or *—*, *Invitees* or
  * *No one else invited*. **The badge names the type as the legend does** — *Internal meeting*, where the
- * prototype's capitalised its code, *Meeting* (P18.95-T8 AC-2; the client's UI review, UI-020: one set
+ * prototype's capitalised its code, *Meeting* (P18.7-T8 AC-2; the client's UI review, UI-020: one set
  * of type names). **A meeting link in the notes is a link**: *Join Zoom* on a Zoom host, *Join meeting*
  * on any other, opening in a new tab (`NotesText`). **What it offers follows the server's `readerIs`,
  * and draws nothing the API would refuse** (D-write):
@@ -218,7 +218,7 @@ export function DetailDialog({
 }
 
 /**
- * ***Location / notes*, as the organiser wrote it, with each meeting link a link** (P18.95-T8 AC-2; the
+ * ***Location / notes*, as the organiser wrote it, with each meeting link a link** (P18.7-T8 AC-2; the
  * client's UI review, UI-020: *the Zoom link in the event popup is plain text*). The link reads *Join
  * Zoom* or *Join meeting* (`notesParts`), is a 44px target on a phone (`TEXT_TAP`), opens in a new tab
  * with neither the opener nor the referrer handed on, and says so to a screen reader; its address is
@@ -240,7 +240,7 @@ function NotesText({ notes }: { notes: string }) {
           rel="noopener noreferrer"
           title={part.href}
           className={cn(
-            'inline-flex items-center rounded-pill bg-navy-soft/[0.12] px-2.5 py-0.5 align-baseline text-sm font-semibold text-navy hover:bg-navy-soft/20',
+            'inline-flex items-center rounded-pill bg-secondary-hover/[0.12] px-2.5 py-0.5 align-baseline text-sm font-semibold text-navy hover:bg-secondary-hover/20',
             TEXT_TAP,
           )}
         >

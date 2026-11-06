@@ -7,7 +7,7 @@ import { withDetail } from './confirmations';
 import { dayInZone, formatClock, formatDayClock, formatOfficeTime, formatShortDay, OFFICE_TIME_ZONE } from './format';
 
 /**
- * **KPM Events, as a member reads them** (`docs/02-specs/functional/events.md`, P18.5-T5 and T6): the
+ * **KPM Events, as a member reads them** (`docs/02-specs/functional/events.md`, P18.2-T5 and T6): the
  * shapes the field reads answer, the calls that ask for them, and the words `/events` and its modal draw
  * them with (`Overall.html:3423-3448`, logic `:8425-8771`, the modal `:4707-4709`).
  *
@@ -169,7 +169,7 @@ export const isOpen = (event: Pick<GuestEvent, 'ended'>) => !event.ended;
 export const isGoing = (event: Pick<GuestEvent, 'me'>) => event.me.rsvp === 'going';
 
 /**
- * Whether a *Join* is drawn for this event — the modal's *Join event* and the card's *Join* alike (P18.95-T10
+ * Whether a *Join* is drawn for this event — the modal's *Join event* and the card's *Join* alike (P18.7-T10
  * AC-1): the server says the reader may RSVP (`can.rsvp`, all false in a read-only support session), the event
  * has not wrapped up, and they are not going already. The server refuses anything else all the same.
  */
@@ -274,7 +274,7 @@ export function pastBlockOf(event: GuestEvent): PastBlock {
 /**
  * *"20 Sep 2026, 18.00"* (`:8534`, where the prototype wrote *Sep 20, 2026 · 6:00 PM*), in the office's calendar and
  * clock as the server resolved them — one date and time, written as every screen writes one (ADR-0167 §1). In
- * `figures`, the reader's figures (`useFigureLanguage()`; P18.98-T4): Indonesian when none is passed, as before.
+ * `figures`, the reader's figures (`useFigureLanguage()`; P18.10-T4): Indonesian when none is passed, as before.
  */
 export const whenLine = (event: Pick<GuestEvent, 'startsOn' | 'startTime'>, figures?: Language) =>
   formatDayClock(event.startsOn, event.startTime, figures);
@@ -289,7 +289,7 @@ export const timeOf = (event: Pick<GuestEvent, 'startTime'>, figures?: Language)
 /*
  * ── The words ───────────────────────────────────────────────────────────────────────────────────
  *
- * **In the catalogue** (`i18n/messages/events.ts`; P18.98-T4): a screen reads the reader's language,
+ * **In the catalogue** (`i18n/messages/events.ts`; P18.10-T4): a screen reads the reader's language,
  * `useMessages(eventsMessages)`; a function here takes the words' language last, English when none is passed, and
  * its caller passes `useLanguage()`. The objects below are the catalogue's English in the shapes this module has
  * always handed its spec.
@@ -303,7 +303,7 @@ const EN = eventWordsIn(SOURCE_LANGUAGE);
 /**
  * **The prototype's words, verbatim** (`Overall.html`), in English, the catalogue's source. Three carry *KPM* — the
  * title, its sub-line and the audience line's issuer — and go to the client with OD-39, as every such string has
- * since ADR-0084. The title is `:10413`'s *KPM Events*, **the nav item's words since P18.95-T9 AC-2** (ADR-0167 §10,
+ * since ADR-0084. The title is `:10413`'s *KPM Events*, **the nav item's words since P18.7-T9 AC-2** (ADR-0167 §10,
  * OD-205): the nav reads *Event list* (`:2664`).
  */
 export const PROTOTYPE_COPY = {
@@ -339,13 +339,13 @@ export const PROTOTYPE_COPY = {
 } as const;
 
 /**
- * *"Joined ✓ — you're going to {title}"*: the client's *Joined ✓* (P18.95-T1 AC-6, ADR-0167 §5; UI-008), then the
+ * *"Joined ✓ — you're going to {title}"*: the client's *Joined ✓* (P18.7-T1 AC-6, ADR-0167 §5; UI-008), then the
  * prototype's *"You're going to {title}"* (`:8718`), so the toast still says which event — both in `language`, *Joined ✓*
  * the shared confirmation's (`i18n/messages/confirmations.ts`).
  */
 export const goingToast = (title: string, language: Language = SOURCE_LANGUAGE) =>
   withDetail(messagesIn(confirmationMessages, language).joined, eventWordsIn(language).goingDetail({ title }));
-/** The card's *Join*, named with its event for a screen reader: *"Join Kickoff 2026"* (P18.95-T10 AC-1). */
+/** The card's *Join*, named with its event for a screen reader: *"Join Kickoff 2026"* (P18.7-T10 AC-1). */
 export const joinName = (title: string, language: Language = SOURCE_LANGUAGE) => eventWordsIn(language).joinName({ title });
 /** *"RSVP cancelled for {title}"* (`:8728`). */
 export const cancelledToast = (title: string, language: Language = SOURCE_LANGUAGE) =>
@@ -397,7 +397,7 @@ export const OWN_COPY = {
   backToEvents: EN.backToEvents,
   opensInNewTab: EN.opensInNewTab,
   /**
-   * The card's *Join* — the client's word (P18.95-T10 AC-1; UI-024, ADR-0167), where the prototype's card had no
+   * The card's *Join* — the client's word (P18.7-T10 AC-1; UI-024, ADR-0167), where the prototype's card had no
    * control but *View event*. Its accessible name adds the event's title, so a list of them is told apart.
    */
   join: EN.join,
@@ -406,7 +406,7 @@ export const OWN_COPY = {
 /**
  * **A refusal the screen can meet, in the spec's words** (`functional/events.md`, *The module's own strings*):
  * the event ended while the modal was open, or has not ended yet by the server's clock — in `language`. Any other
- * refusal is the server's own line, in the reader's language already (P18.98-T5). The code and the request id stay
+ * refusal is the server's own line, in the reader's language already (P18.10-T5). The code and the request id stay
  * in the banner either way.
  */
 export function refusalOf(err: unknown, language: Language = SOURCE_LANGUAGE): ApiError {

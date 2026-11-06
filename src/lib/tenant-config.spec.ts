@@ -53,7 +53,7 @@ describe('signedUploadForm — the form a signed upload is sent as', () => {
   const file = new Blob(['%PDF-1.4'], { type: 'application/pdf' });
   const signed = gcsSignedUpload('dev/kpm-1/products/01DOC');
 
-  it('P18.7-T2 sends every field of the signed POST policy, in the server’s order, then the file last', () => {
+  it('P18.4-T2 sends every field of the signed POST policy, in the server’s order, then the file last', () => {
     const form = signedUploadForm(signed, file);
 
     expect([...form.keys()]).toEqual([
@@ -66,7 +66,7 @@ describe('signedUploadForm — the form a signed upload is sent as', () => {
     expect(form.get('file')).toBeInstanceOf(Blob);
   });
 
-  it('P18.7-T2 adds nothing the server did not sign — no public id, no signature of its own', () => {
+  it('P18.4-T2 adds nothing the server did not sign — no public id, no signature of its own', () => {
     const form = signedUploadForm(signed, file);
 
     expect(form.has('public_id')).toBe(false);
@@ -74,7 +74,7 @@ describe('signedUploadForm — the form a signed upload is sent as', () => {
     expect(form.getAll('file')).toHaveLength(1);
   });
 
-  it('P18.7-T2 sends the server’s fields whatever they are named, so a vendor change stays on the server', () => {
+  it('P18.4-T2 sends the server’s fields whatever they are named, so a vendor change stays on the server', () => {
     const form = signedUploadForm({ ...signed, fields: { b: '2', a: '1' } }, file);
 
     expect([...form.keys()]).toEqual(['b', 'a', 'file']);

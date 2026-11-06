@@ -34,7 +34,7 @@ type ItemField = 'done' | 'note' | 'date';
  *
  * - **The header card**: *Your activation progress*, the *Start date* — read-only, since a leader
  *   corrects it and the hire does not (OD-118) — and *Mark checklist complete* (the prototype's *Mark activation
- *   complete →*, renamed by P18.96-T6 AC-5, ADR-0173 §4), enabled at 100% (OD-28) and saying why while it is not —
+ *   complete →*, renamed by P18.8-T6 AC-5, ADR-0173 §4), enabled at 100% (OD-28) and saying why while it is not —
  *   *"Unlocks when all 16 items are done"* — asked in the product's dialog (F-72).
  * - **The progress**: *Day*, *Completed*, the bar and the aspect table, all served (P13-T2 AC-5).
  * - **A manual row**: a checkbox, and the chevron *Show note and date* opening the hire's own *Note
@@ -50,14 +50,14 @@ type ItemField = 'done' | 'note' | 'date';
  * never overwrites a later one. **The percentage waits for the answer**: the server computes it, and a
  * screen that worked it out could disagree with the leader's (exit criterion 2).
  *
- * **Settled, and in place** (P18.96-T7 AC-1, AC-2; UI-007, UI-008): the figures are the skeleton until the one read
+ * **Settled, and in place** (P18.8-T7 AC-1, AC-2; UI-007, UI-008): the figures are the skeleton until the one read
  * answers, every link evaluated by the server first; after that an answer updates them where they are — every row keeps
  * its node and the focus, nothing scrolls, and the session read again for the nav's check replaces no part of the page.
  *
  * **A read-only support session draws no write control** (T4 AC-9, the calendar's L-79): the boxes are
  * drawn disabled, the note and date read-only, and there is no button.
  *
- * **Its words are the catalogue's** (`i18n/messages/activation.ts`; P18.98-T4) and its dates are written in the
+ * **Its words are the catalogue's** (`i18n/messages/activation.ts`; P18.10-T4) and its dates are written in the
  * figures' language (`useFigureLanguage()`), so a date beside the shared date field reads as its face does.
  */
 export function MyActivation() {
@@ -73,7 +73,7 @@ export function MyActivation() {
   const queue = useWriteQueue();
   /**
    * The tick, the note and the date each say *Saving… → Saved ✓* beside them, or *Couldn't save — retry*
-   * (P18.95-T1 AC-5, ADR-0167 §5; UI-007), above the row's *Not saved.* which still says why.
+   * (P18.7-T1 AC-5, ADR-0167 §5; UI-007), above the row's *Not saved.* which still says why.
    */
   const { save: track, statusOf } = useInlineSave();
 
@@ -145,7 +145,7 @@ export function MyActivation() {
     void track(`${code}\n${field}`, () => write(code, patch));
   }, [track, write]);
 
-  /** A data-backed item's write (P18.96-T4 AC-3): an untick, or the tick and its record together. */
+  /** A data-backed item's write (P18.8-T4 AC-3): an untick, or the tick and its record together. */
   const saveData = useCallback((code: string, done: boolean, record?: ActivationRecordInput) =>
     track(`${code}\ndone`, () => write(code, record ? { done, record } : { done })), [track, write]);
   const loadClosings = useCallback(async () => (await readMyClosings()).closings, []);
@@ -200,7 +200,7 @@ export function MyActivation() {
                     >
                       {t.graduate}
                     </Button>
-                    {/* P18.96-T6 AC-5 (ADR-0173 §4): while it waits, it says why — the checklist's own total, served. */}
+                    {/* P18.8-T6 AC-5 (ADR-0173 §4): while it waits, it says why — the checklist's own total, served. */}
                     {view.pct < 100 && <p id={lockedId} className="mt-1 text-xs text-muted">{t.graduateLocked({ n: view.total })}</p>}
                   </div>
                 )}
@@ -262,7 +262,7 @@ export function MyActivation() {
 }
 
 /**
- * *Join date* — the prototype's *Start date* (`:3283-3287`; P18.96-T2 AC-5, ADR-0169) — **read-only for the hire**
+ * *Join date* — the prototype's *Start date* (`:3283-3287`; P18.8-T2 AC-5, ADR-0169) — **read-only for the hire**
  * (OD-118): the prototype's input lets anybody reset their own ninety days and hide an overdue, so the date is
  * shown, not offered. When a leader moved it, the marker beside it says who and when.
  */
@@ -295,7 +295,7 @@ function MyItemRow({
   reader: string | null | undefined;
   writable: boolean;
   onSave: (patch: MyItemInput, field: ItemField) => void;
-  /** Each field's save confirmation (P18.95-T1 AC-5). */
+  /** Each field's save confirmation (P18.7-T1 AC-5). */
   status: (field: ItemField) => InlineSaveStatusProps;
   error: string | undefined;
   resetKey: number;
@@ -352,7 +352,7 @@ function MyItemRow({
           aria-controls={metaId}
           onClick={() => setOpen((was) => !was)}
           className={cn(
-            'flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted transition-transform hover:bg-navy/[0.06] hover:text-navy',
+            'flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted transition-transform hover:bg-secondary/[0.06] hover:text-navy',
             open && 'rotate-180 text-navy',
           )}
         >
@@ -406,7 +406,7 @@ function NoteInput({
         if (next === (item.note ?? '')) return;
         onSave({ done: item.done, note: next === '' ? null : next });
       }}
-      // The row's flex share is its save confirmation's box's now (P18.95-T1 AC-5); the box fills it.
+      // The row's flex share is its save confirmation's box's now (P18.7-T1 AC-5); the box fills it.
       className="h-[34px] w-full min-w-0 text-base"
     />
   );

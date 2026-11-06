@@ -15,11 +15,11 @@ const childrenOf = (el: Element): Element[] =>
   ([] as ReactNode[]).concat(el.props.children).filter((c): c is Element => typeof c === 'object' && c !== null);
 
 /**
- * **P18.98-T1 AC-4: `<html lang>` is the reader's language, never a fixed one** (WCAG 3.1.1; parity F-258). It was a
+ * **P18.10-T1 AC-4: `<html lang>` is the reader's language, never a fixed one** (WCAG 3.1.1; parity F-258). It was a
  * hard-coded `id` over screens that are mostly English. The root layout is a server component, prerendered once, so
  * it is read here as the element it returns.
  */
-describe('P18.98-T1 the root layout', () => {
+describe('P18.10-T1 the root layout', () => {
   const html = RootLayout({ children: <main /> }) as Element;
   const [head, body] = childrenOf(html);
 

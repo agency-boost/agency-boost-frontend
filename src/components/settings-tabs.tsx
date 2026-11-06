@@ -29,6 +29,7 @@ export function SettingsTabs({
   activeHref,
   label,
   variant = 'tabs',
+  touch = false,
 }: {
   /**
    * `hint`, where a tab has one, is its tooltip: shown on hover and given to a screen reader as the
@@ -66,6 +67,11 @@ export function SettingsTabs({
    * for when they said the subtab belongs under the tab.
    */
   variant?: 'tabs' | 'subtabs';
+  /**
+   * **44px tall below 1024px** (P19.2-T3 AC-4; UI-142: *tab rows 38px*, *tabs 44px*): the Owner's settings pages, through
+   * `SettingsScreen`. From 1024px the row is as it was; a caller that does not ask is unchanged at every width.
+   */
+  touch?: boolean;
 }) {
   const t = useMessages(settingsMessages);
   const pathname = usePathname();
@@ -101,10 +107,11 @@ export function SettingsTabs({
             className={[
               subtabs ? 'rounded-full px-3 py-1 text-sm' : 'border-b-2 px-3 py-2 text-md',
               TAB_PHONE,
+              touch && 'max-lg:inline-flex max-lg:min-h-11 max-lg:items-center',
               // The chosen subtab is navy, as every selected chip and filter is: orange is for an action
               // (ADR-0137, the client's request of 2026-10-10), and an amber pill read as a button.
-              active && subtabs ? 'bg-navy font-semibold text-white' : '',
-              active && !subtabs ? 'border-amber font-semibold text-navy' : '',
+              active && subtabs ? 'bg-secondary font-semibold text-secondary-contrast' : '',
+              active && !subtabs ? 'border-primary font-semibold text-navy' : '',
               !active && subtabs ? 'text-muted hover:bg-base hover:text-navy' : '',
               !active && !subtabs ? 'border-transparent text-muted hover:text-navy' : '',
             ].filter(Boolean).join(' ')}

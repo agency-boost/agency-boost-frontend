@@ -19,13 +19,13 @@ import { firstMentions, termDefinition, termQuestion, type TermKey } from './ter
  * prototype's words. It evaluates no rule and sums no rows: the only arithmetic here is the one the
  * prototype writes into a cell from figures it already shows — *Total leads* as sales plus recruitment
  * (`KPM_Owner.html:3327`). *Producing this month*'s percentage of the row's manpower (`:3342`) is **served**
- * since P18.97-T3 AC-10 (`activePct`, the server's `rateOver`; ADR-0176 §12), where this file divided it. The
+ * since P18.9-T3 AC-10 (`activePct`, the server's `rateOver`; ADR-0176 §12), where this file divided it. The
  * status pill's split (`:3150`, `:3220`) is the server's too, served as `thresholds.statusSplitPct` (invariant §7).
  *
  * Each interface is spelled out with named nested types and no `extends`, so `contract.spec.ts` can read
  * its fields against `backend/openapi.json`: it reads an interface's body up to the first `}`.
  *
- * **Its words are the catalogue's** (P18.98-T4; `i18n/messages/kpm-analytics.ts`): each function that writes words
+ * **Its words are the catalogue's** (P18.10-T4; `i18n/messages/kpm-analytics.ts`): each function that writes words
  * takes the reader's `language` — English, the source, when passed none, which its spec reads — and one that writes a
  * figure takes the figures' language after it (`figures`, `useFigureLanguage()`; Indonesian when passed none, as every
  * figure was before the phase). Its caller passes `useLanguage()` and `useFigureLanguage()`.
@@ -88,7 +88,9 @@ export interface AnalyticsLeads {
   recruitPotential: number;
 }
 
+/** *Manpower* by class (D3): the AB counted once, as AB; `total` is everybody, the head included. */
 export interface AnalyticsManpower {
+  ab: number;
   aab: number;
   agents: number;
   total: number;
@@ -132,7 +134,7 @@ export interface UnitFigures {
   /** `MAA_COUNT_IN_UNIT` for the period's month; `null` is *Not uploaded yet*. */
   activeAgents: number | null;
   /**
-   * Its share of the members it counts from, the server's whole percent (P18.97-T3 AC-10; OD-235): this month's of
+   * Its share of the members it counts from, the server's whole percent (P18.9-T3 AC-10; OD-235): this month's of
    * `manpower.total`, a past month's of that month's members. `null` not uploaded, or over nobody.
    */
   activePct: number | null;
@@ -177,13 +179,12 @@ export interface AgencyRow {
   members: AnalyticsMember[];
 }
 
-/** *Total — all {n} ABs* (`:3386-3396`): the sum of the rows, and how many ABs meet MOC. */
+/**
+ * **The KPM's totals** (UI-109's tiles, above the Leader list): everybody in scope. `apeAnnual` is **the KPM's production
+ * this year, a leaver's included** — the Overview's figure (ADR-0204 §1, OWN R1; P19.3-T3 AC-5) — so it is no longer the
+ * sum of the rows, which count today's members (*"Anggota saat ini"*).
+ */
 export interface AnalyticsTotal {
-  /**
-   * The year to date of members who left this year, which the rows leave out (ADR-0136): the total is the
-   * sum of today's rows, and says so beside it. `null` or 0 when nobody left.
-   */
-  leaversExcludedMinor: number | null;
   apeMonth: AnalyticsMoney;
   apeAnnual: AnalyticsMoney;
   coached7d: AnalyticsRate;
@@ -208,6 +209,54 @@ export interface AnalyticsThresholds {
   statusSplitPct: number;
 }
 
+/** *Active this month* over some members: `count` `null` while the month is not uploaded. */
+export interface AnalyticsActiveCount {
+  count: number | null;
+  of: number;
+}
+
+/** A leader's *Active this month* over their Group, with its *Unit* and *AAB* halves (*"Unit 1/4 · AAB 3/8"*). */
+export interface LeaderActive {
+  count: number | null;
+  of: number;
+  pct: number | null;
+  unit: AnalyticsActiveCount;
+  aab: AnalyticsActiveCount;
+}
+
+/** A person named by the read: the membership and the name. */
+export interface AnalyticsPerson {
+  membershipId: string;
+  name: string;
+}
+
+/**
+ * **One leader of the *Leader* list** (UI-152; P19.3-T3 AC-1, AC-2): every AB and AAB, each figure over their *Group* —
+ * the leader and everybody below them (ADR-0204 §2). `opens`: the reader may open their Unit Dashboard and Group Tree.
+ */
+export interface AnalyticsLeader {
+  head: AnalyticsHead;
+  role: 'ab' | 'aab';
+  opens: boolean;
+  above: AnalyticsPerson | null;
+  group: number;
+  unit: number;
+  manpower: AnalyticsManpower;
+  apeMonth: AnalyticsMoney;
+  active: LeaderActive;
+  coached7d: AnalyticsRate;
+  leads: AnalyticsLeads;
+  club: AnalyticsClub | null;
+  moc: Moc | null;
+}
+
+/** One of the office's custom groups (*All members → Groups*), *Lihat untuk*'s choices (OD-258). */
+export interface AnalyticsGroup {
+  groupId: string;
+  name: string;
+  memberCount: number;
+}
+
 export interface KpmAnalyticsView {
   period: AnalyticsPeriod;
   /** The period's month, `YYYY-MM`, in the office's calendar. */
@@ -218,19 +267,43 @@ export interface KpmAnalyticsView {
    * sentence (`KPM_Owner.html:1248`): never the prototype's numbers re-declared here (invariant §7).
    */
   mocRulesText: string;
+  /** The AB agencies (D-units): the MOC tile's base and each AB's club; no longer drawn as a table (UI-152). */
   agencies: AgencyRow[];
   total: AnalyticsTotal;
-  /** The six months before this one, oldest first. */
+  /** Every AB and AAB, lowest *APE bulan ini* % first — *"↓ Perlu perhatian dulu"* — the server's order. */
+  leaders: AnalyticsLeader[];
+  /** The office's custom groups, A to Z. */
+  groups: AnalyticsGroup[];
+  /** *Seluruh KPM · n orang*: the office's members today, whichever group is read. */
+  officePeople: number;
+  /** The group the figures are over, or `null` for *Seluruh KPM*. */
+  group: AnalyticsGroup | null;
+  /** Six months ending with this one, oldest first (UI-091). */
   monthly: MonthlyProduction[];
 }
 
+/** The custom group the address names (`?group=`), or `null` for the whole KPM. */
+export function analyticsGroupFrom(value: string | string[] | null | undefined): string | null {
+  const one = Array.isArray(value) ? value[0] : value;
+  return one && one.length > 0 ? one : null;
+}
+
+/** The address's query for a period and a group: each only when it is not the first (*Bulan ini*, *Seluruh KPM*). */
+export function analyticsQuery(period: AnalyticsPeriod, group: string | null): string {
+  const search = new URLSearchParams();
+  if (period !== DEFAULT_ANALYTICS_PERIOD) search.set('period', period);
+  if (group) search.set('group', group);
+  const query = search.toString();
+  return query ? `?${query}` : '';
+}
+
 /**
- * The comparison for a period. Owner and Admin (`kpm_analytics:read`); a period or a parameter the read
- * does not know is a 400, so the screen sends only one of the two it offers. Appended with `+`, never
- * interpolated: the API-consumer gate reads path **literals** out of each call.
+ * The analytics for a period, over the whole KPM or one custom group. The Owner, an Admin and a Core Leader
+ * (`kpm_analytics:read`); a period or a parameter the read does not know is a 400, another office's group 404.
+ * Appended with `+`, never interpolated: the API-consumer gate reads path **literals** out of each call.
  */
-export const readKpmAnalytics = (period: AnalyticsPeriod = DEFAULT_ANALYTICS_PERIOD) =>
-  api<KpmAnalyticsView>('/kpm/analytics' + `?period=${period}`);
+export const readKpmAnalytics = (period: AnalyticsPeriod = DEFAULT_ANALYTICS_PERIOD, group: string | null = null) =>
+  api<KpmAnalyticsView>('/kpm/analytics' + `?period=${period}${group ? `&group=${encodeURIComponent(group)}` : ''}`);
 
 /*
  * ── The prototype's words ───────────────────────────────────────────────────────────────────────
@@ -241,13 +314,13 @@ const EN = messagesIn(kpmAnalyticsMessages, SOURCE_LANGUAGE);
 
 /**
  * **The strings `KPM_Owner.html` draws, in English** (D-copy), its literal counts computed (contradiction 11) — the
- * catalogue's source (`i18n/messages/kpm-analytics.ts`, P18.98-T4), in the shapes this module has always handed its
+ * catalogue's source (`i18n/messages/kpm-analytics.ts`, P18.10-T4), in the shapes this module has always handed its
  * callers and its spec. **A screen reads the reader's language instead**: `useMessages(kpmAnalyticsMessages)`.
  *
  * - `headApeMonth`: `:3337` keeps *This Month* under *Previous month* while the column reads last month's file; the
  *   header says which month it is (a Fix, data honesty — parity F-174), as *Producing this month* does.
  * - `headActive`: the prototype's *Active this month* / *Active last month* (`:1248`, `:3367`), **named for what it
- *   counts since P18.97-T3 AC-9** (ADR-0176 §3, UI-021; parity I-508): production, apart from the Overview's *Agents
+ *   counts since P18.9-T3 AC-9** (ADR-0176 §3, UI-021; parity I-508): production, apart from the Overview's *Agents
  *   who logged activity this month*, which counts logging (ADR-0127). The same `MAA_COUNT_IN_UNIT`.
  */
 export const PROTOTYPE_COPY = {
@@ -289,12 +362,11 @@ export const PROTOTYPE_COPY = {
  * the catalogue's source as `PROTOTYPE_COPY` is. None of OD-39's six words (*office*, *KPM*, *reports to*, *tagged
  * to*, *untagged*, *unassigned*), no phase, no code (ADR-0084's rule, as Phases 14 to 17 applied it).
  *
- * `currentMembersOnly` is the line under the total's *APE — Annual* (P18.97-T3 AC-4; ADR-0176 §1, UI-016; parity
+ * `currentMembersOnly` is the line under the total's *APE — Annual* (P18.9-T3 AC-4; ADR-0176 §1, UI-016; parity
  * I-503): the agencies' sum, today's members — where the Overview's *Production — this year* keeps a leaver's
  * production (OD-74). Its ⓘ, beside the row's name, still names the sum it leaves out (`leaversLeftOut`).
  */
 export const OWN_COPY = {
-  leaversLeftOut: (amount: string) => EN.leaversLeftOut({ amount }),
   loading: EN.loading,
   tryAgain: EN.tryAgain,
   notUploaded: EN.notUploaded,
@@ -304,8 +376,6 @@ export const OWN_COPY = {
   currentMembersOnly: EN.currentMembersOnly,
   expand: (name: string) => EN.expand({ name }),
   members: (name: string, n: number) => EN.members({ name, n }),
-  newTab: EN.newTab,
-  newTabOwn: EN.newTabOwn,
   mocFor: (verdict: string, name: string) => EN.mocFor({ verdict, name }),
   mocUnknown: (name: string, missing: string) => EN.mocUnknown({ name, missing }),
   close: EN.close,
@@ -357,7 +427,7 @@ export const rateWords = (rate: AnalyticsRate, figures?: Language) => ({
 
 /**
  * *Producing this month* (`:3342`): *"{n} / {of}"* and its share, as the prototype writes it; *Not uploaded yet* for a
- * month with no file, and *—* over nobody. **The share is the server's** (`activePct`, `rateOver`; P18.97-T3 AC-10,
+ * month with no file, and *—* over nobody. **The share is the server's** (`activePct`, `rateOver`; P18.9-T3 AC-10,
  * invariant §7): this writes it and divides nothing.
  *
  * **The count is over the share's own base** (OD-235, clarified 2026-10-29): `activeOf`, the members the share is over
@@ -380,11 +450,33 @@ export const leadsWords = (leads: AnalyticsLeads, language: Language = SOURCE_LA
   sub: messagesIn(kpmAnalyticsMessages, language).leadsSub(leads),
 });
 
-/** *"{n} AAB · {m} Agents"* under an agency's manpower (`:3240`); an AAB's own row says its agents alone (`:3357`). */
-export const manpowerSub = (manpower: AnalyticsManpower, language: Language = SOURCE_LANGUAGE) =>
-  messagesIn(kpmAnalyticsMessages, language).manpowerSub(manpower);
-export const agentsSub = (manpower: AnalyticsManpower, language: Language = SOURCE_LANGUAGE) =>
-  messagesIn(kpmAnalyticsMessages, language).agentsSub(manpower);
+/**
+ * **One split, one format** (D3, ADR-0200 §6; UI-094, P19.3-T3 AC-10): *"x AB · y AAB · z Agents"*, every AAB counted —
+ * one who leads nobody included — the AB term only where there is an AB to count. Over the KPM, every member.
+ */
+export const manpowerSplit = (manpower: Omit<AnalyticsManpower, 'total'>, language: Language = SOURCE_LANGUAGE) =>
+  messagesIn(kpmAnalyticsMessages, language).split(manpower);
+
+/** A leader's Group below them, in the same format: their own class taken off once (*"3 AAB · 7 Agents"* for an AB). */
+export const groupSplit = (leader: Pick<AnalyticsLeader, 'role' | 'manpower'>, language: Language = SOURCE_LANGUAGE) =>
+  manpowerSplit({
+    ab: leader.manpower.ab - (leader.role === 'ab' ? 1 : 0),
+    aab: leader.manpower.aab - (leader.role === 'aab' ? 1 : 0),
+    agents: leader.manpower.agents,
+  }, language);
+
+/** *Manpower*'s line (UI-152, P19.3-T3 AC-4): *"9 leader · 19 agent"* — the leaders are the AB and AAB. */
+export const leaderManpower = (manpower: AnalyticsManpower, language: Language = SOURCE_LANGUAGE) =>
+  messagesIn(kpmAnalyticsMessages, language).leaderManpower({ leaders: manpower.ab + manpower.aab, agents: manpower.agents });
+
+/** *"ke Agus"*: a person's first name, as the mobile row writes the leader above. */
+export const firstName = (name: string) => name.trim().split(/\s+/)[0] ?? name;
+
+/** The chips' three: *Semua n · AB n · AAB n*. */
+export type LeaderChip = 'all' | 'ab' | 'aab';
+export const LEADER_CHIPS: readonly LeaderChip[] = ['all', 'ab', 'aab'];
+export const leadersIn = (leaders: readonly AnalyticsLeader[], chip: LeaderChip) =>
+  (chip === 'all' ? [...leaders] : leaders.filter((l) => l.role === chip));
 
 /** An AB row's name (`:3108`): the reader's own carries *(you)*. */
 export const headName = (head: AnalyticsHead, language: Language = SOURCE_LANGUAGE) =>
@@ -395,14 +487,22 @@ export const headName = (head: AnalyticsHead, language: Language = SOURCE_LANGUA
  */
 
 /**
- * A leader's Unit Dashboard, from the comparison (`:4865`, in a new tab). The reader's own is
- * `/unit/dashboard`: the page of one's own id answers *not a unit you can open* (P15-T4 AC-2).
+ * A leader's Unit Dashboard, **in the same tab** (UI-095; P19.3-T3 AC-11). The reader's own is `/unit/dashboard`: the
+ * page of one's own id answers *not a unit you can open* (P15-T4 AC-2). Another leader's opens read-only for the Owner
+ * and an Admin (AC-3).
  */
 export const unitDashboardHref = (head: Pick<AnalyticsHead, 'membershipId' | 'isReader'>) =>
   (head.isReader ? '/unit/dashboard' : `/unit/dashboard/${head.membershipId}`);
 
+/** A leader's Group Tree, read-only, as they see it (`/group-tree/[membershipId]`); the reader's own is `/group-tree`. */
+export const groupTreeHref = (head: Pick<AnalyticsHead, 'membershipId' | 'isReader'>) =>
+  (head.isReader ? '/group-tree' : `/group-tree/${head.membershipId}`);
+
+/** A member's page (`/people/members/[membershipId]`), the Owner's and an Admin's route. */
+export const memberPageHref = (membershipId: string) => `/people/members/${membershipId}`;
+
 /**
- * **Whether a name in the analytics opens anything for this reader** (ADR-0159 §2, P18.8-T5): the Owner and the Admins
+ * **Whether a name in the analytics opens anything for this reader** (ADR-0159 §2, P18.5-T5): the Owner and the Admins
  * open every leader's Unit Dashboard and every person page; a **Core Leader** — a field member reading the office —
  * opens their own unit alone (`isReader`), since another leader's Unit Dashboard and every person page are refused to
  * them. A name that leads them nowhere is plain text rather than a link to a refusal.
@@ -425,13 +525,13 @@ export function orgTreeHref(node: { membershipId: string; directCount: number; i
  */
 
 /**
- * **The ⓘ after the *MOC* heading** (P18.97-T3 AC-8; ADR-0176 §3, UI-021; parity I-507): its name *What is MOC?* and
+ * **The ⓘ after the *MOC* heading** (P18.9-T3 AC-8; ADR-0176 §3, UI-021; parity I-507): its name *What is MOC?* and
  * its bubble the glossary's one line (`TERMS.MOC`) **above the company's rules** as the server composes them
  * (`mocRulesText`) — one ⓘ, the prototype's tooltip on the header (`:1248`), now saying what MOC is before how it is
  * decided, rather than a second glyph beside it.
  */
 export const mocTermName = termQuestion('MOC');
-/** The ⓘ's line above the company's rules, in the words' `language` (P18.98-T4, the shared pieces' tips); English by default. */
+/** The ⓘ's line above the company's rules, in the words' `language` (P18.10-T4, the shared pieces' tips); English by default. */
 export const mocTip = (rulesText: string, language: Language = SOURCE_LANGUAGE) =>
   [termDefinition('MOC', language), rulesText].filter((line) => line !== '').join('\n\n');
 
@@ -439,7 +539,7 @@ export const mocTip = (rulesText: string, language: Language = SOURCE_LANGUAGE) 
 export const CLUB_TERM_KEYS: readonly TermKey[] = ['STAR_CLUB', 'ELITE_CLUB', 'CHAIRMANS_CLUB'];
 
 /**
- * **Which agency's badge first shows each club** (P18.97-T3 AC-8), in the table's order: `membershipId → term`, so the
+ * **Which agency's badge first shows each club** (P18.9-T3 AC-8), in the table's order: `membershipId → term`, so the
  * ⓘ goes beside the first *Star Club*, the first *Elite Club* and the first *Chairman's Club* the reader meets, and
  * nowhere else. Read from the badge's own words (`firstMentions`), so a tier a company names otherwise takes none.
  */
@@ -459,18 +559,32 @@ export function mocButtonName(moc: Moc, name: string, language: Language = SOURC
 }
 
 /**
- * A criterion's figure or threshold, in the criterion's own unit: rupiah for Net APE, a percentage for
- * persistency, a count for the rest (`:3301-3313`). *—* for an input not uploaded. A figure, in `figures`.
+ * A criterion's figure or threshold, in the criterion's own unit: rupiah for APE (`MOC_APE`, *Net APE* until P19.3-T1,
+ * ADR-0201 §1), a percentage for persistency, a count for the rest (`:3301-3313`) — *Monthly2 AA* an average to two
+ * places. *—* for an input not uploaded. A figure, in `figures`.
  *
- * **Compact, and lossless** (ADR-0167 §1, ADR-0174 §3): *Rp 200 jt*; but a figure that compact writing would round
- * is written in full, so *Rp 199.960.000 / Rp 200 jt — Gap* can never read *Rp 200 jt / Rp 200 jt — Gap*. A
- * persistency — the carrier's figure and the rule's threshold — keeps the places it has and no *,0*: *74,96% / 75%*.
+ * **Compact, the shared formatter's** (UI-096, P19.3-T3 AC-12): *Rp 3,1 M / Rp 600 jt*, as every other screen writes
+ * the same sum — where it wrote the full rupiah beside *jt* (*Rp 3.094.500.000 / Rp 600 jt*). A persistency — the
+ * carrier's figure and the rule's threshold — keeps the places it has and no *,0*: *74,96% / 75%*.
  */
 export function criterionValue(code: string, value: number | null, figures?: Language): string {
   if (value === null) return '—';
-  if (/APE/.test(code)) return formatRupiahCompact(value, { lossless: true }, figures);
+  if (/APE/.test(code)) return formatRupiahCompact(value, {}, figures);
   if (/PERSISTENCY/.test(code)) return formatPercent(value, { lossless: true }, figures);
   return formatNumber(value, { maxDecimals: 2 }, figures);
+}
+
+/**
+ * **A criterion's figure over its threshold, never two equal words for two different sums** (ADR-0167 §1, ADR-0174 §3
+ * kept under UI-096): compact both — *Rp 3,1 M / Rp 600 jt* — unless compact writing would make them read the same while
+ * they differ, when both are written in full: *Rp 199.960.000 / Rp 200.000.000 — Gap*, never *Rp 200 jt / Rp 200 jt*.
+ */
+export function criterionPair(code: string, current: number | null, required: number, figures?: Language): [string, string] {
+  const pair: [string, string] = [criterionValue(code, current, figures), criterionValue(code, required, figures)];
+  if (current !== null && current !== required && pair[0] === pair[1] && /APE/.test(code)) {
+    return [formatRupiahCompact(current, { lossless: true }, figures), formatRupiahCompact(required, { lossless: true }, figures)];
+  }
+  return pair;
 }
 
 /** *Met*, *Gap*, or *Not uploaded yet* — never *Gap* for a figure nobody has (D-moc). */

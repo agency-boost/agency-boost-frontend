@@ -111,15 +111,18 @@ describe('/coaching/me, the reader’s own coaching (P11-T10 AC-4)', () => {
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Coaching Session$/);
     expect(await screen.findByRole('heading', { level: 2, name: 'Jordan Reyes' })).toBeInTheDocument();
     expect(screen.getByText('AB · Your own coaching')).toBeInTheDocument();
-    expect(within(screen.getByRole('main')).getByText('JR')).toHaveAttribute('aria-hidden', 'true');
+    // The reader's own avatar on the person header; the title row's avatar (P19.1-T1 AC-1, every size) is the other JR.
+    const marks = within(screen.getByRole('main')).getAllByText('JR').filter((el) => !el.closest('[data-title-avatar]'));
+    expect(marks).toHaveLength(1);
+    expect(marks[0]).toHaveAttribute('aria-hidden', 'true');
   });
 
-  it('P11-T10 AC-4, P18.5-T4 AC-3 has the tabs without Leader Notes: the reader’s own Summary, Goal Settings, Activity, Training and Activation, this page current', async () => {
+  it('P11-T10 AC-4, P18.2-T4 AC-3 has the tabs without Leader Notes: the reader’s own Summary, Goal Settings, Activity, Training and Activation, this page current', async () => {
     show();
     const tabs = await screen.findByRole('navigation', { name: 'Coaching' });
     // P13-T9 AC-4: *Activation* opens the reader's own checklist (D-coaching-me). P13.1-T9: *Activity*
     // mirrors the person shell's, the reader's own Dashboard, as Summary and Goal Setting open their own.
-    // P18.5-T4 AC-3: *Training* opens the reader's own training, a tab route as Activation's is.
+    // P18.2-T4 AC-3: *Training* opens the reader's own training, a tab route as Activation's is.
     expect(within(tabs).getAllByRole('link').map((a) => [a.textContent, a.getAttribute('href'), a.getAttribute('aria-disabled')])).toEqual([
       ['Personal Summary', '/summary', null],
       ['Goal Setting', '/goals', null],

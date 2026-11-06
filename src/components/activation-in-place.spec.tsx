@@ -18,7 +18,7 @@ vi.mock('next/navigation', () => ({
 }));
 
 /**
- * **P18.96-T7 — the activation pages' polish** (the client's report of 2026-10-27):
+ * **P18.8-T7 — the activation pages' polish** (the client's report of 2026-10-27):
  *
  * - **AC-1 (UI-007)** the leader's detail — and the hire's own page — paint no count and no status before the one
  *   settled read: the skeleton, then the server's figures, and never a figure from a read that is not the latest asked,
@@ -100,8 +100,8 @@ afterEach(() => {
   delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
 });
 
-describe('P18.96-T7 AC-1 (UI-007): no count before it is settled', () => {
-  it('P18.96-T7 AC-1 the leader’s detail is the skeleton while the read is out, and its first painted count is the settled one', async () => {
+describe('P18.8-T7 AC-1 (UI-007): no count before it is settled', () => {
+  it('P18.8-T7 AC-1 the leader’s detail is the skeleton while the read is out, and its first painted count is the settled one', async () => {
     const read = holdRead('/new-hires/mem-rina', { ...SHELL_STUBS, 'GET /new-hires/mem-rina': { body: settled() } });
     renderInLayout(AgentLayout, <NewHireDetailPage params={routeParams({ membershipId: 'mem-rina' })} />, { me: SARI_ME });
     const cell = watchCell('Initial Setup');
@@ -119,7 +119,7 @@ describe('P18.96-T7 AC-1 (UI-007): no count before it is settled', () => {
     expect(cell.painted).toEqual(['3/4']);
   });
 
-  it('P18.96-T7 AC-1 a read answered after a later one is never painted: the first read’s late answer, the stored 1/4, is dropped', async () => {
+  it('P18.8-T7 AC-1 a read answered after a later one is never painted: the first read’s late answer, the stored 1/4, is dropped', async () => {
     // The page asks again while its first read is out — another hire's address, a remount — and the first answer, the
     // row as stored before its links were evaluated, lands after the later, settled one. It must not replace it.
     let reads = 0;
@@ -157,7 +157,7 @@ describe('P18.96-T7 AC-1 (UI-007): no count before it is settled', () => {
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Budi Hartono');
   });
 
-  it('P18.96-T7 AC-1 another hire’s detail opens on the skeleton, never on the figures of the hire before', async () => {
+  it('P18.8-T7 AC-1 another hire’s detail opens on the skeleton, never on the figures of the hire before', async () => {
     const budi = { ...settled(), hire: { membershipId: 'mem-budi', name: 'Budi Hartono' } };
     const read = holdRead('/new-hires/mem-budi', {
       ...SHELL_STUBS, 'GET /new-hires/mem-rina': { body: unhealed() }, 'GET /new-hires/mem-budi': { body: budi },
@@ -183,7 +183,7 @@ describe('P18.96-T7 AC-1 (UI-007): no count before it is settled', () => {
     expect(itemsCell('Initial Setup')).toBe('3/4');
   });
 
-  it('P18.96-T7 AC-1 the hire’s own page is the skeleton until its read, and paints the settled count first', async () => {
+  it('P18.8-T7 AC-1 the hire’s own page is the skeleton until its read, and paints the settled count first', async () => {
     const read = holdRead('/activation/me', { ...SHELL_STUBS, 'GET /activation/me': { body: activationView() } });
     renderInLayout(AgentLayout, <ActivationPage />, { me: RINA_ME });
     const cell = watchCell('Initial Setup');
@@ -197,11 +197,11 @@ describe('P18.96-T7 AC-1 (UI-007): no count before it is settled', () => {
   });
 });
 
-describe('P18.96-T7 AC-2 (UI-008): a tick keeps the page where it is', () => {
+describe('P18.8-T7 AC-2 (UI-008): a tick keeps the page where it is', () => {
   let scrolled: () => unknown[];
   beforeEach(() => { scrolled = watchScroll(); });
 
-  it('P18.96-T7 AC-2 the leader’s tick near the bottom replaces no node, keeps the focus on its box, scrolls nothing, and updates the summary in place', async () => {
+  it('P18.8-T7 AC-2 the leader’s tick near the bottom replaces no node, keeps the focus on its box, scrolls nothing, and updates the summary in place', async () => {
     const ticked = leaderViewOf(changed(leaderItems(), { JOINT_FIELD_WORK: CRM_BY_SARI }));
     stubFetch({
       ...SHELL_STUBS, 'GET /new-hires/mem-rina': { body: leaderViewOf(leaderItems()) },
@@ -229,7 +229,7 @@ describe('P18.96-T7 AC-2 (UI-008): a tick keeps the page where it is', () => {
     expect(scrolled()).toEqual([]);
   });
 
-  it('P18.96-T7 AC-2 a data-backed tick’s form gives the focus back to its box when it is saved, without scrolling', async () => {
+  it('P18.8-T7 AC-2 a data-backed tick’s form gives the focus back to its box when it is saved, without scrolling', async () => {
     const { calls } = stubFetch({
       ...SHELL_STUBS, 'GET /new-hires/mem-rina': { body: leaderViewOf(leaderItems()) },
       'PUT /new-hires/mem-rina/items/WEEKLY_CHECK_IN': { body: leaderViewOf(withWaitingCheckIn(leaderItems())) },
@@ -257,7 +257,7 @@ describe('P18.96-T7 AC-2 (UI-008): a tick keeps the page where it is', () => {
     expect(scrolled()).toEqual([]);
   });
 
-  it('P18.96-T7 AC-2 a data-backed form cancelled gives the focus back to its box, and sends nothing', async () => {
+  it('P18.8-T7 AC-2 a data-backed form cancelled gives the focus back to its box, and sends nothing', async () => {
     const { calls } = stubFetch({ ...SHELL_STUBS, 'GET /new-hires/mem-rina': { body: leaderViewOf(leaderItems()) } });
     renderInLayout(AgentLayout, <NewHireDetailPage params={routeParams({ membershipId: 'mem-rina' })} />, { me: SARI_ME });
     await screen.findByRole('heading', { level: 2, name: 'Activation progress' });
@@ -274,7 +274,7 @@ describe('P18.96-T7 AC-2 (UI-008): a tick keeps the page where it is', () => {
     expect(scrolled()).toEqual([]);
   });
 
-  it('P18.96-T7 AC-2 the hire’s own tick — and the one that completes the checklist, which reads the session again — keep the page and the focus', async () => {
+  it('P18.8-T7 AC-2 the hire’s own tick — and the one that completes the checklist, which reads the session again — keep the page and the focus', async () => {
     const allButCrm = () => {
       const items = completeView().aspects.map((a) => a.items.map((it) => ({ ...it })));
       items[1][1] = { ...items[1][1], ...UNHEALED };

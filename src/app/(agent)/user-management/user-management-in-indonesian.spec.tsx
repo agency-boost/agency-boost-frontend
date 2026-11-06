@@ -12,7 +12,7 @@ import FindLeaderPage from './leader/page';
 import PendingPage from './pending/page';
 
 /**
- * **User Management in Indonesian** (P18.98-T4 AC-1 to AC-4, new hires and activation): the four screens of one
+ * **User Management in Indonesian** (P18.10-T4 AC-1 to AC-4, new hires and activation): the four screens of one
  * journey — *Register KPM*, *Find Your Leader*, *Add New Agents*, *Pending Requests* — and the tab row over them. The
  * approved glossary's words (`i18n/messages/user-management.ts`; *office* is *KPM*, §B.9), the title and the four tabs
  * kept English (§A.2, §A.3), an office's company, code and branch, names, agent codes and the leader code as stored,
@@ -55,7 +55,7 @@ const inIndonesian = (page: React.ReactElement, me: ReturnType<typeof makeMe>) =
 
 afterEach(() => vi.unstubAllGlobals());
 
-describe('P18.98-T4 User Management in Indonesian', () => {
+describe('P18.10-T4 User Management in Indonesian', () => {
   it('reads the English it is looking for, so a silent zero cannot pass: the same page in English shows it', async () => {
     expect(ENGLISH.length).toBeGreaterThan(80);
     stubFetch({ '/join/me': { body: NO_OFFICE }, '/join/kpm-request': { body: { request: null } }, '/join/kpms': { body: OFFICES } });
@@ -89,7 +89,9 @@ describe('P18.98-T4 User Management in Indonesian', () => {
     inIndonesian(<RegisterKpmPage />, NEWCOMER);
     expect(await screen.findByText('KPM terdaftar')).toBeInTheDocument();
     expect(screen.getByText('Prudential — KPM 0417 · BSD City Branch')).toBeInTheDocument();
-    expect(screen.getByText('Anda sudah masuk KPM dan sedang menunggu leader menerima Anda.')).toBeInTheDocument();
+    // P19-T2 AC-4 (UI-166 item 4): registered, and no leader asked yet — the next step, not a wait.
+    expect(screen.getByText('Anda sudah terdaftar di KPM ini. Berikutnya, minta leader menerima Anda.')).toBeInTheDocument();
+    expect(screen.queryByText(/sedang menunggu leader/)).not.toBeInTheDocument();
     // The tab and the card's call to action: both the tab's kept name.
     expect(screen.getAllByRole('link', { name: 'Find Your Leader' })).toHaveLength(2);
     noEnglishLeft();

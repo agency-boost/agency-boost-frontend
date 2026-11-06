@@ -10,8 +10,8 @@ const row = (over: Partial<LeaderLimitRequestRow> = {}) => ({
   fromOrgLevelCode: 'AGENT', toOrgLevelCode: 'AAB', ...over,
 }) as LeaderLimitRequestRow;
 
-/** A leader past the limit, as the office's screens read the API (P18.8-T2, ADR-0157). */
-describe('leader-limit requests (P18.8-T2)', () => {
+/** A leader past the limit, as the office's screens read the API (P18.5-T2, ADR-0157). */
+describe('leader-limit requests (P18.5-T2)', () => {
   it('AC-2 a refusal may be asked about only where the API says so', () => {
     expect(canRequestApproval({ code: 'LEADER_LIMIT_REACHED', details: { canRequest: true } })).toBe(true);
     expect(canRequestApproval({ code: 'LEADER_LIMIT_REACHED', details: { canRequest: false } })).toBe(false);
@@ -29,7 +29,7 @@ describe('leader-limit requests (P18.8-T2)', () => {
   });
 
   it('says what waits: the rung change, or letting a pending leader in, each rung by the name it is given', () => {
-    // The screens give it the badge's name, *AAB* (P18.95-T9 AC-1); a long label is shown only where one is passed.
+    // The screens give it the badge's name, *AAB* (P18.7-T9 AC-1); a long label is shown only where one is passed.
     expect(requestedChange(row(), (code) => rungShort(code))).toBe('Agent → AAB');
     expect(requestedChange(row({ action: 'activate', fromOrgLevelCode: 'AAB', toOrgLevelCode: null }), (code) => rungShort(code)))
       .toBe('Let in as AAB');

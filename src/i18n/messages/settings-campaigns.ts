@@ -2,7 +2,7 @@ import { defineMessages, type MessagesOf } from '@/i18n/catalogue';
 import { kept } from '@/i18n/kept';
 
 /**
- * **Settings › Campaigns, in words** (P18.98-T4, events, campaigns and the calendar; `functional/campaigns.md`,
+ * **Settings › Campaigns, in words** (P18.10-T4, events, campaigns and the calendar; `functional/campaigns.md`,
  * `functional/tenant-config.md`): the screen's line and two tabs, a campaign's row, the add-and-edit panel with its
  * requirements, and the carrier's tiers and MOC rules with the line saying whose they are. The frame and the shared
  * controls — *Save*, *Cancel*, *Edit*, *Archive*, *Restore*, *Remove*, *Show archived*, *Code*, *Description* — are
@@ -23,7 +23,7 @@ const en = {
   title: kept('Campaigns'),
   subtitle: 'What your office is running, and what your insurer measures your leaders against.',
   tabs: { campaigns: kept('Campaigns'), tiers: kept('Production club tiers') },
-  /** A campaign's phase, worked out on every read, and whose it is (P18.97-T4 AC-8; UI-030). */
+  /** A campaign's phase, worked out on every read, and whose it is (P18.9-T4 AC-8; UI-030). */
   phases: { upcoming: 'Upcoming', running: 'Running', ended: 'Ended' },
   thisOffice: 'This office',
   /** One requirement in words: *"APE achieved at least Rp 600 jt"* — the metric's name as served, the target the caller's. */
@@ -54,7 +54,7 @@ const en = {
   cardLine: 'Card line',
   cardLineHint: 'One line under the title on the agent’s card.',
   descriptionHint: 'What the campaign’s details open to.',
-  /** Every requirement, each a row (P18.5-T7 AC-9). */
+  /** Every requirement, each a row (P18.2-T7 AC-9). */
   toReach: 'What has to be reached',
   toReachHint: 'Only what a campaign can measure — a target nothing computes could never be reached. None, and the campaign is not measured.',
   requirementN: ({ n }: { n: number }) => `Requirement ${n}`,

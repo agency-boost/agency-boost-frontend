@@ -2,7 +2,7 @@ import { defineMessages, type MessagesOf } from '@/i18n/catalogue';
 import { kept } from '@/i18n/kept';
 
 /**
- * **The page frame's own words** (P18.98-T4, the shared pieces): the refusal a screen draws for a reader it is not for
+ * **The page frame's own words** (P18.10-T4, the shared pieces): the refusal a screen draws for a reader it is not for
  * (`NotAvailableToYou`, `components/require-session.tsx`; `Page`'s `permission`), the page that replaces the app when
  * the reader's office cannot be used (`components/office-unavailable.tsx`, ADR-0112 §4), and the sign a route not
  * built yet shows (`components/coming-in-phase.tsx`, whose name, path and props stay: `scripts/lib/screens.py` knows a
@@ -11,7 +11,7 @@ import { kept } from '@/i18n/kept';
  * **English is the source**, byte for byte what the frame wrote. The Indonesian is the approved glossary's — *office* is
  * *KPM* (§B.9), *Keluar · Sedang keluar…* (§B.1, §B.2), *Segera hadir* for a thing not built yet (§B.3), *sesi
  * dukungan* (§A.2) — with what it lacked in the glossary for approval's §B.10. **Kept** (§A): *KPM*, *AgencyBoost*.
- * The server's sentence for a suspended or an archived office arrives in the reader's language (P18.98-T5), and an
+ * The server's sentence for a suspended or an archived office arrives in the reader's language (P18.10-T5), and an
  * office's code and branch are shown as typed. **A figure is never a message's**: the day a subscription ended is
  * written by the caller in the figures' language.
  *

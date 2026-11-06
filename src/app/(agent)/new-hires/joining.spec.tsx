@@ -29,10 +29,10 @@ const show = (routes: Record<string, StubReply | StubReply[]> = {}, me = ADDER) 
   return { ...stub, ...view };
 };
 
-describe('/new-hires: + Add agent, Review requests and Waiting to join (P18.96-T3)', () => {
+describe('/new-hires: + Add agent, Review requests and Waiting to join (P18.8-T3)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('P18.96-T3 AC-1 carries + Add agent in the header for a reader who may add, and opens the one form', async () => {
+  it('P18.8-T3 AC-1 carries + Add agent in the header for a reader who may add, and opens the one form', async () => {
     show();
     const button = (await screen.findAllByRole('button', { name: '+ Add agent' }))[0];
     await userEvent.click(button);
@@ -41,7 +41,7 @@ describe('/new-hires: + Add agent, Review requests and Waiting to join (P18.96-T
     expect(within(dialog).getByLabelText('Join date')).toHaveValue(TODAY);
   });
 
-  it('P18.96-T3 AC-1 opens on the office’s today as the invites answered it, whatever the device’s clock says', async () => {
+  it('P18.8-T3 AC-1 opens on the office’s today as the invites answered it, whatever the device’s clock says', async () => {
     // The device a day ahead of the office: what the first opening used to keep, and then held back as after today.
     vi.setSystemTime(new Date('2026-10-28T03:00:00.000Z'));
     try {
@@ -55,7 +55,7 @@ describe('/new-hires: + Add agent, Review requests and Waiting to join (P18.96-T
     }
   });
 
-  it('P18.96-T3 AC-1 offers neither button, and asks nothing more, to a reader who may not add or decide', async () => {
+  it('P18.8-T3 AC-1 offers neither button, and asks nothing more, to a reader who may not add or decide', async () => {
     const { calls } = show({}, SARI_ME);
     await screen.findByRole('table', { name: 'New Hires' });
     expect(screen.queryAllByRole('button', { name: '+ Add agent' })).toEqual([]);
@@ -63,13 +63,13 @@ describe('/new-hires: + Add agent, Review requests and Waiting to join (P18.96-T
     expect(calls.map((c) => c.url).filter((u) => /invites|transfers|join\/requests/.test(u))).toEqual([]);
   });
 
-  it('P18.96-T3 AC-7 a read-only support session is offered no + Add agent', async () => {
+  it('P18.8-T3 AC-7 a read-only support session is offered no + Add agent', async () => {
     show({}, readOnlySession(ADDER));
     await screen.findByRole('table', { name: 'New Hires' });
     expect(screen.queryAllByRole('button', { name: '+ Add agent' })).toEqual([]);
   });
 
-  it('P18.96-T3 AC-5 Review requests (n) while requests wait, opening the inbox, where approving asks for the join date', async () => {
+  it('P18.8-T3 AC-5 Review requests (n) while requests wait, opening the inbox, where approving asks for the join date', async () => {
     const { calls } = show({
       '/join/requests': { body: [joinRequest(), joinRequest({ requestId: 'req-2', fullName: 'Fajar Nugroho', initials: 'FN' })] },
       '/join/requests/req-1/approve': { body: [joinRequest({ requestId: 'req-2', fullName: 'Fajar Nugroho', initials: 'FN' })] },
@@ -87,7 +87,7 @@ describe('/new-hires: + Add agent, Review requests and Waiting to join (P18.96-T
     expect((await screen.findAllByRole('button', { name: 'Review requests (1)' })).length).toBeGreaterThan(0);
   });
 
-  it('P18.96-T3 AC-5 a join request’s notice opens the inbox: ?review=requests', async () => {
+  it('P18.8-T3 AC-5 a join request’s notice opens the inbox: ?review=requests', async () => {
     window.history.replaceState(null, '', '/new-hires?review=requests');
     try {
       show({ '/join/requests': { body: [joinRequest()] } });
@@ -98,13 +98,13 @@ describe('/new-hires: + Add agent, Review requests and Waiting to join (P18.96-T
     }
   });
 
-  it('P18.96-T3 AC-5 draws no Review requests while nobody waits', async () => {
+  it('P18.8-T3 AC-5 draws no Review requests while nobody waits', async () => {
     show();
     await screen.findAllByRole('button', { name: '+ Add agent' });
     expect(screen.queryAllByRole('button', { name: /Review requests/ })).toEqual([]);
   });
 
-  it('P18.96-T3 AC-2, AC-3 lists who is waiting to join: an invite with Resend and Cancel invite, and a transfer requested', async () => {
+  it('P18.8-T3 AC-2, AC-3 lists who is waiting to join: an invite with Resend and Cancel invite, and a transfer requested', async () => {
     show({
       '/new-hires/invites': { body: { today: TODAY, invites: [invite(), invite({ inviteId: 'inv-2', fullName: 'Rudi Hartono', status: 'expired', leader: { membershipId: 'mem-arief', name: 'Arief Hidayat' } })] } },
       '/new-hires/transfers': { body: [requestedTransfer({ to: { membershipId: 'mem-sari', name: 'Sari Puspita' } })] },
@@ -127,7 +127,7 @@ describe('/new-hires: + Add agent, Review requests and Waiting to join (P18.96-T
     expect(rows[2]).toHaveTextContent('87014 · The office decides');
   });
 
-  it('P18.96-T8 M3 a transfer requested reads as the leader asked for it — the name typed, the code — and nothing of the unit they are in', async () => {
+  it('P18.8-T8 M3 a transfer requested reads as the leader asked for it — the name typed, the code — and nothing of the unit they are in', async () => {
     show({
       '/new-hires/transfers': {
         body: [
@@ -147,7 +147,7 @@ describe('/new-hires: + Add agent, Review requests and Waiting to join (P18.96-T
     expect(section.queryByText(/From /)).not.toBeInTheDocument();
   });
 
-  it('P18.96-T3 AC-2 Resend shows the new link to share; Cancel invite asks first, then leaves nothing', async () => {
+  it('P18.8-T3 AC-2 Resend shows the new link to share; Cancel invite asks first, then leaves nothing', async () => {
     const { calls } = show({
       '/new-hires/invites': { body: { today: TODAY, invites: [invite()] } },
       'POST /new-hires/invites/inv-1/resend': { body: shared() },
@@ -171,7 +171,7 @@ describe('/new-hires: + Add agent, Review requests and Waiting to join (P18.96-T
     expect(within(await screen.findByRole('region', { name: 'Waiting to join' })).getByText('Nobody is waiting to join.')).toBeInTheDocument();
   });
 
-  it('P18.96-T3 AC-3 a linked account is confirmed and the roster is read again', async () => {
+  it('P18.8-T3 AC-3 a linked account is confirmed and the roster is read again', async () => {
     const { calls } = show({
       'POST /new-hires/agents': { body: { outcome: 'linked', member: { membershipId: 'mem-putri', fullName: 'Putri Anggraini' } } },
     });

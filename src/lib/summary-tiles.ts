@@ -21,7 +21,7 @@ import { suggestCode } from './config-code';
  * is whatever the screen counts for its categories, and the total is the screen's own figure, so
  * regrouping moves a count between tiles and never changes one.
  *
- * *Amended 2026-10-26 (P18.95-T5 AC-2):* **Log Activity draws a tile per section** (`sectionTiles`),
+ * *Amended 2026-10-26 (P18.7-T5 AC-2):* **Log Activity draws a tile per section** (`sectionTiles`),
  * at the client's request, so its tiles and its cards are one list; the grouping is the Activity
  * Dashboard's strip's alone.
  */
@@ -45,7 +45,7 @@ export interface SummaryTile {
   value: number;
   /** The strip's last tile, the one it is about. */
   total: boolean;
-  /** A term the tile's label uses, whose ⓘ it carries (P18.95-T9 AC-3): *Total touches* → *a touch*. */
+  /** A term the tile's label uses, whose ⓘ it carries (P18.7-T9 AC-3): *Total touches* → *a touch*. */
   term?: TermKey;
 }
 
@@ -104,7 +104,7 @@ export function summaryTiles<C extends SummaryTileCategory>(
  * **The sections Log Activity shows this reader**, in display order: the active ones their rung is shown
  * (ADR-0020), by display order, ties by position, as `summaryTiles` orders its tiles.
  *
- * The one list the log draws **both** its cards and its tiles from (P18.95-T5 AC-2; the client's UI review,
+ * The one list the log draws **both** its cards and its tiles from (P18.7-T5 AC-2; the client's UI review,
  * UI-017: four tiles above five groups, because the seed counts Personal and Team Development in one
  * *Development* tile).
  */
@@ -117,7 +117,7 @@ export function shownSections<C extends SummaryTileCategory>(categories: readonl
 }
 
 /**
- * **One tile per section, then the total** — Log Activity's strip since 2026-10-26 (P18.95-T5 AC-2, the
+ * **One tile per section, then the total** — Log Activity's strip since 2026-10-26 (P18.7-T5 AC-2, the
  * client's explicit request): the tiles name exactly the groups below them, so a reader adds up what they see.
  * The office's *Summary tile* grouping (ADR-0064) no longer applies here; the Activity Dashboard's strip,
  * `summaryTiles`, still reads it.
@@ -224,7 +224,7 @@ function freeCode(name: string, fallback: string, held: ReadonlySet<string>): st
  * is changed too. Archived sections count throughout: they still render history, and the server
  * compares labels across all of an office's sections (`CONFIG_SUMMARY_GROUP_LABEL_MISMATCH`).
  *
- * A refusal is said in the reader's `language` (P18.98-T4; `messages/summary-tiles.ts`), English when none is passed.
+ * A refusal is said in the reader's `language` (P18.10-T4; `messages/summary-tiles.ts`), English when none is passed.
  */
 export function planSummaryTile(
   typed: string,
@@ -278,7 +278,7 @@ export function planSummaryTile(
  * `CONFIG_SUMMARY_GROUP_LABEL_MISMATCH` carries the tile's labels in `details`; its message carries
  * the batch's op prefix and the tile's code, which the screens never show.
  * `CONFIG_SUMMARY_GROUP_CODE_TAKEN` names the code, because the reader typed it as a section's. Said in the reader's
- * `language` (P18.98-T4), English when none is passed.
+ * `language` (P18.10-T4), English when none is passed.
  */
 export function tileRefusal(error: ApiError, language: Language = SOURCE_LANGUAGE): ApiError | null {
   const t = messagesIn(summaryTileMessages, language);

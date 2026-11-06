@@ -24,35 +24,37 @@ function reader(over: Partial<NonNullable<Me['membership']>> = {}): Me {
 }
 
 /**
- * **The way back to the office console** (P13.2-T5, ADR-0114): *Open Owner view* or *Open Admin view*
- * in the field view's identity menu, for an Owner or an Admin who opened it, and for nobody else.
- * `shell-nav.spec.tsx` holds the field nav itself; nothing here adds to it.
+ * **The view switcher in the field family's pages** (P19.2-T1 AC-3, AC-5; UI-169 items 2, 3; ADR-0198 §3). Until P19.2
+ * an Owner or an Admin found *Open Owner view* or *Open Admin view* here (P13.2-T5, ADR-0114); the views are the avatar's
+ * menu now, at every width, and in the sidebar's account menu from 1024px. `shell-views.spec.tsx` holds the rest.
  */
-describe('Open Owner view and Open Admin view, in the field view’s identity menu (P13.2-T5)', () => {
+describe('P19.2-T1 the views, in the field pages’ account menu (P13.2-T5’s links replaced)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   const chip = () => screen.getByRole('button', { name: /Rina/ });
   const panel = () => document.getElementById('sidebar-user-actions')!;
-  /** The panel's links, in order, by their text. */
-  const links = () => within(panel()).getAllByRole('link').map((a) => a.textContent);
+  /**
+   * The panel's controls, in order, by their text: the views, then *Your account* and *Sign out* — with *📘 Panduan*
+   * between those two since P19.6-T5 (AC-1; ADR-0219 §5): its new tab is in its name (`aria-label`), not in its text.
+   */
+  const controls = () => Array.from(panel().querySelectorAll('a[href], button')).map((a) => a.textContent);
+  const GUIDE = '📘Guide';
 
-  it('P13.2-T5 AC-2 offers an Owner Open Owner view, to the console, above Your account', async () => {
+  it('P19.2-T1 AC-5 offers an Owner My account and KPM Owner, above Your account — no Open Owner view', async () => {
     renderWithSession(<AgentShell title="Coaching Session">body</AgentShell>, {
-      me: reader({ isKpmOwner: true, directCount: 3 }),
+      me: reader({ isKpmOwner: true, directCount: 3, office: { code: '0417', branch: 'Cempaka Putih' } }),
     });
-    // A link in the chip's panel, never an item in the field nav (ADR-0062 §2).
-    expect(screen.queryByRole('link', { name: 'Open Owner view' })).not.toBeInTheDocument();
     await userEvent.click(chip());
-
-    expect(within(panel()).getByRole('link', { name: 'Open Owner view' })).toHaveAttribute('href', '/kpm/overview');
-    expect(links()).toEqual(['Open Owner view', 'Your account']);
+    expect(controls()).toEqual(['My account', 'KPM Owner · Cempaka Putih', 'Your account', GUIDE, 'Sign out']);
+    expect(within(panel()).getByRole('button', { name: 'My account' })).toHaveAttribute('aria-current', 'true');
+    expect(screen.queryByText('Open Owner view')).not.toBeInTheDocument();
   });
 
-  it('P13.2-T5 AC-2 offers an Admin who is not the Owner Open Admin view, to the same place', async () => {
+  it('P19.2-T1 AC-5 offers an Admin who is not the Owner KPM Admin', async () => {
     renderWithSession(<AgentShell title="Log Activity">body</AgentShell>, { me: reader({ isKpmAdmin: true }) });
     await userEvent.click(chip());
-    expect(within(panel()).getByRole('link', { name: 'Open Admin view' })).toHaveAttribute('href', '/kpm/overview');
-    expect(within(panel()).queryByRole('link', { name: 'Open Owner view' })).not.toBeInTheDocument();
+    expect(within(panel()).getByRole('button', { name: 'KPM Admin' })).toBeInTheDocument();
+    expect(screen.queryByText('Open Admin view')).not.toBeInTheDocument();
   });
 
   it.each([
@@ -60,29 +62,29 @@ describe('Open Owner view and Open Admin view, in the field view’s identity me
     ['an AAB who leads people', { orgLevelCode: 'AAB', hierarchyRole: 'aab', directCount: 2 }],
     ['an AAB who leads nobody', { orgLevelCode: 'AAB', hierarchyRole: 'aab', directCount: 0 }],
     ['an Agent', { orgLevelCode: 'AGENT', hierarchyRole: 'agent', directCount: 0 }],
-  ] as const)('P13.2-T5 AC-2 offers %s neither link', async (_, over) => {
+  ] as const)('P19.2-T1 AC-5 offers %s no views: one view, no switcher', async (_, over) => {
     renderWithSession(<AgentShell title="Log Activity">body</AgentShell>, { me: reader(over) });
     await userEvent.click(chip());
-    expect(links()).toEqual(['Your account']);
+    expect(controls()).toEqual(['Your account', GUIDE, 'Sign out']);
   });
 
-  it('P13.2-T5 AC-2 offers somebody in no office nothing either', async () => {
+  it('P19.2-T1 AC-5 offers somebody in no office no views either', async () => {
     renderWithSession(<AgentShell title="Find your KPM">body</AgentShell>, { me: makeMe({ membership: null }) });
     await userEvent.click(chip());
-    expect(links()).toEqual(['Your account']);
+    expect(controls()).toEqual(['Your account', GUIDE, 'Sign out']);
   });
 
-  it('P13.2-T5 AC-5 offers a support session impersonating an Owner the same link', async () => {
+  it('P19.2-T1 AC-5 offers a support session impersonating an Owner the Owner’s own views (ADR-0198 §6)', async () => {
     const me = {
       ...reader({ isKpmOwner: true, directCount: 3 }),
       isImpersonating: true, impersonationReadOnly: true, impersonatedBy: 'u-support',
     };
     renderWithSession(<AgentShell title="Coaching Session">body</AgentShell>, { me });
     await userEvent.click(chip());
-    expect(within(panel()).getByRole('link', { name: 'Open Owner view' })).toHaveAttribute('href', '/kpm/overview');
+    expect(within(panel()).getByRole('button', { name: 'KPM Owner' })).toBeInTheDocument();
   });
 
-  it('P13.2-T5 AC-3, UI-004 on a phone the Lainnya sheet holds the switch, above Keluar — no dark bar, no drawer', async () => {
+  it('P19.2-T1 AC-3, UI-004 on a phone the Lainnya sheet holds no view switch: Keluar after the groups, as for everybody', async () => {
     vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
       media: query,
       matches: query === PHONE_QUERY,
@@ -92,19 +94,15 @@ describe('Open Owner view and Open Admin view, in the field view’s identity me
     renderWithSession(<AgentShell title="Coaching Session">body</AgentShell>, {
       me: reader({ isKpmAdmin: true, directCount: 1 }),
     });
-    // No ☰ and no drawer since UI V1 (UI-004): the tab bar's *More* opens the sheet.
     expect(screen.queryByRole('button', { name: 'Open menu' })).not.toBeInTheDocument();
     await userEvent.click(await screen.findByRole('button', { name: 'More' }));
     const sheet = await screen.findByRole('dialog', { name: 'More' });
-    const switchLink = within(sheet).getByRole('link', { name: 'Open Admin view' });
-    expect(switchLink).toHaveAttribute('href', '/kpm/overview');
-    const signOut = within(sheet).getByRole('button', { name: 'Sign out' });
-    // The switch, then *Keluar*, last.
-    expect(switchLink.compareDocumentPosition(signOut) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(sheet).queryByRole('link', { name: 'Open Admin view' })).not.toBeInTheDocument();
+    expect(within(sheet).getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
   });
 });
 
-describe('the profile line under the name (P18.8-T6 AC-2, ADR-0159 §5)', () => {
+describe('the profile line under the name (P18.5-T6 AC-2, ADR-0159 §5)', () => {
   afterEach(() => vi.unstubAllGlobals());
   const OFFICE = { code: '0417', branch: 'Cempaka Putih' };
 
@@ -134,10 +132,10 @@ describe('the profile line under the name (P18.8-T6 AC-2, ADR-0159 §5)', () => 
 
 /**
  * **Sales and Recruitment, under *Aktivitas*** (UI V1, UI-004; D-20): one entry each, as before — *Sales* opens the plan
- * and stays current on the catalog (P18.8-T12 AC-1, ADR-0161 §5), *Recruitment* opens its first tab (P17-T3 AC-1) — now
+ * and stays current on the catalog (P18.5-T12 AC-1, ADR-0161 §5), *Recruitment* opens its first tab (P17-T3 AC-1) — now
  * the two items of the sidebar's *Aktivitas* group, for every field role.
  */
-describe('UI-004 Sales and Recruitment under Aktivitas (P18.8-T12 AC-1, P17-T3 AC-1)', () => {
+describe('UI-004 Sales and Recruitment under Aktivitas (P18.5-T12 AC-1, P17-T3 AC-1)', () => {
   afterEach(() => { route.path = '/coaching'; });
   const sidebar = () => within(screen.getByRole('navigation', { name: 'Main' }));
   /** The nav's group headings and items, in order, by their text. */
@@ -161,7 +159,7 @@ describe('UI-004 Sales and Recruitment under Aktivitas (P18.8-T12 AC-1, P17-T3 A
     expect(sidebar().queryByRole('link', { name: 'Product Catalog' })).not.toBeInTheDocument();
   });
 
-  it.each(['/attack-plan', '/product-catalog', '/product-catalog/PRUMAPAN'])('P18.8-T12 AC-1 Sales is current on %s', (path) => {
+  it.each(['/attack-plan', '/product-catalog', '/product-catalog/PRUMAPAN'])('P18.5-T12 AC-1 Sales is current on %s', (path) => {
     route.path = path;
     renderWithSession(<AgentShell title="x">body</AgentShell>, { me: reader() });
     expect(sidebar().getByRole('link', { name: 'Sales' })).toHaveAttribute('aria-current', 'page');
@@ -187,12 +185,12 @@ describe('UI-004 Sales and Recruitment under Aktivitas (P18.8-T12 AC-1, P17-T3 A
 });
 
 /*
- * P18.8-T15 AC-1 (UI-005): the header's name falls back to the full name when the preferred name is empty or blank.
+ * P18.5-T15 AC-1 (UI-005): the header's name falls back to the full name when the preferred name is empty or blank.
  * `preferredName ?? fullName` fell back on `null` only, so a profile saved with the field emptied — `''` until the
  * API stored `null` — printed no name at all.
  */
-describe('the header name (P18.8-T15 AC-1)', () => {
-  it.each([[''], ['   '], [null]])('P18.8-T15 AC-1 shows the full name for a preferred name of %j', (preferredName) => {
+describe('the header name (P18.5-T15 AC-1)', () => {
+  it.each([[''], ['   '], [null]])('P18.5-T15 AC-1 shows the full name for a preferred name of %j', (preferredName) => {
     const me = reader();
     renderWithSession(<AgentShell title="x">body</AgentShell>, {
       me: { ...me, user: { ...me.user, preferredName } },
@@ -200,7 +198,7 @@ describe('the header name (P18.8-T15 AC-1)', () => {
     expect(screen.getByRole('button', { name: /Rina Wijaya/ })).toBeInTheDocument();
   });
 
-  it('P18.8-T15 AC-1 shows the preferred name when there is one', () => {
+  it('P18.5-T15 AC-1 shows the preferred name when there is one', () => {
     renderWithSession(<AgentShell title="x">body</AgentShell>, { me: reader() });
     expect(screen.getByRole('button', { name: /Rina/ })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Rina Wijaya/ })).not.toBeInTheDocument();

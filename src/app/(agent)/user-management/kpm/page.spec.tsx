@@ -36,7 +36,7 @@ describe('register KPM (P3-T3)', () => {
     expect(await screen.findByText('Prudential — KPM 0417')).toBeInTheDocument();
   });
 
-  it('P18.98 §C1: the subtitle names no company, because the directory under it lists every company', async () => {
+  it('P18.10 §C1: the subtitle names no company, because the directory under it lists every company', async () => {
     stubFetch({ '/join/me': { body: NO_OFFICE }, '/join/kpm-request': { body: { request: null } }, '/join/kpms': { body: OFFICES } });
     renderInLayout(AgentLayout, <RegisterKpmPage />, { me: NEWCOMER });
 
@@ -91,9 +91,20 @@ describe('register KPM (P3-T3)', () => {
   });
 
   it('says registering is not membership, so nobody waits for nothing', async () => {
-    stubFetch({ '/join/me': { body: REGISTERED }, '/join/kpm-request': { body: { request: null } }, '/join/kpms': { body: OFFICES } });
+    stubFetch({
+      '/join/me': { body: { ...REGISTERED, pendingRequestTo: 'mem-leader' } },
+      '/join/kpm-request': { body: { request: null } }, '/join/kpms': { body: OFFICES },
+    });
     renderInLayout(AgentLayout, <RegisterKpmPage />, { me: NEWCOMER });
     expect(await screen.findByText(/waiting for a leader to take you on/)).toBeInTheDocument();
+  });
+
+  it('P19-T2 AC-4 says nothing of waiting when no leader was asked: it names the next step', async () => {
+    // UI-166 item 4: "sedang menunggu leader menerima Anda" although nothing was sent.
+    stubFetch({ '/join/me': { body: REGISTERED }, '/join/kpm-request': { body: { request: null } }, '/join/kpms': { body: OFFICES } });
+    renderInLayout(AgentLayout, <RegisterKpmPage />, { me: NEWCOMER });
+    expect(await screen.findByText('You are registered to this office. Next, ask a leader to take you on.')).toBeInTheDocument();
+    expect(screen.queryByText(/waiting for a leader/)).not.toBeInTheDocument();
   });
 
   it('offers no "switch office" button, because it would not switch anything', async () => {
@@ -194,5 +205,60 @@ describe('register KPM (P3-T3)', () => {
     renderInLayout(AgentLayout, <RegisterKpmPage />, { me: NEWCOMER });
 
     expect(await screen.findByText('This branch already trades under KPM 0417.')).toBeInTheDocument();
+  });
+
+  describe('P19-T2 asking for an office (ADR-0191 §1; UI-164, UI-165)', () => {
+    const MANULIFE = { companyId: 'c-manulife', name: 'Manulife' };
+    const ASKED = {
+      requestId: 'r1', branchName: 'KaiZen Family', companyName: 'Manulife', status: 'pending',
+      requestedAt: '2026-11-04T00:00:00.000Z', reason: null, createdKpmId: null,
+    };
+
+    it('P19-T2 AC-2 AC-3 enables Kirim permintaan once the branch is named, with no search result, for the account’s company', async () => {
+      // UI-164 exactly: the directory empty, both fields filled, and the button greyed out.
+      const { calls } = stubFetch({
+        '/join/me': { body: NO_OFFICE },
+        '/join/kpm-request': [{ body: { request: null, company: MANULIFE } }, { body: ASKED }],
+        '/join/kpms': { body: [] },
+      });
+      renderInLayout(AgentLayout, <RegisterKpmPage />, { me: NEWCOMER });
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Ask for an office' }));
+      expect(screen.getByText('For Manulife, the company you signed up with.')).toBeInTheDocument();
+      const send = screen.getByRole('button', { name: 'Send the request' });
+      expect(send).toBeDisabled();
+      await userEvent.type(screen.getByLabelText('What is your branch called?'), 'KaiZen Family');
+      // The note stays empty: it is optional.
+      expect(send).toBeEnabled();
+      await userEvent.click(send);
+
+      const post = calls.find((c) => c.url.includes('/join/kpm-request') && c.init.method === 'POST')!;
+      // No company sent: the API files it for the one the applicant signed up with.
+      expect(JSON.parse(String(post.init.body))).toEqual({ branchName: 'KaiZen Family' });
+      expect(await screen.findByText('You asked for an office')).toBeInTheDocument();
+    });
+
+    it('P19-T2 AC-2 asks an account with no company for one, in the same card, saying what is missing', async () => {
+      const { calls } = stubFetch({
+        '/join/me': { body: NO_OFFICE },
+        '/join/kpm-request': [{ body: { request: null, company: null } }, { body: ASKED }],
+        '/join/kpms': { body: [] },
+        '/companies': { body: [{ _id: 'c-allianz', name: 'Allianz Life' }, { _id: 'c-manulife', name: 'Manulife' }] },
+      });
+      renderInLayout(AgentLayout, <RegisterKpmPage />, { me: NEWCOMER });
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Ask for an office' }));
+      expect(screen.getByText('Your account has no company yet. Choose the one you work for.')).toBeInTheDocument();
+      await userEvent.type(screen.getByLabelText('What is your branch called?'), 'stellar');
+      const send = screen.getByRole('button', { name: 'Send the request' });
+      expect(send).toBeDisabled();
+
+      await screen.findByRole('option', { name: 'Manulife' });
+      await userEvent.selectOptions(screen.getByLabelText('Your company'), 'c-manulife');
+      expect(send).toBeEnabled();
+      await userEvent.click(send);
+      const post = calls.find((c) => c.url.includes('/join/kpm-request') && c.init.method === 'POST')!;
+      expect(JSON.parse(String(post.init.body))).toEqual({ companyId: 'c-manulife', branchName: 'stellar' });
+    });
   });
 });

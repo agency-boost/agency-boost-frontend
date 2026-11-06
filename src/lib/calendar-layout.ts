@@ -269,3 +269,43 @@ export const entryIdOf = (item: CalendarItem) => (isBusy(item) ? '' : item.entry
 
 /** How many lines a month cell shows before *"+{n} more…"* (`:1042-1049`). */
 export const MONTH_LINES = 3;
+
+/**
+ * **The hour 3 Hari and Week open at** (P19.1-T3 AC-4; UI-117, UI-144): an hour before the office's now when today is
+ * in view — *now 10.20 − 1 h* opens at 09.00 — and 07.00 on any other days (`OPEN_AT_HOUR`). Never before midnight.
+ * `nowMinute` is the read's, moved on each minute; `null` while it is unknown, which opens at 07.00 too.
+ */
+export function openingHour(days: readonly string[], today: string, nowMinute: number | null): number {
+  if (nowMinute === null || !days.includes(today)) return OPEN_AT_HOUR;
+  return Math.max(0, Math.floor((nowMinute - 60) / 60));
+}
+
+/** Is an office date a Saturday or a Sunday? Date arithmetic on the date itself, never a clock (invariant §9). */
+export function isWeekend(day: string): boolean {
+  const [y, m, d] = day.split('-').map(Number);
+  const weekday = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+  return weekday === 0 || weekday === 6;
+}
+
+/** A band of the Agenda: one day, or a run of days with nothing on them, drawn as one (UI-119). */
+export interface AgendaBand {
+  from: string;
+  to: string;
+  empty: boolean;
+}
+
+/**
+ * **The Agenda's bands** (P19.1-T3 AC-7, AC-9; UI-119, UI-144): each day in order, **consecutive empty days merged into
+ * one band** — *Senin, 2 Nov – Sabtu, 7 Nov* and *Tidak ada event* — and **today always its own band**, empty or not, so
+ * an empty week draws at most two. A single empty day stays a day of its own.
+ */
+export function agendaBands(days: readonly string[], today: string, isEmpty: (day: string) => boolean): AgendaBand[] {
+  const bands: AgendaBand[] = [];
+  for (const day of days) {
+    const empty = isEmpty(day);
+    const last = bands.at(-1);
+    if (empty && day !== today && last?.empty && last.to !== today && last.from !== today) last.to = day;
+    else bands.push({ from: day, to: day, empty });
+  }
+  return bands;
+}

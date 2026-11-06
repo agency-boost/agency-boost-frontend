@@ -1,5 +1,6 @@
-import type {
-  KpmOverviewView, LeaderboardRow, NotLoggedList, OverviewAgency,
+import {
+  SETUP_STEPS, type KpmOverviewView, type LeaderboardRow, type NotLoggedList, type OverviewAgency, type OverviewSetup,
+  type SetupStep,
 } from '@/lib/kpm-overview';
 
 /**
@@ -16,7 +17,7 @@ const leader = (membershipId: string, name: string, coached: number, teamSize: n
   membershipId, name, coached, teamSize, pct, leads: true,
 });
 
-/** An AB who leads nobody, as the server lists them — last, no team, no rate (P18.97-T3 AC-5, UI-017). */
+/** An AB who leads nobody, as the server lists them — last, no team, no rate (P18.9-T3 AC-5, UI-017). */
 export const noTeam = (membershipId: string, name: string): LeaderboardRow => ({
   membershipId, name, coached: 0, teamSize: 0, pct: null, leads: false,
 });
@@ -77,7 +78,8 @@ export function overviewView(over: Partial<KpmOverviewView> = {}): KpmOverviewVi
       ],
     },
     engagement: {
-      loggedThisMonth: { count: 142, of: 187, pct: 76, lastMonthToDate: 138 },
+      // P19.3-T2 (ADR-0200 §2, D1): *Aktif bulan ini* from the October upload, written on 7 October.
+      activeThisMonth: { count: 142, of: 187, pct: 76, month: '2026-10', asOf: '2026-10-07' },
       loggedThisWeek: { logged: 118, notLogged: 69, pct: 63 },
     },
     coaching: {
@@ -88,11 +90,17 @@ export function overviewView(over: Partial<KpmOverviewView> = {}): KpmOverviewVi
     recruitment: { expectedToClose: 13, pipelineNow: 80, closedLastMonth: 11, target: 15, targetMonth: '2026-10' },
     production: {
       ytd: {
-        achievedMinor: rp(8400), targetMinor: rp(12500), pct: 67, missingMonths: ['2026-08'], membersWithoutGoal: 3,
+        // Case 8: September missed and still open; October, this month, not uploaded yet.
+        achievedMinor: rp(8400), targetMinor: rp(12500), pct: 67, missingMonths: ['2026-09', '2026-10'], from: '2026-01',
+        membersWithoutGoal: 3,
       },
       projectionMinor: rp(11900),
+      projectionThrough: '2026-08',
       agencies: AGENCIES,
     },
+    // A running KPM: its setup is done (UI-149), and what waits for the Owner (UI-148, Appendix D).
+    setup: null,
+    settings: { productsAwaiting: 2, checklistDraftVersion: 2 },
     ...over,
   };
 }
@@ -111,7 +119,7 @@ export const EMPTY: KpmOverviewView = overviewView({
     ],
   },
   engagement: {
-    loggedThisMonth: { count: 0, of: 2, pct: 0, lastMonthToDate: null },
+    activeThisMonth: { count: null, of: 2, pct: null, month: '2026-10', asOf: null },
     loggedThisWeek: { logged: 0, notLogged: 2, pct: 0 },
   },
   coaching: {
@@ -125,12 +133,17 @@ export const EMPTY: KpmOverviewView = overviewView({
       achievedMinor: null,
       targetMinor: null,
       pct: null,
-      missingMonths: ['2026-01', '2026-02', '2026-03', '2026-04', '2026-05', '2026-06', '2026-07', '2026-08', '2026-09'],
+      // UI-150: only the months still open are named — October, this month.
+      missingMonths: ['2026-10'],
+      from: '2026-01',
       membersWithoutGoal: 2,
     },
     projectionMinor: null,
+    projectionThrough: null,
     agencies: [agency('mem-hadi', 'Hadi Gunawan', null, null, null)],
   },
+  setup: null,
+  settings: { productsAwaiting: 0, checklistDraftVersion: null },
 });
 
 /** An office with no member at all: every rate is over nobody. */
@@ -145,25 +158,87 @@ export const NOBODY: KpmOverviewView = overviewView({
     ],
   },
   engagement: {
-    loggedThisMonth: { count: 0, of: 0, pct: null, lastMonthToDate: null },
+    activeThisMonth: { count: null, of: 0, pct: null, month: '2026-10', asOf: null },
     loggedThisWeek: { logged: 0, notLogged: 0, pct: null },
   },
   coaching: { coverage7d: { count: 0, of: 0, pct: null }, coverage30d: { count: 0, of: 0, pct: null }, leaderboard: [] },
   recruitment: { expectedToClose: 0, pipelineNow: 0, closedLastMonth: 0, target: null, targetMonth: '2026-10' },
   production: {
-    ytd: { achievedMinor: null, targetMinor: null, pct: null, missingMonths: [], membersWithoutGoal: 0 },
+    ytd: { achievedMinor: null, targetMinor: null, pct: null, missingMonths: [], from: '2026-01', membersWithoutGoal: 0 },
     projectionMinor: null,
+    projectionThrough: null,
     agencies: [],
   },
+  setup: null,
+  settings: { productsAwaiting: 0, checklistDraftVersion: null },
+});
+
+/** The setup card with `done` steps ticked, in the card's order. */
+export const setupWith = (done: readonly SetupStep[], over: Partial<OverviewSetup> = {}): OverviewSetup => ({
+  done: done.length,
+  steps: SETUP_STEPS.map((key) => ({ key, done: done.includes(key) })),
+  branchFilled: false,
+  members: 1,
+  openMonth: { month: '2026-11', closesOn: '2026-12-07' },
+  target: null,
+  ...over,
+});
+
+/**
+ * **KaiZen Family on 3 November** (Overview case 1; UI-149, UI-150): made on 1 November, its Owner Victor Oscar alone,
+ * nothing uploaded, no target, nothing waiting — *Siapkan KPM 0 dari 7*, four tiles, no ranking list, and Nov 2026 the
+ * only month named.
+ */
+export const KAIZEN: KpmOverviewView = overviewView({
+  office: { companyName: 'Prudential', code: '00001', branch: 'KaiZen Family' },
+  today: '2026-11-03',
+  month: '2026-11',
+  composition: { total: 1, newThisMonth: 1, rungs: [{ code: 'AB', label: 'Agency Builder', count: 1 }] },
+  engagement: {
+    activeThisMonth: { count: null, of: 1, pct: null, month: '2026-11', asOf: null },
+    loggedThisWeek: { logged: 0, notLogged: 1, pct: 0 },
+  },
+  coaching: {
+    coverage7d: { count: 0, of: 1, pct: 0 },
+    coverage30d: { count: 0, of: 1, pct: 0 },
+    leaderboard: [noTeam('mem-owner', 'Victor Oscar')],
+  },
+  recruitment: { expectedToClose: 0, pipelineNow: 0, closedLastMonth: null, target: null, targetMonth: '2026-11' },
+  production: {
+    ytd: {
+      achievedMinor: null, targetMinor: null, pct: null, missingMonths: ['2026-11'], from: '2026-11', membersWithoutGoal: 1,
+    },
+    projectionMinor: null,
+    projectionThrough: null,
+    agencies: [agency('mem-owner', 'Victor Oscar', null, null, null)],
+  },
+  setup: setupWith([]),
+  settings: { productsAwaiting: 0, checklistDraftVersion: null },
 });
 
 /** The not-logged list, longest silent first and never-logged first, as the server orders it. */
 export const NOT_LOGGED: NotLoggedList = {
   total: 69,
   members: [
-    { membershipId: 'mem-sinta', name: 'Sinta Halim', rung: { code: 'AGENT', label: 'Agent' }, lastLoggedOn: null, daysSince: null },
-    { membershipId: 'mem-dedy', name: 'Dedy Pranata', rung: { code: 'AGENT', label: 'Agent' }, lastLoggedOn: '2026-09-27', daysSince: 12 },
-    { membershipId: 'mem-rina', name: 'Rina Agustina', rung: { code: 'AAB', label: 'Associate Agency Builder' }, lastLoggedOn: '2026-09-30', daysSince: 9 },
-    { membershipId: 'mem-tono', name: 'Tono Wibisono', rung: { code: 'AGENT', label: 'Agent' }, lastLoggedOn: '2026-10-01', daysSince: 8 },
+    {
+      membershipId: 'mem-sinta', name: 'Sinta Halim', rung: { code: 'AGENT', label: 'Agent' }, lastLoggedOn: null, daysSince: null,
+      leader: { membershipId: 'mem-sari', name: 'Sari Puspita' }, phone: '+6281211110001',
+    },
+    {
+      membershipId: 'mem-dedy', name: 'Dedy Pranata', rung: { code: 'AGENT', label: 'Agent' }, lastLoggedOn: '2026-09-27', daysSince: 12,
+      leader: { membershipId: 'mem-agus', name: 'Agus Prasetyo' }, phone: null,
+    },
+    {
+      membershipId: 'mem-owner', name: 'Wilson Tanoto', rung: { code: 'AB', label: 'Agency Builder' }, lastLoggedOn: '2026-09-23', daysSince: 16,
+      leader: null, phone: '+6281211110003',
+    },
+    {
+      membershipId: 'mem-rina', name: 'Rina Agustina', rung: { code: 'AAB', label: 'Associate Agency Builder' }, lastLoggedOn: '2026-09-30', daysSince: 9,
+      leader: { membershipId: 'mem-agus', name: 'Agus Prasetyo' }, phone: '+6281211110004',
+    },
+    {
+      membershipId: 'mem-tono', name: 'Tono Wibisono', rung: { code: 'AGENT', label: 'Agent' }, lastLoggedOn: '2026-10-01', daysSince: 8,
+      leader: { membershipId: 'mem-sari', name: 'Sari Puspita' }, phone: '+6281211110005',
+    },
   ],
 };

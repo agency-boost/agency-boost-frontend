@@ -80,7 +80,7 @@ export type FormErrors = Partial<Record<FormField, string>>;
 export type FormWords = ReturnType<typeof formWords>;
 
 /**
- * **The rules' sentences in a language** (P18.98-T4): their words in `language` (English when none is passed), a
+ * **The rules' sentences in a language** (P18.10-T4): their words in `language` (English when none is passed), a
  * limit's figure in `figures` (Indonesian when none is passed, as before). The dialog passes the reader's.
  */
 export function formWords(language: Language = SOURCE_LANGUAGE, figures: Language = DEFAULT_LANGUAGE) {
@@ -150,7 +150,7 @@ export function violationsToErrors(
     // Only the limit: an invitee refused for who they are is the 404 the dialog marks on their chip.
     [new RegExp(`^inviteeIds\\b.*(more than|at most|\\b${INVITEES_MAX}\\b)`, 'i'), 'invitees', words.tooManyInvitees],
     [/^(startsOn|departure)\b/i, 'startsOn', words.chooseDate],
-    // The API's sentence in the reader's language (P18.98-T5): *"endsOn paling lambat 31 hari …"* in Indonesian.
+    // The API's sentence in the reader's language (P18.10-T5): *"endsOn paling lambat 31 hari …"* in Indonesian.
     // A trip with times (UI-104 point 8): *"endsOn and end must come after startsOn and start."*
     [/^endsOn (?:and|dan) end\b/i, 'end', words.tripEndAfterStart],
     [/^endsOn (?:must be at most|paling lambat)\b/i, 'endsOn', words.tripTooLong],

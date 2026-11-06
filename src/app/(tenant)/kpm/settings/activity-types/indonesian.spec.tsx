@@ -63,11 +63,11 @@ function render(routes: Record<string, unknown> = {}) {
 const ENGLISH = /\b(Save|Cancel|Edit|Archive|Restore|Rename|Undo|Show archived|Applies to|Everyone|Add to|Add a section|items?|categories|not saved yet|Counts as|Your agents|Publish to agents)\b/;
 
 /**
- * **P18.98-T4, Settings › Activity types in ID mode**: the screen's words the approved glossary's Indonesian, each kept
+ * **P18.10-T4, Settings › Activity types in ID mode**: the screen's words the approved glossary's Indonesian, each kept
  * term English (§A) — its title and tabs, *Log Activity*, the cascade stage a bound type counts as — and what the office
  * typed as typed. The same screen in English is `page.spec.tsx`, untouched.
  */
-describe('P18.98-T4 Settings › Activity types in Indonesian', () => {
+describe('P18.10-T4 Settings › Activity types in Indonesian', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it('AC-2 says the screen in Indonesian and keeps its title and tabs English', async () => {
@@ -113,7 +113,7 @@ describe('P18.98-T4 Settings › Activity types in Indonesian', () => {
     const chip = await screen.findByText('Dihitung sebagai: Sales meeting');
     expect(chip).toHaveAttribute(
       'title',
-      'Ringkasan dan rencana goal menghitung ini sebagai Sales meeting. Super Admin yang mengubah aktivitas mana yang dihitung.',
+      'Ringkasan dan rencana goal menghitung ini sebagai Sales meeting. Ubah aktivitas mana yang dihitung di Pengaitan aktivitas.',
     );
     expect(screen.getByText('Dihitung sebagai: Submission polis')).toBeInTheDocument();
   });

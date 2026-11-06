@@ -9,7 +9,7 @@ import {
 import { formatBenchmark, formatRatioForStatus, unitFor, type RatioDisplayUnit } from './ratio-format';
 
 /**
- * **Campaigns** (`docs/02-specs/functional/campaigns.md`, P18.5-T7 to T9): the shapes the field reads answer,
+ * **Campaigns** (`docs/02-specs/functional/campaigns.md`, P18.2-T7 to T9): the shapes the field reads answer,
  * the calls that ask for them, and the words `Overall.html` draws them with — the list at `/campaigns`
  * (`:3664-3702`, logic `:7920-8243`), its dialog at `/campaigns/[campaignCode]` (`:8177-8228`), the
  * Summary's *Campaigns you're chasing* (`:3225-3232`, `:6221-6253`) and the coachee's chips (`:4121-4130`).
@@ -134,7 +134,7 @@ export interface ChasedCampaign {
   duration: string;
   /**
    * The months it runs, composed by the server in the office's calendar: *Runs Jan – Des*, *Runs Agu – Okt 2026*,
-   * *Runs over the last 12 months* — the Summary row's line (P18.95-T7 AC-1, grey text row 23).
+   * *Runs over the last 12 months* — the Summary row's line (P18.7-T7 AC-1, grey text row 23).
    */
   runs: string;
   poster: CampaignPoster;
@@ -172,7 +172,7 @@ export const readChasing = (forMembershipId?: string) =>
 /*
  * ── The words ───────────────────────────────────────────────────────────────────────────────────
  *
- * **In the catalogue** (`i18n/messages/campaigns.ts`, and what a person is chasing in `campaign-chasing.ts`; P18.98-T4):
+ * **In the catalogue** (`i18n/messages/campaigns.ts`, and what a person is chasing in `campaign-chasing.ts`; P18.10-T4):
  * a screen reads the reader's language, `useMessages(campaignsMessages)`; a function here takes the words' language
  * (English when none is passed) and then the figures' (Indonesian when none is passed, as before), and its caller passes
  * `useLanguage()` and `useFigureLanguage()`. The objects below are the catalogue's English in the shapes this module
@@ -188,11 +188,11 @@ const CHASING = messagesIn(campaignChasingMessages, SOURCE_LANGUAGE);
 /** The strings `Overall.html` draws, verbatim, in English. Those saying *KPM* go to the client with OD-39. */
 export const PROTOTYPE_COPY = {
   /**
-   * The prototype's *Campaigns*, **the nav item's words since P18.95-T9 AC-2** (ADR-0167 §10, OD-205; UI-027, *menu
+   * The prototype's *Campaigns*, **the nav item's words since P18.7-T9 AC-2** (ADR-0167 §10, OD-205; UI-027, *menu
    * labels = page titles*): the nav reads *Campaign list* (`:2669`).
    */
   title: EN.title,
-  // *Tap*, not *click* (P18.95-T9 AC-5; UI-027): the prototype's *click into any card*.
+  // *Tap*, not *click* (P18.7-T9 AC-5; UI-027): the prototype's *click into any card*.
   subtitle: EN.subtitle,
   seasonal: EN.seasonal,
   structural: EN.structural,
@@ -236,7 +236,7 @@ export const unchasedToast = (title: string, language: Language = SOURCE_LANGUAG
 
 /**
  * The toast a chase answer says (`:8144`), from what the server answered, not from what was asked — in `language`. Here,
- * not in `campaign-list.tsx`, so the Summary's chasing card says it without loading the campaigns list (P18.99-T16).
+ * not in `campaign-list.tsx`, so the Summary's chasing card says it without loading the campaigns list (P18.11-T16).
  */
 export const chaseToast = (card: Pick<CampaignCard, 'title' | 'chasing'>, language?: Language) =>
   (card.chasing ? chasedToast(card.title, language) : unchasedToast(card.title, language));
@@ -263,7 +263,7 @@ export const OWN_COPY = {
   notMeasured: EN.notMeasured,
   met: EN.met,
   /**
-   * The card's requirements, ***Needs:*** — the client's word (P18.95-T10 AC-3; UI-024, ADR-0167), where the
+   * The card's requirements, ***Needs:*** — the client's word (P18.7-T10 AC-3; UI-024, ADR-0167), where the
    * prototype wrote *Requirements:* (`:8032`). The dialog's heading stays *Requirements*.
    */
   needs: EN.needs,
@@ -278,7 +278,7 @@ export const OWN_COPY = {
  * M* for 2.450.000.000 would state a different one — so a figure that compact writing would round is written in
  * full. A percentage with the places a threshold was set to and no *,0* — *30%*, *75,55%* — and a figure read
  * against it with every place it has, so *74,96% / 75%* can never read *75% / 75%*. **A ratio in `ratioUnit`**, the
- * unit the office writes that ratio in (P18.97-T4 AC-8, ADR-0176 §8; UI-030: *"Recruitment success rate at least
+ * unit the office writes that ratio in (P18.9-T4 AC-8, ADR-0176 §8; UI-030: *"Recruitment success rate at least
  * 0,30"* on the campaigns settings): a success rate *30%*, leads per activity *1,50*; a caller that does not know it
  * gets the number, as before.
  */
@@ -297,7 +297,7 @@ export function figureWords(
 /**
  * **How the office writes each of its ratios, by its code** — a ratio's code is its metric's key — so a requirement on
  * one reads as the ratio card and the settings do: *30%* for a success rate the office writes as a percentage, *1,50*
- * for one it writes as a number (P18.97-T4 AC-8 on the settings; P18.97-T7 on the agents' cards and dialog, ADR-0174 §2,
+ * for one it writes as a number (P18.9-T4 AC-8 on the settings; P18.9-T7 on the agents' cards and dialog, ADR-0174 §2,
  * *one way of writing a percentage*). From the office's published configuration (`useTenantConfig`), whose read every
  * shell holds; with none yet, nothing — and a ratio reads as a number, as before.
  */
@@ -311,11 +311,11 @@ export function ratioUnitsOf(
 
 /**
  * One requirement in the card's words: ***Rp 16 jt APE***, ***3 new hires***, *more than 2 new active agents* — the
- * target compact only where that loses nothing (`figureWords`), then what it counts (P18.95-T10 AC-3; the client's
+ * target compact only where that loses nothing (`figureWords`), then what it counts (P18.7-T10 AC-3; the client's
  * UI-024), one and many as the figure is one or not, keyed by the metric's code, never its name (invariant §4). The
  * campaign-evaluable set (`CAMPAIGN_METRICS`, D-evaluable) less the ratios, whose name is the rate itself: those, the
  * balance's points and a stored requirement outside the set keep the prototype's `{name} {target}` (`reqRowHtml`,
- * `:8031-8034`): *Selling success rate 15%* — **a ratio in the office's unit for it** (`ratioUnits`, P18.97-T7), where it
+ * `:8031-8034`): *Selling success rate 15%* — **a ratio in the office's unit for it** (`ratioUnits`, P18.9-T7), where it
  * read *0,15* while the settings read *15%*. Its words in `language`, its figure in `figures`.
  */
 export function requirementWords(
@@ -340,7 +340,7 @@ const NOUN_KEYS: Readonly<Record<string, true>> = {
 };
 
 /**
- * The card's line after *Needs:*, every requirement in its words **joined by *" + "*** (P18.95-T10 AC-3), where the
+ * The card's line after *Needs:*, every requirement in its words **joined by *" + "*** (P18.7-T10 AC-3), where the
  * prototype joined them by *" | "* (`:8032`): *Rp 16 jt APE + 3 new hires*.
  */
 export const requirementsLine = (
@@ -350,7 +350,7 @@ export const requirementsLine = (
 
 /**
  * Whether the chase is drawn at all: the server lets the reader chase here (`can.chase`), and **the campaign has
- * not ended** (P18.95-T10 AC-2; UI-024) — the server's `chaseBlocked: 'ended'`, where it was drawn disabled with an
+ * not ended** (P18.7-T10 AC-2; UI-024) — the server's `chaseBlocked: 'ended'`, where it was drawn disabled with an
  * ⓘ. The server refuses a chase or a drop of an ended one all the same (`409 CAMPAIGN_NOT_OPEN`).
  */
 export const showsChase = (c: Pick<CampaignCard, 'chaseBlocked'>, can: CampaignCan) =>
@@ -369,10 +369,10 @@ export const kindLabel = (c: Pick<CampaignCard, 'kind' | 'subtype' | 'phase'>, l
 };
 
 /**
- * **The Summary row's sub-line: the months it runs** (P18.95-T7 AC-1, grey text row 23; ADR-0167 §7), at every size —
+ * **The Summary row's sub-line: the months it runs** (P18.7-T7 AC-1, grey text row 23; ADR-0167 §7), at every size —
  * *Runs Jan – Des*, where the prototype's *"{kindLabel} · {duration}"* (`:6243`) read *"Ongoing incentive · Standing
  * — evaluated per calendar year (1 Jan – 31 Des)"*. The server composes it (`runs`), in the reader's language
- * (P18.98-T5); the dialog the row opens keeps the campaign's kind and its dates.
+ * (P18.10-T5); the dialog the row opens keeps the campaign's kind and its dates.
  */
 export const rowSubline = (c: ChasedCampaign) => c.runs;
 
@@ -381,7 +381,7 @@ export const rowSubline = (c: ChasedCampaign) => c.runs;
  * read, and why not where there is none — `null` where the row shows its target alone (upcoming). Its words in
  * `language`, its figures in `figures`.
  *
- * **A ratio in the office's unit for it** (`ratioUnit`, P18.97-T7; ADR-0174 §2): its target as typed — *30%* — and the
+ * **A ratio in the office's unit for it** (`ratioUnit`, P18.9-T7; ADR-0174 §2): its target as typed — *30%* — and the
  * reader's figure as a ratio beside its benchmark is written (`formatRatioForStatus`): a percentage **whole** (UI-080) —
  * *29% of 30%*, and *30% of 30%* for an unmet 29,96%, its state the server's, judged on the unrounded value — and a
  * number to two places, with a place more where the rounding would reach a target it falls short of.

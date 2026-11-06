@@ -51,10 +51,10 @@ async function openRow(name: string, field = 'Name') {
 }
 
 /**
- * **One section of a template** (ADR-0185 §3; P18.99-T20 AC-3): its parts as pills, its draft saved as it is made, its
+ * **One section of a template** (ADR-0185 §3; P18.11-T20 AC-3): its parts as pills, its draft saved as it is made, its
  * own *Publish*, and the existing editors behind it.
  */
-describe('P18.99-T20 a template section', () => {
+describe('P18.11-T20 a template section', () => {
   beforeEach(() => window.history.replaceState(null, '', '/'));
   afterEach(() => vi.unstubAllGlobals());
 
@@ -142,7 +142,8 @@ describe('P18.99-T20 a template section', () => {
     expect(await screen.findByText('Draft v4 · v3 published')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Publish' }));
 
-    expect(await screen.findByText('Published. Offices that already exist do not change.')).toBeInTheDocument();
+    // *Amended 2026-11-05 (P19.4-T1, ADR-0208 §4):* existing offices are asked about after it, not ruled out.
+    expect(await screen.findByText('Published.')).toBeInTheDocument();
     expect(stub.calls.filter((c) => c.init.method === 'POST').map((c) => c.url.replace(/^.*\/template\//, ''))).toEqual([
       'activity_taxonomy/publish?templateId=t-default', 'ratio_set/publish?templateId=t-default',
     ]);

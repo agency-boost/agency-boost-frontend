@@ -3,7 +3,7 @@ name: ci
 # Pull requests, and every push to the two branches that deploy (ADR-0154): `development` is staging and
 # `main` is production. Vercel builds those two itself and runs no tests of its own; a production
 # deployment waits on these jobs by name (Deployment Checks, README.md § Deployment), so renaming one
-# means updating that selection. A push to `development` went unchecked until Phase 18.7, and work
+# means updating that selection. A push to `development` went unchecked until Phase 18.4, and work
 # lands there directly.
 on:
   pull_request:

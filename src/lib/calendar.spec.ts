@@ -93,7 +93,7 @@ describe('Hide my personal activities (P13.1-T8, ADR-0110)', () => {
 });
 
 describe('the words', () => {
-  it('P18.95-T8 AC-2 names the types once: the legend’s and the toggle’s words, verbatim (`:310-314`), which the badge now uses too', () => {
+  it('P18.7-T8 AC-2 names the types once: the legend’s and the toggle’s words, verbatim (`:310-314`), which the badge now uses too', () => {
     expect(Object.values(TYPE_LABEL)).toEqual(['Internal meeting', '1:1 coaching', 'Client meeting', 'Task', 'Travel']);
     // The prototype's badge words (`:824`) are gone from the module: there is one map, not two.
     expect(Object.keys(calendarModule)).not.toContain('TYPE_BADGE');
@@ -141,7 +141,7 @@ describe('the words', () => {
     for (const key of ['tripTooLong', 'titleTooLong', 'notesTooLong', 'tooManyInvitees']) {
       const line = source.find((l) => l.trim().startsWith(`${key}:`)) ?? '';
       // Through `formatNumber` where the limit can reach a thousand, so it is grouped `1.000` (ADR-0167 §1). Since
-      // P18.98-T4 the words are the catalogue's and the limit is handed to them as a value (`limitWords`, `max:`).
+      // P18.10-T4 the words are the catalogue's and the limit is handed to them as a value (`limitWords`, `max:`).
       expect(line, key).toMatch(/(?:\$\{|max: )(?:formatNumber\()?[A-Z_]+_MAX\b/);
       expect(line, key).not.toMatch(/\d/);
     }
@@ -191,7 +191,7 @@ describe('people', () => {
     expect(initialsOf('  ')).toBe('?');
   });
 
-  it('P12-T4 AC-3, P18.95-T9 AC-1 tags with the rung’s badge name — the ladder’s long label never — and, for anybody not a direct report, their leader’s full name', () => {
+  it('P12-T4 AC-3, P18.7-T9 AC-1 tags with the rung’s badge name — the ladder’s long label never — and, for anybody not a direct report, their leader’s full name', () => {
     expect(personTag({ rung: AGENT_RUNG, leaderName: 'Agus Santoso', direct: true })).toBe('Agent');
     expect(personTag({ rung: AGENT_RUNG, leaderName: 'Sari Dewi', direct: false })).toBe('Agent · under Sari Dewi');
     expect(personTag({ rung: AB_RUNG, leaderName: null, direct: false })).toBe('AB');
@@ -243,10 +243,10 @@ describe('dates, counted on their own numbers', () => {
   });
 });
 
-describe('P18.95-T8 AC-2 meeting links in Location / notes', () => {
+describe('P18.7-T8 AC-2 meeting links in Location / notes', () => {
   const links = (notes: string) => notesParts(notes).filter((p): p is { href: string; label: string } => 'href' in p);
 
-  it('P18.95-T8 AC-2 Join Zoom on a zoom.us host and its own subdomains, the address kept as the href', () => {
+  it('P18.7-T8 AC-2 Join Zoom on a zoom.us host and its own subdomains, the address kept as the href', () => {
     expect(notesParts('Zoom — https://us02web.zoom.us/j/81234567890?pwd=abc')).toEqual([
       { text: 'Zoom — ' },
       { href: 'https://us02web.zoom.us/j/81234567890?pwd=abc', label: 'Join Zoom' },
@@ -259,7 +259,7 @@ describe('P18.95-T8 AC-2 meeting links in Location / notes', () => {
     expect(isZoomHost('us02web.zoom.us')).toBe(true);
   });
 
-  it('P18.95-T8 AC-2 Join meeting on any other http(s) address, and a look-alike Zoom host is another host', () => {
+  it('P18.7-T8 AC-2 Join meeting on any other http(s) address, and a look-alike Zoom host is another host', () => {
     expect(links('Meet: https://meet.google.com/abc-defg-hij')).toEqual([{ href: 'https://meet.google.com/abc-defg-hij', label: 'Join meeting' }]);
     expect(links('teams.microsoft.com/l/meetup-join/19%3a')).toEqual([{ href: 'https://teams.microsoft.com/l/meetup-join/19%3a', label: 'Join meeting' }]);
     expect(links('http://intranet.example.co.id/room-2')).toEqual([{ href: 'http://intranet.example.co.id/room-2', label: 'Join meeting' }]);
@@ -269,7 +269,7 @@ describe('P18.95-T8 AC-2 meeting links in Location / notes', () => {
     expect(isZoomHost('zoom.us.evil.com')).toBe(false);
   });
 
-  it('P18.95-T8 AC-2 makes nothing but http(s) a link: other schemes, bare words, sums and an email stay text', () => {
+  it('P18.7-T8 AC-2 makes nothing but http(s) a link: other schemes, bare words, sums and an email stay text', () => {
     for (const notes of [
       'javascript:alert(1)',
       'data:text/html,<script>alert(1)</script>',
@@ -288,7 +288,7 @@ describe('P18.95-T8 AC-2 meeting links in Location / notes', () => {
     expect(meetingUrl('https://localhost/x')).toBeNull();
   });
 
-  it('P18.95-T8 AC-2 leaves a sentence’s closing mark to the sentence, finds every link, and keeps every other word', () => {
+  it('P18.7-T8 AC-2 leaves a sentence’s closing mark to the sentence, finds every link, and keeps every other word', () => {
     expect(notesParts('Join here (https://zoom.us/j/1). Backup: meet.google.com/xyz, thanks!')).toEqual([
       { text: 'Join here (' },
       { href: 'https://zoom.us/j/1', label: 'Join Zoom' },
@@ -301,7 +301,7 @@ describe('P18.95-T8 AC-2 meeting links in Location / notes', () => {
   });
 });
 
-describe('P18.95-T8 AC-1 the agenda reads the week', () => {
+describe('P18.7-T8 AC-1 the agenda reads the week', () => {
   it('UI-104 each view asks for its own read: the Agenda seven days from today, 3 Hari three, the Week, the Month', () => {
     expect(DISPLAYS).toEqual(['agenda', 'three_days', 'week', 'month']);
     expect(DISPLAYS.map(viewOf)).toEqual(['agenda', 'three_days', 'week', 'month']);
@@ -309,7 +309,7 @@ describe('P18.95-T8 AC-1 the agenda reads the week', () => {
     expect(agendaHref('2026-10-30')).toBe('/calendar?view=agenda&date=2026-10-30');
   });
 
-  it('P18.95-T8 AC-1 counts a phone cell’s entries in words, and names its new strings with none of the six words', () => {
+  it('P18.7-T8 AC-1 counts a phone cell’s entries in words, and names its new strings with none of the six words', () => {
     expect([OWN_COPY.eventCount(1), OWN_COPY.eventCount(4), OWN_COPY.eventCount(1250)]).toEqual(['1 event', '4 events', '1.250 events']);
     expect([OWN_COPY.agenda, OWN_COPY.filters, OWN_COPY.noEvents, OWN_COPY.joinZoom, OWN_COPY.joinMeeting, OWN_COPY.newTab])
       .toEqual(['Agenda', 'Filters', 'No events', 'Join Zoom', 'Join meeting', ', opens in a new tab']);

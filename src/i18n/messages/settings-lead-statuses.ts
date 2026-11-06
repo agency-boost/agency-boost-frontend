@@ -6,7 +6,7 @@ import { kept } from '@/i18n/kept';
 const words = (...parts: ReactNode[]) => createElement(Fragment, null, ...parts);
 
 /**
- * **Settings › Lead statuses** (`/kpm/settings/lead-statuses`, P4-T3; P18.98-T4): the two ladders a lead moves through,
+ * **Settings › Lead statuses** (`/kpm/settings/lead-statuses`, P4-T3; P18.10-T4): the two ladders a lead moves through,
  * one stage a row. The frame and the controls every settings screen shares are `settings.ts`'.
  *
  * **Content, shown as typed** (ADR-0179 §5): a stage's label, which an office types. **Kept English** (§A): the title
@@ -37,7 +37,7 @@ const en = {
   makeClose: 'Make this close the pipeline',
   /** Why the stage that closes a pipeline cannot be archived: *Archive*'s tooltip, and its reason behind ⋮. */
   closingKept: 'Make another stage close the pipeline first.',
-  /** A stage's ⋮ on a phone moves it too (P18.97-T8 F3), in `ReorderArrows`' words (§B.1). */
+  /** A stage's ⋮ on a phone moves it too (P18.9-T8 F3), in `ReorderArrows`' words (§B.1). */
   moveUp: 'Move up',
   moveDown: 'Move down',
   /** The switch's save status, named for its stage. */

@@ -2,7 +2,7 @@ import { defineMessages, type MessagesOf } from '@/i18n/catalogue';
 import { kept } from '@/i18n/kept';
 
 /**
- * **A forum meeting's *Overview & Stats*: the client's reference slide** (P18.98-T4, people and forum; ADR-0175;
+ * **A forum meeting's *Overview & Stats*: the client's reference slide** (P18.10-T4, people and forum; ADR-0175;
  * `functional/leader-forum.md`, *Overview & Stats* and *The module's own strings*) — the strip, the table's columns, its
  * groups and rows, the section bands, the numbered footnotes, the *(\*)* notes, a cell's words for a screen reader, a
  * phone's card and a *Monthly Target*'s field. Drawn by `components/leader-forum/scorecard.tsx` and the print, and
@@ -60,10 +60,15 @@ const en = {
   notTracked: 'Not tracked',
   /** *—* on a scorecard kept before the column or the row existed (I-495). */
   unrecorded: 'Not recorded for this meeting.',
-  /** *—*, a ratio over nothing — each row's own reason. */
+  /** *—* in a column of last year with no month of it uploaded (P19.3-T1; ADR-0203 §8), for a screen reader. */
+  notUploaded: 'Not uploaded yet',
+  /**
+   * *—*, a ratio over nothing — each row's own reason. *Cases/producing agents* over no active agent in any month: true of
+   * both the data sources' rate per month and a kept scorecard's over *Annual Active Agents* (nobody active either way).
+   */
   none: {
     average_case_size: 'No policies in this period.',
-    cases_per_producing_agent: 'No annual active agents in this period.',
+    cases_per_producing_agent: 'No active agents in this period.',
   },
   /** A figure over part of its period: its mark, for a screen reader (I-488). */
   partialMark: 'covers part of its period; see the notes below',
@@ -72,18 +77,38 @@ const en = {
   asOfUnrecorded: 'AS OF: not recorded for this meeting',
   /** A phone's card (UI-014, I-493): the change against last year. */
   change: 'Change',
-  /** On a percentage row, the change in percentage points (P18.97-T8 F1): `figure` written, `points` the number. */
+  /** On a percentage row, the change in percentage points (P18.9-T8 F1): `figure` written, `points` the number. */
   points: ({ sign, figure, points }: { sign: string; figure: string; points: number }) =>
     `${sign}${figure} ${points === 1 ? 'point' : 'points'}`,
   /** A *Monthly Target* input's name: the column, its rate, then the row (I-487). */
   targetName: ({ row }: { row: string }) => `Monthly Target per unit, ${row}`,
-  /** A rate the field cannot read (P18.97-T1 AC-10); `example` a figure in the reader's marks. */
+  /** A rate the field cannot read (P18.9-T1 AC-10); `example` a figure in the reader's marks. */
   notARate: ({ example }: { example: string }) => `Type a number from 0, like 1 or ${example}.`,
   /**
-   * The four footnotes, in our metrics' words (P18.97-T1 AC-12; ADR-0175 §5) — *the monthly production file* where the
-   * ADR says *the office's file*: the same file, in none of the six words.
+   * **The footnotes, in our metrics' words — the data sources' of 3 November** (P19.3-T1; ADR-0202 §2, ADR-0203): what
+   * every live scorecard and every one kept since is computed with — *the monthly production file* where the ADRs say
+   * *the office's file*: the same file, in none of the six words. In the order the rows reach them.
    */
   footnotes: {
+    // ADR-0203 §2: our reading of the SLF map's *Recruitment*; the label stays the slide's.
+    flc: 'FLC (avg. monthly) — the recruitment the monthly production file reports, each month, averaged over the months uploaded.',
+    producing_agents:
+      'Annual Active Agents — members with APE or a policy in the monthly production file in at least one month of the period.',
+    // ADR-0202 §2, the data sources' D7.
+    new_agent_3m:
+      '3M new agent % — of the new agents who joined in the period, the share with a first policy in the monthly production file in their join month or the three months after it.',
+    avg_monthly_aa: 'AA — Active Agent, a member whose month shows APE or a policy in the monthly production file.',
+    case_submission: 'Case submission and Avg. Case Size — the policies in the monthly production file, and its APE over them.',
+    // ADR-0203 §5: per active agent per month.
+    cases_per_producing_agent:
+      'Cases/producing agents — per active agent per month: the policies in the monthly production file over its active agents, both summed over the same months.',
+  },
+  /**
+   * **The four footnotes a scorecard kept before 3 November's data sources was computed with** (P18.9-T1 AC-12; ADR-0175
+   * §5, ADR-0171): kept for it, never recomputed (ADR-0129 §7), so a footnote never describes a figure it is not
+   * (ADR-0202 §4). Its *FLC* read *pending data*, and its *Cases/producing agents* had no footnote of its own.
+   */
+  footnotesReferenceSlide: {
     producing_agents:
       'Annual Active Agents — members with APE or a policy in the monthly production file in at least one month of the period.',
     new_agent_3m:
@@ -141,9 +166,10 @@ const id: MessagesOf<typeof en> = {
   tbd: kept('TBD'),
   notTracked: 'Tidak dilacak',
   unrecorded: 'Tidak tercatat untuk rapat ini.',
+  notUploaded: 'Belum diunggah',
   none: {
     average_case_size: 'Tidak ada polis dalam periode ini.',
-    cases_per_producing_agent: `Tidak ada ${kept('Annual Active Agents')} dalam periode ini.`,
+    cases_per_producing_agent: `Tidak ada ${kept('Active Agent')} dalam periode ini.`,
   },
   partialMark: 'hanya mencakup sebagian periodenya; lihat catatan di bawah',
   asOf: kept('AS OF'),
@@ -153,6 +179,20 @@ const id: MessagesOf<typeof en> = {
   targetName: ({ row }) => `${kept('Monthly Target')} per ${kept('unit')}, ${row}`,
   notARate: ({ example }) => `Ketik angka mulai dari 0, misalnya 1 atau ${example}.`,
   footnotes: {
+    flc:
+      `${kept('FLC (avg. monthly)')} — rekrutmen yang dilaporkan file produksi bulanan setiap bulan, dirata-ratakan atas bulan-bulan yang sudah diunggah.`,
+    producing_agents:
+      `${kept('Annual Active Agents')} — anggota yang memiliki ${kept('APE')} atau polis di file produksi bulanan, minimal dalam satu bulan pada periode ini.`,
+    new_agent_3m:
+      `${kept('3M new agent %')} — dari agen baru yang bergabung dalam periode ini, persentase yang memiliki polis pertama di file produksi bulanan pada bulan bergabungnya atau tiga bulan sesudahnya.`,
+    avg_monthly_aa:
+      `${kept('AA')} — ${kept('Active Agent')}, anggota yang bulannya menunjukkan ${kept('APE')} atau polis di file produksi bulanan.`,
+    case_submission:
+      `${kept('Case submission')} dan ${kept('Avg. Case Size')} — polis di file produksi bulanan, dan ${kept('APE')}-nya dibagi jumlah polis tersebut.`,
+    cases_per_producing_agent:
+      `${kept('Cases/producing agents')} — per ${kept('Active Agent')} per bulan: polis di file produksi bulanan dibagi ${kept('Active Agent')}-nya, keduanya dijumlahkan atas bulan-bulan yang sama.`,
+  },
+  footnotesReferenceSlide: {
     producing_agents:
       `${kept('Annual Active Agents')} — anggota yang memiliki ${kept('APE')} atau polis di file produksi bulanan, minimal dalam satu bulan pada periode ini.`,
     new_agent_3m:

@@ -7,6 +7,7 @@ import { TonePill, type PillTone } from '@/components/ui/tone-pill';
 import { useLanguage, useMessages } from '@/i18n/language-provider';
 import { coachingMessages } from '@/i18n/messages/coaching';
 import { cn } from '@/lib/cn';
+import { useMediaQuery } from '@/lib/use-media-query';
 import {
   coachingSessionHref, firstName, lastOneOnOneLine, rosterStatusLabel,
   type Roster, type RosterRow, type RosterStatus,
@@ -18,7 +19,7 @@ import {
  * - **A 60px row** (`PersonRow`): the avatar, the NAME in capitals, and **the whole row opens their *Coaching Session***
  *   with a › — no orange *Coaching →* per row (UI-034).
  * - **Below 768px** the row's line is *1 hari lalu · oleh Agus*: *Last 1:1* and the first name of who held it, 12px
- *   grey — *Belum ada 1:1* grey too, never red; **red only for *terlambat***, which the words say as well (P18.8-T15
+ *   grey — *Belum ada 1:1* grey too, never red; **red only for *terlambat***, which the words say as well (P18.5-T15
  *   AC-7). Then the status pill and the ›. **From 768px** the same facts in columns under a 40px header — *Nama · 1:1
  *   terakhir · Terakhir di-coaching oleh · Status* — every word 12px or more.
  * - **Groups under 36px bands**: *Agen langsung Anda · 3*, then *AAB units*, each AAB's people **as a tree** at every
@@ -29,6 +30,13 @@ import {
  *
  * Everyone the reader coaches, which is their whole downline (ADR-0074): the server decides who. *Last 1:1* and the
  * status are the server's, worked out in the office's day; nothing here counts days.
+ *
+ * *Changed 2026-11-05 (P19.1-T5 AC-1; UI-115, `coaching-newhires-tablet` 1):* **a tablet (768–1023px) draws the phone's
+ * rows, slightly larger, and no table** — at 768 the columns cut *ARIEF HIDA…* while *Terakhir di-coaching oleh* was
+ * mostly *—*. Each row: a 40px avatar, the full NAME on one line and never cut, one 13px line — *17 hari lalu ·
+ * terlambat · oleh Agus Prasetyo*, **only the *… · terlambat* part red**, who held it grey and in full — the status
+ * pill, ›. A separate variant for the range (`useMediaQuery('tablet')`), so a phone's markup and a desktop's are what
+ * they were, to the byte (the digests in `coaching/coaching-tablet.spec.tsx`).
  */
 
 /** `GOAL_PACE_STATUS` as UI-005's pill tones. */
@@ -48,6 +56,12 @@ const COL = {
 
 /** A 60px row's elbow, at the middle of its avatar (`TreeNode`'s `--elbow`). */
 const ELBOW_60 = '[--elbow:1.875rem]';
+
+/**
+ * **The tablet's avatar is 40px** (P19.1-T5 AC-1; `coaching-newhires-tablet`'s `.ini`), the phone's 36: the tree's line
+ * moves 2px right with its centre — 32px in on a head's row (12px padding, half of 40), 20px on a child's.
+ */
+const TABLET_AVATAR = 40;
 
 /** One person and the people under them, as the flat subtree the server sends (`depth`) nests. */
 interface Branch {
@@ -81,28 +95,33 @@ export function CoachingRoster({ roster }: { roster: Roster }) {
   const { directAgents, units } = roster;
   const directId = useId();
   const unitsId = useId();
+  // P19.1-T5 AC-1 (UI-115): the phone's rows on a tablet, no table. Phone and desktop draw what they drew.
+  const tablet = useMediaQuery('tablet');
 
   return (
     <div data-roster="" className="overflow-hidden rounded-lg border border-card-edge bg-card">
       <h2 className="sr-only">{t.caption}</h2>
-      {/* The columns' header from 768px (UI-034): drawn for the eye; each row's cells say what they are. */}
-      <div
-        aria-hidden="true"
-        className="flex h-10 items-center gap-3 bg-hover-row px-3 text-xs font-semibold text-muted max-md:hidden"
-      >
-        <span className="min-w-0 flex-1 pl-12">{t.columns.name}</span>
-        <span className={cn('shrink-0', COL.last)}>{t.columns.last}</span>
-        <span className={cn('shrink-0', COL.coach)}>{t.columns.coachedBy}</span>
-        <span className={cn('shrink-0', COL.status)}>{t.columns.status}</span>
-        <span className="w-5 shrink-0" />
-      </div>
+      {/* The columns' header from 768px (UI-034): drawn for the eye; each row's cells say what they are. Not on a
+          tablet, which has no columns (P19.1-T5 AC-1). */}
+      {!tablet && (
+        <div
+          aria-hidden="true"
+          className="flex h-10 items-center gap-3 bg-hover-row px-3 text-xs font-semibold text-muted max-md:hidden"
+        >
+          <span className="min-w-0 flex-1 pl-12">{t.columns.name}</span>
+          <span className={cn('shrink-0', COL.last)}>{t.columns.last}</span>
+          <span className={cn('shrink-0', COL.coach)}>{t.columns.coachedBy}</span>
+          <span className={cn('shrink-0', COL.status)}>{t.columns.status}</span>
+          <span className="w-5 shrink-0" />
+        </div>
+      )}
 
       {directAgents.length > 0 && (
         <section aria-labelledby={directId}>
           <GroupBand id={directId} label={t.directAgents} count={directAgents.length} />
           <ul role="list" className="divide-y divide-divider">
             {directAgents.map((row) => (
-              <li key={row.membershipId}><RosterPerson row={row} badged={badged(row)} /></li>
+              <li key={row.membershipId}><RosterPerson row={row} badged={badged(row)} tablet={tablet} /></li>
             ))}
           </ul>
         </section>
@@ -114,8 +133,13 @@ export function CoachingRoster({ roster }: { roster: Roster }) {
           <ul role="list" className="divide-y divide-divider">
             {units.map((unit) => (
               <li key={unit.head.membershipId}>
-                <RosterPerson row={unit.head} badged />
-                <Branches branches={branchesOf(unit.members)} label={t.unitOf({ name: unit.head.name })} badged={badged} />
+                <RosterPerson row={unit.head} badged tablet={tablet} />
+                <Branches
+                  branches={branchesOf(unit.members)}
+                  label={t.unitOf({ name: unit.head.name })}
+                  badged={badged}
+                  tablet={tablet}
+                />
               </li>
             ))}
           </ul>
@@ -131,16 +155,26 @@ export function CoachingRoster({ roster }: { roster: Roster }) {
  * avatar starts 36px right of its leader's (UI-033).
  */
 function Branches({
-  branches, label, badged, nested = false,
-}: { branches: readonly Branch[]; label: string; badged: (row: RosterRow) => boolean; nested?: boolean }) {
+  branches, label, badged, nested = false, tablet = false,
+}: {
+  branches: readonly Branch[];
+  label: string;
+  badged: (row: RosterRow) => boolean;
+  nested?: boolean;
+  /** A tablet's 40px avatars: the line 2px further in (`TABLET_AVATAR`). */
+  tablet?: boolean;
+}) {
   const t = useMessages(coachingMessages).roster;
   if (branches.length === 0) return null;
+  const indent = tablet
+    ? (nested ? 'ml-[19px]' : 'mb-1.5 ml-[31px]')
+    : (nested ? 'ml-[17px]' : 'mb-1.5 ml-[29px]');
   return (
-    <TreeIndent label={label} className={cn('mt-0 gap-0 pl-[19px]', nested ? 'ml-[17px]' : 'mb-1.5 ml-[29px]')}>
+    <TreeIndent label={label} className={cn('mt-0 gap-0 pl-[19px]', indent)}>
       {branches.map(({ row, children }) => (
         <TreeNode key={row.membershipId} className={ELBOW_60}>
-          <RosterPerson row={row} badged={badged(row)} className="pl-0" />
-          <Branches branches={children} label={t.unitOf({ name: row.name })} badged={badged} nested />
+          <RosterPerson row={row} badged={badged(row)} className="pl-0" tablet={tablet} />
+          <Branches branches={children} label={t.unitOf({ name: row.name })} badged={badged} nested tablet={tablet} />
         </TreeNode>
       ))}
     </TreeIndent>
@@ -159,15 +193,45 @@ function GroupBand({ id, label, count }: { id: string; label: string; count?: nu
 
 /**
  * One person: the row opens their *Coaching Session* (`coachingSessionHref`). Below 768px *Last 1:1* and who held it
- * are the row's line; from 768px they are its columns.
+ * are the row's line; from 1024px they are its columns; on a tablet the line again, slightly larger, and no columns.
  */
-function RosterPerson({ row, badged, className }: { row: RosterRow; badged: boolean; className?: string }) {
+function RosterPerson({
+  row, badged, className, tablet = false,
+}: { row: RosterRow; badged: boolean; className?: string; tablet?: boolean }) {
   const language = useLanguage();
   const t = useMessages(coachingMessages).roster;
   const last = row.lastOneOnOne;
   const late = last?.overdue ?? false;
   const when = lastOneOnOneLine(last, language);
   const status: ReactNode = <TonePill tone={TONE[row.status]}>{rosterStatusLabel(row.status, language)}</TonePill>;
+  const badge = badged ? <TonePill tone="grey" className="px-1.5 py-0 leading-[18px]">{shortOfRung(row.rung)}</TonePill> : undefined;
+
+  if (tablet) {
+    return (
+      <PersonRow
+        name={row.name}
+        photoUrl={row.photoUrl ?? null}
+        seed={row.membershipId}
+        href={coachingSessionHref(row.membershipId)}
+        chevron
+        height={60}
+        avatarSize={TABLET_AVATAR}
+        className={cn('rounded-none', className)}
+        // The full name on one line, never cut (UI-115): no *…*, and room enough at 768px for every name the
+        // seed and staging carry; one longer than the row breaks at a space rather than run under the pill.
+        nameClassName="text-md text-clip whitespace-normal md:max-lg:text-md"
+        badge={badge}
+        meta={(
+          // *17 hari lalu · terlambat · oleh Agus Prasetyo*: only the first half red, and only when late (UI-115).
+          <span data-roster-line="" className="min-w-0 text-base text-signal-grey">
+            <span className={cn(late && 'text-signal-red')}>{when}</span>
+            {last?.coach && <> · {t.by({ name: last.coach.name })}</>}
+          </span>
+        )}
+        trailing={status}
+      />
+    );
+  }
 
   return (
     <PersonRow
@@ -179,7 +243,7 @@ function RosterPerson({ row, badged, className }: { row: RosterRow; badged: bool
       height={60}
       className={cn('rounded-none', className)}
       nameClassName="text-md md:max-lg:text-md"
-      badge={badged ? <TonePill tone="grey" className="px-1.5 py-0 leading-[18px]">{shortOfRung(row.rung)}</TonePill> : undefined}
+      badge={badge}
       meta={(
         // The phone's line (UI-033): *1 hari lalu · oleh Agus*, red only when late.
         <span data-roster-line="" className={cn('truncate md:hidden', late ? 'text-signal-red' : 'text-signal-grey')}>

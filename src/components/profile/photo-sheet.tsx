@@ -164,7 +164,7 @@ export function PhotoSheet({
           className={cn(
             'relative mt-1 flex h-[220px] w-[220px] touch-none select-none items-center justify-center overflow-hidden rounded-full bg-hover-row',
             image && 'cursor-grab active:cursor-grabbing',
-            'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber',
+            'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring',
           )}
         >
           {image && source ? (
@@ -200,7 +200,7 @@ export function PhotoSheet({
             value={placement.zoom}
             disabled={!image}
             onChange={(e) => place({ ...placement, zoom: Number(e.target.value) })}
-            className="h-11 min-w-0 flex-1 accent-amber disabled:opacity-40"
+            className="h-11 min-w-0 flex-1 accent-primary disabled:opacity-40"
           />
           <span aria-hidden="true"><LineIcon name="plus" className="h-4 w-4" /></span>
         </div>
@@ -216,7 +216,7 @@ export function PhotoSheet({
           type="button"
           onClick={() => void save()}
           disabled={!image || busy !== null}
-          className="mt-3 flex min-h-12 w-full items-center justify-center rounded-pill bg-amber text-md font-bold text-navy hover:bg-amber-dark disabled:cursor-not-allowed disabled:bg-hover-row disabled:text-muted"
+          className="mt-3 flex min-h-12 w-full items-center justify-center rounded-pill bg-primary text-md font-bold text-primary-contrast hover:bg-primary-hover disabled:cursor-not-allowed disabled:bg-hover-row disabled:text-muted"
         >
           {busy === 'save' ? t.savingPhoto : t.savePhoto}
         </button>

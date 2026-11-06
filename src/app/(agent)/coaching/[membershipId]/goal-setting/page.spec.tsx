@@ -62,7 +62,7 @@ const SHELL = {
   '/kpm/org-levels': { body: [] },
 };
 
-/** `POST /goals/:period/preview?for=` (P18.99-T5): the plan the tab's inputs would make, saved nowhere. */
+/** `POST /goals/:period/preview?for=` (P18.11-T5): the plan the tab's inputs would make, saved nowhere. */
 const PREVIEW = 'POST /goals/2026/preview';
 const previewed = (over: Record<string, unknown> = {}) => ({
   body: {
@@ -131,7 +131,7 @@ describe('a coachee’s Goal Setting tab (P11-T7 AC-5)', () => {
   it('P11-T7 AC-5 saves her plan through PUT /goals/:period?for=, once, when Save is pressed', async () => {
     const { calls } = show([{ body: goal() }, { body: goal({ annualApeTargetMinor: 900_000_000_00 }) }]);
     fireEvent.change(await screen.findByRole('slider', { name: 'Annual APE target' }), { target: { value: '900000000' } });
-    // P18.99-T5 UI-014: the result moves through the preview, about her, and nothing is saved yet.
+    // P18.11-T5 UI-014: the result moves through the preview, about her, and nothing is saved yet.
     await waitFor(() => expect(calls.filter((c) => c.init.method === 'POST')).toHaveLength(1));
     expect(calls.find((c) => c.init.method === 'POST')!.url).toBe('http://api.test/api/v1/goals/2026/preview?for=mem-rina');
     expect(calls.filter((c) => c.init.method === 'PUT')).toHaveLength(0);
@@ -152,7 +152,7 @@ describe('a coachee’s Goal Setting tab (P11-T7 AC-5)', () => {
       .toHaveTextContent('Saved ✓'));
   });
 
-  it('P18.99-T5 UI-015 on a phone the tab’s save floats above the tab bar, as /goals’ does', async () => {
+  it('P18.11-T5 UI-015 on a phone the tab’s save floats above the tab bar, as /goals’ does', async () => {
     atWidth(375);
     show();
     await screen.findByRole('heading', { name: /What's their APE target this year\?/ });
@@ -166,7 +166,7 @@ describe('a coachee’s Goal Setting tab (P11-T7 AC-5)', () => {
     show();
     await screen.findByRole('button', { name: 'Save goal' });
     expect(screen.queryByText(/logged rate|measured/i)).not.toBeInTheDocument();
-    // The same calculator as `/goals`, so the same screen: no 💡 tip since ADR-0160 §4 (P18.8-T10 AC-4).
+    // The same calculator as `/goals`, so the same screen: no 💡 tip since ADR-0160 §4 (P18.5-T10 AC-4).
     expect(screen.queryByText('Use your real conversion ratios for accuracy.')).not.toBeInTheDocument();
     expect(screen.getByRole('group', { name: 'Appointment to meeting' })).toBeInTheDocument();
   });
@@ -178,18 +178,19 @@ describe('a coachee’s Goal Setting tab (P11-T7 AC-5)', () => {
   });
 
   /*
-   * ADR-0183 (OD-242; the owner's staging review SR-07, P18.99-T17), partly reversing ADR-0075: while the office holds
+   * ADR-0183 (OD-242; the owner's staging review SR-07, P18.11-T17), partly reversing ADR-0075: while the office holds
    * no figure for her, her leader types her APE produced here, and the save stores it (`typedApeOf`).
    */
-  it('ADR-0183 her leader types her APE produced while the office holds none: tapping the ✎ focuses it, the figure selected', async () => {
+  it('ADR-0183, P19.1-T4 AC-1 her leader types her APE produced while the office holds none: tapping the pill focuses it, the figure selected', async () => {
     const { calls } = show([{ body: goal() }, { body: goal({ apeAchievedMinor: 75_000_000_00 }) }]);
     await screen.findByRole('button', { name: 'Save goal' });
     const field = screen.getByRole('textbox', { name: 'APE already produced this year' }) as HTMLInputElement;
     expect(field).toHaveValue('IDR 0');
-    // The whole pill is the target: a tap on its ✎ focuses the field, and the figure is selected, so typing replaces it.
+    // The whole pill is the target — no ✎ since UI-122 — and the figure is selected, so typing replaces it.
     const pill = field.closest('label')!;
     expect(pill).toHaveAttribute('for', field.id);
-    await userEvent.click(pill.querySelector('svg')!);
+    expect(pill.querySelector('svg')).toBeNull();
+    await userEvent.click(pill);
     expect(field).toHaveFocus();
     await waitFor(() => expect([field.selectionStart, field.selectionEnd]).toEqual([0, field.value.length]));
     await userEvent.keyboard('75000000');
@@ -203,6 +204,13 @@ describe('a coachee’s Goal Setting tab (P11-T7 AC-5)', () => {
     const put = calls.find((c) => c.init.method === 'PUT')!;
     expect(put.url).toBe('http://api.test/api/v1/goals/2026?for=mem-rina');
     expect(JSON.parse(String(put.init.body))).toMatchObject({ apeAchievedMinor: 75_000_000_00 });
+  });
+
+  it('P19.1-T4 AC-12 the member’s own estimate, read by her coach, is labelled as hers', async () => {
+    show([{ body: goal({ apeAchievedMinor: 120_000_000_00 }) }]);
+    await screen.findByRole('button', { name: 'Save goal' });
+    expect(document.querySelector('[data-estimate-label]')).toHaveTextContent(/^(her|their|his) estimate$/);
+    expect(screen.getByRole('textbox', { name: 'APE already produced this year' })).toHaveValue('IDR 120M');
   });
 
   it('P11-T7 AC-5 an upload is hers and nobody’s to type: plain figures, no field, ⚡ and ⓘ, and no ADR-0084 six words', async () => {

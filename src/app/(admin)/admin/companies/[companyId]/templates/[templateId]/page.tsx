@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation';
 import { use, useEffect, useState } from 'react';
 import { Page } from '@/components/page';
 import { BackLink, useCompany, useCompanyName } from '@/components/kpm-template/company-frame';
-import { OfficesBehindDialog } from '@/components/kpm-template/offices-behind-dialog';
+import { ApplyToOfficesDialog } from '@/components/kpm-template/apply-to-offices-dialog';
+import { settleDraftSaves } from '@/components/kpm-template/use-template-drafts';
 import { PublishAllDialog, PublishAllReport } from '@/components/kpm-template/publish-all-dialog';
 import { TemplateActions } from '@/components/kpm-template/template-actions';
 import { Button, Card, ErrorBanner } from '@/components/ui/field';
@@ -14,8 +15,8 @@ import { LineIcon } from '@/components/ui/line-icon';
 import { Skeleton, SkeletonBar } from '@/components/ui/skeleton';
 import { TonePill, type PillTone } from '@/components/ui/tone-pill';
 import {
-  listTemplateOffices, listTemplates, publishAllTemplate,
-  type NamedTemplate, type PublishAllOutcome, type TemplateOffice,
+  isOfficeKind, listTemplateOffices, listTemplates, publishAllTemplate, readTemplate,
+  type NamedTemplate, type OfficeTemplateKind, type PublishAllOutcome, type TemplateOffice,
 } from '@/lib/admin';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import {
@@ -23,6 +24,8 @@ import {
 } from '@/lib/template-sections';
 import { useMessages } from '@/i18n/language-provider';
 import { adminTemplateMessages } from '@/i18n/messages/admin-template';
+import { adminTemplateAnalyticsMessages } from '@/i18n/messages/admin-template-analytics';
+import { sectionSummary, type AdvancedAnalyticsConfig } from '@/lib/advanced-analytics';
 
 const STATE_TONE: Record<ReturnType<typeof sectionState>['state'], PillTone> = {
   published: 'green',
@@ -32,7 +35,7 @@ const STATE_TONE: Record<ReturnType<typeof sectionState>['state'], PillTone> = {
 };
 
 /**
- * **One template, as a checklist of its sections** (ADR-0185 §3; P18.99-T20 AC-2): each of the six with *Terbit vN*,
+ * **One template, as a checklist of its sections** (ADR-0185 §3; P18.11-T20 AC-2): each of the seven with *Terbit vN*,
  * *Draf* or *Kosong* — words on a tinted pill, never a dot (D-27) — and a › to its editor; *Terbitkan semua (n)*, asking
  * first which sections it will publish; *N KPM memakai versi lama*, which lists them; and the template's ⋮.
  *
@@ -53,7 +56,9 @@ export default function TemplatePage({
   const [error, setError] = useState<ApiError | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [offices, setOffices] = useState<TemplateOffice[] | null>(null);
-  const [dialog, setDialog] = useState<null | 'publish' | 'offices'>(null);
+  const [dialog, setDialog] = useState<null | 'publish' | 'apply'>(null);
+  /** The sections the apply dialog asks about: those just published, or every published one (ADR-0208 §4). */
+  const [applyKinds, setApplyKinds] = useState<OfficeTemplateKind[]>([]);
   const [busy, setBusy] = useState(false);
   const [results, setResults] = useState<PublishAllOutcome[] | null>(null);
   const [publishError, setPublishError] = useState<ApiError | null>(null);
@@ -61,7 +66,9 @@ export default function TemplatePage({
   useEffect(() => {
     let live = true;
     setError(null);
-    void listTemplates(companyId)
+    // After the section just left has saved its last edit, so the checklist counts its draft (P19.4-T5 AC-9).
+    void settleDraftSaves()
+      .then(() => listTemplates(companyId))
       .then((rows) => { if (live) setTemplates(rows); })
       .catch((err) => { if (live) setError(toDisplayError(err)); });
     return () => { live = false; };
@@ -78,10 +85,40 @@ export default function TemplatePage({
     return () => { live = false; };
   }, [companyId, templateId, officesRead]);
 
+  /*
+   * **The *Advanced analytics* row's summary and its KPMs** (P19.5-T1 AC-1, AC-16): *"N dari 6 bagian aktif · M kolom
+   * data upload"*, and how many KPMs read the template, for *Terbitkan semua*'s line. A failure leaves the row's state
+   * pill alone, which the list carries.
+   */
+  const [analytics, setAnalytics] = useState<{ summary: ReturnType<typeof sectionSummary>; kpms: number } | null>(null);
+  useEffect(() => {
+    let live = true;
+    void readTemplate(companyId, 'advanced_analytics', templateId)
+      .then((row) => {
+        const config = row.payload as unknown as AdvancedAnalyticsConfig;
+        if (live && Array.isArray(config.sections)) {
+          setAnalytics({ summary: sectionSummary(config), kpms: row.analytics?.kpms ?? 0 });
+        }
+      })
+      .catch(() => { if (live) setAnalytics(null); });
+    return () => { live = false; };
+  }, [companyId, templateId, officesRead]);
+
   const template = templates?.find((row) => row.id === templateId) ?? null;
   const archived = template?.status === 'archived';
   const waiting = template ? sectionsWaiting(template) : [];
   const behind = offices?.filter((o) => o.behind.length > 0).length ?? 0;
+
+  /**
+   * *Dipakai N KPM* and *N KPM memakai versi lama* open the push for every section the template has published — but the
+   * playbook, which the KPMs read live (ADR-0210 §4).
+   */
+  const openApply = (kinds?: OfficeTemplateKind[]) => {
+    if (!template) return;
+    setApplyKinds(kinds ?? (Object.keys(template.sections) as OfficeTemplateKind[])
+      .filter((kind) => isOfficeKind(kind) && template.sections[kind]?.publishedVersion !== null));
+    setDialog('apply');
+  };
 
   /** The template as an action answered it, in the list in hand. */
   const replace = (saved: NamedTemplate) => {
@@ -96,22 +133,32 @@ export default function TemplatePage({
     setBusy(true);
     setPublishError(null);
     try {
+      // A section left with an edit on its way is saved first, so the publish carries it (P19.4-T5 AC-9).
+      await settleDraftSaves();
       const answer = await publishAllTemplate(companyId, templateId);
       replace(answer.template);
       setResults(answer.results);
       setOfficesRead((n) => n + 1);
+      // *Terapkan juga ke KPM yang sudah ada?* (ADR-0208 §4): asked for what was published, when there are KPMs to reach.
+      const published = answer.results.filter((r) => r.outcome === 'published').map((r) => r.kind).filter(isOfficeKind);
+      if (published.length > 0 && answer.template.officeCount > 0) {
+        setApplyKinds(published);
+        setDialog('apply');
+        return;
+      }
+      setDialog(null);
     } catch (err) {
       setPublishError(toDisplayError(err));
+      setDialog(null);
     } finally {
       setBusy(false);
-      setDialog(null);
     }
   }
 
   return (
     <Page
       title={template?.name ?? words.card.list}
-      subtitle={template ? <TemplateFacts template={template} /> : undefined}
+      subtitle={template ? <TemplateFacts template={template} onOpenOffices={() => openApply()} /> : undefined}
       permission="company_template:read"
       actions={(
         <div className="flex flex-wrap items-start gap-4">
@@ -152,8 +199,8 @@ export default function TemplatePage({
               <p className="text-md font-semibold text-navy">
                 {archived ? t.archived : waiting.length > 0 ? t.changed({ n: waiting.length }) : t.noChanges}
               </p>
-              {behind > 0 && (
-                <Button variant="inline" className="self-start text-navy underline" onClick={() => setDialog('offices')}>
+              {behind > 0 && !archived && (
+                <Button variant="inline" className="self-start text-navy underline" onClick={() => openApply()}>
                   {t.behind({ n: behind })}
                 </Button>
               )}
@@ -171,33 +218,53 @@ export default function TemplatePage({
           <ul aria-label={t.list} className="divide-y divide-divider overflow-hidden rounded-lg border border-card-edge bg-card">
             {TEMPLATE_SECTIONS.map((section) => (
               <li key={section.slug}>
-                <SectionRow companyId={companyId} template={template} section={section} />
+                <SectionRow
+                  companyId={companyId}
+                  template={template}
+                  section={section}
+                  summary={section.slug === 'analytics' ? analytics?.summary : undefined}
+                />
               </li>
             ))}
           </ul>
 
           <PublishAllDialog
+            analyticsKpms={analytics?.kpms ?? 0}
             open={dialog === 'publish'}
             sections={waiting}
             busy={busy}
             onConfirm={() => void publishAll()}
             onClose={() => setDialog(null)}
           />
-          <OfficesBehindDialog open={dialog === 'offices'} offices={offices ?? []} onClose={() => setDialog(null)} />
+          <ApplyToOfficesDialog
+            open={dialog === 'apply'}
+            companyId={companyId}
+            templateId={templateId}
+            kinds={applyKinds}
+            onClose={() => { setDialog(null); setOfficesRead((n) => n + 1); }}
+          />
         </>
       )}
     </Page>
   );
 }
 
-/** Under the template's name: *★ Default* or *Diarsipkan*, and the offices it answers for. */
-function TemplateFacts({ template }: { template: NamedTemplate }) {
+/**
+ * Under the template's name: *★ Default* or *Diarsipkan*, and the offices it answers for — ***Dipakai N KPM*** opening
+ * the list the publish dialog shows (SA UI-012; ADR-0208 §4), so the newest version can be pushed later too.
+ */
+function TemplateFacts({ template, onOpenOffices }: { template: NamedTemplate; onOpenOffices: () => void }) {
   const t = useMessages(adminTemplateMessages).card;
+  const live = template.officeCount > 0 && template.status === 'active';
   return (
     <span className="flex flex-wrap items-center gap-2">
       {template.isDefault && <TonePill tone="blue"><span aria-hidden="true">★ </span>{t.default}</TonePill>}
       {template.status === 'archived' && <TonePill tone="grey">{t.archived}</TonePill>}
-      <span>{t.usedBy({ n: template.officeCount })}</span>
+      {live ? (
+        <Button variant="inline" className="text-navy underline" onClick={onOpenOffices}>
+          {t.usedBy({ n: template.officeCount })}
+        </Button>
+      ) : <span>{t.usedBy({ n: template.officeCount })}</span>}
     </span>
   );
 }
@@ -210,11 +277,15 @@ function SectionRow({
   companyId,
   template,
   section,
+  summary,
 }: {
   companyId: string;
   template: NamedTemplate;
   section: TemplateSection;
+  /** *Advanced analytics* only (P19.5-T1 AC-1): its sections on and its columns, the row's detail. */
+  summary?: ReturnType<typeof sectionSummary>;
 }) {
+  const analyticsWords = useMessages(adminTemplateAnalyticsMessages);
   const words = useMessages(adminTemplateMessages);
   const t = words.checklist;
   const { state, versions } = sectionState(template, section);
@@ -229,6 +300,10 @@ function SectionRow({
       name: words.parts[v.kind as keyof typeof words.parts], v: v.version,
     })).join(' · '))
     : state === 'draft' ? t.draftOver({ v: versions[0].version }) : null;
+  // *Advanced analytics* says what it holds, and its pill the rest (AC-1, spec §6 *Overview row*).
+  const shown = summary
+    ? analyticsWords.summary({ on: summary.on, of: summary.total, columns: summary.columns })
+    : detail;
 
   return (
     <Link
@@ -237,7 +312,7 @@ function SectionRow({
     >
       <span className="min-w-0 flex-1">
         <span className="block text-md font-semibold text-navy">{words.sections[section.slug]}</span>
-        {detail && <span className="block text-sm text-muted">{detail}</span>}
+        {shown && <span className="block text-sm text-muted">{shown}</span>}
       </span>
       <TonePill tone={STATE_TONE[state]}>{label}</TonePill>
       <LineIcon name="chevronRight" className="h-5 w-5 shrink-0 text-navy" />

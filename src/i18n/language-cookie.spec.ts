@@ -4,10 +4,10 @@ import { LANGUAGE_COOKIE } from './language';
 import { languageCookieFor, readLanguageCookie, writeLanguageCookie } from './language-cookie';
 
 /**
- * **P18.98-T2 AC-5: the language cookie** (ADR-0179 §2). `ab_lang` holds `id` or `en`, lasts a year, is
+ * **P18.10-T2 AC-5: the language cookie** (ADR-0179 §2). `ab_lang` holds `id` or `en`, lasts a year, is
  * `SameSite=Lax`, and is not `HttpOnly`, because the page reads it before it paints (`pre-paint.ts`).
  */
-describe('P18.98-T2 AC-5 the language cookie', () => {
+describe('P18.10-T2 AC-5 the language cookie', () => {
   afterEach(() => {
     vi.restoreAllMocks();
   });

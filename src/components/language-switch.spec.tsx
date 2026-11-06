@@ -4,19 +4,20 @@ import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { axe } from 'vitest-axe';
 import {
-  atWidth, languageCookie, makeMe, renderLive, renderWithSession, resetLanguage, stubFetch, wears,
+  atWidth, languageCookie, makeMe, renderLive, renderWithSession, resetLanguage, stubFetch,
 } from '@test/harness';
 import { getRequestLanguage } from '@/lib/api-client';
 import type { Me } from '@/lib/session';
-import { AdminShell } from './admin-shell';
+import { fieldChrome } from '@test/shell-fixtures';
 import { AgentShell } from './agent-shell';
 import { AppShell, PageHeader, type NavSection } from './app-shell';
 import { LanguageSwitch } from './language-switch';
-import { TenantShell } from './tenant-shell';
+import { Shell } from './shell';
 
+const route = vi.hoisted(() => ({ path: '/activity/log' }));
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
-  usePathname: () => '/activity/log',
+  usePathname: () => route.path,
 }));
 
 const SECTIONS: readonly NavSection[] = [
@@ -34,10 +35,14 @@ function HalfTypedForm() {
   );
 }
 
-/** A shell as a page meets it: the bar, the sidebar, a page header with an action, and a form under it. */
+/**
+ * A shell as a page meets it: the sidebar (from 1024px) or the bar and its sheet (below), a page header with an action,
+ * and a form under it. *Changed 2026-11-05 (P19.2-T1; ADR-0197):* every shell is the one shell, so `field` always.
+ */
 function shell() {
   return (
     <AppShell
+      field={fieldChrome()}
       sections={SECTIONS}
       user={{ name: 'Rina', fullName: 'Rina Wijaya', role: 'Agent', initials: 'RW', email: 'rina@kpm0417.test' }}
       account={{ href: '/profile', onSignOut: vi.fn() }}
@@ -50,27 +55,39 @@ function shell() {
   );
 }
 
-const bar = () => document.querySelector('aside')!;
 const main = () => document.querySelector('main')!;
-/** The switches in a part of the page: the bar's or the page header's. */
+/** The switches in a part of the page: the account menu's, the sheet's — and never the page's. */
 const switchesIn = (el: HTMLElement) => within(el).queryAllByRole('group', { name: /^(Language|Bahasa)$/ });
 const option = (el: HTMLElement, code: 'ID' | 'EN') => within(switchesIn(el)[0]).getByRole('button', { name: code });
-/** Whether an element is hidden at a width, by a class that holds there (`print:hidden` is the printer's, not a size's). */
-const hiddenAt = (el: Element, px: number) => wears(el, px).split(' ').includes('hidden');
+/** The account menu at the sidebar's foot, opened: where the switch is from 1024px (UI-112, UI-129). */
+async function accountMenu(): Promise<HTMLElement> {
+  if (!document.querySelector('[data-account-panel]')) {
+    await userEvent.click(document.querySelector<HTMLElement>('[aria-controls="sidebar-user-actions"]')!);
+  }
+  return document.querySelector<HTMLElement>('[data-account-panel]')!;
+}
+/** The *Lainnya* sheet, opened: where the switch is below 1024px (ADR-0180 §3). */
+async function sheet(): Promise<HTMLElement> {
+  const open = document.querySelector<HTMLElement>('[role="dialog"]');
+  if (open) return open;
+  await userEvent.click(within(document.querySelector<HTMLElement>('[data-tab-bar]')!).getByRole('button', { name: /^(More|Lainnya)$/ }));
+  return screen.findByRole('dialog', { name: /^(More|Lainnya)$/ });
+}
 
 afterEach(() => {
   vi.unstubAllGlobals();
   resetLanguage();
   window.localStorage.clear();
+  route.path = '/activity/log';
 });
 
 /**
- * **P18.98-T2 AC-3: the *ID | EN* switch** (ADR-0179 §2; UI-041). Built whole and held back: nothing is drawn until
- * `LANGUAGE_LIVE` turns on at P18.98-T4's exit. These cases render it live through the harness (`renderLive`), as it
+ * **P18.10-T2 AC-3: the *ID | EN* switch** (ADR-0179 §2; UI-041). Built whole and held back: nothing is drawn until
+ * `LANGUAGE_LIVE` turns on at P18.10-T4's exit. These cases render it live through the harness (`renderLive`), as it
  * will be then.
  */
-describe('P18.98-T2 the switch, while it is not live', () => {
-  it.each([375, 768, 1024, 1280])('AC-3 draws nothing at %ipx: no switch in the bar or the page header', (px) => {
+describe('P18.10-T2 the switch, while it is not live', () => {
+  it.each([375, 768, 1024, 1280])('AC-3 draws nothing at %ipx: no switch on the page or in the menu', (px) => {
     atWidth(px);
     renderWithSession(shell());
 
@@ -85,111 +102,28 @@ describe('P18.98-T2 the switch, while it is not live', () => {
     expect(Array.from(row.children).map((el) => el.tagName)).toEqual(['DIV', 'BUTTON']);
   });
 
-  it('AC-3 leaves the bar’s wordmark as it was drawn', () => {
-    atWidth(320);
-    renderWithSession(shell());
-    expect(within(bar()).getByText('AgencyBoost').className)
-      .toBe('font-display text-lg font-extrabold leading-tight tracking-tight text-white');
-  });
-
   it('AC-3 the switch itself renders nothing outside a live provider', () => {
     const { container } = render(<LanguageSwitch tone="page" />);
     expect(container).toBeEmptyDOMElement();
   });
 });
 
-describe('P18.98-T2 the switch, live, in every shell’s header', () => {
-  it('AC-3 at 375px sits in the phone’s bar between the brand and the avatar, two 44 × 44 options', () => {
-    atWidth(375);
-    stubFetch({});
-    renderLive(shell());
-
-    const [inBar] = switchesIn(bar());
-    expect(switchesIn(bar())).toHaveLength(1);
-    // Between the brand and the avatar: after the mark, before the account's control, in the bar's right-hand group.
-    const mark = bar().querySelector('svg[viewBox="0 0 26 26"]')!;
-    // Live, a reader who has chosen nothing reads Indonesian: the avatar is *Akun*.
-    const avatar = within(bar()).getByRole('button', { name: /^(Account|Akun)/ });
-    expect(mark.compareDocumentPosition(inBar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(inBar.compareDocumentPosition(avatar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(inBar.parentElement).toBe(avatar.closest('.ml-auto'));
-    // Two options, each a 44px target; the box is exactly theirs, its edge a ring that takes no room.
-    const options = within(inBar).getAllByRole('button');
-    expect(options.map((o) => o.textContent)).toEqual(['ID', 'EN']);
-    for (const o of options) expect(o).toHaveClass('h-11', 'w-11');
-    expect(inBar).toHaveClass('ring-1');
-    expect(inBar).not.toHaveClass('p-1');
-    // On a phone the page header leaves it to the bar.
-    expect(switchesIn(main())).toHaveLength(0);
-  });
-
-  it('AC-3 makes room on the narrowest phones: below 360px the bar’s wordmark is said, not drawn (WCAG 1.4.10)', () => {
-    atWidth(320);
-    stubFetch({});
-    renderLive(shell());
-    const wordmark = within(bar()).getByText('AgencyBoost');
-
-    expect(wordmark).toHaveClass('max-[359.98px]:sr-only');
-    // Walked on a production build: ☰, the mark, the switch and the avatar fill 320px with nothing scrolling sideways.
-  });
-
-  it('AC-3 at 375px is the phone’s alone: hidden by its class from 768px, so nothing wider shows it', () => {
-    atWidth(375);
-    stubFetch({});
-    renderLive(shell());
-    const [inBar] = switchesIn(bar());
-
-    expect(hiddenAt(inBar, 375)).toBe(false);
-    expect(hiddenAt(inBar, 768)).toBe(true);
-    expect(hiddenAt(inBar, 1280)).toBe(true);
-  });
-
-  it.each([768, 1024, 1280])('AC-3 at %ipx sits at the page header’s top right, after the page’s own actions: the right-most thing in it', (px) => {
-    atWidth(px);
-    stubFetch({});
-    renderLive(shell());
-
-    const [inHeader] = switchesIn(main());
-    expect(switchesIn(main())).toHaveLength(1);
-    const heading = screen.getByRole('heading', { level: 1, name: 'Log Activity' });
-    const action = screen.getByRole('button', { name: 'Log today' });
-    // The header's row: the title and the page's actions, which wrap among themselves; then the switch, a column of its
-    // own at the top-right corner that never wraps (2026-10-29: right of every action, on every page).
-    const titleAndActions = heading.parentElement!.parentElement!;
-    const row = inHeader.parentElement!;
-    expect(Array.from(titleAndActions.children)).toEqual([heading.parentElement, action]);
-    expect(Array.from(row.children)).toEqual([titleAndActions, inHeader]);
-    expect(row).not.toHaveClass('flex-wrap');
-    expect(inHeader).toHaveClass('shrink-0');
-    // Shown here from 768px, its 44px targets centred on the title's line; the bar's is hidden by its class.
-    expect(hiddenAt(inHeader, px)).toBe(false);
-    expect(wears(inHeader, px)).toContain('-my-[5px]');
-    expect(hiddenAt(inHeader, 375)).toBe(true);
-    for (const o of within(inHeader).getAllByRole('button')) expect(o).toHaveClass('h-11', 'w-11');
-    for (const inBar of switchesIn(bar())) expect(hiddenAt(inBar, px)).toBe(true);
-  });
-
-  it('AC-3 sits at the top right of a page header with no actions', () => {
-    atWidth(1280);
-    stubFetch({});
-    renderLive(<PageHeaderInShell />);
-
-    const [inHeader] = switchesIn(main());
-    const titleAndActions = screen.getByRole('heading', { level: 1 }).parentElement!.parentElement!;
-    expect(Array.from(titleAndActions.children)).toHaveLength(1);
-    expect(Array.from(inHeader.parentElement!.children)).toEqual([titleAndActions, inHeader]);
-  });
-
-  it('AC-3 is named Language, the current option pressed, each option its code and its language’s own name', () => {
+/*
+ * *Changed 2026-11-05 (P19.2-T1 AC-11; UI-129, ADR-0197 §5):* the phone's bar and the page header no longer carry the
+ * switch for any role — the consoles' bar is gone, and no page carries it. Its own behaviour is pinned where it lives
+ * now: the account menu at the sidebar's foot from 1024px, the *Lainnya* sheet below.
+ */
+describe('P18.10-T2 the switch, live, in the account menu', () => {
+  it('AC-3 is named Language, the current option pressed, each option its code and its language’s own name', async () => {
     atWidth(1280);
     stubFetch({});
     renderLive(shell());
-    const [inHeader] = switchesIn(main());
+    const [inMenu] = switchesIn(await accountMenu());
 
-    expect(inHeader).toHaveAttribute('role', 'group');
-    expect(inHeader).toHaveAccessibleName('Bahasa');
-    const id = within(inHeader).getByRole('button', { name: 'ID' });
-    const en = within(inHeader).getByRole('button', { name: 'EN' });
+    expect(inMenu).toHaveAttribute('role', 'group');
+    expect(inMenu).toHaveAccessibleName('Bahasa');
+    const id = within(inMenu).getByRole('button', { name: 'ID' });
+    const en = within(inMenu).getByRole('button', { name: 'EN' });
     // Live, a reader who has chosen nothing reads Bahasa Indonesia.
     expect(id).toHaveAttribute('aria-pressed', 'true');
     expect(en).toHaveAttribute('aria-pressed', 'false');
@@ -197,6 +131,7 @@ describe('P18.98-T2 the switch, live, in every shell’s header', () => {
     expect(en).toHaveAccessibleDescription('English');
     expect(id).toHaveAttribute('lang', 'id');
     expect(en).toHaveAttribute('lang', 'en');
+    expect(switchesIn(main())).toHaveLength(0);
   });
 
   it('AC-3 switches the screen at once, and says so: the group’s name, the pressed option, <html lang>', async () => {
@@ -204,14 +139,15 @@ describe('P18.98-T2 the switch, live, in every shell’s header', () => {
     stubFetch({ 'PATCH /auth/me': { body: makeMe() } });
     renderLive(shell());
 
-    await userEvent.click(option(main(), 'EN'));
+    await userEvent.click(option(await accountMenu(), 'EN'));
 
-    expect(switchesIn(main())[0]).toHaveAccessibleName('Language');
-    expect(option(main(), 'EN')).toHaveAttribute('aria-pressed', 'true');
-    expect(option(main(), 'ID')).toHaveAttribute('aria-pressed', 'false');
+    const menu = await accountMenu();
+    expect(switchesIn(menu)[0]).toHaveAccessibleName('Language');
+    expect(option(menu, 'EN')).toHaveAttribute('aria-pressed', 'true');
+    expect(option(menu, 'ID')).toHaveAttribute('aria-pressed', 'false');
     expect(document.documentElement.lang).toBe('en');
-    // The shell's own words follow: the bar's ☰ is named in English now.
-    expect(screen.getByRole('button', { name: 'Open menu' })).toBeInTheDocument();
+    // The shell's own words follow: the account menu's *Sign out* is in English now.
+    expect(within(menu).getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
   });
 
   it('AC-3 is reached and chosen by keyboard: Tab to an option, then Enter or Space', async () => {
@@ -219,31 +155,32 @@ describe('P18.98-T2 the switch, live, in every shell’s header', () => {
     stubFetch({ 'PATCH /auth/me': { body: makeMe() } });
     renderLive(shell());
     const user = userEvent.setup();
+    const menu = await accountMenu();
 
-    option(main(), 'ID').focus();
+    option(menu, 'ID').focus();
     await user.tab();
-    expect(option(main(), 'EN')).toHaveFocus();
+    expect(option(menu, 'EN')).toHaveFocus();
     await user.keyboard('{Enter}');
     expect(document.documentElement.lang).toBe('en');
 
     await user.tab({ shift: true });
-    expect(option(main(), 'ID')).toHaveFocus();
+    expect(option(menu, 'ID')).toHaveFocus();
     await user.keyboard(' ');
     expect(document.documentElement.lang).toBe('id');
   });
 
-  it('AC-3 an open form keeps what was typed across a switch, both ways', async () => {
+  it('AC-3 an open form keeps what was typed across a switch, both ways — from the Lainnya sheet on a phone', async () => {
     atWidth(375);
     stubFetch({ 'PATCH /auth/me': { body: makeMe() } });
     renderLive(shell());
     const box = screen.getByLabelText('Note');
 
     await userEvent.type(box, 'Follow up Pak Budi on Friday');
-    await userEvent.click(option(bar(), 'EN'));
+    await userEvent.click(option(await sheet(), 'EN'));
     expect(screen.getByLabelText('Note')).toBe(box);
     expect(box).toHaveValue('Follow up Pak Budi on Friday');
 
-    await userEvent.click(option(bar(), 'ID'));
+    await userEvent.click(option(await sheet(), 'ID'));
     expect(box).toHaveValue('Follow up Pak Budi on Friday');
   });
 
@@ -252,7 +189,7 @@ describe('P18.98-T2 the switch, live, in every shell’s header', () => {
     const { calls } = stubFetch({ 'PATCH /auth/me': { body: makeMe() } });
     renderLive(shell());
 
-    await userEvent.click(option(main(), 'EN'));
+    await userEvent.click(option(await accountMenu(), 'EN'));
 
     expect(languageCookie()).toBe('en');
     expect(getRequestLanguage()).toBe('en');
@@ -268,7 +205,7 @@ describe('P18.98-T2 the switch, live, in every shell’s header', () => {
     const { calls } = stubFetch({});
     renderLive(shell());
 
-    await userEvent.click(option(main(), 'ID'));
+    await userEvent.click(option(await accountMenu(), 'ID'));
 
     expect(calls).toHaveLength(0);
     expect(languageCookie()).toBeNull();
@@ -279,7 +216,7 @@ describe('P18.98-T2 the switch, live, in every shell’s header', () => {
     const { calls } = stubFetch({});
     renderLive(shell(), { me: makeMe({ isImpersonating: true, impersonationReadOnly: true, impersonatedBy: 'sa-1' }) });
 
-    await userEvent.click(option(main(), 'EN'));
+    await userEvent.click(option(await accountMenu(), 'EN'));
 
     expect(document.documentElement.lang).toBe('en');
     expect(languageCookie()).toBe('en');
@@ -291,51 +228,25 @@ describe('P18.98-T2 the switch, live, in every shell’s header', () => {
     stubFetch({ 'PATCH /auth/me': { status: 503, body: { error: { code: 'INTERNAL_ERROR', message: 'x', requestId: 'r' } } } });
     renderLive(shell());
 
-    await userEvent.click(option(main(), 'EN'));
+    await userEvent.click(option(await accountMenu(), 'EN'));
 
     expect(document.documentElement.lang).toBe('en');
     expect(languageCookie()).toBe('en');
   });
 
-  it.each(['id', 'en'] as const)('AC-3 has no axe violations in the bar and the header, the screen in %s', async (language) => {
+  it.each(['id', 'en'] as const)('AC-3 has no axe violations in the sheet, the screen in %s', async (language) => {
     atWidth(375);
     stubFetch({ 'PATCH /auth/me': { body: makeMe() } });
-    const { container } = renderLive(shell());
-    if (language === 'en') fireEvent.click(option(bar(), 'EN'));
+    renderLive(shell());
+    const open = await sheet();
+    if (language === 'en') fireEvent.click(option(open, 'EN'));
     // Contrast is measured in a browser, not in jsdom, which cannot draw a canvas (as every axe spec here).
-    const results = await axe(container, { rules: { 'color-contrast': { enabled: false } } });
+    const results = await axe(document.body, { rules: { 'color-contrast': { enabled: false }, region: { enabled: false } } });
     expect(results.violations ?? []).toEqual([]);
   });
 });
 
-/** A shell's page whose header has nothing beside its title. */
-function PageHeaderInShell() {
-  return (
-    <AppShell sections={SECTIONS} user={{ name: 'Rina', role: 'Agent', initials: 'RW' }}>
-      <PageHeader title="Your 90-day activation" />
-    </AppShell>
-  );
-}
-
-/**
- * The two consoles, each as its reader meets it: the office's and the platform's. *Changed 2026-10-30 (UI V1, ADR-0180):*
- * the field shell has no bar on a phone or a tablet; its switch is the *Lainnya* sheet's there (the next case) and the
- * page header's from 1024px.
- */
-const SHELLS: [string, () => React.ReactElement, Partial<Me>][] = [
-  ['the office console', () => <TenantShell title="Overview">body</TenantShell>, {
-    membership: {
-      membershipId: 'mem-1', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab', status: 'active',
-      isKpmOwner: true, isKpmAdmin: false, directCount: 3,
-    },
-    permissions: ['member:read_profile'],
-  }],
-  ['the platform console', () => <AdminShell title="Overview">body</AdminShell>, {
-    user: { ...makeMe().user, platformRole: 'super_admin' }, membership: null, permissions: ['kpm:list_all'],
-  }],
-];
-
-describe('ADR-0180 the field shell’s switch: in the Lainnya sheet below 1024px, in the page header from 1024px', () => {
+describe('ADR-0180, P19.1-T1 the field shell’s switch: in the Lainnya sheet below 1024px, in the account menu from 1024px', () => {
   it.each([375, 768])('UI-004 at %ipx is in no page header and no bar, and in the sheet the bar’s Lainnya opens', async (px) => {
     stubFetch({});
     atWidth(px);
@@ -347,29 +258,51 @@ describe('ADR-0180 the field shell’s switch: in the Lainnya sheet below 1024px
     expect(switchesIn(sheet)).toHaveLength(1);
   });
 
-  it('ADR-0180 at 1280px is the page header’s top-right corner, as before', () => {
+  /*
+   * *Changed 2026-11-04 (P19.1-T1 AC-1, ADR-0196; UI-112, Conflicts row 145):* **no page header carries it at 1280px** —
+   * it is the account menu's, the sidebar foot's chip, from 1024px. It was the header's top-right corner (ADR-0180 §3).
+   */
+  it('P19.1-T1 AC-1 at 1280px is in no page header, and in the account menu the sidebar’s chip opens', async () => {
     stubFetch({});
     atWidth(1280);
     renderLive(<AgentShell title="Log Activity">body</AgentShell>, { me: makeMe() });
-    const [inHeader] = switchesIn(main());
-    expect(inHeader).toBeDefined();
-    expect(inHeader.parentElement!.lastElementChild).toBe(inHeader);
+    expect(switchesIn(main())).toHaveLength(0);
+    fireEvent.click(screen.getByRole('button', { name: /Rina/ }));
+    const panel = document.querySelector('[data-account-panel]') as HTMLElement;
+    expect(switchesIn(panel)).toHaveLength(1);
   });
 });
 
-describe('P18.98-T2 the switch, live, in each of the three shells', () => {
-  it.each(SHELLS)('AC-3 is in %s’s phone bar at 375px, and its page header at 1280px', (_, page, who) => {
-    stubFetch({});
-    const width = atWidth(375);
-    renderLive(page(), { me: makeMe(who) });
-    expect(switchesIn(bar())).toHaveLength(1);
-    expect(switchesIn(main())).toHaveLength(0);
+/**
+ * *Changed 2026-11-05 (P19.2-T1 AC-11; UI-129, ADR-0197 §5):* the office's and the platform's pages are in the one shell,
+ * so their switch is where everybody's is — the sheet below 1024px, the account menu from 1024px — and never on a page.
+ * It was each console's phone bar and page header.
+ */
+const ROLES: [string, string, Partial<Me>][] = [
+  ['an Owner’s office page', '/kpm/overview', {
+    membership: {
+      membershipId: 'mem-1', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab', status: 'active',
+      isKpmOwner: true, isKpmAdmin: false, directCount: 3,
+    },
+    permissions: ['member:read_profile'],
+  }],
+  ['a Super Admin’s page', '/admin', {
+    user: { ...makeMe().user, platformRole: 'super_admin' }, membership: null, permissions: ['kpm:list_all'],
+  }],
+];
 
-    width.resize(1280);
-    expect(switchesIn(main())).toHaveLength(1);
-    // The header's top-right corner: the row's last child, right of the title and the page's actions (2026-10-29).
-    const [inHeader] = switchesIn(main());
-    expect(inHeader.parentElement!.lastElementChild).toBe(inHeader);
-    expect(inHeader.parentElement!.firstElementChild).toBe(screen.getByRole('heading', { level: 1 }).parentElement!.parentElement);
+describe('P19.2-T1 AC-11 the switch, live, for the office and the platform too', () => {
+  it.each(ROLES)('P19.2-T1 AC-11 %s: in the sheet at 375px, the account menu at 1280px, on the page at neither', async (_, path, who) => {
+    stubFetch({});
+    route.path = path;
+    atWidth(375);
+    const phone = renderLive(<Shell title="Overview">body</Shell>, { me: makeMe(who) });
+    expect(switchesIn(main())).toHaveLength(0);
+    expect(switchesIn(await sheet())).toHaveLength(1);
+    phone.unmount();
+    atWidth(1280);
+    renderLive(<Shell title="Overview">body</Shell>, { me: makeMe(who) });
+    expect(switchesIn(main())).toHaveLength(0);
+    expect(switchesIn(await accountMenu())).toHaveLength(1);
   });
 });

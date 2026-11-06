@@ -16,7 +16,7 @@ import {
 import { useMeetingWriter } from './meeting-writer';
 
 /**
- * ***Share these minutes*** (`:2735-2745`, *Share this MOM* there — P18.97-T2 AC-3; OD-146, ADR-0131, I-256): the
+ * ***Share these minutes*** (`:2735-2745`, *Share this MOM* there — P18.9-T2 AC-3; OD-146, ADR-0131, I-256): the
  * product's dialog (F-72).
  *
  * **Each opening makes a fresh link** (contract, Noted 1): only its hash is kept, so a link once made cannot
@@ -66,7 +66,7 @@ export function ShareDialog({
       // Absent in an insecure context and in some in-app browsers.
       if (!navigator.clipboard?.writeText) throw new Error('no clipboard');
       await navigator.clipboard.writeText(address);
-      // The copy controls' one wording since 2026-10-26 (P18.95-T1 AC-6, ADR-0167 §5): the shared confirmations'.
+      // The copy controls' one wording since 2026-10-26 (P18.7-T1 AC-6, ADR-0167 §5): the shared confirmations'.
       writer.announce(confirmed.linkCopied);
     } catch {
       // The prototype's own way (`:2761-2763`); failing that, the link is left selected to copy by hand.

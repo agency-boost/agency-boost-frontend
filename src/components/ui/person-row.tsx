@@ -26,7 +26,7 @@ export function initialsFor(name: string): string {
  * words on it above 4.5:1. Never a role's colour: a role is a pill's words (D-27).
  */
 const TINTS = [
-  'bg-amber/20 text-amber-ink',
+  'bg-primary/20 text-primary-ink',
   'bg-lavender/20 text-navy',
   'bg-pill-green text-pill-green-ink',
   'bg-pill-blue text-pill-blue-ink',
@@ -95,16 +95,16 @@ const TONE: Record<PersonRowTone, string> = {
   // An agent: white; the desktop's row under the pointer.
   default: 'bg-card lg:hover:bg-hover-row',
   // The reader's own row: navy, white name.
-  self: 'bg-navy text-white lg:hover:bg-navy-soft',
+  self: 'bg-secondary text-secondary-contrast lg:hover:bg-secondary-hover',
   // An AAB's row: the accent's tint (`#FDF1E6`).
-  tinted: 'bg-amber/[0.12] lg:hover:bg-amber/20',
+  tinted: 'bg-primary/[0.12] lg:hover:bg-primary/20',
   // The upline: no fill, a 1px outline, grey words — and never a link.
   muted: 'border border-line bg-transparent text-muted',
 };
 
 const META: Record<PersonRowTone, string> = {
   default: 'text-muted',
-  self: 'text-on-navy-muted',
+  self: 'text-secondary-muted',
   tinted: 'text-muted',
   muted: 'text-muted',
 };
@@ -151,7 +151,7 @@ export function PersonRow({
   trailing?: ReactNode;
   /**
    * Beside the name, on its line, never cut short — the Group Tree's *Anda* on the reader's own row (UI-059, UI-075;
-   * added by Phase 18.99 T9). The name gives way with *…* first.
+   * added by Phase 18.11 T9). The name gives way with *…* first.
    */
   badge?: ReactNode;
   href?: string;
@@ -163,7 +163,7 @@ export function PersonRow({
   avatarSize?: number;
   /**
    * In the avatar's place — New Hires' status circle (UI-024: *✓ Teraktivasi, amber ✓ after day 90, empty when not
-   * yet*; added by Phase 18.99 T6). Decorative or labelled by the caller; the avatar when absent.
+   * yet*; added by Phase 18.11 T6). Decorative or labelled by the caller; the avatar when absent.
    */
   lead?: ReactNode;
   nameClassName?: string;
@@ -173,7 +173,7 @@ export function PersonRow({
   const nameClass = cn(
     'block truncate font-bold uppercase tracking-[0.2px]',
     tone === 'muted' ? 'text-sm' : 'text-[0.9375rem] md:max-lg:text-base lg:text-md',
-    tone === 'self' ? 'text-white' : tone === 'muted' ? 'text-muted' : 'text-ink',
+    tone === 'self' ? 'text-secondary-contrast' : tone === 'muted' ? 'text-muted' : 'text-ink',
     nameClassName,
   );
   // The target covers the row; the trailing controls sit above it.
@@ -192,7 +192,7 @@ export function PersonRow({
         'relative flex items-center gap-3 rounded-row px-3 py-2',
         HEIGHT[tone === 'muted' ? 48 : height],
         TONE[tone],
-        live && 'cursor-pointer has-[[data-row-main]:focus-visible]:outline has-[[data-row-main]:focus-visible]:outline-2 has-[[data-row-main]:focus-visible]:outline-offset-1 has-[[data-row-main]:focus-visible]:outline-amber',
+        live && 'cursor-pointer has-[[data-row-main]:focus-visible]:outline has-[[data-row-main]:focus-visible]:outline-2 has-[[data-row-main]:focus-visible]:outline-offset-1 has-[[data-row-main]:focus-visible]:outline-primary',
         className,
       )}
     >
@@ -219,7 +219,7 @@ export function PersonRow({
       {chevron && live && (
         <LineIcon
           name="chevronRight"
-          className={cn('h-5 w-5', tone === 'self' ? 'text-on-navy-muted' : 'text-signal-grey')}
+          className={cn('h-5 w-5', tone === 'self' ? 'text-secondary-muted' : 'text-signal-grey')}
         />
       )}
     </div>
@@ -257,7 +257,7 @@ export function TreeToggle({
       onClick={onToggle}
       className={cn(
         'relative z-[1] -mr-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-pill md:max-lg:h-12 md:max-lg:w-12 lg:h-8 lg:w-8',
-        onNavy ? 'text-on-navy-muted hover:bg-white/10' : 'text-signal-grey hover:bg-hover-row',
+        onNavy ? 'text-secondary-muted hover:bg-secondary-contrast/10' : 'text-signal-grey hover:bg-hover-row',
       )}
     >
       <LineIcon name={open ? 'chevronUp' : 'chevronDown'} className="h-5 w-5" />

@@ -18,14 +18,14 @@ import { formatBenchmark, formatRatioForStatus, type RatioDisplayUnit } from '@/
 import type { PeriodFigures } from '@/lib/summary';
 import { useOpenedOnce } from '@/lib/use-opened-once';
 
-/** The drill, downloaded when it is first opened and mounted from then on (`useOpenedOnce`; P18.99-T16). */
+/** The drill, downloaded when it is first opened and mounted from then on (`useOpenedOnce`; P18.11-T16). */
 const ActivityDrill = dynamic(() => import('@/components/coaching-activity-drill').then((m) => m.ActivityDrill), { ssr: false });
 
 /**
- * **What a finalized session's record draws and the live workspace does not** (P18.99-T16, the bundle): the snapshot's
+ * **What a finalized session's record draws and the live workspace does not** (P18.11-T16, the bundle): the snapshot's
  * tags, its goal row, its ratio lines and its Activity panel, for the archive and `/coaching/me` (`coaching-record.tsx`).
  * Out of `coaching-parts.tsx`, which the workspace shares with the record, so the Coaching Session does not load them.
- * Their words are the catalogue's (`messages/coaching-session.tsx`, P18.98-T4), their figures in `useFigureLanguage()`'s.
+ * Their words are the catalogue's (`messages/coaching-session.tsx`, P18.10-T4), their figures in `useFigureLanguage()`'s.
  */
 
 /** The prototype's tags (`.action-date-tag`, `.action-from-tag`, `Overall.html:1332-1335`). */
@@ -38,7 +38,7 @@ export function DateTag({ day }: { day: string | null }) {
 export function FromLeadTag({ name }: { name: string }) {
   const t = useMessages(coachingSessionMessages).agreement;
   return (
-    <span className="whitespace-nowrap rounded-pill bg-navy-soft/[0.08] px-2 py-0.5 text-2xs text-navy-soft">
+    <span className="whitespace-nowrap rounded-pill bg-secondary-hover/[0.08] px-2 py-0.5 text-2xs text-navy-soft">
       {t.fromLead({ name })}
     </span>
   );
@@ -97,9 +97,9 @@ export function GoalRow({
           aria-valuemax={100}
           aria-valuenow={Math.min(100, pct)}
           aria-valuetext={formatPercent(pct, {}, language)}
-          className="h-1.5 overflow-hidden rounded bg-navy/[0.08]"
+          className="h-1.5 overflow-hidden rounded bg-secondary/[0.08]"
         >
-          <div className="h-full rounded bg-navy-soft" style={{ width: `${Math.min(100, pct)}%` }} />
+          <div className="h-full rounded bg-secondary-hover" style={{ width: `${Math.min(100, pct)}%` }} />
         </div>
       )}
       {figures.gapMinor !== null && (
@@ -219,7 +219,7 @@ export function RatiosPanel({
  */
 
 /**
- * One of the three targets: its label in the cascade's words (ADR-0160 §4; P18.9-T2's cleanup, 2026-10-26) — the
+ * One of the three targets: its label in the cascade's words (ADR-0160 §4; P18.6-T2's cleanup, 2026-10-26) — the
  * Summary's and `/goals`', kept in both languages (§A.6). The prototype reads *Leads contacted*, *Appointments* and
  * *Closings* (`Overall.html:4223-4238`).
  */
@@ -248,9 +248,9 @@ export function WeekChip({ target }: { target: SubPeriodTarget }) {
           aria-valuemax={100}
           aria-valuenow={pct}
           aria-valuetext={t.of({ logged: target.logged, target: target.target })}
-          className="h-1.5 overflow-hidden rounded bg-navy/[0.08]"
+          className="h-1.5 overflow-hidden rounded bg-secondary/[0.08]"
         >
-          <div className="h-full rounded bg-navy-soft" style={{ width: `${pct}%` }} />
+          <div className="h-full rounded bg-secondary-hover" style={{ width: `${pct}%` }} />
         </div>
       )}
     </div>

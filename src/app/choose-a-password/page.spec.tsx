@@ -18,7 +18,7 @@ async function fill(current = 'kfmp-3xqz-7bdn-r4vw', next = 'a password of my ow
   await userEvent.type(screen.getByLabelText('Confirm your new password'), next);
 }
 
-describe('choosing your own password (P3.6-T4)', () => {
+describe('choosing your own password (P3.2-T4)', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     replace.mockClear();

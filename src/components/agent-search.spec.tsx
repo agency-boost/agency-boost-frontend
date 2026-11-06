@@ -26,7 +26,7 @@ describe('AgentSearch (UI V1, UI-012; D-14)', () => {
     const { calls } = stubFetch({ '/members/search': { body: ALL } });
     renderWithSession(<AgentSearch />);
     const field = screen.getByRole('combobox', { name: 'Search agent' });
-    expect(field.parentElement).toHaveClass('rounded-pill', 'focus-within:border-amber', 'h-10');
+    expect(field.parentElement).toHaveClass('rounded-pill', 'focus-within:border-primary', 'h-10');
     await userEvent.click(field);
     const list = await screen.findByRole('listbox', { name: 'Agents found' });
     expect(within(list).getAllByRole('option')).toHaveLength(3);

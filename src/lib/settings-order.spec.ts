@@ -3,9 +3,9 @@ import { byPhaseAndDate, type DatedPhase } from './settings-order';
 
 const row = (title: string, phase: DatedPhase, startsAt: string) => ({ title, phase, startsAt });
 
-/** P18.97-T4 AC-8 (ADR-0176 §8; UI-030): upcoming, then running, then ended, each group by date. */
-describe('P18.97-T4 AC-8 byPhaseAndDate', () => {
-  it('P18.97-T4 AC-8 reads upcoming soonest first, then running soonest first, then ended latest first', () => {
+/** P18.9-T4 AC-8 (ADR-0176 §8; UI-030): upcoming, then running, then ended, each group by date. */
+describe('P18.9-T4 AC-8 byPhaseAndDate', () => {
+  it('P18.9-T4 AC-8 reads upcoming soonest first, then running soonest first, then ended latest first', () => {
     const rows = [
       row('Bootcamp', 'past', '2026-09-08T02:00:00.000Z'),
       row('Kick-off', 'upcoming', '2026-11-20T02:00:00.000Z'),
@@ -19,7 +19,7 @@ describe('P18.97-T4 AC-8 byPhaseAndDate', () => {
     ]);
   });
 
-  it('P18.97-T4 AC-8 treats a campaign’s ended as an event’s past, breaks a tie by title, and leaves its input as it was', () => {
+  it('P18.9-T4 AC-8 treats a campaign’s ended as an event’s past, breaks a tie by title, and leaves its input as it was', () => {
     const rows = [
       row('B', 'ended', '2026-01-01T00:00:00.000Z'),
       row('A', 'ended', '2026-01-01T00:00:00.000Z'),

@@ -1,7 +1,8 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { makeMe, renderWithSession, stubFetch } from '@test/harness';
+import { atWidth, makeMe, renderWithSession, stubFetch, wears } from '@test/harness';
+import { smallTargets } from '@test/touch-audit';
 import { TenantConfigProvider } from '@/lib/tenant-config-cache';
 import CampaignsSettingsPage from './page';
 
@@ -27,7 +28,7 @@ const campaign = (over: Record<string, unknown> = {}) => ({
     value: 50_000_000_000, unit: 'idr_minor', measured: true,
   }],
   reward: 'Extra unit budget', status: 'active', version: 1,
-  // D-fields (P18.5-T7 AC-9).
+  // D-fields (P18.2-T7 AC-9).
   kind: 'seasonal', subtype: null, window: 'campaign_dates', appliesToOrgLevelCodes: [],
   poster: { emoji: '⭐', color: 'amber' }, blurb: 'The last push of the year.',
   ...over,
@@ -78,20 +79,20 @@ function render(
     // The metric vocabulary is served, not listed in the screen (P5-T9, invariant 7).
     '/metrics': {
       body: [
-        { key: 'APE_ACHIEVED', name: 'APE achieved', unit: 'idr_minor', phase: 9, computed: true, campaign: true },
+        { key: 'APE_ACHIEVED', name: 'APE achieved', unit: 'idr_minor', phase: '9', computed: true, campaign: true },
         {
           key: 'SELLING_SUCCESS_RATE', name: 'Selling success rate', unit: 'percentage',
-          phase: 9, computed: true, campaign: true,
+          phase: '9', computed: true, campaign: true,
         },
-        { key: 'NEW_HIRES', name: 'New Hire', unit: 'count', phase: 18.5, computed: true, campaign: true },
+        { key: 'NEW_HIRES', name: 'New Hire', unit: 'count', phase: '18.2', computed: true, campaign: true },
         // Measured, but nothing a member achieves over a window (D-evaluable): not offered.
-        { key: 'TRAINING_COMPLETION_PCT', name: 'Training completion', unit: 'percentage', phase: 18.5, computed: true, campaign: false },
-        { key: 'GOAL_PACE_STATUS', name: 'Goal pace status', unit: 'enum', phase: 11, computed: true, campaign: false },
+        { key: 'TRAINING_COMPLETION_PCT', name: 'Training completion', unit: 'percentage', phase: '18.2', computed: true, campaign: false },
+        { key: 'GOAL_PACE_STATUS', name: 'Goal pace status', unit: 'enum', phase: '11', computed: true, campaign: false },
         // Not measured by the time campaigns are evaluated: it must not be offered. A stand-in:
         // since the 2026-10-08 re-plan campaigns are evaluated after every metric registered
         // today, so the server answers `computed: false` for none. Coaching coverage stood here
         // until coaching moved ahead of campaigns, and Event NPS until that re-plan.
-        { key: 'LATER_METRIC', name: 'A metric measured later', unit: 'count', phase: 19, computed: false, campaign: false },
+        { key: 'LATER_METRIC', name: 'A metric measured later', unit: 'count', phase: '20', computed: false, campaign: false },
       ],
     },
     '/kpm/settings/publish-state': {
@@ -131,7 +132,7 @@ describe('the office’s Campaigns screen', () => {
     expect(screen.getByText('Ended')).toBeInTheDocument();
   });
 
-  // *This office* since P18.97-T4 AC-8 (UI-030), where it read *Your office’s*.
+  // *This office* since P18.9-T4 AC-8 (UI-030), where it read *Your office’s*.
   it('marks the office’s own campaign as the office’s', async () => {
     render();
 
@@ -249,8 +250,8 @@ describe('the office’s Campaigns screen', () => {
     expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
   });
 
-  describe('the fields the agent’s card draws (P18.5-T7 AC-9, D-fields)', () => {
-    it('P18.5-T7 AC-9 a seasonal campaign: its poster, line, description and who it is for, its days as the office’s instants', async () => {
+  describe('the fields the agent’s card draws (P18.2-T7 AC-9, D-fields)', () => {
+    it('P18.2-T7 AC-9 a seasonal campaign: its poster, line, description and who it is for, its days as the office’s instants', async () => {
       const stub = render([]);
       await userEvent.click(await screen.findByRole('button', { name: 'Add a campaign' }));
       expect(screen.getByLabelText('Kind')).toHaveValue('seasonal');
@@ -279,7 +280,7 @@ describe('the office’s Campaigns screen', () => {
       });
     });
 
-    it('P18.5-T7 AC-9 a structural campaign: its section and its window, and no end', async () => {
+    it('P18.2-T7 AC-9 a structural campaign: its section and its window, and no end', async () => {
       const stub = render([]);
       await userEvent.click(await screen.findByRole('button', { name: 'Add a campaign' }));
       await userEvent.type(screen.getByLabelText('Title'), 'MDRT Qualification');
@@ -298,7 +299,7 @@ describe('the office’s Campaigns screen', () => {
       });
     });
 
-    it('P18.5-T7 AC-9 the server’s refusal is named on the screen, in its words', async () => {
+    it('P18.2-T7 AC-9 the server’s refusal is named on the screen, in its words', async () => {
       const stub = stubFetch({
         '/kpm/settings/campaigns/rules': { body: [] },
         'GET /kpm/settings/campaigns': { body: [] },
@@ -312,7 +313,7 @@ describe('the office’s Campaigns screen', () => {
             },
           },
         },
-        '/metrics': { body: [{ key: 'APE_ACHIEVED', name: 'APE achieved', unit: 'idr_minor', phase: 9, computed: true, campaign: true }] },
+        '/metrics': { body: [{ key: 'APE_ACHIEVED', name: 'APE achieved', unit: 'idr_minor', phase: '9', computed: true, campaign: true }] },
         '/kpm/settings/publish-state': { body: { publishedVersion: 1, workingVersion: 1, hasUnpublishedChanges: false, publishedAt: null } },
       });
       renderWithSession(<CampaignsSettingsPage />, { me: OWNER });
@@ -325,7 +326,7 @@ describe('the office’s Campaigns screen', () => {
       expect(stub.calls.filter((c) => c.init.method === 'POST')).toHaveLength(1);
     });
 
-    it('P18.5-T8 AC-1 the picker offers only what a campaign can measure', async () => {
+    it('P18.2-T8 AC-1 the picker offers only what a campaign can measure', async () => {
       render([]);
       await userEvent.click(await screen.findByRole('button', { name: 'Add a campaign' }));
       await userEvent.click(screen.getByRole('button', { name: '+ Add requirement' }));
@@ -334,14 +335,14 @@ describe('the office’s Campaigns screen', () => {
       expect(values).toEqual(['', 'APE_ACHIEVED', 'SELLING_SUCCESS_RATE', 'NEW_HIRES']);
     });
 
-    it('P18.5-T8 AC-1 a stored requirement a campaign cannot measure reads Not measured yet, and editing sends it back unchanged', async () => {
+    it('P18.2-T8 AC-1 a stored requirement a campaign cannot measure reads Not measured yet, and editing sends it back unchanged', async () => {
       const old = campaign({
         requirements: [{
           metricKey: 'TRAINING_COMPLETION_PCT', metricName: 'Training completion', comparator: 'gt', value: 80, unit: 'percentage', measured: false,
         }],
       });
       const stub = render([old]);
-      // A threshold keeps the places it was set with, and no ,0 (P18.97-T3 AC-2).
+      // A threshold keeps the places it was set with, and no ,0 (P18.9-T3 AC-2).
       const row = (await screen.findByText(/Training completion more than 80%/)).closest('li')!;
       expect(within(row).getByText('Not measured yet')).toBeInTheDocument();
       await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
@@ -365,7 +366,7 @@ describe('the office’s Campaigns screen', () => {
       ],
     });
 
-    it('P18.5-T7 AC-9 editing a two-requirement campaign’s line sends both requirements back, each with its comparator', async () => {
+    it('P18.2-T7 AC-9 editing a two-requirement campaign’s line sends both requirements back, each with its comparator', async () => {
       const stub = render([sprint()]);
       await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
       expect(screen.getByLabelText('Requirement 1')).toHaveValue('APE_ACHIEVED');
@@ -387,7 +388,7 @@ describe('the office’s Campaigns screen', () => {
       ]);
     });
 
-    it('P18.5-T7 AC-9 a row is added and removed, the metric another row names not offered twice', async () => {
+    it('P18.2-T7 AC-9 a row is added and removed, the metric another row names not offered twice', async () => {
       const stub = render([sprint()]);
       await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
       await userEvent.click(screen.getByRole('button', { name: '+ Add requirement' }));
@@ -411,7 +412,7 @@ describe('the office’s Campaigns screen', () => {
       ]);
     });
 
-    it('P18.5-T7 AC-9 removing every row saves a campaign that measures nothing', async () => {
+    it('P18.2-T7 AC-9 removing every row saves a campaign that measures nothing', async () => {
       const stub = render([sprint()]);
       await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
       await userEvent.click(screen.getByRole('button', { name: 'Remove requirement 2' }));
@@ -421,7 +422,7 @@ describe('the office’s Campaigns screen', () => {
       expect(JSON.parse(String(stub.calls.find((c) => c.init.method === 'PATCH')!.init.body)).requirements).toEqual([]);
     });
 
-    it('P18.5-T7 AC-9 editing reads back the office’s days and the fields as stored', async () => {
+    it('P18.2-T7 AC-9 editing reads back the office’s days and the fields as stored', async () => {
       render([campaign({ startsAt: '2026-09-30T17:00:00.000Z', endsAt: '2026-12-31T16:59:59.999Z', appliesToOrgLevelCodes: ['AGENT'] })]);
       await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
       // It read the UTC day of the instant: 30 Sep for a campaign that starts on 1 Okt in Jakarta.
@@ -433,7 +434,7 @@ describe('the office’s Campaigns screen', () => {
       expect(screen.getByRole('checkbox', { name: 'Agent' })).toBeChecked();
     });
 
-    it('P18.5-T7 AC-9 the settings list is otherwise unchanged: no kind, poster or line on the row', async () => {
+    it('P18.2-T7 AC-9 the settings list is otherwise unchanged: no kind, poster or line on the row', async () => {
       render();
       const title = await screen.findByText('Year-End Star Club Drive');
       const row = title.closest('li')!;
@@ -444,12 +445,12 @@ describe('the office’s Campaigns screen', () => {
 });
 
 /**
- * **The campaigns settings in order, tagged *This office*, a rate as a percentage** (P18.97-T4 AC-8, ADR-0176 §8; the
+ * **The campaigns settings in order, tagged *This office*, a rate as a percentage** (P18.9-T4 AC-8, ADR-0176 §8; the
  * client's KPM Owner review of 2026-10-27, UI-030: *"UPCOMING, RUNNING, ENDED mixed; tag "YOUR OFFICE'S"; "Recruitment
  * success rate at least 0,30""*). Upcoming soonest first, running soonest first, ended latest first; a requirement on
  * one of the office's ratios in that ratio's unit — a success rate *30%*, leads per activity *1,50* (ADR-0174).
  */
-describe('P18.97-T4 AC-8 the campaigns settings: order, This office, rates', () => {
+describe('P18.9-T4 AC-8 the campaigns settings: order, This office, rates', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   const ratio = (code: string, label: string, displayUnit: 'percent' | 'decimal') => ({
@@ -475,7 +476,7 @@ describe('P18.97-T4 AC-8 the campaigns settings: order, This office, rates', () 
     renderWithSession(<TenantConfigProvider><CampaignsSettingsPage /></TenantConfigProvider>, { me: OWNER });
   }
 
-  it('P18.97-T4 AC-8 lists upcoming, then running, then ended — each by date', async () => {
+  it('P18.9-T4 AC-8 lists upcoming, then running, then ended — each by date', async () => {
     renderWithConfig([
       campaign({ id: 'a', code: 'OLD', title: 'Last year’s drive', phase: 'ended', startsAt: '2025-10-01T00:00:00.000Z' }),
       campaign({ id: 'b', code: 'NEXT', title: 'January kick-off', phase: 'upcoming', startsAt: '2027-01-05T00:00:00.000Z' }),
@@ -489,13 +490,13 @@ describe('P18.97-T4 AC-8 the campaigns settings: order, This office, rates', () 
     ]);
   });
 
-  it('P18.97-T4 AC-8 tags the office’s own campaign This office, and never Your office’s', async () => {
+  it('P18.9-T4 AC-8 tags the office’s own campaign This office, and never Your office’s', async () => {
     renderWithConfig([campaign()]);
     expect(await screen.findByText('This office')).toBeInTheDocument();
     expect(screen.queryByText(/Your office’s/)).toBeNull();
   });
 
-  it('P18.97-T4 AC-8 writes a requirement on a rate as a percentage, and one on a count of a count as the number', async () => {
+  it('P18.9-T4 AC-8 writes a requirement on a rate as a percentage, and one on a count of a count as the number', async () => {
     renderWithConfig([campaign({
       requirements: [
         { metricKey: 'RECRUITMENT_SUCCESS_RATE', metricName: 'Recruitment success rate', comparator: 'gte', value: 0.3, unit: 'ratio', measured: true },
@@ -507,10 +508,81 @@ describe('P18.97-T4 AC-8 the campaigns settings: order, This office, rates', () 
     expect(screen.queryByText(/at least 0.30/)).toBeNull();
   });
 
-  it('P18.97-T4 AC-8 writes a ratio the office does not hold as the number, as before', async () => {
+  it('P18.9-T4 AC-8 writes a ratio the office does not hold as the number, as before', async () => {
     renderWithConfig([campaign({
       requirements: [{ metricKey: 'MEETING_PER_APPROACH', metricName: 'Set appointment to meeting', comparator: 'gte', value: 0.3, unit: 'ratio', measured: true }],
     })]);
     expect(await screen.findByText('Set appointment to meeting at least 0.30')).toBeInTheDocument();
+  });
+});
+
+/**
+ * **A campaign on a phone: one line, and its card and its form in its sheet** (P19.2-T3 AC-3; UI-141: *Activity types and
+ * Campaigns: same row + sheet*, 3.5 screens at 375).
+ */
+describe('P19.2-T3 AC-3 the campaigns on a phone (UI-141)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const TWO = [campaign(), campaign({ id: 'c2', code: 'OLD', title: 'Old drive', phase: 'ended', status: 'archived' })];
+
+  it('P19.2-T3 AC-3 at 375px draws each campaign as a 56px row — its title, its phase · This office, › — and no form', async () => {
+    atWidth(375);
+    render(TWO);
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'Show archived' }));
+    const row = screen.getByRole('button', { name: 'Year-End Star Club Drive' }).closest('li')!;
+    expect(wears(row, 375).split(' ')).toContain('min-h-14');
+    expect(row).toHaveTextContent('Running · This office');
+    expect(within(screen.getByRole('button', { name: 'Old drive' }).closest('li')!).getByText('Archived')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
+    expect(screen.queryByRole('combobox')).toBeNull();
+  });
+
+  it('P19.2-T3 AC-3 at 375px opens the campaign’s sheet with its card, and Edit turns it into the form', async () => {
+    atWidth(375);
+    render();
+    await userEvent.click(await screen.findByRole('button', { name: 'Year-End Star Club Drive' }));
+    const sheet = await screen.findByRole('dialog', { name: 'Year-End Star Club Drive' });
+    expect(within(sheet).getByText('Push to Star Club before the year closes.')).toBeInTheDocument();
+    expect(within(sheet).getByText(/Extra unit budget/)).toBeInTheDocument();
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Edit' }));
+    expect(within(sheet).getByLabelText('Title')).toHaveValue('Year-End Star Club Drive');
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Cancel' }));
+    expect(within(sheet).getByRole('button', { name: 'Edit' })).toBeInTheDocument();
+  });
+
+  it('P19.2-T3 AC-3 at 375px archives from the sheet, and Add a campaign opens the form in a sheet', async () => {
+    atWidth(375);
+    const stub = render();
+    await userEvent.click(await screen.findByRole('button', { name: 'Year-End Star Club Drive' }));
+    const sheet = await screen.findByRole('dialog', { name: 'Year-End Star Club Drive' });
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Archive' }));
+    await waitFor(() => expect(stub.calls.some((c) => c.url.includes('/kpm/settings/campaigns/c1/archive'))).toBe(true));
+    await userEvent.keyboard('{Escape}');
+    await userEvent.click(screen.getByRole('button', { name: 'Add a campaign' }));
+    const adding = await screen.findByRole('dialog', { name: 'Add a campaign' });
+    expect(within(adding).getByLabelText('Title')).toHaveValue('');
+  });
+
+  it.each([768, 1280])('P19.2-T3 AC-3 at %ipx keeps a card per campaign with Edit and Archive on it', async (px) => {
+    atWidth(px);
+    render();
+    await screen.findByText('Year-End Star Club Drive');
+    expect(document.querySelectorAll('[data-list-row]')).toHaveLength(0);
+    expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument();
+  });
+});
+
+describe('P19.2-T3 AC-4 the campaigns’ targets (UI-142)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it.each([375, 768])('P19.2-T3 AC-4 at %ipx finds no target under 44px on either tab', async (px) => {
+    atWidth(px);
+    render();
+    const frame = document.body.firstElementChild!;
+    frame.setAttribute('data-surface', 'v1');
+    await screen.findByText('Year-End Star Club Drive');
+    expect(smallTargets(frame, px)).toEqual([]);
+    await openTiers();
+    await screen.findByText('Star Club');
+    expect(smallTargets(frame, px)).toEqual([]);
   });
 });

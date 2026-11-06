@@ -98,7 +98,7 @@ export function SessionList({ bare = false }: {
                 <p className="text-md text-navy">
                   {describeDevice(session.userAgent, language)}
                   {session.current && (
-                    <span className="ml-2 rounded-full bg-amber px-2 py-0.5 text-sm font-semibold text-navy">
+                    <span className="ml-2 rounded-full bg-primary px-2 py-0.5 text-sm font-semibold text-primary-contrast">
                       {t.thisDevice}
                     </span>
                   )}
@@ -157,7 +157,7 @@ export function SessionList({ bare = false }: {
           {t.signOutEverywhere}
         </Button>
         <p className="mt-2 text-sm text-muted">
-          {/* The client's words for the lost device (P18.95-T7 AC-5; UI-030), at every size. */}
+          {/* The client's words for the lost device (P18.7-T7 AC-5; UI-030), at every size. */}
           {t.everywhereLine}
         </p>
       </div>

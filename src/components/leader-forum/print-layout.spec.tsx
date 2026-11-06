@@ -8,13 +8,13 @@ import type { MeetingView } from '@/lib/leader-meetings';
 const draw = (meeting: MeetingView = makeMeetingView()) => render(<PrintLayout meeting={meeting} />);
 const tables = () => screen.getAllByRole('table');
 
-describe('P18.1-T3 AC-4, P18.97-T1 AC-18 the print layout (`:2662-2695`; the reference slide’s table)', () => {
+describe('P18.1-T3 AC-4, P18.9-T1 AC-18 the print layout (`:2662-2695`; the reference slide’s table)', () => {
   it('off the screen and on the paper only', () => {
     const { container } = draw();
     expect(container.firstElementChild).toHaveClass('hidden', 'print:block');
   });
 
-  it('P18.97-T1 AC-18 on landscape A4: the page size is the meeting’s while it is open', () => {
+  it('P18.9-T1 AC-18 on landscape A4: the page size is the meeting’s while it is open', () => {
     const { container } = draw();
     expect(container.querySelector('style')!.textContent).toBe('@media print { @page { size: A4 landscape; margin: 10mm; } }');
   });
@@ -25,7 +25,7 @@ describe('P18.1-T3 AC-4, P18.97-T1 AC-18 the print layout (`:2662-2695`; the ref
     expect(screen.getByRole('heading', { level: 4, name: 'BSD City Branch: Sep 2026' })).toBeInTheDocument();
   });
 
-  it('P18.97-T1 AC-18 the same table: the title and AS OF, the strip, the seven columns in their two groups, the targets as text', () => {
+  it('P18.9-T1 AC-18 the same table: the title and AS OF, the strip, the seven columns in their two groups, the targets as text', () => {
     draw();
     expect(screen.getByText('AS OF 5 Sep 2026')).toBeInTheDocument();
     const strip = screen.getByText('# of AAB:').closest('dl')!;
@@ -45,7 +45,7 @@ describe('P18.1-T3 AC-4, P18.97-T1 AC-18 the print layout (`:2662-2695`; the ref
     expect(stats).not.toHaveClass('min-w-[760px]');
   });
 
-  it('P18.97-T1 AC-18 the hatch and the outline print as on the screen; no navy block', () => {
+  it('P18.9-T1 AC-18 the hatch and the outline print as on the screen; no navy block', () => {
     draw();
     const [stats] = tables();
     expect(within(stats).getAllByText('Not tracked')).toHaveLength(16);
@@ -55,7 +55,7 @@ describe('P18.1-T3 AC-4, P18.97-T1 AC-18 the print layout (`:2662-2695`; the ref
     expect(ape.children[3].className).toContain('border-r-alert');
   });
 
-  it('P18.97-T1 AC-18 the footnotes and the (*) notes print, where the print’s † and its line were', () => {
+  it('P18.9-T1 AC-18 the footnotes and the (*) notes print, where the print’s † and its line were', () => {
     const { container } = draw();
     expect(screen.getByText(/^Annual Active Agents — members with APE/)).toBeInTheDocument();
     expect(screen.getByText('(*) YTD 2026 covers Jan–Sep 2026 without Aug 2026, not uploaded')).toBeInTheDocument();
@@ -65,7 +65,7 @@ describe('P18.1-T3 AC-4, P18.97-T1 AC-18 the print layout (`:2662-2695`; the ref
     expect(screen.queryByText(/^Note: AA/)).toBeNull();
   });
 
-  it('P18.97-T1 AC-18 a scorecard that leaves nothing out prints no * and no (*) note', () => {
+  it('P18.9-T1 AC-18 a scorecard that leaves nothing out prints no * and no (*) note', () => {
     const m = makeMeetingView();
     draw({
       ...m,
@@ -100,7 +100,7 @@ describe('P18.1-T3 AC-4, P18.97-T1 AC-18 the print layout (`:2662-2695`; the ref
       ['Key initiative', 'Success metric', 'Action item', 'PIC', 'Status', 'Remarks / Target'],
     );
     expect(within(tracker).getAllByRole('row')).toHaveLength(5);
-    expect(within(tracker).getAllByText('Planned')[0]).toHaveClass('rounded-pill', 'bg-amber/15', 'text-navy');
+    expect(within(tracker).getAllByText('Planned')[0]).toHaveClass('rounded-pill', 'bg-primary/15', 'text-navy');
   });
 
   it('no control: every field its text', () => {
@@ -109,7 +109,7 @@ describe('P18.1-T3 AC-4, P18.97-T1 AC-18 the print layout (`:2662-2695`; the ref
     expect(screen.queryByRole('button')).toBeNull();
   });
 
-  it('P18.97-T1 AC-18 a past meeting prints its frozen figures — one kept before the slide its — and its own units', () => {
+  it('P18.9-T1 AC-18 a past meeting prints its frozen figures — one kept before the slide its — and its own units', () => {
     const { unmount } = draw(completedMeeting());
     expect(within(screen.getByText('# of AAB:').closest('dl')!).getByText('23')).toBeInTheDocument();
     unmount();

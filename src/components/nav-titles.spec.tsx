@@ -13,6 +13,7 @@ import OrgLevelsPage from '@/app/(admin)/admin/org-levels/page';
 import PlatformOverviewPage from '@/app/(admin)/admin/page';
 import TenantAdminsPage from '@/app/(admin)/admin/tenant-admins/page';
 import AllKpmsPage from '@/app/(admin)/admin/tenants/page';
+import AllMembersPage from '@/app/(admin)/admin/members/page';
 import ActivationPage from '@/app/(agent)/activation/page';
 import LogActivityPage from '@/app/(agent)/activity/log/page';
 import AttackPlanPage from '@/app/(agent)/attack-plan/page';
@@ -38,6 +39,7 @@ import KpmOverviewPage from '@/app/(tenant)/kpm/overview/page';
 import ActivationChecklistPage from '@/app/(tenant)/kpm/settings/activation-checklist/page';
 import ActivityTypesPage from '@/app/(tenant)/kpm/settings/activity-types/page';
 import BranchInfoPage from '@/app/(tenant)/kpm/settings/branch-info/page';
+import BrandingPage from '@/app/(tenant)/kpm/settings/branding/page';
 import CampaignSettingsPage from '@/app/(tenant)/kpm/settings/campaigns/page';
 import CapabilityMappingPage from '@/app/(tenant)/kpm/settings/capability-mapping/page';
 import EventSettingsPage from '@/app/(tenant)/kpm/settings/events/page';
@@ -49,11 +51,12 @@ import KpmAdminsPage from '@/app/(tenant)/people/admins/page';
 import ImportPeoplePage from '@/app/(tenant)/people/import/page';
 import MembersPage from '@/app/(tenant)/people/members/page';
 import OrgTreePage from '@/app/(tenant)/people/org-tree/page';
+import AdvancedAnalyticsLayout from '@/app/kpm/advanced-analytics/layout';
+import AdvancedAnalyticsIndexPage from '@/app/kpm/advanced-analytics/page';
 import KpmAnalyticsLayout from '@/app/kpm/analytics/layout';
 import KpmAnalyticsPage from '@/app/kpm/analytics/page';
 import LeaderMeetingsPage from '@/app/leader-meetings/page';
-import { AdminShell } from './admin-shell';
-import { TenantShell } from './tenant-shell';
+import { Shell } from './shell';
 
 const nav = vi.hoisted(() => ({ pathname: '/' }));
 vi.mock('next/navigation', () => ({
@@ -74,7 +77,7 @@ vi.mock('@/components/require-session', async (original) => ({
 }));
 
 /**
- * **P18.95-T9 AC-2: each menu label is its page's title** (ADR-0167 §10, OD-205; the client's UI review, UI-027:
+ * **P18.7-T9 AC-2: each menu label is its page's title** (ADR-0167 §10, OD-205; the client's UI review, UI-027:
  * *menu "Training modules" vs page "Sales Training"; menu "User management" vs page "Register KPM"*).
  *
  * Table-driven over the three shells' nav as they draw it: every item with an address must have a row here, and the
@@ -134,6 +137,9 @@ const PAGES: Record<string, Screen> = {
   '/campaigns': { ui: () => <CampaignsLayout><CampaignsPage /></CampaignsLayout>, me: FIELD },
   '/leader-meetings': { ui: () => <LeaderMeetingsPage />, me: FIELD },
   '/kpm/analytics': { ui: () => <KpmAnalyticsLayout><KpmAnalyticsPage /></KpmAnalyticsLayout>, me: OWNER },
+  // P19.5-T4: *Advanced analytics* opens the KPM's survey tabs, titled the same.
+  // P19.5-T3 AC-1: the menu's item opens the page's index, which goes to the template's first section.
+  '/kpm/advanced-analytics': { ui: () => <AdvancedAnalyticsLayout><AdvancedAnalyticsIndexPage /></AdvancedAnalyticsLayout>, me: OWNER },
   '/group-tree': { ui: () => <GroupTreePage />, me: FIELD },
   '/user-management/kpm': { ui: () => <RegisterKpmPage />, me: FIELD },
   // The office console's.
@@ -149,6 +155,7 @@ const PAGES: Record<string, Screen> = {
   '/kpm/settings/products': { ui: () => <ProductsPage />, me: OWNER },
   '/kpm/settings/recruitment-pitch': { ui: () => <RecruitmentPitchPage />, me: OWNER },
   '/kpm/settings/branch-info': { ui: () => <BranchInfoPage />, me: OWNER },
+  '/kpm/settings/branding': { ui: () => <BrandingPage />, me: OWNER },
   '/people/members': { ui: () => <MembersPage />, me: OWNER },
   '/people/import': { ui: () => <ImportPeoplePage />, me: OWNER },
   '/people/org-tree': { ui: () => <OrgTreePage />, me: OWNER },
@@ -158,6 +165,7 @@ const PAGES: Record<string, Screen> = {
   '/admin/companies': { ui: () => <CompaniesPage />, me: ADMIN },
   '/admin/org-levels': { ui: () => <OrgLevelsPage />, me: ADMIN },
   '/admin/tenants': { ui: () => <AllKpmsPage />, me: ADMIN },
+  '/admin/members': { ui: () => <AllMembersPage />, me: ADMIN },
   '/admin/kpm-requests': { ui: () => <KpmRequestsPage />, me: ADMIN },
   '/admin/leader-limit-requests': { ui: () => <LeaderLimitRequestsPage />, me: ADMIN },
   '/admin/billing': { ui: () => <BillingPage />, me: ADMIN },
@@ -166,27 +174,41 @@ const PAGES: Record<string, Screen> = {
   '/admin/analytics': { ui: () => <AdminAnalyticsPage />, me: ADMIN },
 };
 
-/** Every item with an address, in the shell's order, by its words: a pill or a count after them is not its label. */
-function navItems(shell: ReactNode, me: typeof FIELD): { label: string; href: string }[] {
+/**
+ * Every item with an address, in the shell's order, by its words: a pill or a count after them is not its label — on
+ * `path`, and of the items `mine` keeps.
+ */
+function navItems(
+  shell: ReactNode, me: typeof FIELD, path: string, mine: (href: string) => boolean,
+): { label: string; href: string }[] {
+  nav.pathname = path;
   renderWithSession(<>{shell}</>, { me });
   const main = screen.getByRole('navigation', { name: 'Main' });
   const items = [...main.querySelectorAll<HTMLAnchorElement>('a[href]')].map((a) => ({
     label: (a.querySelector('[data-nav-label]')?.textContent ?? a.textContent ?? '').replace(/\s+/g, ' ').trim(),
     href: a.getAttribute('href')!,
-  }));
+  })).filter((item) => mine(item.href));
   cleanup();
+  window.sessionStorage.clear();
+  nav.pathname = '/';
   return items;
 }
 
 /*
  * *Changed 2026-10-30 (UI V1, UI-004; ADR-0180):* the field shell is not here. Its sidebar's labels are the owner's — the
  * *Lainnya* sheet's, in full (D-20: *Home · Activity · Calendar · Unit Dashboard*, *Leads*, *Sales*, *Campaign* …) —
- * which the revision chose over P18.95-T9's *label = title*; the pages it draws take their own titles from it. Each field
+ * which the revision chose over P18.7-T9's *label = title*; the pages it draws take their own titles from it. Each field
  * item still opens a page that exists (`field-shell.spec.tsx`). The two consoles keep the rule.
  */
+/*
+ * *Changed 2026-11-05 (P19.2-T1; ADR-0197, ADR-0198):* the two consoles are the one shell's **office view** — whose
+ * office groups (*KPM*, *Pengaturan*, *People*) keep the rule, its field items being the field's — and **the Super
+ * Admin's menu**, all of it.
+ */
 const SHELLS = [
-  ['the office console', <TenantShell key="t">x</TenantShell>, OWNER],
-  ['the platform console', <AdminShell key="p">x</AdminShell>, ADMIN],
+  ['the office view’s groups', <Shell key="t" family="tenant">x</Shell>, OWNER, '/kpm/overview',
+    (href: string) => href.startsWith('/kpm') || href.startsWith('/people') || href === '/leader-meetings'],
+  ['the Super Admin’s menu', <Shell key="p" family="admin">x</Shell>, ADMIN, '/admin', () => true],
 ] as const;
 
 /** A page's own title, once it is up: its `<h1>`. */
@@ -205,24 +227,24 @@ async function titleOf(href: string): Promise<string> {
   return (heading.textContent ?? '').replace(/\s+/g, ' ').trim();
 }
 
-describe('P18.95-T9 AC-2 each menu label is its page’s title', () => {
+describe('P18.7-T9 AC-2 each menu label is its page’s title', () => {
   beforeEach(() => { nav.pathname = '/'; });
   afterEach(() => vi.unstubAllGlobals());
 
-  describe.each(SHELLS)('%s', (_, shell, me) => {
-    const items = navItems(shell, me);
+  describe.each(SHELLS)('%s', (_, shell, me, path, mine) => {
+    const items = navItems(shell, me, path, mine);
 
     it('draws its nav at all, and every item has a page here', () => {
       expect(items.length).toBeGreaterThan(5);
       expect(items.filter((item) => !PAGES[item.href]).map((item) => item.href)).toEqual([]);
     });
 
-    it.each(items.map((item) => [item.label, item.href] as const))('P18.95-T9 AC-2 “%s” opens a page titled the same (%s)', async (label, href) => {
+    it.each(items.map((item) => [item.label, item.href] as const))('P18.7-T9 AC-2 “%s” opens a page titled the same (%s)', async (label, href) => {
       expect((await titleOf(href)).toLowerCase()).toBe(label.toLowerCase());
     });
   });
 
-  it('P18.95-T9 AC-2 the client’s two pairs: Training modules and User management are their pages’ titles now', async () => {
+  it('P18.7-T9 AC-2 the client’s two pairs: Training modules and User management are their pages’ titles now', async () => {
     expect(await titleOf('/training')).toBe('Training Modules');
     cleanup();
     expect(await titleOf('/user-management/kpm')).toBe('User Management');

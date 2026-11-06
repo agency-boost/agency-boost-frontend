@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import config from '../../../tailwind.config';
 
 /**
- * **Row 44** (P18.5-T7 AC-3, AC-7): the campaigns screens' colours, each a token and each clearing its floor,
+ * **Row 44** (P18.2-T7 AC-3, AC-7): the campaigns screens' colours, each a token and each clearing its floor,
  * computed from the tokens themselves — jsdom applies no stylesheet, so no rendered test could see a miss.
  *
  * The prototype's raw hexes become tokens; where its pairs miss WCAG 2.1 AA they are replaced: the *KPM* tag's

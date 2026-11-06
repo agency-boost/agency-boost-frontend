@@ -3,7 +3,6 @@
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useId, useState, type ReactNode } from 'react';
 import { FeedbackSummarySection } from '@/components/events/feedback-summary';
-import { useFieldChrome } from '@/components/field-nav';
 import { Button, ErrorBanner } from '@/components/ui/field';
 import { useMessages } from '@/i18n/language-provider';
 import { kpmComplianceMessages } from '@/i18n/messages/kpm-compliance';
@@ -13,14 +12,17 @@ import {
   type ComplianceCategory, type ComplianceSelection, type ComplianceTrainingCategory, type ComplianceView,
   type SortDirection,
 } from '@/lib/kpm-compliance';
-import { CampaignPicker, EventPicker, TooltipNote, TrainingTabs } from './compliance-pickers';
+import { keepTab, readComplianceAsPlatform } from '@/lib/platform-reads';
+import { useSession } from '@/lib/session';
+import { useMediaQuery } from '@/lib/use-media-query';
+import { CampaignPicker, EventPicker, TooltipNote } from './compliance-pickers';
 import { ComplianceSummary } from './compliance-summary';
 import { ComplianceTree, TreeSkeleton } from './compliance-tree';
-import { V1Compliance } from './v1-compliance';
-import { usePhone } from '@/lib/use-phone';
+import { GroupFilter } from './group-filter';
+import { ModulePicker, V1Compliance } from './v1-compliance';
 
 /**
- * **Compliance, Events, and Campaigns** (`KPM_Owner.html:1262-1286`, `:3449-4118`; P18.6-T1, P18.6-T2): the
+ * **Compliance, Events, and Campaigns** (`KPM_Owner.html:1262-1286`, `:3449-4118`; P18.3-T1, P18.3-T2): the
  * heading and its counted sub-line, the six chips, the chosen category's tabs or picker, Activity's note, a past
  * event's *Feedback Summary*, search and sort, and the tree — over one read of the server's
  * (`GET /kpm/analytics/compliance`).
@@ -37,11 +39,18 @@ import { usePhone } from '@/lib/use-phone';
  * The states the prototype lacks are Fills (L-01): the outline while reading, an error with a retry that keeps
  * the selection, a team with no AB, and a year with no training, event or campaign to show.
  *
- * **Its words are the reader's** (P18.98-T4; `kpmComplianceMessages`): the heading and the six chips kept English, the
+ * **Its words are the reader's** (P18.10-T4; `kpmComplianceMessages`): the heading and the six chips kept English, the
  * rest the approved glossary's; a category's, an event's and a campaign's names are the office's, shown as typed.
  */
-export function ComplianceScreen({ selection }: { selection: ComplianceSelection }) {
+export function ComplianceScreen({ selection, group = null, platformKpmId }: {
+  selection: ComplianceSelection;
+  group?: string | null;
+  /** ***Lihat sebagai KPM*** (P19.4-T3 AC-4): the KPM's tree, read by the Super Admin through the platform read, read-only. */
+  platformKpmId?: string;
+}) {
   const t = useMessages(kpmComplianceMessages);
+  const { me } = useSession();
+  const office = Boolean(me?.membership?.isKpmOwner || me?.membership?.isKpmAdmin);
   const router = useRouter();
   const pathname = usePathname();
   const headingId = useId();
@@ -49,8 +58,20 @@ export function ComplianceScreen({ selection }: { selection: ComplianceSelection
   /** The selection on screen: the address's, and the one just chosen until the address catches up. */
   const [shown, setShown] = useState<ComplianceSelection>(selection);
   useEffect(() => setShown({ category: selection.category, item: selection.item }), [selection.category, selection.item]);
+  /** The custom group on screen (P19.3-T3 AC-15): the address's, and the one just chosen until it catches up. */
+  const [inGroup, setInGroup] = useState<string | null>(group);
+  useEffect(() => setInGroup(group), [group]);
   const { category, item } = shown;
-  const key = `${category}|${item ?? ''}`;
+  const key = `${category}|${item ?? ''}|${inGroup ?? ''}`;
+  /** The AB rows open (UI-098: collapsed until opened), kept across reads and *Back* from a name (UI-095). */
+  const [openSections, setOpenSections] = useState<ReadonlySet<string>>(() => savedOpen());
+  const toggleSection = (id: string) => setOpenSections((now) => {
+    const next = new Set(now);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    keepOpen(next);
+    return next;
+  });
 
   const [held, setHeld] = useState<{ key: string; view: ComplianceView } | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
@@ -59,19 +80,30 @@ export function ComplianceScreen({ selection }: { selection: ComplianceSelection
   const [direction, setDirection] = useState<SortDirection>('worst');
   /** A training category with no module, pressed: shown on the screen, read from nowhere. */
   const [emptyCategory, setEmptyCategory] = useState<string | null>(null);
-  // UI V1 (UI-109): a phone in the field shell reads the compact Compliance; the console and wider screens as before.
-  const phone = usePhone();
-  const field = useFieldChrome() !== null;
+  /*
+   * **UI-109's Compliance below 1024px, for every reader** (P19.3-T3; the one shell hosts the Owner's pages since Phase
+   * 19.2): the six tiles three across, the one module picker, the AB rows. From 1024px the tree with UI-098's changes.
+   */
+  const desktop = useMediaQuery('desktop', { beforePaint: true });
 
   useEffect(() => {
     let live = true;
-    const asked = `${category}|${item ?? ''}`;
+    const asked = `${category}|${item ?? ''}|${inGroup ?? ''}`;
     setError(null);
-    readCompliance({ category, item })
+    (platformKpmId === undefined
+      ? readCompliance({ category, item }, inGroup)
+      : readComplianceAsPlatform(platformKpmId, { category, item }, inGroup))
       .then((next) => { if (live) setHeld({ key: asked, view: next }); })
       .catch((err) => { if (live) setError(toDisplayError(err)); });
     return () => { live = false; };
-  }, [category, item, attempt]);
+  }, [category, item, inGroup, attempt, platformKpmId]);
+
+  // Back from a name (UI-095): the page where it was left.
+  useEffect(() => {
+    if (held === null) return;
+    const y = takeScroll(pathname);
+    if (y !== null) requestAnimationFrame(() => window.scrollTo(0, y));
+  }, [held, pathname]);
 
   const view = held?.view ?? null;
   const fresh = held?.key === key;
@@ -79,7 +111,22 @@ export function ComplianceScreen({ selection }: { selection: ComplianceSelection
   const choose = (next: ComplianceSelection) => {
     setEmptyCategory(null);
     setShown(next);
-    router.replace(`${pathname}${complianceQuery(next)}`, { scroll: false });
+    router.replace(`${pathname}${keepTab(complianceQuery(next, inGroup), platformKpmId, 'compliance')}`, { scroll: false });
+  };
+
+  /** *Lihat untuk* (AC-15): the same selection over the group chosen, or the whole KPM. */
+  const chooseGroup = (next: string | null) => {
+    setInGroup(next);
+    router.replace(`${pathname}${keepTab(complianceQuery(shown, next), platformKpmId, 'compliance')}`, { scroll: false });
+  };
+  const groupPill = view && (office || view.groups.length > 0) ? (
+    <div className="mb-2.5 flex flex-wrap items-center gap-2">
+      <GroupFilter groups={view.groups} group={view.group} officePeople={view.people} manages={office} onChoose={chooseGroup} />
+    </div>
+  ) : null;
+  // A name followed keeps the page's place for *Back* (UI-095).
+  const onLeave = (e: React.MouseEvent) => {
+    if ((e.target as Element).closest('a[href]')) saveScroll(pathname);
   };
 
   /** A chip: its category, its default item, and worst-first again (`jumpToCategory`, `:3480-3484`). */
@@ -107,9 +154,10 @@ export function ComplianceScreen({ selection }: { selection: ComplianceSelection
     ? { label: t.backTo({ category: t.chips[category] }), run: () => choose({ category, item: null }) }
     : { label: t.tryAgain, run: () => setAttempt((n) => n + 1) };
 
-  if (phone && field) {
+  if (!desktop) {
     return (
-      <div className="min-w-0" data-part="compliance">
+      <div className="min-w-0" data-part="compliance" onClickCapture={onLeave}>
+        {groupPill}
         {!view && !error && <TreeSkeleton withChips />}
         {error && <Failed error={error} onRetry={retry} />}
         {view && (
@@ -125,7 +173,9 @@ export function ComplianceScreen({ selection }: { selection: ComplianceSelection
               onTraining={chooseTraining}
               onItem={(next) => choose({ category, item: next })}
               onToggle={() => setDirection((d) => (d === 'worst' ? 'best' : 'worst'))}
+              onChanged={() => setAttempt((n) => n + 1)}
             />
+            {category === 'activity' && fresh && <div className="mt-2"><TooltipNote>{t.activityTooltip}</TooltipNote></div>}
             {fresh && <div className="mt-3"><PastEventCard view={view} /></div>}
             {!fresh && !error && <TreeSkeleton />}
           </>
@@ -135,12 +185,15 @@ export function ComplianceScreen({ selection }: { selection: ComplianceSelection
   }
 
   return (
-    <div className="min-w-0" data-part="compliance">
-      {/* `.section-head` (`:1265-1268`): the title and its sub-line, both counts the read's (contradiction 1). */}
-      <div className="mb-3.5 flex flex-col items-start gap-[3px] md:flex-row md:items-baseline md:justify-between">
-        <h2 id={headingId} className="font-display text-lg font-bold text-navy">{t.title}</h2>
-        {view && view.units > 0 && <p className="text-sm text-muted">{t.sub({ people: view.people, units: view.units })}</p>}
-      </div>
+    <div className="min-w-0" data-part="compliance" onClickCapture={onLeave}>
+      {groupPill}
+      {/*
+        * **No repeated heading** (UI-098, D-35): the tab is *Compliance*, and the panel's heading is its counted line —
+        * *"28 orang · 5 unit AB"* — where it repeated *Compliance, Events, and Campaigns* (`.section-head`, `:1265-1268`).
+        */}
+      <h2 id={headingId} className="mb-3.5 text-md font-bold text-navy">
+        {view && view.units > 0 ? t.v1.head({ people: view.people, units: view.units }) : <span className="sr-only">{t.title}</span>}
+      </h2>
 
       {!view && !error && <TreeSkeleton withChips />}
       {!view && error && <Failed error={error} onRetry={retry} />}
@@ -176,6 +229,8 @@ export function ComplianceScreen({ selection }: { selection: ComplianceSelection
               search={search}
               direction={direction}
               onChanged={() => setAttempt((n) => n + 1)}
+              open={openSections}
+              onToggleSection={toggleSection}
             />
           ) : !error && <TreeSkeleton />}
         </>
@@ -209,19 +264,11 @@ function Selector({
   switch (category) {
     case 'training': {
       if (catalog.training.length === 0) return null;
-      const path = trainingPathOf(catalog.training, selected);
-      const active = catalog.training.find((c) => c.code === emptyCategory) ?? path?.category ?? catalog.training[0];
-      const showing = active.code === path?.category.code;
+      // UI-098 (UI-109's at every size): one module picker — category › skill › module inside — for the three chip rows.
       return (
-        <TrainingTabs
-          catalog={catalog.training}
-          category={active}
-          skill={showing ? path!.skill : null}
-          module={showing ? selected : null}
-          onCategory={onTraining}
-          onSkill={(skill) => onItem(skill.modules[0].code)}
-          onModule={(module) => onItem(module.code)}
-        />
+        <div className="mb-3.5 lg:max-w-[480px]">
+          <ModulePicker catalog={catalog.training} selected={selected} emptyCategory={emptyCategory} onTraining={onTraining} onItem={onItem} />
+        </div>
       );
     }
     // One item each: the prototype draws no item tab for them (`renderItemTabs`, `:3609-3611`), and nor does this.
@@ -241,7 +288,7 @@ function Selector({
 }
 
 /**
- * `#eventCampaignSummary` (`:1271`, `:3801`): a **past** event's *Feedback Summary* above its tree — P18.5-T6's
+ * `#eventCampaignSummary` (`:1271`, `:3801`): a **past** event's *Feedback Summary* above its tree — P18.2-T6's
  * card with its own read (`GET /kpm/settings/events/:id/feedback`), names shown (ADR-0141). None for an upcoming
  * or a running one, which nobody has rated yet.
  */
@@ -280,12 +327,12 @@ function Filters({
         placeholder={t.searchPlaceholder}
         aria-label={t.searchName}
         // A row of its own below `sm`, the sort under it: beside the sort at 360px it cut its own placeholder.
-        className="min-w-[160px] flex-1 basis-full rounded-md border border-hairline bg-card px-2.5 py-2 text-sm text-navy focus:border-amber sm:max-w-[240px] sm:basis-0"
+        className="min-w-[160px] flex-1 basis-full rounded-md border border-hairline bg-card px-2.5 py-2 text-sm text-navy focus:border-primary sm:max-w-[240px] sm:basis-0"
       />
       <button
         type="button"
         onClick={onToggle}
-        className="ml-auto rounded-pill border border-hairline bg-card px-3 py-1.5 text-sm font-semibold text-muted hover:border-navy/30 hover:text-navy"
+        className="ml-auto rounded-pill border border-hairline bg-card px-3 py-1.5 text-sm font-semibold text-muted hover:border-secondary/30 hover:text-navy"
       >
         <span aria-hidden="true">{arrow}</span> {t.sort[kind][direction]}
       </button>
@@ -295,13 +342,15 @@ function Filters({
 
 /** The body under the filters: the tree, or why there is none. */
 function Body({
-  view, emptyCategory, search, direction, onChanged,
+  view, emptyCategory, search, direction, onChanged, open, onToggleSection,
 }: {
   view: ComplianceView;
   emptyCategory: string | null;
   search: string;
   direction: SortDirection;
   onChanged: () => void;
+  open: ReadonlySet<string>;
+  onToggleSection: (id: string) => void;
 }) {
   const t = useMessages(kpmComplianceMessages);
   const { catalog, selected } = view;
@@ -327,6 +376,9 @@ function Body({
     <ComplianceTree
       sections={sections}
       direction={direction}
+      // A search opens every row it keeps: what was searched for is shown, not folded away.
+      open={search.trim() ? new Set(sections.map((s) => s.head.membershipId)) : open}
+      onToggle={onToggleSection}
       context={{
         category,
         kind: treeKindOf(category),
@@ -352,4 +404,51 @@ function Empty({ title, filtered = false, children }: { title: string; filtered?
       {children && <div className="mt-1.5">{children}</div>}
     </div>
   );
+}
+
+/*
+ * ── Where the page was left (UI-095, UI-098; P19.3-T3 AC-11) ────────────────────────────────────
+ */
+
+/** The AB rows open, and the scroll a name was followed from: this tab's session only, and it may be unavailable. */
+const OPEN_KEY = 'kpm-compliance:open';
+const SCROLL_KEY = 'kpm-compliance:return';
+
+function savedOpen(): ReadonlySet<string> {
+  try {
+    const raw = sessionStorage.getItem(OPEN_KEY);
+    const ids = raw ? (JSON.parse(raw) as unknown) : [];
+    return new Set(Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string') : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function keepOpen(ids: ReadonlySet<string>) {
+  try {
+    sessionStorage.setItem(OPEN_KEY, JSON.stringify([...ids]));
+  } catch {
+    // No storage: the rows start folded next time.
+  }
+}
+
+function saveScroll(at: string) {
+  try {
+    sessionStorage.setItem(SCROLL_KEY, JSON.stringify({ at, y: window.scrollY }));
+  } catch {
+    // No storage: Back comes to the top.
+  }
+}
+
+function takeScroll(at: string): number | null {
+  try {
+    const raw = sessionStorage.getItem(SCROLL_KEY);
+    if (!raw) return null;
+    const saved = JSON.parse(raw) as { at?: string; y?: number };
+    if (saved.at !== at || typeof saved.y !== 'number') return null;
+    sessionStorage.removeItem(SCROLL_KEY);
+    return saved.y;
+  } catch {
+    return null;
+  }
 }

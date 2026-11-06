@@ -18,12 +18,13 @@ import {
   type CalendarTask, type CalendarView,
 } from '@/lib/calendar';
 import { readLead, type Lead } from '@/lib/leads';
-import { HOUR_PX, nextHalfHour, OPEN_AT_HOUR } from '@/lib/calendar-layout';
+import { HOUR_PX, nextHalfHour, OPEN_AT_HOUR, openingHour } from '@/lib/calendar-layout';
 import { DEFAULT_END, DEFAULT_START, type Slot } from '@/lib/calendar-form';
-import { formatMonth, formatShortDay, formatWeekRange } from '@/lib/format';
+import { formatDayRange, formatMonth } from '@/lib/format';
 import { joinInFlight } from '@/lib/in-flight';
 import { announceInboxChanged } from '@/lib/notifications';
 import { useCan, useSession } from '@/lib/session';
+import { useMediaQuery } from '@/lib/use-media-query';
 import { usePhone } from '@/lib/use-phone';
 import { cn } from '@/lib/cn';
 import { AgendaPane, AgendaSkeleton, type AgendaPerson } from './agenda';
@@ -41,7 +42,7 @@ import { WeekPane, WeekSkeleton, type ScrollGroup } from './week-pane';
 /** The lead's details from a task's › (UI-104 point 4; D-19), loaded when a lead is opened. */
 const LeadSheet = dynamic(() => import('@/components/lead-sheet').then((m) => m.LeadSheet), { ssr: false });
 /**
- * An entry's detail and the new/edit form, downloaded when one is first opened (P18.99-T16, the bundle): drawn only
+ * An entry's detail and the new/edit form, downloaded when one is first opened (P18.11-T16, the bundle): drawn only
  * after a tap or an address that asks for one, and with the invite picker a third of the screen's own code.
  */
 const DetailDialog = dynamic(() => import('./detail-dialog').then((m) => m.DetailDialog), { ssr: false });
@@ -49,6 +50,37 @@ const EntryDialog = dynamic(() => import('./entry-dialog').then((m) => m.EntryDi
 
 /** A pane's frame: a tile of its own, side by side with the others or stacked below 980px (`:96-101`, `:232-234`). */
 const TILE = 'overflow-hidden rounded-lg border border-hairline';
+
+/**
+ * **One size for every control in the toolbar** (P19.1-T3 AC-3; UI-156, R1): 16px, 600, 48px tall, at every size — the
+ * view picker's 16px, which keeps iOS from zooming on a tap, and its neighbours brought up to it, ‹ › at the same weight.
+ */
+const TOOL = 'inline-flex h-12 shrink-0 items-center justify-center gap-1 rounded-md border border-hairline bg-card px-2 '
+  + 'text-lg font-semibold text-navy hover:bg-hover-row disabled:opacity-40';
+
+/**
+ * **The last view chosen, on this device** (P19.1-T3 AC-9; UI-119): a convenience, so a storage that refuses — a private
+ * window, a cleared site — falls back to the size's default and nothing else changes. From 768px only: the phone opens
+ * on the Agenda, always (D-30).
+ */
+const VIEW_KEY = 'ab.calendar.view';
+
+function storedView(): CalendarDisplay | null {
+  try {
+    const kept = window.localStorage.getItem(VIEW_KEY);
+    return (DISPLAYS as readonly string[]).includes(kept ?? '') ? kept as CalendarDisplay : null;
+  } catch {
+    return null;
+  }
+}
+
+function keepView(view: CalendarDisplay) {
+  try {
+    window.localStorage.setItem(VIEW_KEY, view);
+  } catch {
+    // A convenience: refused, the next visit opens on the size's default.
+  }
+}
 
 
 /**
@@ -61,7 +93,7 @@ const TILE = 'overflow-hidden rounded-lg border border-hairline';
  *
  * The prototype's four `alert('Mockup: …')` stand-ins are built as they describe (contradiction 3):
  * *Today* returns to the office's today; ‹ and › step the period; a save is saved, and the view moves to
- * the period holding the entry and draws it. **A new entry also says *Event created ✓*** (P18.95-T1 AC-6).
+ * the period holding the entry and draws it. **A new entry also says *Event created ✓*** (P18.7-T1 AC-6).
  *
  * **From a notice** the address carries `?entry=&date=` (ADR-0095): the entry is read, and its week
  * opens with its detail; if it no longer reads, the week of `date` opens, with a line saying so.
@@ -77,7 +109,7 @@ const TILE = 'overflow-hidden rounded-lg border border-hairline';
  * **UI V1 (UI-104)**:
  *
  * - **Four views at every width — *Agenda · 3 Hari · Week · Month*** — the Agenda the phone's default, starting from
- *   today (points 5, 10); Week the default from 768px, as before.
+ *   today (points 5, 10); Week the default from 768px until P19.1-T3 (below).
  * - **What other features put on it**, read-only: a lead's next action and an open coaching action item as *Tugas*
  *   (no time: never on the grid), and the events joined, at their time (point 1). **A tick on the reader's own task**
  *   completes it at its source — the toast says *Selesai* with *Urungkan* — strikes it through and lowers every count
@@ -90,6 +122,18 @@ const TILE = 'overflow-hidden rounded-lg border border-hairline';
  *   it on is still read by a leader as *Sibuk* blocks and a count of tasks — the server's rule (ADR-0110).
  * - **Compared people** appear in the Agenda and 3 Hari among the reader's own, each with their avatar; in Week and
  *   Month as panes of their own, as before.
+ *
+ * **Phase 19.1 (P19.1-T3; UI-117 to UI-120, UI-144, UI-154, UI-156)**:
+ *
+ * - **One toolbar, in the same place in every view** (UI-117, UI-144). A phone keeps its own — *Hari ini* · ‹ › · the
+ *   view picker · *Filter*, then the range and *+ Event baru* — in all four views, 3 Hari included. A tablet: *Hari ini*
+ *   ‹ › the range … *Filter*, then the switcher across and *+ Event baru*. A laptop, one row: *Hari ini* ‹ › the range ·
+ *   the switcher · *Filter* · *+ Event baru*. Every control 16px / 600 / 48px (UI-156).
+ * - ***Melihat* and *Jenis***: a laptop's one row under the toolbar, which its *Filter* hides and shows; a tablet's and a
+ *   phone's *Filter* panel, the button navy while it is open (UI-118).
+ * - **The default view by size** — the Agenda on a phone, 3 Hari on a tablet, Week on a laptop — and **the last one
+ *   chosen remembered** on the device from 768px (UI-119).
+ * - **3 Hari and Week are one time grid** (`TimeGrid`), opened an hour before now (UI-117, UI-144).
  */
 export function CalendarScreen({
   initialView,
@@ -97,11 +141,11 @@ export function CalendarScreen({
   initialEntry,
   initialWith,
 }: {
-  /** The address's `view`, when it names one; without it, Week — and on a phone, the Agenda. */
+  /** The address's `view`, when it names one; without it, the size's default or the view last chosen (UI-119). */
   initialView?: CalendarView;
   initialDate?: string;
   initialEntry?: string;
-  /** The address's `with` (P18.96-T6 AC-4): open *New event* as a 1:1 with this member, once the week is read. */
+  /** The address's `with` (P18.8-T6 AC-4): open *New event* as a 1:1 with this member, once the week is read. */
   initialWith?: string;
 }) {
   const t = useMessages(calendarMessages);
@@ -109,13 +153,20 @@ export function CalendarScreen({
   const language = useFigureLanguage();
   const { me } = useSession();
   const phone = usePhone();
+  // A tablet: 768–1023px (UI-117's two rows; UI-119's 3 Hari). From 1024px, a laptop.
+  const tablet = useMediaQuery('tablet');
   /*
    * **The first read waits one effect** (UI-104): `usePhone` answers in an effect, after the first render, and since UI
    * V1 the phone's Agenda and the wider Week are different reads — asking before it answered would read a week a
    * phone never shows. This effect runs after the media query's, in the same commit, so the first read asks once.
    */
   const [ready, setReady] = useState(false);
-  useEffect(() => { setReady(true); }, []);
+  // The last view chosen (UI-119), read with the sizes: never on the server, and before the first read.
+  const [kept, setKept] = useState<CalendarDisplay | null>(null);
+  useEffect(() => {
+    setKept(storedView());
+    setReady(true);
+  }, []);
   const readOnly = !!me?.isImpersonating && !!me.impersonationReadOnly;
   const may = {
     create: useCan('calendar_entry:create') && !readOnly,
@@ -129,10 +180,11 @@ export function CalendarScreen({
   const membership = me?.membership;
   const canCompare = (membership?.directCount ?? 0) > 0 && membership?.hierarchyRole !== 'agent';
 
-  // What the reader chose, or the address named; `null` until then, which is Week — or a phone's Agenda. A notice's
-  // entry opens on the default view at its date: its week, or on a phone the Agenda from that day.
+  // What the reader chose, or the address named; `null` until then, which is the size's default (UI-119): a phone's
+  // Agenda, else the view last chosen on this device, else 3 Hari on a tablet and Week on a laptop. A notice's entry
+  // opens on that default at its date.
   const [chosen, setChosen] = useState<CalendarDisplay | null>(initialEntry ? null : initialView ?? null);
-  const display: CalendarDisplay = chosen ?? (phone ? 'agenda' : 'week');
+  const display: CalendarDisplay = chosen ?? (phone ? 'agenda' : kept ?? (tablet ? 'three_days' : 'week'));
   const view = viewOf(display);
   const [date, setDate] = useState<string | undefined>(initialEntry ? undefined : initialDate);
   const [resolved, setResolved] = useState(!initialEntry);
@@ -156,8 +208,13 @@ export function CalendarScreen({
   const panes = useRef<HTMLDivElement>(null);
   const newEventButton = useRef<HTMLButtonElement>(null);
   const refocus = useRef(false);
-  // A phone's *Filter* panel, and the types unticked (UI-104 point 9).
-  const [filtersOpen, setFiltersOpen] = useState(false);
+  // *Filter* (UI-104 point 9; UI-118): a phone's and a tablet's panel, closed until opened; a laptop's row under the
+  // toolbar, shown until hidden. `null` is the size's own.
+  const [filtersChosen, setFiltersChosen] = useState<boolean | null>(null);
+  const laptop = !phone && !tablet;
+  const filtersOpen = filtersChosen ?? laptop;
+  const setFiltersOpen = (next: boolean | ((now: boolean) => boolean)) =>
+    setFiltersChosen(typeof next === 'function' ? next(filtersOpen) : next);
   const filtersId = useId();
   const [hiddenKinds, setHiddenKinds] = useState<ReadonlySet<FilterKind>>(new Set());
   // The day whose *Tugas* popup is open (UI-104 point 3), and the lead a task's › opened.
@@ -245,6 +302,7 @@ export function CalendarScreen({
     if (to === display && on === undefined) return;
     setRead(null);
     setChosen(to);
+    if (!phone) keepView(to);
     if (on !== undefined) setDate(on);
     else if (to === 'agenda' || to === 'three_days') setDate(raw?.today);
   };
@@ -257,11 +315,12 @@ export function CalendarScreen({
   const goToday = () => {
     setGone(false);
     if (raw) setDate(raw.today);
-    scroll.reset();
+    // Back to an hour before now (UI-117): today is the day in view once the read lands.
+    scroll.reset(raw ? openingHour([raw.today], raw.today, nowMinute) : undefined);
   };
 
   /*
-   * **A 1:1 asked for by the address** (P18.96-T6 AC-4; `/new-hires`' *Schedule 1:1*): once the reader's calendar is
+   * **A 1:1 asked for by the address** (P18.8-T6 AC-4; `/new-hires`' *Schedule 1:1*): once the reader's calendar is
    * read — so the office's today is known — the new-entry dialog opens as *1:1 coaching*, *"1:1 with {full name}"*, them
    * invited, the name from the reader's own downline. Once per address.
    */
@@ -314,12 +373,17 @@ export function CalendarScreen({
   /** A phone's month cell, or a *Tugas* badge: that day in the Agenda (UI-104 point 2). */
   const toAgenda = (day: string) => changeView('agenda', day);
 
+  // The range, the month said once where both days are in it — *2 – 4 Nov 2026* (UI-144) — and never cut.
   const label = shown
-    ? (shown.view === 'month' ? formatMonth(shown.month ?? '', language) : formatWeekRange(shown.from, shown.to, language))
+    ? (shown.view === 'month' ? formatMonth(shown.month ?? '', language) : formatDayRange(shown.from, shown.to, language))
     : '';
   const stepWords = view === 'month'
     ? { previous: t.previousMonth, next: t.nextMonth }
-    : { previous: t.previousWeek, next: t.nextWeek };
+    : view === 'three_days'
+      ? { previous: t.previousDays, next: t.nextDays }
+      : { previous: t.previousWeek, next: t.nextWeek };
+  /** Where Week and 3 Hari open, and go back to when the panes change: an hour before now, or 07.00 (UI-117). */
+  const openAt = () => (shown ? openingHour(shown.days.map((d) => d.date), shown.today, nowMinute) : undefined);
 
   // What a compared read asks for: the period shown, by its first day (a month's own first day).
   const comparedDate = shown ? (shown.view === 'month' ? shown.days.find((d) => d.inPeriod)?.date ?? shown.from : shown.from) : '';
@@ -349,55 +413,87 @@ export function CalendarScreen({
     } : null))
     .filter((o): o is AgendaPerson => o !== null);
 
-  const nav = (size: string) => (
-    <div className="inline-flex overflow-hidden rounded-md border border-hairline bg-card">
-      <button
-        type="button"
-        aria-label={stepWords.previous}
-        disabled={!shown}
-        onClick={() => shown && step(shown.previous)}
-        className={cn(size, 'text-md text-navy hover:bg-base')}
-      >
-        <span aria-hidden="true">‹</span>
-      </button>
-      <button
-        type="button"
-        aria-label={stepWords.next}
-        disabled={!shown}
-        onClick={() => shown && step(shown.next)}
-        className={cn(size, 'text-md text-navy hover:bg-base')}
-      >
-        <span aria-hidden="true">›</span>
-      </button>
+  /** ‹ and ›: a phone's one pill of two 44px halves, as it was; wider, two buttons (UI-117's `[‹] [›]`). */
+  const stepButton = (direction: 'previous' | 'next', className: string) => (
+    <button
+      type="button"
+      aria-label={stepWords[direction]}
+      disabled={!shown}
+      onClick={() => shown && step(shown[direction])}
+      className={className}
+    >
+      <span aria-hidden="true">{direction === 'previous' ? '‹' : '›'}</span>
+    </button>
+  );
+  const halves = 'h-full w-11 text-lg font-semibold text-navy hover:bg-hover-row disabled:opacity-40';
+  const nav = phone ? (
+    <div className="inline-flex h-12 shrink-0 overflow-hidden rounded-md border border-hairline bg-card">
+      {stepButton('previous', halves)}
+      {stepButton('next', halves)}
     </div>
+  ) : (
+    <>
+      {stepButton('previous', cn(TOOL, 'w-12 px-0'))}
+      {stepButton('next', cn(TOOL, 'w-12 px-0'))}
+    </>
   );
+  // Never cut (UI-144): the range keeps its one line, and on a laptop it gives way before the controls do.
   const rangeLabel = (className: string) => (
-    <span aria-live="polite" className={cn('font-display font-bold text-navy', className)}>{label}</span>
+    <span aria-live="polite" className={cn('whitespace-nowrap font-display font-bold text-navy', className)}>{label}</span>
   );
+  const todayButton = <button type="button" onClick={goToday} className={TOOL}>{t.today}</button>;
   const newEventControl = may.create && (
-    <Button ref={newEventButton} onClick={newEvent} className={phone ? 'shrink-0' : undefined}>{t.newEvent}</Button>
+    <Button ref={newEventButton} onClick={newEvent} className="h-12 shrink-0 px-4 text-lg font-semibold">{t.newEvent}</Button>
   );
-  const viewSelect = (className: string) => (
+  const viewSelect = (
     <Select
       aria-label={t.view}
       value={display}
       onChange={(e) => changeView(e.target.value as CalendarDisplay)}
-      className={className}
+      className="h-12 min-w-0 flex-1 px-2 text-lg font-semibold"
     >
       {DISPLAYS.map((v) => <option key={v} value={v}>{t[v]}</option>)}
     </Select>
   );
+  /** The switcher from 768px: *Agenda · 3 Hari · Week · Month*, the chosen one navy. Across a tablet's second row. */
+  const switcher = (
+    <div
+      role="group"
+      aria-label={t.view}
+      className={cn('inline-flex h-12 shrink-0 rounded-[9px] border border-hairline bg-card p-[3px]', tablet && 'min-w-0 flex-1')}
+    >
+      {DISPLAYS.map((v) => (
+        <button
+          key={v}
+          type="button"
+          aria-pressed={display === v}
+          onClick={() => changeView(v)}
+          className={cn(
+            'whitespace-nowrap rounded-[6px] px-3 text-lg font-semibold',
+            tablet && 'flex-1',
+            display === v ? 'bg-secondary text-secondary-contrast' : 'text-muted hover:text-navy',
+          )}
+        >
+          {t[v]}
+        </button>
+      ))}
+    </div>
+  );
   const filterButton = (
-    <Button
-      variant="secondary"
+    <button
+      type="button"
       aria-expanded={filtersOpen}
       aria-controls={filtersId}
       onClick={() => setFiltersOpen((now) => !now)}
-      className={cn('ml-auto h-11 gap-1 px-2', filtersOpen && 'border-navy bg-navy text-white hover:bg-navy')}
+      className={cn(
+        TOOL,
+        // Navy while its panel is open (D-30; UI-118) — a phone's and a tablet's. A laptop's row is shown as it was drawn.
+        filtersOpen && !laptop && 'border-secondary bg-secondary text-secondary-contrast hover:bg-secondary',
+      )}
     >
       <LineIcon name="adjust" className="h-4 w-4" />
       {t.filters}
-    </Button>
+    </button>
   );
   const toggleKind = (kind: FilterKind) => setHiddenKinds((now) => {
     const next = new Set(now);
@@ -413,15 +509,16 @@ export function CalendarScreen({
       canCompare={canCompare}
       compared={compared}
       lost={lost}
+      inline={!phone}
       onAdd={(person) => {
         if (compared.length >= COMPARE_MAX || compared.some((c) => c.membershipId === person.membershipId)) return;
         setLost(null);
         setCompared([...compared, person]);
-        scroll.reset();
+        scroll.reset(openAt());
       }}
       onRemove={(membershipId) => {
         forget(membershipId);
-        scroll.reset();
+        scroll.reset(openAt());
       }}
       onLostSeen={() => setLost(null)}
     />
@@ -471,7 +568,7 @@ export function CalendarScreen({
   } else if (!shown || !ownHead) {
     body = (
       <Skeleton label={t.loading} className={cn(TILE, 'bg-card')}>
-        {display === 'week' || display === 'three_days' ? <WeekSkeleton /> : display === 'month' ? <MonthSkeleton phone={phone} /> : <AgendaSkeleton />}
+        {display === 'week' || display === 'three_days' ? <WeekSkeleton columns={display === 'week' ? 7 : 3} /> : display === 'month' ? <MonthSkeleton phone={phone} /> : <AgendaSkeleton />}
       </Skeleton>
     );
   } else if (display === 'month') {
@@ -499,37 +596,13 @@ export function CalendarScreen({
           read={shown}
           others={others}
           nowMinute={nowMinute}
+          phone={phone}
           regionLabel={t.region({ range: label })}
+          scroll={scroll}
           onStep={(direction) => step(direction < 0 ? shown.previous : shown.next)}
           onOpen={setDetail}
           onSlot={may.create ? (slot) => open({ mode: 'new', slot }) : undefined}
           onTasks={setPopupDay}
-          controls={(
-            // The pinned header's row (UI-104 point 5): ‹ the range › *Hari ini* and the compact switcher.
-            <div className="flex h-[52px] items-center gap-1.5 px-2.5">
-              <button
-                type="button"
-                aria-label={t.previousDays}
-                onClick={() => step(shown.previous)}
-                className="flex h-11 w-11 items-center justify-center rounded-full text-pill-grey-ink hover:bg-hover-row"
-              >
-                <LineIcon name="chevronLeft" className="h-5 w-5" />
-              </button>
-              <span aria-live="polite" className="min-w-0 flex-1 truncate text-base font-bold text-navy">
-                {formatShortDay(shown.from, {}, language)} – {formatShortDay(shown.to, {}, language)}
-              </span>
-              <button
-                type="button"
-                aria-label={t.nextDays}
-                onClick={() => step(shown.next)}
-                className="flex h-11 w-11 items-center justify-center rounded-full text-pill-grey-ink hover:bg-hover-row"
-              >
-                <LineIcon name="chevronRight" className="h-5 w-5" />
-              </button>
-              <Button variant="secondary" className="h-11 px-2.5 md:h-9" onClick={goToday}>{t.today}</Button>
-              {viewSelect('h-11 px-2 font-semibold md:h-9')}
-            </div>
-          )}
         />
       </div>
     );
@@ -552,79 +625,77 @@ export function CalendarScreen({
     );
   }
 
-  const threeDays = display === 'three_days';
+  /*
+   * **The toolbar** (P19.1-T3 AC-1 to AC-3): one per size, the same in every view, so switching views never moves it.
+   * A phone's first row fits 360px on one line — the picker gives way, never the buttons — and its range is never cut.
+   */
+  let toolbar: ReactNode;
+  if (phone) {
+    toolbar = (
+      <div className="mb-3 flex flex-col gap-2">
+        <div data-toolbar="" className="flex flex-nowrap items-center gap-1">
+          {todayButton}
+          {nav}
+          {viewSelect}
+          {filterButton}
+        </div>
+        <div className="flex items-center justify-between gap-2">
+          {rangeLabel('text-lg')}
+          {newEventControl}
+        </div>
+      </div>
+    );
+  } else if (tablet) {
+    toolbar = (
+      <div className="mb-3 flex flex-col gap-2">
+        <div data-toolbar="" className="flex flex-nowrap items-center gap-2">
+          {todayButton}
+          {nav}
+          {rangeLabel('min-w-0 text-lg')}
+          <span className="ml-auto" />
+          {filterButton}
+        </div>
+        <div className="flex flex-nowrap items-center gap-2">
+          {switcher}
+          {newEventControl}
+        </div>
+      </div>
+    );
+  } else {
+    toolbar = (
+      <div data-toolbar="" className="mb-3 flex flex-nowrap items-center gap-2">
+        {todayButton}
+        {nav}
+        {rangeLabel('min-w-0 truncate text-lg')}
+        <span className="ml-auto" />
+        {switcher}
+        {filterButton}
+        {newEventControl}
+      </div>
+    );
+  }
+
   return (
     <CalendarTasksContext.Provider value={ticks.value}>
       <div>
-        {phone ? (
-          <div className="mb-3 flex flex-col gap-2">
-            {/* One row at 320px: each control 44px tall and as narrow as its words allow. In 3 Hari the range and the
-                switcher move into its pinned header, and this row keeps *Filter* and *+ New event*. */}
-            {threeDays ? (
-              <div className="flex flex-wrap items-center gap-1">
-                {newEventControl}
-                {filterButton}
-              </div>
-            ) : (
-              <>
-                <div className="flex flex-wrap items-center gap-1">
-                  <Button variant="secondary" className="h-11 px-2" onClick={goToday}>{t.today}</Button>
-                  {nav('h-11 w-11')}
-                  {viewSelect('h-11 px-2 font-semibold')}
-                  {filterButton}
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  {rangeLabel('min-w-0 truncate text-lg')}
-                  {newEventControl}
-                </div>
-              </>
-            )}
+        {toolbar}
+
+        {laptop ? (
+          // *Melihat* and the type chips on one row under the toolbar (UI-118), which *Filter* hides and shows.
+          <div id={filtersId} hidden={!filtersOpen} data-filter-row="" className="mb-3">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+              {compareBar}
+              <span aria-hidden="true" className="h-6 w-px bg-line" />
+              {chips}
+            </div>
           </div>
         ) : (
-          <div className="mb-3.5 flex flex-wrap items-center justify-between gap-3.5">
-            <div className="flex flex-wrap items-center gap-3">
-              {!threeDays && (
-                <>
-                  <Button variant="secondary" className="h-[34px] px-3.5" onClick={goToday}>{t.today}</Button>
-                  {nav('h-[34px] w-8')}
-                  {rangeLabel('whitespace-nowrap text-xl')}
-                </>
-              )}
-            </div>
-            <div className="flex flex-wrap items-center justify-end gap-2.5">
-              <div role="group" aria-label={t.view} className="inline-flex rounded-[9px] border border-hairline bg-card p-[3px]">
-                {DISPLAYS.map((v) => (
-                  <button
-                    key={v}
-                    type="button"
-                    aria-pressed={display === v}
-                    onClick={() => changeView(v)}
-                    className={cn(
-                      'rounded-[6px] px-4 py-[7px] text-base font-semibold',
-                      display === v ? 'bg-navy text-white' : 'text-muted hover:text-navy',
-                    )}
-                  >
-                    {t[v]}
-                  </button>
-                ))}
-              </div>
-              {newEventControl}
-            </div>
-          </div>
-        )}
-
-        {phone ? (
           // In place, not a dialog: what it holds is the page's own, and it stays put while the reader works.
-          <div id={filtersId} hidden={!filtersOpen} className="mb-3">
+          <div id={filtersId} hidden={!filtersOpen} className={cn('mb-3', tablet && 'rounded-lg bg-card p-3.5')}>
             {compareBar}
-            <p className="mb-1.5 text-xs font-bold text-muted">{t.type}</p>
+            <p className={cn('mb-1.5 text-xs font-bold text-muted', tablet && 'mt-3')}>{t.type}</p>
             {chips}
           </div>
-        ) : (
-          <>
-            {compareBar}
-            <div className="mb-4">{chips}</div>
-          </>
         )}
 
         {gone && <p role="status" className="mb-3 text-md font-semibold text-navy">{t.gone}</p>}
@@ -950,10 +1021,11 @@ function ComparedPane({
 }
 
 /**
- * Every pane's scroll box, moved as one (`syncScroll`, `:1001-1005`), and all of them back to 7 AM
- * when the set of panes changes or *Today* is pressed (`resetScrollPositions`, `:1091-1093`).
+ * Every pane's scroll box, moved as one (`syncScroll`, `:1001-1005`), and all of them back to where the grid opens —
+ * an hour before now, or 07.00 on another week (P19.1-T3 AC-4, `openingHour`) — when the set of panes changes or
+ * *Today* is pressed (`resetScrollPositions`, `:1091-1093`).
  */
-function useScrollGroup(): ScrollGroup & { reset: () => void } {
+function useScrollGroup(): ScrollGroup & { reset: (hour?: number) => void } {
   const boxes = useRef(new Set<HTMLElement>());
   return useMemo(() => ({
     register: (el: HTMLElement) => {
@@ -965,8 +1037,8 @@ function useScrollGroup(): ScrollGroup & { reset: () => void } {
         if (el !== source && el.scrollTop !== source.scrollTop) el.scrollTop = source.scrollTop;
       }
     },
-    reset: () => {
-      for (const el of boxes.current) el.scrollTop = OPEN_AT_HOUR * HOUR_PX;
+    reset: (hour = OPEN_AT_HOUR) => {
+      for (const el of boxes.current) el.scrollTop = hour * HOUR_PX;
     },
   }), []);
 }

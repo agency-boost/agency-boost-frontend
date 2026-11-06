@@ -103,7 +103,7 @@ describe('Modal (P11-T8)', () => {
     expect(badge.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it('P18.95-T4 AC-1: rises from the foot of the screen as a sheet, with the same manners as the dialog', async () => {
+  it('P18.7-T4 AC-1: rises from the foot of the screen as a sheet, with the same manners as the dialog', async () => {
     const onClose = vi.fn();
     render(
       <Modal open placement="sheet" title="Edit Pak Budi" focusDialog onClose={onClose}>
@@ -124,7 +124,7 @@ describe('Modal (P11-T8)', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it('P18.95-T4: keeps the centred box by default', () => {
+  it('P18.7-T4: keeps the centred box by default', () => {
     render(<Modal open title="Edit again" onClose={() => {}}><p>Why</p></Modal>);
     const dialog = screen.getByRole('dialog', { name: 'Edit again' });
     expect(dialog.parentElement).toHaveAttribute('data-placement', 'center');
@@ -132,12 +132,12 @@ describe('Modal (P11-T8)', () => {
     expect(dialog.className).toContain('rounded-lg');
   });
 
-  describe('its height, its foot and the page behind (P18.96-T1 AC-2)', () => {
+  describe('its height, its foot and the page behind (P18.8-T1 AC-2)', () => {
     afterEach(() => {
       document.body.style.overflow = '';
     });
 
-    it('P18.96-T1 AC-2 never taller than the dynamic viewport: the box scrolls inside, and hands nothing on to the page', () => {
+    it('P18.8-T1 AC-2 never taller than the dynamic viewport: the box scrolls inside, and hands nothing on to the page', () => {
       render(<Modal open title="Edit subscription" onClose={() => {}}><p>Fields</p></Modal>);
       const dialog = screen.getByRole('dialog', { name: 'Edit subscription' });
       expect(dialog).toHaveClass('max-h-[calc(100dvh-1.25rem-max(1.25rem,env(safe-area-inset-top)))]', 'overflow-y-auto', 'overscroll-contain');
@@ -164,7 +164,7 @@ describe('Modal (P11-T8)', () => {
       expect(dialog).toHaveClass('lg:max-h-[calc(100dvh-1.25rem-max(1.25rem,env(safe-area-inset-top)))]', 'max-lg:max-h-[90dvh]');
     });
 
-    it('P18.96-T1 AC-2 the title stays at the top as the content scrolls under it', () => {
+    it('P18.8-T1 AC-2 the title stays at the top as the content scrolls under it', () => {
       render(
         <Modal open title="Edit subscription" description="KPM 0417 · BSD" eyebrow={<span>Badge</span>} onClose={() => {}}>
           <p>Fields</p>
@@ -178,7 +178,7 @@ describe('Modal (P11-T8)', () => {
       expect(head).not.toContainElement(screen.getByText('Fields'));
     });
 
-    it('P18.96-T1 AC-2 a footer is held at the foot, after the content, on the card colour; a form’s submit still submits', async () => {
+    it('P18.8-T1 AC-2 a footer is held at the foot, after the content, on the card colour; a form’s submit still submits', async () => {
       const onSubmit = vi.fn((e: React.FormEvent) => e.preventDefault());
       render(
         <Modal
@@ -207,7 +207,7 @@ describe('Modal (P11-T8)', () => {
       expect(results.violations).toEqual([]);
     });
 
-    it('P18.96-T1 AC-2 a sheet’s footer clears the home indicator; without one, the box keeps the padding', () => {
+    it('P18.8-T1 AC-2 a sheet’s footer clears the home indicator; without one, the box keeps the padding', () => {
       const { unmount } = render(
         <Modal open placement="sheet" title="Edit Pak Budi" onClose={() => {}} footer={<button type="button">Close</button>}>
           <p>Remarks</p>
@@ -222,7 +222,7 @@ describe('Modal (P11-T8)', () => {
       expect(document.querySelector('[data-modal-foot]')).toBeNull();
     });
 
-    it('P18.96-T1 AC-2 the page behind holds still while it is open, and gets its scroll back as it was', async () => {
+    it('P18.8-T1 AC-2 the page behind holds still while it is open, and gets its scroll back as it was', async () => {
       document.body.style.overflow = 'auto';
       render(<Harness />);
       expect(document.body.style.overflow).toBe('auto');
@@ -232,7 +232,7 @@ describe('Modal (P11-T8)', () => {
       expect(document.body.style.overflow).toBe('auto');
     });
 
-    it('P18.96-T1 AC-2 a confirmation over an open Modal nests the lock: closing it leaves the page held', async () => {
+    it('P18.8-T1 AC-2 a confirmation over an open Modal nests the lock: closing it leaves the page held', async () => {
       function Stack() {
         const [asking, setAsking] = useState(false);
         const [open, setOpen] = useState(true);
@@ -264,7 +264,7 @@ describe('Modal (P11-T8)', () => {
       expect(document.body.style.overflow).toBe('');
     });
   });
-  it('P18.98-T4: draws at the end of the page, so its h2 never breaks the outline it opens in, and says what is inside it', async () => {
+  it('P18.10-T4: draws at the end of the page, so its h2 never breaks the outline it opens in, and says what is inside it', async () => {
     const { container } = render(
       <main>
         <h1>Compliance</h1>

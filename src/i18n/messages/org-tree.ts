@@ -2,7 +2,7 @@ import { defineMessages, type MessagesOf } from '@/i18n/catalogue';
 import { kept } from '@/i18n/kept';
 
 /**
- * **The hierarchy, drawn** (P18.98-T4, people and forum; `functional/org-hierarchy.md`, *The tree*): the office's
+ * **The hierarchy, drawn** (P18.10-T4, people and forum; `functional/org-hierarchy.md`, *The tree*): the office's
  * *Org Tree* (`/people/org-tree`) and the tree itself (`components/org-tree/org-tree.tsx`), which a leader's *Group
  * tree* draws too — its counts, its legend, the reader's leader, its layers, a leader's unit, and the control that
  * opens and closes it, on the canvas and in a phone's list.
@@ -38,6 +38,16 @@ const en = {
     `${n} ${n === 1 ? 'person is' : 'people are'} inside a closed unit. Units below layer 2 start closed, so a large office opens legibly.`,
   /** A leader's own unit, *"3 direct agents, 2 AAB"*: the agents' part, the prototype's words. */
   directAgents: ({ n }: { n: number }) => `${n} direct agent${n > 1 ? 's' : ''}`,
+  /**
+   * **The Org tree's search and *Open all*** (OWN UI-026): the search pill is Group Tree's (`TreeSearch`, *Find an
+   * agent*); these are what the tree says about its answer, and the button that opens every unit.
+   */
+  openAll: 'Open all',
+  noMatch: 'Nobody in this office matches that search.',
+  /** Said to a screen reader as the search answers. */
+  found: ({ n }: { n: number }) => `${n} ${n === 1 ? 'person matches' : 'people match'} your search, highlighted in the tree.`,
+  /** After a highlighted name, for a screen reader. */
+  matched: 'matches your search',
 };
 
 const id: MessagesOf<typeof en> = {
@@ -56,6 +66,10 @@ const id: MessagesOf<typeof en> = {
   closed: ({ n }) =>
     `${n} orang ada di dalam ${kept('unit')} yang tertutup. ${kept('Unit')} di bawah lapisan 2 dimulai dalam keadaan tertutup, agar ${kept('KPM')} yang besar tetap mudah dibaca.`,
   directAgents: ({ n }) => `${n} agen langsung`,
+  openAll: 'Buka semua',
+  noMatch: `Tidak ada orang di ${kept('KPM')} ini yang cocok dengan pencarian itu.`,
+  found: ({ n }) => `${n} orang cocok dengan pencarian Anda, ditandai di pohon.`,
+  matched: 'cocok dengan pencarian Anda',
 };
 
 export const orgTreeMessages = defineMessages({ en, id });

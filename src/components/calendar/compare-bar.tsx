@@ -17,11 +17,15 @@ import { Avatar, CHIP } from './calendar-parts';
  * *"Viewing:"* and the reader's own *"My Calendar"*, which cannot be removed, are drawn for everybody.
  * **The rest is a leader's** (ADR-0087): a chip per compared person with a ✕ named *Remove {name}*, and
  * *"+ Compare with downline"* with its popover — **in Week, in Month and in a phone's Agenda alike**
- * (P18.95-T8 AC-2; the client's UI review, UI-020: *"Compare with downline" missing in Month view*).
+ * (P18.7-T8 AC-2; the client's UI review, UI-020: *"Compare with downline" missing in Month view*).
  * D-month had kept it to Week; the chips chosen stay with whichever view is drawn.
  *
  * **Removing somebody puts the focus on *"+ Compare with downline"*** (F2): their ✕ goes with their
  * chip, and the focus would have gone with it to the page's foot.
+ *
+ * **`inline`** (P19.1-T3 AC-8; UI-118): from 768px the bar is not a card of its own — it shares one row with the type
+ * chips under a laptop's toolbar, and sits in a tablet's *Filter* panel — so it draws no frame and no margin. A chip's
+ * ✕ is a 44px target below 1024px, its circle unchanged.
  */
 export function CompareBar({
   myInitials,
@@ -31,6 +35,7 @@ export function CompareBar({
   onAdd,
   onRemove,
   onLostSeen,
+  inline = false,
 }: {
   myInitials: string;
   canCompare: boolean;
@@ -40,11 +45,18 @@ export function CompareBar({
   onAdd: (person: CalendarDownlinePerson) => void;
   onRemove: (membershipId: string) => void;
   onLostSeen: () => void;
+  inline?: boolean;
 }) {
   const t = useMessages(calendarMessages);
   const toggle = useRef<HTMLButtonElement>(null);
   return (
-    <div className="mb-4 flex flex-wrap items-center gap-2 rounded-[10px] border border-hairline bg-card px-3.5 py-2.5">
+    <div
+      data-compare-bar=""
+      className={cn(
+        'flex flex-wrap items-center gap-2',
+        !inline && 'mb-4 rounded-[10px] border border-hairline bg-card px-3.5 py-2.5',
+      )}
+    >
       <span className="mr-0.5 text-sm font-semibold text-muted">{t.viewing}</span>
       <span className={cn(CHIP, 'py-1.5 pl-1.5 pr-2')}>
         <Avatar initials={myInitials} me />
@@ -61,7 +73,11 @@ export function CompareBar({
               onRemove(person.membershipId);
               toggle.current?.focus();
             }}
-            className="flex h-5 w-5 items-center justify-center rounded-full bg-navy/10 text-2xs text-navy hover:bg-alert/15 hover:text-alert"
+            className={cn(
+              'relative flex h-5 w-5 items-center justify-center rounded-full bg-secondary/10 text-2xs text-navy hover:bg-alert/15 hover:text-alert',
+              // A 44px target below 1024px, its circle drawn as before (UI-118).
+              "max-lg:before:absolute max-lg:before:-inset-3 max-lg:before:content-['']",
+            )}
           >
             <span aria-hidden="true">✕</span>
           </button>
@@ -197,7 +213,7 @@ function ComparePopover({
         aria-expanded={open}
         aria-controls={popover}
         onClick={() => (open ? close() : setOpen(true))}
-        className="flex items-center gap-1.5 rounded-pill border-[1.3px] border-dashed border-hairline px-[13px] py-[7px] text-sm font-semibold text-navy-soft hover:border-navy-soft hover:bg-navy-soft/5"
+        className="flex items-center gap-1.5 rounded-pill border-[1.3px] border-dashed border-hairline px-[13px] py-[7px] text-sm font-semibold text-navy-soft hover:border-secondary-hover hover:bg-secondary-hover/5"
       >
         {t.compare}
       </button>
@@ -216,7 +232,7 @@ function ComparePopover({
               placeholder={t.searchDownline}
               value={text}
               onChange={(e) => setText(e.target.value)}
-              className="mb-2 w-full rounded-[7px] border-[1.3px] border-hairline px-2.5 py-2 text-base text-navy focus:border-amber"
+              className="mb-2 w-full rounded-[7px] border-[1.3px] border-hairline px-2.5 py-2 text-base text-navy focus:border-primary"
             />
             <div ref={list} className="max-h-[320px] overflow-y-auto">
               {lost && <p className="px-2.5 py-2 text-sm text-muted">{t.lost({ name: lost })}</p>}

@@ -88,7 +88,7 @@ describe('the forum’s words and helpers (P18.1-T2)', () => {
 
   it('the prototype’s strings ship verbatim', () => {
     expect(FORUM_COPY.sub).toBe('Biweekly check-ins with your core leaders — agenda, notes, and action items');
-    // P18.97-T2 AC-1: the list's own line (`:2004`) is gone — one subtitle; AC-3: *MOM* in no string of the module.
+    // P18.9-T2 AC-1: the list's own line (`:2004`) is gone — one subtitle; AC-3: *MOM* in no string of the module.
     expect('listLine' in FORUM_COPY).toBe(false);
     expect([FORUM_COPY.canEdit, FORUM_COPY.shareDialog.title]).toEqual(['Can edit these minutes', 'Share these minutes']);
     expect(JSON.stringify(FORUM_COPY)).not.toMatch(/\bMOM\b/);

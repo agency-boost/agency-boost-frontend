@@ -83,7 +83,7 @@ export const LEADER_LIMIT_QUEUE_CHANGED = 'agencyboost:leader-limit-queue-change
 
 /**
  * What the request asks for, in a sentence: *Agent → Associate Agency Builder*, or *let in as AAB* — in the reader's
- * `language` (P18.98-T4; `useLanguage()`), English, the source, when given none.
+ * `language` (P18.10-T4; `useLanguage()`), English, the source, when given none.
  */
 export function requestedChange(
   row: Pick<LeaderLimitRequestRow, 'action' | 'fromOrgLevelCode' | 'toOrgLevelCode'>,

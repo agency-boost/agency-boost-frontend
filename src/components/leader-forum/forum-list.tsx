@@ -3,7 +3,7 @@
 import dynamic from 'next/dynamic';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { useFieldChrome } from '@/components/field-nav';
+import { useFieldContent } from '@/components/field-nav';
 import { Button } from '@/components/ui/field';
 import { useLanguage, useMessages } from '@/i18n/language-provider';
 import { forumMessages } from '@/i18n/messages/forum';
@@ -19,7 +19,7 @@ import { ListSkeleton, LoadError, NotFound } from './forum-states';
 import { MeetingCardRow } from './meeting-card';
 import { V1ForumList } from './v1-list';
 
-/** *+ New meeting*'s dialog, downloaded when it is first opened and mounted from then on (`useOpenedOnce`; P18.99-T16). */
+/** *+ New meeting*'s dialog, downloaded when it is first opened and mounted from then on (`useOpenedOnce`; P18.11-T16). */
 const MeetingDialog = dynamic(() => import('./meeting-dialog').then((m) => m.MeetingDialog), { ssr: false });
 
 const FILTERS: readonly MeetingFilter[] = ['all', 'upcoming', 'past'];
@@ -29,7 +29,7 @@ const FILTERS: readonly MeetingFilter[] = ['all', 'upcoming', 'past'];
  * over the one read, *+ New meeting* beside it for whoever may make one, and a card per meeting, newest first. A member
  * the server does not let read the forum is answered `404`, and meets the not-found state.
  *
- * **One subtitle** (P18.97-T2 AC-1, I-496; the client's grey-text row for UI-015): the page's, from the shell. The list's
+ * **One subtitle** (P18.9-T2 AC-1, I-496; the client's grey-text row for UI-015): the page's, from the shell. The list's
  * own line (`:2004`) said it again and is gone at every size.
  */
 export function ForumList() {
@@ -48,7 +48,7 @@ export function ForumList() {
   const createOpened = useOpenedOnce(creating);
   // UI V1 (UI-110): a phone in the field shell reads the Event-like cards; the console and wider screens as before.
   const phone = usePhone();
-  const field = useFieldChrome() !== null;
+  const field = useFieldContent();
 
   useEffect(() => {
     if (!loading && !me) router.replace(signInAndReturn(pathname, { signedOut, expired }));
@@ -112,7 +112,7 @@ export function ForumList() {
               onClick={() => setFilter(f)}
               className={cn(
                 'rounded-md px-4 py-[7px] text-base font-semibold',
-                filter === f ? 'bg-navy text-white' : 'text-muted hover:text-navy',
+                filter === f ? 'bg-secondary text-secondary-contrast' : 'text-muted hover:text-navy',
               )}
             >
               {t.filters[f]}

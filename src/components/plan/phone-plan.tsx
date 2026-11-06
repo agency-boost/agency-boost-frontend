@@ -94,7 +94,7 @@ export function NavyHead({ tags, verdict, title, headingRef, line, fitLabel, fit
       <h2 ref={headingRef} tabIndex={-1} className="m-0 mt-2 break-words text-2xl font-extrabold text-white">{title}</h2>
       {line && <p className="m-0 mt-1 text-base leading-snug text-on-navy-muted">{line}</p>}
       {fit && (
-        <p className="m-0 mt-1 text-base leading-snug text-on-navy-muted">
+        <p className="m-0 mt-1 whitespace-pre-line text-base leading-snug text-on-navy-muted">
           <span className="font-semibold text-white">{fitLabel}</span> {fit}
         </p>
       )}
@@ -110,7 +110,7 @@ export function PhoneSection({ n, label, children }: { n?: number; label: string
     <section aria-labelledby={id} className="mt-2 rounded-lg bg-card p-3" data-block={n}>
       <h3 id={id} className="m-0 mb-2 flex items-center gap-2 text-md font-bold text-navy">
         {n !== undefined && (
-          <span aria-hidden="true" className="flex h-[1.375rem] w-[1.375rem] shrink-0 items-center justify-center rounded-full bg-amber/[0.14] text-sm text-amber-ink">
+          <span aria-hidden="true" className="flex h-[1.375rem] w-[1.375rem] shrink-0 items-center justify-center rounded-full bg-primary/[0.14] text-sm text-primary-ink">
             {n}
           </span>
         )}
@@ -122,9 +122,9 @@ export function PhoneSection({ n, label, children }: { n?: number; label: string
   );
 }
 
-/** The line to open with: italic, behind an amber rule. */
+/** The line to open with: italic, behind an amber rule — on as many lines as its author typed (P19-T6 AC-1). */
 export function PhoneQuote({ text }: { text: string }) {
-  return <p className="m-0 border-l-[3px] border-amber pl-2.5 text-md italic leading-normal text-ink">“{text}”</p>;
+  return <p className="m-0 whitespace-pre-line border-l-[3px] border-primary pl-2.5 text-md italic leading-normal text-ink">“{text}”</p>;
 }
 
 /** How many benefits show before *Lihat n manfaat lagi* (`attack-plan-mobile` 3: four, then the link). */
@@ -193,18 +193,21 @@ export function PhoneScript({ text }: { text: string }) {
   );
 }
 
-/** What they say, and what you say back: two bubbles, *Dia berkata* to the left and *Anda menjawab* to the right. */
+/**
+ * What they say, and what you say back: two bubbles, *Dia berkata* to the left and *Anda menjawab* to the right — each on
+ * as many lines as its author typed (P19-T6 AC-1).
+ */
 export function PhoneBubbles({ theySay, youSay }: { theySay: string; youSay: string }) {
   const p = useMessages(planMessages);
   return (
     <div data-part="bubbles">
       <p className="m-0 mr-7 mt-1.5 rounded-row bg-hover-row px-3 py-2.5 text-base leading-snug text-ink">
         <small className="mb-0.5 block text-sm font-bold text-muted">{p.theySaid}</small>
-        “{theySay}”
+        <span className="whitespace-pre-line">“{theySay}”</span>
       </p>
-      <p className="m-0 ml-7 mt-1.5 rounded-row bg-amber/[0.14] px-3 py-2.5 text-base leading-snug text-ink">
-        <small className="mb-0.5 block text-sm font-bold text-amber-ink">{p.youAnswer}</small>
-        “{youSay}”
+      <p className="m-0 ml-7 mt-1.5 rounded-row bg-primary/[0.14] px-3 py-2.5 text-base leading-snug text-ink">
+        <small className="mb-0.5 block text-sm font-bold text-primary-ink">{p.youAnswer}</small>
+        <span className="whitespace-pre-line">“{youSay}”</span>
       </p>
     </div>
   );

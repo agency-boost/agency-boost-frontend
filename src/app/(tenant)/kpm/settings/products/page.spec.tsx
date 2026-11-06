@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { atWidth, digestAt, makeMe, renderWithSession, stubFetch, wears } from '@test/harness';
 import { GCS_UPLOAD_URL, gcsSignedUpload } from '@test/storage-fixtures';
+import { smallTargets } from '@test/touch-audit';
 import KpmProductsPage from './page';
 
 vi.mock('next/navigation', () => ({
@@ -38,8 +39,7 @@ const script = (over: Record<string, unknown> = {}) => ({
   opening: field('Halo, boleh saya tanya sebentar?'),
   benefits: field(['Proteksi jiwa']),
   fullScript: field('Halo. Ini scriptnya.'),
-  objectionTheySay: field('Terlalu mahal.'),
-  objectionYouSay: field('Preminya bisa disesuaikan.'),
+  objections: field([{ objection: 'Terlalu mahal.', answer: 'Preminya bisa disesuaikan.' }]),
   nextAction: field('Boleh saya siapkan ilustrasinya?'),
   ...over,
 });
@@ -50,6 +50,8 @@ const product = (over: Record<string, unknown> = {}) => ({
   companyName: 'PRUMapan',
   channel: 'conventional',
   category: 'life',
+  kind: 'base',
+  attachesTo: [],
   lifecycle: 'active',
   sellable: true,
   active: field(true),
@@ -164,7 +166,7 @@ describe('the office’s Products screen', () => {
       .toEqual({ active: false });
   });
 
-  describe('P18.95-T1 AC-5 — the switch says it is saved, beside it', () => {
+  describe('P18.7-T1 AC-5 — the switch says it is saved, beside it', () => {
     /** The save confirmation in the switch's own row: the nearest ancestor with a status for a child. */
     const besides = (el: HTMLElement) => {
       for (let box = el.parentElement; box; box = box.parentElement) {
@@ -178,7 +180,7 @@ describe('the office’s Products screen', () => {
     const sends = (stub: ReturnType<typeof stubFetch>) =>
       stub.calls.filter((c) => c.url.includes('/p1/active')).map((c) => JSON.parse(String(c.init.body)));
 
-    it('P18.95-T1 AC-5: says Saved ✓ beside the switch once it is kept, and beside no other', async () => {
+    it('P18.7-T1 AC-5: says Saved ✓ beside the switch once it is kept, and beside no other', async () => {
       render([product(), product({ productId: 'p2', code: 'PRUSMART', companyName: 'PRUSmart', displayName: field('PRUSmart') })], OWNER, {
         [ACTIVE]: { body: product({ active: field(false) }) },
       });
@@ -194,7 +196,7 @@ describe('the office’s Products screen', () => {
       expect(screen.getAllByText('Saved ✓')).toHaveLength(1);
     });
 
-    it('P18.95-T1 AC-5: a refused switch says Couldn’t save — retry, and the retry sends the same value again', async () => {
+    it('P18.7-T1 AC-5: a refused switch says Couldn’t save — retry, and the retry sends the same value again', async () => {
       const stub = render([product()], OWNER, {
         [ACTIVE]: [
           { status: 500, body: { error: { code: 'INTERNAL_ERROR', message: 'Something went wrong.', requestId: 'r-1' } } },
@@ -495,7 +497,7 @@ describe('the office’s Products screen', () => {
    * recruitment pitch's control, in the prototype's words and place (`KPM_Owner.html:2404`).
    */
   describe('the office’s own document upload (P17-T9)', () => {
-    /** A GCS signed POST policy, as the API answers since Phase 18.7 (ADR-0153). */
+    /** A GCS signed POST policy, as the API answers since Phase 18.4 (ADR-0153). */
     const SIGNED = gcsSignedUpload('dev/kpm-1/products/01DOC');
     const DOCS = [
       { slot: 'brochure', label: 'Brochure', storageKey: 'k1', filename: 'ours.pdf', source: 'kpm' },
@@ -559,7 +561,8 @@ describe('the office’s Products screen', () => {
       await open();
       fireEvent.change(pick('Product Document'), { target: { files: [new File(['x'], 'sheet.xlsx', { type: 'application/vnd.ms-excel' })] } });
 
-      expect(await within(row('Product Document')).findByText('“sheet.xlsx” is not a PDF. Only a PDF can be uploaded here.')).toBeInTheDocument();
+      // P19.6-T2: an HTML page is accepted too (ADR-0217 §1), and the refusal says so.
+      expect(await within(row('Product Document')).findByText('“sheet.xlsx” is not a PDF or an HTML page. Only a PDF or an HTML page can be uploaded here.')).toBeInTheDocument();
       expect(stub.calls.filter((c) => c.url.includes('/uploads'))).toEqual([]);
     });
 
@@ -600,6 +603,24 @@ describe('the office’s Products screen', () => {
       await waitFor(() => expect(stub.calls.some((c) => c.init.method === 'DELETE' && c.url.includes('/documents/brochure'))).toBe(true));
     });
 
+    it('P19.6-T2 AC-2 previews an HTML page in the sandboxed window, never a tab (ADR-0217 §4)', async () => {
+      const open = vi.fn();
+      vi.stubGlobal('open', open);
+      const page = DOCS.map((d) => (d.slot === 'brochure' ? { ...d, mimeType: 'text/html' } : d));
+      render([product({ documents: page })], OWNER, {
+        '/kpm/settings/products/p1/documents/brochure/url': {
+          body: { url: 'https://storage.googleapis.com/test-bucket/dev/kpm-1/products/01PAGE?X-Goog-Signature=abc' },
+        },
+      });
+      await screen.findByRole('button', { name: 'Customize' });
+      await userEvent.click(screen.getByRole('button', { name: 'Customize' }));
+      await userEvent.click(within(row('Brochure')).getByRole('button', { name: 'Open' }));
+      const frame = await screen.findByTitle('Brochure');
+      expect(frame.getAttribute('sandbox')).toBe('allow-scripts');
+      expect(new URL(frame.getAttribute('src')!).origin).toBe('https://storage.googleapis.com');
+      expect(open).not.toHaveBeenCalled();
+    });
+
     it('says so when a document’s link is refused', async () => {
       render([product({ documents: DOCS })], OWNER, {
         '/kpm/settings/products/p1/documents/brochure/url': {
@@ -622,12 +643,12 @@ describe('the office’s Products screen', () => {
 });
 
 /**
- * ***Review* beside *Waiting for your approval*** (P18.97-T4 AC-7, ADR-0176 §7; the client's KPM Owner review of
+ * ***Review* beside *Waiting for your approval*** (P18.9-T4 AC-7, ADR-0176 §7; the client's KPM Owner review of
  * 2026-10-27, UI-028: *"WAITING FOR YOUR APPROVAL"* on PRUFuture and PRUWarisan with no action on the row). It opens
  * the product's script review on *Script approvals* — its card, where it is approved or sent back — for whoever holds
  * `sales_script:approve`; the API refuses everybody else (`kpm-product.controller.int.spec.ts`, backend).
  */
-describe('P18.97-T4 AC-7 Review beside the badge', () => {
+describe('P18.9-T4 AC-7 Review beside the badge', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   const PENDING = [
@@ -641,7 +662,7 @@ describe('P18.97-T4 AC-7 Review beside the badge', () => {
   });
 
   it.each([['the Owner', OWNER], ['an Admin', ADMIN]])(
-    'P18.97-T4 AC-7 offers %s Review beside Waiting for your approval, and on no other row', async (_who, me) => {
+    'P18.9-T4 AC-7 offers %s Review beside Waiting for your approval, and on no other row', async (_who, me) => {
       render(PENDING, me);
       const review = await screen.findByRole('button', { name: 'Review PRUFuture' });
       expect(review).toHaveTextContent(/^Review$/);
@@ -652,7 +673,7 @@ describe('P18.97-T4 AC-7 Review beside the badge', () => {
     },
   );
 
-  it('P18.97-T4 AC-7 opens that product’s script review, its card taking the focus, Approve and Send back on it', async () => {
+  it('P18.9-T4 AC-7 opens that product’s script review, its card taking the focus, Approve and Send back on it', async () => {
     render(PENDING);
     await userEvent.click(await screen.findByRole('button', { name: 'Review PRUFuture' }));
     expect(window.location.hash).toBe('#approvals');
@@ -666,7 +687,7 @@ describe('P18.97-T4 AC-7 Review beside the badge', () => {
   });
 
   it.each([['somebody who may write a script but not approve one', WRITER], ['a reader', READER]])(
-    'P18.97-T4 AC-7 offers %s no Review: the badge is said, the action is not theirs', async (_who, me) => {
+    'P18.9-T4 AC-7 offers %s no Review: the badge is said, the action is not theirs', async (_who, me) => {
       render(PENDING, me);
       expect(await screen.findByText('Waiting for your approval')).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: /^Review/ })).toBeNull();
@@ -675,11 +696,11 @@ describe('P18.97-T4 AC-7 Review beside the badge', () => {
 });
 
 /**
- * **The shelf's grey sentence per size** (P18.97-T4 AC-6, ADR-0176 §6; the client's grey-text table of 2026-10-27,
+ * **The shelf's grey sentence per size** (P18.9-T4 AC-6, ADR-0176 §6; the client's grey-text table of 2026-10-27,
  * UI-027): *"Your changes apply to this office only."* — the 50 words it replaces — shown from 1024px, behind an ⓘ
  * after the shelf's count line at 768–1023px and below 768px (*ⓘ · ⓘ · Show*).
  */
-describe('P18.97-T4 AC-6 the products’ grey text per size', () => {
+describe('P18.9-T4 AC-6 the products’ grey text per size', () => {
   afterEach(() => vi.unstubAllGlobals());
   const NOTE = 'Your changes apply to this office only.';
 
@@ -691,13 +712,13 @@ describe('P18.97-T4 AC-6 the products’ grey text per size', () => {
     return { sentence: wears(sentence, px).split(' '), tip: wears(tip.parentElement!, px).split(' '), glyph: tip };
   }
 
-  it.each([1024, 1280])('P18.97-T4 AC-6 at %ipx shows the sentence and draws no ⓘ', async (px) => {
+  it.each([1024, 1280])('P18.9-T4 AC-6 at %ipx shows the sentence and draws no ⓘ', async (px) => {
     const { sentence, tip } = await parts(px);
     expect(sentence).not.toContain('hidden');
     expect(tip).toContain('hidden');
   });
 
-  it.each([767, 768, 1023])('P18.97-T4 AC-6 at %ipx hides the sentence and keeps it behind the ⓘ after the count', async (px) => {
+  it.each([767, 768, 1023])('P18.9-T4 AC-6 at %ipx hides the sentence and keeps it behind the ⓘ after the count', async (px) => {
     const { sentence, tip, glyph } = await parts(px);
     expect(sentence).toContain('hidden');
     expect(tip).not.toContain('hidden');
@@ -706,7 +727,7 @@ describe('P18.97-T4 AC-6 the products’ grey text per size', () => {
     expect(screen.getByRole('tooltip', { hidden: true })).toHaveTextContent(NOTE);
   });
 
-  it('P18.97-T4 AC-6 says the whole catalog sentence no more', async () => {
+  it('P18.9-T4 AC-6 says the whole catalog sentence no more', async () => {
     render();
     await screen.findByRole('button', { name: NOTE });
     expect(screen.queryByText(/This catalog is your company’s/)).toBeNull();
@@ -715,11 +736,11 @@ describe('P18.97-T4 AC-6 the products’ grey text per size', () => {
 });
 
 /**
- * **44px targets on a phone** (P18.97-T7 AC-6, ADR-0178 §5; the client's KPM Owner review of 2026-10-27, UI-040: 33
+ * **44px targets on a phone** (P18.9-T7 AC-6, ADR-0178 §5; the client's KPM Owner review of 2026-10-27, UI-040: 33
  * tappable controls under 44px, the *Agents sell it* switch on every row among them). Below 768px every button, field
  * and switch is a 44 × 44 target; at 768px and wider the shelf is as it was, to the byte.
  */
-describe('P18.97-T7 AC-6 the products’ targets on a phone (UI-040)', () => {
+describe('P18.9-T7 AC-6 the products’ targets on a phone (UI-040)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   const SHELF = [
@@ -727,20 +748,24 @@ describe('P18.97-T7 AC-6 the products’ targets on a phone (UI-040)', () => {
     product({ productId: 'p2', code: 'PRULINK', companyName: 'PRULink', displayName: field('PRULink'), reviewState: 'pending', active: field(false) }),
   ];
 
-  /** The shelf's markup on the build before P18.97-T7, at rest and with a product open, from this fixture on 2026-10-28. */
+  /** The shelf's markup on the build before P18.9-T7, at rest and with a product open, from this fixture on 2026-10-28. */
   const BEFORE_T7: Record<'rest' | 'open', Record<768 | 1280, string>> = {
     rest: {
       // Re-recorded 2026-10-30 (UI V1): UI-008's card edge (`border-card-edge`) and UI-010's 44px/48px targets below 1024px.
-      768: '37f5dfd019fe553d0b39c27fe3871816e65abf7e2eb5829406b2c8179167acff',
+      // Re-recorded 2026-11-05 (P19.2-T3 AC-4; UI-142): the tabs and *Agents sell it* 44px tall on a tablet, and nothing
+      // else; 1280 unchanged.
+      768: '80b40d69b819575022357a8aca7e3c3c0ed2b9d5873ac89380c9442dbc3feb78',
       1280: '6f98689634c5e5e4a6ef5c05d445826c8b99f1cf17c2e0eeb3c9e1c957768e06',
     },
     open: {
-      768: '3bb1efa68ede513496baec6a9c757361b1fe06dd4e5a2fa6eff66a7b6f373a5f',
-      1280: '7742db5bcf8c330dd6782687c5454bdf34b0ab779a9bfe42b47b4fbf099e57c1',
+      // Re-recorded 2026-11-05 (P19.4-T4 AC-1, ADR-0209 §9): *4a* and *4b* became the objection cards, with *"+ Tambah
+      // keberatan"*; the shelf at rest is unchanged.
+      768: '13cd17737b4529d587031cb2aecbd638fc0d64f5a5c66b7bc8a27788d124b1eb',
+      1280: 'b4ac6ee51c8218d58fde80257fd74d4a2f0fdcd209ad8c98288c61de191cfc6d',
     },
   };
 
-  it.each([768, 1280] as const)('P18.97-T7 AC-6 at %ipx draws the shelf as it was, to the byte', async (px) => {
+  it.each([768, 1280] as const)('P18.9-T7 AC-6 at %ipx draws the shelf as it was, to the byte', async (px) => {
     atWidth(px);
     render(SHELF);
     await screen.findByText('PRULink');
@@ -749,17 +774,38 @@ describe('P18.97-T7 AC-6 the products’ targets on a phone (UI-040)', () => {
     expect(digestAt(page(), px)).toBe(BEFORE_T7.rest[px]);
     await userEvent.click(screen.getAllByRole('button', { name: 'Customize' })[0]);
     await screen.findByLabelText('What your office calls it');
-    expect(digestAt(page(), px)).toBe(BEFORE_T7.open[px]);
+    /*
+     * *Amended 2026-11-05 (P19.7-T1 AC-3; ADR-0225 §5, the proposal spec's decision 6):* an opened product gains the
+     * office's *Tanya-jawab* and plan highlights above *Documents* (`[data-office-proposal]`). Everything else is drawn
+     * as before: the digest is taken with that block lifted out, and still matches.
+     */
+    const open = page().cloneNode(true) as Element;
+    expect(open.querySelector('[data-office-proposal]')).not.toBeNull();
+    open.querySelector('[data-office-proposal]')!.remove();
+    /*
+     * *Amended 2026-11-06 (P19.6-T2 AC-1; ADR-0217 §1):* a document's picker offers an HTML page beside a PDF. That one
+     * attribute is the only change: written back as it was, the opened product still matches.
+     */
+    const pickers = [...open.querySelectorAll('[data-pdf-picker]')];
+    expect(pickers.length).toBeGreaterThan(0);
+    for (const picker of pickers) {
+      expect(picker.getAttribute('accept')).toBe('application/pdf,.pdf,text/html,.html,.htm');
+      picker.setAttribute('accept', 'application/pdf,.pdf');
+    }
+    expect(digestAt(open, px)).toBe(BEFORE_T7.open[px]);
   });
-  it.each([375, 767])('P18.97-T7 AC-6 at %ipx makes Agents sell it a 44 × 44px target, the track as drawn', async (px) => {
+  it.each([375, 767])('P18.9-T7 AC-6 at %ipx makes Agents sell it a 44 × 44px target, the track as drawn', async (px) => {
     atWidth(px);
     render(SHELF);
-    await screen.findByText('PRULink');
-    for (const toggle of screen.getAllByRole('switch', { name: 'Agents sell it' })) {
+    // A phone's shelf is rows since P19.2-T3 AC-3 (UI-141): the switch is in each product's sheet.
+    await userEvent.click(await screen.findByRole('button', { name: 'PRULink' }));
+    for (const toggle of await screen.findAllByRole('switch', { name: 'Agents sell it' })) {
       // The transparent input — what a finger and a screen reader meet — a 44px square on the track.
       expect(wears(toggle, px).split(' ')).toEqual(expect.arrayContaining(['h-11', 'w-11', 'left-1/2', 'top-1/2']));
-      expect(wears(toggle, 768).split(' ')).toEqual(expect.arrayContaining(['h-full', 'w-full']));
-      expect(wears(toggle, 768).split(' ')).not.toContain('h-11');
+      // On a tablet too since P19.2-T3 AC-4 (UI-142: *≥ 44px on a phone and a tablet*); from 1024px the switch it was.
+      expect(wears(toggle, 768).split(' ')).toEqual(expect.arrayContaining(['h-11', 'w-11']));
+      expect(wears(toggle, 1024).split(' ')).toEqual(expect.arrayContaining(['h-full', 'w-full']));
+      expect(wears(toggle, 1024).split(' ')).not.toContain('h-11');
       // Its line 44px tall, so the square reaches over nothing above or below; the track itself unchanged.
       const line = toggle.parentElement!.parentElement!;
       expect(wears(line, px).split(' ')).toContain('min-h-11');
@@ -767,11 +813,12 @@ describe('P18.97-T7 AC-6 the products’ targets on a phone (UI-040)', () => {
     }
   });
 
-  it('P18.97-T7 AC-6 makes every button and field of a product, and of the approvals, a 44px target on a phone', async () => {
+  it('P18.9-T7 AC-6 makes every button and field of a product, and of the approvals, a 44px target on a phone', async () => {
     atWidth(375);
     render(SHELF);
-    await screen.findByText('PRULink');
-    await userEvent.click(screen.getAllByRole('button', { name: 'Customize' })[0]);
+    // Opened from the product's row since P19.2-T3 AC-3 (UI-141): *Customize* is in its sheet.
+    await userEvent.click(await screen.findByRole('button', { name: 'PRULink' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Customize' }));
     await screen.findByLabelText('What your office calls it');
     const controls = [
       screen.getByLabelText('What your office calls it'),
@@ -783,16 +830,147 @@ describe('P18.97-T7 AC-6 the products’ targets on a phone (UI-040)', () => {
       expect(wears(control, 375).split(' ')).toContain('h-11');
       expect(wears(control, 768).split(' ')).not.toContain('h-11');
     }
-    // The row's text actions — *Customize*, *Review*, *Close*, a document's *+ Upload* — are 44 × 44 on a phone already.
-    for (const name of ['Close', 'Review PRULink']) {
+    // The row's text actions — *Customize*, *Review*, a document's *+ Upload* — are 44 × 44 on a phone already.
+    for (const name of ['Review PRULink']) {
       expect(wears(screen.getByRole('button', { name }), 375).split(' ')).toEqual(expect.arrayContaining(['min-h-11', 'min-w-11']));
     }
 
+    await userEvent.keyboard('{Escape}');
     await userEvent.click(screen.getByRole('link', { name: 'Script approvals' }));
     const approve = await screen.findByRole('button', { name: 'Approve' });
     await userEvent.click(screen.getByRole('button', { name: 'Send back' }));
     for (const name of ['Approve', 'Send it back', 'Cancel']) {
       expect(wears(name === 'Approve' ? approve : screen.getByRole('button', { name }), 375).split(' ')).toContain('h-11');
     }
+  });
+});
+
+/**
+ * **The shelf on a phone: one line per product, its controls in its sheet** (P19.2-T3 AC-3; UI-141: *products with
+ * "Agent menjualnya" switch and "Sesuaikan" on every row*, 6.1 screens at 375; `kpm-owner-mobile-2026-11-03` 7).
+ */
+describe('P19.2-T3 AC-3 the products on a phone (UI-141)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const SHELF = [
+    product(),
+    product({ productId: 'p2', code: 'PRUFUTURE', companyName: 'PRUFuture', displayName: field('PRUFuture'), reviewState: 'pending' }),
+    product({ productId: 'p3', code: 'PRUANUGERAH', companyName: 'PRUAnugerah', displayName: field('PRUAnugerah'), reviewState: 'rejected', rejectionReason: 'Too long' }),
+    product({ productId: 'p4', code: 'PRUHERITAGE', companyName: 'PRUHeritage Syariah', displayName: field('PRUHeritage Syariah'), channel: 'syariah', reviewState: 'approved' }),
+    product({ productId: 'p5', code: 'PGB', companyName: 'PGB', displayName: field('PGB'), sellable: false, lifecycle: 'withdrawn' }),
+  ];
+  const rowOf = (name: string) => screen.getByRole('button', { name }).closest('li')!;
+
+  it('P19.2-T3 AC-3 at 375px draws one 56px row per product — the name, category · channel, one pill only when there is one, ›', async () => {
+    atWidth(375);
+    render(SHELF);
+    await screen.findByRole('button', { name: 'PRUMapan' });
+    const rows = document.querySelectorAll('[data-list-row]');
+    expect(rows).toHaveLength(5);
+    for (const row of rows) expect(wears(row, 375).split(' ')).toContain('min-h-14');
+    expect(rowOf('PRUMapan')).toHaveTextContent('PRUMapanLife · Conventional');
+    // No pill when there is none; one when there is.
+    expect(rowOf('PRUMapan').querySelector('[data-tone]')).toBeNull();
+    expect(within(rowOf('PRUFuture')).getByText('Waiting for your approval')).toHaveAttribute('data-tone', 'amber');
+    expect(within(rowOf('PRUAnugerah')).getByText('Sent back')).toHaveAttribute('data-tone', 'red');
+    expect(within(rowOf('PRUHeritage Syariah')).getByText('Approved')).toHaveAttribute('data-tone', 'green');
+    expect(rowOf('PRUHeritage Syariah')).toHaveTextContent('Syariah');
+    expect(within(rowOf('PGB')).getByText('Withdrawn by Allianz Life')).toHaveAttribute('data-tone', 'grey');
+    // Every row is a tappable row with a ›, its controls nowhere on the shelf.
+    for (const row of rows) expect(row.querySelector('svg')).not.toBeNull();
+    expect(screen.queryByRole('switch')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Customize' })).toBeNull();
+    // The count line is kept.
+    expect(screen.getByText(/5 products/)).toBeInTheDocument();
+  });
+
+  it('P19.2-T3 AC-3 at 375px filters by the chips for what waits on the owner, and by Search products', async () => {
+    atWidth(375);
+    render(SHELF);
+    await screen.findByRole('button', { name: 'PRUMapan' });
+    const chips = screen.getByRole('group', { name: 'Filter products' });
+    expect(within(chips).getAllByRole('button').map((b) => b.textContent)).toEqual(['All5', 'Waiting1', 'Sent back1']);
+    const chip = (name: RegExp) => within(chips).getByRole('button', { name });
+    for (const chip of within(chips).getAllByRole('button')) expect(wears(chip, 375).split(' ')).toContain('min-h-11');
+
+    await userEvent.click(chip(/^Waiting/));
+    expect(chip(/^Waiting/)).toHaveAttribute('aria-pressed', 'true');
+    expect(document.querySelectorAll('[data-list-row]')).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'PRUFuture' })).toBeInTheDocument();
+
+    await userEvent.click(chip(/^All/));
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Search products' }), 'heritage');
+    expect(document.querySelectorAll('[data-list-row]')).toHaveLength(1);
+    await userEvent.clear(screen.getByRole('searchbox', { name: 'Search products' }));
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Search products' }), 'nothing like it');
+    expect(screen.getByText('No product matches.')).toBeInTheDocument();
+  });
+
+  it('P19.2-T3 AC-3 at 375px opens the product’s sheet: its badges, Review, Agents sell it and Customize, each still working', async () => {
+    atWidth(375);
+    const stub = render(SHELF);
+    await userEvent.click(await screen.findByRole('button', { name: 'PRUMapan' }));
+    const sheet = await screen.findByRole('dialog', { name: 'PRUMapan' });
+    // *Agents sell it* saves itself from the sheet, as it did on the card.
+    await userEvent.click(within(sheet).getByRole('switch', { name: 'Agents sell it' }));
+    await waitFor(() => expect(stub.calls.some((c) => c.url.includes('/p1/active'))).toBe(true));
+    // *Customize* opens the product's own words in the sheet.
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Customize' }));
+    expect(await within(sheet).findByLabelText('What your office calls it')).toHaveValue('PRUMapan');
+    expect(within(sheet).getByRole('heading', { name: 'Documents' })).toBeInTheDocument();
+    // The focus went to the words *Customize* opened, so Escape reaches the sheet.
+    expect(within(sheet).getByLabelText('What your office calls it')).toHaveFocus();
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+    // A waiting script's *Review* goes to the queue from the sheet, and the sheet closes.
+    await userEvent.click(screen.getByRole('button', { name: 'PRUFuture' }));
+    const waiting = await screen.findByRole('dialog', { name: 'PRUFuture' });
+    expect(within(waiting).getByText('Waiting for your approval')).toBeInTheDocument();
+    await userEvent.click(within(waiting).getByRole('button', { name: 'Review PRUFuture' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(await screen.findByRole('button', { name: 'Approve' })).toBeInTheDocument();
+  });
+
+  it('P19.2-T3 AC-3 at 375px offers a withdrawn product no switch in its sheet, and a reader a disabled one', async () => {
+    atWidth(375);
+    render(SHELF, READER);
+    await userEvent.click(await screen.findByRole('button', { name: 'PGB' }));
+    const sheet = await screen.findByRole('dialog', { name: 'PGB' });
+    expect(within(sheet).queryByRole('switch')).toBeNull();
+    expect(within(sheet).getByText('Withdrawn by Allianz Life')).toBeInTheDocument();
+    await userEvent.keyboard('{Escape}');
+    await userEvent.click(await screen.findByRole('button', { name: 'PRUMapan' }));
+    expect(within(await screen.findByRole('dialog', { name: 'PRUMapan' })).getByRole('switch', { name: 'Agents sell it' })).toBeDisabled();
+  });
+
+  it.each([768, 1024, 1280])('P19.2-T3 AC-3 at %ipx keeps the cards: every switch on the shelf, no rows', async (px) => {
+    atWidth(px);
+    render(SHELF);
+    await screen.findByText('PRUFuture');
+    expect(document.querySelectorAll('[data-list-row]')).toHaveLength(0);
+    expect(screen.getAllByRole('switch', { name: 'Agents sell it' })).toHaveLength(4);
+    expect(screen.queryByRole('searchbox')).toBeNull();
+  });
+});
+
+describe('P19.2-T3 AC-4 the products’ targets (UI-142)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const SHELF = [
+    product(),
+    product({ productId: 'p2', code: 'PRULINK', companyName: 'PRULink', displayName: field('PRULink'), reviewState: 'pending' }),
+  ];
+
+  it.each([375, 768])('P19.2-T3 AC-4 at %ipx finds no target under 44px on the shelf, in a product opened and on the approvals', async (px) => {
+    atWidth(px);
+    render(SHELF);
+    const frame = document.body.firstElementChild!;
+    frame.setAttribute('data-surface', 'v1');
+    await screen.findByText('PRULink');
+    expect(smallTargets(frame, px)).toEqual([]);
+    if (px === 375) await userEvent.click(screen.getByRole('button', { name: 'PRUMapan' }));
+    await userEvent.click(screen.getAllByRole('button', { name: 'Customize' })[0]);
+    await screen.findByLabelText('What your office calls it');
+    expect(smallTargets(document.body, px)).toEqual([]);
   });
 });

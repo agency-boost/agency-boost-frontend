@@ -4,6 +4,7 @@ import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useEffect, useId, useState, type ReactNode } from 'react';
 import { describeDevice, SessionList } from '@/components/session-list';
+import { useDestructiveAction } from '@/components/ui/destructive-action';
 import { RoleShell } from '@/components/role-shell';
 import { Avatar } from '@/components/ui/person-row';
 import { DateField } from '@/components/ui/date-field';
@@ -21,6 +22,8 @@ import { messagesIn } from '@/i18n/catalogue';
 import { LANGUAGE_NAMES, LANGUAGES, type Language } from '@/i18n/language';
 import { useLanguage, useLanguageChoice, useMessages } from '@/i18n/language-provider';
 import { accountMessages } from '@/i18n/messages/account';
+import { accountLinkMessages } from '@/i18n/messages/account-links';
+import { removeLink } from '@/lib/account-links';
 import { api, toDisplayError, type ApiError } from '@/lib/api-client';
 import { readCalendarSettings, saveCalendarSettings } from '@/lib/calendar';
 import { cn } from '@/lib/cn';
@@ -34,7 +37,7 @@ import { CORE_LEADER_LABEL } from '@/lib/profile-line';
 import { readProfileFacts, type ProfileFacts } from '@/lib/profile';
 import { PASSWORD_MIN_LENGTH } from '@/lib/password';
 import { listSessions } from '@/lib/sessions';
-import { useCan, useSession, type Me } from '@/lib/session';
+import { useCan, useSession, type LinkedLogin, type Me } from '@/lib/session';
 import { useSignOut } from '@/lib/use-sign-out';
 
 /** The photo sheet, loaded the first time it opens (common.md: a sheet costs nothing until then). */
@@ -57,7 +60,8 @@ const PhotoSheet = dynamic(() => import('@/components/profile/photo-sheet').then
  *   groups, *Grup Anda* › (the group tree) and *Kode leader* with *Salin*. Changes go through User Management.
  * - ***Pengaturan***: *Bahasa* › — a small sheet saving at once, the same choice as the *ID | EN* switch (ADR-0180 §3) —
  *   and *Sembunyikan aktivitas calendar*, moved here from Calendar (D-30; `PUT /calendar/settings`).
- * - ***Keamanan***: *Ubah kata sandi* › and *Perangkat tempat Anda masuk* ›, today's two forms in sheets.
+ * - ***Keamanan***: *Ubah kata sandi* › and *Perangkat tempat Anda masuk* ›, today's two forms in sheets; and, for a
+ *   person with a linked login, *Akun tertaut* — its address and *Hapus tautan* (P19.2-T1 AC-8; ADR-0199 §5).
  * - **Keluar**, last, red outline.
  *
  * **In a support session it is shown and not offered** (ADR-0162 §4): the person's details, photo, language and
@@ -147,7 +151,7 @@ function ProfileBody({ say }: { say: Say }) {
       )}
       <Settings me={me} say={say} />
       <SectionHead>{t.security}</SectionHead>
-      <Security />
+      <Security me={me} say={say} />
     </>
   );
 }
@@ -193,11 +197,11 @@ function PhotoCard({ me, facts, code, say }: { me: Me; facts: ProfileFacts | nul
         onClick={() => setOpen(true)}
         disabled={locked}
         aria-label={t.photoButton}
-        className="relative shrink-0 rounded-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber disabled:cursor-default"
+        className="relative shrink-0 rounded-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring disabled:cursor-default"
       >
         <Avatar name={me.user.fullName} photoUrl={me.user.avatarUrl ?? null} seed={me.user.id} size={84} className="text-[1.625rem] font-extrabold" />
         {!locked && (
-          <span aria-hidden="true" className="absolute -bottom-0.5 -right-0.5 flex h-[30px] w-[30px] items-center justify-center rounded-full border-2 border-card bg-navy text-white">
+          <span aria-hidden="true" className="absolute -bottom-0.5 -right-0.5 flex h-[30px] w-[30px] items-center justify-center rounded-full border-2 border-card bg-secondary text-secondary-contrast">
             <CameraIcon />
           </span>
         )}
@@ -209,7 +213,7 @@ function PhotoCard({ me, facts, code, say }: { me: Me; facts: ProfileFacts | nul
           <button
             type="button"
             onClick={() => setOpen(true)}
-            className="-ml-1 mt-1 inline-flex min-h-11 items-center gap-1 rounded-md px-1 text-base font-bold text-amber-ink hover:underline"
+            className="-ml-1 mt-1 inline-flex min-h-11 items-center gap-1 rounded-md px-1 text-base font-bold text-primary-ink hover:underline"
           >
             {t.changePhoto}
           </button>
@@ -512,7 +516,7 @@ function PersonalForm({ me, facts, say }: { me: Me; facts: ProfileFacts | null; 
         <Row>
           <Field label={t.whatsapp} htmlFor="whatsapp" error={phoneError ?? undefined}>
             <div className={cn(
-              'flex min-h-12 items-center overflow-hidden rounded-md border bg-card focus-within:border-amber focus-within:ring-1 focus-within:ring-amber md:min-h-10',
+              'flex min-h-12 items-center overflow-hidden rounded-md border bg-card focus-within:border-primary focus-within:ring-1 focus-within:ring-focus-ring md:min-h-10',
               phoneError ? 'border-alert' : 'border-line',
               locked && 'bg-base',
             )}>
@@ -641,7 +645,7 @@ function ChoiceSegments<T extends string>({
               }}
               className={cn(
                 'flex flex-1 items-center justify-center rounded-pill px-2 text-base font-semibold disabled:cursor-not-allowed',
-                on ? 'bg-navy text-white' : 'text-muted hover:text-navy',
+                on ? 'bg-secondary text-secondary-contrast' : 'text-muted hover:text-navy',
               )}
             >
               {option.label}
@@ -722,7 +726,7 @@ function KpmAndRole({ me, facts, code, say }: { me: Me; facts: ProfileFacts | nu
           term={t.role}
           value={longName && longName !== shortRung ? `${shortRung} · ${longName}` : shortRung}
           trailing={membership.isCoreLeader
-            ? <span className="shrink-0 whitespace-nowrap rounded-pill bg-navy px-2.5 py-0.5 text-sm font-bold text-white">{CORE_LEADER_LABEL}</span>
+            ? <span className="shrink-0 whitespace-nowrap rounded-pill bg-secondary px-2.5 py-0.5 text-sm font-bold text-secondary-contrast">{CORE_LEADER_LABEL}</span>
             : null}
         />
         {facts?.leader && (
@@ -735,7 +739,7 @@ function KpmAndRole({ me, facts, code, say }: { me: Me; facts: ProfileFacts | nu
             value={(
               <span className="mt-0.5 flex flex-wrap gap-1">
                 {groups.map((g) => (
-                  <span key={g} className="rounded-pill bg-amber/15 px-2.5 py-0.5 text-sm font-bold text-amber-ink">{g}</span>
+                  <span key={g} className="rounded-pill bg-primary/15 px-2.5 py-0.5 text-sm font-bold text-primary-ink">{g}</span>
                 ))}
               </span>
             )}
@@ -777,7 +781,8 @@ function KpmAndRole({ me, facts, code, say }: { me: Me; facts: ProfileFacts | nu
   );
 }
 
-type FactIconName = 'building' | 'badge' | 'up' | 'group' | 'tree' | 'key' | 'language' | 'eye' | 'lock' | 'devices';
+type FactIconName =
+  | 'building' | 'badge' | 'up' | 'group' | 'tree' | 'key' | 'language' | 'eye' | 'lock' | 'devices' | 'link';
 
 /** The row's line icon (`profile-mobile`'s Tabler glyphs, drawn in the line icons' stroke). */
 function FactIcon({ icon }: { icon: FactIconName }) {
@@ -792,6 +797,8 @@ function FactIcon({ icon }: { icon: FactIconName }) {
     eye: <><path d="M3 12s3.5-6 9-6c1.6 0 3 .5 4.2 1.2M21 12s-3.5 6-9 6c-1.6 0-3-.5-4.2-1.2M4 4l16 16" /><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" /></>,
     lock: <><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></>,
     devices: <><rect x="3" y="5" width="13" height="10" rx="1.5" /><rect x="16" y="9" width="5" height="10" rx="1" /><path d="M7 19h6" /></>,
+    // Tabler's *link*, for *Akun tertaut* (P19.2-T1 AC-8).
+    link: <><path d="M9 15l6-6M11 6l.5-.5a4.5 4.5 0 0 1 6.4 6.4l-.5.5M13 18l-.5.5a4.5 4.5 0 0 1-6.4-6.4l.5-.5" /></>,
   };
   return (
     <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 shrink-0 text-pill-grey-ink">
@@ -914,10 +921,10 @@ function Settings({ me, say }: { me: Me; say: Say }) {
                   onClick={() => void pick(code)}
                   className={cn(
                     'flex min-h-12 items-center gap-2.5 rounded-row px-3 text-left text-md',
-                    on ? 'bg-amber/[0.12] font-semibold text-ink ring-[1.5px] ring-inset ring-amber' : 'bg-hover-row text-ink',
+                    on ? 'bg-primary/[0.12] font-semibold text-ink ring-[1.5px] ring-inset ring-primary' : 'bg-hover-row text-ink',
                   )}
                 >
-                  <span aria-hidden="true" className={cn('h-[18px] w-[18px] shrink-0 rounded-full border-2', on ? 'border-[5px] border-amber' : 'border-line')} />
+                  <span aria-hidden="true" className={cn('h-[18px] w-[18px] shrink-0 rounded-full border-2', on ? 'border-[5px] border-primary' : 'border-line')} />
                   {LANGUAGE_NAMES[code]}
                 </button>
               );
@@ -936,8 +943,10 @@ function messagesSaved(language: Language): string {
 
 /* ── Keamanan ────────────────────────────────────────────────────────────────────────────── */
 
-function Security() {
+function Security({ me, say }: { me: Me; say: Say }) {
   const t = useMessages(accountMessages);
+  // Never in a support session: its `me` carries no link (ADR-0199 §7), and the API refuses the removal there besides.
+  const linked = me.isImpersonating ? null : (me.linkedLogin ?? null);
   const language = useLanguage();
   const [open, setOpen] = useState<'password' | 'devices' | null>(null);
   const [devices, setDevices] = useState<{ n: number; current: string | null } | null>(null);
@@ -965,6 +974,7 @@ function Security() {
           onOpen={() => setOpen('devices')}
           divided
         />
+        {linked && <LinkedLoginRow linked={linked} say={say} />}
       </CardBox>
       <ResponsiveSheet open={open === 'password'} title={t.v1.changePassword} onClose={() => setOpen(null)}>
         <PasswordForm />
@@ -973,6 +983,61 @@ function Security() {
         {open === 'devices' && <SessionList bare />}
       </ResponsiveSheet>
     </>
+  );
+}
+
+/**
+ * ***Akun tertaut*** (P19.2-T1 AC-8; UI-169 item 5; ADR-0199 §5): the linked login's address, and ***Hapus tautan***,
+ * which asks first — undoing it takes both logins' passwords again — then removes the link and reads the session again,
+ * so the linked login leaves the avatar menu at once. One line, where the section already lists the sessions.
+ */
+function LinkedLoginRow({ linked, say }: { linked: LinkedLogin; say: Say }) {
+  const t = useMessages(accountLinkMessages).profile;
+  const { reload } = useSession();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
+  const remove = useDestructiveAction({
+    label: t.remove,
+    message: t.removeAsk({ email: linked.email }),
+    confirmLabel: t.remove,
+    cancelLabel: t.keep,
+    disabled: busy,
+    onConfirm: () => {
+      void (async () => {
+        setBusy(true);
+        setError(null);
+        try {
+          await removeLink(linked.linkId);
+          say(t.removed);
+          await reload();
+        } catch (err) {
+          setError(toDisplayError(err));
+        } finally {
+          setBusy(false);
+        }
+      })();
+    },
+  });
+  return (
+    <div className="border-t border-divider" data-linked-login="">
+      <div className="flex min-h-[52px] items-center gap-2.5 px-3.5 py-1.5">
+        <FactIcon icon="link" />
+        <span className="min-w-0 flex-1">
+          <span className="block text-md text-ink">{t.linked}</span>
+          <span className="mt-0.5 block truncate text-sm leading-snug text-muted">{linked.email}</span>
+        </span>
+        <button
+          type="button"
+          onClick={remove.ask}
+          disabled={busy}
+          className="flex min-h-11 shrink-0 items-center rounded-row px-2 text-md font-semibold text-signal-red hover:bg-pill-red disabled:opacity-40"
+        >
+          {t.remove}
+        </button>
+      </div>
+      {error && <div className="px-3.5 pb-2"><ErrorBanner {...error} /></div>}
+      {remove.dialog}
+    </div>
   );
 }
 
@@ -995,7 +1060,7 @@ function SecurityRow({
   );
 }
 
-/** *Ubah kata sandi*: today's three fields, in their sheet (P4-T13; P18.95-T7 AC-3, UI-030's held reasons). */
+/** *Ubah kata sandi*: today's three fields, in their sheet (P4-T13; P18.7-T7 AC-3, UI-030's held reasons). */
 function PasswordForm() {
   const language = useLanguage();
   const [currentPassword, setCurrentPassword] = useState('');

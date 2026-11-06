@@ -44,11 +44,11 @@ describe('savedTemplateSentence (P13.2 exit review, finding 2)', () => {
 });
 
 /**
- * **P18.98-T6: the sentence in the reader's language** — the words `admin-template.tsx`'s, the template's and the
+ * **P18.10-T6: the sentence in the reader's language** — the words `admin-template.tsx`'s, the template's and the
  * company's names as stored and each reason the API's, in the language it was written in; English when no language is
  * passed, so the office page reads as before until it passes its own.
  */
-describe('P18.98-T6 savedTemplateSentence in Indonesian', () => {
+describe('P18.10-T6 savedTemplateSentence in Indonesian', () => {
   const template = {
     id: 't', companyId: 'co-1', name: 'BSD City settings', isDefault: false, status: 'active' as const,
     archivedAt: null, origin: { kind: 'office' as const }, officeCount: 0, publishedVersions: {} as never, sections: {} as never,

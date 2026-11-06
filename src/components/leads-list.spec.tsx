@@ -125,7 +125,7 @@ describe('UI-105 — /leads on a phone and a tablet', () => {
     expect(within(chips).getAllByRole('button').map((b) => b.textContent)).toEqual(['All5', 'Sales4', 'Recruit1']);
     expect(within(chips).getByRole('button', { name: 'Sales, 4 leads' })).toHaveAttribute('aria-pressed', 'true');
     const strip = screen.getByRole('group', { name: 'Sales pipeline' });
-    expect(strip).toHaveClass('bg-navy');
+    expect(strip).toHaveClass('bg-secondary');
     // The report's short words for the seeded stages, by code.
     expect(within(strip).getAllByRole('button').map((b) => b.textContent))
       .toEqual(['2Not yet', '1Follow-up', '1SPAJ', '0Unpaid', '0Closing']);
@@ -215,7 +215,8 @@ describe('UI-105 — /leads on a phone and a tablet', () => {
       .toEqual(['Not yet approached', 'Meeting scheduled', 'New active agent']);
     expect(sheet.getByRole('radio', { name: 'Not yet approached' })).toBeChecked();
     expect(sheet.getByText('Not saved yet')).toBeInTheDocument();
-    expect(sheet.getByText('Recruit this month')).toBeInTheDocument();
+    // P19.1-T2 AC-5: the Potensi switch, labelled by the type just chosen (UI-153 item 1).
+    expect(sheet.getByRole('switch', { name: 'Potential recruit this month' })).toBeInTheDocument();
 
     await userEvent.click(sheet.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
@@ -287,7 +288,7 @@ describe('UI-105 — /leads on a phone and a tablet', () => {
     });
     await list();
     const add = screen.getByRole('button', { name: 'Add lead' });
-    expect(add).toHaveClass('fixed', 'bottom-[calc(var(--tab-bar-space)+1rem)]', 'bg-amber', 'text-navy');
+    expect(add).toHaveClass('fixed', 'bottom-[calc(var(--tab-bar-space)+1rem)]', 'bg-primary', 'text-primary-contrast');
     await userEvent.click(add);
     const sheet = within(await screen.findByRole('dialog', { name: 'New lead' }));
     expect(sheet.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
@@ -306,8 +307,9 @@ describe('UI-105 — /leads on a phone and a tablet', () => {
     const { calls } = render({ 'PATCH /leads/l1/outcome': { body: lead({ outcome: 'lost', version: 3 }) } });
     await userEvent.click(within(await cardOf('Ibu Sekar Arum')).getByRole('button', { name: 'Ibu Sekar Arum' }));
     const sheet = within(await screen.findByRole('dialog', { name: 'Ibu Sekar Arum' }));
-    // *Mark successful* only at the ladder's last stage (D-10: an action not available is not shown).
-    expect(sheet.queryByRole('button', { name: 'Mark successful' })).not.toBeInTheDocument();
+    // P19.1-T2 AC-9 (UI-160): both buttons always; *Mark successful* held below the final stage, saying why.
+    expect(sheet.getByRole('button', { name: 'Mark successful' })).toBeDisabled();
+    expect(sheet.getByRole('button', { name: 'Mark successful' })).toHaveAccessibleDescription('Active after status Paid and issued');
     await userEvent.click(sheet.getByRole('button', { name: 'Mark not successful' }));
     await userEvent.click(within(await question()).getByRole('button', { name: 'Mark not successful' }));
     await waitFor(() => expect(writes(calls)).toEqual(['PATCH /leads/l1/outcome {"outcome":"lost","version":2}']));
@@ -326,7 +328,8 @@ describe('UI-105 — /leads on a phone and a tablet', () => {
     await list();
     await userEvent.click(screen.getByRole('button', { name: 'Filter and sort' }));
     const sheet = within(await screen.findByRole('dialog', { name: 'Filter and sort' }));
-    expect(sheet.getAllByRole('group').map((g) => g.getAttribute('aria-label'))).toEqual(['Type', 'Status', 'Order']);
+    // *Proposal* since P19.7-T2 AC-12: *Has a proposal / No proposal yet*, before the order.
+    expect(sheet.getAllByRole('group').map((g) => g.getAttribute('aria-label'))).toEqual(['Type', 'Status', 'Proposal', 'Order']);
     await userEvent.click(sheet.getByRole('button', { name: 'Name A–Z' }));
     await waitFor(() => expect(calls.some((c) => /outcome=open/.test(c.url) && /sort=name&dir=asc/.test(c.url))).toBe(true));
     expect(screen.getByText('Name A–Z', { selector: 'span' })).toBeInTheDocument();
@@ -334,7 +337,8 @@ describe('UI-105 — /leads on a phone and a tablet', () => {
     expect(screen.getByText('Saved order', { selector: 'span' })).toBeInTheDocument();
   });
 
-  it('UI-105 draws the same list on a tablet, and a desktop keeps the table', async () => {
+  // *Changed 2026-11-05 (P19.1-T2 AC-1, UI-116):* the desktop no longer keeps the table — the same list, beside the pane.
+  it('UI-105 draws the same list on a tablet, and a desktop draws it too, beside the pane (UI-116)', async () => {
     render({}, 800);
     expect(await list()).toBeInTheDocument();
     expect(screen.getByRole('group', { name: 'Sales pipeline' })).toBeInTheDocument();
@@ -342,9 +346,11 @@ describe('UI-105 — /leads on a phone and a tablet', () => {
     vi.unstubAllGlobals();
 
     render({}, 1280);
-    expect(await screen.findByRole('table', { name: 'Your leads' })).toBeInTheDocument();
-    expect(screen.queryByRole('group', { name: 'Sales pipeline' })).not.toBeInTheDocument();
-    expect(screen.getByRole('heading', { level: 1, name: 'Leads Management' })).toBeInTheDocument();
+    expect(await list()).toBeInTheDocument();
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Sales pipeline' })).toBeInTheDocument();
+    // *Leads* at every size since P19.1-T1 AC-1 (UI-112: each page's title is its phone title).
+    expect(screen.getByRole('heading', { level: 1, name: 'Leads' })).toBeInTheDocument();
   });
 });
 

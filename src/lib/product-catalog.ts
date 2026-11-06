@@ -12,7 +12,7 @@ import { formatPercent, formatRupiahCompact, toMinor } from './format';
  * Catalog (`/product-catalog`, its drawer at `/product-catalog/[productCode]`) and the Sales Attack Plan
  * (`/attack-plan`).
  *
- * **The words are the catalogue's** (P18.98-T4; ADR-0179 §4): `messages/product-catalog.ts`,
+ * **The words are the catalogue's** (P18.10-T4; ADR-0179 §4): `messages/product-catalog.ts`,
  * `messages/sales-attack-plan.tsx` and the two plans' `messages/plan.ts`. A function here that writes words takes the
  * reader's language last — English (`SOURCE_LANGUAGE`) when none is passed, so its spec reads as before; one that
  * writes a figure takes the figures' language — Indonesian (`DEFAULT_LANGUAGE`) when none is passed; one that writes
@@ -47,6 +47,8 @@ export interface CatalogCard {
   channel: ProductChannel;
   lifecycle: CatalogLifecycle;
   needs: string[];
+  /** What it is sold in, `IDR` first: *IDR*, *USD*, *IDR + USD* on the card (P19.4-T4 AC-12; ADR-0209 §8). */
+  currencies: string[];
 }
 
 export interface CatalogList {
@@ -59,14 +61,26 @@ export interface CommissionRate {
   rate: number;
 }
 
-/** The seven script fields, each the office's approved words or the company's. Plain text, always. */
+/** One objection and its reply (P19.4-T4 AC-1; ADR-0209 §9). */
+export interface CatalogObjection {
+  objection: string;
+  answer: string;
+}
+
+/** A rider an agent may add to a base: *"Bisa ditambah: …"* (P19.4-T4 AC-5; ADR-0209 §3). */
+export interface CatalogRider {
+  code: string;
+  name: string;
+}
+
+/** The script fields, each the office's approved words or the company's. Plain text, always. */
 export interface CatalogScript {
   goodFit: string;
   opening: string;
   benefits: string[];
   fullScript: string;
-  objectionTheySay: string;
-  objectionYouSay: string;
+  /** *4 · If they push back*: every card, in order. */
+  objections: CatalogObjection[];
   nextAction: string;
 }
 
@@ -74,6 +88,11 @@ export interface CatalogDocument {
   slot: string;
   label: string;
   available: boolean;
+  /**
+   * What the slot holds (P19.6-T2): `application/pdf`, or `text/html` — a page drawn only in the sandboxed window, never
+   * opened in a tab (ADR-0217 §4); `null` for an empty slot. Optional so a fixture that is about something else need not.
+   */
+  mimeType?: string | null;
 }
 
 /**
@@ -88,6 +107,7 @@ export interface CatalogProduct {
   channel: ProductChannel;
   lifecycle: CatalogLifecycle;
   needs: string[];
+  currencies: string[];
   benefits: string[];
   differentiator: string;
   bestFit: string;
@@ -95,6 +115,8 @@ export interface CatalogProduct {
   commissionSchedule?: CommissionRate[];
   script: CatalogScript;
   documents: CatalogDocument[];
+  /** The riders on sale attached to it, *"Bisa ditambah: …"*; empty for a base with none. Never a product alone. */
+  riders: CatalogRider[];
 }
 
 export interface DocumentLink {
@@ -162,7 +184,7 @@ const NEED_CODES: readonly NeedCode[] = [
 const isNeed = (need: string | undefined): need is NeedCode => NEED_CODES.some((code) => code === need);
 
 /**
- * **The brief's need chips, in the reader's `words`** (P18.98-T4; `Overall.html:3801-3810`): the domain constants'
+ * **The brief's need chips, in the reader's `words`** (P18.10-T4; `Overall.html:3801-3810`): the domain constants'
  * codes, each labelled from the catalogue (`messages/sales-attack-plan.tsx`). English when no language is passed.
  */
 export const needChoices = (words: Language = SOURCE_LANGUAGE): Choice<string>[] => {
@@ -189,7 +211,7 @@ export const AGE_CHOICES: readonly Choice<number>[] = [
 /**
  * **The band that is not a monthly premium**: *Lump-sum*, the backend's `PRODUCT_LUMP_SUM_BUDGET_BAND`
  * (`product-catalog.spec.ts` pins the number to that file). The brief asks it as **its own option** beside
- * *Monthly premium budget*, not as that question's seventh chip (P18.95-T6 AC-3; UI-030, parity I-422). Its
+ * *Monthly premium budget*, not as that question's seventh chip (P18.7-T6 AC-3; UI-030, parity I-422). Its
  * number is unchanged, so `?budget=7` and every product's bands mean what they did.
  */
 export const LUMP_SUM_BUDGET = 7;
@@ -198,7 +220,7 @@ export const LUMP_SUM_BUDGET = 7;
 const BUDGET_BANDS = [1, 2, 3, 4, 5, 6, LUMP_SUM_BUDGET] as const;
 
 /**
- * **What each monthly band spans, in rupiah** — the sums its chip writes (P18.98-T4): a band below the first, between
+ * **What each monthly band spans, in rupiah** — the sums its chip writes (P18.10-T4): a band below the first, between
  * two, or above the last. Nothing matches on them: a band is its number, and the scorer is the server's. Written in
  * Indonesian figures, the labels below are the backend's `PRODUCT_BUDGET_BAND_LABELS` to the character, and
  * `product-catalog.spec.ts` pins them to that file, so a band cannot say one sum here and another on the server.
@@ -214,7 +236,7 @@ const MONTHLY_BUDGET_SPANS: Readonly<Record<number, { readonly from?: number; re
 
 /**
  * **A budget band as its chip and the brief's summary write it** — its sums **compact**, as a chip's money is (ADR-0167
- * §1, ADR-0174 §4; parity I-394), in the reader's `figures` (P18.98-T3): *< Rp 500 rb*, *Rp 500 rb–Rp 2 jt* in Indonesian,
+ * §1, ADR-0174 §4; parity I-394), in the reader's `figures` (P18.10-T3): *< Rp 500 rb*, *Rp 500 rb–Rp 2 jt* in Indonesian,
  * *< IDR 500K*, *IDR 500K–IDR 2M* in English — the prototype's *Rp500K–Rp2M* wrote a million *M*, which in Indonesian is
  * *miliar*. Band 7 is words, *Lump-sum*, in the reader's `words`. Indonesian figures and English words when none is
  * passed: the backend's labels, as before. `undefined` for a band that does not exist.
@@ -326,7 +348,7 @@ function briefQuery(brief: AttackPlanBrief, product?: string): string {
   return params.toString();
 }
 
-/** The two Sales tools screens' own addresses: the sidebar's one entry and the tabs over both (P18.8-T12). */
+/** The two Sales tools screens' own addresses: the sidebar's one entry and the tabs over both (P18.5-T12). */
 export const SALES_ATTACK_PLAN_HREF = '/attack-plan';
 export const PRODUCT_CATALOG_HREF = '/product-catalog';
 
@@ -363,7 +385,7 @@ export function filtersQuery(filters: CatalogFilters): string {
 export const catalogHref = (filters: CatalogFilters) => `/product-catalog${filtersQuery(filters)}`;
 
 /**
- * **The catalog's search, by product name** (P18.95-T6 AC-4; UI-023: 31 products, no search). The name the card
+ * **The catalog's search, by product name** (P18.7-T6 AC-4; UI-023: 31 products, no search). The name the card
  * shows — the office's display name, else the company's — contains what was typed, ignoring case, accents and
  * the spaces around it; nothing typed matches everything. Over the shelf already loaded: `GET /product-catalog`
  * answers the whole shelf in one read, so a search asks the server nothing.
@@ -382,7 +404,7 @@ export const drawerHref = (code: string, filters: CatalogFilters) =>
  * A commission rate as the drawer prints it: `0.4` is `40%`, `0.125` is `12,5%`, `0.0725` is `7,25%` — **the places
  * it was stored with and no more** (ADR-0174 §3: a figure stated as a rule keeps its places, and has no *,0*), so
  * the rate an agent reads is the rate stored. Two at most, the schedule's own (`toFixed(2)`). In the reader's
- * `figures` (P18.98-T3): *12.5%* in English; Indonesian when none is passed.
+ * `figures` (P18.10-T3): *12.5%* in English; Indonesian when none is passed.
  */
 export const formatRate = (rate: number, figures: Language = DEFAULT_LANGUAGE) =>
   formatPercent(Number((rate * 100).toFixed(2)), { lossless: true }, figures);
@@ -407,7 +429,7 @@ export const hasScript = (script: CatalogScript) => script.fullScript.trim() !==
 /**
  * **The strings these screens write themselves, in English** (Fills; D-copy) — the catalogue's source
  * (`messages/product-catalog.ts`, `messages/sales-attack-plan.tsx`, `messages/plan.ts`), for code with no reader to ask,
- * as they read before P18.98-T4 moved every word of the two screens into the catalogue, where they are written once: the
+ * as they read before P18.10-T4 moved every word of the two screens into the catalogue, where they are written once: the
  * states the prototype has none of, the commission's not-set line, the accessible names. The screens read them with
  * `useMessages`, in the reader's language. None uses *office*, *KPM*, *reports to*, *tagged to*, *untagged* or
  * *unassigned* (ADR-0084's rule, as ADR-0096 applied it) — `product-catalog.spec.ts` checks the English, and
@@ -436,9 +458,9 @@ export const OWN_COPY = {
   channels: CATALOG.channels,
   steps: planMessages.en.steps,
   productTabs: CATALOG.drawer.tabs,
-  /** The second budget group's name: *Lump-sum*, asked apart from the monthly bands (P18.95-T6 AC-3; UI-030). */
+  /** The second budget group's name: *Lump-sum*, asked apart from the monthly bands (P18.7-T6 AC-3; UI-030). */
   lumpSum: PLAN.lumpSumGroup,
-  /** The catalog's search (P18.95-T6 AC-4; UI-023): its name, its placeholder, and what a search that finds nothing says. */
+  /** The catalog's search (P18.7-T6 AC-4; UI-023): its name, its placeholder, and what a search that finds nothing says. */
   searchName: CATALOG.searchName,
   searchPlaceholder: CATALOG.searchPlaceholder,
   noSearchMatch: (term: string) => CATALOG.noSearchMatch({ term: term.trim() }),

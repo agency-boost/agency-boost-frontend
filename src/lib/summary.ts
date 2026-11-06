@@ -24,6 +24,17 @@ export interface FigureSource {
   typedBy?: { membershipId: string; name: string | null };
 }
 
+/**
+ * **Whose figure a period's APE produced is** (P19.1-T4, UI-157; ADR-0195): the office's file, the member's own estimate
+ * (*perkiraan Anda* — the year only), or nothing yet; and with nothing, the helpers counting 0 achieved (UI-157 item 2),
+ * which the card marks *(belum ada data produksi)*. The server's; the API always sends them, optional so a fixture about
+ * something else need not.
+ */
+export interface ProductionHeld {
+  production?: 'official' | 'estimate' | 'none';
+  withoutProduction?: { gapMinor: number; policiesNeeded: number | null } | null;
+}
+
 export interface PeriodFigures {
   targetMinor: number | null;
   /** `null` when nothing is held yet — this month before its file. Not zero. */
@@ -128,7 +139,7 @@ export type Insight =
   | { rule: 'RATIO_STRENGTH'; kind: 'improve'; facts: RatioFacts };
 
 /**
- * **Which period a Summary is for, and which there are** (P18.8-T11, ADR-0161 §4) — the server's, so no date is
+ * **Which period a Summary is for, and which there are** (P18.5-T11, ADR-0161 §4) — the server's, so no date is
  * worked out here: the office's first month and its current one, and whether the month and the year read are
  * the current ones. A closed period is read whole, with no pace; the screen shows *The gap* for the current one.
  */
@@ -150,8 +161,14 @@ export interface Summary {
   period: SummaryPeriod;
   goal: { set: boolean; savedAt: string | null };
   caseSizeMinor: number;
-  monthly: PeriodFigures & { source: FigureSource | null };
-  yearly: PeriodFigures & { source: FigureSource };
+  monthly: PeriodFigures & { source: FigureSource | null } & ProductionHeld;
+  yearly: PeriodFigures & { source: FigureSource } & ProductionHeld;
+  /**
+   * **The office's figure replaced an estimate** (P19.1-T4 AC-11; ADR-0195 §3): the day it was written, for *Diganti data
+   * produksi resmi (diunggah 5 Des)*; `null` when nothing was replaced. Optional so a fixture about something else need
+   * not.
+   */
+  estimateReplaced?: { uploadedOn: string } | null;
   pace: Pace | null;
   /**
    * **Where the page's counts of policies come from** (UI-052): every one — the *Submission polis* chips and the pace
@@ -169,7 +186,7 @@ export interface Summary {
   /**
    * The nearest of the reader's own open leads, and how many there are; and `unitOpen`, the open leads Leads
    * Management lists them besides their own — counted on their own summary while their own card is empty
-   * (P18.8-T15 AC-4). The API always sends it; optional so a fixture about something else need not.
+   * (P18.5-T15 AC-4). The API always sends it; optional so a fixture about something else need not.
    */
   leads: { rows: OpenLead[]; total: number; unitOpen?: number };
   /** The rules that fired, in their fixed priority, at most four. */
@@ -177,7 +194,7 @@ export interface Summary {
 }
 
 /**
- * **The period a page asks for** (P18.8-T11): a month, `YYYY-MM`, or a year, `YYYY`, or neither — the office's
+ * **The period a page asks for** (P18.5-T11): a month, `YYYY-MM`, or a year, `YYYY`, or neither — the office's
  * current month. It is the page's address, `?month=` or `?year=`, as `/summary` and a coachee's *Personal Summary*
  * tab carry it.
  */
@@ -208,7 +225,7 @@ export const periodSearch = (period: SummaryPeriodQuery) =>
   (period.month ? `?month=${period.month}` : period.year ? `?year=${period.year}` : '');
 
 /**
- * **The months a reader may choose**, newest first: the office's current month back to its first (P18.8-T11).
+ * **The months a reader may choose**, newest first: the office's current month back to its first (P18.5-T11).
  * Calendar arithmetic on two `YYYY-MM` strings the server sent, so no clock and no zone is read here.
  */
 export function monthsOf(period: Pick<SummaryPeriod, 'firstMonth' | 'thisMonth'>): string[] {
@@ -260,7 +277,7 @@ const summaryQuery = (membershipId: string | undefined, period: SummaryPeriodQue
  * Summary computed for that member (P11-T4, P11-T7): their goal, production and its source, log,
  * leads and compliance, on their rung. The server resolves the subject by the reader's grant — a
  * leader reaches the people they coach (ADR-0074) — answers 404 outside it, and writes one audit
- * entry per read (roles §3.5). **With a period** (P18.8-T11), an earlier month or year, read whole.
+ * entry per read (roles §3.5). **With a period** (P18.5-T11), an earlier month or year, read whole.
  */
 export const readSummary = (membershipId?: string, period: SummaryPeriodQuery = {}) =>
   api<Summary>('/summary' + summaryQuery(membershipId, period));

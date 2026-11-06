@@ -25,7 +25,7 @@ import { useOpenedOnce } from '@/lib/use-opened-once';
 import type { LeadStatusRow } from '@/lib/tenant-config';
 import { useTenantConfig } from '@/lib/tenant-config-cache';
 
-/** The lead sheet, downloaded when a lead is first opened and mounted from then on (`useOpenedOnce`; P18.99-T16). */
+/** The lead sheet, downloaded when a lead is first opened and mounted from then on (`useOpenedOnce`; P18.11-T16). */
 const LeadSheet = dynamic(() => import('@/components/lead-sheet').then((m) => m.LeadSheet), { ssr: false });
 
 /**
@@ -143,7 +143,7 @@ export function CoacheeLeadRow({
           type="button"
           onClick={() => onOpen()}
           aria-haspopup="dialog"
-          className="block w-full truncate text-left text-md font-bold uppercase text-ink after:absolute after:inset-0 after:rounded-row after:content-[''] focus-visible:outline-none focus-visible:after:outline focus-visible:after:outline-2 focus-visible:after:outline-amber"
+          className="block w-full truncate text-left text-md font-bold uppercase text-ink after:absolute after:inset-0 after:rounded-row after:content-[''] focus-visible:outline-none focus-visible:after:outline focus-visible:after:outline-2 focus-visible:after:outline-focus-ring"
         >
           {lead.name}
         </button>
@@ -152,7 +152,7 @@ export function CoacheeLeadRow({
             <span
               className={cn(
                 'inline-flex items-center rounded-pill px-2 py-px text-xs font-semibold',
-                lead.type === 'sales' ? 'bg-amber/[0.12] text-amber-ink' : 'bg-lavender/20 text-navy',
+                lead.type === 'sales' ? 'bg-primary/[0.12] text-primary-ink' : 'bg-lavender/20 text-navy',
               )}
             >
               {t.types[lead.type]}
@@ -217,7 +217,7 @@ function SearchPill({ value, onChange, filter }: { value: string; onChange: (nex
   const t = useMessages(leadsMessages);
   return (
     <div role="search" className="flex gap-2" aria-label={t.searchAndFilter}>
-      <label className="flex min-h-10 min-w-0 flex-1 items-center gap-2 rounded-pill bg-base px-3.5 text-muted focus-within:outline focus-within:outline-2 focus-within:outline-amber max-lg:min-h-11">
+      <label className="flex min-h-10 min-w-0 flex-1 items-center gap-2 rounded-pill bg-base px-3.5 text-muted focus-within:outline focus-within:outline-2 focus-within:outline-focus-ring max-lg:min-h-11">
         <LineIcon name="search" className="h-[18px] w-[18px] shrink-0" />
         <span className="sr-only">{t.list.search}</span>
         <input
@@ -322,7 +322,7 @@ export function SessionLeadsCard({
           <button
             type="button"
             onClick={() => onOpen(null)}
-            className="inline-flex min-h-9 items-center rounded-pill border border-amber px-3 text-base font-semibold text-amber-ink hover:bg-amber/10 max-lg:min-h-11"
+            className="inline-flex min-h-9 items-center rounded-pill border border-primary px-3 text-base font-semibold text-primary-ink hover:bg-primary/10 max-lg:min-h-11"
           >
             {t.add}
           </button>
@@ -341,7 +341,7 @@ export function SessionLeadsCard({
             className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-base text-navy hover:bg-hover-row max-lg:h-11 max-lg:w-11"
           >
             <LineIcon name="adjust" className="h-5 w-5" />
-            {type !== 'all' && <span aria-hidden="true" className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-amber" />}
+            {type !== 'all' && <span aria-hidden="true" className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-primary" />}
           </button>
         )}
       />
@@ -395,11 +395,11 @@ export function SessionLeadsCard({
               onClick={() => { setType(chip); setFiltering(false); }}
               className={cn(
                 'flex min-h-11 items-center gap-1.5 rounded-pill px-3.5 text-base font-semibold',
-                type === chip ? 'bg-navy text-white' : 'bg-base text-navy hover:bg-hover-row',
+                type === chip ? 'bg-secondary text-secondary-contrast' : 'bg-base text-navy hover:bg-hover-row',
               )}
             >
               {typeName(chip)}
-              <span className={cn('text-xs font-semibold', type === chip ? 'text-on-navy-muted' : 'text-muted')}>{counts[chip]}</span>
+              <span className={cn('text-xs font-semibold', type === chip ? 'text-secondary-muted' : 'text-muted')}>{counts[chip]}</span>
             </button>
           ))}
         </div>
@@ -452,11 +452,11 @@ export function CoacheeLeadsTab({ coachee }: { coachee: Coachee }) {
             onClick={() => setType(chip)}
             className={cn(
               'flex min-h-9 items-center gap-1.5 rounded-pill px-3.5 text-base font-semibold max-lg:min-h-11',
-              type === chip ? 'bg-navy text-white' : 'bg-card text-navy hover:bg-hover-row',
+              type === chip ? 'bg-secondary text-secondary-contrast' : 'bg-card text-navy hover:bg-hover-row',
             )}
           >
             {typeName(chip)}
-            <span className={cn('text-xs font-semibold', type === chip ? 'text-on-navy-muted' : 'text-muted')}>{leads ? counts[chip] : ''}</span>
+            <span className={cn('text-xs font-semibold', type === chip ? 'text-secondary-muted' : 'text-muted')}>{leads ? counts[chip] : ''}</span>
           </button>
         ))}
       </div>
@@ -492,7 +492,7 @@ export function CoacheeLeadsTab({ coachee }: { coachee: Coachee }) {
           aria-label={t.list.add}
           className={cn(
             'fixed bottom-[calc(var(--tab-bar-space)+1rem)] right-4 z-30 flex h-14 w-14 items-center justify-center rounded-full',
-            'bg-amber text-navy shadow-modal hover:bg-amber-dark lg:bottom-6 lg:right-6',
+            'bg-primary text-primary-contrast shadow-modal hover:bg-primary-hover lg:bottom-6 lg:right-6',
           )}
         >
           <LineIcon name="plus" className="h-7 w-7" />

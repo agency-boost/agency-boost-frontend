@@ -2,14 +2,14 @@ import { defineMessages, type MessagesOf } from '@/i18n/catalogue';
 import { kept } from '@/i18n/kept';
 
 /**
- * **Home** — `/home` (UI V1, 2026-10-30, Phase 18.99 T11; UI-100, UI-101; `functional/home.md`): the greeting, the
+ * **Home** — `/home` (UI V1, 2026-10-30, Phase 18.11 T11; UI-100, UI-101; `functional/home.md`): the greeting, the
  * tiles, *Aksi hari ini*, *Laporan tim*, the 7-day chart and the WhatsApp reminder.
  *
  * **The Indonesian is the report's** where it gives the words (O-12: *Home's labels as given*) — *Pagi, AGUS*,
  * *Aktivitas saya*, *Jadwal hari ini*, *Aksi hari ini*, *Laporan tim*, *Coaching 7 hari*, *Kemarin*, *Tugas*, *meeting*,
  * *Kmrn*, *Hari ini*, *Semua*, *Dari:*, *Aktivitas 7 hari terakhir*, *Belum ada aktivitas 7 hari terakhir*, *+ Log* and
  * the reminder, word for word (Appendix A, UI-100, UI-101). The rest — *Siang*, *Sore*, *Malam*, the names a screen
- * reader hears — is proposed in the glossary's §B.10 (*Phase 18.99 T11*). *Active Agent {Bulan}* and *dari 12* are the
+ * reader hears — is proposed in the glossary's §B.10 (*Phase 18.11 T11*). *Active Agent {Bulan}* and *dari 12* are the
  * Unit Dashboard's own words (`unit-dashboard.ts`), read from there so the two tiles never differ. **Kept** (§A):
  * *Coaching*, *Unit*, *Group*, *Home*.
  *
@@ -47,6 +47,23 @@ const en = {
     /** The chip: *Tugas 3*. */
     tasks: 'Tasks',
     coached: `${kept('Coaching')} 7 days`,
+  },
+  /**
+   * ***Tim saya*** (P19-T4 AC-2; UI-159 item 2, ADR-0189 §4): every leader's four tiles, each with one call to action at
+   * zero. The Indonesian is the handover's, word for word.
+   */
+  timSaya: {
+    heading: 'My team',
+    members: 'Team members',
+    coached: `${kept('Coaching')} this week`,
+    recruitment: 'Recruiting pipeline',
+    newHires: kept('New hires'),
+    cta: {
+      members: 'No members yet · Add your first agent →',
+      coached: 'Start coaching →',
+      recruitment: 'Plan recruitment →',
+      newHires: 'Add a new agent →',
+    },
   },
   actions: {
     heading: 'Today’s actions',
@@ -116,6 +133,19 @@ const id: MessagesOf<typeof en> = {
     meetings: () => 'meeting',
     tasks: 'Tugas',
     coached: `${kept('Coaching')} 7 hari`,
+  },
+  timSaya: {
+    heading: 'Tim saya',
+    members: 'Anggota tim',
+    coached: `${kept('Coaching')} minggu ini`,
+    recruitment: `${kept('Recruitment')} pipeline`,
+    newHires: kept('New hires'),
+    cta: {
+      members: 'Belum ada anggota · Tambah agent pertama →',
+      coached: 'Mulai coaching →',
+      recruitment: 'Rencanakan recruitment →',
+      newHires: 'Tambah agent baru →',
+    },
   },
   actions: {
     heading: 'Aksi hari ini',

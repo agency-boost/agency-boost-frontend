@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { SettingsScreen } from '@/components/settings-screen';
+import { SettingsReviewed } from '@/components/settings-reviewed';
 import {
   Button, Card, Field, ReadOnlyField, Select, TextInput, Textarea,
 } from '@/components/ui/field';
@@ -88,6 +89,8 @@ export default function BranchInfoPage() {
       title={kept('Branch info')}
       subtitle={t.subtitle}
       permission="kpm:read_profile"
+      // P19.3-T2 AC-5 (UI-149): *Sudah sesuai*, step 1 of the KPM setup card.
+      actions={<SettingsReviewed page="branch-info" />}
       error={error}
     >
 

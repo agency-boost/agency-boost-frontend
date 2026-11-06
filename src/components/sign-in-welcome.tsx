@@ -31,7 +31,7 @@ export function SignInWelcome() {
   return (
     <div data-sign-in-welcome="" aria-hidden="true">
       {/* The shapes: large soft discs behind the column, never under the form's words. */}
-      <span className="pointer-events-none absolute -left-24 -top-20 h-64 w-64 rounded-full bg-amber/[0.12]" />
+      <span className="pointer-events-none absolute -left-24 -top-20 h-64 w-64 rounded-full bg-primary/[0.12]" />
       <span className="pointer-events-none absolute -right-28 top-40 h-72 w-72 rounded-full bg-hairline/60" />
       <div className="relative mx-auto mb-4 h-[11.5rem] w-[15rem] md:h-[13.5rem] md:w-[17rem]">
         <Boost pose="pointing" size={200} priority className="absolute left-1/2 top-0 h-auto -translate-x-1/2 max-md:w-[168px]" />

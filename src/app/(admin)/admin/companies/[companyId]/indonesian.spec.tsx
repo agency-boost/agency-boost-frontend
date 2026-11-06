@@ -21,7 +21,7 @@ vi.mock('next/navigation', () => ({
 vi.mock('next/dynamic', () => ({ default: () => () => <div data-testid="lazy" /> }));
 
 /**
- * **P18.99-T20, the KPM template in ID mode** (ADR-0185 §1): *Template KPM*, *Pengaturan perusahaan*, *Template bawaan
+ * **P18.11-T20, the KPM template in ID mode** (ADR-0185 §1): *Template KPM*, *Pengaturan perusahaan*, *Template bawaan
  * AgencyBoost*, the checklist's *Terbit vN · Draf · Kosong* and *Terbitkan semua* — the developer's words for the
  * product owner, the rest the approved glossary's — with the section names an Owner's settings keep (§A.3) and every
  * template and company name as typed. The same pages in English are their own `page.spec.tsx`.
@@ -42,7 +42,7 @@ const ROUTES = {
   },
 };
 
-describe('P18.99-T20 the KPM template in Indonesian', () => {
+describe('P18.11-T20 the KPM template in Indonesian', () => {
   beforeEach(() => window.history.replaceState(null, '', '/'));
   afterEach(() => vi.unstubAllGlobals());
 
@@ -58,7 +58,9 @@ describe('P18.99-T20 the KPM template in Indonesian', () => {
     expect(tabs.getAllByRole('link').map((l) => l.textContent)).toEqual(['Template KPM', 'Pengaturan perusahaan']);
     const cards = list.getAllByRole('link');
     expect(cards[0]).toHaveTextContent('Prudential template');
-    expect(cards[0]).toHaveTextContent('Dipakai 3 KPM · 6/6 bagian terbit');
+    // P19.5-T1: eight sections, *Advanced analytics* the eighth.
+    // P19.6-T1: nine, *Tampilan* before it.
+    expect(cards[0]).toHaveTextContent('Dipakai 3 KPM · 9/9 bagian terbit');
     expect(cards[1]).toHaveTextContent('2 perubahan belum terbit');
     expect(within(cards[2]).getByText('Diarsipkan')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Perusahaan' })).toHaveAttribute('href', '/admin/companies');
@@ -81,7 +83,9 @@ describe('P18.99-T20 the KPM template in Indonesian', () => {
     renderInIndonesian(<TemplatePage params={routeParams({ companyId: 'c1', templateId: 't-bsd' })} />, { me: SUPER_ADMIN });
     const rows = within(await screen.findByRole('list', { name: 'Bagian template' })).getAllByRole('link');
     expect(rows.map((r) => within(r).getAllByText(/./)[0].textContent)).toEqual([
-      'Aktivitas & rasio', 'Pipeline lead', 'Checklist aktivasi', 'Training', 'Capability Mapping', 'Events',
+      'Aktivitas & rasio', 'Pipeline lead', 'Checklist aktivasi', 'Training', 'Capability Mapping', 'Events', 'Rekrutmen',
+      // P19.6-T1 (ADR-0218 §3): *Tampilan*, before the last.
+      'Tampilan', 'Advanced analytics',
     ]);
     expect(within(rows[0]).getByText('Sebagian terbit')).toBeInTheDocument();
     expect(rows[0]).toHaveTextContent('Aktivitas v1 · Rasio kosong');
@@ -96,16 +100,19 @@ describe('P18.99-T20 the KPM template in Indonesian', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Terbitkan semua (2)' }));
     const dialog = within(screen.getByRole('dialog', { name: 'Terbitkan semua perubahan?' }));
     expect(dialog.getByText('Bagian berikut akan diterbitkan:')).toBeInTheDocument();
-    expect(dialog.getByText('KPM yang sudah ada tidak berubah; hanya KPM baru yang memakai versi ini.')).toBeInTheDocument();
+    // *Amended 2026-11-05 (P19.4-T1, ADR-0208 §4):* existing KPMs are asked about after the publish.
+    expect(dialog.getByText('Setelah itu, Anda memilih apakah KPM yang sudah ada ikut memakainya.')).toBeInTheDocument();
     noEnglishLeft();
     await clean();
     await userEvent.click(dialog.getByRole('button', { name: 'Batal' }));
 
+    // *Amended 2026-11-05 (P19.4-T1 AC-6, ADR-0208 §4):* the count opens the push, no longer an information-only list.
     await userEvent.click(screen.getByRole('button', { name: '1 KPM memakai versi lama' }));
-    const offices = within(screen.getByRole('dialog', { name: 'KPM yang memakai versi lama' }));
-    expect(offices.getByRole('link', { name: 'KPM 0417 · BSD City Branch' })).toBeInTheDocument();
-    expect(offices.getByText('Versi lama: Pipeline lead')).toBeInTheDocument();
-    await userEvent.click(offices.getByRole('button', { name: 'Tutup' }));
+    const offices = within(screen.getByRole('dialog', { name: 'Terapkan juga ke KPM yang sudah ada?' }));
+    expect(await offices.findByText('KPM 0417 · BSD City Branch')).toBeInTheDocument();
+    expect(offices.getByText('Belum diubah KPM')).toBeInTheDocument();
+    noEnglishLeft();
+    await userEvent.click(offices.getByRole('button', { name: 'Tidak sekarang' }));
 
     await userEvent.click(screen.getByRole('button', { name: 'Aksi untuk BSD City settings' }));
     expect(screen.getAllByRole('menuitem').map((m) => m.textContent?.split(/(?=Template)/)[0]))
@@ -134,12 +141,12 @@ describe('P18.99-T20 the KPM template in Indonesian', () => {
     await clean();
   });
 
-  it('Pengaturan perusahaan: the one line, Produk · Campaign · Rekrutmen', async () => {
+  it('Pengaturan perusahaan: the one line, Produk · Campaign (P19.4-T5: Rekrutmen is a template section)', async () => {
     stubFetch(ROUTES);
     renderInIndonesian(<CompanySettingsPage params={routeParams({ companyId: 'c1' })} />, { me: SUPER_ADMIN });
     expect(await screen.findByText('Berlaku langsung untuk semua KPM perusahaan ini.')).toBeInTheDocument();
     expect(within(screen.getByRole('navigation', { name: 'Pengaturan perusahaan' })).getAllByRole('link').map((l) => l.textContent))
-      .toEqual(['Produk', 'Campaign', 'Rekrutmen']);
+      .toEqual(['Produk', 'Campaign']);
     noEnglishLeft();
     await clean();
   });

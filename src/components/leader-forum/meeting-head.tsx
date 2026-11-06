@@ -14,13 +14,13 @@ import { useMeetingSave } from './meeting-writer';
 
 /** `.lm-btn-sm` (`:610`); *Share* and *Save as PDF* outlined in navy (`.lm-btn-secondary`, `:606`). */
 const SMALL = 'h-auto rounded-[7px] px-[13px] py-[7px] text-sm';
-const OUTLINED = 'border-[1.5px] border-navy bg-transparent text-navy hover:bg-navy/5';
+const OUTLINED = 'border-[1.5px] border-secondary bg-transparent text-navy hover:bg-secondary/5';
 
 /**
  * **A meeting's head** (`:2709-2733`; *The head*): the title; *"{date} · Upcoming"* — the date a button for
  * whoever may move or delete the meeting, opening *Meeting details* (ADR-0130 §4); the cadence note; *Share*,
  * *Save as PDF* and *Save* for whoever may do each, *Save* the amber primary with navy text (an action,
- * ADR-0137); then *Can edit these minutes* (P18.97-T2 AC-3; the prototype's *Can edit this MOM*) and its chips, and
+ * ADR-0137); then *Can edit these minutes* (P18.9-T2 AC-3; the prototype's *Can edit this MOM*) and its chips, and
  * *Manage tags →* for whoever may tag.
  *
  * In print the head stays — the title, the date and who can edit, as the prototype prints them — and its
@@ -70,7 +70,7 @@ export function MeetingHead({
           </p>
         </div>
         <div className="flex flex-col items-end gap-2.5 print:hidden max-sm:items-start">
-          <span className="whitespace-nowrap rounded-pill bg-navy/5 px-[9px] py-[3px] text-xs text-muted">
+          <span className="whitespace-nowrap rounded-pill bg-secondary/5 px-[9px] py-[3px] text-xs text-muted">
             {t.cadence}
           </span>
           {anyButton && (
@@ -126,12 +126,12 @@ function Editors({ meeting }: { meeting: MeetingView }) {
 function Chip({ person, owner }: { person: ForumPerson; owner: boolean }) {
   const t = useMessages(forumMessages);
   return (
-    <li className="inline-flex items-center gap-1.5 rounded-pill bg-navy/5 py-[3px] pl-[3px] pr-2.5 text-sm font-semibold text-navy">
+    <li className="inline-flex items-center gap-1.5 rounded-pill bg-secondary/5 py-[3px] pl-[3px] pr-2.5 text-sm font-semibold text-navy">
       <span
         aria-hidden="true"
         className={cn(
           'flex h-5 w-5 items-center justify-center rounded-full text-2xs font-bold',
-          owner ? 'bg-amber text-navy' : 'bg-navy-soft text-white',
+          owner ? 'bg-primary text-primary-contrast' : 'bg-secondary-hover text-secondary-contrast',
         )}
       >
         {initialsOf(person.name)}

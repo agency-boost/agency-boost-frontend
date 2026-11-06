@@ -39,7 +39,7 @@ export interface SegmentedTab {
  * the track while their words fit, and when they do not the track scrolls sideways, fading on the side
  * that has more, with the selected one in view. Below 768px only (`phone.ts`, `use-tab-row.ts`).
  *
- * **Two options are the exception** (`phoneLayout="wrap"`, P18.95-T5 AC-7): a choice between two must show
+ * **Two options are the exception** (`phoneLayout="wrap"`, P18.7-T5 AC-7): a choice between two must show
  * both, so the halves stay equal and a label wraps inside its own (`SEGMENT_WRAP_PHONE`) rather than the track
  * scrolling one of them out of sight — *Calculate from savings target* on `/goals` at 375px.
  */
@@ -62,7 +62,7 @@ export function Segmented({
   className?: string;
   /**
    * Below 768px: `scroll`, a row that scrolls when its words do not fit (the default), or `wrap`, equal halves whose
-   * words wrap inside them — for two options, which must both be seen (P18.95-T5 AC-7).
+   * words wrap inside them — for two options, which must both be seen (P18.7-T5 AC-7).
    */
   phoneLayout?: 'scroll' | 'wrap';
 }) {
@@ -115,7 +115,7 @@ export function Segmented({
                 // 44px tall below 1024px (UI V1, UI-010).
                 SEGMENT_TOUCH,
                 phoneLayout === 'scroll' ? SEGMENT_PHONE : SEGMENT_WRAP_PHONE,
-                on ? 'bg-navy text-card' : 'text-muted hover:text-navy',
+                on ? 'bg-secondary text-secondary-contrast' : 'text-muted hover:text-navy',
               )}
             >
               {tab.label}

@@ -1,14 +1,19 @@
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { axe } from 'vitest-axe';
 import AdminLayout from '@/app/(admin)/layout';
-import { makeMe, renderInLayout, routeParams, stubFetch } from '@test/harness';
+import { atWidth, makeMe, renderInLayout, routeParams, stubFetch } from '@test/harness';
+import { smallTargets } from '@test/touch-audit';
 import TenantDetailPage from './page';
 
+const push = vi.hoisted(() => vi.fn());
+/** The address's query: `?tab=` picks the KPM page's tab (P19.4-T3). */
+const address = vi.hoisted(() => ({ search: '' }));
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  useRouter: () => ({ push, replace: vi.fn() }),
   usePathname: () => '/admin/tenants/kpm-1',
+  useSearchParams: () => new URLSearchParams(address.search),
 }));
 
 const SUPER_ADMIN = makeMe({
@@ -17,7 +22,7 @@ const SUPER_ADMIN = makeMe({
     pronoun: 'they', initials: 'R', platformRole: 'super_admin',
   },
   membership: null,
-  permissions: ['kpm:list_all', 'kpm:read_profile', 'kpm:suspend'],
+  permissions: ['kpm:list_all', 'kpm:read_profile', 'kpm:suspend', 'kpm:assign_owner'],
 });
 
 const KPM = {
@@ -50,12 +55,13 @@ describe('tenant detail', () => {
     expect(screen.queryByRole('heading', { name: 'Seeded settings' })).not.toBeInTheDocument();
     expect(screen.queryByText('activationWindowDays')).not.toBeInTheDocument();
     expect(screen.queryByText(/phase \d/i)).not.toBeInTheDocument();
-    // Nor a placeholder where it stood: the four cards are the page.
+    // Nor a placeholder where it stood: *Ringkasan*'s cards are the page (P19.4-T3 AC-9) — the Owner, the Admins, the
+    // members, then the KPM's profile and lifecycle.
     expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent))
-      .toEqual(['Profile', 'Owner', 'People', 'Lifecycle']);
+      .toEqual(['Owner', 'Admin', 'Members', 'Profile', 'Lifecycle']);
   });
 
-  it('P3.5-T14 AC-7: names the owner, and keeps the one id support asks for', async () => {
+  it('P3.1-T14 AC-7: names the owner, and keeps the one id support asks for', async () => {
     stubFetch({ '/admin/tenants/kpm-1': { body: KPM } });
     renderInLayout(AdminLayout, <TenantDetailPage params={params} />, { me: SUPER_ADMIN });
 
@@ -77,29 +83,51 @@ describe('tenant detail', () => {
   it('offers a transfer when an owner exists and an assignment when none does', async () => {
     stubFetch({ '/admin/tenants/kpm-1': { body: KPM } });
     const { unmount } = renderInLayout(AdminLayout, <TenantDetailPage params={params} />, { me: SUPER_ADMIN });
-    expect(await screen.findByRole('link', { name: 'Transfer owner' })).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: 'Change owner' })).toBeInTheDocument();
     unmount();
     vi.unstubAllGlobals();
 
     stubFetch({ '/admin/tenants/kpm-1': { body: { ...KPM, ownerUserId: null, ownerName: null, ownerEmail: null } } });
     renderInLayout(AdminLayout, <TenantDetailPage params={params} />, { me: SUPER_ADMIN });
-    expect(await screen.findByRole('link', { name: 'Assign owner' })).toBeInTheDocument();
-    expect(screen.getByText(/Nobody can administer this office/)).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: 'Set owner' })).toBeInTheDocument();
+    expect(screen.getByText(/Nobody can run this KPM until one is set/)).toBeInTheDocument();
   });
 
   /*
-   * ADR-0162 (P18.9-T1 AC-5): *Open as Owner* on the Owner card, to the start screen for a setup session as
-   * them. Only where there is an Owner, the office is active and the reader may start a session.
+   * **P19.4-T2 AC-3, AC-8 (UI-151; Overview case 10; ADR-0206 §6): no *Impor roster*.** The people are the KPM's; the
+   * *People* card says its Owner or an Admin adds them, and nothing on the page links to an import or an upload.
    */
-  describe('Open as Owner (ADR-0162)', () => {
+  it('P19.4-T2 AC-3 offers no import or upload of the KPM’s, and says the Owner or an Admin adds the members', async () => {
+    const IMPERSONATOR = { ...SUPER_ADMIN, permissions: [...SUPER_ADMIN.permissions, 'impersonation:start'] };
+    // P19.4-T3 AC-9 (A2, UI-151): with nobody but the Owner, *"Belum ada anggota"* says the Owner or an Admin imports —
+    // with no link to an import.
+    stubFetch({ '/admin/tenants/kpm-1': { body: { ...KPM, memberCount: 1, membersBesidesOwner: 0 } } });
+    renderInLayout(AdminLayout, <TenantDetailPage params={params} />, { me: IMPERSONATOR });
+    const warning = await screen.findByRole('note');
+    expect(warning).toHaveTextContent('No members yet. The KPM’s Owner or an Admin imports its members, on their People page.');
+    expect(within(warning).queryByRole('link')).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /import|roster|upload/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /import|roster|upload/i })).not.toBeInTheDocument();
+    for (const link of screen.getAllByRole('link')) {
+      expect(link.getAttribute('href')).not.toMatch(/roster|data-upload|people\/import|purpose=/);
+    }
+  });
+
+  /*
+   * *Open as Owner* on the Owner card, to the start screen of a session as them that only looks (P19.4-T2 AC-1, AC-7;
+   * ADR-0206 §3; it was a setup session's, ADR-0162). Only where there is an Owner, the office is active and the reader
+   * may start a session.
+   */
+  describe('Open as Owner (ADR-0206)', () => {
     const IMPERSONATOR = { ...SUPER_ADMIN, permissions: [...SUPER_ADMIN.permissions, 'impersonation:start'] };
 
-    it('AC-5 opens the start screen for a setup session as the office’s Owner, in the Owner card', async () => {
+    it('P19.4-T2 AC-7 opens the start screen as the office’s Owner, from the Owner card, naming no purpose', async () => {
       stubFetch({ '/admin/tenants/kpm-1': { body: KPM } });
       renderInLayout(AdminLayout, <TenantDetailPage params={params} />, { me: IMPERSONATOR });
 
       const link = await screen.findByRole('link', { name: 'Open as Owner' });
-      expect(link).toHaveAttribute('href', '/admin/impersonate/u-owner?purpose=setup&kpmId=kpm-1');
+      // No purpose: there is one kind of session, *Hanya melihat* (UI-151, ADR-0206 §3).
+      expect(link).toHaveAttribute('href', '/admin/impersonate/u-owner?kpmId=kpm-1');
       const card = screen.getByRole('heading', { name: 'Owner' }).parentElement!;
       expect(within(card).getByRole('link', { name: 'Open as Owner' })).toBe(link);
     });
@@ -118,7 +146,7 @@ describe('tenant detail', () => {
     it('is not offered to a reader who may not start a session', async () => {
       stubFetch({ '/admin/tenants/kpm-1': { body: KPM } });
       renderInLayout(AdminLayout, <TenantDetailPage params={params} />, { me: SUPER_ADMIN });
-      expect(await screen.findByRole('link', { name: 'Transfer owner' })).toBeInTheDocument();
+      expect(await screen.findByRole('link', { name: 'Change owner' })).toBeInTheDocument();
       expect(screen.queryByRole('link', { name: 'Open as Owner' })).not.toBeInTheDocument();
     });
   });
@@ -168,6 +196,99 @@ describe('tenant detail', () => {
     expect(screen.getByText('Subscription:')).toBeInTheDocument();
     // The header's pill reads as the list's Status column does.
     expect(screen.getAllByText(word).length).toBeGreaterThan(0);
+  });
+
+  /** P19-T3 (ADR-0191 §5; UI-168 points 1 and 4): moving an office, and deleting an empty one. */
+  describe('P19-T3 move and delete', () => {
+    const MOVER = makeMe({
+      user: SUPER_ADMIN.user, membership: null,
+      permissions: [...SUPER_ADMIN.permissions, 'kpm:update_company_tag', 'kpm:archive'],
+    });
+    const INSURERS = { body: [{ _id: 'co-1', name: 'Prudential' }, { _id: 'co-2', name: 'Manulife' }] };
+
+    it('P19-T3 AC-6 moves the office to another company and says where its settings now come from', async () => {
+      const { calls } = stubFetch({
+        '/admin/tenants/kpm-1/company': { body: { ...KPM, companyId: 'co-2', companyName: 'Manulife' } },
+        '/admin/tenants/kpm-1': { body: KPM },
+        '/companies': INSURERS,
+      });
+      renderInLayout(AdminLayout, <TenantDetailPage params={params} />, { me: MOVER });
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Move to another company' }));
+      expect(screen.getByText(/Only for an office with no member but its Owner/)).toBeInTheDocument();
+      await screen.findByRole('option', { name: 'Manulife' });
+      // The company it is in is not offered.
+      expect(screen.queryByRole('option', { name: 'Prudential' })).toBeNull();
+      await userEvent.selectOptions(screen.getByLabelText('New company'), 'co-2');
+      await userEvent.click(screen.getByRole('button', { name: 'Move' }));
+
+      const patch = calls.find((c) => c.init.method === 'PATCH' && c.url.endsWith('/company'))!;
+      expect(JSON.parse(patch.init.body as string)).toEqual({ companyId: 'co-2' });
+      expect(await screen.findByText('Moved to Manulife. Its settings now come from Manulife’s default template.')).toBeInTheDocument();
+    });
+
+    it('P19-T3 AC-6 shows the refusal for an office with members, with the reason', async () => {
+      stubFetch({
+        '/admin/tenants/kpm-1/company': { status: 409, body: { error: {
+          code: 'TENANT_NOT_EMPTY', message: 'This office has 3 members besides its Owner, so it cannot move to another company.',
+          details: { members: 3 }, requestId: 'r-1',
+        } } },
+        '/admin/tenants/kpm-1': { body: KPM },
+        '/companies': INSURERS,
+      });
+      renderInLayout(AdminLayout, <TenantDetailPage params={params} />, { me: MOVER });
+      await userEvent.click(await screen.findByRole('button', { name: 'Move to another company' }));
+      await screen.findByRole('option', { name: 'Manulife' });
+      await userEvent.selectOptions(screen.getByLabelText('New company'), 'co-2');
+      await userEvent.click(screen.getByRole('button', { name: 'Move' }));
+      expect(await screen.findByRole('alert')).toHaveTextContent('3 members besides its Owner');
+    });
+
+    it('P19-T3 AC-7 deletes an empty office after a confirmation that shows the counts', async () => {
+      push.mockClear();
+      const { calls } = stubFetch({
+        '/admin/tenants/kpm-1/contents': { body: { members: 0, records: 0, deletable: true } },
+        'DELETE /admin/tenants/kpm-1': { body: { deleted: true, kpmId: 'kpm-1' } },
+        '/admin/tenants/kpm-1': { body: { ...KPM, ownerUserId: null, ownerName: null, ownerEmail: null } },
+      });
+      renderInLayout(AdminLayout, <TenantDetailPage params={params} />, { me: MOVER });
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Delete KPM' }));
+      const dialog = await screen.findByRole('dialog');
+      expect(dialog).toHaveTextContent('Delete KPM 0417 · BSD City Branch? It has 0 members and 0 records.');
+      expect(calls.some((c) => c.init.method === 'DELETE')).toBe(false);
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Delete KPM' }));
+
+      await vi.waitFor(() => expect(push).toHaveBeenCalledWith('/admin/tenants'));
+      expect(calls.some((c) => c.init.method === 'DELETE' && c.url.endsWith('/admin/tenants/kpm-1'))).toBe(true);
+    });
+
+    it('P19-T3 AC-7 offers Archive instead for an office with a member or a record, and never deletes it', async () => {
+      const { calls } = stubFetch({
+        '/admin/tenants/kpm-1/contents': { body: { members: 4, records: 120, deletable: false } },
+        '/admin/tenants/kpm-1/status': { body: {} },
+        '/admin/tenants/kpm-1': { body: KPM },
+      });
+      renderInLayout(AdminLayout, <TenantDetailPage params={params} />, { me: MOVER });
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Delete KPM' }));
+      const dialog = await screen.findByRole('dialog');
+      expect(dialog).toHaveTextContent('KPM 0417 · BSD City Branch has 4 members and 120 records, so it cannot be deleted. Archive it instead?');
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Archive' }));
+
+      await vi.waitFor(() => expect(calls.some((c) => c.url.endsWith('/status') && c.init.method === 'PATCH')).toBe(true));
+      const patch = calls.find((c) => c.url.endsWith('/status'))!;
+      expect(JSON.parse(patch.init.body as string)).toMatchObject({ status: 'archived' });
+      expect(calls.some((c) => c.init.method === 'DELETE')).toBe(false);
+    });
+
+    it('P19-T3 offers neither to a reader without the grants: the API refuses them too', async () => {
+      stubFetch({ '/admin/tenants/kpm-1': { body: KPM } });
+      renderInLayout(AdminLayout, <TenantDetailPage params={params} />, { me: SUPER_ADMIN });
+      expect(await screen.findByRole('heading', { name: 'Owner' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Move to another company' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Delete KPM' })).toBeNull();
+    });
   });
 
   it('shows the error envelope instead of an empty shell when the office cannot be read', async () => {
@@ -349,10 +470,10 @@ describe('tenant detail', () => {
   });
 
   /*
-   * P18.9-T2 AC-3 (ADR-0163): the office's activity binding, kept by the Super Admin — which activities each cascade
+   * P18.6-T2 AC-3 (ADR-0163): the office's activity binding, kept by the Super Admin — which activities each cascade
    * stage counts, and a replacement added beside the old one.
    */
-  describe('Activity binding (P18.9-T2)', () => {
+  describe('Activity binding (P18.6-T2)', () => {
     const KEEPER = { ...SUPER_ADMIN, permissions: [...SUPER_ADMIN.permissions, 'activity_binding:read', 'activity_binding:write'] };
     const BINDING = {
       kpmId: 'kpm-1', leads: ['LEADS_CONTACTED'], appointments: ['SELL_PRESENTATION'], closings: ['SELL_SUBMISSION'],
@@ -434,5 +555,238 @@ describe('tenant detail', () => {
       await within(binding).findByRole('group', { name: 'Submission polis' });
       expect((await axe(binding, { rules: { 'color-contrast': { enabled: false } } })).violations ?? []).toHaveLength(0);
     });
+  });
+
+  /*
+   * **The KPM page's tabs** (P19.4-T3 AC-9, AC-10; the setup spec's A2; the route registry): *Ringkasan · Anggota · Data
+   * bulanan · Lihat sebagai KPM · Billing*, four in the query and *Lihat sebagai KPM* its own route — each drawn for a
+   * reader whose grants open it, every one read-only.
+   */
+  describe('P19.4-T3 — the KPM page’s tabs', () => {
+    const READER = {
+      ...SUPER_ADMIN,
+      permissions: [...SUPER_ADMIN.permissions, 'platform_members:read', 'platform_kpm_figures:read', 'billing:read_prices'],
+    };
+    const PROFILE = {
+      ...KPM, memberCount: 9, membersBesidesOwner: 8, ownerState: 'active', ownerPhone: '+6281234567890',
+      admins: [{ fullName: 'Maya Kusuma', state: 'invited' }],
+      membersByRole: [{ code: 'AB', label: 'AB', count: 2 }, { code: 'AAB', label: 'AAB', count: 3 }, { code: 'AGENT', label: 'Agent', count: 4 }],
+    };
+    const DATA = {
+      kpmId: 'kpm-1',
+      months: [
+        ...['2025-11', '2025-12', '2026-01', '2026-02', '2026-03', '2026-04', '2026-05', '2026-06'].map((month) => ({ month, status: 'none' })),
+        { month: '2026-07', status: 'missing' }, { month: '2026-08', status: 'complete' }, { month: '2026-09', status: 'complete' },
+        { month: '2026-10', status: 'missing' },
+      ],
+      uploads: [{ month: '2026-09', by: 'Rina Wijaya', at: '2026-10-05T03:00:00.000Z', agents: 41, note: { status: 'committed', asOf: null } }],
+    };
+    afterEach(() => { address.search = ''; });
+
+    it.each([375, 1280])('P19.4-T3 AC-9 at %ipx Ringkasan: the Owner, the Admins read-only, the members by role, the 12 months', async (px) => {
+      atWidth(px);
+      stubFetch({ '/admin/tenants/kpm-1/data': { body: DATA }, '/admin/tenants/kpm-1': { body: PROFILE } });
+      renderInLayout(AdminLayout, <TenantDetailPage params={params} />, { me: READER });
+      const tabs = await screen.findByRole('navigation', { name: 'KPM page' });
+      expect(within(tabs).getAllByRole('link').map((a) => [a.textContent, a.getAttribute('href')])).toEqual([
+        ['At a glance', '/admin/tenants/kpm-1'], ['Members', '/admin/tenants/kpm-1?tab=anggota'], ['Monthly data', '/admin/tenants/kpm-1?tab=data'],
+        ['View as KPM', '/admin/tenants/kpm-1/analytics'], ['Billing', '/admin/tenants/kpm-1?tab=billing'],
+      ]);
+      expect(within(tabs).getByRole('link', { name: 'At a glance' })).toHaveAttribute('aria-current', 'page');
+      expect(screen.getByText('Maya Kusuma')).toBeInTheDocument();
+      expect(screen.getByText('The Owner adds and removes Admins.')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /add admin/i })).not.toBeInTheDocument();
+      expect(screen.getByText('AB 2 · AAB 3 · Agent 4')).toBeInTheDocument();
+      const grid = (await screen.findByRole('heading', { name: 'Monthly data · last 12 months' })).parentElement!;
+      expect(within(grid).getAllByRole('listitem')).toHaveLength(12);
+      expect(within(grid).getAllByText('Complete')).toHaveLength(2);
+      expect(within(grid).queryByText(/HQ/)).not.toBeInTheDocument();
+    });
+
+    it('P19.4-T3 AC-9 Anggota: the KPM’s members, read-only — no add, no import', async () => {
+      address.search = 'tab=anggota';
+      const { calls } = stubFetch({
+        '/admin/members': { body: { rows: [], page: 1, pageSize: 50, total: 0 } },
+        '/admin/tenants/kpm-1': { body: PROFILE },
+      });
+      renderInLayout(AdminLayout, <TenantDetailPage params={params} />, { me: READER });
+      expect(await screen.findByText('Read only. The KPM’s Owner and Admins add, change and import members.')).toBeInTheDocument();
+      expect(await screen.findByText('No members yet. Members appear here once a KPM imports people.')).toBeInTheDocument();
+      expect(calls.some((c) => c.url.includes('/admin/members?kpmId=kpm-1'))).toBe(true);
+      expect(screen.queryByRole('button', { name: /add member|import/i })).not.toBeInTheDocument();
+    });
+
+    it('P19.4-T3 AC-9 Anggota’s table: Kode agen, Nama, Peran, Upline, Bergabung, Status — Aktif · Diundang · Belum diundang', async () => {
+      address.search = 'tab=anggota';
+      const row = (over: Record<string, unknown>) => ({
+        membershipId: 'm-1', fullName: 'Rina Wijaya', agentCode: '70045001', company: { id: 'co-1', name: 'Prudential' },
+        kpm: { id: 'kpm-1', code: '0417', branch: 'BSD City Branch' }, role: { code: 'AB', label: 'AB', isOwner: true, isAdmin: false },
+        leader: null, status: 'active', invitation: 'signed_in', joinedOn: '2024-03-01', lastActiveOn: null, ...over,
+      });
+      stubFetch({
+        '/admin/members': {
+          body: {
+            rows: [
+              row({}),
+              row({ membershipId: 'm-2', fullName: 'Bayu Saputra', agentCode: '70045002', invitation: 'invited', leader: { fullName: 'Rina Wijaya' } }),
+              row({ membershipId: 'm-3', fullName: 'Dewi Lestari', agentCode: '70045003', invitation: 'not_invited' }),
+            ],
+            page: 1, pageSize: 50, total: 3,
+          },
+        },
+        '/admin/tenants/kpm-1': { body: PROFILE },
+      });
+      renderInLayout(AdminLayout, <TenantDetailPage params={params} />, { me: READER });
+      const table = await screen.findByRole('table', { name: 'Every member on the platform' });
+      expect(within(table).getAllByRole('columnheader').map((h) => h.textContent))
+        .toEqual(['Agent code', 'Name', 'Role', 'Upline', 'Joined', 'Status']);
+      expect(within(within(table).getByRole('row', { name: /70045001/ })).getByText('Active')).toBeInTheDocument();
+      expect(within(within(table).getByRole('row', { name: /70045002/ })).getByText('Invited')).toBeInTheDocument();
+      expect(within(within(table).getByRole('row', { name: /70045003/ })).getByText('Not invited')).toBeInTheDocument();
+    });
+
+    it('P19.4-T3 AC-9 Data bulanan: the grid and the upload history, by name, with no upload', async () => {
+      address.search = 'tab=data';
+      stubFetch({ '/admin/tenants/kpm-1/data': { body: DATA }, '/admin/tenants/kpm-1': { body: PROFILE } });
+      renderInLayout(AdminLayout, <TenantDetailPage params={params} />, { me: READER });
+      const history = await screen.findByRole('table', { name: 'Upload history' });
+      expect(within(history).getByRole('row', { name: /Rina Wijaya/ })).toHaveTextContent('41');
+      expect(screen.queryByRole('button', { name: /upload/i })).not.toBeInTheDocument();
+    });
+
+    it('P19.4-T3 AC-16 a reader without the platform grants sees only Ringkasan, and nothing reads the figures', async () => {
+      const { calls } = stubFetch({ '/admin/tenants/kpm-1': { body: PROFILE } });
+      renderInLayout(AdminLayout, <TenantDetailPage params={params} />, { me: SUPER_ADMIN });
+      const tabs = await screen.findByRole('navigation', { name: 'KPM page' });
+      expect(within(tabs).getAllByRole('link').map((a) => a.textContent)).toEqual(['At a glance']);
+      expect(calls.some((c) => c.url.includes('/data') || c.url.includes('/admin/members'))).toBe(false);
+    });
+  });
+});
+
+/**
+ * **P19.2-T2 — a KPM's page below 1024px** (UI-134, UI-135): *Status*, *Pindahkan ke perusahaan lain* and *Simpan
+ * sebagai template*'s company draw no native select on a phone or a tablet — three choice rows for the state, a pill
+ * opening its choices for a company — and the laptop keeps its selects; every target in `main` is 44px. What each does
+ * is the same.
+ */
+describe('P19.2-T2 a KPM’s page below 1024px (UI-134, UI-135)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const ALL = makeMe({
+    user: SUPER_ADMIN.user, membership: null,
+    permissions: [...SUPER_ADMIN.permissions, 'kpm:update_company_tag', 'kpm:archive', 'company_template:write', 'company:crud'],
+  });
+  const INSURERS = { body: [{ _id: 'co-1', name: 'Prudential' }, { _id: 'co-2', name: 'Manulife' }] };
+  const mount = (routes: Parameters<typeof stubFetch>[0] = {}) => {
+    const stub = stubFetch({ '/admin/tenants/kpm-1': { body: KPM }, '/companies': INSURERS, ...routes });
+    renderInLayout(AdminLayout, <TenantDetailPage params={params} />, { me: ALL });
+    return stub;
+  };
+
+  it.each([375, 768])('P19.2-T2 AC-4 at %ipx Status is three choice rows, and a suspension sends its reason as before', async (px) => {
+    atWidth(px);
+    const { calls } = mount({
+      '/admin/tenants/kpm-1/status': { body: {} },
+      '/admin/tenants/kpm-1': [{ body: KPM }, { body: { ...KPM, status: 'suspended', suspendedReason: 'unpaid invoice' } }],
+    });
+    const status = await screen.findByRole('radiogroup', { name: 'Status' });
+    expect(document.querySelector('select')).toBeNull();
+    expect(within(status).getAllByRole('radio').map((r) => r.textContent)).toEqual(['Active', 'Suspended', 'Archived']);
+    expect(within(status).getByRole('radio', { name: 'Active' })).toBeChecked();
+    await userEvent.click(within(status).getByRole('radio', { name: 'Suspended' }));
+    await userEvent.type(screen.getByLabelText('Reason'), 'unpaid invoice');
+    await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    const patch = calls.find((c) => c.init.method === 'PATCH')!;
+    expect(JSON.parse(patch.init.body as string)).toEqual({ status: 'suspended', reason: 'unpaid invoice' });
+    expect(await screen.findByText('Suspended: unpaid invoice')).toBeInTheDocument();
+  });
+
+  it.each([375, 768])('P19.2-T2 AC-4 at %ipx moving a KPM: a pill opening the companies, the one it is in left out', async (px) => {
+    atWidth(px);
+    const { calls } = mount({ '/admin/tenants/kpm-1/company': { body: { ...KPM, companyId: 'co-2', companyName: 'Manulife' } } });
+    await userEvent.click(await screen.findByRole('button', { name: 'Move to another company' }));
+    const pill = screen.getByRole('button', { name: 'New company: New company' });
+    expect(pill).toHaveAccessibleDescription(expect.stringContaining('Only for an office with no member but its Owner'));
+    expect(document.querySelector('select')).toBeNull();
+    // Nothing chosen, nothing to move.
+    expect(screen.getByRole('button', { name: 'Move' })).toBeDisabled();
+    await userEvent.click(pill);
+    const sheet = await screen.findByRole('dialog', { name: 'Choose new company' });
+    // The companies arrive once the move is open; the sheet lists them as they do.
+    await waitFor(() => expect(within(sheet).getAllByRole('radio')).toHaveLength(1));
+    expect(within(sheet).queryByRole('radio', { name: 'Prudential' })).toBeNull();
+    await userEvent.click(within(sheet).getByRole('radio', { name: 'Manulife' }));
+    expect(screen.getByRole('button', { name: 'New company: Manulife' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Move' }));
+    const patch = calls.find((c) => c.init.method === 'PATCH' && c.url.endsWith('/company'))!;
+    expect(JSON.parse(patch.init.body as string)).toEqual({ companyId: 'co-2' });
+    expect(await screen.findByText('Moved to Manulife. Its settings now come from Manulife’s default template.')).toBeInTheDocument();
+  });
+
+  it.each([375, 768])('P19.2-T2 AC-4 at %ipx Save as template’s company is a pill, the office’s own first and chosen', async (px) => {
+    atWidth(px);
+    const { calls } = mount({
+      '/admin/companies': { body: [
+        { _id: 'co-2', name: 'Allianz Life', slug: 'allianz-life', status: 'active', usesPlatformDefaults: true },
+        { _id: 'co-1', name: 'Prudential', slug: 'prudential', status: 'active', usesPlatformDefaults: true },
+      ] },
+      'POST /admin/tenants/kpm-1/template': { status: 201, body: { id: 't-1', companyId: 'co-2', name: 'For Allianz', dropped: [] } },
+    });
+    await userEvent.click(await screen.findByRole('button', { name: 'Save as template' }));
+    const dialog = screen.getByRole('dialog', { name: 'Save as template' });
+    const pill = await within(dialog).findByRole('button', { name: 'Company: Prudential' });
+    expect(document.querySelector('select')).toBeNull();
+    await userEvent.click(pill);
+    await userEvent.click(within(await screen.findByRole('dialog', { name: 'Choose company' })).getByRole('radio', { name: 'Allianz Life' }));
+    await userEvent.type(within(dialog).getByLabelText('Name'), 'For Allianz');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save template' }));
+    expect(JSON.parse(calls.find((c) => c.init.method === 'POST')!.init.body as string)).toEqual({ name: 'For Allianz', companyId: 'co-2' });
+  });
+
+  it.each([375, 768])('P19.2-T2 AC-1 at %ipx Data bulanan’s upload history is a row per upload, no table', async (px) => {
+    atWidth(px);
+    address.search = 'tab=data';
+    stubFetch({
+      '/admin/tenants/kpm-1/data': { body: {
+        kpmId: 'kpm-1', months: [{ month: '2026-09', status: 'complete' }],
+        uploads: [{ month: '2026-09', by: 'Rina Wijaya', at: '2026-10-05T03:00:00.000Z', agents: 41, note: { status: 'committed', asOf: null } }],
+      } },
+      '/admin/tenants/kpm-1': { body: KPM },
+    });
+    renderInLayout(AdminLayout, <TenantDetailPage params={params} />, {
+      me: { ...ALL, permissions: [...ALL.permissions, 'platform_kpm_figures:read'] },
+    });
+    const list = await screen.findByRole('list', { name: 'Upload history' });
+    expect(screen.queryByRole('table')).toBeNull();
+    const [row] = within(list).getAllByRole('listitem');
+    expect(row).toHaveTextContent('Sep 2026');
+    expect(row).toHaveTextContent('Rina Wijaya · 5 Oct 2026');
+    expect(row).toHaveTextContent('Agent rows 41 · Imported');
+    expect(smallTargets(document.querySelector('main')!, px)).toEqual([]);
+    address.search = '';
+  });
+
+  it.each([1024, 1280])('P19.2-T2 AC-4 at %ipx keeps the laptop’s selects: Status and New company', async (px) => {
+    atWidth(px);
+    mount();
+    expect((await screen.findByLabelText('Status')).tagName).toBe('SELECT');
+    await userEvent.click(screen.getByRole('button', { name: 'Move to another company' }));
+    expect(screen.getByLabelText('New company').tagName).toBe('SELECT');
+  });
+
+  it.each([375, 768])('P19.2-T2 AC-5 at %ipx finds no target under 44px in main, the move open', async (px) => {
+    atWidth(px);
+    mount();
+    await userEvent.click(await screen.findByRole('button', { name: 'Move to another company' }));
+    expect(smallTargets(document.querySelector('main')!, px)).toEqual([]);
+  });
+
+  it.each([375, 1280])('P19.2-T2 AC-4 at %ipx has no axe violations, the move open', async (px) => {
+    atWidth(px);
+    mount();
+    await userEvent.click(await screen.findByRole('button', { name: 'Move to another company' }));
+    const results = await axe(document.body, { rules: { 'color-contrast': { enabled: false }, region: { enabled: false } } });
+    expect(results.violations).toEqual([]);
   });
 });

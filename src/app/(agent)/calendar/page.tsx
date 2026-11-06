@@ -24,10 +24,11 @@ const one = (value: string | string[] | undefined) => (typeof value === 'string'
  * inside the period) and `entry` (an entry whose detail opens, on the week holding it) — the last two
  * are what a notice's row opens (ADR-0095). Anything unreadable is ignored for the default, never an
  * error page. A new address is a new screen, so a notice opened from the calendar itself starts afresh.
- * **`with`** (P18.96-T6 AC-4) — a membership id — opens *New event* as a 1:1 with them: *1:1 coaching*, *"1:1 with
+ * **`with`** (P18.8-T6 AC-4) — a membership id — opens *New event* as a 1:1 with them: *1:1 coaching*, *"1:1 with
  * {full name}"* and them invited, on the office's today. `/new-hires`' *Schedule 1:1* is its caller.
- * **Without a `view`** the page opens on Week, and on a phone on the Agenda (P18.95-T8 AC-1), so an
- * address that names one is passed on as named and one that does not, as nothing.
+ * **Without a `view`** the page opens on the size's default — the Agenda on a phone (P18.7-T8 AC-1), 3 Hari on a tablet,
+ * Week on a laptop — or, from 768px, on the view last chosen on the device (P19.1-T3 AC-9, UI-119), so an address that
+ * names one is passed on as named and one that does not, as nothing.
  */
 export default function CalendarPage() {
   return (

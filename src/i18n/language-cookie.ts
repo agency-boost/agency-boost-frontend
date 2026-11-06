@@ -1,7 +1,7 @@
 import { isLanguage, LANGUAGE_COOKIE, LANGUAGE_COOKIE_MAX_AGE, type Language } from './language';
 
 /**
- * **The browser's language, kept for a year** (ADR-0179 §2; P18.98-T2 AC-5).
+ * **The browser's language, kept for a year** (ADR-0179 §2; P18.10-T2 AC-5).
  *
  * `ab_lang=id` or `ab_lang=en`: the whole site (`Path=/`), a year (`Max-Age`), `SameSite=Lax`, and **not `HttpOnly`**,
  * because the page itself reads it before it paints (`pre-paint.ts`). `Secure` wherever the page is served over HTTPS.

@@ -6,7 +6,7 @@
 # Several specs read it there, so that the two halves cannot drift (invariant §7): the OpenAPI document the
 # API client is checked against, and the backend's constants the screens mirror — the office time zone, the
 # activation code, the product catalog, template names, the production template, the permission catalog. A
-# CI checkout of this repository alone has none of it, and its first run of Phase 18.7 failed six spec files
+# CI checkout of this repository alone has none of it, and its first run of Phase 18.4 failed six spec files
 # on ENOENT (2026-10-23).
 #
 # Read-only, over SSH, with a deploy key of the backend repository: GITHUB_TOKEN reads this repository and

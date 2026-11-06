@@ -1,10 +1,11 @@
-import { act, screen, waitFor, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { axe } from 'vitest-axe';
 import AdminLayout from '@/app/(admin)/layout';
-import type { BillingTier } from '@/lib/billing';
-import { makeMe, renderInLayout, renderWithSession, stubFetch } from '@test/harness';
+import type { BillingKpmRow, BillingTier } from '@/lib/billing';
+import { atWidth, makeMe, renderInLayout, renderWithSession, stubFetch, wears } from '@test/harness';
+import { smallTargets } from '@test/touch-audit';
 import BillingPage from './page';
 
 vi.mock('next/navigation', () => ({
@@ -33,35 +34,43 @@ const TIERS: BillingTier[] = [
 const PRICES = { currency: 'IDR', tiers: TIERS, annualDiscountPct: 5 };
 const INBOX = { items: [], total: 0, page: 1, pageSize: 1, unread: 0 };
 
-/** The page alone: its only request is its own, so AC-9 can count them. */
-function renderPage(routes: Parameters<typeof stubFetch>[0] = { '/admin/billing/prices': { body: PRICES } }) {
+const PRU = { id: 'co-pru', name: 'Prudential' };
+const MAN = { id: 'co-man', name: 'Manulife' };
+const ROWS: BillingKpmRow[] = [
+  {
+    kpmId: 'kpm-1', code: '0417', branch: 'BSD City', company: PRU, leadersUsed: 9,
+    tier: { code: 'TIER_1_10', minLeaders: 1, maxLeaders: 10 }, plan: 'annual', renewalDate: '2027-01-05', status: 'active',
+  },
+  {
+    kpmId: 'kpm-2', code: '0602', branch: 'Bekasi Barat', company: PRU, leadersUsed: 2,
+    tier: { code: 'TIER_1_10', minLeaders: 1, maxLeaders: 10 }, plan: 'six_months', renewalDate: '2026-10-02',
+    status: 'ended_kept_active',
+  },
+  {
+    kpmId: 'kpm-3', code: '0100', branch: 'Sudirman', company: MAN, leadersUsed: 13,
+    tier: { code: 'TIER_11_20', minLeaders: 11, maxLeaders: 20 }, plan: null, renewalDate: null, status: 'none',
+  },
+];
+
+function renderPage(routes: Parameters<typeof stubFetch>[0] = {
+  '/admin/billing/prices': { body: PRICES },
+  '/admin/billing/kpms': { body: ROWS },
+}) {
   const fetched = stubFetch(routes);
   renderWithSession(<BillingPage />, { me: SUPER_ADMIN });
   return fetched;
 }
 
-const cards = () => within(screen.getAllByRole('list')[0]).getAllByRole('listitem');
-const row = (label: string) => screen.getByText(label, { selector: 'dt' }).parentElement as HTMLElement;
-const leaders = () => screen.getByLabelText('Number of leaders');
-const discount = () => screen.getByLabelText('Arbitrary discount (internal, per leader)');
-
-async function setLeaders(n: string) {
-  await userEvent.clear(leaders());
-  if (n) await userEvent.type(leaders(), n);
-}
-
-async function fillDialog({ kpm = 'Jakarta Selatan', pic = 'Andi Wijaya', sales = 'Maya' } = {}) {
-  const dialog = screen.getByRole('dialog', { name: 'Send quote' });
-  if (kpm) await userEvent.type(within(dialog).getByLabelText('Name of KPM'), kpm);
-  if (pic) await userEvent.type(within(dialog).getByLabelText('Name of PIC'), pic);
-  if (sales) await userEvent.type(within(dialog).getByLabelText('Sales input by'), sales);
-  return dialog;
-}
+const table = () => screen.getByRole('table', { name: 'Every KPM, its leaders, tier, plan and renewal' });
+const list = () => screen.getByRole('list', { name: 'Every KPM, its leaders, tier, plan and renewal' });
+const kpmCalls = (calls: { url: string }[]) => calls
+  .map((c) => new URL(c.url))
+  .filter((u) => u.pathname.endsWith('/admin/billing/kpms'))
+  .map((u) => u.search);
 
 beforeEach(() => {
-  // 01:30 on 8 October in Jakarta: still the 7th in UTC. Only the clock is faked; timers stay real.
   vi.useFakeTimers({ toFake: ['Date'] });
-  vi.setSystemTime(new Date('2026-10-07T18:30:00Z'));
+  vi.setSystemTime(new Date('2026-11-05T03:00:00Z'));
 });
 
 afterEach(() => {
@@ -70,534 +79,229 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('the quote tool (P13.2-T2)', () => {
-  describe('AC-4: the screen, verbatim', () => {
-    it('draws the header, the launch line and the five cards, each with the six-month rate', async () => {
-      renderPage();
+/**
+ * **`/admin/billing`, one row per KPM** (P19.4-T3 AC-10; ADR-0211 §3; SA UI-015, SA R6, SA case 8): the tiers as a
+ * reference strip with no *"TINGKAT ANDA"*, and the list of KPMs — filtered by company and sorted by a column on the
+ * server — each row opening the KPM's *Billing* tab, where the calculator moved (its tests are
+ * `components/admin/kpm-billing-tab.spec.tsx`).
+ */
+describe('P19.4-T3 AC-10 Billing & subscription lists the KPMs', () => {
+  it('P19.4-T3 AC-10 lists each KPM: company, leaders, tier, plan, renewal and status', async () => {
+    renderPage();
+    await screen.findByRole('table');
 
-      expect(screen.getByRole('heading', { level: 1, name: 'Billing & subscription' })).toBeInTheDocument();
-      expect(screen.getByText('Launch pricing — locked in for signups before Mar 2027.')).toBeInTheDocument();
-      await screen.findByText('Estimate your price');
-
-      expect(cards().map((c) => c.textContent)).toEqual([
-        '1–10 leadersIDR 500,000/moIDR 400,000 /leader/moSave 20%Your tier',
-        '11–20 leadersIDR 475,000/moIDR 375,000 /leader/moSave 21%',
-        '21–50 leadersIDR 450,000/moIDR 350,000 /leader/moSave 22%',
-        '51–100 leadersIDR 425,000/moIDR 300,000 /leader/moSave 29%',
-        "101+ leadersCustom pricing based on your unit's structure.Talk to us",
-      ]);
-      // The 101+ tier's rates are never on a card.
-      expect(cards()[4]).not.toHaveTextContent(/Rp|IDR/);
-    });
-
-    it('keeps the six-month rate on the cards on Annual, and moves *Your tier* with the count', async () => {
-      renderPage();
-      await screen.findByText('Estimate your price');
-
-      await userEvent.click(screen.getByRole('button', { name: 'Annual' }));
-      expect(cards()[0]).toHaveTextContent('IDR 400,000 /leader/mo');
-
-      await setLeaders('21');
-      expect(cards()[0]).not.toHaveTextContent('Your tier');
-      expect(cards()[2]).toHaveTextContent('Your tier');
-      await setLeaders('101');
-      expect(cards()[4]).toHaveTextContent('Your tier');
-    });
-
-    it('prices the page as it opens: 8 leaders, six months, no discount', async () => {
-      renderPage();
-      await screen.findByText('Estimate your price');
-
-      expect(leaders()).toHaveValue(8);
-      expect(screen.getByText(/falls in the/)).toHaveTextContent('8 leaders falls in the 1–10 tier.');
-      expect(row('Standard price / leader / mo')).toHaveTextContent('IDR 500,000');
-      expect(row('Offering price / leader / mo')).toHaveTextContent('IDR 400,000');
-      expect(screen.queryByText('Offering price after discount / leader / mo')).not.toBeInTheDocument();
-      expect(row('Monthly total (all leaders)')).toHaveTextContent('IDR 3,200,000');
-      expect(row('6-month total (all leaders)')).toHaveTextContent('IDR 19,200,000');
-      expect(screen.getByRole('button', { name: '6-month' })).toHaveAttribute('aria-pressed', 'true');
-      expect(screen.getByText('Discounts applied')).toBeInTheDocument();
-      expect(screen.getByText('Prices shown in IDR, per leader. Agents under each leader are included at no extra cost.')).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Confirm plan' })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Send quote' })).toBeInTheDocument();
-    });
-
-    it('on Annual shows the offer after discount, the annual total and the annual discount', async () => {
-      renderPage();
-      await screen.findByText('Estimate your price');
-      await userEvent.click(screen.getByRole('button', { name: 'Annual' }));
-
-      expect(screen.getByRole('button', { name: 'Annual' })).toHaveAttribute('aria-pressed', 'true');
-      expect(row('Offering price after discount / leader / mo')).toHaveTextContent('IDR 380,000');
-      // The six-month offer is struck through whenever the row below it shows.
-      expect(row('Offering price / leader / mo').querySelector('s')).toHaveTextContent('IDR 400,000');
-      expect(row('Monthly total (all leaders)')).toHaveTextContent('IDR 3,040,000');
-      expect(row('Annual total (all leaders)')).toHaveTextContent('IDR 36,480,000');
-      expect(screen.getByText('Annual discount (extra 5% off 6-month rate)')).toBeInTheDocument();
-      expect(screen.getByText('-IDR 20,000/leader/mo')).toBeInTheDocument();
-    });
-
-    it('says the annual discount is not applied on six months, with the toggle above (a Fix)', async () => {
-      renderPage();
-      await screen.findByText('Estimate your price');
-
-      expect(screen.getByText('Annual discount')).toBeInTheDocument();
-      expect(screen.getByText('Not applied — switch to Annual above')).toBeInTheDocument();
-      expect(screen.queryByText(/switch to Annual below/)).not.toBeInTheDocument();
-    });
-
-    it('reads one leader in the singular, a count below 1 as 1, and 101 as the custom tier', async () => {
-      renderPage();
-      await screen.findByText('Estimate your price');
-
-      await setLeaders('1');
-      expect(screen.getByText(/falls in the/)).toHaveTextContent('1 leader falls in the 1–10 tier.');
-      await setLeaders('');
-      expect(screen.getByText(/falls in the/)).toHaveTextContent('1 leader falls in the 1–10 tier.');
-      expect(row('Monthly total (all leaders)')).toHaveTextContent('IDR 400,000');
-
-      await setLeaders('120');
-      expect(screen.getByText(/falls in the/)).toHaveTextContent(
-        '120 leaders falls in the 101+ tier — shown as "custom pricing" publicly, real rate calculated below for your own quoting.',
-      );
-      expect(row('Monthly total (all leaders)')).toHaveTextContent('IDR 30,000,000');
-      expect(row('6-month total (all leaders)')).toHaveTextContent('IDR 180,000,000');
-      expect(screen.getByRole('button', { name: 'Send custom quote' })).toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: 'Confirm plan' })).not.toBeInTheDocument();
-    });
+    const headers = within(table()).getAllByRole('columnheader').map((h) => h.textContent?.replace(/[▲▼⇅]/g, '').trim());
+    expect(headers).toEqual(['KPM', 'Company', 'Leaders', 'Tier', 'Plan', 'Renewal', 'Status']);
+    const rows = within(table()).getAllByRole('row').slice(1);
+    expect(rows.map((r) => within(r).getAllByRole('cell').map((c) => c.textContent))).toEqual([
+      ['0417BSD City', 'Prudential', '9', '1–10', 'Annual', '5 Jan 2027', 'Active'],
+      ['0602Bekasi Barat', 'Prudential', '2', '1–10', '6 months', '2 Oct 2026', 'Ended — kept active'],
+      ['0100Sudirman', 'Manulife', '13', '11–20', '—', '—', 'No subscription yet'],
+    ]);
   });
 
-  describe('AC-5: the manual override and its Fixes', () => {
-    it('opens closed, applies a percent, and reads a decimal comma as a decimal', async () => {
-      renderPage();
-      await screen.findByText('Estimate your price');
-      const details = screen.getByText('Manual override').closest('details') as HTMLDetailsElement;
-      expect(details.open).toBe(false);
-
-      await userEvent.click(screen.getByText('Manual override'));
-      await userEvent.click(screen.getByRole('button', { name: 'Annual' }));
-      await userEvent.clear(discount());
-      await userEvent.type(discount(), '10');
-      expect(row('Offering price after discount / leader / mo')).toHaveTextContent('IDR 342,000');
-      expect(row('Annual total (all leaders)')).toHaveTextContent('IDR 32,832,000');
-
-      await userEvent.clear(discount());
-      await userEvent.type(discount(), '10,5');
-      expect(row('Offering price after discount / leader / mo')).toHaveTextContent('IDR 340,100');
-    });
-
-    it('sets the value to 0 when the type changes, and groups an amount as it is typed', async () => {
-      renderPage();
-      await screen.findByText('Estimate your price');
-      await userEvent.click(screen.getByText('Manual override'));
-
-      await userEvent.clear(discount());
-      await userEvent.type(discount(), '50');
-      await userEvent.selectOptions(screen.getByLabelText('Discount type'), 'IDR/leader');
-      expect(discount()).toHaveValue('0');
-
-      await setLeaders('15');
-      await userEvent.clear(discount());
-      await userEvent.type(discount(), '25000');
-      expect(discount()).toHaveValue('25,000');
-      expect(row('Offering price after discount / leader / mo')).toHaveTextContent('IDR 350,000');
-      expect(row('Monthly total (all leaders)')).toHaveTextContent('IDR 5,250,000');
-      expect(row('6-month total (all leaders)')).toHaveTextContent('IDR 31,500,000');
-    });
-
-    it('refuses a percent above 100 with a sentence, prices without it, and generates nothing', async () => {
-      renderPage();
-      await screen.findByText('Estimate your price');
-      await userEvent.click(screen.getByText('Manual override'));
-      await userEvent.clear(discount());
-      await userEvent.type(discount(), '150');
-
-      expect(screen.getByRole('alert')).toHaveTextContent('Enter a percent from 0 to 100.');
-      expect(discount()).toHaveAttribute('aria-invalid', 'true');
-      expect(row('Monthly total (all leaders)')).toHaveTextContent('IDR 3,200,000');
-
-      // Close the disclosure, then press each way into the dialog: none opens it.
-      await userEvent.click(screen.getByText('Manual override'));
-      for (const name of ['Confirm plan', 'Send quote', 'Talk to us']) {
-        await userEvent.click(screen.getByRole('button', { name }));
-        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-        // The disclosure is opened again and the field holding the reason takes the focus.
-        expect((screen.getByText('Manual override').closest('details') as HTMLDetailsElement).open).toBe(true);
-        await waitFor(() => expect(discount()).toHaveFocus());
-      }
-    });
-
-    it('refuses an amount above the rate, naming the rate', async () => {
-      renderPage();
-      await screen.findByText('Estimate your price');
-      await userEvent.click(screen.getByText('Manual override'));
-      await userEvent.selectOptions(screen.getByLabelText('Discount type'), 'IDR/leader');
-      await userEvent.clear(discount());
-      await userEvent.type(discount(), '400001');
-
-      expect(screen.getByRole('alert')).toHaveTextContent('Enter an amount from IDR 0 to IDR 400,000.');
-    });
-
-    it.each(['Confirm plan', 'Send quote', 'Talk to us'])('%s opens the dialog (a Fix: two of them did nothing)', async (name) => {
-      renderPage();
-      await screen.findByText('Estimate your price');
-
-      await userEvent.click(screen.getByRole('button', { name }));
-
-      expect(screen.getByRole('dialog', { name: 'Send quote' })).toBeInTheDocument();
-    });
-
-    it('Send custom quote opens the dialog from 101 leaders', async () => {
-      renderPage();
-      await screen.findByText('Estimate your price');
-      await setLeaders('150');
-
-      await userEvent.click(screen.getByRole('button', { name: 'Send custom quote' }));
-
-      expect(screen.getByRole('dialog', { name: 'Send quote' })).toBeInTheDocument();
-    });
+  it('P19.4-T3 AC-10 a row opens the KPM’s Billing tab, named for its office', async () => {
+    renderPage();
+    const link = await screen.findByRole('link', { name: 'KPM 0417 · BSD City, billing' });
+    expect(link).toHaveAttribute('href', '/admin/tenants/kpm-1?tab=billing');
   });
 
-  describe('AC-6: the dialog', () => {
-    it('draws the prototype’s fields and placeholders, the dates from the office’s today', async () => {
-      renderPage();
-      await screen.findByText('Estimate your price');
-      await userEvent.click(screen.getByRole('button', { name: 'Send quote' }));
-
-      const dialog = screen.getByRole('dialog', { name: 'Send quote' });
-      expect(dialog).toHaveAccessibleDescription('Fill in the client details to generate a quote page you can send.');
-      expect(within(dialog).getByLabelText('Name of KPM')).toHaveAttribute('placeholder', 'e.g. Jakarta Selatan');
-      expect(within(dialog).getByLabelText('Name of PIC')).toHaveAttribute('placeholder', 'e.g. Andi Wijaya');
-      expect(within(dialog).getByLabelText('Sales input by')).toHaveAttribute('placeholder', 'e.g. your name or teammate');
-      // 8 October in Jakarta + 7 days; six months less a day.
-      expect(within(dialog).getByLabelText('Start date')).toHaveValue('15/10/2026');
-      expect(within(dialog).getByLabelText('Start date')).toHaveAttribute('placeholder', 'DD/MM/YYYY');
-      expect(within(dialog).getByLabelText('End date')).toHaveValue('14/04/2027');
-      expect(within(dialog).getByRole('button', { name: 'Generate quote' })).toBeInTheDocument();
-      expect(within(dialog).getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
-    });
-
-    it('ends an annual plan a year less a day after the start (a Fix: the prototype always added a year)', async () => {
-      renderPage();
-      await screen.findByText('Estimate your price');
-      await userEvent.click(screen.getByRole('button', { name: 'Annual' }));
-      await userEvent.click(screen.getByRole('button', { name: 'Send quote' }));
-
-      expect(screen.getByLabelText('End date')).toHaveValue('14/10/2027');
-    });
-
-    it('inserts the slashes as a date is typed, and the end follows the start until it is edited', async () => {
-      renderPage();
-      await screen.findByText('Estimate your price');
-      await userEvent.click(screen.getByRole('button', { name: 'Send quote' }));
-      const start = screen.getByLabelText('Start date');
-      const end = screen.getByLabelText('End date');
-
-      await userEvent.clear(start);
-      await userEvent.type(start, '01112026');
-      expect(start).toHaveValue('01/11/2026');
-      expect(end).toHaveValue('30/04/2027');
-
-      await userEvent.clear(end);
-      await userEvent.type(end, '31122027');
-      await userEvent.clear(start);
-      await userEvent.type(start, '01122026');
-      expect(end).toHaveValue('31/12/2027');
-    });
-
-    it('refuses empty names, an impossible date and an end before the start, each with its sentence', async () => {
-      renderPage();
-      await screen.findByText('Estimate your price');
-      await userEvent.click(screen.getByRole('button', { name: 'Send quote' }));
-      const dialog = screen.getByRole('dialog');
-      await userEvent.clear(within(dialog).getByLabelText('Start date'));
-      await userEvent.type(within(dialog).getByLabelText('Start date'), '31022027');
-
-      await userEvent.click(within(dialog).getByRole('button', { name: 'Generate quote' }));
-
-      expect(within(dialog).getByText('Enter the KPM name.')).toBeInTheDocument();
-      expect(within(dialog).getByText('Enter the PIC name.')).toBeInTheDocument();
-      expect(within(dialog).getByText("Enter who's submitting this quote.")).toBeInTheDocument();
-      expect(within(dialog).getByText('Enter a valid start date, as DD/MM/YYYY.')).toBeInTheDocument();
-      expect(within(dialog).getByLabelText('Name of KPM')).toHaveAttribute('aria-invalid', 'true');
-      expect(within(dialog).getByLabelText('Name of KPM')).toHaveFocus();
-
-      await fillDialog();
-      await userEvent.clear(within(dialog).getByLabelText('Start date'));
-      await userEvent.type(within(dialog).getByLabelText('Start date'), '01122026');
-      await userEvent.clear(within(dialog).getByLabelText('End date'));
-      await userEvent.type(within(dialog).getByLabelText('End date'), '30112026');
-      await userEvent.click(within(dialog).getByRole('button', { name: 'Generate quote' }));
-
-      expect(within(dialog).getByText('Enter an end date on or after the start date.')).toBeInTheDocument();
-      expect(within(dialog).getByLabelText('End date')).toHaveFocus();
-      expect(screen.queryByText('Subscription quote')).not.toBeInTheDocument();
-    });
-
-    it('reopening keeps the three names, clears old errors and starts the dates again', async () => {
-      renderPage();
-      await screen.findByText('Estimate your price');
-      await userEvent.click(screen.getByRole('button', { name: 'Send quote' }));
-      await fillDialog({ pic: '', sales: '' });
-      await userEvent.clear(screen.getByLabelText('Start date'));
-      await userEvent.click(screen.getByRole('button', { name: 'Generate quote' }));
-      expect(screen.getByText('Enter the PIC name.')).toBeInTheDocument();
-
-      await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-      await userEvent.click(screen.getByRole('button', { name: 'Send quote' }));
-
-      expect(screen.getByLabelText('Name of KPM')).toHaveValue('Jakarta Selatan');
-      expect(screen.queryByText('Enter the PIC name.')).not.toBeInTheDocument();
-      expect(screen.getByLabelText('Start date')).toHaveValue('15/10/2026');
-    });
-
-    it('closes on Escape, as the product’s Modal does', async () => {
-      renderPage();
-      await screen.findByText('Estimate your price');
-      await userEvent.click(screen.getByRole('button', { name: 'Send quote' }));
-
-      await userEvent.keyboard('{Escape}');
-
-      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    });
+  it('P19.4-T3 AC-10 keeps the tiers as a reference strip: no “Your tier”, no calculator, no Talk to us', async () => {
+    renderPage();
+    const strip = await screen.findByRole('list', { name: 'Price tiers' });
+    expect(within(strip).getAllByRole('listitem')).toHaveLength(5);
+    expect(strip).toHaveTextContent('IDR 400,000 /leader/mo');
+    expect(screen.queryByText('Your tier')).not.toBeInTheDocument();
+    expect(screen.queryByText('Estimate your price')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Talk to us' })).not.toBeInTheDocument();
+    // The 101+ tier's rates are never on the strip.
+    expect(within(strip).getAllByRole('listitem')[4]).not.toHaveTextContent(/Rp|IDR/);
   });
 
-  describe('AC-7: the quote', () => {
-    async function generate(setup?: () => Promise<void>) {
-      renderPage();
-      await screen.findByText('Estimate your price');
-      await setup?.();
-      await userEvent.click(screen.getByRole('button', { name: 'Send quote' }));
-      await fillDialog();
-      await userEvent.click(screen.getByRole('button', { name: 'Generate quote' }));
-      return screen.getByRole('article');
+  it('P19.4-T3 AC-10 filters by company on the server, from the companies the list holds', async () => {
+    const { calls } = renderPage({
+      '/admin/billing/prices': { body: PRICES },
+      '/admin/billing/kpms': [{ body: ROWS }, { body: ROWS.slice(2) }],
+    });
+    await screen.findByRole('table');
+    const company = screen.getByLabelText('Company');
+    expect(within(company).getAllByRole('option').map((o) => o.textContent)).toEqual(['All companies', 'Manulife', 'Prudential']);
+
+    await userEvent.selectOptions(company, 'Manulife');
+    await waitFor(() => expect(within(table()).getAllByRole('row')).toHaveLength(2));
+    expect(kpmCalls(calls).at(-1)).toBe('?companyId=co-man&sort=kpm&dir=asc');
+    // The other companies stay offered while one is chosen.
+    expect(within(company).getAllByRole('option')).toHaveLength(3);
+  });
+
+  // P19.2-T2 AC-4 (UI-134: *No native <select> on /admin at 375 or 768*; *a pill that opens a sheet for long lists
+  // (company)*): below 1024px the same filter as a pill, navy once it narrows; a laptop keeps the select above.
+  it.each([375, 768])('P19.2-T2 AC-4 at %ipx the company filter is a 44px pill opening the companies; a choice filters on the server', async (px) => {
+    atWidth(px);
+    const { calls } = renderPage({
+      '/admin/billing/prices': { body: PRICES },
+      '/admin/billing/kpms': [{ body: ROWS }, { body: ROWS.slice(2) }],
+    });
+    // Rows below 1024px since P19.2-T2 AC-1 (below), where this read a table.
+    await screen.findByRole('list', { name: 'Every KPM, its leaders, tier, plan and renewal' });
+    expect(document.querySelector('select')).toBeNull();
+    const pill = screen.getByRole('button', { name: 'Company: All companies' });
+    expect(wears(pill, px)).toContain('min-h-11');
+    await userEvent.click(pill);
+    const sheet = await screen.findByRole('dialog', { name: 'Choose company' });
+    expect(within(sheet).getAllByRole('radio').map((r) => r.textContent)).toEqual(['All companies', 'Manulife', 'Prudential']);
+    await userEvent.click(within(sheet).getByRole('radio', { name: 'Manulife' }));
+    await waitFor(() => expect(within(list()).getAllByRole('listitem')).toHaveLength(1));
+    expect(kpmCalls(calls).at(-1)).toBe('?companyId=co-man&sort=kpm&dir=asc');
+    expect(screen.getByRole('button', { name: 'Company: Manulife' })).toHaveTextContent('Manulife');
+  });
+
+  it.each([1024, 1280])('P19.2-T2 AC-4 at %ipx a laptop keeps the company select', async (px) => {
+    atWidth(px);
+    renderPage();
+    await screen.findByRole('table');
+    expect(screen.getByRole('combobox', { name: 'Company' })).toBeInTheDocument();
+  });
+
+  it('P19.4-T3 AC-10 sorts by a column on the server, said by aria-sort, the other way on a second press', async () => {
+    const { calls } = renderPage();
+    await screen.findByRole('table');
+    expect(screen.getByRole('columnheader', { name: /KPM/ })).toHaveAttribute('aria-sort', 'ascending');
+
+    await userEvent.click(screen.getByRole('button', { name: /Renewal/ }));
+    await waitFor(() => expect(kpmCalls(calls).at(-1)).toBe('?sort=renewal&dir=asc'));
+    expect(await screen.findByRole('columnheader', { name: /Renewal/ })).toHaveAttribute('aria-sort', 'ascending');
+
+    await userEvent.click(screen.getByRole('button', { name: /Renewal/ }));
+    await waitFor(() => expect(kpmCalls(calls).at(-1)).toBe('?sort=renewal&dir=desc'));
+  });
+
+  it('P19.4-T3 AC-10 says when there is no KPM yet', async () => {
+    renderPage({ '/admin/billing/prices': { body: PRICES }, '/admin/billing/kpms': { body: [] } });
+    expect(await screen.findByText('No KPM on the platform yet.')).toBeInTheDocument();
+  });
+
+  it('P19.4-T3 AC-10 says the list could not be read, and tries again', async () => {
+    const { calls } = renderPage({
+      '/admin/billing/prices': { body: PRICES },
+      '/admin/billing/kpms': [
+        { status: 500, body: { error: { code: 'INTERNAL_ERROR', message: 'Something broke.', requestId: 'req-9' } } },
+        { body: ROWS },
+      ],
+    });
+    expect(await screen.findByText("The KPMs couldn't be loaded.")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(await screen.findByRole('table')).toBeInTheDocument();
+    expect(kpmCalls(calls)).toHaveLength(2);
+  });
+
+  it('P19.4-T3 AC-10 refuses a reader without the permission, and asks the API for nothing', () => {
+    const { calls } = stubFetch({ '/admin/billing/prices': { body: PRICES }, '/admin/billing/kpms': { body: ROWS } });
+    renderWithSession(<BillingPage />, { me: { ...SUPER_ADMIN, permissions: ['kpm:list_all'] } });
+    expect(screen.getByRole('alert')).toHaveTextContent('Not available to you');
+    expect(calls).toEqual([]);
+  });
+  // In Indonesian — SA UI-015's own column names, and no *Tingkat Anda* — is `console-in-indonesian.spec.tsx`'s.
+});
+
+describe('P19.4-T3 AC-10 at a phone’s width and a laptop’s', () => {
+  // Changed 2026-11-06 (P19.2-T2 AC-1; UI-126: *no sideways scroll inside any /admin table or list at 375, 768, 1024 and
+  // 1280*): a phone draws rows, and the laptop's table takes the content's width — its 46rem minimum, which kept a phone's
+  // table scrolling inside its box, is gone. The box stays, for a cell that cannot wrap.
+  it.each([375, 1280])('P19.4-T3 AC-10 at %ipx the title is the console’s, and nothing scrolls sideways', async (px) => {
+    atWidth(px);
+    renderPage();
+    await screen.findByRole(px < 1024 ? 'list' : 'table', { name: 'Every KPM, its leaders, tier, plan and renewal' });
+    const titles = screen.getAllByRole('heading', { level: 1 });
+    expect(titles).toHaveLength(1);
+    // 20px on a phone like every /admin title (UI-138), the page header's own size from a laptop.
+    if (px < 768) expect(wears(titles[0], px)).toContain('text-title');
+    else expect(wears(titles[0], px)).toContain('font-display');
+    if (px >= 1024) {
+      expect(table().className).not.toMatch(/min-w-\[/);
+      expect(table().parentElement).toHaveClass('overflow-x-auto');
+    } else {
+      expect(screen.queryByRole('table')).toBeNull();
     }
+    expect(screen.getAllByRole('list')[0]).toHaveClass('grid-cols-[repeat(auto-fit,minmax(170px,1fr))]');
+  });
+});
 
-    it('replaces the editor with the quote, generated on the office’s today, the discounts hidden when none applies', async () => {
-      const quote = await generate();
+describe('the console', () => {
+  it('AC-4: “Billing & subscription” is the last item of the KPMs group, and it is current here', async () => {
+    stubFetch({ '/admin/billing/prices': { body: PRICES }, '/admin/billing/kpms': { body: ROWS }, '/notifications': { body: INBOX } });
+    renderInLayout(AdminLayout, <BillingPage />, { me: SUPER_ADMIN });
+    await screen.findByRole('table');
 
-      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-      expect(screen.getByText('Estimate your price')).not.toBeVisible();
-      expect(within(quote).getByRole('heading', { name: 'Subscription quote' })).toHaveFocus();
-      // The paper writes its dates as every screen does (ADR-0167 §1); the dialog's fields keep DD/MM/YYYY.
-      expect(quote).toHaveTextContent('Generated 8 Oct 2026');
-      for (const [label, value] of [
-        ['KPM', 'Jakarta Selatan'], ['Person in charge (PIC)', 'Andi Wijaya'], ['Plan start date', '15 Oct 2026'],
-        ['Plan end date', '14 Apr 2027'], ['Sales input by', 'Maya'],
-      ]) {
-        expect(within(quote).getByText(label).nextElementSibling).toHaveTextContent(value);
-      }
-      expect(within(quote).getByText('Plan details')).toBeInTheDocument();
-      expect(within(quote).getByText('Tier').nextElementSibling).toHaveTextContent('1–10 leaders');
-      expect(within(quote).getByText('Leaders on plan').nextElementSibling).toHaveTextContent('8');
-      expect(within(quote).getByText('Billing period').nextElementSibling).toHaveTextContent('6-month plan');
-      expect(within(quote).getByText('Standard price / leader / mo').nextElementSibling).toHaveTextContent('IDR 500,000');
-      expect(within(quote).getByText('Offering price / leader / mo').nextElementSibling).toHaveTextContent('IDR 400,000');
-      expect(within(quote).queryByText('Discounts')).not.toBeInTheDocument();
-      expect(within(quote).queryByText('Annual discount')).not.toBeInTheDocument();
-      expect(within(quote).getByText('Final price / leader / mo').nextElementSibling).toHaveTextContent('IDR 400,000');
-      expect(within(quote).getByText('Total')).toBeInTheDocument();
-      expect(within(quote).getByText('Monthly total (all leaders)').nextElementSibling).toHaveTextContent('IDR 3,200,000');
-      expect(within(quote).getByText('6-month total (all leaders)').nextElementSibling).toHaveTextContent('IDR 19,200,000');
-      expect(quote).toHaveTextContent(
-        "This quote is valid for the plan period shown above. Rate is locked for the duration of the subscription under AgencyBoost's launch pricing, valid for signups before Mar 2027.",
-      );
-    });
-
-    it('lists both discounts on an annual plan with a manual one, and the 13-leader case’s exact totals', async () => {
-      const quote = await generate(async () => {
-        await setLeaders('13');
-        await userEvent.click(screen.getByRole('button', { name: 'Annual' }));
-        await userEvent.click(screen.getByText('Manual override'));
-        await userEvent.clear(discount());
-        await userEvent.type(discount(), '7');
-      });
-
-      expect(within(quote).getByText('Discounts')).toBeInTheDocument();
-      expect(within(quote).getByText('Tier').nextElementSibling).toHaveTextContent('11–20 leaders');
-      expect(within(quote).getByText('Billing period').nextElementSibling).toHaveTextContent('Annual plan');
-      expect(within(quote).getByText('Annual discount').nextElementSibling).toHaveTextContent('-IDR 18,750/leader/mo');
-      expect(within(quote).getByText('Manual discount').nextElementSibling).toHaveTextContent('-IDR 24,937/leader/mo');
-      expect(within(quote).getByText('Final price / leader / mo').nextElementSibling).toHaveTextContent('IDR 331,313');
-      // 13 × IDR 331,313, exactly — the prototype printed IDR 4,307,063 (ADR-0111 §4).
-      expect(within(quote).getByText('Monthly total (all leaders)').nextElementSibling).toHaveTextContent('IDR 4,307,069');
-      expect(within(quote).getByText('Annual total (all leaders)').nextElementSibling).toHaveTextContent('IDR 51,684,828');
-    });
-
-    it('marks the 101+ tier custom on the quote', async () => {
-      const quote = await generate(() => setLeaders('120'));
-
-      expect(within(quote).getByText('Tier').nextElementSibling).toHaveTextContent('101+ leaders (custom)');
-    });
-
-    it('Back to editor returns to the calculator as it was', async () => {
-      await generate(async () => {
-        await setLeaders('15');
-        await userEvent.click(screen.getByRole('button', { name: 'Annual' }));
-      });
-
-      await userEvent.click(screen.getByRole('button', { name: 'Back to editor' }));
-
-      expect(screen.queryByRole('article')).not.toBeInTheDocument();
-      expect(screen.getByText('Estimate your price')).toBeVisible();
-      expect(leaders()).toHaveValue(15);
-      expect(screen.getByRole('button', { name: 'Annual' })).toHaveAttribute('aria-pressed', 'true');
-      // The focus goes back to the button that opened the dialog.
-      expect(screen.getByRole('button', { name: 'Send quote' })).toHaveFocus();
-    });
+    const nav = screen.getByRole('navigation', { name: 'Main' });
+    const link = within(nav).getByRole('link', { name: 'Billing & subscription' });
+    expect(link).toHaveAttribute('href', '/admin/billing');
+    expect(link).toHaveAttribute('aria-current', 'page');
   });
 
-  describe('AC-8: Print / save as PDF', () => {
-    it('prints the title, the launch line and the quote, and nothing else, under the quote’s name', async () => {
-      const print = vi.fn();
-      vi.stubGlobal('print', print);
-      renderPage();
-      await screen.findByText('Estimate your price');
-      await userEvent.click(screen.getByRole('button', { name: 'Send quote' }));
-      await fillDialog();
-      await userEvent.click(screen.getByRole('button', { name: 'Generate quote' }));
-      const before = document.title;
+  it('passes axe in the console, the strip and the list', async () => {
+    stubFetch({ '/admin/billing/prices': { body: PRICES }, '/admin/billing/kpms': { body: ROWS }, '/notifications': { body: INBOX } });
+    renderInLayout(AdminLayout, <BillingPage />, { me: SUPER_ADMIN });
+    await screen.findByRole('table');
+    const results = await axe(document.body, { rules: { 'color-contrast': { enabled: false } } });
+    expect((results.violations ?? []).map((v) => `${v.id} (${v.nodes.length})`)).toEqual([]);
+  });
+});
 
-      await userEvent.click(screen.getByRole('button', { name: 'Print / save as PDF' }));
-
-      expect(print).toHaveBeenCalledTimes(1);
-      expect(document.title).toBe('Subscription quote – Jakarta Selatan');
-      const paper = document.body.querySelector(':scope > [data-print-view]') as HTMLElement;
-      expect(paper).not.toBeNull();
-      // Off the screen, on the paper.
-      expect(paper).toHaveClass('hidden', 'print:block');
-      expect(paper).toHaveTextContent('Billing & subscription');
-      expect(paper).toHaveTextContent('Launch pricing — locked in for signups before Mar 2027.');
-      expect(paper).toHaveTextContent('Subscription quote');
-      expect(paper).toHaveTextContent('IDR 19,200,000');
-      expect(within(paper).queryAllByRole('button', { hidden: true })).toEqual([]);
-      // On the screen the two buttons are hidden from a print too.
-      expect(screen.getByRole('button', { name: 'Print / save as PDF' }).parentElement).toHaveClass('print:hidden');
-
-      act(() => {
-        window.dispatchEvent(new Event('afterprint'));
-      });
-      expect(document.body.querySelector(':scope > [data-print-view]')).toBeNull();
-      expect(document.title).toBe(before);
-    });
+/**
+ * **P19.2-T2 — the KPMs below 1024px** (UI-126, UI-134, UI-135): a row per KPM opening its *Billing* tab; the sort a pill,
+ * on the server as the headings sort; 44px targets. The laptop keeps its table.
+ */
+describe('P19.2-T2 Billing’s list below 1024px (UI-126, UI-134, UI-135)', () => {
+  it.each([375, 768])('P19.2-T2 AC-1 at %ipx a row per KPM: code · branch opening its Billing tab, the figures after their columns', async (px) => {
+    atWidth(px);
+    renderPage();
+    await screen.findByRole('list', { name: 'Every KPM, its leaders, tier, plan and renewal' });
+    expect(screen.queryByRole('table')).toBeNull();
+    const [bsd, bekasi, sudirman] = within(list()).getAllByRole('listitem');
+    expect(wears(bsd, px)).toContain('min-h-14');
+    expect(within(bsd).getByRole('link', { name: 'KPM 0417 · BSD City, billing' })).toHaveAttribute('href', '/admin/tenants/kpm-1?tab=billing');
+    expect(bsd).toHaveTextContent('0417 · BSD City');
+    expect(bsd).toHaveTextContent('Prudential');
+    expect(bsd).toHaveTextContent('Leaders 9 · Tier 1–10 · Plan Annual · Renewal 5 Jan 2027');
+    expect(within(bsd).getByText('Active')).toBeInTheDocument();
+    expect(within(bekasi).getByText('Ended — kept active')).toBeInTheDocument();
+    expect(sudirman).toHaveTextContent('Plan — · Renewal —');
   });
 
-  describe('AC-9: nothing is stored', () => {
-    it('makes one request, the prices read, through a whole quote and its print', async () => {
-      vi.stubGlobal('print', vi.fn());
-      const { calls } = renderPage();
-      await screen.findByText('Estimate your price');
-
-      await userEvent.click(screen.getByRole('button', { name: 'Annual' }));
-      await userEvent.click(screen.getByText('Manual override'));
-      await userEvent.clear(discount());
-      await userEvent.type(discount(), '5');
-      await userEvent.click(screen.getByRole('button', { name: 'Confirm plan' }));
-      await fillDialog();
-      await userEvent.click(screen.getByRole('button', { name: 'Generate quote' }));
-      await userEvent.click(screen.getByRole('button', { name: 'Print / save as PDF' }));
-      act(() => {
-        window.dispatchEvent(new Event('afterprint'));
-      });
-      await userEvent.click(screen.getByRole('button', { name: 'Back to editor' }));
-
-      expect(calls.map((c) => [c.init.method ?? 'GET', new URL(c.url).pathname])).toEqual([
-        ['GET', '/api/v1/admin/billing/prices'],
-      ]);
-    });
+  it.each([375, 768])('P19.2-T2 AC-4 at %ipx the sort is a pill: a column as its heading’s first press, again the other way', async (px) => {
+    atWidth(px);
+    const { calls } = renderPage();
+    await screen.findByRole('list', { name: 'Every KPM, its leaders, tier, plan and renewal' });
+    await userEvent.click(screen.getByRole('button', { name: 'Sort order: KPM ↑' }));
+    await userEvent.click(within(await screen.findByRole('dialog', { name: 'Choose sort order' })).getByRole('radio', { name: 'Renewal' }));
+    await waitFor(() => expect(kpmCalls(calls).at(-1)).toBe('?sort=renewal&dir=asc'));
+    await userEvent.click(await screen.findByRole('button', { name: 'Sort order: Renewal ↑' }));
+    await userEvent.click(within(await screen.findByRole('dialog', { name: 'Choose sort order' })).getByRole('radio', { name: 'Renewal ↑' }));
+    await waitFor(() => expect(kpmCalls(calls).at(-1)).toBe('?sort=renewal&dir=desc'));
   });
 
-  describe('AC-10: states', () => {
-    it('shows a skeleton while the prices are read, named for a screen reader', async () => {
-      renderPage();
-
-      expect(screen.getByRole('status')).toHaveTextContent('Loading prices…');
-      expect(await screen.findByText('Estimate your price')).toBeInTheDocument();
-      expect(screen.queryByRole('status')).not.toBeInTheDocument();
-    });
-
-    it('says the prices could not be read, prices nothing, and tries again', async () => {
-      const { calls } = renderPage({
-        '/admin/billing/prices': [
-          { status: 500, body: { error: { code: 'INTERNAL_ERROR', message: 'Something broke.', requestId: 'req-9' } } },
-          { body: PRICES },
-        ],
-      });
-
-      const alert = await screen.findByRole('alert');
-      expect(alert).toHaveTextContent("The prices couldn't be loaded, so nothing can be priced.");
-      expect(alert).toHaveTextContent('INTERNAL_ERROR · req-9');
-      expect(screen.queryByText('Estimate your price')).not.toBeInTheDocument();
-      expect(screen.queryByText(/Rp|IDR/)).not.toBeInTheDocument();
-      // The page's own title stays, so the reader knows where they are.
-      expect(screen.getByRole('heading', { level: 1, name: 'Billing & subscription' })).toBeInTheDocument();
-
-      await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
-
-      expect(await screen.findByText('Estimate your price')).toBeInTheDocument();
-      expect(calls).toHaveLength(2);
-    });
-
-    it('refuses a reader without the permission, and asks the API for nothing', () => {
-      const { calls } = stubFetch({ '/admin/billing/prices': { body: PRICES } });
-      renderWithSession(<BillingPage />, { me: { ...SUPER_ADMIN, permissions: ['kpm:list_all'] } });
-
-      expect(screen.getByRole('alert')).toHaveTextContent('Not available to you');
-      expect(screen.queryByText('Billing & subscription')).not.toBeInTheDocument();
-      expect(calls).toEqual([]);
-    });
+  it.each([1024, 1280])('P19.2-T2 AC-1 at %ipx keeps the table and its sortable headings, no sort pill', async (px) => {
+    atWidth(px);
+    renderPage();
+    expect(await screen.findByRole('table', { name: 'Every KPM, its leaders, tier, plan and renewal' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Sort order/ })).toBeNull();
   });
 
-  describe('the console', () => {
-    it('AC-4: “Billing & subscription” is the last item of the KPMs group, and it is current here', async () => {
-      stubFetch({ '/admin/billing/prices': { body: PRICES }, '/notifications': { body: INBOX } });
-      renderInLayout(AdminLayout, <BillingPage />, { me: SUPER_ADMIN });
-      await screen.findByText('Estimate your price');
-
-      const nav = screen.getByRole('navigation', { name: 'Main' });
-      const names = within(nav).getAllByRole('link').map((a) => a.textContent?.trim());
-      const kpms = names.indexOf('All KPMs');
-      // P18.8-T2 (ADR-0157): the second queue of the group, *Leaders past the limit*, sits beside the first.
-      expect(names.slice(kpms, kpms + 4)).toEqual([
-        'All KPMs', 'Pending KPM requests', 'Leaders past the limit', 'Billing & subscription',
-      ]);
-      expect(names[kpms + 4]).toBe('KPM Owners & Admins');
-      const link = within(nav).getByRole('link', { name: 'Billing & subscription' });
-      expect(link).toHaveAttribute('href', '/admin/billing');
-      expect(link).toHaveAttribute('aria-current', 'page');
-    });
-
-    it('AC-11: the cards wrap rather than scroll — a grid of columns at least 170px wide, as many as fit', async () => {
-      renderPage();
-      await screen.findByText('Estimate your price');
-
-      expect(screen.getAllByRole('list')[0]).toHaveClass('grid-cols-[repeat(auto-fit,minmax(170px,1fr))]');
-    });
+  it.each([375, 768])('P19.2-T2 AC-5 at %ipx finds no target under 44px in main', async (px) => {
+    atWidth(px);
+    stubFetch({ '/admin/billing/prices': { body: PRICES }, '/admin/billing/kpms': { body: ROWS }, '/notifications': { body: INBOX } });
+    renderInLayout(AdminLayout, <BillingPage />, { me: SUPER_ADMIN });
+    await screen.findByRole('list', { name: 'Every KPM, its leaders, tier, plan and renewal' });
+    expect(smallTargets(document.querySelector('main')!, px)).toEqual([]);
   });
 
-  describe('accessibility (WCAG 2.1 AA, axe)', () => {
-    /** Contrast is checked from the tokens in `a11y.spec.tsx`: jsdom cannot sample rendered pixels. */
-    async function expectClean(name: string) {
-      const results = await axe(document.body, { rules: { 'color-contrast': { enabled: false } } });
-      const violations = results.violations ?? [];
-      expect(violations.map((v) => `${name}: ${v.id} (${v.nodes.length})`)).toEqual([]);
-    }
-
-    it('the editor, the dialog with its refusals, and the quote pass, in the console', async () => {
-      stubFetch({ '/admin/billing/prices': { body: PRICES }, '/notifications': { body: INBOX } });
-      renderInLayout(AdminLayout, <BillingPage />, { me: SUPER_ADMIN });
-      await screen.findByText('Estimate your price');
-      await userEvent.click(screen.getByText('Manual override'));
-      await expectClean('the editor');
-
-      await userEvent.click(screen.getByRole('button', { name: 'Send quote' }));
-      await userEvent.click(screen.getByRole('button', { name: 'Generate quote' }));
-      await expectClean('the dialog, refused');
-
-      await fillDialog();
-      await userEvent.click(screen.getByRole('button', { name: 'Generate quote' }));
-      await expectClean('the quote');
-    });
+  it.each([375, 1280])('P19.2-T2 AC-1 at %ipx has no axe violations', async (px) => {
+    atWidth(px);
+    stubFetch({ '/admin/billing/prices': { body: PRICES }, '/admin/billing/kpms': { body: ROWS }, '/notifications': { body: INBOX } });
+    renderInLayout(AdminLayout, <BillingPage />, { me: SUPER_ADMIN });
+    await screen.findByText(/BSD City/);
+    const results = await axe(document.body, { rules: { 'color-contrast': { enabled: false }, region: { enabled: false } } });
+    expect(results.violations).toEqual([]);
   });
 });

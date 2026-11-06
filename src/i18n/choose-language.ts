@@ -6,13 +6,13 @@ import { SessionContext } from '@/lib/session';
 import type { Language } from './language';
 import { useLanguageChoice } from './language-provider';
 
-/** **Saves the reader's language on their account**: `PATCH /auth/me` with `locale` alone (P18.98-T2 AC-1). */
+/** **Saves the reader's language on their account**: `PATCH /auth/me` with `locale` alone (P18.10-T2 AC-1). */
 export async function saveAccountLanguage(language: Language): Promise<void> {
   await api('/auth/me', { method: 'PATCH', body: { locale: language } });
 }
 
 /**
- * **Choosing a language, as the switch and *Your account* do** (ADR-0179 §2; P18.98-T2 AC-2, AC-3, AC-4).
+ * **Choosing a language, as the switch and *Your account* do** (ADR-0179 §2; P18.10-T2 AC-2, AC-3, AC-4).
  *
  * The screen changes at once and the browser keeps it (`choose`: the cookie, the API's next request). Then, **signed in
  * and not in a support session**, the account is told too, so the choice follows the person to every device. Answers

@@ -20,7 +20,7 @@ import EventsPage from './page';
 import EventModalPage from './[eventId]/page';
 
 /**
- * **The agents' *Event List* in Indonesian** (P18.98-T4 AC-1 to AC-4, events, campaigns and the calendar): the list —
+ * **The agents' *Event List* in Indonesian** (P18.10-T4 AC-1 to AC-4, events, campaigns and the calendar): the list —
  * its line, filter, sections, cards with their audience line, pill and *Join* — an event's modal with its RSVP, a past
  * event's feedback form, didn't-join block and thanks, and the toasts. Their words the approved glossary's, each kept term
  * English (§A: the title, *event*, *KPM*, *{company} Event*), what the office typed as typed, and none of the module's
@@ -57,15 +57,16 @@ function modal(event: GuestEvent, routes: Routes = {}) {
 
 afterEach(() => vi.unstubAllGlobals());
 
-describe('P18.98-T4 the Event List in Indonesian', () => {
+describe('P18.10-T4 the Event List in Indonesian', () => {
   it('reads the English it is looking for, so a silent zero cannot pass: the same list in English shows it', async () => {
     expect(EVENTS_ENGLISH.length).toBeGreaterThan(40);
     list({}, 'en');
     await screen.findByRole('heading', { level: 3, name: 'Kickoff 2026' });
-    expect(englishShown(document.body, EVENTS_ENGLISH)).toEqual(expect.arrayContaining(['Going', 'View event', 'Show events']));
+    // The compact card's words since P19.1-T5 (UI-123: UI-108's card at every size), where *Going* and *View event* were.
+    expect(englishShown(document.body, EVENTS_ENGLISH)).toEqual(expect.arrayContaining(['Upcoming', 'Not going', 'Show events']));
   });
 
-  it('P18.98-T4 AC-1, AC-2 the list: its title kept, its line, filter, sections, pills and Join Indonesian', async () => {
+  it('P18.10-T4 AC-1, AC-2, P19.1-T5 AC-4 the list: its title kept, its line, filter, groups, pills and Ikut Indonesian', async () => {
     list();
     await screen.findByRole('heading', { level: 3, name: 'Kickoff 2026' });
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Event List$/);
@@ -73,46 +74,52 @@ describe('P18.98-T4 the Event List in Indonesian', () => {
       .toBeInTheDocument();
     const filter = screen.getByRole('group', { name: 'Tampilkan event' });
     expect(within(filter).getAllByRole('button').map((b) => b.textContent)).toEqual(['Semua', 'Akan datang', 'Sudah lewat']);
-    for (const name of ['Ikut', 'Akan datang', 'Sudah lewat']) expect(screen.getByRole('heading', { level: 2, name })).toBeInTheDocument();
+    // Two groups in sentence case with their counts (UI-108 at every size since P19.1-T5): no *IKUT* section.
+    for (const name of ['Akan datang', 'Sudah lewat']) expect(screen.getByRole('region', { name })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Ikut' })).not.toBeInTheDocument();
     const kickoff = screen.getByRole('heading', { level: 3, name: 'Kickoff 2026' }).closest<HTMLElement>('[data-event]')!;
     // The audience line: the issuer kept (*KPM*), the scope Indonesian; the company's own event, *{company} Event* (§C5).
     expect(within(kickoff).getByText('KPM | Semua agent')).toBeInTheDocument();
     const refresh = screen.getByRole('heading', { level: 3, name: 'Product refresh briefing' }).closest<HTMLElement>('[data-event]')!;
     expect(within(refresh).getByText('Prudential Event | Semua agent')).toBeInTheDocument();
     // A figure in Indonesian: the reader chose it (`InLanguage`).
-    expect(within(refresh).getByText(/15 Okt 2026, 14\.00/)).toBeInTheDocument();
-    expect(within(kickoff).getByRole('button', { name: 'Ikut Kickoff 2026' })).toHaveTextContent('Ikut');
-    expect(within(kickoff).getByText('Belum ikut')).toBeInTheDocument();
-    expect(within(kickoff).getByRole('button', { name: 'Lihat event' })).toBeInTheDocument();
-    // Typed content as typed: the title, the line, the place.
-    expect(within(kickoff).getByText("ev-kickoff's line.")).toBeInTheDocument();
-    for (const pill of ['Feedback belum dikirim', 'Tidak ikut', 'Feedback terkirim']) expect(screen.getByText(pill)).toBeInTheDocument();
+    expect(refresh).toHaveTextContent('15Okt');
+    expect(refresh).toHaveTextContent('14.00 – 16.00');
+    const answer = within(kickoff).getByRole('group', { name: 'Jawaban Anda untuk Kickoff 2026' });
+    expect(within(answer).getAllByRole('button').map((b) => b.textContent)).toEqual(['Ikut', 'Tidak ikut']);
+    // Typed content as typed: the title, the place.
+    expect(kickoff).toHaveTextContent('BSD City Branch');
+    for (const pill of ['Feedback belum dikirim', 'Tidak ikut', 'Feedback terkirim']) {
+      expect(screen.getByText(pill, { selector: '[data-tone]' })).toBeInTheDocument();
+    }
     noEnglishLeft();
   });
 
-  it('P18.98-T4 AC-1 the empty sections, in Indonesian', async () => {
+  it('P18.10-T4 AC-1, P19.1-T5 AC-5 the empty list, in Indonesian: one line, never the empty IKUT section', async () => {
     list({ 'GET /events': { body: eventList([]) } });
-    expect(await screen.findByText('Anda belum ikut event yang akan datang.')).toBeInTheDocument();
-    expect(screen.getByText('Belum ada event yang akan datang saat ini.')).toBeInTheDocument();
-    expect(screen.getByText('Belum ada event yang sudah lewat.')).toBeInTheDocument();
+    expect(await screen.findByText('Belum ada event yang akan datang saat ini.')).toBeInTheDocument();
+    expect(screen.queryByText('Anda belum ikut event yang akan datang.')).not.toBeInTheDocument();
+    expect(screen.queryByText('Belum ada event yang sudah lewat.')).not.toBeInTheDocument();
     noEnglishLeft();
   });
 
-  it('P18.98-T4 AC-1 Join from the card: the shared confirmation and the event, both in Indonesian', async () => {
+  it('P18.10-T4 AC-1 Join from the card: the shared confirmation and the event, both in Indonesian', async () => {
     list({ 'POST /events/ev-kickoff/rsvp': { body: { ...KICKOFF, me: { rsvp: 'going', claimed: false, feedback: null } } } });
-    await userEvent.click(await screen.findByRole('button', { name: 'Ikut Kickoff 2026' }));
+    const answer = await screen.findByRole('group', { name: 'Jawaban Anda untuk Kickoff 2026' });
+    await userEvent.click(within(answer).getByRole('button', { name: 'Ikut' }));
     expect(await screen.findByText('Berhasil bergabung ✓ — Anda ikut Kickoff 2026')).toBeInTheDocument();
   });
 
-  it('P18.98-T4 AC-1 a refusal the screen words itself, in Indonesian; the server’s own as it came', async () => {
+  it('P18.10-T4 AC-1 a refusal the screen words itself, in Indonesian; the server’s own as it came', async () => {
     list({ 'POST /events/ev-kickoff/rsvp': conflict('EVENT_RSVP_CLOSED', 'Event ini sudah berakhir, jadi RSVP-nya ditutup.') });
-    await userEvent.click(await screen.findByRole('button', { name: 'Ikut Kickoff 2026' }));
+    const answer = await screen.findByRole('group', { name: 'Jawaban Anda untuk Kickoff 2026' });
+    await userEvent.click(within(answer).getByRole('button', { name: 'Ikut' }));
     expect(await screen.findByText('Event ini sudah berakhir.')).toBeInTheDocument();
   });
 });
 
-describe('P18.98-T4 an event’s modal in Indonesian', () => {
-  it('P18.98-T4 AC-1 to AC-4 an upcoming event: the tag, audience, date and time, place, and Join event', async () => {
+describe('P18.10-T4 an event’s modal in Indonesian', () => {
+  it('P18.10-T4 AC-1 to AC-4 an upcoming event: the tag, audience, date and time, place, and Join event', async () => {
     modal(KICKOFF);
     const box = await screen.findByRole('dialog', { name: 'Kickoff 2026' });
     expect(within(box).getByText('Belum ikut')).toBeInTheDocument();
@@ -124,7 +131,7 @@ describe('P18.98-T4 an event’s modal in Indonesian', () => {
     noEnglishLeft();
   });
 
-  it('P18.98-T4 AC-1 going: Anda ikut and Batalkan RSVP, the place a link that says it opens a new tab', async () => {
+  it('P18.10-T4 AC-1 going: Anda ikut and Batalkan RSVP, the place a link that says it opens a new tab', async () => {
     modal(PRODUCT_REFRESH);
     const box = await screen.findByRole('dialog', { name: 'Product refresh briefing' });
     expect(within(box).getByText('Anda ikut')).toBeInTheDocument();
@@ -133,7 +140,7 @@ describe('P18.98-T4 an event’s modal in Indonesian', () => {
     noEnglishLeft();
   });
 
-  it('P18.98-T4 AC-1 the feedback form: its question, scale, fields and the toast without a score', async () => {
+  it('P18.10-T4 AC-1 the feedback form: its question, scale, fields and the toast without a score', async () => {
     modal(PRULINK);
     const box = await screen.findByRole('dialog', { name: 'PRULink briefing' });
     expect(within(box).getByRole('radiogroup', {
@@ -148,7 +155,7 @@ describe('P18.98-T4 an event’s modal in Indonesian', () => {
     noEnglishLeft();
   });
 
-  it('P18.98-T4 AC-1 the didn’t-join block and its claim, and the thanks with the member’s own words as typed', async () => {
+  it('P18.10-T4 AC-1 the didn’t-join block and its claim, and the thanks with the member’s own words as typed', async () => {
     modal(TOWN_HALL);
     const box = await screen.findByRole('dialog', { name: 'August Town Hall' });
     expect(within(box).getByText('Anda tidak ikut event ini')).toBeInTheDocument();
@@ -156,7 +163,7 @@ describe('P18.98-T4 an event’s modal in Indonesian', () => {
     noEnglishLeft();
   });
 
-  it('P18.98-T4 AC-4 the thanks: the score and the member’s why, as typed', async () => {
+  it('P18.10-T4 AC-4 the thanks: the score and the member’s why, as typed', async () => {
     modal(BOOTCAMP);
     const box = await screen.findByRole('dialog', { name: 'New Agent Bootcamp' });
     expect(within(box).getByText('Terima kasih atas feedback Anda')).toBeInTheDocument();
@@ -164,7 +171,7 @@ describe('P18.98-T4 an event’s modal in Indonesian', () => {
     noEnglishLeft();
   });
 
-  it('P18.98-T4 AC-1 the not-found state, in Indonesian', async () => {
+  it('P18.10-T4 AC-1 the not-found state, in Indonesian', async () => {
     modal(KICKOFF, { 'GET /events/ev-kickoff': { status: 404, body: { error: { code: 'NOT_FOUND', message: 'x', requestId: 'r' } } } });
     expect(await screen.findByText('Event ini tidak dapat Anda buka.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Kembali ke daftar event' })).toBeInTheDocument();
@@ -172,7 +179,7 @@ describe('P18.98-T4 an event’s modal in Indonesian', () => {
   });
 });
 
-describe('P18.98-T4 lib/events.ts in each language', () => {
+describe('P18.10-T4 lib/events.ts in each language', () => {
   it('writes its sentences in the language passed, English when none is', () => {
     expect(goingToast('Kickoff', 'id')).toBe('Berhasil bergabung ✓ — Anda ikut Kickoff');
     expect(goingToast('Kickoff')).toBe('Joined ✓ — you\'re going to Kickoff');

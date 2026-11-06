@@ -14,7 +14,7 @@ import ActivityIndex from './page';
 import ActivityRatioPage from './ratio/page';
 
 /**
- * **Activity Management in ID mode** (P18.98-T4 AC-1 to AC-4, field selling): *Log Activity*, the *Dashboard* (and its
+ * **Activity Management in ID mode** (P18.10-T4 AC-1 to AC-4, field selling): *Log Activity*, the *Dashboard* (and its
  * body as a coachee's *Activity* tab draws it), the *Ratio* tab and `/activity`'s hand-off — in the approved glossary's
  * Indonesian, the title, the nav item and the three tabs English (§A), what the office typed as typed, the figures
  * Indonesian, and no English message of the module's own left on the screen (`englishShown`). English is each
@@ -85,21 +85,29 @@ const renderLog = () => {
   renderInIndonesian(<AgentLayout><LogActivityPage /></AgentLayout>, { me: AGENT });
 };
 
-describe('P18.98-T4 Log Activity in Indonesian', () => {
+describe('P18.10-T4 Log Activity in Indonesian', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('AC-2 says the day in Indonesian, the title and the three tabs English, the office’s items as typed', async () => {
+  /*
+   * *Changed 2026-11-04 (P19.1-T1 AC-1, AC-2; UI-112, UI-113):* from 768px the phone's log — *Activity*, the date pill and
+   * *Hari ini: n aktivitas* in one row, no *Tanggal* label, no strip, the save state in the bar.
+   */
+  it('AC-2, P19.1-T1 AC-1 says the day in Indonesian, the title and the three tabs English, the office’s items as typed', async () => {
     stubFetch(logRoutes());
     renderLog();
     await screen.findByText('Melakukan aktivitas leads generation');
 
-    expect(screen.getByRole('heading', { name: 'Activity Management', level: 1 })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Activity', level: 1 })).toBeInTheDocument();
     const tabs = screen.getByRole('navigation', { name: 'Activity management' });
     expect(within(tabs).getAllByRole('link').map((a) => a.textContent)).toEqual(['Log Activity', 'Dashboard', 'Ratio']);
-    expect(screen.getByText('Catat aktivitas hari ini dalam 1 menit.')).toBeInTheDocument();
-    expect(screen.getByLabelText('Tanggal')).toBeInTheDocument();
-    expect(screen.getByText('Tersimpan · 3 aktivitas')).toBeInTheDocument();
-    expect(screen.getByText(/^Total aktivitas hari ini/)).toBeInTheDocument();
+    // The sub-line is in the page, its words Indonesian, and drawn at no size (UI-112; P18.7-T7 AC-1 on a phone).
+    expect(screen.getByText('Catat aktivitas hari ini dalam 1 menit.')).toHaveClass('max-md:hidden', 'md:hidden');
+    expect(screen.queryByLabelText('Tanggal')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Pilih hari')).toBeInTheDocument();
+    const line = screen.getByText((_, el) => el?.tagName === 'P' && /^Hari ini: 3 aktivitas/.test(el.textContent ?? ''));
+    expect(line.closest('[data-control-row]')).not.toBeNull();
+    expect(document.querySelector('[data-action-bar]')).toHaveTextContent('Tersimpan ✓');
+    expect(screen.queryByText(/^Total aktivitas hari ini/)).not.toBeInTheDocument();
     expect(document.body).not.toHaveTextContent(/sentuhan/);
     expect(screen.getByText('2 item')).toBeInTheDocument();
     expect(screen.getByText('1 item')).toBeInTheDocument();
@@ -116,12 +124,10 @@ describe('P18.98-T4 Log Activity in Indonesian', () => {
     renderLog();
     await screen.findByText('Melakukan aktivitas leads generation');
 
-    // The stepper's own controls are the shared `Stepper`'s; its last button adds one.
+    // The row's own − n +; its last button adds one. The date pill's ‹ goes to the day before (P19.1-T1 AC-1).
     const stepper = screen.getByRole('group', { name: 'Submission polis' });
     await userEvent.click(within(stepper).getAllByRole('button').at(-1)!);
-    const date = screen.getByLabelText('Tanggal');
-    await userEvent.clear(date);
-    await userEvent.type(date, '2026-10-27');
+    await userEvent.click(screen.getByRole('button', { name: 'Hari sebelumnya' }));
 
     const dialog = within(await screen.findByRole('dialog'));
     expect(dialog.getByText('Ada jumlah yang belum disimpan untuk hari tersebut. Buang dan buka hari lain?'))
@@ -254,7 +260,7 @@ const renderDashboard = () => renderInIndonesian(
   <TenantConfigProvider><ActivityDashboardPage /></TenantConfigProvider>, { me: AGENT },
 );
 
-describe('P18.98-T4 the Activity Dashboard in Indonesian', () => {
+describe('P18.10-T4 the Activity Dashboard in Indonesian', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it('AC-2 says the range, the strip and the table in Indonesian, the weekdays and the days in Indonesian figures', async () => {
@@ -336,7 +342,7 @@ describe('P18.98-T4 the Activity Dashboard in Indonesian', () => {
 
     expect(within(screen.getByRole('group', { name: 'Rentang' })).getAllByRole('button').map((b) => b.textContent))
       .toEqual(['7 hari', '30 hari', 'Kustom']);
-    expect(screen.getByText('Total aktivitas').parentElement).toHaveClass('bg-navy');
+    expect(screen.getByText('Total aktivitas').parentElement).toHaveClass('bg-secondary');
     expect(screen.getByRole('group', { name: 'Total per kelompok' })).toBeInTheDocument();
     const line = within(cards).getAllByRole('button')[0];
     expect(line).toHaveTextContent('Menghubungi prospek12');
@@ -374,7 +380,7 @@ const renderRatio = (body: unknown) => {
   renderInIndonesian(<ActivityRatioPage />, { me: AGENT });
 };
 
-describe('P18.98-T4 the Ratio tab in Indonesian (UI V1, UI-106: the shared card)', () => {
+describe('P18.10-T4 the Ratio tab in Indonesian (UI V1, UI-106: the shared card)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it('AC-2, UI-106 says the card and a rate in Indonesian, its figure and target in Indonesian figures, the office’s words as typed', async () => {
@@ -408,7 +414,7 @@ describe('P18.98-T4 the Ratio tab in Indonesian (UI V1, UI-106: the shared card)
   });
 });
 
-describe('P18.98-T4 /activity hands off in Indonesian', () => {
+describe('P18.10-T4 /activity hands off in Indonesian', () => {
   it('names where it is taking the reader, the tab kept English', () => {
     renderInIndonesian(<ActivityIndex />, { me: AGENT });
     expect(screen.getByRole('status')).toHaveTextContent('Membuka Log Activity…');

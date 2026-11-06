@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import AgentLayout from '@/app/(agent)/layout';
 import { FLOATING_BAR_ROOM } from '@/components/ui/floating-bar';
 import { PHONE_QUERY } from '@/lib/use-phone';
-import { makeMe, renderInLayout, stubFetch } from '@test/harness';
+import { makeMe, renderInLayout, stubFetch, wears } from '@test/harness';
 import LogActivityPage from './page';
 
 vi.mock('next/navigation', () => ({
@@ -95,29 +95,33 @@ const SEEDED = [
   }],
 }));
 
-/** The save status under the date (`SaveStatus`), whatever else on the page is a live region. */
-/** The status under the date's `Field` — the field's own box, since P18.96-T2, sits inside the shared DateField. */
-const saveStatus = () => screen.getByLabelText('Date').closest('div')!.nextElementSibling!;
+/**
+ * **The save state, the bar's at every size** (P19.1-T1 AC-1, AC-2): *Saved ✓* or *Not saved yet* in the floating pill.
+ * Until P19.1-T1 it was stacked under the date field from 768px, *Saved · 3 activities*.
+ */
+const saveStatus = () => document.querySelector('[data-action-bar] [role="status"]')!;
+
+/** The day's saved count beside the date pill: *Today: 3 activities*, or another day named. */
+const dayCount = () => screen.getByRole('button', { name: 'What is an activity?' }).closest('p')!;
+
+/** The day the date pill shows, and the field behind it. */
+const dayField = () => screen.getByLabelText('Choose the day');
 
 /** The shell's toast region: the status region that is neither the save status nor a skeleton. */
 const toastText = () => screen.queryAllByRole('status').map((r) => r.textContent).join(' | ');
 
-/** The strip's tiles, label and value each, read off the page. */
-function strip() {
-  const row = screen.getByText(/^Total activities/).closest('[data-total]')!.parentElement!;
-  // A tile's label without the ⓘ the total carries (P18.95-T9 AC-3), which `touchTip` asserts on its own.
-  return [...row.children].map((tile) => [tile.children[0].textContent!.replace(/ ⓘ.*$/, ''), tile.children[1].textContent]);
-}
-
 describe('Log activity (P6-T2)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('P18.95-T7 AC-1 keeps the sub-line from 768px and draws it nowhere on a phone, loading or not (grey text row 25)', async () => {
+  /*
+   * *Changed 2026-11-04 (P19.1-T1 AC-1; UI-112):* the sub-line is drawn at no size — it showed from 768px.
+   */
+  it('P18.7-T7 AC-1, P19.1-T1 AC-1 draws the sub-line at no size, loading or not (grey text row 25; UI-112)', async () => {
     stubFetch({ ...base, '/activity/log': { body: day() } });
     renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
-    expect(screen.getByText("Enter today's activities in 1 minute.")).toHaveClass('max-md:hidden');
+    expect(screen.getByText("Enter today's activities in 1 minute.")).toHaveClass('max-md:hidden', 'md:hidden');
     await screen.findByRole('heading', { name: 'Leads' });
-    expect(screen.getByText("Enter today's activities in 1 minute.")).toHaveClass('max-md:hidden');
+    expect(screen.getByText("Enter today's activities in 1 minute.")).toHaveClass('max-md:hidden', 'md:hidden');
   });
 
   it('renders the office’s own sections and types, not a hardcoded twelve', async () => {
@@ -177,7 +181,8 @@ describe('Log activity (P6-T2)', () => {
     stubFetch({ ...base, '/activity/log': { body: day({ localDate: '2026-03-11' }) } });
     renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
 
-    expect(await screen.findByLabelText('Date')).toHaveValue('2026-03-11');
+    await screen.findByRole('heading', { name: 'Leads' });
+    expect(dayField()).toHaveValue('2026-03-11');
   });
 
   it('sends the whole day, keyed by code', async () => {
@@ -403,7 +408,7 @@ describe('Log activity (P6-T2)', () => {
     expect(await screen.findByRole('heading', { name: 'Selling' })).toBeInTheDocument();
   });
 
-  it('AC-10: says what to do when the office has no activity types yet, and draws no strip', async () => {
+  it('AC-10: says what to do when the office has no activity types yet, and draws no count', async () => {
     stubFetch({
       ...base,
       '/kpm/config': { body: { activity: [], ratios: [], leadPipelines: [], version: 1 } },
@@ -413,6 +418,7 @@ describe('Log activity (P6-T2)', () => {
 
     expect(await screen.findByText(/has not set up its activity types yet/)).toBeInTheDocument();
     expect(screen.queryByText('Total activities today')).toBeNull();
+    expect(screen.queryByText(/^Today:/)).toBeNull();
   });
 
   it('shows the server’s refusal rather than swallowing it', async () => {
@@ -438,104 +444,76 @@ describe('Log activity (P6-T2)', () => {
     expect(within(tabs).getByRole('link', { name: 'Log Activity' })).toHaveAttribute('aria-current', 'page');
   });
 
-  it('AC-4: counts each tile and totals the day, live as you step', async () => {
+  /*
+   * **Was AC-4** — *counts each tile and totals the day, live as you step*. Since P19.1-T1 (UI-113,
+   * `activity-tablet-desktop`) a tablet and a laptop draw the phone's log: the day as saved beside the date pill, and the
+   * taps not yet saved counted in the bar.
+   */
+  it('P19.1-T1 AC-2 counts the day as saved beside the date, and the new taps in the bar, live as you step', async () => {
     stubFetch({ ...base, '/activity/log': { body: day() } });
     renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
 
-    // Neither section names a tile, so each has its own. Leads: 0 + 2. Selling: 1. Total: 3.
     await screen.findByRole('heading', { name: 'Leads' });
-    expect(strip()).toEqual([['Leads', '2'], ['Selling', '1'], ['Total activities today', '3']]);
-
+    expect(dayCount()).toHaveTextContent('Today: 3 activities');
     await userEvent.click(screen.getByLabelText('Increase Submission polis'));
-    expect(strip()).toEqual([['Leads', '2'], ['Selling', '2'], ['Total activities today', '4']]);
+    expect(dayCount()).toHaveTextContent('Today: 3 activities');
+    const bar = document.querySelector('[data-action-bar]')!;
+    expect(bar).toHaveTextContent('Not saved yet');
+    expect(bar).toHaveTextContent('1 new activity');
   });
 
   /*
-   * **Was P10.1-T5 AC-3, AC-4** — *the strip is the prototype's, grouped by the office*: the seed's Personal and
-   * Team Development were one *Development* tile over two cards. The client asked for the tiles to be the groups
-   * (2026-10-26, UI-017), so the log draws one tile per section; the office's grouping is the Dashboard's alone.
+   * **Was P10.1-T5 AC-3, AC-4** — *the strip is the prototype's, grouped by the office* — and **P18.7-T5 AC-2**, *the
+   * tiles are the sections below them, one each*. Since P19.1-T1 (UI-113, `activity-tablet-desktop`) a tablet and a
+   * laptop draw no strip: the phone's cards, in two columns, are the groups.
    */
-  describe('P18.95-T5 AC-2: the tiles are the sections below them, one each', () => {
+  describe('P19.1-T1 AC-2: the groups in two columns from 768px, the phone’s cards', () => {
     const seededDay = day({
       entries: SEEDED.map((c, i) => ({
         activityTypeId: `t${i}`, activityTypeCode: c.types[0].code, label: c.types[0].label, count: i + 1,
       })),
       totalCount: 15,
     });
+    const seeded = (activity: unknown) => stubFetch({
+      ...base,
+      '/kpm/config': { body: { activity, ratios: [], leadPipelines: [], version: 1 } },
+      '/activity/log': { body: seededDay },
+    });
 
-    it('P18.95-T5 AC-2: the seed draws its five sections and the total — Personal and Team Development each', async () => {
-      stubFetch({
-        ...base,
-        '/kpm/config': { body: { activity: SEEDED, ratios: [], leadPipelines: [], version: 1 } },
-        '/activity/log': { body: seededDay },
-      });
+    it('P19.1-T1 AC-2 the seed’s five groups fill two columns, down the first and then the second, each card whole', async () => {
+      seeded(SEEDED);
       renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
       await screen.findByRole('heading', { name: 'Team Development' });
-
-      // The seed still groups the two as *Development* (ADR-0064); the log no longer reads it.
-      expect(strip()).toEqual([
-        ['Leads Generation', '1'], ['Selling', '2'], ['Recruitment', '3'], ['Personal Development', '4'],
-        ['Team Development', '5'], ['Total activities today', '15'],
+      const flow = document.querySelector('[data-column-flow]')!;
+      expect(flow.className).toContain('md:columns-2');
+      const cards = Array.from(flow.querySelectorAll('section[data-phone-section]'));
+      expect(cards.map((c) => c.querySelector('h2')!.textContent)).toEqual([
+        'Leads Generation', 'Selling', 'Recruitment', 'Personal Development', 'Team Development',
       ]);
-      // One tile per card, in the cards' order.
-      const cards = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent);
-      expect(cards).toEqual(strip().slice(0, -1).map(([label]) => label));
+      // The phone's card; the column's gap stands in for its 8px above, so the two columns' tops line up.
+      for (const card of cards) expect(card).toHaveClass('mt-0', 'rounded-lg', 'bg-card');
+      for (const wrapper of Array.from(flow.children)) expect(wrapper.className).toContain('md:break-inside-avoid');
+      // No strip of tiles from 768px (the approved mockup draws none).
+      expect(screen.queryByText('Total activities today')).not.toBeInTheDocument();
     });
 
-    it('P18.95-T5 AC-2: one list for both — a section reordered moves its card and its tile together', async () => {
-      const reordered = SEEDED.map((c) => (c.code === 'TEAM_DEVELOPMENT' ? { ...c, displayOrder: 0 } : c));
-      stubFetch({
-        ...base,
-        '/kpm/config': { body: { activity: reordered, ratios: [], leadPipelines: [], version: 1 } },
-        '/activity/log': { body: seededDay },
-      });
+    it('P18.7-T5 AC-2 a section reordered moves its card', async () => {
+      seeded(SEEDED.map((c) => (c.code === 'TEAM_DEVELOPMENT' ? { ...c, displayOrder: 0 } : c)));
       renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
       await screen.findByRole('heading', { name: 'Team Development' });
-
-      const cards = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent);
-      expect(cards[0]).toBe('Team Development');
-      expect(cards).toEqual(strip().slice(0, -1).map(([label]) => label));
+      expect(screen.getAllByRole('heading', { level: 2 })[0]).toHaveTextContent('Team Development');
     });
 
-    it('AC-3: the total is a white card whose number is amber-deep, with no tint (F-71)', async () => {
-      stubFetch({
-        ...base,
-        '/kpm/config': { body: { activity: SEEDED, ratios: [], leadPipelines: [], version: 1 } },
-        '/activity/log': { body: seededDay },
-      });
-      renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
-      await screen.findByRole('heading', { name: 'Team Development' });
-
-      const total = screen.getByText('Total activities today').closest('[data-total]')!;
-      expect(total).toHaveClass('bg-card', 'rounded-lg');
-      expect(total.className).not.toMatch(/amber/);
-      expect(total.children[1]).toHaveClass('text-amber-deep', 'text-2xl');
-      const plain = screen.getByText('Selling', { selector: 'span' }).parentElement!;
-      expect(plain).toHaveClass('bg-card');
-      expect(plain.children[1]).toHaveClass('text-navy');
-    });
-
-    it('P18.95-T5 AC-2: a section hidden from this rung has no card and no tile', async () => {
-      const narrowed = SEEDED.map((c) => (c.code === 'TEAM_DEVELOPMENT'
-        ? { ...c, appliesToOrgLevelCodes: ['AB'] }
-        : c));
-      stubFetch({
-        ...base,
-        '/kpm/config': { body: { activity: narrowed, ratios: [], leadPipelines: [], version: 1 } },
-        '/activity/log': { body: seededDay },
-      });
+    it('P18.7-T5 AC-2 a section hidden from this rung has no card', async () => {
+      seeded(SEEDED.map((c) => (c.code === 'TEAM_DEVELOPMENT' ? { ...c, appliesToOrgLevelCodes: ['AB'] } : c)));
       renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
       await screen.findByRole('heading', { name: 'Personal Development' });
-
       expect(screen.queryByRole('heading', { name: 'Team Development' })).not.toBeInTheDocument();
-      expect(strip().map(([label]) => label)).toEqual([
-        'Leads Generation', 'Selling', 'Recruitment', 'Personal Development', 'Total activities today',
-      ]);
     });
   });
 
   /*
-   * **Was P18.95-T5 AC-1** — *on a phone, one line and a bar fixed to the bottom*. UI V1 redraws the phone (UI-106, D-03):
+   * **Was P18.7-T5 AC-1** — *on a phone, one line and a bar fixed to the bottom*. UI V1 redraws the phone (UI-106, D-03):
    * the segmented views, the date pill with the day's saved count, a row per activity with − n + beside its name, and
    * the save bar held above the tab bar. From 768px nothing changes.
    */
@@ -614,7 +592,7 @@ describe('Log activity (P6-T2)', () => {
       const save = screen.getByRole('button', { name: 'Save activity' });
       const bar = save.closest('[data-floating-bar]') as HTMLElement;
       expect(bar).toHaveAttribute('data-action-bar');
-      expect(save).toHaveClass('bg-amber', 'text-navy');
+      expect(save).toHaveClass('bg-primary', 'text-primary-contrast');
       expect(bar).toContainElement(screen.getByRole('button', { name: 'Cancel' }));
       // One save status on the screen, in the bar.
       const statuses = screen.getAllByRole('status').filter((r) => /saved/i.test(r.textContent ?? ''));
@@ -644,6 +622,20 @@ describe('Log activity (P6-T2)', () => {
       expect(screen.getByRole('button', { name: 'Cancel' })).toHaveClass('min-h-11', 'rounded-pill');
     });
 
+    it('P19.1-T1 AC-7 a phone draws the log as UI-106 drew it: no control row, no columns, the views over the date row', async () => {
+      phoneDay();
+      await screen.findByRole('heading', { name: 'Leads' });
+      expect(document.querySelector('[data-control-row]')).toBeNull();
+      expect(document.querySelector('[data-column-flow]')).toBeNull();
+      const views = screen.getByRole('navigation', { name: 'Activity management' });
+      const pill = document.querySelector('[data-day-pill]') as HTMLElement;
+      expect(views.compareDocumentPosition(pill) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(views).not.toContainElement(pill);
+      // The phone's cards keep their 8px above, one column under the date row.
+      for (const card of document.querySelectorAll('section[data-phone-section]')) expect(card).toHaveClass('mt-2');
+      expect(wears(views, 375).split(' ')).toEqual(['mb-2.5', 'flex', 'rounded-pill', 'bg-card', 'p-[3px]']);
+    });
+
     it('UI-106 keeps a closed day’s reason above the bar, and a closed day never logged has no bar', async () => {
       asPhone();
       stubFetch({ ...base, '/activity/log': { body: day({ editable: false, frozenAt: '2026-03-08T00:00:00Z' }) } });
@@ -663,26 +655,55 @@ describe('Log activity (P6-T2)', () => {
 
   });
 
-  describe('from 768px, as before (UI-106 is the phone’s)', () => {
-    it('P18.95-T5 AC-1: at 768px and wider the status stays under the date, and the bar is only the row it was', async () => {
+  /*
+   * **Was P18.7-T5 AC-1, *from 768px, as before*** — the status under the date, the bar a row of two buttons. Since
+   * P19.1-T1 (UI-112, UI-113, `activity-tablet-desktop`) a tablet and a laptop draw the phone's log in two columns.
+   */
+  describe('P19.1-T1 from 768px: the phone’s log, in more columns (UI-112, UI-113)', () => {
+    it('P19.1-T1 AC-1 one control row: the views, the date pill and Today: n — no Tanggal label, nothing stacked under the date', async () => {
       stubFetch({ ...base, '/activity/log': { body: day() } });
       renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
       await screen.findByRole('heading', { name: 'Leads' });
 
-      expect(saveStatus()).toHaveTextContent('Saved · 3 activities');
-      const bar = screen.getByRole('button', { name: 'Save activity' }).parentElement!;
-      expect(bar).not.toContainElement(saveStatus() as HTMLElement);
-      expect((bar.getAttribute('class') ?? '').split(/\s+/).filter(Boolean))
-        .toEqual(['flex', 'flex-wrap', 'items-center', 'justify-end', 'gap-2.5']);
-      // Not a floating bar from 768px: the row under the cards, as it was.
-      expect(document.querySelector('[data-floating-bar]')).toBeNull();
-      expect(screen.queryByText(/^Today:/)).not.toBeInTheDocument();
-      expect(strip().at(-1)).toEqual(['Total activities today', '3']);
+      const row = document.querySelector('[data-control-row]') as HTMLElement;
+      expect(row).toHaveClass('flex', 'items-center');
+      const views = within(row).getByRole('navigation', { name: 'Activity management' });
+      expect(views).toHaveAttribute('data-segmented');
+      expect(row).toContainElement(document.querySelector('[data-day-pill]') as HTMLElement);
+      expect(row).toContainElement(dayCount());
+      expect(dayCount()).toHaveTextContent('Today: 3 activities');
+      // No *Date* field with its label, and the save state is the bar's, not stacked under the date.
+      expect(screen.queryByLabelText('Date')).not.toBeInTheDocument();
+      expect(screen.queryByText('Date')).not.toBeInTheDocument();
+      expect(row).not.toContainElement(saveStatus() as HTMLElement);
+      // The title row holds the title and the avatar; the date is not beside the title any more.
+      const title = screen.getByRole('heading', { level: 1, name: 'Activity' });
+      expect(title.closest('[data-title-row]')).not.toContainElement(dayField());
+    });
+
+    it('P19.1-T1 AC-2 the save pill floats above the tab bar on a tablet and stands under the lists from 1024px', async () => {
+      stubFetch({ ...base, '/activity/log': { body: day() } });
+      renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
+      await screen.findByRole('heading', { name: 'Leads' });
+
+      const save = screen.getByRole('button', { name: 'Save activity' });
+      const bar = save.closest('[data-floating-bar]') as HTMLElement;
+      expect(bar).toHaveAttribute('data-action-bar');
+      expect(wears(bar, 768).split(' ')).toContain('fixed');
+      expect(wears(bar, 768).split(' ')).not.toContain('static');
+      expect(wears(bar, 1024).split(' ')).toContain('static');
+      expect(wears(bar, 1024).split(' ')).not.toContain('hidden');
+      expect(save).toHaveClass('bg-primary', 'text-primary-contrast', 'rounded-pill');
+      expect(bar).toContainElement(screen.getByRole('button', { name: 'Cancel' }));
+      expect(bar).toContainElement(saveStatus() as HTMLElement);
+      expect(saveStatus()).toHaveTextContent('Saved ✓');
+      // Room under the cards on a tablet, where the pill floats over the page's foot.
+      expect(document.querySelector('[data-column-flow]')).toHaveClass(FLOATING_BAR_ROOM);
     });
   });
 
-  describe('P18.95-T5 AC-3: the skeleton goes once the reads have answered', () => {
-    it('P18.95-T5 AC-3: draws the day as soon as the configuration and the day answer — the ladder still on its way', async () => {
+  describe('P18.7-T5 AC-3: the skeleton goes once the reads have answered', () => {
+    it('P18.7-T5 AC-3: draws the day as soon as the configuration and the day answer — the ladder still on its way', async () => {
       // The log waited for `/kpm/org-levels` too, which it never draws: the provider's two reads were one.
       const { mock } = stubFetch({ ...base, '/activity/log': { body: day() } });
       vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => (
@@ -693,7 +714,7 @@ describe('Log activity (P6-T2)', () => {
       expect(screen.queryByText('Loading your day…')).not.toBeInTheDocument();
     });
 
-    it('P18.95-T5 AC-3: draws an empty day — never logged, every count zero — once it answers', async () => {
+    it('P18.7-T5 AC-3: draws an empty day — never logged, every count zero — once it answers', async () => {
       stubFetch({ ...base, '/activity/log': { body: day({
         version: 0, totalCount: 0, entries: day().entries.map((e) => ({ ...e, count: 0 })),
       }) } });
@@ -701,10 +722,10 @@ describe('Log activity (P6-T2)', () => {
 
       expect(await screen.findByRole('heading', { name: 'Leads' })).toBeInTheDocument();
       expect(screen.queryByText('Loading your day…')).not.toBeInTheDocument();
-      expect(saveStatus()).toHaveTextContent('Not yet saved');
+      expect(saveStatus()).toHaveTextContent('Not saved yet');
     });
 
-    it('P18.95-T5 AC-3: a configuration that failed says so, and never that the office has nothing set up', async () => {
+    it('P18.7-T5 AC-3: a configuration that failed says so, and never that the office has nothing set up', async () => {
       stubFetch({
         ...base,
         '/kpm/config': { status: 500, body: { error: { code: 'INTERNAL_ERROR', message: 'Something went wrong.', requestId: 'r' } } },
@@ -728,7 +749,7 @@ describe('Log activity (P6-T2)', () => {
     expect(screen.getByLabelText('Decrease Submission polis')).toBeInTheDocument();
   });
 
-  it('numbers each activity and counts the items in each card', async () => {
+  it('counts the items in each card', async () => {
     stubFetch({ ...base, '/activity/log': { body: day() } });
     renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
 
@@ -737,7 +758,8 @@ describe('Log activity (P6-T2)', () => {
     expect(screen.getByText('1 item')).toBeInTheDocument();
   });
 
-  it('shows an activity’s own description under its name', async () => {
+  /* *Changed 2026-11-04 (P19.1-T1 AC-2; `activity-tablet-desktop`: *examples behind ⓘ*):* under the name until then. */
+  it('P19.1-T1 AC-2 puts an activity’s own description behind the ⓘ beside its name', async () => {
     const described = TAXONOMY.map((c) => ({
       ...c,
       types: c.types.map((ty) => (
@@ -753,10 +775,11 @@ describe('Log activity (P6-T2)', () => {
     });
     renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
 
-    expect(await screen.findByText('Berkas lengkap masuk ke sistem.')).toBeInTheDocument();
+    const glyph = await screen.findByRole('button', { name: 'Berkas lengkap masuk ke sistem.' });
+    expect(glyph.closest('li')).toHaveTextContent(/^Submission polis/);
   });
 
-  it('P18.8-T8 AC-1 centres every row, with a description and without, and leaves no line for a missing one', async () => {
+  it('P18.5-T8 AC-1 centres every row, with a description and without, and gives a description no line of its own', async () => {
     // ADR-0161 §3, the client's request of 2026-10-26: the prototype tops its rows (`flex-start`).
     const described = TAXONOMY.map((c) => ({
       ...c,
@@ -769,16 +792,15 @@ describe('Log activity (P6-T2)', () => {
     });
     renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
 
-    const row = (label: string) => screen.getByLabelText(`Count for ${label}`).closest('.border-b')!;
-    await screen.findByText('telepon, WhatsApp, tatap muka, dll');
+    const row = (label: string) => screen.getByLabelText(`Count for ${label}`).closest('li')!;
+    await screen.findByRole('button', { name: 'telepon, WhatsApp, tatap muka, dll' });
     for (const label of ['Set Appointment', 'Melakukan aktivitas leads generation', 'Submission polis']) {
       expect(row(label).className).toContain('items-center');
       expect(row(label).className).not.toContain('items-start');
     }
-    // A row with no description holds its label and nothing under it.
-    const words = screen.getByText('Submission polis', { selector: 'span.block' }).parentElement!;
-    expect(words.children).toHaveLength(1);
-    expect(screen.getByText('Set Appointment', { selector: 'span.block' }).parentElement!.children).toHaveLength(2);
+    // The description is behind its ⓘ on the name's line, never a second line under it (P19.1-T1 AC-2).
+    expect(within(row('Set Appointment')).getByRole('button', { name: 'telepon, WhatsApp, tatap muka, dll' })).toBeInTheDocument();
+    expect(within(row('Submission polis')).queryByRole('button', { name: /dll/ })).toBeNull();
   });
 
   describe('P10.1-T5 AC-8: the save status tells the truth', () => {
@@ -788,7 +810,7 @@ describe('Log activity (P6-T2)', () => {
       ...over,
     });
 
-    it('P18.95-T1 AC-6: a save that lands says Activity logged ✓, and keeps Saved · n touches under the date', async () => {
+    it('P18.7-T1 AC-6: a save that lands says Activity logged ✓, the bar Saved ✓ and the day its new count', async () => {
       stubFetch({
         ...base,
         '/activity/log': [
@@ -804,10 +826,11 @@ describe('Log activity (P6-T2)', () => {
       await userEvent.click(screen.getByRole('button', { name: 'Save activity' }));
 
       await waitFor(() => expect(toastText()).toContain('Activity logged ✓'));
-      expect(saveStatus()).toHaveTextContent('Saved · 1 activity');
+      expect(saveStatus()).toHaveTextContent('Saved ✓');
+      expect(dayCount()).toHaveTextContent('Today: 1 activity');
     });
 
-    it('P18.95-T1 AC-6: a refused save toasts nothing, and its reason stays in the banner', async () => {
+    it('P18.7-T1 AC-6: a refused save toasts nothing, and its reason stays in the banner', async () => {
       stubFetch({
         ...base,
         '/activity/log': [
@@ -822,10 +845,10 @@ describe('Log activity (P6-T2)', () => {
 
       expect(await screen.findByText('Something went wrong.')).toBeInTheDocument();
       expect(toastText()).not.toContain('Activity logged ✓');
-      expect(saveStatus()).toHaveTextContent('Not yet saved');
+      expect(saveStatus()).toHaveTextContent('Not saved yet');
     });
 
-    it('P18.95-T1 AC-6: a correction of a closed day is the log’s save too, and says Activity logged ✓', async () => {
+    it('P18.7-T1 AC-6: a correction of a closed day is the log’s save too, and says Activity logged ✓', async () => {
       const closed = day({ editable: false, frozenAt: '2026-03-08T00:00:00Z', correctionCount: 0 });
       stubFetch({
         ...base,
@@ -847,7 +870,8 @@ describe('Log activity (P6-T2)', () => {
       renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
 
       await screen.findByRole('heading', { name: 'Leads' });
-      expect(screen.getByRole('status')).toHaveTextContent('Saved · 3 activities');
+      expect(saveStatus()).toHaveTextContent('Saved ✓');
+      expect(dayCount()).toHaveTextContent('Today: 3 activities');
     });
 
     it('AC-8: opens a day with no entry as not yet saved', async () => {
@@ -855,7 +879,7 @@ describe('Log activity (P6-T2)', () => {
       renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
 
       await screen.findByRole('heading', { name: 'Leads' });
-      expect(screen.getByRole('status')).toHaveTextContent('Not yet saved');
+      expect(saveStatus()).toHaveTextContent('Not saved yet');
     });
 
     it('AC-8: saves, then reads Not yet saved on a date that has no entry', async () => {
@@ -872,16 +896,15 @@ describe('Log activity (P6-T2)', () => {
       renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
 
       await userEvent.click(await screen.findByLabelText('Increase Submission polis'));
-      expect(screen.getByRole('status')).toHaveTextContent('Not yet saved');
+      expect(saveStatus()).toHaveTextContent('Not saved yet');
       await userEvent.click(screen.getByRole('button', { name: 'Save activity' }));
-      // The save's toast is a status region of its own now (P18.95-T1 AC-6): the one under the date is read.
-      await waitFor(() => expect(saveStatus()).toHaveTextContent('Saved · 1 activity'));
+      await waitFor(() => expect(saveStatus()).toHaveTextContent('Saved ✓'));
 
-      fireEvent.change(screen.getByLabelText('Date'), { target: { value: '2026-03-10' } });
-      await waitFor(() => expect(screen.getByLabelText('Date')).toHaveValue('2026-03-10'));
-      // P18.96-T2 AC-4: the shared field writes the day as the app does, never the browser's mm/dd/yyyy.
-      expect(screen.getByLabelText('Date').nextElementSibling).toHaveTextContent('10 Mar 2026');
-      expect(saveStatus()).toHaveTextContent('Not yet saved');
+      await userEvent.click(screen.getByRole('button', { name: 'Previous day' }));
+      await waitFor(() => expect(dayField()).toHaveValue('2026-03-10'));
+      // The day named, never *today*, written as the app writes a day.
+      expect(dayCount()).toHaveTextContent('10 Mar 2026: 0 activities');
+      expect(saveStatus()).toHaveTextContent('Not saved yet');
     });
 
     it('AC-8: opens another saved day as saved, with that day’s touches', async () => {
@@ -893,35 +916,27 @@ describe('Log activity (P6-T2)', () => {
       renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
       await screen.findByRole('heading', { name: 'Leads' });
 
-      fireEvent.change(screen.getByLabelText('Date'), { target: { value: '2026-03-09' } });
+      fireEvent.change(dayField(), { target: { value: '2026-03-09' } });
 
-      await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Saved · 7 activities'));
+      await waitFor(() => expect(dayCount()).toHaveTextContent('9 Mar 2026: 7 activities'));
+      expect(saveStatus()).toHaveTextContent('Saved ✓');
     });
 
-    it('AC-8: sits under the date, as the prototype stacks them (`:2700-2704`)', async () => {
+    /*
+     * **Was AC-8, *sits under the date*, and P10.1-T8, *stands beside the title*.** Since P19.1-T1 (UI-112: *"Tanggal"
+     * label + "Belum disimpan" stacked under the date* is the finding) the state is the bar's, one live region, and the
+     * title row holds the title alone with the avatar — so the title sits where Dashboard's does by construction.
+     */
+    it('P19.1-T1 AC-1 one save state on the screen, the bar’s; the title row holds no date', async () => {
       stubFetch({ ...base, '/activity/log': { body: day() } });
       renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
       await screen.findByRole('heading', { name: 'Leads' });
 
-      const field = screen.getByLabelText('Date').closest('div')!;
-      expect(field.nextElementSibling).toBe(screen.getByRole('status'));
-      expect(field.parentElement).toHaveClass('flex-col');
-    });
-
-    it('P10.1-T8: stands beside the title, top-aligned, so the title sits where Dashboard’s does', async () => {
-      // The client, 2026-10-01: the Log title sat lower than the other tabs', *"mungkin karena ada
-      // tanggal di sebelah kanannya"*. The row was bottom-aligned, so this block — taller than the
-      // title and its sub-line — set the line. `Overall.html:839` top-aligns it.
-      stubFetch({ ...base, '/activity/log': { body: day() } });
-      renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
-      await screen.findByRole('heading', { name: 'Leads' });
-
-      const row = screen.getByRole('heading', { name: 'Activity Management', level: 1 })
-        .parentElement!.parentElement!;
-      expect(row).toContainElement(screen.getByLabelText('Date'));
-      expect(row).toContainElement(screen.getByRole('status'));
-      expect(row).toHaveClass('items-start');
-      expect(row).not.toHaveClass('items-end');
+      const states = screen.getAllByRole('status').filter((r) => /saved/i.test(r.textContent ?? ''));
+      expect(states).toEqual([saveStatus()]);
+      const row = screen.getByRole('heading', { name: 'Activity', level: 1 }).closest('[data-title-row]') as HTMLElement;
+      expect(row).not.toContainElement(saveStatus() as HTMLElement);
+      expect(within(row).queryByRole('textbox')).toBeNull();
     });
   });
 
@@ -932,8 +947,7 @@ describe('Log activity (P6-T2)', () => {
     renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
 
     await userEvent.click(await screen.findByLabelText('Increase Submission polis'));
-    await userEvent.clear(screen.getByLabelText('Date'));
-    await userEvent.type(screen.getByLabelText('Date'), '2026-03-10');
+    await userEvent.click(screen.getByRole('button', { name: 'Previous day' }));
 
     const dialog = await screen.findByRole('dialog');
     expect(dialog).toHaveTextContent('You have unsaved counts');
@@ -948,8 +962,7 @@ describe('Log activity (P6-T2)', () => {
     await userEvent.click(await screen.findByLabelText('Increase Submission polis'));
     expect(screen.getByLabelText('Count for Submission polis')).toHaveValue(2);
 
-    await userEvent.clear(screen.getByLabelText('Date'));
-    await userEvent.type(screen.getByLabelText('Date'), '2026-03-10');
+    await userEvent.click(screen.getByRole('button', { name: 'Previous day' }));
     // Scoped to the dialog: the page has its own Cancel, which a modal makes unreachable.
     const dialog = await screen.findByRole('dialog');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
@@ -959,7 +972,7 @@ describe('Log activity (P6-T2)', () => {
   });
 });
 
-describe('Log Activity — names and terms (P18.95-T9)', () => {
+describe('Log Activity — names and terms (P18.7-T9)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   /** Item 9 and item 12 in the seed's words: *Proses NPA*, and a note naming *JFW* — each twice over the screen. */
@@ -975,35 +988,37 @@ describe('Log Activity — names and terms (P18.95-T9)', () => {
   }];
   const worded = { ...base, '/kpm/config': { body: { activity: WORDED, ratios: [], leadPipelines: [], version: 1 } } };
 
-  it('P18.95-T9 AC-2 is titled Activity Management, the nav item’s words, over the Log Activity tab', async () => {
+  /* *Changed 2026-11-04 (P19.1-T1 AC-1; UI-112: each page's title is its phone title):* it was *Activity Management*. */
+  it('P18.7-T9 AC-2, P19.1-T1 AC-1 is titled Activity, the tab bar’s word, over the Log Activity view', async () => {
     stubFetch({ ...base, '/activity/log': { body: day() } });
     renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
-    expect(await screen.findByRole('heading', { level: 1, name: 'Activity Management' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Activity' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { level: 1, name: 'Activity Management' })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { level: 1, name: 'Log Activity' })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Log Activity' })).toHaveAttribute('aria-current', 'page');
   });
 
-  it('P18.95-T9 AC-3, UI-106 says what an activity counts once, on the strip’s total, in the one-line definition', async () => {
+  it('P18.7-T9 AC-3, UI-106 says what an activity counts once, beside the day’s count, in the one-line definition', async () => {
     stubFetch({ ...base, '/activity/log': { body: day() } });
     renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
     await screen.findByRole('heading', { name: 'Leads' });
     const tips = screen.getAllByRole('button', { name: 'What is an activity?' });
-    // The strip's from 768px; a phone's is on its date row (UI-106).
+    // Beside *Today: n activities* at every size since P19.1-T1 (it was the strip's total from 768px).
     expect(tips).toHaveLength(1);
-    expect(tips[0].closest('[data-total]')).not.toBeNull();
+    expect(tips[0].closest('[data-control-row]')).not.toBeNull();
     expect(tips[0]).toHaveAccessibleDescription('One activity is one count you log: each one you add on Log Activity counts once.');
   });
 
-  it('P18.95-T9 AC-3 gives a term in the office’s words an ⓘ the first time it appears, and only then', async () => {
+  it('P18.7-T9 AC-3 gives a term in the office’s words an ⓘ the first time it appears, and only then', async () => {
     stubFetch({ ...worded, '/activity/log': { body: day() } });
     renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
     await screen.findByRole('heading', { name: 'Leads' });
     const npa = screen.getAllByRole('button', { name: 'What is NPA?' });
     expect(npa).toHaveLength(1);
-    expect(npa[0].closest('span.block')).toHaveTextContent(/^Proses NPA ⓘ/);
-    const jfw = screen.getAllByRole('button', { name: 'What is JFW?' });
-    expect(jfw).toHaveLength(1);
-    expect(jfw[0]).toHaveAccessibleDescription('Joint field work: a visit to a prospect that an agent makes with their leader there too.');
+    expect(npa[0].closest('[data-activity-name]')).toHaveTextContent(/^Proses NPA ⓘ/);
+    // A term inside the office's examples is read in them, behind the row's ⓘ (P19.1-T1 AC-2, as on a phone).
+    expect(screen.getByRole('button', { name: '1-on-1 coaching, unit meeting, role-play, JFW, memberikan training' }))
+      .toBeInTheDocument();
     // The label is still the office's, whole: the stepper is named by it.
     expect(screen.getByLabelText('Increase Proses NPA')).toBeInTheDocument();
   });

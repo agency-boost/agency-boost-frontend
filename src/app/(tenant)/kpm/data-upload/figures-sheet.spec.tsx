@@ -1,69 +1,46 @@
 import { describe, expect, it } from 'vitest';
+import { V1_COLUMNS, KOMISI } from '@test/data-upload-fixtures';
 import type { CorrectionResult } from '@/lib/production';
-import { correctedWords, inSafeOrder } from './figures-sheet';
+import { correctedWords } from './figures-sheet';
 
-type Change = Parameters<typeof inSafeOrder>[0][number];
-const change = (metric: Change['metric'], cadence: Change['cadence'], held: number | null, value: number | null): Change =>
-  ({ metric, cadence, key: `${metric}:${cadence}`, held, value });
-const order = (changes: Change[]) => inSafeOrder(changes).map((c) => c.key);
-
-/**
- * **The sheet's figures go one `PATCH` at a time** (P18.97-T7 AC-2), and the server checks each against its pair as
- * it stands then: a month's figure never above the year to date (`breaksYtd`). So where both of a metric's change, the
- * one that keeps the pair whole is sent first.
+/*
+ * *Changed 2026-11-05 (P19.5-T2; R4, ADR-0214 §10):* the sheet sent a metric's month and year in the order that kept the
+ * pair whole (`inSafeOrder`), because the server refused a month above its year to date. A summed year to date is the
+ * months' now, never typed, so nothing pairs a month with a year and the rule went with it: the sheet sends each figure
+ * in the order it lists them (`page.spec.tsx`, *saves each changed figure by kode*).
  */
-describe('P18.97-T7 AC-2 inSafeOrder: the order the sheet sends a metric’s month and year in', () => {
-  it('P18.97-T7 AC-2 sends the year first when the month held fits under the new year — both raised', () => {
-    // 1,5 jt / 9 jt held, 12 jt / 15 jt typed: the month first would read 12 jt over 9 jt and be refused.
-    expect(order([change('ape', 'monthly', 150, 1200), change('ape', 'ytd', 900, 1500)])).toEqual(['ape:ytd', 'ape:monthly']);
-  });
 
-  it('P18.97-T7 AC-2 sends the month first when the new year falls under the month held — both lowered', () => {
-    // 5 / 9 held, 1 / 3 typed: the year first would read 5 over 3 and be refused.
-    expect(order([change('fyp', 'monthly', 5, 1), change('fyp', 'ytd', 9, 3)])).toEqual(['fyp:monthly', 'fyp:ytd']);
-  });
-
-  it('P18.97-T7 AC-2 sends the year first where either side is empty, which the rule does not check', () => {
-    expect(order([change('policyCount', 'monthly', null, 2), change('policyCount', 'ytd', 4, 6)]))
-      .toEqual(['policyCount:ytd', 'policyCount:monthly']);
-    expect(order([change('policyCount', 'monthly', 2, 1), change('policyCount', 'ytd', 4, null)]))
-      .toEqual(['policyCount:ytd', 'policyCount:monthly']);
-  });
-
-  it('P18.97-T7 AC-2 leaves a metric that changes once, and the others, in the table’s order', () => {
-    expect(order([
-      change('ape', 'monthly', 1, 2), change('persistency', 'monthly', 80, 81), change('ape', 'ytd', 9, 10),
-      change('recruitment', 'ytd', 1, 2),
-    ])).toEqual(['ape:ytd', 'ape:monthly', 'persistency:monthly', 'recruitment:ytd']);
-    expect(order([change('persistency', 'ytd', 80, 81)])).toEqual(['persistency:ytd']);
-  });
-});
-
-describe('P18.97-T7 AC-2 correctedWords: what the sheet did, in a sentence', () => {
-  const result = (metric: CorrectionResult['metric'], cadence: CorrectionResult['cadence'], before: number | null, after: number | null, changed = true): CorrectionResult => ({
-    membershipId: 'mem-rina', metric, cadence, changed,
+describe('P18.9-T7 AC-2 correctedWords: what the sheet did, in a sentence', () => {
+  const columns = [...V1_COLUMNS, KOMISI];
+  const result = (kode: string, ytd: boolean, before: number | null, after: number | null, changed = true): CorrectionResult => ({
+    membershipId: 'mem-rina', kode, ytd, changed,
     before: { value: before, provenance: 'imported', correction: null },
     after: { value: after, provenance: 'corrected', correction: null },
     state: { month: '2026-09', revision: 4, locked: false, reason: 'open', editableUntil: '2026-10-07', changedAt: null, changedBy: null },
   });
 
-  it('P18.97-T7 AC-2 says one figure in the panel’s own words', () => {
-    expect(correctedWords('Rina Wijaya', [result('ape', 'monthly', 150_000_000, 200_000_000)], 'id'))
+  it('P18.9-T7 AC-2, P19.5-T2 says one figure in the panel’s own words, its column named by the template', () => {
+    expect(correctedWords('Rina Wijaya', [result('APE', false, 150_000_000, 200_000_000)], columns, 'id'))
       .toBe('Corrected APE this month for Rina Wijaya: Rp 1.500.000 → Rp 2.000.000.');
   });
 
-  it('P18.97-T7 AC-2 counts several and says each, in the order they were written', () => {
-    expect(correctedWords('Rina Wijaya', [result('policyCount', 'monthly', 2, 3), result('persistency', 'ytd', 86, null)], 'id'))
-      .toBe('Corrected 2 figures for Rina Wijaya: # of policy this month 2 → 3; Rolling persistency year to date 86% → nothing reported.');
+  it('P18.9-T7 AC-2, P19.5-T2 counts several and says each, in the order they were written — an uploaded YTD among them', () => {
+    expect(correctedWords('Rina Wijaya', [result('POLICY_COUNT', false, 2, 3), result('KOMISI', true, 86_000_000, null)], columns, 'id'))
+      .toBe('Corrected 2 figures for Rina Wijaya: # of policy (case issued) this month 2 → 3; Commission year to date Rp 860.000 → nothing reported.');
   });
 
-  it('P18.97-T7 AC-2 says when nothing changed, as the panel does', () => {
-    expect(correctedWords('Rina Wijaya', [result('recruitment', 'ytd', 5, 5, false)], 'id'))
-      .toBe('Recruitment year to date for Rina Wijaya already reads 5 — nothing was changed.');
+  it('P18.9-T7 AC-2 says when nothing changed, as the panel does', () => {
+    expect(correctedWords('Rina Wijaya', [result('RECRUITMENT', false, 5, 5, false)], columns, 'id'))
+      .toBe('Recruitment this month for Rina Wijaya already reads 5 — nothing was changed.');
   });
 
-  it('P18.98-T3 AC-4 writes the figures in full in the reader’s language: IDR 1,500,000 in English', () => {
-    expect(correctedWords('Rina Wijaya', [result('ape', 'monthly', 150_000_000, 200_000_000)], 'en'))
+  it('P18.10-T3 AC-4 writes the figures in full in the reader’s language: IDR 1,500,000 in English', () => {
+    expect(correctedWords('Rina Wijaya', [result('APE', false, 150_000_000, 200_000_000)], columns, 'en'))
       .toBe('Corrected APE this month for Rina Wijaya: IDR 1,500,000 → IDR 2,000,000.');
+  });
+
+  it('P19.5-T2 names a column in the reader’s language: Persistensi rolling in Indonesian', () => {
+    expect(correctedWords('Rina Wijaya', [result('PERSISTENCY', false, 86, 88)], columns, 'id', 'id'))
+      .toBe('Persistensi rolling bulan ini untuk Rina Wijaya dikoreksi: 86% → 88%.');
   });
 });

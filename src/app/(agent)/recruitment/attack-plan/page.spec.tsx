@@ -83,7 +83,7 @@ describe('/recruitment/attack-plan, the Recruitment Attack Plan (P17-T3)', () =>
   afterEach(() => vi.unstubAllGlobals());
 
   describe('the page and the brief, verbatim (AC-2, AC-3)', () => {
-    it('P17-T3 AC-2, P18.95-T7 AC-1 the title, the sub-line off a phone, and the two tabs as links, Attack Plan the current one', async () => {
+    it('P17-T3 AC-2, P18.7-T7 AC-1 the title, the sub-line off a phone, and the two tabs as links, Attack Plan the current one', async () => {
       show();
       await briefHeading();
       expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Recruitment$/);
@@ -108,7 +108,7 @@ describe('/recruitment/attack-plan, the Recruitment Attack Plan (P17-T3)', () =>
       const steps = within(screen.getByRole('list', { name: 'Steps' })).getAllByRole('listitem');
       expect(steps.map((s) => s.textContent)).toEqual(['11 Candidate brief', '22 Recruitment plan']);
       expect(steps[0]).toHaveAttribute('aria-current', 'step');
-      // P18.95-T7 AC-1 (grey text row 9): the client's line from 768px; on a phone no grey line (UI-107, D-08).
+      // P18.7-T7 AC-1 (grey text row 9): the client's line from 768px; on a phone no grey line (UI-107, D-08).
       expect(desktopOnly(screen.getByText('Answer 3 questions to get your pitch.'))).not.toContain('hidden');
       expect(screen.getByText('Answer 3 questions to get your pitch.')).toHaveClass('max-md:hidden');
       expect(reads(calls)).toEqual([API]);
@@ -141,7 +141,7 @@ describe('/recruitment/attack-plan, the Recruitment Attack Plan (P17-T3)', () =>
       show();
       await briefHeading();
       const build = screen.getByRole('button', { name: 'Build recruitment plan' });
-      expect(build).toHaveClass('bg-amber', 'text-navy', 'w-full');
+      expect(build).toHaveClass('bg-primary', 'text-primary-contrast', 'w-full');
       expect(build).toBeDisabled();
       await userEvent.click(chip('Candidate type', 'Retiree'));
       await userEvent.click(chip('What\'s driving them', 'Career change'));
@@ -149,7 +149,7 @@ describe('/recruitment/attack-plan, the Recruitment Attack Plan (P17-T3)', () =>
       await userEvent.click(chip('Their biggest hesitation', 'No network'));
       expect(build).toBeEnabled();
       // A chosen chip is a selection, so it stays navy beside the amber action.
-      expect(chip('Their biggest hesitation', 'No network')).toHaveClass('bg-navy', 'text-white');
+      expect(chip('Their biggest hesitation', 'No network')).toHaveClass('bg-secondary', 'text-secondary-contrast');
       // Unchoosing the only hesitation closes it again.
       await userEvent.click(chip('Their biggest hesitation', 'No network'));
       expect(build).toBeDisabled();
@@ -436,7 +436,7 @@ describe('/recruitment/attack-plan, the Recruitment Attack Plan (P17-T3)', () =>
   });
 
   describe('who may (AC-9)', () => {
-    it('P18.95-T6 AC-2 labels: the chips read the client’s shorter words, the codes behind them unchanged', async () => {
+    it('P18.7-T6 AC-2 labels: the chips read the client’s shorter words, the codes behind them unchanged', async () => {
       const { calls } = show();
       await briefHeading();
       const labels = (name: string) => within(group(name)).getAllByRole('button').map((b) => b.textContent);
@@ -483,7 +483,7 @@ describe('/recruitment/attack-plan, the Recruitment Attack Plan (P17-T3)', () =>
       expect(nav.push).not.toHaveBeenCalled();
     });
 
-    it('P18.95-T6 AC-1 the plan has no bar: Build is the brief’s alone', async () => {
+    it('P18.7-T6 AC-1 the plan has no bar: Build is the brief’s alone', async () => {
       show(BRIEF);
       await result();
       expect(document.querySelector('.max-md\\:fixed')).toBeNull();

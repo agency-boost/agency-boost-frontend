@@ -1,7 +1,7 @@
 import {
   BulletList, NextAction, OpeningLine, SayBox, ScriptBlock, ScriptNote, ScriptText, type ScriptSize,
 } from '@/components/plan/script-blocks';
-import { PushBackBox } from '@/components/plan/push-back-box';
+import { PushBackStack } from '@/components/plan/multi/push-back-stack';
 import { useMessages } from '@/i18n/language-provider';
 import { planMessages } from '@/i18n/messages/plan';
 import { productCatalogMessages } from '@/i18n/messages/product-catalog';
@@ -22,7 +22,7 @@ import { hasScript, type CatalogScript } from '@/lib/product-catalog';
  *
  * A run-off product's drawer tab shows its note instead (`:10290`), which is the drawer's business.
  *
- * **The frame is ours, the words inside it the company's** (P18.98-T4; ADR-0179 §5): the blocks' labels are the two
+ * **The frame is ours, the words inside it the company's** (P18.10-T4; ADR-0179 §5): the blocks' labels are the two
  * plans' (`messages/plan.ts`) and the script's own lines the catalog's (`messages/product-catalog.ts`), in the reader's
  * language; every field of the script is shown as typed.
  */
@@ -30,13 +30,13 @@ export function ProductScript({ script, place }: { script: CatalogScript; place:
   const p = useMessages(planMessages);
   const t = useMessages(productCatalogMessages);
   const size: ScriptSize = place;
+  // Every objection card, a box each, in order (P19.4-T4 AC-1; ADR-0209 §9) — the Recruitment Attack Plan's stack.
   const pushBack = (
-    <PushBackBox
+    <PushBackStack
       size={size}
       theySayLabel={p.theySay}
-      theySay={script.objectionTheySay}
       youSayLabel={p.youSay}
-      youSay={script.objectionYouSay}
+      items={script.objections.map((card, i) => ({ key: String(i + 1), theySay: card.objection, youSay: card.answer }))}
     />
   );
   const goodFit = (

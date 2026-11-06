@@ -16,7 +16,7 @@ vi.mock('next/navigation', () => ({
 }));
 
 /**
- * **The data-backed items on both pages** (P18.96-T4 AC-2 to AC-5; ADR-0171 §3): *Close first case independently*,
+ * **The data-backed items on both pages** (P18.8-T4 AC-2 to AC-5; ADR-0171 §3): *Close first case independently*,
  * *Reach Independent Agent milestone* and *Weekly 1-on-1 check-in* — the *Auto* badge, the source line linked to the
  * record, a hand tick that opens its form in place and saves the tick and the record in one request, and *waiting for
  * data*. The hire's `/activation` and the leader's `/new-hires/[membershipId]` draw them with one component.
@@ -41,12 +41,12 @@ const writes = (calls: { url: string; init: RequestInit }[]) =>
 const changed = (code: string, over: Partial<ActivationItemProgress>, items = rinaItems()) =>
   items.map((list) => list.map((it) => (it.code === code ? { ...it, ...over } : it)));
 
-describe('the data-backed checklist items (P18.96-T4)', () => {
+describe('the data-backed checklist items (P18.8-T4)', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });
 
-  it('P18.96-T4 AC-2 a done item shows Auto and its source line, “Completed from Sales data · {date}”, linked to the lead on the hire’s page', async () => {
+  it('P18.8-T4 AC-2 a done item shows Auto and its source line, “Completed from Sales data · {date}”, linked to the lead on the hire’s page', async () => {
     hirePage();
     await screen.findByRole('heading', { level: 2, name: 'Your activation progress' });
     const first = within(row('FIRST_CASE_CLOSED'));
@@ -58,7 +58,7 @@ describe('the data-backed checklist items (P18.96-T4)', () => {
     expect(first.queryByRole('link', { name: /^Go to/ })).not.toBeInTheDocument();
   });
 
-  it('P18.96-T4 AC-2 the coaching item links its session: the hire’s own coaching, the leader’s archive', async () => {
+  it('P18.8-T4 AC-2 the coaching item links its session: the hire’s own coaching, the leader’s archive', async () => {
     const items = changed('WEEKLY_CHECK_IN', {
       done: true, doneAt: '2026-10-01T03:00:00.000Z', source: 'link', doneBy: SARI, record: { collection: 'coachingSessions', id: 's-4' },
     });
@@ -67,7 +67,7 @@ describe('the data-backed checklist items (P18.96-T4)', () => {
     expect(own.getByRole('link', { name: 'Completed from Coaching sessions · 1 Oct 2026' })).toHaveAttribute('href', '/coaching/me?session=s-4');
   });
 
-  it('P18.96-T4 AC-2, UI-027 a leader’s detail says where each came from behind ⓘ: the session, and the sales data', async () => {
+  it('P18.8-T4 AC-2, UI-027 a leader’s detail says where each came from behind ⓘ: the session, and the sales data', async () => {
     const items = changed('WEEKLY_CHECK_IN', {
       done: true, doneAt: '2026-10-01T03:00:00.000Z', source: 'link', doneBy: SARI, record: { collection: 'coachingSessions', id: 's-4' },
     }).map((list) => list.map((it) => ({ ...it, note: null, date: null })));
@@ -79,7 +79,7 @@ describe('the data-backed checklist items (P18.96-T4)', () => {
     expect(row('WEEKLY_CHECK_IN').querySelector('[data-testid="source-line"]')).toBeNull();
   });
 
-  it('P18.96-T4 AC-4 a tick its data has not confirmed reads “Ticked by {name}, waiting for data”, the tick’s own date kept in its ⓘ', async () => {
+  it('P18.8-T4 AC-4 a tick its data has not confirmed reads “Ticked by {name}, waiting for data”, the tick’s own date kept in its ⓘ', async () => {
     hirePage({}, activationView({}, withWaitingCheckIn()));
     await screen.findByRole('heading', { level: 2, name: 'Your activation progress' });
     const checkIn = within(row('WEEKLY_CHECK_IN'));
@@ -90,7 +90,7 @@ describe('the data-backed checklist items (P18.96-T4)', () => {
     expect(checkIn.getByRole('checkbox')).toBeEnabled();
   });
 
-  it('P18.96-T4 AC-3 the hire’s Which case?: their closings listed, a new one logged — the tick and the record in one request', async () => {
+  it('P18.8-T4 AC-3 the hire’s Which case?: their closings listed, a new one logged — the tick and the record in one request', async () => {
     const after = activationView({}, changed('INDEPENDENT_AGENT_MILESTONE', {
       done: true, doneAt: '2026-10-03T03:00:00.000Z', source: 'hire', doneBy: RINA, waiting: true, record: { collection: 'leads', id: 'l-new' },
     }));
@@ -119,7 +119,7 @@ describe('the data-backed checklist items (P18.96-T4)', () => {
     expect(await milestone.findByText('Saved ✓')).toBeInTheDocument();
   });
 
-  it('P18.96-T4 AC-3 names an existing closing by its lead, and Cancel sends nothing and leaves the box unticked', async () => {
+  it('P18.8-T4 AC-3 names an existing closing by its lead, and Cancel sends nothing and leaves the box unticked', async () => {
     const { calls } = hirePage({
       'GET /activation/me/closings': { body: { closings: [{ leadId: 'l-1', name: 'Ibu Ratna', date: '2026-09-20' }] } },
       'PUT /activation/me/items/INDEPENDENT_AGENT_MILESTONE': { body: activationView() },
@@ -142,7 +142,7 @@ describe('the data-backed checklist items (P18.96-T4)', () => {
     ]));
   });
 
-  it('P18.96-T4 AC-3 a new closing with no name is not sent: the form says so', async () => {
+  it('P18.8-T4 AC-3 a new closing with no name is not sent: the form says so', async () => {
     const { calls } = hirePage({ 'GET /activation/me/closings': { body: { closings: [] } } });
     await screen.findByRole('heading', { level: 2, name: 'Your activation progress' });
     const milestone = within(row('INDEPENDENT_AGENT_MILESTONE'));
@@ -154,7 +154,7 @@ describe('the data-backed checklist items (P18.96-T4)', () => {
     expect(writes(calls)).toEqual([]);
   });
 
-  it('P18.96-T4 AC-3 the leader’s Log 1:1: a date and a note, sent with the tick; a refusal keeps the box unticked and says why', async () => {
+  it('P18.8-T4 AC-3 the leader’s Log 1:1: a date and a note, sent with the tick; a refusal keeps the box unticked and says why', async () => {
     const { calls } = leaderPage({
       'PUT /new-hires/mem-rina/items/WEEKLY_CHECK_IN': [
         { status: 400, body: { error: { code: 'VALIDATION_FAILED', message: 'record.date is a day from the join date.', requestId: 'r-1' } } },
@@ -181,7 +181,7 @@ describe('the data-backed checklist items (P18.96-T4)', () => {
     expect(checkIn.queryByRole('group', { name: 'Log 1:1' })).not.toBeInTheDocument();
   });
 
-  it('P18.96-T4 AC-3 unticking a waiting tick saves at once, with no form and no record', async () => {
+  it('P18.8-T4 AC-3 unticking a waiting tick saves at once, with no form and no record', async () => {
     const { calls } = leaderPage({
       'PUT /new-hires/mem-rina/items/WEEKLY_CHECK_IN': { body: leaderView() },
     }, { ...leaderView(), aspects: activationView({}, withWaitingCheckIn()).aspects });
@@ -190,7 +190,7 @@ describe('the data-backed checklist items (P18.96-T4)', () => {
     await waitFor(() => expect(writes(calls)).toEqual([['PUT', '/new-hires/mem-rina/items/WEEKLY_CHECK_IN', { done: false }]]));
   });
 
-  it('P18.96-T4 AC-3 an Agent who leads ticks none of the three by hand: their boxes are inert, no form opens', async () => {
+  it('P18.8-T4 AC-3 an Agent who leads ticks none of the three by hand: their boxes are inert, no form opens', async () => {
     const stub = stubFetch({ ...SHELL_STUBS, 'GET /new-hires/mem-rina': { body: leaderView() } });
     renderInLayout(AgentLayout, <NewHireDetailPage params={routeParams({ membershipId: 'mem-rina' })} />, {
       me: { ...SARI_ME, permissions: SARI_ME.permissions.filter((p) => !p.startsWith('coaching_session:')) },
@@ -203,7 +203,7 @@ describe('the data-backed checklist items (P18.96-T4)', () => {
     expect(writes(stub.calls)).toEqual([]);
   });
 
-  it('P18.96-T4 AC-5, UI-027 the leader’s detail and the hire’s page say the same of each item — the leader’s behind ⓘ — the reader “you” on their own', async () => {
+  it('P18.8-T4 AC-5, UI-027 the leader’s detail and the hire’s page say the same of each item — the leader’s behind ⓘ — the reader “you” on their own', async () => {
     const items = withWaitingCheckIn();
     const state = () => ['FIRST_CASE_CLOSED', 'WEEKLY_CHECK_IN', 'INDEPENDENT_AGENT_MILESTONE'].map((code) => [
       code, row(code).querySelector('[data-testid="source-line"]')?.textContent ?? null, (within(row(code)).getByRole('checkbox') as HTMLInputElement).checked,

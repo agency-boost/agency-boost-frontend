@@ -6,10 +6,10 @@ import { kept } from '@/i18n/kept';
 const words = (...parts: ReactNode[]) => createElement(Fragment, null, ...parts);
 
 /**
- * **Settings › Ratio benchmarks** (`/kpm/settings/ratio-benchmarks`, P4-T2; P18.98-T4): what each ratio counts, and
+ * **Settings › Ratio benchmarks** (`/kpm/settings/ratio-benchmarks`, P4-T2; P18.10-T4): what each ratio counts, and
  * what counts as on track. The frame and the controls every settings screen shares are `settings.ts`'; a unit's name,
  * *points* and *Side A* / *Side B* are `ratio-words.ts`'. **A message never writes a figure**: a benchmark, a band and
- * a unit's example are written in the reader's figures and handed in (P18.98-T3).
+ * a unit's example are written in the reader's figures and handed in (P18.10-T3).
  *
  * **Content, shown as typed** (ADR-0179 §5): a ratio's name, an activity type's label, a section's name, a rung's label.
  * **Kept English** (§A): the title and the tabs (§A.1, §A.3), *ratio* and *benchmark* (§A.6), *KPM* (§A.5). *On track*
@@ -57,6 +57,8 @@ const en = {
   /** Where a ratio came from, under its name. */
   fromStandard: 'Provisioned with your company’s standard. Everything on it is yours to change, the formula included — '
     + 'and if you change what it counts, this card says so.',
+  /** The ⓘ beside the title on a phone, which holds `fromStandard` once (P19.2-T3 AC-3; UI-141). */
+  aboutStandard: 'About the standard ratios',
   ownRatio: 'Your office’s own — the name, what it counts, the benchmark and who it applies to are all yours. It is '
     + 'compared with nobody outside this office, which is what makes that safe.',
   /** A ratio moved away from its company's standard (ADR-0024): what it was set up as, by its types' names. */
@@ -117,6 +119,7 @@ const id: MessagesOf<typeof en> = {
 
   fromStandard: 'Disediakan dengan standar perusahaan Anda. Semuanya boleh Anda ubah, termasuk rumusnya — dan jika Anda '
     + 'mengubah yang dihitungnya, kartu ini menyebutkannya.',
+  aboutStandard: `Tentang ${kept('ratio')} standar`,
   ownRatio: `Milik ${kept('KPM')} Anda sendiri — nama, yang dihitung, ${kept('benchmark')}, dan untuk siapa ${kept('ratio')} `
     + `ini berlaku sepenuhnya milik Anda. ${kept('Ratio')} ini tidak dibandingkan dengan siapa pun di luar ${kept('KPM')} `
     + 'ini, itulah yang membuatnya aman.',

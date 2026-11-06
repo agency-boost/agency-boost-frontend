@@ -49,16 +49,16 @@ const group = (name: string) => screen.getByRole('group', { name });
 const chips = (name: string) => within(group(name)).getAllByRole('button').map((b) => b.textContent);
 
 /**
- * **P18.98-T4, Recruitment and its Attack Plan in ID mode** (field selling; ADR-0179 §3–§5): the section's line, the
+ * **P18.10-T4, Recruitment and its Attack Plan in ID mode** (field selling; ADR-0179 §3–§5): the section's line, the
  * brief's questions, the plan's frame and the states in the approved glossary's Indonesian; *Recruitment*, *Attack Plan*
  * and *Pitch Materials* English (§A); the company's playbook — the profile, the openings, the push-backs, the next
  * action — as typed. In English: `page.spec.tsx` and `attack-plan/page.spec.tsx`.
  *
- * *Changed 2026-10-29 (P18.98-T7):* **the brief's chips are the platform's words, not the playbook's**: the API writes
+ * *Changed 2026-10-29 (P18.10-T7):* **the brief's chips are the platform's words, not the playbook's**: the API writes
  * them in the reader's language (`recruitment.messages.ts`). The screen draws what it is served, so these specs, which
  * stub the API, stub them as they come.
  */
-describe('P18.98-T4 Recruitment in Indonesian', () => {
+describe('P18.10-T4 Recruitment in Indonesian', () => {
   beforeEach(() => {
     nav.push.mockReset();
     nav.replace.mockReset();

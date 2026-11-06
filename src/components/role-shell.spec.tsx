@@ -50,18 +50,25 @@ describe('RoleShell', () => {
     expect(screen.queryByRole('link', { name: 'Activity management' })).toBeNull();
   });
 
-  it('gives a KPM Owner their office, not the agent application', async () => {
+  /*
+   * *Changed 2026-11-05 (P19.2-T1; ADR-0197, ADR-0198):* **one shell, in the tab's view.** An Owner or an Admin on a
+   * shared page wore the office console until then; now the one shell draws *Akun saya*'s menu, or the office view's
+   * when the tab is in it (`lib/views.ts`), and no console tag.
+   */
+  it('P19.2-T1 AC-6 gives a KPM Owner the one shell in Akun saya: the field menu, no console', async () => {
     stubFetch({ '/notifications': { body: { items: [], unread: 0 } } });
     renderWithSession(<RoleShell title="Notifications">body</RoleShell>, {
       me: member({ isKpmOwner: true }),
     });
 
-    expect(await screen.findByText('KPM OWNER')).toBeInTheDocument();
-    // Every group starts open (P10.1-T3), so `People`'s items are there without a click.
-    expect(screen.getByRole('link', { name: 'All members' })).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: 'Activity' })).toBeInTheDocument();
+    expect(screen.queryByText('KPM OWNER')).toBeNull();
+    expect(screen.queryByRole('link', { name: 'All members' })).toBeNull();
   });
 
-  it('gives an Admin the office too — running one is what decides, not the hierarchy role', async () => {
+  it('P19.2-T1 AC-6 gives an Admin whose tab is in the office view that view’s menu on a shared page', async () => {
+    window.sessionStorage.setItem('ab.view', 'kpm_admin');
+    onTestFinished(() => window.sessionStorage.clear());
     stubFetch({ '/notifications': { body: { items: [], unread: 0 } } });
     renderWithSession(<RoleShell title="Notifications">body</RoleShell>, {
       me: member({ isKpmAdmin: true }),
@@ -89,11 +96,11 @@ describe('RoleShell', () => {
   });
 
   /*
-   * P18.8-T15 AC-2 (the client's UI review, UI-006): every other cross-family page sends a signed-out reader to sign
+   * P18.5-T15 AC-2 (the client's UI review, UI-006): every other cross-family page sends a signed-out reader to sign
    * in and back. It rendered bare for them, so an expired session on `/profile` drew an empty form, no header and the
    * raw code of the read that failed.
    */
-  describe('a reader with no session (P18.8-T15 AC-2)', () => {
+  describe('a reader with no session (P18.5-T15 AC-2)', () => {
     const at = (path: string) => {
       window.history.replaceState(null, '', path);
       onTestFinished(() => window.history.replaceState(null, '', '/'));
@@ -103,7 +110,7 @@ describe('RoleShell', () => {
       ['/profile', '/login?next=%2Fprofile'],
       ['/notifications', '/login?next=%2Fnotifications'],
       ['/leader-meetings?tab=past', '/login?next=%2Fleader-meetings%3Ftab%3Dpast'],
-    ])('P18.8-T15 AC-2 sends somebody signed out of %s to %s, and renders none of the page', (path, to) => {
+    ])('P18.5-T15 AC-2 sends somebody signed out of %s to %s, and renders none of the page', (path, to) => {
       at(path);
       router.replace.mockClear();
       renderWithSession(<RoleShell title="Your account">the profile form</RoleShell>, { me: null });
@@ -120,14 +127,14 @@ describe('RoleShell', () => {
       expect(screen.queryByText('the profile form')).toBeNull();
     });
 
-    it('P18.8-T15 AC-2 sends somebody who signed out themselves to plain /login', () => {
+    it('P18.5-T15 AC-2 sends somebody who signed out themselves to plain /login', () => {
       at('/profile');
       router.replace.mockClear();
       renderWithSession(<RoleShell title="Your account">the profile form</RoleShell>, { me: null, signedOut: true });
       expect(router.replace).toHaveBeenCalledWith('/login');
     });
 
-    it('P18.8-T15 AC-2 shows the page skeleton while the session loads, and sends nobody anywhere yet', () => {
+    it('P18.5-T15 AC-2 shows the page skeleton while the session loads, and sends nobody anywhere yet', () => {
       at('/profile');
       router.replace.mockClear();
       renderWithSession(<RoleShell title="Your account">the profile form</RoleShell>, { me: null, loading: true });
@@ -159,12 +166,11 @@ describe('RoleShell', () => {
     expect(router.replace).not.toHaveBeenCalled();
   });
 
-  it('picks the same way landingFor does, so the two cannot drift', () => {
-    // Where somebody lands and what chrome they wear are one question asked twice. This
-    // pins the correspondence rather than trusting two lists to stay in the same order.
+  it('P19.2-T1 AC-4 lands each reader where the one shell’s menu begins: /admin for the platform, Home for a member', () => {
+    // There is no shell to pick any more (ADR-0197): the landing and the menu are both the role's, and the view's.
     expect(landingFor(SUPER_ADMIN)).toBe('/admin');
-    expect(landingFor(member({ isKpmOwner: true }))).toBe('/kpm/overview');
-    expect(landingFor(member({ isKpmAdmin: true }))).toBe('/kpm/overview');
+    expect(landingFor(member({ isKpmOwner: true }))).toBe('/home');
+    expect(landingFor(member({ isKpmAdmin: true }))).toBe('/home');
     expect(landingFor(null)).toBe('/login');
   });
 

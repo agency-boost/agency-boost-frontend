@@ -23,7 +23,7 @@ export interface InboxList {
   loading: boolean;
   load: (page: number) => Promise<void>;
   /**
-   * Marks one read (`true`) or unread — or **every item of a run of repeats at once** (P18.95-T7 AC-4), which the
+   * Marks one read (`true`) or unread — or **every item of a run of repeats at once** (P18.7-T7 AC-4), which the
    * list draws as one line. Answers whether the server took all of them.
    */
   setRead: (items: InboxItem | readonly InboxItem[], read: boolean) => Promise<boolean>;
@@ -70,7 +70,7 @@ function withRead(page: InboxPage, readAt: ReadonlyMap<string, string | null>, u
  * the whole inbox's count, and the count goes to the badge with the announcement (T2 AC-6). A write
  * that fails puts the row back (T3 AC-2: *leaves the row unread*) and says why.
  *
- * **The bell's count moves with the row** (P18.95-T1 AC-7): a mark announces its move as it is clicked —
+ * **The bell's count moves with the row** (P18.7-T1 AC-7): a mark announces its move as it is clicked —
  * one fewer, one more, or none at all for *Mark all read* — marked `local`, so no list reads again on it;
  * the answer's count settles it, and a refusal moves it back to what it was.
  *
@@ -112,7 +112,7 @@ export function useInbox(pageSize: number, { listen = false }: { listen?: boolea
   }, [pageSize]);
 
   /*
-   * **One item, or a run of repeats** (P18.95-T7 AC-4): every item the mark changes moves at once, and the badge with
+   * **One item, or a run of repeats** (P18.7-T7 AC-4): every item the mark changes moves at once, and the badge with
    * them; the marks then go one after another, so the last answer's count is the inbox's own — each answer counts
    * the writes before it — and is what the page and the badge settle on. An item the server refuses goes back as it
    * was, and the count with it; the first refusal is said.

@@ -28,7 +28,7 @@ export function NumberBadge({
       aria-hidden="true"
       className={cn(
         'inline-flex shrink-0 items-center justify-center rounded-full',
-        'border-[1.5px] border-navy font-bold text-navy',
+        'border-[1.5px] border-secondary font-bold text-navy',
         size === 'sm' ? 'h-[22px] w-[22px] text-2xs' : 'h-6 w-6 text-sm',
         className,
       )}

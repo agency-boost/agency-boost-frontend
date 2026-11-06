@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import type { Ref } from 'react';
 import { TEXT_TAP } from '@/components/ui/phone';
+import { RidersLine } from '@/components/riders-line';
 import { useLanguage, useMessages } from '@/i18n/language-provider';
 import { planMessages } from '@/i18n/messages/plan';
 import { productCatalogMessages } from '@/i18n/messages/product-catalog';
@@ -68,6 +69,8 @@ export function PhoneSalesPlan({ product, plan, headingRef, onSwitch }: {
         fit={script.goodFit}
         note={note}
       />
+      {/* *"Bisa ditambah: …"* under the product (P19.4-T4 AC-5; ADR-0209 §3), on a card as the sections below are. */}
+      {product.riders.length > 0 && <RidersLine riders={product.riders} className="mt-2 rounded-lg bg-card p-3" />}
       <PhoneSection n={1} label={p.openingLine}>
         <PhoneQuote text={scripted ? script.opening : script.goodFit} />
       </PhoneSection>
@@ -80,10 +83,13 @@ export function PhoneSalesPlan({ product, plan, headingRef, onSwitch }: {
         </PhoneSection>
       )}
       <PhoneSection n={scripted ? 4 : 3} label={p.pushBack}>
-        <PhoneBubbles theySay={script.objectionTheySay} youSay={script.objectionYouSay} />
+        {/* Every objection card, a pair of bubbles each (P19.4-T4 AC-1; ADR-0209 §9). */}
+        {script.objections.map((card, i) => (
+          <PhoneBubbles key={i} theySay={card.objection} youSay={card.answer} />
+        ))}
       </PhoneSection>
       <PhoneSection n={scripted ? 5 : 4} label={p.nextAction}>
-        <p className="m-0 text-base leading-snug text-ink">{scripted ? script.nextAction : c.script.pageNoScriptNext}</p>
+        <p className="m-0 whitespace-pre-line text-base leading-snug text-ink">{scripted ? script.nextAction : c.script.pageNoScriptNext}</p>
       </PhoneSection>
       {plan && plan.alternatives.length > 0 && (
         <PhoneSection label={t.alsoFits}>

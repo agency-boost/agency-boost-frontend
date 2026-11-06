@@ -4,6 +4,7 @@ import { useEffect, useId, useState } from 'react';
 import { Modal } from '@/components/ui/modal';
 import { Skeleton, SkeletonBar } from '@/components/ui/skeleton';
 import { Button, ErrorBanner, Field, Select, TextInput } from '@/components/ui/field';
+import { ChoicePill } from '@/components/ui/rows-and-sheets';
 import {
   listCompanies, saveOfficeAsTemplate, type Company, type SavedOfficeTemplate,
 } from '@/lib/admin';
@@ -11,6 +12,7 @@ import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client
 import { TEMPLATE_NAME_MAX } from '@/lib/templates';
 import { useMessages } from '@/i18n/language-provider';
 import { adminTemplateMessages } from '@/i18n/messages/admin-template';
+import { useMediaQuery } from '@/lib/use-media-query';
 
 /**
  * **Save as template** (ADR-0115 §5, §6; P13.2-T7 AC-7), from an office's page: what its agents read
@@ -43,6 +45,7 @@ export function SaveAsTemplateDialog({
 }) {
   const t = useMessages(adminTemplateMessages);
   const id = useId();
+  const belowLaptop = useMediaQuery(['phone', 'tablet']);
   const [companies, setCompanies] = useState<Company[] | null>(null);
   const [companyId, setCompanyId] = useState(kpm.companyId);
   const [name, setName] = useState('');
@@ -129,9 +132,23 @@ export function SaveAsTemplateDialog({
             htmlFor={`${id}-company`}
             hint={t.saveAs.companyHint}
           >
-            <Select id={`${id}-company`} value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
-              {companies.map((c) => <option key={c._id} value={c._id}>{c.name}</option>)}
-            </Select>
+            {/* **No native select below 1024px** (P19.2-T2 AC-4; UI-134: *a pill … for long lists (company)*). */}
+            {belowLaptop ? (
+              <ChoicePill
+                id={`${id}-company`}
+                name={t.company}
+                options={companies.map((c) => ({ key: c._id, label: c.name }))}
+                value={companyId}
+                onChange={setCompanyId}
+                narrows={false}
+                shows="value"
+                className="self-start"
+              />
+            ) : (
+              <Select id={`${id}-company`} value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
+                {companies.map((c) => <option key={c._id} value={c._id}>{c.name}</option>)}
+              </Select>
+            )}
           </Field>
         )}
       </form>

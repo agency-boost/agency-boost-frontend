@@ -1,12 +1,12 @@
 import { defineMessages, type MessagesOf } from '@/i18n/catalogue';
 
 /**
- * **The words a ratio's figure is written with** (P18.98-T4): `lib/ratio-format.ts`' and `lib/ratio-balance.ts`'
+ * **The words a ratio's figure is written with** (P18.10-T4): `lib/ratio-format.ts`' and `lib/ratio-balance.ts`'
  * word constants — what a unit is called where an Owner chooses one, *points* beside a balance's figure, a balance's
  * *Side A* and *Side B*, and the advice an off-balance reading gives. Every screen that writes a ratio reads them: the
  * office's Ratio benchmarks, the field's Ratio tab, a coaching session, the Unit Dashboard, the Company template.
  *
- * **A message never writes a figure** (P18.98-T3): the functions write it in the figures' language and hand it in,
+ * **A message never writes a figure** (P18.10-T3): the functions write it in the figures' language and hand it in,
  * and take the words' language beside it — English when a caller passes none, so a screen not moved yet reads as it
  * did. *Points* is §B.7's *poin*; *Side* is *Sisi* (for approval, the glossary for approval's §B.10). A section's name,
  * which names a side, is the office's, shown as typed (ADR-0179 §5).

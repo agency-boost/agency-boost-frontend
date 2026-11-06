@@ -134,9 +134,8 @@ describe('a coachee’s Personal Summary tab (P11-T7 AC-4)', () => {
   it('P11-T7 AC-4 writes the cards in her pronoun, as the prototype’s coaching tab does', async () => {
     show(summary());
 
-    expect(await card('Her sales activity targets')).toHaveTextContent(
-      'From Goal Settings — appointments and closings are her sales pipeline targets.',
-    );
+    // P19.1-T4 AC-6 (UI-121): no helper line under the targets, on her tab as on /summary.
+    expect(await card('Her sales activity targets')).not.toHaveTextContent('From Goal Settings');
     expect(await card('Leads that need her')).toHaveTextContent('All active leads, nearest date first');
     // UI-054: her gap is inside her goal card, as on her own page, and the pace box is gone.
     expect((await card('Goal vs. actual (APE)')).querySelector('dl')).toHaveTextContent('Remaining this month');
@@ -193,12 +192,15 @@ describe('a coachee’s Personal Summary tab (P11-T7 AC-4)', () => {
     expect(screen.getByText('From the production upload, Sep 2026', { selector: '[role="tooltip"]' })).toBeVisible();
   });
 
-  it('P11-T7 AC-4 names her own figure as hers', async () => {
+  it('P11-T7 AC-4, P19.1-T4 AC-12 names her own figure as hers: her estimate, lighter, on her coach’s reading of her page', async () => {
     show(summary({
       monthly: { ...figures(), source: { provenance: 'self_reported', month: null } },
     }));
     const goal = await card('Goal vs. actual (APE)');
-    expect(within(goal).getByRole('button', { name: 'Her own figure, entered in Goal Settings' })).toBeInTheDocument();
+    expect(goal.querySelector('[data-estimate]')).toHaveTextContent('IDR 30M · her estimate');
+    // Her page, read by her coach: none of the reader's own actions (UI-157 items 1, 3, 4) — those are hers to take.
+    expect(within(goal).queryByRole('button', { name: /Enter interim production|Edit|Delete/ })).not.toBeInTheDocument();
+    expect(goal.querySelector('[data-who-uploads]')).toBeNull();
   });
 
   it('S2 names the leader who typed her figure, rather than calling it hers', async () => {
@@ -239,14 +241,14 @@ describe('a coachee’s Personal Summary tab (P11-T7 AC-4)', () => {
   });
 
   /*
-   * P18.5-T9: *Campaigns she's chasing* (`Overall.html:4121-4130`), the sign of P11-T7's review replaced — the
+   * P18.2-T9: *Campaigns she's chasing* (`Overall.html:4121-4130`), the sign of P11-T7's review replaced — the
    * coachee's chases, from the read `/summary`'s card makes for the member, as 🚀 chips.
    */
   it.each([
     ['she', "Campaigns she's chasing"],
     ['he', "Campaigns he's chasing"],
     ['they', "Campaigns they're chasing"],
-  ] as const)('P18.5-T9 AC-1 titles the card in %s’s pronoun, with the bolt and no tag, and draws chips by title, a line icon on each (UI-102)', async (pronoun, title) => {
+  ] as const)('P18.2-T9 AC-1 titles the card in %s’s pronoun, with the bolt and no tag, and draws chips by title, a line icon on each (UI-102)', async (pronoun, title) => {
     const { calls } = show(summary(), person(pronoun));
     const section = await card(title);
     const heading = within(section).getByRole('heading', { level: 2 });
@@ -259,18 +261,18 @@ describe('a coachee’s Personal Summary tab (P11-T7 AC-4)', () => {
     expect(within(section).queryByRole('button')).not.toBeInTheDocument();
     expect(section).not.toHaveClass('print:hidden');
     expect(section.textContent).not.toMatch(SIX_WORDS);
-    // P18.5-T9 AC-2: the coachee's chases, through ?for= — the one read the member's own card makes.
+    // P18.2-T9 AC-2: the coachee's chases, through ?for= — the one read the member's own card makes.
     expect(calls.filter((c) => c.url.includes('/campaigns')).map((c) => c.url))
       .toEqual(['http://api.test/api/v1/campaigns/chasing?for=mem-rina']);
   });
 
-  it('P18.5-T9 AC-1 says the Unit Dashboard’s words when she chases nothing', async () => {
+  it('P18.2-T9 AC-1 says the Unit Dashboard’s words when she chases nothing', async () => {
     show(summary(), person('she'), LEADER, { body: RATIOS }, { body: NONE_CHASED });
     const section = await card("Campaigns she's chasing");
     expect(await within(section).findByText('Not currently chasing any campaigns.')).toBeInTheDocument();
   });
 
-  it('P18.5-T9 AC-2 fails on its own card, and the Summary stands', async () => {
+  it('P18.2-T9 AC-2 fails on its own card, and the Summary stands', async () => {
     show(summary(), person('she'), LEADER, { body: RATIOS }, {
       status: 404, body: { error: { code: 'NOT_FOUND', message: 'Not found', requestId: 'r-9' } },
     });
@@ -293,15 +295,13 @@ describe('a coachee’s Personal Summary tab (P11-T7 AC-4)', () => {
     expect(pulse.textContent).not.toMatch(SIX_WORDS);
   });
 
-  it('P11-T7 AC-4 opens her Goal Setting tab where /summary links to the reader’s own Goal Settings, and links to no screen of the reader’s', async () => {
+  it('P11-T7 AC-4, P19.1-T4 AC-6 links to no screen of the reader’s — the helper line’s Goal Settings link went with the line (UI-121)', async () => {
     show(summary());
     await card('Goal vs. actual (APE)');
 
-    const links = within(screen.getByRole('main')).getAllByRole('link')
+    const links = within(screen.getByRole('main')).queryAllByRole('link')
       .filter((a) => !a.closest('nav') && a.getAttribute('href') !== '/coaching');
-    expect(links.map((a) => [a.textContent, a.getAttribute('href')])).toEqual([
-      ['Goal Settings', '/coaching/mem-rina/goal-setting'],
-    ]);
+    expect(links.map((a) => [a.textContent, a.getAttribute('href')])).toEqual([]);
   });
 
   it('P11-T7 AC-4 sends a coachee with no goal yet to her Goal Setting tab, in her words', async () => {
@@ -386,10 +386,10 @@ describe('a coachee’s Personal Summary tab (P11-T7 AC-4)', () => {
 });
 
 /**
- * **The coaching tab's period** (P18.8-T11 AC-2): the same month and year selects as `/summary`, in this tab's own
+ * **The coaching tab's period** (P18.5-T11 AC-2): the same month and year selects as `/summary`, in this tab's own
  * address, read with `for` and the period together.
  */
-describe('a coachee’s Personal Summary tab — an earlier month or year (P18.8-T11 AC-2)', () => {
+describe('a coachee’s Personal Summary tab — an earlier month or year (P18.5-T11 AC-2)', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     nav.replace.mockClear();
@@ -423,7 +423,7 @@ describe('a coachee’s Personal Summary tab — an earlier month or year (P18.8
     return { sheet, options: within(within(sheet).getByRole('list')).getAllByRole('button').map((b) => b.textContent) };
   };
 
-  it('P18.8-T11 AC-2, UI-051 offers the month pill /summary has, her office’s months newest first, and no download', async () => {
+  it('P18.5-T11 AC-2, UI-051 offers the month pill /summary has, her office’s months newest first, and no download', async () => {
     open();
     const { options } = await sheetOf('Month: Sep 2026');
     expect(options).toEqual(['Sep 2026', 'Aug 2026', 'Jul 2026', 'Jun 2026']);
@@ -434,7 +434,7 @@ describe('a coachee’s Personal Summary tab — an earlier month or year (P18.8
     expect(screen.queryByRole('button', { name: 'Download' })).not.toBeInTheDocument();
   });
 
-  it('P18.8-T11 AC-2 reads her August with for and the month together, the month in this tab’s own address', async () => {
+  it('P18.5-T11 AC-2 reads her August with for and the month together, the month in this tab’s own address', async () => {
     const { calls } = open();
     const { sheet } = await sheetOf('Month: Sep 2026');
     await userEvent.click(within(sheet).getByRole('button', { name: 'Aug 2026' }));
@@ -445,7 +445,7 @@ describe('a coachee’s Personal Summary tab — an earlier month or year (P18.8
     expect(calls.filter((c) => c.url.includes('/activity/ratios'))).toHaveLength(1);
   });
 
-  it('P18.8-T11 AC-3, UI-054 her August from the address: final figures, no gap, no days left', async () => {
+  it('P18.5-T11 AC-3, UI-054 her August from the address: final figures, no gap, no days left', async () => {
     const { calls } = open({ month: '2026-08' });
     const goal = await card('Goal vs. actual (APE)');
 

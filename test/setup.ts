@@ -35,13 +35,31 @@ afterEach(() => {
     window.history.replaceState(window.history.state, '', window.location.pathname);
   }
   /*
-   * **The language a test chose stays with it** (P18.98-T2): the switch writes the `ab_lang` cookie and `<html lang>`,
+   * **The language a test chose stays with it** (P18.10-T2): the switch writes the `ab_lang` cookie and `<html lang>`,
    * and jsdom keeps one `document` per spec file, so the next test would start in it — and a pre-paint read would take
    * it up. Cleared after each, as the hash is.
    */
   document.cookie = `${LANGUAGE_COOKIE}=; Max-Age=0; Path=/`;
   document.documentElement.lang = '';
   document.documentElement.removeAttribute(LANGUAGE_PENDING);
+  /*
+   * **The calendar's last view stays with the test that chose it** (P19.1-T3 AC-9, UI-119): the page remembers it in
+   * `localStorage`, which jsdom keeps per spec file, so a test that pressed *Month* would open the next one on Month.
+   */
+  try {
+    window.localStorage.removeItem('ab.calendar.view');
+  } catch {
+    // No storage, nothing kept.
+  }
+  /*
+   * **The tab's view stays with the test that chose it** (P19.2-T1; ADR-0198 §5): opening an office page as an Owner
+   * remembers the office view in `sessionStorage`, which jsdom keeps per spec file, so the next test would start in it.
+   */
+  try {
+    window.sessionStorage.removeItem('ab.view');
+  } catch {
+    // No storage, nothing kept.
+  }
 });
 
 /**

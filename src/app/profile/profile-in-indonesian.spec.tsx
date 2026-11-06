@@ -149,7 +149,7 @@ describe('UI-111 Profil saya in Indonesian', () => {
   });
 });
 
-describe('P18.98-T4 describeDevice, in the words’ language', () => {
+describe('P18.10-T4 describeDevice, in the words’ language', () => {
   it('names a device in Indonesian, a browser’s and a system’s names their own', () => {
     expect(describeDevice('Mozilla/5.0 (Linux; Android 13) Chrome/120 Mobile Safari', 'id')).toBe('Chrome di Android');
     expect(describeDevice('Mozilla/5.0 (iPhone; CPU iPhone OS 17_0) AppleWebKit', 'id')).toBe('iPhone atau iPad');

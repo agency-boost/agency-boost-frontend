@@ -3,7 +3,7 @@ import { defineMessages, type MessagesOf } from '@/i18n/catalogue';
 import { kept } from '@/i18n/kept';
 
 /**
- * **`/join`** (P18.98-T4, public and account; `functional/org-hierarchy.md`, *Invites*, *Redemption*, *Accepting an
+ * **`/join`** (P18.10-T4, public and account; `functional/org-hierarchy.md`, *Invites*, *Redemption*, *Accepting an
  * invite*): a leader's code, link or QR checked before anything is written, and a leader's invite to one person, read
  * before anybody signs in — for somebody signed out, with no office, or already in one.
  *
@@ -47,7 +47,7 @@ const en = {
     accept: 'Accept and join',
     different: 'Use a different code',
   },
-  /** A leader's invite to one person (P18.96-T3 AC-4, ADR-0170 §3, §4). */
+  /** A leader's invite to one person (P18.8-T3 AC-4, ADR-0170 §3, §4). */
   invite: {
     title: 'Join your leader’s team',
     subtitle: 'An invite from your leader, to you by your agent code.',

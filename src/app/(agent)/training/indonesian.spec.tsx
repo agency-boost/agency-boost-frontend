@@ -55,11 +55,11 @@ const modulePageAt = (routes: Routes = {}, me: Me = LEARNER) => inIndonesian(
 const title = () => screen.findByRole('heading', { level: 1, name: 'Training Modules' });
 
 /**
- * **P18.98-T4, Training in ID mode** (ADR-0179 §3–§5): the learner's list, a module's page and the coaching *Training*
+ * **P18.10-T4, Training in ID mode** (ADR-0179 §3–§5): the learner's list, a module's page and the coaching *Training*
  * tab in the approved glossary's Indonesian; the title, the nav item, *Training*, *Skill* and *Module* English (§A); every
  * category, skill, module and item as the office typed it. In English: `page.spec.tsx` and its module page's spec.
  */
-describe('P18.98-T4 Training in Indonesian', () => {
+describe('P18.10-T4 Training in Indonesian', () => {
   beforeEach(() => { nav.replace.mockReset(); nav.push.mockReset(); });
   afterEach(() => {
     vi.unstubAllGlobals();

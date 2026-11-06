@@ -63,7 +63,7 @@ const rowIn = (layout: HTMLElement, id: string) => {
 };
 const ready = () => screen.findByTestId('group-tree-list');
 
-describe('group tree (UI V1, Phase 18.99 T9)', () => {
+describe('group tree (UI V1, Phase 18.11 T9)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   describe('UI-058 rows at every size, no canvas', () => {
@@ -202,7 +202,7 @@ describe('group tree (UI V1, Phase 18.99 T9)', () => {
       expect(link).toHaveFocus();
       await userEvent.tab();
       expect(within(sari).getByRole('button', { name: 'Show Sari Puspita’s team' })).toHaveFocus();
-      expect(sari.className).toContain('has-[[data-row-main]:focus-visible]:outline-amber');
+      expect(sari.className).toContain('has-[[data-row-main]:focus-visible]:outline-primary');
     });
 
     it('UI-072 an Admin’s field view: their own leader a node and inert, nobody outside their downline coached', async () => {
@@ -324,7 +324,11 @@ describe('group tree (UI V1, Phase 18.99 T9)', () => {
       leader: null, rootIds: ['mem-ab'], selfId: 'mem-ab',
       counts: { ab: 0, aab: 0, agent: 0, total: 0 },
     });
-    expect(await screen.findByText(/Nobody reports to you yet/)).toBeInTheDocument();
+    // P19-T4 AC-3 (D-37: *"Undang agen" on an empty Group Tree*): the tree as it will look, greyed, and the next step.
+    expect(await screen.findByText('No data yet')).toBeInTheDocument();
+    expect(screen.getByText('Example')).toBeInTheDocument();
+    expect(document.querySelector('[data-sample]')!.textContent).toContain('Sample agent 3');
+    expect(screen.getByRole('link', { name: 'Invite an agent' })).toHaveAttribute('href', '/new-hires');
     expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
   });
 

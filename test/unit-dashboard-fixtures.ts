@@ -47,6 +47,7 @@ export function unitRow(membershipId: string, name: string, over: Partial<UnitRo
     },
     leadsCounts: { salesOpen: 9, salesClosing: 4, recruitOpen: 0, recruitNominated: 0 },
     closings: 0,
+    proposalsMade: 0,
     activity: {
       leads: { logged: 63, target: 70 },
       appointments: { logged: 18, target: 20 },
@@ -68,6 +69,7 @@ export const total = (over: Partial<UnitTotal> = {}): UnitTotal => ({
   goal: { targetMinor: rp(320), actualMinor: rp(262.4), attainmentPct: 82, missing: 0, gapMinor: rp(57.6), overMinor: 0 },
   leadsCounts: { salesOpen: 36, salesClosing: 16, recruitOpen: 2, recruitNominated: 1 },
   closings: 3,
+  proposalsMade: 0,
   touches: { logged: 340, target: 380 },
   potentialActive: { count: 3, of: 4 },
   newHires: 0,
@@ -76,7 +78,7 @@ export const total = (over: Partial<UnitTotal> = {}): UnitTotal => ({
 
 const AAB = { code: 'AAB', label: 'Associate Agency Builder' };
 
-/** The seed's chases (`phase-18.5-agent-enablement.md`, *Seed*): Agus MDRT; Dimas and Rina MDRT and the sprint. */
+/** The seed's chases (`phase-18.2-agent-enablement.md`, *Seed*): Agus MDRT; Dimas and Rina MDRT and the sprint. */
 const MDRT = { code: 'MDRT_QUALIFICATION', title: 'MDRT Qualification' };
 const SPRINT = { code: 'APE_SPRINT', title: 'Q4 APE Sprint' };
 
@@ -159,6 +161,7 @@ export function dashboard(over: Partial<UnitDashboardView> = {}): UnitDashboardV
     overdueAfterDays: 7,
     head: { membershipId: 'mem-agus', name: 'Agus Santoso', isReader: true },
     empty: false,
+    readOnly: false,
     tiles: {
       team: { total: 16, direct: 4, units: 3, underUnits: 9, newHires: 0 },
       directGroupProduction: {
@@ -213,7 +216,7 @@ export const SARI_UNIT = dashboard({
 });
 
 /**
- * **Yanti as the seed has her since P18.96-T5** (ADR-0172): rejoined weeks ago, no first sale yet — a *New hire*, in
+ * **Yanti as the seed has her since P18.8-T5** (ADR-0172): rejoined weeks ago, no first sale yet — a *New hire*, in
  * Sari's unit and in Agus's team, out of every total's production and of *On pace*'s count — and, since UI V1
  * (UI-013), in its `of`: manpower. Her missing figure is no longer *missing*: the production leaves her out for the
  * other reason, and says so.
@@ -275,7 +278,7 @@ export const RATIOS = {
 };
 
 /*
- * ── UI V1 (Phase 18.99 T4): the Activities tab ─────────────────────────────────────────────────
+ * ── UI V1 (Phase 18.11 T4): the Activities tab ─────────────────────────────────────────────────
  */
 
 /** The seed's office sections, as the office named them (content: never translated). */

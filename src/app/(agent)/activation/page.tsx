@@ -10,7 +10,7 @@ import { activationMessages } from '@/i18n/messages/activation';
  * hire's own checklist. Gated by `activation:read`, which every field rung holds for their own; the API
  * answers the reader's own activation and nobody else's, and a reader with none, or whose activation is
  * over, meets the page's not-offered state rather than a checklist (T4 AC-7). Its title is the nav item's words, kept
- * English (§A.2); its line the catalogue's (P18.98-T4).
+ * English (§A.2); its line the catalogue's (P18.10-T4).
  */
 export default function ActivationPage() {
   const t = useMessages(activationMessages);

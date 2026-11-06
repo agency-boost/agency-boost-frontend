@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
@@ -33,14 +33,20 @@ const membership = (over: Partial<NonNullable<Me['membership']>> = {}): NonNulla
   isKpmOwner: false, isKpmAdmin: false, directCount: 0, ...over,
 });
 
-/** Platform-wide and in no office, holding most of an office's read grants besides (`all`) but not the roster's. */
+/**
+ * Platform-wide and in no office, holding most of an office's read grants besides (`all`) but not the roster's — nor,
+ * since P19.4-T2 (ADR-0206 §2), the import's or the data upload's.
+ */
 const SUPER_ADMIN = makeMe({
   user: { ...makeMe().user, platformRole: 'super_admin' },
   membership: null,
   permissions: [
-    ...OFFICE.filter((p) => !['member:read_profile', 'org_tree:read', 'calendar_entry:read', 'activation:read', 'new_hires:read_roster'].includes(p)),
+    ...OFFICE.filter((p) => ![
+      'member:read_profile', 'org_tree:read', 'calendar_entry:read', 'activation:read', 'new_hires:read_roster',
+      'kpm:import_roster', 'data_upload:read',
+    ].includes(p)),
     'kpm:list_all', 'kpm_admin:grant', 'platform_analytics:read', 'billing:read_prices', 'org_level:crud',
-    'company_template:read', 'impersonation:elevate_to_write',
+    'company_template:read',
   ],
 });
 /** Every permission any gate names: what is left to refuse is the family. */
@@ -91,7 +97,8 @@ describe('canOpen — by family and role (2026-10-11)', () => {
   it('the Owner opens the console of their office and the field view (ADR-0114), never the platform console', () => {
     expect(opens(OWNER, ADDRESSES.office)).toEqual(ADDRESSES.office);
     expect(opens(OWNER, ADDRESSES.field)).toEqual(ADDRESSES.field);
-    // They hold `kpm:import_roster`, the roster page's gate: the platform console is still not theirs.
+    // They hold `kpm:import_roster`, the import's grant: the platform console, its retired roster address included, is
+    // still not theirs (P19.4-T2: the address redirects under the console's own gate).
     expect(opens(OWNER, ADDRESSES.console)).toEqual([]);
   });
 
@@ -160,7 +167,7 @@ describe('canOpen — by family and role (2026-10-11)', () => {
     expect(canOpen('/notifications', REMOVED)).toBe(false);
   });
 
-  it('P18.8-T5 KPM analytics is the Owner’s, an Admin’s and a Core Leader’s — in their own shell — and no other leader’s', () => {
+  it('P18.5-T5 KPM analytics is the Owner’s, an Admin’s and a Core Leader’s — in their own shell — and no other leader’s', () => {
     const analytics = ['/kpm/analytics', '/kpm/analytics/compliance?category=training'];
     // The AB and AAB hold the grant for this (ADR-0159 §2); whether they are one is the session's fact.
     const withGrant = (me: Me, isCoreLeader: boolean) => makeMe({
@@ -182,6 +189,8 @@ describe('canOpen — by family and role (2026-10-11)', () => {
     for (const me of [SUPER_ADMIN, OWNER, AGENT, NOBODY_S]) {
       expect(opens(me, [
         '/login', '/register', '/forgot-password', '/reset-password/t', '/verify-email/t', '/verify-email-change/t',
+        // P19.2-T1 AC-8 (ADR-0199 §2): a linked login's link — an emailed page, never somewhere to land after signing in.
+        '/link-account/t',
       ])).toEqual([]);
     }
   });
@@ -238,7 +247,7 @@ describe('canOpen — matching an address to its page', () => {
   });
 
   it('holds a page to its own gate, and to its layouts’ gates, which reach every page beneath them', () => {
-    // Outside every group since P18.8-T5 (ADR-0159 §3): its layout's gate alone, no console shell's.
+    // Outside every group since P18.5-T5 (ADR-0159 §3): its layout's gate alone, no console shell's.
     expect(gatesFor('/kpm/analytics/compliance')).toEqual(['kpm_analytics:read']);
     expect(gatesFor('/kpm/overview')).toEqual(['member:read_profile', 'kpm_overview:read']);
     expect(gatesFor('/coaching/[membershipId]/activity')).toEqual(['coaching_session:read', 'activity_log:read_raw']);
@@ -384,11 +393,16 @@ describe('the route table is the app directory’s', () => {
     expect(GATES.map((g) => `${g.on} ${g.route} ${g.permission}`).sort()).toEqual(declared);
   });
 
-  it('each group’s layout gates through its shell’s default, and FAMILY_GATES records it', () => {
-    const SHELLS: Record<string, { name: string; file: string } | null> = {
-      admin: { name: 'AdminShell', file: 'admin-shell.tsx' },
-      tenant: { name: 'TenantShell', file: 'tenant-shell.tsx' },
-      agent: { name: 'AgentShell', file: 'agent-shell.tsx' },
+  /*
+   * *Changed 2026-11-05 (P19.2-T1; ADR-0197):* **one shell for every family.** The group layouts render it with their
+   * family — the field's through `AgentShell` — and the shell takes the family's gate from `FAMILY_GATES` itself, so the
+   * table and the gate cannot part. It read each console shell's own `permission = '…'` default until then.
+   */
+  it('P19.2-T1 AC-2 each group’s layout renders the one shell with its family, gated by FAMILY_GATES', () => {
+    const SHELLS: Record<string, string | null> = {
+      admin: '<Shell family="admin">',
+      tenant: '<Shell family="tenant">',
+      agent: '<AgentShell>',
       auth: null,
     };
     const roots = files.filter((f) => f.groupRoot && f.kind === 'layout');
@@ -402,23 +416,26 @@ describe('the route table is the app directory’s', () => {
         expect(FAMILY_GATES[root.family as RouteFamily]).toBeUndefined();
         continue;
       }
-      expect(source, root.file).toContain(`<${shell.name}>`);
-      const shellSource = readFileSync(join(SRC, 'components', shell.file), 'utf8');
-      const fallback = /\bpermission\s*=\s*'([^']+)'/.exec(shellSource)?.[1];
-      expect(FAMILY_GATES[root.family as RouteFamily], shell.file).toBe(fallback);
+      expect(source, root.file).toContain(shell);
     }
+    expect(readFileSync(join(SRC, 'components', 'agent-shell.tsx'), 'utf8')).toContain('<Shell family="agent"');
+    // The office's and the platform's gates, as the two consoles' defaults were; the field family has none.
+    expect(FAMILY_GATES).toEqual({ admin: 'kpm:list_all', tenant: 'member:read_profile' });
   });
 
-  it('each group’s shell passes its own family to RequireSession, so the shell refuses every other reader', () => {
-    for (const [family, file] of [['admin', 'admin-shell.tsx'], ['tenant', 'tenant-shell.tsx'], ['agent', 'agent-shell.tsx']]) {
-      const source = readFileSync(join(SRC, 'components', file), 'utf8');
-      expect(source.match(/<RequireSession\b[^>]*>/g), file).toEqual([`<RequireSession permission={permission} family="${family}">`]);
-    }
+  it('P19.2-T1 AC-2 the one shell passes its family to RequireSession, and the family’s gate when the page names none', () => {
+    const source = readFileSync(join(SRC, 'components', 'shell.tsx'), 'utf8');
+    expect(source.match(/<RequireSession\b[^>]*>/g)).toEqual([
+      '<RequireSession permission={permission ?? (family ? FAMILY_GATES[family] : undefined)} family={family}>',
+    ]);
+    // The two consoles' shells are gone (ADR-0197 §1): nothing chooses between shells any more.
+    expect(existsSync(join(SRC, 'components', 'tenant-shell.tsx'))).toBe(false);
+    expect(existsSync(join(SRC, 'components', 'admin-shell.tsx'))).toBe(false);
   });
 
-  it('OWNER_ONLY is the console nav’s ownerOnly items', () => {
-    const nav = readFileSync(join(SRC, 'components', 'tenant-shell.tsx'), 'utf8');
-    const ownerOnly = [...nav.matchAll(/href: '([^']+)'[^}\n]*ownerOnly: true/g)].map((m) => m[1]);
+  it('P19.2-T1 AC-6 OWNER_ONLY is the office view’s Owner-only items', () => {
+    const nav = readFileSync(join(SRC, 'lib', 'field-nav.ts'), 'utf8');
+    const ownerOnly = [...nav.matchAll(/isKpmOwner \? \[dest\('[^']+', '([^']+)'/g)].map((m) => m[1]);
     expect(ownerOnly.length).toBeGreaterThan(0);
     expect([...OWNER_ONLY].sort()).toEqual(ownerOnly.sort());
   });

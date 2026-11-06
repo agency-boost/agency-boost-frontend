@@ -49,10 +49,10 @@ function render(me = OWNER) {
 const ENGLISH = /\b(Edit|Archive|Restore|Show archived|statuses|Closes the pipeline|Open|Make this close|Add a (sales|recruitment) stage|Switch on|No stages yet|Nothing has been published)\b/;
 
 /**
- * **P18.98-T4, Settings › Lead statuses in ID mode**: the screen's words the approved glossary's Indonesian, its title,
+ * **P18.10-T4, Settings › Lead statuses in ID mode**: the screen's words the approved glossary's Indonesian, its title,
  * its tabs and *Expected to close* English (§A), and the office's stages as typed. In English: `page.spec.tsx`.
  */
-describe('P18.98-T4 Settings › Lead statuses in Indonesian', () => {
+describe('P18.10-T4 Settings › Lead statuses in Indonesian', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it('AC-2 says the ladder in Indonesian, its title, tabs and Expected to close kept English', async () => {

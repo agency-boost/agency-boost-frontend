@@ -16,6 +16,25 @@ export interface LeadContact {
   email: string | null;
 }
 
+/**
+ * **The avatar's badge** (P19.1-T2 AC-8; UI-153 item 5; Q-3): `potensi` — the yellow ✓ — while the lead is switched on
+ * this month and open; `won` — the green ✓ — when that switched-on lead was marked *Berhasil* this month; `null` when the
+ * switch is off, or the lead closed some other way. It clears on the 1st with the switch, which the server derives.
+ */
+export function potensiBadgeOf(lead: { thisMonth: boolean; closedThisMonth?: boolean; outcome: LeadOutcome | null }): 'potensi' | 'won' | null {
+  if (!lead.thisMonth) return null;
+  if (lead.closedThisMonth) return 'won';
+  return lead.outcome === null ? 'potensi' : null;
+}
+
+/**
+ * **The office's final stage of a ladder** — the stage it flagged `isTerminal` (ADR-0043) — or `null` for a ladder with
+ * none (P19.1-T2 AC-9; UI-160; ADR-0194). *Tandai berhasil* is enabled there and *Tandai tidak berhasil* refused; its
+ * label is the office's own words for the held line, *Aktif setelah status {label}*.
+ */
+export const finalStageOf = <S extends { isTerminal?: boolean }>(ladder: readonly S[]): S | null =>
+  ladder.find((stage) => stage.isTerminal) ?? null;
+
 /** Who last changed a lead, when it was not its owner (ADR-0044). */
 export interface LeadEditor {
   membershipId: string;
@@ -43,6 +62,12 @@ export interface Lead {
   /** Every month this lead was promised for, oldest first, as `YYYY-MM` in the office's zone. */
   committedMonths: string[];
   /**
+   * **Marked *Berhasil* inside the office's current month** (P19.1-T2, UI-153 item 5): derived by the server, never
+   * stored. With `thisMonth` it is the avatar's badge (`potensiBadgeOf`). Always sent since P19.1; optional here so a
+   * reading of an older answer draws no badge rather than a wrong one.
+   */
+  closedThisMonth?: boolean;
+  /**
    * Who last changed it, when that was not the agent whose lead it is (ADR-0044) — `null`
    * otherwise. A leader's edit carries their name; the agent's own does not need one.
    */
@@ -53,10 +78,41 @@ export interface Lead {
   outcome: LeadOutcome | null;
   source: string | null;
   dateRegistered: string | null;
+  /**
+   * **The client's age at the next birthday, today** (P19.7-T1 AC-1; ADR-0224 §2): the server's reading — the age written
+   * plus the whole years since `ageRecordedOn` — never computed here. `null` when none was given. Optional, as
+   * `closedThisMonth` is, so an older answer reads as no age.
+   */
+  age?: number | null;
+  /** The office's day the age was last written; the server's alone. */
+  ageRecordedOn?: string | null;
+  /** *Laki-laki* or *Perempuan*, or `null` (ADR-0224 §1). */
+  gender?: LeadGender | null;
+  /**
+   * **The lead's proposals, for its owner only** (P19.7-T2 AC-12; ADR-0221 §6): how many live ones, and the products of
+   * the one updated last — the card's *"PRUWell Medical +1"*. `null` on a lead with none **and on every lead the reader
+   * does not own**: a leader never learns what was proposed on a downline's lead (decision 4). Optional, as `age` is, so
+   * an older answer reads as none.
+   */
+  proposals?: LeadProposals | null;
   version: number;
   flags: LeadFlag[];
   /** How late, in the office's own days. `null` unless `flags` carries `overdue`. */
   overdueDays: number | null;
+}
+
+/** `Lead.proposals`: the lead's live proposals, drafts included, and the latest one's products (ADR-0221 §6). */
+export interface LeadProposals {
+  count: number;
+  latest: LeadLatestProposal;
+}
+
+/**
+ * The proposal updated last that has a product: its item names as the proposal shows them, in order. Empty when every
+ * live proposal of the lead is still an empty draft — the card then draws the document icon alone.
+ */
+export interface LeadLatestProposal {
+  products: string[];
 }
 
 /**
@@ -64,14 +120,32 @@ export interface Lead {
  * by code — the office names the stage. Only `GET /leads/:id` carries them (`LeadDetail`); the list never does.
  */
 export interface LeadMove {
+  /** `stage` since P19.7-T2; absent on an older answer, which carried moves alone. */
+  kind?: 'stage';
   at: string;
   fromStatusCode: string | null;
   toStatusCode: string;
 }
 
-/** One lead read by its id: the list's shape, and its moves, oldest first (UI-105). */
+/**
+ * ***"Proposal dibuat · {produk}"*** in the lead's *Riwayat* (P19.7-T2 AC-11; ADR-0221 §6): derived from the reader's
+ * own proposals of the lead that were ever finished, never written to the lead. `at` is the first *Simpan PDF*;
+ * `proposalId` is `null` once that proposal was deleted — the note stays, its link goes. Only the lead's owner is
+ * answered these.
+ */
+export interface LeadProposalNote {
+  kind: 'proposal';
+  at: string;
+  proposalId: string | null;
+  products: string[];
+}
+
+/** One line of a lead's *Riwayat*: a move along its ladder, or a proposal made. */
+export type LeadHistoryEntry = LeadMove | LeadProposalNote;
+
+/** One lead read by its id: the list's shape, and its *Riwayat*, oldest first (UI-105; P19.7-T2). */
 export interface LeadDetail extends Lead {
-  history: LeadMove[];
+  history: LeadHistoryEntry[];
 }
 
 export interface LeadPage {
@@ -95,13 +169,18 @@ export interface LeadQuery {
    * recruitment rank 2 sit together by a stated rule rather than by accident. `nextActionDate`
    * stays for the coaching card; `/leads` no longer offers it.
    *
-   * **None is the owner's own order** (P18.8-T7, ADR-0161 §1): where `reorderLeads` put each lead, a new
+   * **None is the owner's own order** (P18.5-T7, ADR-0161 §1): where `reorderLeads` put each lead, a new
    * one on top. `dir` means nothing without a key.
    */
   sort?: 'dateRegistered' | 'name' | 'nextActionDate' | 'type' | 'status';
   dir?: 'asc' | 'desc';
   page?: number;
   pageSize?: number;
+  /**
+   * ***Sudah ada proposal* / *Belum ada proposal*** (P19.7-T2 AC-12; ADR-0221 §6): either one narrows the list to the
+   * reader's own leads first, then to those with a live proposal or without one. Works with every other filter.
+   */
+  hasProposal?: boolean;
   /**
    * Whose leads: a coachee's, on the coaching session's *Leads* card (P11-T4 AC-3, ADR-0076). Absent,
    * the list is the reader's scope as `/leads` reads it. The server answers 404 outside the reader's
@@ -115,7 +194,7 @@ const EN = leadsMessages.en;
 
 /**
  * What each attention flag is called on screen, **in English**: one place, so two screens cannot disagree. A screen
- * reads it in the reader's language through `flagLabel(flag, overdueDays, language)` (P18.98-T4).
+ * reads it in the reader's language through `flagLabel(flag, overdueDays, language)` (P18.10-T4).
  */
 export const FLAG_LABEL: Record<LeadFlag, string> = {
   overdue: EN.flags.overdue,
@@ -132,7 +211,7 @@ export const FLAG_LABEL: Record<LeadFlag, string> = {
  * wrong for anybody whose device is in another zone, which is the defect the whole day-boundary
  * rule exists to stop (invariant §9).
  *
- * In the reader's words' `language` (P18.98-T4), English when none is passed: *Terlambat 14 hari*.
+ * In the reader's words' `language` (P18.10-T4), English when none is passed: *Terlambat 14 hari*.
  */
 export const flagLabel = (flag: LeadFlag, overdueDays: number | null, language: Language = SOURCE_LANGUAGE): string => {
   const t = messagesIn(leadsMessages, language).flags;
@@ -151,23 +230,23 @@ export const LEAD_ROWS_FIRST_SHOWN = 30;
 
 /**
  * **WhatsApp's and the dialler's reading of a number** — `WHATSAPP_DIGITS`, `whatsAppNumber`, `whatsAppLink`, `callLink`
- * (P13.1-T4 AC-2, P18.95-T4 AC-3) — live in `lib/phone-number.ts` with the rest of the phone's rules, so a screen that
- * draws a WhatsApp button for a member loads no lead (P18.99-T16, the bundle). Re-exported here for the leads' screens.
+ * (P13.1-T4 AC-2, P18.7-T4 AC-3) — live in `lib/phone-number.ts` with the rest of the phone's rules, so a screen that
+ * draws a WhatsApp button for a member loads no lead (P18.11-T16, the bundle). Re-exported here for the leads' screens.
  */
 export { callLink, WHATSAPP_DIGITS, whatsAppLink, whatsAppNumber } from './phone-number';
 
 /**
  * Why the 📞 and WhatsApp are held on a lead, in the reader's words — and where to put it right, which on a
- * phone is the ⋮'s *Lead details*. (P18.95-T4 AC-3.) In English, the catalogue's source (`messages/leads.ts`).
+ * phone is the ⋮'s *Lead details*. (P18.7-T4 AC-3.) In English, the catalogue's source (`messages/leads.ts`).
  */
 export const PHONE_HELD = EN.phoneHeld;
 
 /**
- * Why a lead's phone can be neither called nor opened in WhatsApp, or `null` when it can (P18.95-T4 AC-3).
+ * Why a lead's phone can be neither called nor opened in WhatsApp, or `null` when it can (P18.7-T4 AC-3).
  *
  * **One reason for both actions**, because one rule (`whatsAppNumber`) decides both: nothing saved, or
  * something saved that is not 10 to 15 digits once read — `123`, a name typed in the wrong box. In the reader's
- * words' `language` (P18.98-T4), English when none is passed.
+ * words' `language` (P18.10-T4), English when none is passed.
  */
 export function phoneHeld(phone: string | null | undefined, language: Language = SOURCE_LANGUAGE): string | null {
   if (whatsAppNumber(phone)) return null;
@@ -211,6 +290,23 @@ export const LEAD_PAGE_CAP = 200;
  * server answer would use, and takes it away once the name is long enough.
  */
 export const LEAD_NAME_MIN = 2;
+
+/** `male` or `female` (ADR-0224 §1; ADR-0158's values): *Laki-laki* and *Perempuan* on screen. */
+export type LeadGender = 'male' | 'female';
+
+/**
+ * **The bounds of a lead's age at the next birthday** (`LEAD_AGE`, §B.34; ADR-0224 §3): the API's, held to its document
+ * by `contract.spec.ts` (`CreateLeadDto.age`'s `minimum` and `maximum`). Outside them the API answers `422
+ * LEAD_AGE_OUT_OF_RANGE`; the stepper stops at them.
+ */
+export const LEAD_AGE_MIN = 1;
+export const LEAD_AGE_MAX = 100;
+
+/** A typed age as the API takes it: a whole number, or `null` for an empty box. */
+export function ageOfText(text: string): number | null {
+  const trimmed = text.trim();
+  return trimmed === '' ? null : Number(trimmed);
+}
 
 /**
  * Every row one query holds, page after page, handed over as each page lands (P10.1-T4 AC-4).
@@ -285,7 +381,7 @@ export const deleteLead = (id: string) =>
   api<{ id: string; deletedAt: string }>(`/leads/${id}`, { method: 'DELETE' });
 
 /**
- * **The reader's open leads, every one, in the order they dragged them into** (P18.8-T7, ADR-0161 §1) —
+ * **The reader's open leads, every one, in the order they dragged them into** (P18.5-T7, ADR-0161 §1) —
  * top first. `GET /leads` without a sort then answers in it.
  *
  * The whole list, never *move this one*: the server refuses a list that leaves one of the reader's open

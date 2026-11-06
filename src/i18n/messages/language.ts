@@ -1,7 +1,7 @@
 import { defineMessages, type MessagesOf } from '@/i18n/catalogue';
 
 /**
- * **The language switch's own words** (P18.98-T2; ADR-0179 §2): the *ID | EN* switch in every shell's header, on the
+ * **The language switch's own words** (P18.10-T2; ADR-0179 §2): the *ID | EN* switch in every shell's header, on the
  * phone's bar and on the six public pages (`components/language-switch.tsx`), and *Language* on *Your account*.
  *
  * **Not here: the options' names.** *ID* and *EN* are the languages' codes, and *Bahasa Indonesia* and *English* each

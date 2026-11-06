@@ -103,7 +103,7 @@ export function AgentSearch({
       <div
         className={cn(
           'flex h-10 items-center gap-2 rounded-pill border border-line bg-card pl-3 pr-2 text-muted',
-          'focus-within:border-amber focus-within:ring-2 focus-within:ring-amber',
+          'focus-within:border-primary focus-within:ring-2 focus-within:ring-focus-ring',
         )}
       >
         <LineIcon name="search" className="h-[18px] w-[18px]" />

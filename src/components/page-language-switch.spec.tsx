@@ -2,6 +2,7 @@ import { screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { atWidth, makeMe, renderLive, renderWithSession, resetLanguage, stubFetch } from '@test/harness';
 import BillingPage from '@/app/(admin)/admin/billing/page';
+import { fieldChrome } from '@test/shell-fixtures';
 import { AppShell, type NavSection } from './app-shell';
 import { PersonIdentity } from './coaching-person';
 
@@ -14,7 +15,7 @@ const SECTIONS: readonly NavSection[] = [{ label: null, items: [{ label: 'Overvi
 
 /** A page in a shell, as a group layout draws one. */
 function inShell(page: React.ReactNode) {
-  return <AppShell sections={SECTIONS} user={{ name: 'Root', role: 'Superadmin', initials: 'R' }}>{page}</AppShell>;
+  return <AppShell field={fieldChrome()} sections={SECTIONS} user={{ name: 'Root', role: 'Superadmin', initials: 'R' }}>{page}</AppShell>;
 }
 
 const SUPER_ADMIN = makeMe({
@@ -41,53 +42,38 @@ afterEach(() => {
 });
 
 /**
- * **P18.98-T2 AC-3: the two pages that draw their own heading block** carry the switch where `PageHeader` would: at the
- * top right, before their own controls, from 768px. Nothing until it is live.
+ * **The two pages that draw their own heading block** carried the switch where `PageHeader` would (P18.10-T2 AC-3).
+ * *Changed 2026-11-05 (P19.2-T1 AC-11; UI-129, ADR-0197 §5):* **no page carries it at any size** — it lives in the
+ * account menu alone. These pin that the two pages' own headers lost it too, live or not.
  */
-describe('P18.98-T2 the switch on a page that draws its own header', () => {
-  it('AC-3 sits at the top right of Billing & subscription’s title and launch line, and never on its paper', async () => {
+describe('P19.2-T1 AC-11 no switch on a page that draws its own header (P18.10-T2 AC-3 reversed)', () => {
+  it('P19.2-T1 AC-11 Billing & subscription’s title carries no ID | EN, live', async () => {
     atWidth(1280);
-    stubFetch({ '/admin/billing/prices': { body: PRICES } });
+    stubFetch({ '/admin/billing/prices': { body: PRICES }, '/admin/billing/kpms': { body: [] } });
     renderLive(inShell(<BillingPage />), { me: SUPER_ADMIN });
 
-    const heading = await screen.findByRole('heading', { level: 1 });
-    const block = heading.parentElement!.parentElement!;
-    const group = switchIn(block)!;
-    expect(Array.from(block.children)).toEqual([heading.parentElement, group]);
-    expect(group).toHaveClass('print:hidden');
+    await screen.findByRole('heading', { level: 1 });
+    expect(switchIn(document.querySelector('main')!)).toBeNull();
   });
 
-  it('AC-3 leaves Billing’s heading as it was while the switch is not live', async () => {
+  it('P19.2-T1 AC-11 Billing carries none while the switch is not live either', async () => {
     atWidth(1280);
-    stubFetch({ '/admin/billing/prices': { body: PRICES } });
+    stubFetch({ '/admin/billing/prices': { body: PRICES }, '/admin/billing/kpms': { body: [] } });
     renderWithSession(inShell(<BillingPage />), { me: SUPER_ADMIN });
 
-    const heading = await screen.findByRole('heading', { level: 1 });
-    expect(heading.parentElement!.className).toBe('mb-[18px]');
+    await screen.findByRole('heading', { level: 1 });
     expect(switchIn(document.body)).toBeNull();
   });
 
-  it('AC-3 sits right of a coachee’s view toggle, at the corner, when their name is the page’s title, and not under another title', () => {
+  it('P19.2-T1 AC-11 a coachee’s name as the page’s title carries no switch beside its toggle, live', () => {
     atWidth(1280);
     stubFetch({});
     renderLive(inShell(
-      <>
-        <PersonIdentity initials="RW" name="Rina Wijaya" line="Agent · Hendra's unit" title>
-          <button type="button">Leader view</button>
-        </PersonIdentity>
-        <PersonIdentity initials="BS" name="Budi Santoso" line={null}>
-          <button type="button">Open</button>
-        </PersonIdentity>
-      </>,
+      <PersonIdentity initials="RW" name="Rina Wijaya" line="Agent · Hendra's unit" title>
+        <button type="button">Leader view</button>
+      </PersonIdentity>,
     ));
-
-    const toggle = screen.getByRole('button', { name: 'Leader view' });
-    const group = switchIn(document.querySelector('main')!)!;
-    // The toggle with the name, then the switch in a column of its own at the top-right corner (2026-10-29).
-    expect(toggle.parentElement!.lastElementChild).toBe(toggle);
-    expect(group.parentElement!.lastElementChild).toBe(group);
-    expect(group.parentElement!.firstElementChild).toBe(toggle.parentElement);
-    // The second, an `<h2>` under the page's own title, has no switch of its own.
-    expect(within(document.querySelector('main')!).getAllByRole('group', { name: /^(Language|Bahasa)$/ })).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Leader view' })).toBeInTheDocument();
+    expect(switchIn(document.querySelector('main')!)).toBeNull();
   });
 });

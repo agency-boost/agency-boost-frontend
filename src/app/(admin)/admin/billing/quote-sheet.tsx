@@ -22,10 +22,10 @@ export interface GeneratedQuote {
 function QuoteMark() {
   return (
     <svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true" className="shrink-0">
-      <path d="M12 8L6 15M12 8L18 15" strokeWidth="1.6" className="stroke-navy/40" />
-      <circle cx="12" cy="5" r="3" className="fill-navy" />
-      <circle cx="6" cy="18" r="3" className="fill-navy" />
-      <circle cx="18" cy="18" r="3" className="fill-amber" />
+      <path d="M12 8L6 15M12 8L18 15" strokeWidth="1.6" className="stroke-secondary/40" />
+      <circle cx="12" cy="5" r="3" className="fill-secondary" />
+      <circle cx="6" cy="18" r="3" className="fill-secondary" />
+      <circle cx="18" cy="18" r="3" className="fill-primary" />
     </svg>
   );
 }
@@ -36,7 +36,7 @@ function QuoteRow({ label, children, grand = false }: { label: string; children:
   return (
     <div className="flex flex-wrap items-baseline justify-between gap-x-4 border-b border-hairline py-2">
       <dt className={grand ? 'text-lg font-bold text-navy' : 'text-md text-muted'}>{label}</dt>
-      <dd className={cn('m-0', grand ? 'font-display text-2xl font-bold text-amber-ink' : 'text-md font-semibold text-navy')}>
+      <dd className={cn('m-0', grand ? 'font-display text-2xl font-bold text-primary-ink' : 'text-md font-semibold text-navy')}>
         {children}
       </dd>
     </div>
@@ -76,7 +76,7 @@ export function QuoteSheet({
 
   return (
     <article className="rounded-lg border border-card-edge bg-card px-5 py-7 md:px-10 md:py-9">
-      <header className="mb-[22px] flex flex-wrap items-center justify-between gap-3 border-b-2 border-navy pb-[18px]">
+      <header className="mb-[22px] flex flex-wrap items-center justify-between gap-3 border-b-2 border-secondary pb-[18px]">
         <div className="flex items-center gap-2.5">
           <QuoteMark />
           <span className="font-display text-lg font-extrabold tracking-tight text-navy">{kept('AgencyBoost')}</span>

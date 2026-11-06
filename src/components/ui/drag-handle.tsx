@@ -18,7 +18,7 @@ import { uiMessages } from '@/i18n/messages/ui';
  * are moving.
  *
  * **On a phone a drag never starts** (HTML5 drag does not fire on touch), so a list reordered by drag offers ↑ and ↓
- * beside it there, `ReorderArrows` (P18.97-T7 AC-6, ADR-0178 §5); a screen whose handles are 44 × 44px targets on a
+ * beside it there, `ReorderArrows` (P18.9-T7 AC-6, ADR-0178 §5); a screen whose handles are 44 × 44px targets on a
  * phone passes `cn(DRAG_HANDLE_CLASS, TAP_TARGET)`.
  */
 /** The handle's look where its caller names none: the prototype's grey `⠿`, a grab cursor. */
@@ -33,7 +33,7 @@ export function DragHandle({
   disabled,
   className,
 }: {
-  /** For a caller that puts the focus back on it once its row has moved (the leads table, P18.8-T7). */
+  /** For a caller that puts the focus back on it once its row has moved (the leads table, P18.5-T7). */
   id?: string;
   /** What is being moved, for the accessible name. */
   label: string;

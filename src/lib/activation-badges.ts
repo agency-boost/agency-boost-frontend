@@ -3,7 +3,7 @@ import { SOURCE_LANGUAGE, type Language } from '@/i18n/language';
 import { activationMessages } from '@/i18n/messages/activation';
 
 /*
- * **The checklist link's badge, apart from the activation client** (P18.99-T16, the bundle): the Super Admin's
+ * **The checklist link's badge, apart from the activation client** (P18.11-T16, the bundle): the Super Admin's
  * template editor draws it, and taking it from `lib/activation.ts` loaded that module and New Hires' catalogue in both
  * languages onto `/admin/companies/[companyId]/template`, past its 200 kB budget. `lib/activation.ts` re-exports both.
  */
@@ -18,7 +18,7 @@ export interface BadgeWords {
 }
 
 /**
- * **The link badge's words, in `language`** (P18.98-T4): ***Auto*** for a link that completes its item (T4 AC-4), its
+ * **The link badge's words, in `language`** (P18.10-T4): ***Auto*** for a link that completes its item (T4 AC-4), its
  * tooltip and the end of its name the registry's sentence as the server sends it — on the hire's rows, the leader's,
  * and the office's checklist settings (P13-T3 AC-1, parity I-80). Its caller passes `useLanguage()`; English when
  * given none.

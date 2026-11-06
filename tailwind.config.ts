@@ -54,6 +54,30 @@ const config: Config = {
           deep: token('amber-deep'),
           ink: token('amber-ink'),
         },
+        /*
+         * **A KPM's two colours** (P19.6-T1 AC-1; ADR-0218 §6; `tokens.md`, *Brand tokens*): every brand use reads these,
+         * never `amber` or `navy`, which stay as the fixed palette their defaults point at (`styles/brand-sweep.spec.ts`).
+         */
+        primary: {
+          DEFAULT: token('primary'),
+          hover: token('primary-hover'),
+          contrast: token('primary-contrast'),
+          ink: token('primary-ink'),
+          deep: token('primary-deep'),
+          'on-secondary': token('primary-on-secondary'),
+          50: token('primary-50'),
+          100: token('primary-100'),
+        },
+        secondary: {
+          DEFAULT: token('secondary'),
+          hover: token('secondary-hover'),
+          contrast: token('secondary-contrast'),
+          ink: token('secondary-ink'),
+          muted: token('secondary-muted'),
+          50: token('secondary-50'),
+          100: token('secondary-100'),
+        },
+        'focus-ring': token('focus-ring'),
         base: token('base'),
         card: token('card'),
         muted: token('muted'),
@@ -96,7 +120,7 @@ const config: Config = {
         'input-focus': token('input-focus'),
         success: token('success'),
         club: { chairman: token('club-chairman') },
-        // MDRT's poster fill, and its ✓ on the roster at 4.03:1 (P18.5-T7, row 44).
+        // MDRT's poster fill, and its ✓ on the roster at 4.03:1 (P18.2-T7, row 44).
         gold: { DEFAULT: token('gold'), ink: token('gold-ink') },
         alert: token('alert'),
         neutral: token('neutral'),
@@ -104,6 +128,17 @@ const config: Config = {
         // Travel (H-19). `DEFAULT` and `ink` merge into Tailwind's own teal scale, which no component
         // uses: `bg-teal`, `border-teal` and `text-teal-ink` are the calendar's.
         teal: { DEFAULT: token('teal'), ink: token('teal-ink') },
+        // The calendar's *Tugas* blue and a phone's today (P19.1-T3; UI-154; `tokens.md`, *November 2026 tokens*):
+        // `bg-tugas`, `text-tugas-ink`, `border-tugas-edge`, `bg-today`, `text-today-ink`.
+        tugas: { DEFAULT: token('tugas'), ink: token('tugas-ink'), edge: token('tugas-edge') },
+        today: { DEFAULT: token('today'), ink: token('today-ink') },
+        // The *Potensi* switch, the avatar's ✓ badges, the *n potensi* pill and a kandidat's avatar (P19.1-T2, T6; UI-153,
+        // UI-155): `bg-switch-off`, `border-switch-off-edge`, `bg-badge-potensi`, `bg-badge-won`, `bg-potensi`,
+        // `text-potensi-ink`, `bg-kandidat`, `text-kandidat-ink`.
+        'switch-off': { DEFAULT: token('switch-off'), edge: token('switch-off-edge') },
+        badge: { potensi: token('badge-potensi'), won: token('badge-won') },
+        potensi: { DEFAULT: token('pill-potensi'), ink: token('pill-potensi-ink') },
+        kandidat: { DEFAULT: token('avatar-kandidat'), ink: token('avatar-kandidat-ink') },
         role: {
           ab: token('role-ab'),
           aab: token('role-aab'),

@@ -73,7 +73,7 @@ describe('FloatingBar (staging review, 2026-10-31)', () => {
 
   it('gives the accent button its 44px pill, navy and bold on the accent (I-542)', () => {
     expect(FLOATING_BAR_BUTTON.split(' ')).toEqual(expect.arrayContaining([
-      'min-h-11', 'rounded-pill', 'bg-amber', 'text-navy', 'font-bold', 'px-5', 'shrink-0',
+      'min-h-11', 'rounded-pill', 'bg-primary', 'text-primary-contrast', 'font-bold', 'px-5', 'shrink-0',
     ]));
   });
 

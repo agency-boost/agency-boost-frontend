@@ -25,7 +25,7 @@ export function OpeningLines({
     <div className="flex flex-col gap-3.5">
       {lines.map((line) => (
         <div key={line.key} data-opening={line.key}>
-          {tagged && <p className="m-0 mb-1.5 text-xs font-bold uppercase tracking-wide text-amber-ink">{line.tag}</p>}
+          {tagged && <p className="m-0 mb-1.5 text-xs font-bold uppercase tracking-wide text-primary-ink">{line.tag}</p>}
           <OpeningLine text={line.text} size={size} />
         </div>
       ))}

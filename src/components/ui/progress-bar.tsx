@@ -12,7 +12,7 @@ import type { Status } from './status-pill';
  *
  * A zero target renders the not-enough-data state rather than NaN%, which is what the
  * prototype does today (prototype-parity F-25). The percentage is half up in integers
- * (`percentOf`; P18.97-T3, parity F-254): 23 of 40 is 58%, where `Math.round` read 57.
+ * (`percentOf`; P18.9-T3, parity F-254): 23 of 40 is 58%, where `Math.round` read 57.
  */
 export function ProgressBar({
   value,

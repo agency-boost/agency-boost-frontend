@@ -18,13 +18,13 @@ const typedOtherwise = (row: TransferView) => {
 };
 
 /**
- * **Transfer requests, on *All Members* › *Pending*** (P18.96-T3 AC-3, ADR-0170 §4): every move a leader asked for that
+ * **Transfer requests, on *All Members* › *Pending*** (P18.8-T3 AC-3, ADR-0170 §4): every move a leader asked for that
  * nobody has decided, for the Owner and the Admins (`member:transfer_approve`). *Approve* asks first — it moves the
  * member and their whole unit — and *Decline* asks why, which the leader is sent. Drawn only while one waits: the
  * Pending tab's own population is the people who registered, and this is a second one beside it.
  *
  * **The name the leader typed** sits on the code's line, *Added as {name}*, where it is not the account's own (the
- * P18.96 exit review, M3): the leader who asked is shown only what they typed, so the decider is the one who can see a
+ * P18.8 exit review, M3): the leader who asked is shown only what they typed, so the decider is the one who can see a
  * code typed for the wrong person before approving it.
  */
 export function TransferRequests() {

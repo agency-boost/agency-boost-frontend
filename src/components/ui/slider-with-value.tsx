@@ -16,7 +16,7 @@ import { formatDecimalInput, parseDecimal } from '@/lib/format';
  * - **Tapping the value opens a number field** in its place — 16px, a numeric keyboard — for an exact amount; Enter or
  *   leaving it applies it, Escape leaves the value as it was. A typed value is clamped to `min`–`max` and not rounded to
  *   the step: an exact amount is what the field is for. **`exactMin` / `exactMax` widen what may be typed** past the
- *   track's ends (P18.99-T5: Goal Setting's track reaches Rp 1 M, and a bigger annual target is still typed); the thumb
+ *   track's ends (P18.11-T5: Goal Setting's track reaches Rp 1 M, and a bigger annual target is still typed); the thumb
  *   then stands at the end it passed.
  *
  * The value is the caller's, in the caller's unit (the goal's major rupiah, say); the slider never stores anything.
@@ -111,7 +111,7 @@ export function SliderWithValue({
               }
             }}
             aria-label={t.slider.typeExact({ label })}
-            className="h-11 w-40 shrink-0 rounded-md border border-line bg-card px-2 text-right text-base font-bold text-ink [font-size:16px] focus:border-amber"
+            className="h-11 w-40 shrink-0 rounded-md border border-line bg-card px-2 text-right text-base font-bold text-ink [font-size:16px] focus:border-primary"
           />
         )}
       </div>
@@ -130,15 +130,15 @@ export function SliderWithValue({
           'mt-2 h-[22px] w-full cursor-pointer appearance-none bg-transparent disabled:cursor-not-allowed disabled:opacity-40',
           // The track: 6px, the accent up to the thumb and the line's grey after it.
           '[&::-webkit-slider-runnable-track]:h-1.5 [&::-webkit-slider-runnable-track]:rounded-pill',
-          '[&::-webkit-slider-runnable-track]:bg-[linear-gradient(to_right,var(--color-amber)_var(--fill),var(--color-line)_var(--fill))]',
+          '[&::-webkit-slider-runnable-track]:bg-[linear-gradient(to_right,var(--color-primary)_var(--fill),var(--color-line)_var(--fill))]',
           '[&::-moz-range-track]:h-1.5 [&::-moz-range-track]:rounded-pill [&::-moz-range-track]:bg-line',
-          '[&::-moz-range-progress]:h-1.5 [&::-moz-range-progress]:rounded-pill [&::-moz-range-progress]:bg-amber',
+          '[&::-moz-range-progress]:h-1.5 [&::-moz-range-progress]:rounded-pill [&::-moz-range-progress]:bg-primary',
           // The thumb: 22px, white with the accent's ring, centred on the track.
           '[&::-webkit-slider-thumb]:-mt-2 [&::-webkit-slider-thumb]:h-[22px] [&::-webkit-slider-thumb]:w-[22px]',
           '[&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-[3px]',
-          '[&::-webkit-slider-thumb]:border-amber [&::-webkit-slider-thumb]:bg-card [&::-webkit-slider-thumb]:shadow',
+          '[&::-webkit-slider-thumb]:border-primary [&::-webkit-slider-thumb]:bg-card [&::-webkit-slider-thumb]:shadow',
           '[&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:rounded-full',
-          '[&::-moz-range-thumb]:border-[3px] [&::-moz-range-thumb]:border-amber [&::-moz-range-thumb]:bg-card',
+          '[&::-moz-range-thumb]:border-[3px] [&::-moz-range-thumb]:border-primary [&::-moz-range-thumb]:bg-card',
         )}
       />
     </div>

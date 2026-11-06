@@ -2,7 +2,7 @@ import { defineMessages, type MessagesOf } from '@/i18n/catalogue';
 import { kept } from '@/i18n/kept';
 
 /**
- * ***Your account*** — `/profile` (P18.98-T4, public and account; `api/auth-and-sessions.md`, *Sessions*, *A person's own
+ * ***Your account*** — `/profile` (P18.10-T4, public and account; `api/auth-and-sessions.md`, *Sessions*, *A person's own
  * account*, *The screens' own strings*): *Your details* with what a person records, *Password*, and *Where you are
  * signed in* (`components/session-list.tsx`). *Language* on it is T2's (`language.ts`), the four a person records are
  * `personal.ts`'.

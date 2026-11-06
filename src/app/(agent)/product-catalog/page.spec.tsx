@@ -62,7 +62,7 @@ describe('/product-catalog, the office’s shelf (P14-T7)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   describe('the page, verbatim (AC-1, AC-2)', () => {
-    it('P14-T7 AC-1, P18.8-T12 AC-1 one Sales tools entry, live and current on the catalog', async () => {
+    it('P14-T7 AC-1, P18.5-T12 AC-1 one Sales tools entry, live and current on the catalog', async () => {
       grid();
       await shelfReady();
       const sidebar = within(screen.getByRole('navigation', { name: 'Main' }));
@@ -76,19 +76,23 @@ describe('/product-catalog, the office’s shelf (P14-T7)', () => {
       expect(sidebar.queryByRole('link', { name: 'Product Catalog' })).not.toBeInTheDocument();
     });
 
-    it('P18.8-T12 AC-2 the tabs Sales Attack Plan | Product Catalog, the catalog current, above the category pills', async () => {
+    it('P18.5-T12 AC-2 the tabs Sales Attack Plan | Product Catalog, the catalog current, above the category pills', async () => {
       grid();
       await shelfReady();
       const tabs = screen.getByRole('navigation', { name: 'Sales tools' });
       expect(within(tabs).getAllByRole('link').map((l) => [l.textContent, l.getAttribute('href'), l.getAttribute('aria-current')]))
-        .toEqual([['Sales Attack Plan', '/attack-plan', null], ['Product Catalog', '/product-catalog', 'page']]);
+        .toEqual([
+          ['Sales Attack Plan', '/attack-plan', null], ['Product Catalog', '/product-catalog', 'page'],
+          // P19.7-T2 AC-1 (ADR-0221 §8): the third tab, *Riwayat*.
+          ['Proposal', '/proposal', null],
+        ]);
       // Two idioms, two rows: the route strip first, then the category pills, which are buttons in a group.
       const categories = screen.getByRole('group', { name: 'Category' });
       expect(tabs.compareDocumentPosition(categories) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
       expect(tabs).not.toContainElement(categories);
     });
 
-    it('P18.8-T12 AC-2 over a product’s drawer the catalog’s tab is still current, and the strip is behind the modal', async () => {
+    it('P18.5-T12 AC-2 over a product’s drawer the catalog’s tab is still current, and the strip is behind the modal', async () => {
       drawer('PRUMAPAN');
       await dialog();
       const tabs = screen.getByRole('navigation', { name: 'Sales tools', hidden: true });
@@ -108,7 +112,7 @@ describe('/product-catalog, the office’s shelf (P14-T7)', () => {
       expect(calls.filter((c) => /\/product-catalog$/.test(c.url))).toHaveLength(1);
     });
 
-    it('P18.95-T7 AC-1 keeps the sub-line from 768px and draws it nowhere on a phone, its search above the grid (grey text row 13)', async () => {
+    it('P18.7-T7 AC-1 keeps the sub-line from 768px and draws it nowhere on a phone, its search above the grid (grey text row 13)', async () => {
       grid();
       await shelfReady();
       expect(screen.getByText(/^The full individual shelf — conventional and syariah\./)).toHaveClass('max-md:hidden');
@@ -134,10 +138,10 @@ describe('/product-catalog, the office’s shelf (P14-T7)', () => {
       const [allProducts, life] = within(screen.getByRole('group', { name: 'Category' })).getAllByRole('button');
       const [all, conventional] = within(screen.getByRole('group', { name: 'Channel' })).getAllByRole('button');
       for (const on of [allProducts, all]) {
-        expect(on).toHaveClass('bg-navy', 'text-white');
-        expect(on).not.toHaveClass('bg-amber');
+        expect(on).toHaveClass('bg-secondary', 'text-secondary-contrast');
+        expect(on).not.toHaveClass('bg-primary');
       }
-      for (const off of [life, conventional]) expect(off).not.toHaveClass('bg-navy');
+      for (const off of [life, conventional]) expect(off).not.toHaveClass('bg-secondary');
     });
 
     it('P14-T7 AC-2 a section per category in order, hidden when empty, each with its count', async () => {
@@ -154,7 +158,9 @@ describe('/product-catalog, the office’s shelf (P14-T7)', () => {
       await shelfReady();
       const mapan = document.querySelector('[data-product-card="PRUMAPAN"]') as HTMLElement;
       expect(mapan.tagName).toBe('BUTTON');
-      expect(mapan.textContent).toBe('ConventionalPRUMapanDana pensiun yang cair rutin dari usia 55.View detail →');
+      // The currency's code beside the channel since P19.4-T4 (AC-12): *IDR*, *USD*, *IDR + USD*.
+      expect(mapan.textContent).toBe('ConventionalIDRPRUMapanDana pensiun yang cair rutin dari usia 55.View detail →');
+      expect(within(mapan).getByLabelText('Sold in IDR')).toHaveTextContent(/^IDR$/);
       const syariah = document.querySelector('[data-product-card="PRUSEHAT_SYARIAH"]') as HTMLElement;
       expect(within(syariah).getByText('Syariah')).toHaveClass('text-navy');
       const pgb = document.querySelector('[data-product-card="PRULINK_GENERASI_BARU_PGB"]') as HTMLElement;
@@ -204,11 +210,11 @@ describe('/product-catalog, the office’s shelf (P14-T7)', () => {
     });
   });
 
-  describe('P18.95-T6 AC-4 — the search by name and the phone’s filter row (UI-023, UI-015; ADR-0167)', () => {
+  describe('P18.7-T6 AC-4 — the search by name and the phone’s filter row (UI-023, UI-015; ADR-0167)', () => {
     const search = () => screen.getByRole('searchbox', { name: 'Search products by name' });
     const cards = () => [...document.querySelectorAll('[data-product-card]')].map((c) => c.getAttribute('data-product-card'));
 
-    it('P18.95-T6 AC-4 catalog search: a search box above the filters, at every size, filtering the shelf by name', async () => {
+    it('P18.7-T6 AC-4 catalog search: a search box above the filters, at every size, filtering the shelf by name', async () => {
       const { calls } = grid();
       await shelfReady();
       expect(search()).toHaveAttribute('placeholder', 'Search products…');
@@ -227,7 +233,7 @@ describe('/product-catalog, the office’s shelf (P14-T7)', () => {
       expect(nav.replace).not.toHaveBeenCalled();
     });
 
-    it('P18.95-T6 AC-4 catalog search: ignores case and the spaces around it, with the category and channel', async () => {
+    it('P18.7-T6 AC-4 catalog search: ignores case and the spaces around it, with the category and channel', async () => {
       nav.search = 'channel=conventional';
       grid();
       await shelfReady();
@@ -241,7 +247,7 @@ describe('/product-catalog, the office’s shelf (P14-T7)', () => {
       expect(cards()).toEqual(['PRUMAPAN', 'PRUFUTURE', 'PRULINK_GENERASI_BARU_PGB']);
     });
 
-    it('P18.95-T6 AC-4 catalog search and empty result: says what was searched for', async () => {
+    it('P18.7-T6 AC-4 catalog search and empty result: says what was searched for', async () => {
       grid();
       await shelfReady();
       await userEvent.type(search(), 'zzz');
@@ -251,7 +257,7 @@ describe('/product-catalog, the office’s shelf (P14-T7)', () => {
       expect(screen.queryByText('No products match this filter.')).not.toBeInTheDocument();
     });
 
-    it('P18.95-T6 AC-4 catalog search: kept while a drawer opens over the grid and closes again', async () => {
+    it('P18.7-T6 AC-4 catalog search: kept while a drawer opens over the grid and closes again', async () => {
       grid();
       await shelfReady();
       await userEvent.type(search(), 'future');
@@ -261,7 +267,7 @@ describe('/product-catalog, the office’s shelf (P14-T7)', () => {
       expect(cards()).toEqual(['PRUFUTURE']);
     });
 
-    it('P18.95-T6 AC-4 the scrollable filter row: the category pills are one row that scrolls on a phone, and wrap at 768px and wider', async () => {
+    it('P18.7-T6 AC-4 the scrollable filter row: the category pills are one row that scrolls on a phone, and wrap at 768px and wider', async () => {
       nav.search = 'category=investment';
       grid();
       await screen.findByRole('heading', { level: 2, name: 'Investment-linked' });
@@ -276,7 +282,7 @@ describe('/product-catalog, the office’s shelf (P14-T7)', () => {
       expect(row).not.toContainElement(screen.getByRole('group', { name: 'Channel' }));
     });
 
-    it('P18.95-T6 AC-4 the name fix: the shelf names PRUMapan without a placeholder', async () => {
+    it('P18.7-T6 AC-4 the name fix: the shelf names PRUMapan without a placeholder', async () => {
       grid();
       await shelfReady();
       expect(screen.getByText('PRUMapan')).toBeInTheDocument();
@@ -369,7 +375,7 @@ describe('/product-catalog/[productCode], the drawer (P14-T7)', () => {
       expect(nav.back).not.toHaveBeenCalled();
     });
 
-    it('P18.96-T1 AC-2 the drawer is the dynamic viewport tall and scrolls inside, and the grid behind holds still', async () => {
+    it('P18.8-T1 AC-2 the drawer is the dynamic viewport tall and scrolls inside, and the grid behind holds still', async () => {
       document.body.style.overflow = 'auto';
       try {
         drawer('PRUMAPAN');
@@ -437,7 +443,7 @@ describe('/product-catalog/[productCode], the drawer (P14-T7)', () => {
   });
 
   describe('Details (AC-5)', () => {
-    it('P14-T7 AC-5, P18.97-T3 AC-2 the commission table, Year · Rate, a row per year, as percentages with the places stored (OD-135)', async () => {
+    it('P14-T7 AC-5, P18.9-T3 AC-2 the commission table, Year · Rate, a row per year, as percentages with the places stored (OD-135)', async () => {
       drawer('PRUMAPAN');
       const box = await dialog();
       const table = within(box).getByRole('table', { name: 'Commission rate' });
@@ -496,8 +502,8 @@ describe('/product-catalog/[productCode], the drawer (P14-T7)', () => {
         '44 If they push back', '55 Next action',
       ]);
       expect(panel.getByText(`“${SCRIPT.opening}”`)).toBeInTheDocument();
-      expect(panel.getByText(`“${SCRIPT.objectionTheySay}”`)).toBeInTheDocument();
-      expect(panel.getByText(SCRIPT.objectionYouSay)).toBeInTheDocument();
+      expect(panel.getByText(`“${SCRIPT.objections[0].objection}”`)).toBeInTheDocument();
+      expect(panel.getByText(SCRIPT.objections[0].answer)).toBeInTheDocument();
       expect(panel.getByRole('link', { name: 'Open in Sales Attack Plan page (add customer age & budget for a fit check) →' }))
         .toHaveAttribute('href', '/attack-plan?product=PRUMAPAN');
     });
@@ -525,13 +531,43 @@ describe('/product-catalog/[productCode], the drawer (P14-T7)', () => {
       const panel = await planTab(product({
         script: {
           goodFit: marked, opening: marked, benefits: [marked], fullScript: marked,
-          objectionTheySay: marked, objectionYouSay: marked, nextAction: marked,
+          objections: [{ objection: marked, answer: marked }], nextAction: marked,
         },
       }));
       const box = screen.getByRole('dialog');
       expect(box.querySelector('b')).toBeNull();
       expect(box.querySelector('script')).toBeNull();
       expect(panel.getAllByText(/<b>Pak<\/b><script>noop<\/script>/).length).toBe(7);
+    });
+  });
+
+  describe('P19.6-T2 an HTML page in a document slot (ADR-0217 §4)', () => {
+    const SIGNED = 'https://storage.googleapis.com/test-bucket/dev/kpm-1/products/01PAGE?X-Goog-Signature=abc';
+    const withPage = () => product({
+      documents: [
+        { slot: 'brochure', label: 'Brochure', available: true, mimeType: 'text/html' },
+        { slot: 'illustration', label: 'Illustration / Simulation', available: false, mimeType: null },
+        { slot: 'productDoc', label: 'Product Document', available: false, mimeType: null },
+      ],
+    });
+
+    it('P19.6-T2 AC-2 opens it in the sandboxed window over the drawer, never a tab', async () => {
+      const open = vi.fn();
+      vi.stubGlobal('open', open);
+      drawer('PRUMAPAN', {
+        'GET /product-catalog/PRUMAPAN': { body: withPage() },
+        'GET /product-catalog/PRUMAPAN/documents/brochure/url': { body: { url: SIGNED, expiresAt: '2026-11-06T03:05:00.000Z' } },
+      });
+      const box = await dialog();
+      await userEvent.click(within(box).getByRole('tab', { name: 'Documents' }));
+      const link = within(box).getByRole('button', { name: 'Open link →' });
+      expect(link).toHaveAccessibleDescription('Brochure — opens in this window');
+      await userEvent.click(link);
+      const window = await screen.findByRole('dialog', { name: 'Brochure' });
+      const frame = within(window).getByTitle('Brochure');
+      expect(frame.getAttribute('sandbox')).toBe('allow-scripts');
+      expect(new URL(frame.getAttribute('src')!).origin).toBe('https://storage.googleapis.com');
+      expect(open).not.toHaveBeenCalled();
     });
   });
 

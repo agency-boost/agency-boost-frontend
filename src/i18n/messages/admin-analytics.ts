@@ -2,12 +2,13 @@ import { defineMessages, type MessagesOf } from '@/i18n/catalogue';
 import { kept } from '@/i18n/kept';
 
 /**
- * ***Cross-platform analytics*** — `/admin/analytics` (P18.98-T6; `functional/kpm-analytics.md`, *The platform's
+ * ***Cross-platform analytics*** — `/admin/analytics` (P18.10-T6; `functional/kpm-analytics.md`, *The platform's
  * analytics*, *The module's own strings*): adoption by branch and company, and nothing else (ADR-0133).
  *
  * **English is the source**, byte for byte what the screen wrote before; it uses none of OD-39's six words, and the
- * table's rows are *branches*, as *All KPMs*' *Branch* column calls them — the Indonesian keeps to that: *cabang*,
- * never *KPM* or *kantor*. The Indonesian is the approved glossary's (*Kode · Cabang · Perusahaan · Status · Anggota*
+ * table's rows are *branches*, as *All KPMs*' *Branch* column calls them. *Changed 2026-11-05 (P19.4-T3 AC-13; SA UI-018,
+ * Appendix A):* the rows are **KPMs** in both languages — *"Belum ada KPM di platform."* — never *cabang* or *kantor*;
+ * *Cabang* stays only as the column heading of a KPM's branch name. The Indonesian is the approved glossary's (*Kode · Cabang · Perusahaan · Status · Anggota*
  * §B.4, *Coba lagi* §B.1, *Masuk* §B.1, *7 hari terakhir* §B.7, *jenjang* §B.10). **Kept** (§A): the title,
  * *AgencyBoost*, *Total* (spelled alike). **Typed content stays as typed**: an office's code and branch, a company's
  * name, its rungs' labels. **A figure is never a message's**: every count, share and month is written by the caller
@@ -19,14 +20,14 @@ import { kept } from '@/i18n/kept';
 const en = {
   title: kept('Cross-platform analytics'),
   subtitle: 'Adoption across every company on AgencyBoost',
-  caption: 'Adoption by branch and company',
-  empty: 'No branches on the platform yet.',
+  caption: 'Adoption by KPM and company',
+  empty: 'No KPMs on the platform yet.',
   tryAgain: 'Try again',
   /** `branches` the count written; `n` the number, for its plural. */
   companyTotal: ({ name, n, branches }: { name: string; n: number; branches: string }) =>
-    `${name} — Total (${branches} ${n === 1 ? 'branch' : 'branches'})`,
+    `${name} — Total (${branches} ${n === 1 ? 'KPM' : 'KPMs'})`,
   platformTotal: ({ c, companies, b, branches }: { c: number; companies: string; b: number; branches: string }) =>
-    `Platform — Total (${companies} ${c === 1 ? 'company' : 'companies'}, ${branches} ${b === 1 ? 'branch' : 'branches'})`,
+    `Platform — Total (${companies} ${c === 1 ? 'company' : 'companies'}, ${branches} ${b === 1 ? 'KPM' : 'KPMs'})`,
   /** The table's headings, in order: *All KPMs*' first four, verbatim, then the figures. */
   headings: {
     code: 'Code', branch: 'Branch', company: 'Company', status: 'Status', members: 'Members', byRung: 'By rung',
@@ -41,11 +42,11 @@ const en = {
 const id: MessagesOf<typeof en> = {
   title: kept('Cross-platform analytics'),
   subtitle: `Adopsi di semua perusahaan di ${kept('AgencyBoost')}`,
-  caption: 'Adopsi per cabang dan perusahaan',
-  empty: 'Belum ada cabang di platform.',
+  caption: `Adopsi per ${kept('KPM')} dan perusahaan`,
+  empty: `Belum ada ${kept('KPM')} di platform.`,
   tryAgain: 'Coba lagi',
-  companyTotal: ({ name, branches }) => `${name} — Total (${branches} cabang)`,
-  platformTotal: ({ companies, branches }) => `Platform — Total (${companies} perusahaan, ${branches} cabang)`,
+  companyTotal: ({ name, branches }) => `${name} — Total (${branches} ${kept('KPM')})`,
+  platformTotal: ({ companies, branches }) => `Platform — Total (${companies} perusahaan, ${branches} ${kept('KPM')})`,
   headings: {
     code: 'Kode', branch: 'Cabang', company: 'Perusahaan', status: 'Status', members: 'Anggota', byRung: 'Per jenjang',
     joined: 'Bergabung bulan ini', left: 'Keluar bulan ini', signedIn7d: 'Masuk dalam 7 hari terakhir',

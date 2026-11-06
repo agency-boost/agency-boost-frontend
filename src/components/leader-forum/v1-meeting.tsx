@@ -127,7 +127,7 @@ export function V1MeetingHead({
  * **The meeting's *Overview* on a phone** (UI-110; `kpm-mobile` 4): *BSD City Branch · Okt 2026* with *per 27 Okt*; the
  * branch as one strip — *28 Manpower · 19 Agents · 9 Units · 5 AB · 4 AAB*; *YTD 2026 vs 2025* over *Jan–Okt*; **one row
  * per metric**: its name (an ⓘ where it has a definition), *Okt x · Sep y* under it, the change as a green or red pill,
- * and YTD this year big on the right with *dari {last year}* under it. *FLC* reads a grey *Menunggu data*.
+ * and YTD this year big on the right with *dari {last year}* under it. *FLC* reads a grey *Menunggu data* while the file carries no recruitment (P19.3-T1: the upload's, ADR-0203 §2).
  *
  * **A row opens all of its figures**, its definition and — for who edits the minutes — its *Monthly Target*, in a
  * sheet (`MetricCard`): what the table and the cards show, so nothing the forum records is out of reach on a phone.
@@ -188,7 +188,7 @@ function MetricLine({ meeting, row, onOpen }: { meeting: MeetingView; row: Score
   const figures = useFigureLanguage();
   const { periods } = meeting.scorecard;
   const name = rowName(row.key, figures);
-  const defined = footnotesIn(words).some((note) => note.rows.includes(row.key));
+  const defined = footnotesIn(words, meeting.scorecard.definitions).some((note) => note.rows.includes(row.key));
   const ytd = row.cells.ytd;
   const tone = CHANGE_TONE(row);
   const monthly = row.cells.thisMonth.kind !== 'blocked'
@@ -229,7 +229,8 @@ function MetricLine({ meeting, row, onOpen }: { meeting: MeetingView; row: Score
 function MetricSheet({ meeting, row }: { meeting: MeetingView; row: ScorecardRow }) {
   const words = useLanguage();
   const { readOnly } = useMeetingWriter();
-  const note = footnotesIn(words).find((n) => n.rows.includes(row.key));
+  // P19.3-T1 (ADR-0202 §4): the definition the scorecard was computed with — a kept one's from before, a live one's today's.
+  const note = footnotesIn(words, meeting.scorecard.definitions).find((n) => n.rows.includes(row.key));
   return (
     <div>
       {note && <p className="mb-3 text-md text-muted">{note.text}</p>}

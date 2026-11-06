@@ -143,7 +143,7 @@ function ScopePill({
           onClick={() => onChange(option.id)}
           className={cn(
             'min-h-11 whitespace-nowrap rounded-pill px-3 text-sm font-semibold lg:min-h-8',
-            value === option.id ? 'bg-navy text-white' : 'text-muted hover:text-navy',
+            value === option.id ? 'bg-secondary text-secondary-contrast' : 'text-muted hover:text-navy',
           )}
         >
           {option.label}

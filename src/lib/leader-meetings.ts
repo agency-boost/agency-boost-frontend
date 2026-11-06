@@ -105,7 +105,18 @@ export type ScorecardCell =
   /** *Not tracked*: a row the table leaves empty in this column. */
   | { kind: 'blocked' }
   /** *—*: a column or a row a scorecard kept before it existed does not hold (ADR-0175 §8). */
-  | { kind: 'unrecorded' };
+  | { kind: 'unrecorded' }
+  /**
+   * *—*, *Not uploaded yet* to a screen reader: a *Full Year* or *YTD* column of last year with no month of its period
+   * uploaded (P19.3-T1; ADR-0203 §8, *"Show '—' until uploaded"*). Every other cell keeps *pending data*.
+   */
+  | { kind: 'not_uploaded' };
+
+/**
+ * **Which definitions a scorecard's rows follow** (P19.3-T1; ADR-0202 §4) — what its footnotes say: `data_sources`, the
+ * owner's data sources of 3 November (live, or kept since), or `reference_slide`, a scorecard kept before them. Served.
+ */
+export type ScorecardDefinitions = 'data_sources' | 'reference_slide';
 
 /** The months a column names, `YYYY-MM` to `YYYY-MM`, from the meeting's month: its header's second line. */
 export interface ColumnPeriod {
@@ -128,7 +139,7 @@ export interface MonthlyTarget {
 /**
  * What a phone's card reads beside *YTD {Y}* and *YTD {Y−1}*: the change the server computed, whole and signed, in its
  * `unit` — `percent`, a percentage of last year's figure, or `points`, the difference in percentage points on a row
- * whose own figure is a percentage (*3M new agent %*; P18.97-T8 F1, parity F-256).
+ * whose own figure is a percentage (*3M new agent %*; P18.9-T8 F1, parity F-256).
  */
 export type YtdChange = { kind: 'figure'; value: number; unit: 'percent' | 'points' } | { kind: 'none' };
 
@@ -152,7 +163,10 @@ export interface PartialPeriod {
 
 export interface Scorecard {
   periods: Record<ColumnKey, ColumnPeriod>;
-  /** `units` is *# of AB* + *# of AAB* — or, on a scorecard kept before that, the number it was kept with. */
+  /**
+   * `units` is the AB and AAB who lead somebody (P19.3-T1, ADR-0203 §1) — or, on a scorecard kept before that, the number
+   * it was kept with. The server's; the *Monthly Target*'s multiplier.
+   */
   chips: { manpower: number; agents: number; units: number; ab: number; aab: number };
   /** Nine, in the slide's order. */
   rows: ScorecardRow[];
@@ -161,6 +175,8 @@ export interface Scorecard {
   partialPeriods: PartialPeriod[];
   /** `null` while live; the instant it was frozen onto the meeting otherwise. */
   frozenAt: string | null;
+  /** The definitions its rows follow, so the footnotes drawn are true of them (P19.3-T1). */
+  definitions: ScorecardDefinitions;
 }
 
 export type AgendaSection = 'preparation' | 'during' | 'post';
@@ -302,7 +318,7 @@ export interface MeetingWriter {
 /*
  * ── The words ───────────────────────────────────────────────────────────────────────────────────
  *
- * The forum's words are the catalogue's (P18.98-T4): `i18n/messages/forum.ts`, English the source, Indonesian the
+ * The forum's words are the catalogue's (P18.10-T4): `i18n/messages/forum.ts`, English the source, Indonesian the
  * approved glossary's. A screen reads them with `useMessages(forumMessages)`; each function here that writes words takes
  * the reader's language last (`useLanguage()`), English — the source, what its spec reads — when given none. None of the
  * module's own uses the words that spec keeps out of the reader's sight (D-copy), in either language, and none names a
@@ -315,7 +331,7 @@ export interface MeetingWriter {
  * (`signedOut`, 2026-10-11), when it is plain `/login`, and a session that ended under the reader adds
  * `reason=expired` (ADR-0168 §1), as `signInPathFrom` decides for every guard.
  *
- * Here, not in `meeting-screen.tsx`, so the list's guard does not load the meeting screen with it (P18.99-T16, the bundle).
+ * Here, not in `meeting-screen.tsx`, so the list's guard does not load the meeting screen with it (P18.11-T16, the bundle).
  */
 export const signInAndReturn = (pathname: string, end: SessionEnd) =>
   signInPathFrom({ pathname, search: '' }, end);
@@ -394,7 +410,7 @@ export const rungShort = (rung: ForumPerson['rung']) => shortOfRung(rung);
 
 /**
  * The card's date block: the month's three letters over the day (`:2597`) — *Okt* over *13*, `id-ID` (ADR-0167 §1);
- * *Oct* in English (P18.98-T3).
+ * *Oct* in English (P18.10-T3).
  */
 export function dateBlock(date: string, language: Language = DEFAULT_LANGUAGE): { month: string; day: string } {
   const [y, m, d] = date.split('-').map(Number);

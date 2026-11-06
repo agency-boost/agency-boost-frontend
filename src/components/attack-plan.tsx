@@ -12,6 +12,7 @@ import { ResultHead, type PillTone } from '@/components/plan/result-head';
 import { StepPills } from '@/components/plan/step-pills';
 import { EmptyShelf } from '@/components/product-catalog';
 import { ProductScript } from '@/components/product-script';
+import { RidersLine } from '@/components/riders-line';
 import { PhoneSalesPlan } from '@/components/sales-plan-phone';
 import { Button, ErrorBanner } from '@/components/ui/field';
 import { REMOVED_ON_PHONE, TAP_HEIGHT, TEXT_TAP } from '@/components/ui/phone';
@@ -64,7 +65,7 @@ type Shown =
  * The states the prototype lacks are Fills (P14-T8 AC-10): a skeleton while the plan is built, an error
  * with a retry that keeps the brief, the empty shelf in the catalog's words, and the not-found state.
  *
- * **The client's review of 2026-10-26** (ADR-0167; P18.95-T6): below 768px the chips are two to a row and
+ * **The client's review of 2026-10-26** (ADR-0167; P18.7-T6): below 768px the chips are two to a row and
  * *Build attack plan* sits in a bar fixed to the bottom of the screen, with room left under the brief so its
  * last chips are never behind it (AC-1, UI-015); at every size *Lump-sum* is an option of its own after
  * *Monthly premium budget*, not that question's seventh chip — one answer between the two groups, band 7 as
@@ -72,15 +73,15 @@ type Shown =
  *
  * **UI V1 on a phone** (UI-107; `attack-plan-mobile` 1, 3; Mobile only): the question in a white card with
  * sentence-case labels and wrapping pill chips, no grey line, the step line on one line, and *Susun Attack Plan* right
- * under the last question — **not pinned** (P18.95-T6's bar is gone below 768px: nothing floats over the question card)
+ * under the last question — **not pinned** (P18.7-T6's bar is gone below 768px: nothing floats over the question card)
  * and **always active**: tapped with a question open, it brings that question into view and gives it the focus
  * (`PlanButton`). The plan is the phone's own layout (`PhoneSalesPlan`): the answers as chips with *Ubah*, the product
  * in a navy card, five numbered sections. From 768px every part is as before, the button disabled until the brief is
  * whole.
  *
- * **Its words are the catalogue's** (P18.98-T4; ADR-0179 §4): `messages/sales-attack-plan.tsx`, the two plans'
+ * **Its words are the catalogue's** (P18.10-T4; ADR-0179 §4): `messages/sales-attack-plan.tsx`, the two plans'
  * `messages/plan.ts` and the catalog's `messages/product-catalog.ts`, in the reader's language. A budget band's sums are
- * the reader's figures (`useFigureLanguage()`, P18.98-T3); the product, its script and an alternative's name are the
+ * the reader's figures (`useFigureLanguage()`, P18.10-T3); the product, its script and an alternative's name are the
  * company's or the office's, shown as typed (ADR-0179 §5).
  */
 export function AttackPlanScreen({ address }: { address: PlanAddress }) {
@@ -292,7 +293,7 @@ function PlanResult({ address, phone, onBack, focusResult, onShelf, onSwitch, on
   return (
     <>
       {fromCatalog && (
-        <div className="mb-5 flex flex-wrap items-center justify-between gap-3.5 rounded-lg border border-amber/30 bg-amber/10 px-[18px] py-[13px] text-base text-navy">
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3.5 rounded-lg border border-primary/30 bg-primary/10 px-[18px] py-[13px] text-base text-navy">
           <span>{t.banner({ strong: (words) => <strong className="font-bold">{words}</strong> })}</span>
           {/* Navy and underlined on the wash, where amber-dark — and even amber-ink — miss 4.5:1 (`product-catalog.spec.ts`). */}
           <button type="button" onClick={onAddProfile} className={cn('whitespace-nowrap rounded-sm font-semibold text-navy underline', TEXT_TAP)}>
@@ -333,7 +334,7 @@ function PlanResult({ address, phone, onBack, focusResult, onShelf, onSwitch, on
         <div ref={landing} tabIndex={-1} className="rounded-lg border border-card-edge bg-card px-6 py-[22px]" data-state="not-found">
           <p className="m-0 text-md font-semibold text-navy">{c.drawer.notFound}</p>
           <p className="m-0 mt-1 text-base text-muted">{c.drawer.notFoundHint}</p>
-          <Link href="/product-catalog" className={cn('mt-2 inline-block rounded-sm text-base font-semibold text-amber-ink hover:underline', TEXT_TAP)}>
+          <Link href="/product-catalog" className={cn('mt-2 inline-block rounded-sm text-base font-semibold text-primary-ink hover:underline', TEXT_TAP)}>
             {c.drawer.backToCatalog}
           </Link>
         </div>
@@ -356,6 +357,10 @@ function PlanResult({ address, phone, onBack, focusResult, onShelf, onSwitch, on
         <>
           <article className="mb-4 overflow-hidden rounded-lg border border-card-edge bg-card">
             <ResultHeadFor shown={shown} product={product} headingRef={heading} />
+            {/* *"Bisa ditambah: …"* under the product shown (P19.4-T4 AC-5; ADR-0209 §3): never a pick of its own. */}
+            {product.riders.length > 0 && (
+              <RidersLine riders={product.riders} className="border-b border-hairline px-5 py-3 sm:px-6" />
+            )}
             {shown.kind === 'plan' && shown.plan.verdict === 'check_fit' && (
               <p className="m-0 border-b border-hairline bg-alert/5 px-5 py-3 text-base text-alert sm:px-6">{fitNote(shown.plan.outside, language)}</p>
             )}

@@ -1,11 +1,11 @@
 import { LANGUAGE_COOKIE, LANGUAGE_PENDING, LANGUAGES } from './language';
 
 /**
- * **The reader's language, before the body is parsed** (ADR-0179 §2, §8; P18.98-T1 AC-3, AC-4).
+ * **The reader's language, before the body is parsed** (ADR-0179 §2, §8; P18.10-T1 AC-3, AC-4).
  *
  * Every page but the dynamic ones is prerendered once, in `LANGUAGE_UNCHOSEN`, so the HTML cannot know who reads it;
  * reading the cookie in the root layout instead (`cookies()`) would make every route dynamic. So the root layout runs
- * this inline, first thing in `<head>`: it reads the language cookie (`ab_lang`, written from P18.98-T2) and, where
+ * this inline, first thing in `<head>`: it reads the language cookie (`ab_lang`, written from P18.10-T2) and, where
  * the reader's language is not the page's, **writes it on `<html lang>` and holds the page back**
  * (`LANGUAGE_PENDING`; `globals.css` hides it) until `LanguageProvider` has rendered the page in theirs, before the
  * first paint after hydration. A reader whose language is the page's — everybody, until T2 writes a cookie — pays

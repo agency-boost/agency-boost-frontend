@@ -1,7 +1,7 @@
 import { makeMe } from './harness';
 
 /**
- * **The KPM template's doubles** (ADR-0185; P18.99-T20): a Super Admin, two companies and the library, a company's
+ * **The KPM template's doubles** (ADR-0185; P18.11-T20): a Super Admin, two companies and the library, a company's
  * templates as `GET /admin/companies/:companyId/templates` answers them — with `sections` — and one kind of one template
  * as `GET …/template/:kind` answers it. Shared by the company page, a template's checklist, a section's editor, the
  * company settings, their Indonesian specs and the axe sweep.
@@ -12,7 +12,7 @@ export const SUPER_ADMIN = makeMe({
     pronoun: 'they', initials: 'R', platformRole: 'super_admin',
   },
   membership: null,
-  permissions: ['kpm:list_all', 'company:crud', 'company_template:read', 'company_template:write', 'recruitment_playbook:write'],
+  permissions: ['kpm:list_all', 'company:crud', 'company_template:read', 'company_template:write'],
 });
 
 export const PRUDENTIAL = {
@@ -24,7 +24,7 @@ export const LIBRARY = { ...PRUDENTIAL, _id: 'lib', name: 'Template', slug: 'tem
 
 const KINDS = [
   'activity_taxonomy', 'lead_pipeline', 'ratio_set', 'activation_checklist', 'training_taxonomy', 'capability_ladder',
-  'event_types',
+  'event_types', 'recruitment_playbook', 'advanced_analytics', 'branding',
 ] as const;
 type Kind = (typeof KINDS)[number];
 type Section = { publishedVersion: number | null; hasDraft: boolean };

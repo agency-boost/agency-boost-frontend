@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import type { ReactNode } from 'react';
+import { LineIcon } from '@/components/ui/line-icon';
 import { messagesIn } from '@/i18n/catalogue';
 import type { Language } from '@/i18n/language';
 import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
@@ -12,7 +13,7 @@ import {
 } from '@/lib/calendar';
 import { formatMonthSpan, formatNumber, formatWeekdayDay, weekdayHeadings } from '@/lib/format';
 import { cn } from '@/lib/cn';
-import { MONTH_BORDER, PaneHeadBar, TYPE_SWATCH, type PaneHead } from './calendar-parts';
+import { MONTH_BORDER, PaneHeadBar, type PaneHead } from './calendar-parts';
 import { dayShort, useCalendarTasks } from './calendar-tasks';
 
 /** A cell's line: an entry, a busy block, or an event joined (UI-104). */
@@ -23,6 +24,11 @@ const keyOf = (item: MonthItem, i: number, date: string) =>
 
 /** The month's frame: a tile, as the week's panes are. */
 const FRAME = 'overflow-hidden rounded-lg border border-card-edge bg-card';
+
+/** A count pill in a cell: 12px, bold, round (the 2 Nov mockups' `.cnt`). */
+const MONTH_PILL = 'inline-flex items-center gap-0.5 rounded-pill px-1.5 text-2xs font-bold leading-4';
+/** *Tugas* blue (UI-154): the pill's ground and its words, at every size (*Decisions* 6). */
+const TUGAS_PILL = 'bg-tugas text-tugas-ink';
 
 /**
  * Month (`Calendar_Section.html:346-349`, `:1007-1074`; P12-T3).
@@ -43,19 +49,22 @@ const FRAME = 'overflow-hidden rounded-lg border border-card-edge bg-card';
  * phrase at every width and begins with what is drawn (WCAG 2.5.3); and it truncates in its cell
  * rather than spill out of it, whatever the width.
  *
- * **Beside somebody compared** (P18.95-T8 AC-2; the client's UI review, UI-020): the month offers
+ * **Beside somebody compared** (P18.7-T8 AC-2; the client's UI review, UI-020): the month offers
  * compare as the week does, and each person's month is a pane of its own, stacked, under the same head
  * the week's pane has (`head`). A compared month reads its member's busy blocks as *Busy* lines with
  * their time, which open nothing — a tap there lands on the cell, as on any empty part of it.
  *
- * **On a phone** (`phone`; P18.95-T8 AC-1): a line in a 45px cell read *"9-…"*, so a cell draws a dot
- * per entry in its type's colour — three, then *+{n}* — and its name says how many entries it holds, since the dots
- * are not read. **A tap on a day opens that day in the Agenda** (UI V1, UI-104 point 2; it showed the day's list under
- * the grid). At 768px and wider the month is as it was.
+ * **On a phone** (`phone`; P18.7-T8 AC-1; P19.1-T3 AC-7, UI-144): a line in a 45px cell read *"9-…"*, so a cell draws
+ * **a count pill under the day** — the number of things on it, in the status grey (UI-154), never a dot (D-27) — and its
+ * name says how many, since the pill is drawn, not read. **A tap on a day opens that day in the Agenda** (UI V1, UI-104
+ * point 2).
  *
- * **Tugas** (UI V1, UI-104 point 2): a small orange count badge beside each date with tasks — never a dot (D-27). On a
- * phone the cell's tap goes to that day's Agenda, where the checklist is; from 768px the badge is its own button to it.
- * Events joined are lines (dots on a phone) in their own tone, and open the event.
+ * **Tugas** (UI V1, UI-104 point 2; P19.1-T3 AC-6, UI-154): **a blue ✓ pill with the count** — under the day on a phone,
+ * beside the date from 768px, where it is its own button to that day's Agenda — blue at every size (*Decisions* 6).
+ *
+ * **Today** (P19.1-T3 AC-5; OD-252): a phone's cell shaded with today's ink and no circle (UI-154); from 768px the amber
+ * circle behind the date and no tint (UI-117). **The days of the months either side are grey** — the cell and its
+ * number — at every size (UI-119, UI-144). **A line reads its title first**, then its time (UI-119).
  */
 export function MonthGrid({
   read,
@@ -101,9 +110,10 @@ export function MonthGrid({
             key={date}
             data-date={date}
             className={cn(
-              'relative min-w-0 border-b border-r border-hairline p-1.5 [&:nth-child(7n)]:border-r-0',
-              phone ? 'min-h-[52px]' : 'min-h-[128px]',
-              today ? 'bg-amber/[0.08] hover:bg-amber/[0.12]' : 'hover:bg-navy-soft/[0.035]',
+              'relative min-w-0 border-b border-r border-hairline [&:nth-child(7n)]:border-r-0',
+              phone ? 'flex min-h-16 flex-col items-center gap-[3px] px-0.5 py-1' : 'min-h-[128px] p-1.5',
+              !inPeriod && 'bg-hover-row',
+              today && phone ? 'bg-today' : 'hover:bg-secondary-hover/[0.035]',
             )}
           >
             <button
@@ -117,15 +127,25 @@ export function MonthGrid({
               onClick={() => (phone ? onAgenda(date) : onWeek(date))}
               className="absolute inset-0 h-full w-full"
             />
-            <span className="pointer-events-none relative flex items-center justify-between gap-1">
+            <span className={cn('pointer-events-none relative flex items-center gap-1', phone ? 'flex-col gap-[3px]' : 'justify-between')}>
               <span
                 aria-hidden="true"
-                className={cn('text-sm font-bold', today ? 'text-amber-ink' : inPeriod ? 'text-navy' : 'text-muted')}
+                className={cn(
+                  'flex h-6 min-w-6 items-center justify-center rounded-full px-1 text-sm font-bold',
+                  today ? (phone ? 'text-today-ink' : 'bg-primary text-primary-contrast') : inPeriod ? 'text-navy' : 'text-muted',
+                )}
               >
                 {Number(date.slice(8))}
               </span>
+              {phone && items.length > 0 && (
+                // The things on the day, as a count (UI-144): the status grey, so it is never read as a *Tugas* (UI-154).
+                <span aria-hidden="true" data-event-count={date} className={cn(MONTH_PILL, 'bg-pill-grey text-pill-grey-ink')}>
+                  {formatNumber(items.length, {}, language)}
+                </span>
+              )}
               {tasks > 0 && (phone ? (
-                <span aria-hidden="true" data-task-badge={date} className="rounded-pill bg-amber px-1.5 text-2xs font-bold leading-4 text-navy">
+                <span aria-hidden="true" data-task-badge={date} className={cn(MONTH_PILL, TUGAS_PILL)}>
+                  <LineIcon name="check" className="h-3 w-3" />
                   {formatNumber(tasks, {}, language)}
                 </span>
               ) : (
@@ -134,15 +154,14 @@ export function MonthGrid({
                   data-task-badge={date}
                   aria-label={tasksName}
                   onClick={() => onAgenda(date)}
-                  className="pointer-events-auto rounded-pill bg-amber px-1.5 text-2xs font-bold leading-5 text-navy hover:brightness-95"
+                  className={cn(MONTH_PILL, TUGAS_PILL, 'pointer-events-auto leading-5 hover:brightness-95')}
                 >
+                  <LineIcon name="check" className="h-3 w-3" />
                   {formatNumber(tasks, {}, language)}
                 </button>
               ))}
             </span>
-            {phone ? (
-              items.length > 0 && <Dots items={items} />
-            ) : items.length > 0 && (
+            {!phone && items.length > 0 && (
               <ul className="pointer-events-none relative mt-1.5 flex flex-col gap-[3px]">
                 {shown.map((item, i) => (
                   <li key={keyOf(item, i, date)} className="min-w-0">
@@ -153,8 +172,8 @@ export function MonthGrid({
                         aria-label={t.joinedName({ title: item.title, type: item.type.label, time: formatMonthSpan(item.start ?? '', item.end ?? '', language) })}
                         className="pointer-events-auto block w-full truncate rounded-sm border-l-[2.5px] border-lavender bg-lavender/[0.14] px-[5px] py-0.5 text-left text-2xs font-semibold leading-tight text-navy"
                       >
-                        <span className="mr-1 font-bold text-navy-soft">{formatMonthSpan(item.start ?? '', item.end ?? '', language)}</span>
-                        {item.title}
+                        <span className="font-bold">{item.title}</span>
+                        <span className="ml-1 text-navy-soft">{formatMonthSpan(item.start ?? '', item.end ?? '', language)}</span>
                       </Link>
                     ) : (
                       <button
@@ -163,14 +182,14 @@ export function MonthGrid({
                         aria-label={lineName(item, words, language)}
                         onClick={() => onOpen(item)}
                         className={cn(
-                          'pointer-events-auto block w-full truncate rounded-sm border-l-[2.5px] bg-navy-soft/10 px-[5px] py-0.5 text-left text-2xs font-semibold leading-tight text-navy',
+                          'pointer-events-auto block w-full truncate rounded-sm border-l-[2.5px] bg-secondary-hover/10 px-[5px] py-0.5 text-left text-2xs font-semibold leading-tight text-navy',
                           MONTH_BORDER[item.type],
                         )}
                       >
+                        <span className="font-bold">{titleOf(item, words)}</span>
                         {!item.allDay && (
-                          <span className="mr-1 font-bold text-navy-soft">{formatMonthSpan(item.start ?? '', item.end ?? '', language)}</span>
+                          <span className="ml-1 text-navy-soft">{formatMonthSpan(item.start ?? '', item.end ?? '', language)}</span>
                         )}
-                        {titleOf(item, words)}
                       </button>
                     )}
                   </li>
@@ -205,31 +224,10 @@ function BusyLine({ item }: { item: MonthItem }) {
   return (
     <span
       data-busy=""
-      className="block w-full truncate rounded-sm border-l-[2.5px] border-muted bg-navy/[0.06] px-[5px] py-0.5 text-2xs font-semibold leading-tight text-navy"
+      className="block w-full truncate rounded-sm border-l-[2.5px] border-muted bg-secondary/[0.06] px-[5px] py-0.5 text-2xs font-semibold leading-tight text-navy"
     >
-      {!item.allDay && <span className="mr-1 font-bold">{formatMonthSpan(item.start ?? '', item.end ?? '', language)}</span>}
-      {t.busy}
-    </span>
-  );
-}
-
-/**
- * A phone's cell: a dot per entry in its type's colour, a busy block's grey, three of them and then
- * *+{n}* — drawn, not read: the cell's name says how many (P18.95-T8 AC-1).
- */
-function Dots({ items }: { items: MonthItem[] }) {
-  const t = useMessages(calendarMessages);
-  return (
-    <span aria-hidden="true" className="pointer-events-none relative mt-1 flex flex-wrap items-center gap-[3px]">
-      {items.slice(0, MONTH_LINES).map((item, i) => (
-        <span
-          key={keyOf(item, i, '')}
-          className={cn('h-1.5 w-1.5 shrink-0 rounded-full', isBusy(item) ? 'bg-muted' : isJoined(item) ? 'bg-lavender' : TYPE_SWATCH[item.type])}
-        />
-      ))}
-      {items.length > MONTH_LINES && (
-        <span className="text-2xs font-bold leading-none text-muted">{t.moreCount({ n: items.length - MONTH_LINES })}</span>
-      )}
+      <span className="font-bold">{t.busy}</span>
+      {!item.allDay && <span className="ml-1">{formatMonthSpan(item.start ?? '', item.end ?? '', language)}</span>}
     </span>
   );
 }
@@ -264,7 +262,7 @@ function lineName(entry: CalendarEntry, words: Language, figures: Language): str
 
 /**
  * The month's frame while its read is on its way: the day names and five empty rows (L-01, a Fill) —
- * a phone's cells as short as its month draws them (P18.95-T8 AC-1).
+ * a phone's cells as short as its month draws them (P18.7-T8 AC-1).
  */
 export function MonthSkeleton({ phone = false }: { phone?: boolean }) {
   const language = useFigureLanguage();
@@ -276,7 +274,7 @@ export function MonthSkeleton({ phone = false }: { phone?: boolean }) {
         </div>
       ))}
       {Array.from({ length: 35 }, (_, i) => (
-        <div key={i} className={cn(phone ? 'min-h-[52px]' : 'min-h-[128px]', 'border-b border-r border-hairline p-1.5 [&:nth-child(7n)]:border-r-0')}>
+        <div key={i} className={cn(phone ? 'min-h-16' : 'min-h-[128px]', 'border-b border-r border-hairline p-1.5 [&:nth-child(7n)]:border-r-0')}>
           <span className="block h-3 w-4 animate-pulse rounded-sm bg-hairline motion-reduce:animate-none" />
         </div>
       ))}

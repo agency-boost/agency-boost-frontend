@@ -10,8 +10,8 @@ import { makeMe, renderInIndonesian, stubFetch } from '@test/harness';
 import GoalSettingsPage from './page';
 
 /**
- * **P18.98-T4, Goal Settings in ID mode** (field selling): `/goals` and the calculator a coachee's *Goal Setting* tab
- * mounts — since UI V1 (P18.99-T5) the result card, four steps, *Simpan goal* and its status, the commitment in the
+ * **P18.10-T4, Goal Settings in ID mode** (field selling): `/goals` and the calculator a coachee's *Goal Setting* tab
+ * mounts — since UI V1 (P18.11-T5) the result card, four steps, *Simpan goal* and its status, the commitment in the
  * report's sentence (UI-017) and every state a plan can be in —
  * read in Bahasa Indonesia: our words the approved glossary's, §A.4's KPI labels, the cascade's stages and the jargon
  * kept English, the office's activity names as typed, every figure Indonesian, and no English message of the module's
@@ -72,7 +72,7 @@ const met = projection({
   targetMet: true, remainingApeMinor: 0, monthlyApeTargetMinor: 0, policiesPerMonth: 0, appointmentsPerMonth: 0, leadsPerMonth: 0,
 });
 
-/** `POST /goals/:period/preview` (P18.99-T5): the plan the inputs on screen would make. */
+/** `POST /goals/:period/preview` (P18.11-T5): the plan the inputs on screen would make. */
 const PREVIEW = { [`POST /goals/${PERIOD}/preview`]: { body: {
   period: PERIOD, monthsLeft: 5, monthsLeftIsOverride: false, achieved: { minor: 0, provenance: 'self_reported', month: null },
   projected: projection(),
@@ -93,7 +93,7 @@ const resultCard = () => screen.findByRole('region', { name: 'Target aktivitas b
 /** The desktop's save status, at the foot of the right column (UI-022). */
 const status = () => within(document.querySelector('[data-goal-aside]') as HTMLElement).getByRole('status');
 
-describe('P18.98-T4 Goal Settings in Indonesian', () => {
+describe('P18.10-T4 Goal Settings in Indonesian', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it('AC-2 UI-006 asks the four steps in Indonesian, the kept terms English, every figure Indonesian', async () => {
@@ -122,7 +122,9 @@ describe('P18.98-T4 Goal Settings in Indonesian', () => {
     // UI-020: the two prefilled figures, the months the office's with its ⚡.
     expect(screen.getByRole('textbox', { name: 'Sisa bulan tahun ini' })).toHaveValue('5');
     expect(screen.getByRole('textbox', { name: 'Sisa bulan tahun ini' }).parentElement).toHaveTextContent('bulan');
-    expect(screen.getByText('Otomatis')).toHaveClass('sr-only');
+    // P19.1-T4 AC-2 (UI-122): both prefilled figures carry the ⚡, each named *Otomatis* for a screen reader.
+    expect(screen.getAllByText('Otomatis')).toHaveLength(2);
+    for (const marker of screen.getAllByText('Otomatis')) expect(marker).toHaveClass('sr-only');
     expect(screen.getByRole('textbox', { name: 'APE yang sudah dicapai tahun ini' })).toHaveValue('Rp 0');
     expect(screen.getByText('Sisa yang dibutuhkan').closest('[data-variant]')).toHaveTextContent('Rp 500 jt');
     expect(screen.getByText('Target APE bulan ini').closest('[data-variant]')).toHaveTextContent('Rp 100 jt');
@@ -245,7 +247,7 @@ describe('P18.98-T4 Goal Settings in Indonesian', () => {
  * **A coachee's *Goal Setting* tab** (P11-T7 AC-5): the same calculator about somebody else — *dia* and *-nya* whatever
  * their pronoun (§B.0 rule 8; T4 AC-3), the coaching tool's own questions, and no word naming the office (ADR-0084).
  */
-describe('P18.98-T4 a coachee’s Goal Setting in Indonesian', () => {
+describe('P18.10-T4 a coachee’s Goal Setting in Indonesian', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it.each(['she', 'he', 'they'] as const)('AC-3 writes a coachee as dia whatever their pronoun (%s)', async (pronoun) => {

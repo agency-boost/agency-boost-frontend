@@ -2,9 +2,9 @@ import { defineMessages, type MessagesOf } from '@/i18n/catalogue';
 import { kept } from '@/i18n/kept';
 
 /**
- * **Settings › Capability Mapping** (`/kpm/settings/capability-mapping`, P5-T8; P18.98-T4): the ladder a stage is
+ * **Settings › Capability Mapping** (`/kpm/settings/capability-mapping`, P5-T8; P18.10-T4): the ladder a stage is
  * decided by, its milestones, and the skill grids leaders assess against. The frame and the controls every settings
- * screen shares are `settings.ts`'. The ladder's grey sentence keeps its verdict per size in both languages (P18.97-T4
+ * screen shares are `settings.ts`'. The ladder's grey sentence keeps its verdict per size in both languages (P18.9-T4
  * AC-6): shown from 1024px, behind an ⓘ beside the ladder's heading below it.
  *
  * **Content, shown as typed** (ADR-0179 §5): a stage's, a milestone's, a grid's and an item's name. **Kept English**

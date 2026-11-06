@@ -104,7 +104,7 @@ const dashboardCalls = (calls: { url: string }[]) => calls.filter((c) => c.url.i
 /** The strip's tiles, label and value each. */
 function strip() {
   const row = screen.getByText('Total activities').closest('[data-total]')!.parentElement!;
-  // A tile's label without the ⓘ the total carries (P18.95-T9 AC-3).
+  // A tile's label without the ⓘ the total carries (P18.7-T9 AC-3).
   return [...row.children].map((tile) => [tile.children[0].textContent!.replace(/ ⓘ.*$/, ''), tile.children[1].textContent]);
 }
 

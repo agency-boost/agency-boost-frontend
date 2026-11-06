@@ -66,10 +66,10 @@ describe('the person shell (P11-T7)', () => {
   });
   afterEach(() => vi.unstubAllGlobals());
 
-  it('P11-T7 AC-1, P18.95-T7 AC-2, UI-031 heads the page with the way back, the avatar, the name as its title, and the rung and unit under it', async () => {
+  it('P11-T7 AC-1, P18.7-T7 AC-2, UI-031 heads the page with the way back, the avatar, the name as its title, and the rung and unit under it', async () => {
     const { calls } = show(RINA);
 
-    // P18.95-T7 AC-2 (UI-021): the person's name is the page's one title; *Coaching Session* is the tab and the way back.
+    // P18.7-T7 AC-2 (UI-021): the person's name is the page's one title; *Coaching Session* is the tab and the way back.
     const heading = await screen.findByRole('heading', { level: 1, name: 'Rina Wijaya' });
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
     expect(screen.queryByRole('heading', { name: 'Coaching Session' })).not.toBeInTheDocument();
@@ -131,18 +131,19 @@ describe('the person shell (P11-T7)', () => {
     expect(document.body.textContent).not.toMatch(SIX_WORDS);
   });
 
-  it('UI-029 lists the eight tabs in the owner’s order, Leads new, Capability mapping renamed, a line lock and no emoji', async () => {
+  it('UI-029, P19.5-T4 lists the nine tabs in the owner’s order, Leads new, Survei between Activation and Training, Capability mapping renamed, a line lock and no emoji', async () => {
     show(RINA);
     const nav0 = await screen.findByRole('navigation', { name: 'Coaching' });
     const tabs = within(nav0);
 
     expect(tabs.getAllByRole('link').map((t) => t.textContent)).toEqual([
-      'Coaching Session', 'Activity', 'Leads', 'Goal Setting', 'Personal Summary', 'Activation', 'Training', 'Capability mapping',
+      'Coaching Session', 'Activity', 'Leads', 'Goal Setting', 'Personal Summary', 'Activation', 'Survey', 'Training', 'Capability mapping',
     ]);
     const hrefs = tabs.getAllByRole('link').map((t) => t.getAttribute('href'));
     expect(hrefs).toEqual([
       '/coaching/mem-rina/session', '/coaching/mem-rina/activity', '/coaching/mem-rina/leads', '/coaching/mem-rina/goal-setting',
-      '/coaching/mem-rina/summary', '/coaching/mem-rina/activation', '/coaching/mem-rina/training', '/coaching/mem-rina/leader-notes',
+      '/coaching/mem-rina/summary', '/coaching/mem-rina/activation', '/coaching/mem-rina/survey', '/coaching/mem-rina/training',
+      '/coaching/mem-rina/leader-notes',
     ]);
     expect(tabs.getByRole('link', { name: 'Personal Summary' })).toHaveAttribute('aria-current', 'page');
     expect(tabs.getByRole('link', { name: 'Goal Setting' })).not.toHaveAttribute('aria-current');
@@ -169,7 +170,7 @@ describe('the person shell (P11-T7)', () => {
     expect(first).toHaveAttribute('href', '/coaching/mem-rina/session');
   });
 
-  it('P18.5-T4 AC-2 makes Training a live tab', async () => {
+  it('P18.2-T4 AC-2 makes Training a live tab', async () => {
     show(RINA);
     const tabs = within(await screen.findByRole('navigation', { name: 'Coaching' }));
 
@@ -204,7 +205,7 @@ describe('the person shell (P11-T7)', () => {
   });
 
   it('UI-041 draws no Leader view / Agent view toggle on any tab', async () => {
-    for (const tab of ['session', 'activity', 'leads', 'goal-setting', 'summary', 'activation', 'training', 'leader-notes']) {
+    for (const tab of ['session', 'activity', 'leads', 'goal-setting', 'summary', 'activation', 'survey', 'training', 'leader-notes']) {
       nav.pathname = `/coaching/mem-rina/${tab}`;
       const view = show(RINA);
       await screen.findByRole('heading', { level: 1, name: 'Rina Wijaya' });
@@ -265,7 +266,7 @@ describe('the person shell (P11-T7)', () => {
     expect(heading.nextElementSibling).toHaveTextContent(
       /^They may have moved to another leader, or the address may be mistyped\. Everyone you coach is on Coaching Session\.$/,
     );
-    // P18.95-T7 AC-2: with nobody to name, the page keeps the prototype's title, and the card is a section under it.
+    // P18.7-T7 AC-2: with nobody to name, the page keeps the prototype's title, and the card is a section under it.
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Coaching Session$/);
     expect(heading.tagName).toBe('H2');
     // Inside the agent shell: its nav is there, and the way back.

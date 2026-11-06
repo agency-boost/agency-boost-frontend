@@ -22,8 +22,8 @@ describe('GoalHeroCard (UI V1, UI-054)', () => {
   it('UI-054 one orange card: the title and its % badge, the figure and its target, the bar, the foot split in two', () => {
     render(card(31));
     const hero = document.querySelector('[data-goal-hero]')!;
-    expect(hero).toHaveClass('bg-amber', 'rounded-lg', 'text-navy');
-    expect(screen.getByText('31%')).toHaveClass('bg-card', 'text-amber-ink');
+    expect(hero).toHaveClass('bg-primary', 'rounded-lg', 'text-primary-contrast');
+    expect(screen.getByText('31%')).toHaveClass('bg-card', 'text-primary-ink');
     expect(screen.getByText('Rp 29 jt')).toHaveClass('font-extrabold');
     expect(screen.getByText('dari target Rp 94,7 jt')).toBeInTheDocument();
     const bar = screen.getByRole('progressbar');

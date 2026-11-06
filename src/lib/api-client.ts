@@ -34,9 +34,9 @@ export interface ApiError {
  * did not have, threw a `TypeError`, and this function reported it as *"Could not reach the
  * server"* — which is what the office's Owner saw, and what they went looking for.
  *
- * **The browser's own sentences are the catalogue's English** (`uiMessages.errors`, P18.98-T4): composed here, outside
+ * **The browser's own sentences are the catalogue's English** (`uiMessages.errors`, P18.10-T4): composed here, outside
  * React and with no language to hand, and written in the reader's language where `ErrorBanner` shows them
- * (`ErrorWords`), so no caller changes. A server's sentence arrives in the reader's language already (P18.98-T5).
+ * (`ErrorWords`), so no caller changes. A server's sentence arrives in the reader's language already (P18.10-T5).
  */
 export function toDisplayError(err: unknown): ApiError {
   const BROWSER_SAID = uiMessages.en.errors;
@@ -45,17 +45,9 @@ export function toDisplayError(err: unknown): ApiError {
     return { code: 'CONFIG', message: err.message, requestId: 'unknown' };
   }
 
-  /*
-   * A request that never arrived is a `TypeError` from `fetch` itself, and the browsers word it
-   * differently: *Failed to fetch* (Chrome), *NetworkError when attempting to fetch* (Firefox),
-   * *Load failed* (Safari), *fetch failed* (undici, which is what the tests run on).
-   */
-  const failedToFetch = err instanceof TypeError
-    && /fetch|network|load failed/i.test(err.message);
-
   // Written for the person most likely to see it — an agent on a phone with poor signal, not a
   // developer. A developer hitting a misconfiguration gets the CONFIG branch above.
-  if (failedToFetch) {
+  if (isNetworkFailure(err)) {
     return {
       code: 'NETWORK',
       message: BROWSER_SAID.network,
@@ -77,6 +69,15 @@ export function toDisplayError(err: unknown): ApiError {
   };
 }
 
+/**
+ * A request that never arrived is a `TypeError` from `fetch` itself, and the browsers word it
+ * differently: *Failed to fetch* (Chrome), *NetworkError when attempting to fetch* (Firefox),
+ * *Load failed* (Safari), *fetch failed* (undici, which is what the tests run on).
+ */
+function isNetworkFailure(err: unknown): boolean {
+  return err instanceof TypeError && /fetch|network|load failed/i.test(err.message);
+}
+
 export class ApiRequestError extends Error {
   constructor(
     readonly status: number,
@@ -87,13 +88,61 @@ export class ApiRequestError extends Error {
   }
 }
 
+/*
+ * **A busy minute is not a signed-out one** (P19-T5 AC-1; UI-125, `revisions/2026-11-03/…ui-report-full…`): a `429`, a
+ * proxy or server briefly unavailable (`502`, `503`, `504`), or a request that never arrived, says *not now* — never
+ * *not you*. The refresh (`refreshOnce`) and the session's read (`SessionProvider`) try again on these, waiting the
+ * server's `retryAfterSeconds` where it says one (the API's `429`) and backing off otherwise, before they give up; and
+ * giving up on them never ends a session (`RefreshOutcome`'s `unreachable`). On production a Super Admin moving
+ * quickly through the console met the API's refresh limit and was sent to sign in with no word why, a reload too.
+ */
+
+/** The waits between tries, in order: five more tries, about half a minute in all where the server names no wait. */
+export const RETRY_BACKOFF_MS: readonly number[] = [1_000, 2_000, 4_000, 8_000, 16_000];
+
+/** The longest one wait the server names is waited (the API's refresh limit refuses for a minute at most). */
+export const RETRY_AFTER_CAP_MS = 60_000;
+
+const TRANSIENT_STATUSES: readonly number[] = [429, 502, 503, 504];
+
+export function isTransientStatus(status: number): boolean {
+  return TRANSIENT_STATUSES.includes(status);
+}
+
+/**
+ * How long to wait before the next try, the `tried`-th retry counting from 0 — or `null` when every retry is spent. The
+ * server's `retryAfterSeconds` wins where it gives one, up to `RETRY_AFTER_CAP_MS`.
+ */
+export function backoffDelay(tried: number, retryAfterSeconds?: unknown): number | null {
+  if (tried >= RETRY_BACKOFF_MS.length) return null;
+  const told = typeof retryAfterSeconds === 'number' && Number.isFinite(retryAfterSeconds) && retryAfterSeconds >= 0
+    ? retryAfterSeconds * 1000
+    : null;
+  return Math.min(told ?? RETRY_BACKOFF_MS[tried], RETRY_AFTER_CAP_MS);
+}
+
+/** Whether a thrown request failure says *not now*: a transient status, or a request that never arrived. */
+export function isTransientFailure(err: unknown): boolean {
+  return err instanceof ApiRequestError ? isTransientStatus(err.status) : isNetworkFailure(err);
+}
+
+/** The wait before trying a failed request again, or `null` for a failure that is an answer, or with no tries left. */
+export function retryDelayFor(err: unknown, tried: number): number | null {
+  if (!isTransientFailure(err)) return null;
+  return backoffDelay(tried, err instanceof ApiRequestError ? err.error.details?.retryAfterSeconds : undefined);
+}
+
+export function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => { setTimeout(resolve, ms); });
+}
+
 let accessToken: string | null = null;
 let impersonating = false;
 
 /**
- * **The language the screen is written in, told to the API on every request** (ADR-0179 §7; P18.98-T2 AC-6):
+ * **The language the screen is written in, told to the API on every request** (ADR-0179 §7; P18.10-T2 AC-6):
  * `Accept-Language: id` or `en`. Held here, beside the token, and set by `LanguageProvider` whenever the screen's
- * language changes — before the request that follows a choice, so the choice's own save carries it. From P18.98-T5 the
+ * language changes — before the request that follows a choice, so the choice's own save carries it. From P18.10-T5 the
  * API writes its refusals, notices and validation messages in it; until then it reads nothing from it.
  *
  * Starts as the language the pages are prerendered in (`LANGUAGE_UNCHOSEN`): what a request made before the provider
@@ -145,6 +194,12 @@ interface RequestOptions {
   body?: unknown;
   /** Set on the refresh call itself, so a failed refresh cannot recurse. */
   skipRefresh?: boolean;
+  /**
+   * **`401` codes that are this route's answer, never an expired token** (P19.2-T1 AC-8; ADR-0199 §4): a wrong password
+   * for the other login is `401 AUTH_INVALID_CREDENTIALS` on a route the reader is signed in to. Refreshing and replaying
+   * it would count the wrong password twice against the sign-in limiter; any other `401` is still refreshed once.
+   */
+  answers401?: readonly string[];
 }
 
 async function raw(path: string, options: RequestOptions = {}): Promise<Response> {
@@ -197,7 +252,7 @@ async function send(path: string, options: RequestOptions): Promise<Response> {
 
   // One transparent retry: the access token lives 15 minutes, so an open tab will hit
   // this routinely and the user should never see it.
-  if (response.status === 401 && !options.skipRefresh && !impersonating) {
+  if (response.status === 401 && !options.skipRefresh && !impersonating && !(await isRouteAnswer(response, options))) {
     // A refresh that finished while this request was out has already replaced the token it
     // carried: replay with that one, rather than spend the cookie it was issued with again.
     const replaced = accessToken !== null && accessToken !== sentWith;
@@ -211,11 +266,20 @@ async function send(path: string, options: RequestOptions): Promise<Response> {
   return response;
 }
 
+/** Whether a `401` is one the route answers on purpose (`answers401`), read off a copy so the caller still has the body. */
+async function isRouteAnswer(response: Response, options: RequestOptions): Promise<boolean> {
+  if (!options.answers401?.length) return false;
+  // A body is read once: the copy is read here, and the caller reads the original.
+  const copy = typeof response.clone === 'function' ? response.clone() : response;
+  const body = (await copy.json().catch(() => null)) as { error?: { code?: string } } | null;
+  return options.answers401.includes(body?.error?.code ?? '');
+}
+
 /** A refusal's envelope as the error a screen shows, telling the session first when the office cannot be used. */
 function refusal(response: Response, payload: unknown): ApiRequestError {
   const error = (payload as { error?: ApiError } | null)?.error ?? {
     code: 'INTERNAL_ERROR',
-    // The catalogue's English, written in the reader's language where it is shown (`ErrorWords`, P18.98-T4).
+    // The catalogue's English, written in the reader's language where it is shown (`ErrorWords`, P18.10-T4).
     message: uiMessages.en.errors.noAnswer,
     requestId: 'unknown',
   };
@@ -281,7 +345,10 @@ let refreshing: Promise<RefreshOutcome> | null = null;
  * - **`none`** — any other `401`, `AUTH_TOKEN_INVALID` for no cookie at all: there was no session to refresh — never
  *   signed in here, or the cookie a sign-out cleared;
  * - **`unreachable`** — anything else: the request never arrived, or was answered with something that is not about
- *   the session (a rate limit, a refused origin, a server error).
+ *   the session (a rate limit, a refused origin, a server error). *Since 2026-11-04 (P19-T5 AC-1, UI-125):* a rate
+ *   limit, a server briefly unavailable and a request that never arrived are **tried again first**, with backoff
+ *   (`RETRY_BACKOFF_MS`, the server's `retryAfterSeconds` where it names one); `unreachable` only once every try is
+ *   spent. It never ends a session.
  */
 export type RefreshOutcome = 'refreshed' | 'ended' | 'none' | 'unreachable';
 
@@ -303,23 +370,48 @@ export async function tryRefresh(): Promise<boolean> {
   return (await refreshSession()) === 'refreshed';
 }
 
+/**
+ * One refresh, **tried again while the answer is *not now*** (P19-T5 AC-1, UI-125): a `429` waits the server's
+ * `retryAfterSeconds`, a `502`–`504` or a request that never arrived backs off, up to five more tries. Every caller
+ * waits on it, as on any refresh in flight (`refreshSession`), so the screen keeps its loading state rather than its
+ * reader being sent to sign in.
+ */
 async function refreshOnce(): Promise<RefreshOutcome> {
+  for (let tried = 0; ; tried += 1) {
+    const attempt = await refreshAttempt();
+    if (attempt.outcome !== 'retry') return attempt.outcome;
+    const delay = backoffDelay(tried, attempt.retryAfterSeconds);
+    if (delay === null) return 'unreachable';
+    await wait(delay);
+  }
+}
+
+type RefreshAttempt = { outcome: RefreshOutcome } | { outcome: 'retry'; retryAfterSeconds?: unknown };
+
+async function refreshAttempt(): Promise<RefreshAttempt> {
   try {
     const response = await raw('/auth/refresh', { method: 'POST', skipRefresh: true });
     if (response.status === 401) {
       const body = (await response.json().catch(() => null)) as { error?: { code?: string } } | null;
-      return body?.error?.code === SESSION_ENDED_CODE ? 'ended' : 'none';
+      return { outcome: body?.error?.code === SESSION_ENDED_CODE ? 'ended' : 'none' };
     }
-    if (!response.ok) return 'unreachable';
+    if (isTransientStatus(response.status)) {
+      const body = (await response.json().catch(() => null)) as
+        | { error?: { details?: { retryAfterSeconds?: unknown } } }
+        | null;
+      return { outcome: 'retry', retryAfterSeconds: body?.error?.details?.retryAfterSeconds };
+    }
+    if (!response.ok) return { outcome: 'unreachable' };
     const { accessToken: token } = (await response.json()) as { accessToken: string };
     setAccessToken(token);
-    return 'refreshed';
+    return { outcome: 'refreshed' };
   } catch (err) {
     // "Not refreshed" is the right answer to a network failure or a rejected cookie.
     // It is the wrong answer to a misconfigured origin: the app would show a signed-out
     // shell and never say why, on every screen at once.
     if (err instanceof ApiConfigError) throw err;
-    return 'unreachable';
+    // A request that never arrived is tried again (UI-125); anything else thrown is not the network's.
+    return isNetworkFailure(err) ? { outcome: 'retry' } : { outcome: 'unreachable' };
   }
 }
 

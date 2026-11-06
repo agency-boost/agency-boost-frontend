@@ -15,7 +15,7 @@ import { authMessages } from '@/i18n/messages/auth';
  * Grouped by office, and collapsed by default — there are fifteen of them, and an
  * unrolled list of fifteen pushes the actual sign-in form off a laptop screen.
  *
- * **Its own words are the catalogue's** (`messages/auth.tsx`, `demo`; P18.98-T4); **the accounts are not** — each one's
+ * **Its own words are the catalogue's** (`messages/auth.tsx`, `demo`; P18.10-T4); **the accounts are not** — each one's
  * role, where it lands and its group stay in `lib/demo-accounts.ts`, folded out of every other build with the credentials
  * (ADR-0041): an area ships everywhere, so nothing of the seed goes into one. They read as the seed writes them.
  */

@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { use, useCallback, useEffect, useState } from 'react';
 import { LeaderLimitNotice, LeaderLimitWaiting, isLeaderLimit } from '@/components/leader-limit-notice';
+import { MemberDashboardLink, MemberTiles } from '@/components/member-tiles';
 import { Page } from '@/components/page';
 import { Cell, DataTable, Row } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -14,6 +15,7 @@ import { kept } from '@/i18n/kept';
 import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
 import { memberMessages } from '@/i18n/messages/member';
 import { orgMessages } from '@/i18n/messages/org';
+import { cn } from '@/lib/cn';
 import { displayName } from '@/lib/display-name';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { formatCalendarDay } from '@/lib/format';
@@ -44,6 +46,17 @@ import {
  * A page rather than a modal because it has a URL worth sharing: "look at this person"
  * is a thing an Owner says to an Admin, and a modal cannot be linked to.
  */
+/**
+ * **A link or a box's line, 44px tall below 1024px** (P19.2-T3 AC-4; UI-142: *the measurement script finds no target
+ * under 44px in `main` at 375 and 768*): *‹ All members*, a report's name, a group's or *Core Leader*'s tick, a
+ * removal's choice. Its words centred in the height; from 1024px it sits on its line as before. A link inside a
+ * sentence keeps its line (WCAG 2.5.8's inline exception).
+ */
+const TAP_LINE = 'max-lg:inline-flex max-lg:min-h-11 max-lg:items-center';
+
+/** A box's line — a label that is a flex line already — 44px tall below 1024px, as `TAP_LINE`. */
+const TAP_BOX = 'max-lg:min-h-11';
+
 export default function MemberPage({ params }: { params: Promise<{ membershipId: string }> }) {
   const t = useMessages(memberMessages);
   const status = useMessages(orgMessages).status;
@@ -58,7 +71,7 @@ export default function MemberPage({ params }: { params: Promise<{ membershipId:
   const [tags, setLocalTags] = useState<MemberTags | null>(null);
   const [draft, setDraft] = useState<{ groupIds: string[]; isCoreLeader: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
-  // P3.5-T13. Both controls live here rather than on a roster row, which is where the
+  // P3.1-T13. Both controls live here rather than on a roster row, which is where the
   // prototype puts them (`KPM_Owner.html:4515-4522`) — a bare `onchange` and a `Remove`
   // link, no confirmation and no reason. There is no room on a row to ask why.
   // A rung of the company's ladder, by its code lower-cased — `aab`, or a rung the company added (OD-50).
@@ -75,7 +88,7 @@ export default function MemberPage({ params }: { params: Promise<{ membershipId:
   const [asks, setAsks] = useState<LeaderLimitRequestRow[] | null>(null);
   const [asking, setAsking] = useState(false);
 
-  /** P3.5-T13. A role change and a removal both alter this page, so both re-read it. */
+  /** P3.1-T13. A role change and a removal both alter this page, so both re-read it. */
   const load = useCallback(async () => {
     try {
       const [one, theirs, mine, all] = await Promise.all([
@@ -199,7 +212,7 @@ export default function MemberPage({ params }: { params: Promise<{ membershipId:
       <Page title={kept('Member')}>
         <ErrorBanner {...error} />
         <p className="mt-3 text-md text-muted">{t.hidden}</p>
-        <Link href="/people/members" className="mt-3 inline-block text-md text-navy underline">
+        <Link href="/people/members" className={cn('mt-3 inline-block text-md text-navy underline', TAP_LINE)}>
           {t.back}
         </Link>
       </Page>
@@ -219,12 +232,19 @@ export default function MemberPage({ params }: { params: Promise<{ membershipId:
       title={displayName(member)}
       subtitle={member.agentCode}
       actions={
-        <StatusPill
-          status={member.status === 'active' ? 'success' : member.status === 'pending' ? 'neutral' : 'alert'}
-          label={status[member.status]}
-        />
+        <>
+          {/* *Lihat dashboard ›* on the title row from 1024px (`kpm-owner-desktop` screen 3); below, after the tiles. */}
+          <MemberDashboardLink member={member} variant="primary" className="max-lg:hidden" />
+          <StatusPill
+            status={member.status === 'active' ? 'success' : member.status === 'pending' ? 'neutral' : 'alert'}
+            label={status[member.status]}
+          />
+        </>
       }
     >
+      {/* OWN UI-020 (ADR-0205 §1): how they are doing, under the name; the admin sections stay below. */}
+      <MemberTiles member={member} />
+
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <h2 className="font-display text-lg font-bold text-navy">{t.personal}</h2>
@@ -234,13 +254,14 @@ export default function MemberPage({ params }: { params: Promise<{ membershipId:
             <Detail term={t.agentCode} detail={<code className="text-sm">{member.agentCode}</code>} />
             <Detail term={t.role} detail={<RoleBadge role={member.role} short={false} />} />
             <Detail term={t.reportsTo} detail={member.leaderName ?? t.topOfTree} />
-            {/* *Join date*, the one name for it (P18.96-T2 AC-5, ADR-0169 §7): the day their leader gave, an office
-                date — not `joinedAt`, the instant the system made them active. */}
+            {/* *Bergabung di AgencyBoost* (OWN UI-025, ADR-0205 §4; was *Join date*, ADR-0169 §7): the day their leader
+                gave, an office date — not `joinedAt`, the instant the system made them active. The 90-day clock reads it
+                (OD-255's default). */}
             <Detail
               term={t.joinDate}
               detail={member.joinDate ? formatCalendarDay(member.joinDate, figures) : '—'}
             />
-            {/* What the person records (ADR-0158, P18.8-T4 AC-6): the API serves it to the Owner and the
+            {/* What the person records (ADR-0158, P18.5-T4 AC-6): the API serves it to the Owner and the
                 Admins on this read only, read-only here — the person's own to change, on their profile. */}
             {member.personal && <PersonalDetailRows personal={member.personal} />}
           </dl>
@@ -278,7 +299,7 @@ export default function MemberPage({ params }: { params: Promise<{ membershipId:
         {draft === null ? (
           <div className="mt-3 flex flex-wrap items-center gap-2">
             {tags?.isCoreLeader && (
-              <span className="rounded-full bg-amber px-2 py-0.5 text-sm font-semibold text-navy">
+              <span className="rounded-full bg-primary px-2 py-0.5 text-sm font-semibold text-primary-contrast">
                 {kept('Core Leader')}
               </span>
             )}
@@ -317,7 +338,7 @@ export default function MemberPage({ params }: { params: Promise<{ membershipId:
                 {groups.map((group) => (
                   <label
                     key={group.groupId}
-                    className="mt-1 flex items-center gap-2 text-md text-navy"
+                    className={cn('mt-1 flex items-center gap-2 text-md text-navy', TAP_BOX)}
                   >
                     <input
                       type="checkbox"
@@ -339,7 +360,7 @@ export default function MemberPage({ params }: { params: Promise<{ membershipId:
 
             {/* A leader's tag (ADR-0159 §1): on a member whose rung leads nobody the box cannot be ticked — the API
                 refuses it `CORE_LEADER_NOT_A_LEADER` — and a tag kept from before can still be cleared. */}
-            <label className="mt-3 flex items-center gap-2 text-md text-navy">
+            <label className={cn('mt-3 flex items-center gap-2 text-md text-navy', TAP_BOX)}>
               <input
                 type="checkbox"
                 checked={draft.isCoreLeader}
@@ -407,7 +428,7 @@ export default function MemberPage({ params }: { params: Promise<{ membershipId:
                   hint={member.canPromoteToAb ? undefined : t.onlyOfficeMakesAb({ ab: rungShort('AB', ladder) })}
                 >
                   <Select id="to-role" value={toRole} onChange={(e) => setToRole(e.target.value)}>
-                    {/* The ladder listed to choose from, so each rung by the ladder's own label (P18.95-T9 AC-1). */}
+                    {/* The ladder listed to choose from, so each rung by the ladder's own label (P18.7-T9 AC-1). */}
                     <option value="">{t.noChange({ rung: rungLabel(currentRung(member), ladder) })}</option>
                     {/* The company's ladder, junior first — a rung it added included (OD-50) — each by its
                         label. The two matrix rows, kept apart: Agent⇄AAB is a direct leader's call, anything
@@ -476,7 +497,7 @@ export default function MemberPage({ params }: { params: Promise<{ membershipId:
                         {t.reportCount({ n: member.directCount })}
                       </legend>
                       <p className="text-sm text-muted">{t.sayWhere}</p>
-                      <label className="mt-2 flex items-center gap-2 text-md text-navy">
+                      <label className={cn('mt-2 flex items-center gap-2 text-md text-navy', TAP_BOX)}>
                         <input
                           type="radio"
                           name="disposition"
@@ -486,7 +507,7 @@ export default function MemberPage({ params }: { params: Promise<{ membershipId:
                         />
                         {t.moveUp({ to: member.leaderName ?? null })}
                       </label>
-                      <label className="mt-1 flex items-center gap-2 text-md text-navy">
+                      <label className={cn('mt-1 flex items-center gap-2 text-md text-navy', TAP_BOX)}>
                         <input
                           type="radio"
                           name="disposition"
@@ -546,7 +567,7 @@ export default function MemberPage({ params }: { params: Promise<{ membershipId:
           {reports.map((r) => (
             <Row key={r.membershipId}>
               <Cell className="font-semibold">
-                <Link href={`/people/members/${r.membershipId}`} className="underline">
+                <Link href={`/people/members/${r.membershipId}`} className={cn('underline', TAP_LINE)}>
                   {displayName(r)}
                 </Link>
               </Cell>
@@ -556,7 +577,7 @@ export default function MemberPage({ params }: { params: Promise<{ membershipId:
               <Cell>
                 <RoleBadge role={r.role} />
               </Cell>
-              {/* The directory's words for one who leads nobody (P18.97-T4 AC-3; UI-024): *No team*. */}
+              {/* The directory's words for one who leads nobody (P18.9-T4 AC-3; UI-024): *No team*. */}
               <Cell className="text-muted">
                 {r.isLeader ? t.direct({ n: r.directCount }) : t.noTeam}
               </Cell>
@@ -565,7 +586,7 @@ export default function MemberPage({ params }: { params: Promise<{ membershipId:
         </DataTable>
       )}
 
-      <Link href="/people/members" className="mt-6 inline-block text-md text-navy underline">
+      <Link href="/people/members" className={cn('mt-6 inline-block text-md text-navy underline', TAP_LINE)}>
         {t.back}
       </Link>
     </Page>
@@ -582,7 +603,7 @@ function Detail({ term, detail }: { term: string; detail: React.ReactNode }) {
 }
 
 /** The four a person records, *Not recorded* for each they have not given (ADR-0158 §3). */
-function PersonalDetailRows({ personal }: { personal: PersonalDetails }) {
+function PersonalDetailRows({ personal }: { personal: PersonalDetails & { companyName?: string | null } }) {
   const t = useMessages(memberMessages);
   // The values are the profile's (`lib/personal.ts`), as `/profile` writes them: words and figures each in theirs.
   const lines = personalLines(personal, useLanguage(), useFigureLanguage());
@@ -590,7 +611,8 @@ function PersonalDetailRows({ personal }: { personal: PersonalDetails }) {
     <>
       <Detail term={t.dateOfBirth} detail={lines.dateOfBirth} />
       <Detail term={t.gender} detail={lines.gender} />
-      <Detail term={t.companyJoinMonth} detail={lines.companyJoinMonth} />
+      {/* *Bergabung di <company>* (OWN UI-025, ADR-0205 §4): the insurer's month, the company named from the office. */}
+      <Detail term={t.companyJoinMonth({ company: personal.companyName ?? null })} detail={lines.companyJoinMonth} />
       <Detail term={t.workStatus} detail={lines.workStatus} />
     </>
   );

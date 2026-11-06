@@ -9,7 +9,7 @@ import { NONE } from '@/lib/leader-meeting-tabs';
 import { AGENDA_SECTIONS, type MeetingView } from '@/lib/leader-meetings';
 
 /**
- * **A4, landscape** (P18.97-T1 AC-18, I-494): the slide's seven columns fit across without clipping. While a meeting's
+ * **A4, landscape** (P18.9-T1 AC-18, I-494): the slide's seven columns fit across without clipping. While a meeting's
  * page is open, its print is this layout alone, so the page size is the meeting's.
  */
 const LANDSCAPE = '@media print { @page { size: A4 landscape; margin: 10mm; } }';
@@ -19,14 +19,14 @@ const LANDSCAPE = '@media print { @page { size: A4 landscape; margin: 10mm; } }'
  * what *Save as PDF* prints in place of the tab — *Overview & Stats*, *Agenda* (the three columns side by side, each
  * item's text and *"PIC: {name}"*, no boxes) and *Action Items* (the six named columns, the status as its pill).
  *
- * ***Overview & Stats* prints the screen's own table** since P18.97-T1 (AC-18; the client's *Save as PDF* against the
+ * ***Overview & Stats* prints the screen's own table** since P18.9-T1 (AC-18; the client's *Save as PDF* against the
  * reference slide): the title and *AS OF*, the strip, the seven columns with their two-line headers and the two groups,
  * the hatch, the outline, every target as its text, and the numbered footnotes and *(\*)* notes — which take the place
  * of the print's *†* and its line (P18.1-T3). A past meeting prints its frozen figures.
  *
  * Off the screen and on the paper (`hidden print:block`, `:744`, `:762-764`); the page around it hides its own
  * chrome. **It draws what the page holds**, so it is never stale (the prototype's can be, flow doc §2.9). It writes
- * nothing. **In the screen's language** (P18.98-T4): the words the reader reads, the figures the reader's.
+ * nothing. **In the screen's language** (P18.10-T4): the words the reader reads, the figures the reader's.
  */
 export function PrintLayout({ meeting }: { meeting: MeetingView }) {
   const tabs = useMessages(forumMessages).tabs;

@@ -71,7 +71,7 @@ export function Field({
   label: React.ReactNode;
   hint?: string;
   /**
-   * `false`: **the hint is not drawn below 768px** — the client's *Remove* verdict on a grey sentence (P18.95-T7
+   * `false`: **the hint is not drawn below 768px** — the client's *Remove* verdict on a grey sentence (P18.7-T7
    * AC-1; ADR-0167 §7). It still describes the control there, as it does at every width: a screen reader reads a
    * description it is not shown.
    */
@@ -151,7 +151,7 @@ export function CodeField({
   /** Why it cannot change. Not optional: a greyed field with no explanation reads as broken. */
   reason: string;
   className?: string;
-  /** The box's own classes beside its look — `CONTROL_PHONE`, where a screen's fields are 44px on a phone (P18.97-T7). */
+  /** The box's own classes beside its look — `CONTROL_PHONE`, where a screen's fields are 44px on a phone (P18.9-T7). */
   inputClassName?: string;
 }) {
   return (
@@ -234,7 +234,7 @@ const DENSITY = {
   default: `h-10 ${FIELD_TOUCH} rounded-md border bg-card px-3 text-base`,
   cell:
     'w-full rounded-sm border bg-transparent px-1.5 py-[3px] text-base leading-tight '
-    + 'hover:border-hairline focus:border-amber focus:bg-card focus:ring-1 focus:ring-amber',
+    + 'hover:border-hairline focus:border-primary focus:bg-card focus:ring-1 focus:ring-focus-ring',
 } as const;
 
 /** `cell` starts transparent; `default` shows its hairline at rest. */
@@ -318,7 +318,7 @@ export function TextInput({
         invalid ? 'border-alert' : 'border-hairline',
         // The same weight the global rule gives a bare input — 2px amber, offset by one — so nothing
         // is lost by moving the indicator out here.
-        'focus-within:border-amber focus-within:ring-2 focus-within:ring-amber focus-within:ring-offset-1',
+        'focus-within:border-primary focus-within:ring-2 focus-within:ring-focus-ring focus-within:ring-offset-1',
         className,
       )}
     >
@@ -459,10 +459,15 @@ export function ColorInput({
  * **The label never changes with the state.** *Published* stays *Published* whether it is on or
  * off; a name that flipped to *Draft* would announce as a different control appearing.
  *
- * **`phoneTarget`: a 44 × 44px target below 768px** (P18.97-T7 AC-6, ADR-0178 §5; UI-040): the transparent input a
+ * **`phoneTarget`: a 44 × 44px target below 768px** (P18.9-T7 AC-6, ADR-0178 §5; UI-040): the transparent input a
  * square centred on the track and the line as tall, the track drawn as before (`SWITCH_TAP_PHONE`, `phone.ts`). On the
  * screens the client's UI-040 names; from 768px it changes nothing.
  */
+/** `Switch`'s line and target on a tablet, as `SWITCH_LINE_PHONE` and `SWITCH_TAP_PHONE` are on a phone (UI-142). */
+const SWITCH_LINE_TABLET = 'md:max-lg:min-h-11';
+const SWITCH_TAP_TABLET = 'md:max-lg:left-1/2 md:max-lg:top-1/2 md:max-lg:h-11 md:max-lg:w-11 '
+  + 'md:max-lg:-translate-x-1/2 md:max-lg:-translate-y-1/2';
+
 export function Switch({
   id,
   label,
@@ -472,6 +477,7 @@ export function Switch({
   describedBy,
   className,
   phoneTarget = false,
+  tabletTarget = false,
 }: {
   id: string;
   /** Stays the same in both states — it names the control, not the state. */
@@ -481,11 +487,16 @@ export function Switch({
   onChange: (next: boolean) => void;
   describedBy?: string;
   className?: string;
-  /** Below 768px, a 44 × 44px target (P18.97-T7 AC-6). */
+  /** Below 768px, a 44 × 44px target (P18.9-T7 AC-6). */
   phoneTarget?: boolean;
+  /**
+   * From 768 to 1023px, the same 44 × 44px target (P19.2-T3 AC-4; UI-142: *≥ 44px on a phone and a tablet*). Opt-in: a
+   * caller that does not ask is unchanged at every width.
+   */
+  tabletTarget?: boolean;
 }) {
   return (
-    <span className={cn('inline-flex items-center gap-2', phoneTarget && SWITCH_LINE_PHONE, className)}>
+    <span className={cn('inline-flex items-center gap-2', phoneTarget && SWITCH_LINE_PHONE, tabletTarget && SWITCH_LINE_TABLET, className)}>
       <span className="relative inline-flex h-[22px] w-[38px] shrink-0 items-center">
         <input
           id={id}
@@ -498,6 +509,7 @@ export function Switch({
           className={cn(
             'peer absolute inset-0 z-10 m-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed',
             phoneTarget && SWITCH_TAP_PHONE,
+            tabletTarget && SWITCH_TAP_TABLET,
           )}
         />
         <span
@@ -507,7 +519,7 @@ export function Switch({
             'peer-checked:bg-success peer-disabled:opacity-40',
             // The amber ring the project keeps, moved onto the visible track because the input
             // itself is transparent.
-            'peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-1 peer-focus-visible:outline-amber',
+            'peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-1 peer-focus-visible:outline-focus-ring',
           )}
         />
         <span
@@ -581,7 +593,7 @@ const BUTTON_VARIANT = {
    * is 2.23:1 and fails WCAG AA 1.4.3; navy on amber is 6.31:1, and on the amber-dark hover 4.71:1.
    * `a11y.spec.tsx` pins all three. Registered in `prototype-parity.md`.
    */
-  primary: 'bg-amber text-navy hover:bg-amber-dark',
+  primary: 'bg-primary text-primary-contrast hover:bg-primary-hover',
   secondary: 'border border-hairline bg-card text-navy',
   // The prototype's `.btn-danger` (`Overall.html:2244-2245`): transparent, with an
   // alert-red border and alert-red text. Deliberately quieter than the primary — a
@@ -611,7 +623,7 @@ const BUTTON_VARIANT = {
 const ICON_TONE = {
   success: 'hover:bg-success/[0.12] hover:text-success',
   alert: 'hover:bg-alert/10 hover:text-alert',
-  neutral: 'hover:bg-navy/[0.08] hover:text-navy',
+  neutral: 'hover:bg-secondary/[0.08] hover:text-navy',
 } as const;
 
 /** The three that are not a 40px box, so `Button` picks the right base. */
@@ -762,7 +774,7 @@ export function Card({
  * **A server's answer shows its code and request id** under its sentence — *PERM_OWNER_ONLY · r-1* — which is what
  * support asks for. **A failure the browser detected** — *NETWORK*, *UNEXPECTED*, *CONFIG*, which no server answered
  * and which carry no request id (`lib/browser-errors.ts`) — **shows its sentence alone**, and its code goes to the
- * console (P18.97-T4 AC-10, ADR-0176 §10; the client's UI-032: a raw *NETWORK* under the sign-in error). `/login` first,
+ * console (P18.9-T4 AC-10, ADR-0176 §10; the client's UI-032: a raw *NETWORK* under the sign-in error). `/login` first,
  * and every screen through this one component.
  */
 export function ErrorBanner({ code, message, requestId }: { code: string; message: string; requestId?: string }) {

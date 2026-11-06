@@ -13,7 +13,7 @@ import { activationMessages } from '@/i18n/messages/activation';
 import ActivationPage from './page';
 
 /**
- * **The hire's `/activation` in Indonesian** (P18.98-T4 AC-1 to AC-4, new hires and activation): the progress card,
+ * **The hire's `/activation` in Indonesian** (P18.10-T4 AC-1 to AC-4, new hires and activation): the progress card,
  * the aspect table, a row with its note and date, the *Auto* badge and its *Buka … →*, who ticked what, a data-backed
  * item's source line, its waiting line and *Which case?*, the graduation's confirmation, the leader's note and the
  * page's states — the approved glossary's words (`i18n/messages/activation.ts`), each kept term English (§A), what the
@@ -42,7 +42,7 @@ afterEach(() => {
   resetLanguage();
 });
 
-describe('P18.98-T4 /activation in Indonesian', () => {
+describe('P18.10-T4 /activation in Indonesian', () => {
   it('reads the English it is looking for, so a silent zero cannot pass: the same page in English shows it', async () => {
     expect(ENGLISH.length).toBeGreaterThan(40);
     stubFetch({ ...SHELL_STUBS, 'GET /activation/me': { body: activationView() } });
@@ -184,11 +184,11 @@ describe('P18.98-T4 /activation in Indonesian', () => {
 });
 
 /**
- * **The figures follow the reader's choice** (P18.98-T3's rule, now on this screen): a reader with no choice, the switch
+ * **The figures follow the reader's choice** (P18.10-T3's rule, now on this screen): a reader with no choice, the switch
  * not live, reads English words and Indonesian dates — the date beside the shared field's face as its face is — and a
  * reader who chose Indonesian reads both in it.
  */
-describe('P18.98-T4 /activation under the app’s provider', () => {
+describe('P18.10-T4 /activation under the app’s provider', () => {
   it('a reader with no choice reads English words and Indonesian dates', async () => {
     stubFetch({ ...SHELL_STUBS, 'GET /activation/me': { body: activationView() } });
     renderWithLanguage(<AgentLayout><ActivationPage /></AgentLayout>, { me: RINA_ME }, { live: false });

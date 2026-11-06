@@ -1,8 +1,10 @@
 import { screen, within } from '@testing-library/react';
+import { axe } from 'vitest-axe';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import AdminLayout from '@/app/(admin)/layout';
-import { makeMe, renderInLayout, stubFetch } from '@test/harness';
+import { atWidth, makeMe, renderInLayout, stubFetch, wears } from '@test/harness';
+import { smallTargets } from '@test/touch-audit';
 import LeaderLimitRequestsPage from './page';
 
 vi.mock('next/navigation', () => ({
@@ -29,10 +31,10 @@ const req = (over: Record<string, unknown> = {}) => ({
 });
 
 /**
- * **Leaders past the limit** (P18.8-T2 AC-6, ADR-0157 §3): the Super Admin's queue — pending first, approve, decline
+ * **Leaders past the limit** (P18.5-T2 AC-6, ADR-0157 §3): the Super Admin's queue — pending first, approve, decline
  * with a reason, the decided list — and its count in the console's nav.
  */
-describe('Leaders past the limit (P18.8-T2)', () => {
+describe('Leaders past the limit (P18.5-T2)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it('AC-6 names who, the change, the office, who asked and why, and what approving makes the count', async () => {
@@ -112,5 +114,63 @@ describe('Leaders past the limit (P18.8-T2)', () => {
       me: makeMe({ ...SUPER_ADMIN, permissions: ['kpm:list_all'] }),
     });
     expect(await screen.findByRole('alert')).toHaveTextContent('Not available to you');
+  });
+});
+
+/**
+ * **P19.2-T2 — the queue below 1024px** (UI-126, UI-135): the decided requests as rows, read only; the pending cards'
+ * targets 44px. The laptop keeps its table.
+ */
+describe('P19.2-T2 Leaders past the limit below 1024px (UI-126, UI-135)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const ROWS = [
+    req(),
+    req({ requestId: 'llr-2', subjectName: 'Sari Dewi', status: 'approved', decidedAt: '2026-11-01T00:00:00.000Z' }),
+    req({ requestId: 'llr-3', subjectName: 'Budi Santoso', status: 'declined', declineReason: 'Wait for the new year.' }),
+  ];
+  const show = () => {
+    stubFetch({ '/admin/leader-limit-requests': { body: ROWS } });
+    renderInLayout(AdminLayout, <LeaderLimitRequestsPage />, { me: SUPER_ADMIN });
+  };
+
+  it.each([375, 768])('P19.2-T2 AC-1 at %ipx the decided requests are rows: the member, office · change · asked by, the state', async (px) => {
+    atWidth(px);
+    show();
+    const list = await screen.findByRole('list', { name: 'Decided requests' });
+    expect(screen.queryByRole('table')).toBeNull();
+    const [approved, declined] = within(list).getAllByRole('listitem');
+    expect(wears(approved, px)).toContain('min-h-14');
+    expect(approved).toHaveTextContent('Sari Dewi');
+    expect(approved).toHaveTextContent('KPM 0603 · Tangerang Branch · Agent → AAB · asked by Hendra Gunawan');
+    expect(within(approved).getByText('Approved')).toBeInTheDocument();
+    expect(declined).toHaveTextContent('Wait for the new year.');
+    expect(within(declined).getByText('Declined')).toBeInTheDocument();
+    // Read only, as the table is.
+    expect(within(list).queryByRole('link')).toBeNull();
+    expect(within(list).queryByRole('button')).toBeNull();
+  });
+
+  it.each([1024, 1280])('P19.2-T2 AC-1 at %ipx keeps the decided table', async (px) => {
+    atWidth(px);
+    show();
+    const table = await screen.findByRole('table', { name: 'Decided requests' });
+    expect(within(table).getByText('Sari Dewi')).toBeInTheDocument();
+    expect(screen.queryByRole('list', { name: 'Decided requests' })).toBeNull();
+  });
+
+  it.each([375, 768])('P19.2-T2 AC-5 at %ipx finds no target under 44px in main', async (px) => {
+    atWidth(px);
+    show();
+    await screen.findByRole('list', { name: 'Decided requests' });
+    expect(smallTargets(document.querySelector('main')!, px)).toEqual([]);
+  });
+
+  it.each([375, 1280])('P19.2-T2 AC-1 at %ipx has no axe violations', async (px) => {
+    atWidth(px);
+    show();
+    await screen.findByText('Sari Dewi');
+    const results = await axe(document.body, { rules: { 'color-contrast': { enabled: false }, region: { enabled: false } } });
+    expect(results.violations).toEqual([]);
   });
 });

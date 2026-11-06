@@ -12,8 +12,8 @@ import { NavIcon } from './nav-icon';
 const WHOLE_DATE = /^[1-9]\d{3}-\d{2}-\d{2}$/;
 
 /**
- * What an empty field says, in the face's place of a date (P18.96-T2; parity I-455): the catalogue's English, which the
- * field writes in the reader's language (`uiMessages.chooseDate`, P18.98-T4).
+ * What an empty field says, in the face's place of a date (P18.8-T2; parity I-455): the catalogue's English, which the
+ * field writes in the reader's language (`uiMessages.chooseDate`, P18.10-T4).
  */
 export const DATE_FIELD_EMPTY = uiMessages.en.chooseDate;
 
@@ -43,7 +43,7 @@ const FACE: Record<DateFieldDensity, string> = {
 const REST: Record<DateFieldDensity, string> = {
   default: 'border-hairline bg-card',
   compact: 'border-hairline bg-card',
-  cell: 'border-transparent bg-transparent peer-hover:border-hairline peer-focus:border-amber peer-focus:bg-card peer-focus:ring-1 peer-focus:ring-amber',
+  cell: 'border-transparent bg-transparent peer-hover:border-hairline peer-focus:border-primary peer-focus:bg-card peer-focus:ring-1 peer-focus:ring-focus-ring',
   text: 'bg-transparent',
 };
 
@@ -71,7 +71,7 @@ export interface DateFieldProps
 }
 
 /**
- * **One date field, written the app's way** (P18.96-T2 AC-4, ADR-0173 D12; UI-009; parity I-455).
+ * **One date field, written the app's way** (P18.8-T2 AC-4, ADR-0173 D12; UI-009; parity I-455).
  *
  * A native `<input type="date">` writes its value **in the browser's locale** — *07/22/2026* in an American
  * Chrome, *22/07/2026* in a British one — beside screens that write *22 Jul 2026* (ADR-0167 §1). So the field shows
@@ -108,7 +108,7 @@ export function DateField({
 }: DateFieldProps) {
   const ref = useRef<HTMLInputElement>(null);
   // The face in the figures' language, *5 Okt 2026* or *5 Oct 2026* — Indonesian for a reader with no choice
-  // (P18.98-T3, `useFigureLanguage`); the value stays ISO.
+  // (P18.10-T3, `useFigureLanguage`); the value stays ISO.
   const language = useFigureLanguage();
   const t = useMessages(uiMessages);
   // A year still being typed digit by digit (`0002-08-01`) is not a date yet: the face waits for a whole one.
@@ -169,7 +169,7 @@ export function DateField({
           REST[density],
           invalid && 'border-alert',
           (disabled || (readOnly && density !== 'cell')) && 'bg-base text-muted',
-          'peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-1 peer-focus-visible:outline-amber',
+          'peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-1 peer-focus-visible:outline-focus-ring',
           faceClassName,
         )}
       >

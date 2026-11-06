@@ -7,7 +7,7 @@ import { useMessages } from '@/i18n/language-provider';
 import { inlineSaveMessages } from '@/i18n/messages/inline-save';
 
 /**
- * **A field that saves itself says so** (P18.95-T1 AC-5; ADR-0167 §5, OD-200; the client's UI review of
+ * **A field that saves itself says so** (P18.7-T1 AC-5; ADR-0167 §5, OD-200; the client's UI review of
  * 2026-10-26, UI-007: *"inline lead edits save silently"*).
  *
  * Four states, one per field:
@@ -28,7 +28,7 @@ export const INLINE_SAVED_MS = 2000;
 
 /**
  * The words, once (ADR-0167 §5). The client's own: *Saving… → Saved ✓*, *Couldn't save — retry* — in the catalogue
- * since P18.98-T2 (`messages/inline-save.ts`), in the reader's language; this is their English, the source.
+ * since P18.10-T2 (`messages/inline-save.ts`), in the reader's language; this is their English, the source.
  */
 export const INLINE_SAVE_COPY = inlineSaveMessages.en;
 

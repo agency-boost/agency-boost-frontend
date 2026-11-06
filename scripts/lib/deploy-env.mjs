@@ -1,5 +1,5 @@
 /**
- * **What a Vercel build must be told before it may build** (P18.7-T5, ADR-0152, ADR-0154).
+ * **What a Vercel build must be told before it may build** (P18.4-T5, ADR-0152, ADR-0154).
  *
  * Exactly two deployments build on Vercel — `main` as production and `development` as staging — and each
  * has exactly one right pair of values. Both are `NEXT_PUBLIC_*`, so `next build` inlines them into the
@@ -10,10 +10,20 @@
  * exiting. That is what lets a spec walk every case without running a build.
  */
 
-/** The two deployments, and the only values each may be built with. Domains: plan D1, ADR-0152. */
+/**
+ * The two deployments, and the only values each may be built with. Domains: plan D1, ADR-0152.
+ *
+ * `storageBucket` is the environment's assets bucket (ADR-0153, `deployment-gcp.md` §2.1): the one bucket whose files
+ * the app may frame — an HTML lesson or page, inside its sandbox — named in the app's Content-Security-Policy
+ * (`next.config.mjs`, ADR-0217 §6). Not a variable: it follows from which deployment this is, as the API origin does.
+ */
 export const DEPLOY_TARGETS = Object.freeze({
-  production: Object.freeze({ appEnv: 'production', apiOrigin: 'https://api.agencyboost.id' }),
-  staging: Object.freeze({ appEnv: 'staging', apiOrigin: 'https://staging-api.agencyboost.id' }),
+  production: Object.freeze({
+    appEnv: 'production', apiOrigin: 'https://api.agencyboost.id', storageBucket: 'agencyboost-prod-assets',
+  }),
+  staging: Object.freeze({
+    appEnv: 'staging', apiOrigin: 'https://staging-api.agencyboost.id', storageBucket: 'agencyboost-staging-assets',
+  }),
 });
 
 /**

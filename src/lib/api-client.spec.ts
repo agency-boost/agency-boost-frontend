@@ -6,13 +6,18 @@ import {
   api,
   apiBlob,
   ApiRequestError,
+  backoffDelay,
   getAccessToken,
   getRequestLanguage,
   isImpersonating,
   isOfficeUnavailable,
+  isTransientFailure,
   onOfficeUnavailable,
   onSessionLost,
   refreshSession,
+  RETRY_AFTER_CAP_MS,
+  RETRY_BACKOFF_MS,
+  retryDelayFor,
   setAccessToken,
   setImpersonating,
   setRequestLanguage,
@@ -167,8 +172,9 @@ describe('api client', () => {
       ['the server said the presented cookie no longer works, AUTH_SESSION_ENDED', {
         status: 401, body: { error: { code: 'AUTH_SESSION_ENDED', message: 'Your session ended.', requestId: 'r' } },
       }, 1],
-      ['the refresh was answered with something not about the session, 503', { status: 503, body: {} }, 0],
-      ['the refresh was rate limited, 429', { status: 429, body: {} }, 0],
+      // A 429 or a 503 is tried again first since P19-T5 (UI-125): below, *a busy minute is not a signed-out one*.
+      ['the refresh was answered with something not about the session, 500', { status: 500, body: {} }, 0],
+      ['the refresh was refused for its origin, 403', { status: 403, body: {} }, 0],
     ])('when %s: told %i time(s)', async (_what, refresh, times) => {
       const lost = vi.fn();
       const off = onSessionLost(lost);
@@ -204,8 +210,8 @@ describe('api client', () => {
       ['ended', { status: 401, body: { error: { code: 'AUTH_SESSION_ENDED', message: 'Ended.', requestId: 'r' } } }],
       ['none', { status: 401, body: { error: { code: 'AUTH_TOKEN_INVALID', message: 'No session.', requestId: 'r' } } }],
       ['none', { status: 401, body: {} }],
-      ['unreachable', { status: 503, body: {} }],
-      ['unreachable', { status: 429, body: {} }],
+      ['unreachable', { status: 500, body: {} }],
+      ['unreachable', { status: 403, body: {} }],
     ])('refreshSession tells the first read %s from the answer', async (outcome, answer) => {
       stubFetch({ '/auth/refresh': answer });
       await expect(refreshSession()).resolves.toBe(outcome);
@@ -216,15 +222,22 @@ describe('api client', () => {
     it('a refresh that never arrived is not refused either, and tryRefresh still answers false', async () => {
       const lost = vi.fn();
       const off = onSessionLost(lost);
+      // Tried again with backoff since P19-T5 (UI-125): the clock is the test's, and every wait is run out.
+      vi.useFakeTimers();
       try {
         vi.stubGlobal('fetch', vi.fn(async (url: string) => {
           if (url.includes('/auth/refresh')) throw new TypeError('Failed to fetch');
           return { ok: false, status: 401, json: async () => ({}) } as Response;
         }));
-        await expect(api('/widgets')).rejects.toMatchObject({ status: 401 });
-        await expect(tryRefresh()).resolves.toBe(false);
+        const read = expect(api('/widgets')).rejects.toMatchObject({ status: 401 });
+        await vi.runAllTimersAsync();
+        await read;
+        const refreshed = tryRefresh();
+        await vi.runAllTimersAsync();
+        await expect(refreshed).resolves.toBe(false);
         expect(lost).not.toHaveBeenCalled();
       } finally {
+        vi.useRealTimers();
         off();
       }
     });
@@ -371,6 +384,138 @@ describe('api client', () => {
  * **A file the API answers as itself** (ADR-0184): a template asked for as `.xlsx` or `.csv`, fetched with the token —
  * never a link, which would arrive without it — with the same retry and the same refusal as `api`.
  */
+/**
+ * **P19-T5 AC-1 — a busy minute is not a signed-out one** (UI-125; `revisions/2026-11-03/…ui-report-full…`). A Super
+ * Admin moving quickly through the console met the API's refresh limit, and every `429` read as *no session*: they
+ * were sent to sign in, and a reload too. A refresh answered `429`, `502`–`504`, or never arriving is tried again —
+ * after the server's `retryAfterSeconds` where it names one, with backoff otherwise — and giving up ends nothing.
+ */
+describe('P19-T5 AC-1 a busy minute is not a signed-out one', () => {
+  const LIMITED = (retryAfterSeconds?: number) => ({
+    status: 429,
+    body: {
+      error: {
+        code: 'AUTH_RATE_LIMITED', message: 'Too many attempts. Try again in 1 minute(s).', requestId: 'r',
+        ...(retryAfterSeconds === undefined ? {} : { details: { retryAfterSeconds } }),
+      },
+    },
+  });
+  const refreshesIn = (calls: { url: string }[]) => calls.filter((c) => c.url.includes('/auth/refresh')).length;
+
+  beforeEach(() => {
+    setAccessToken(null);
+    setImpersonating(false);
+    vi.useFakeTimers();
+  });
+  afterEach(async () => {
+    // A refresh still waiting would be shared with the next test's: every wait is run out first.
+    await vi.runAllTimersAsync();
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it('P19-T5 AC-1 a 429 on the refresh waits the server’s retryAfterSeconds, tries again, and the request replays: still signed in', async () => {
+    const lost = vi.fn();
+    const off = onSessionLost(lost);
+    try {
+      setAccessToken('stale');
+      const { calls } = stubFetch({
+        '/widgets': [{ status: 401, body: {} }, { body: { ok: true } }],
+        '/auth/refresh': [LIMITED(30), { body: { accessToken: 'fresh' } }],
+      });
+      const read = api('/widgets');
+
+      await vi.advanceTimersByTimeAsync(29_999);
+      expect(refreshesIn(calls)).toBe(1);
+      await vi.advanceTimersByTimeAsync(1);
+      await expect(read).resolves.toEqual({ ok: true });
+      expect(refreshesIn(calls)).toBe(2);
+      expect(getAccessToken()).toBe('fresh');
+      expect(lost).not.toHaveBeenCalled();
+    } finally {
+      off();
+    }
+  });
+
+  it('P19-T5 AC-1 the session’s first read waits out a 429 too: refreshed, not signed out', async () => {
+    stubFetch({ '/auth/refresh': [LIMITED(5), LIMITED(5), { body: { accessToken: 'fresh' } }] });
+    const outcome = refreshSession();
+    await vi.runAllTimersAsync();
+    await expect(outcome).resolves.toBe('refreshed');
+  });
+
+  it('P19-T5 AC-1 with no wait named it backs off 1, 2, 4, 8 and 16 seconds; still busy after, unreachable — and the session is not told it is lost', async () => {
+    const lost = vi.fn();
+    const off = onSessionLost(lost);
+    try {
+      setAccessToken('stale');
+      const { calls } = stubFetch({ '/widgets': { status: 401, body: {} }, '/auth/refresh': { status: 503, body: {} } });
+      const read = expect(api('/widgets')).rejects.toMatchObject({ status: 401 });
+
+      await vi.advanceTimersByTimeAsync(0);
+      for (const [i, ms] of RETRY_BACKOFF_MS.entries()) {
+        expect(refreshesIn(calls)).toBe(i + 1);
+        await vi.advanceTimersByTimeAsync(ms);
+      }
+      await read;
+      expect(refreshesIn(calls)).toBe(RETRY_BACKOFF_MS.length + 1);
+      expect(RETRY_BACKOFF_MS).toEqual([1_000, 2_000, 4_000, 8_000, 16_000]);
+      expect(lost).not.toHaveBeenCalled();
+    } finally {
+      off();
+    }
+  });
+
+  it('P19-T5 AC-1 a refresh that never arrived is tried again, and one try that does arrive refreshes', async () => {
+    let tries = 0;
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      tries += 1;
+      if (tries === 1) throw new TypeError('Failed to fetch');
+      return { ok: true, status: 200, json: async () => ({ accessToken: 'fresh' }) } as Response;
+    }));
+    const outcome = refreshSession();
+    await vi.runAllTimersAsync();
+    await expect(outcome).resolves.toBe('refreshed');
+    expect(tries).toBe(2);
+  });
+
+  it.each([
+    ['ended', { status: 401, body: { error: { code: 'AUTH_SESSION_ENDED', message: 'Ended.', requestId: 'r' } } }],
+    ['none', { status: 401, body: {} }],
+    ['unreachable', { status: 500, body: {} }],
+  ])('P19-T5 AC-1 an answer about the session, or a server error, is never tried again: %s at once', async (outcome, answer) => {
+    const { calls } = stubFetch({ '/auth/refresh': answer });
+    await expect(refreshSession()).resolves.toBe(outcome);
+    expect(refreshesIn(calls)).toBe(1);
+  });
+
+  it('P19-T5 AC-1 the wait: the server’s, up to a minute; else the backoff; none once every try is spent', () => {
+    expect(backoffDelay(0, 30)).toBe(30_000);
+    expect(backoffDelay(0, 0)).toBe(0);
+    expect(backoffDelay(0, 3_600)).toBe(RETRY_AFTER_CAP_MS);
+    expect(RETRY_AFTER_CAP_MS).toBe(60_000);
+    expect(backoffDelay(0)).toBe(1_000);
+    expect(backoffDelay(2, 'soon')).toBe(4_000);
+    expect(backoffDelay(0, -5)).toBe(1_000);
+    expect(backoffDelay(RETRY_BACKOFF_MS.length)).toBeNull();
+  });
+
+  it('P19-T5 AC-1 what is transient: 429, 502, 503, 504 and a request that never arrived — never a refusal about you', () => {
+    const refused = (status: number, details?: Record<string, unknown>) =>
+      new ApiRequestError(status, { code: 'X', message: 'x', requestId: 'r', details });
+    for (const status of [429, 502, 503, 504]) expect(isTransientFailure(refused(status))).toBe(true);
+    for (const status of [400, 401, 403, 404, 409, 500]) expect(isTransientFailure(refused(status))).toBe(false);
+    expect(isTransientFailure(new TypeError('Failed to fetch'))).toBe(true);
+    expect(isTransientFailure(new TypeError('x is not a function'))).toBe(false);
+    expect(isTransientFailure(new Error('offline'))).toBe(false);
+
+    expect(retryDelayFor(refused(429, { retryAfterSeconds: 12 }), 0)).toBe(12_000);
+    expect(retryDelayFor(refused(503), 1)).toBe(2_000);
+    expect(retryDelayFor(refused(401), 0)).toBeNull();
+    expect(retryDelayFor(refused(429), RETRY_BACKOFF_MS.length)).toBeNull();
+  });
+});
+
 describe('apiBlob (ADR-0184)', () => {
   beforeEach(() => {
     setAccessToken(null);
@@ -432,10 +577,10 @@ describe('apiBlob (ADR-0184)', () => {
 });
 
 /**
- * **P18.98-T2 AC-6: the API is told the screen's language on every request** (ADR-0179 §7): `Accept-Language: id` or
+ * **P18.10-T2 AC-6: the API is told the screen's language on every request** (ADR-0179 §7): `Accept-Language: id` or
  * `en`, set by `LanguageProvider` through `setRequestLanguage` as the token is set through `setAccessToken`. T5's input.
  */
-describe('P18.98-T2 AC-6 the language on every request', () => {
+describe('P18.10-T2 AC-6 the language on every request', () => {
   beforeEach(() => {
     setAccessToken(null);
     setImpersonating(false);

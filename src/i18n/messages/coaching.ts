@@ -3,7 +3,7 @@ import { kept } from '@/i18n/kept';
 import type { Pronoun, PronounForms, RosterStatus } from '@/lib/coaching';
 
 /**
- * **Coaching's own words: the roster, the person shell and `lib/coaching.ts`** (P18.98-T4, coaching and unit;
+ * **Coaching's own words: the roster, the person shell and `lib/coaching.ts`** (P18.10-T4, coaching and unit;
  * `functional/coaching.md`, *The module's own strings*) — `/coaching`'s roster as a table and as a phone's cards, the
  * person shell's header, view switch, tab bar and not-found state, `/coaching/me`'s head, the tab pages' own words, and
  * the sentences `lib/coaching.ts` writes: a status, *Last 1:1*, whose unit, a history row, a refused finalize, the
@@ -56,7 +56,7 @@ const en = {
     none: 'No 1:1 yet',
     today: 'Today',
     daysAgo: ({ days }: { days: number }) => `${days} day${days === 1 ? '' : 's'} ago`,
-    /** P18.8-T15 AC-7: *14 days ago · overdue*, in words and not by colour alone. */
+    /** P18.5-T15 AC-7: *14 days ago · overdue*, in words and not by colour alone. */
     overdue: ({ text }: { text: string }) => `${text} · overdue`,
   },
   /** The line under a coachee's name (`Overall.html:3977`): `rung` its badge's name. */

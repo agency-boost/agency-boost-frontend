@@ -27,10 +27,10 @@ const sales = () => screen.findByRole('heading', { level: 2, name: 'Sales (4/10)
 const rowsShown = () => screen.getAllByRole('list', { name: / modules$/ }).flatMap((list) =>
   within(list).getAllByRole('listitem').map((r) => [list.getAttribute('aria-label'), r.textContent]));
 
-describe('/coaching/me/training, the reader’s own Training tab (P18.5-T4 AC-3)', () => {
+describe('/coaching/me/training, the reader’s own Training tab (P18.2-T4 AC-3)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('P18.5-T4 AC-3 is /coaching/me’s head with Training current, and the reader’s own read, without `for`', async () => {
+  it('P18.2-T4 AC-3 is /coaching/me’s head with Training current, and the reader’s own read, without `for`', async () => {
     const { calls } = show();
     await sales();
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Coaching Session$/);
@@ -43,7 +43,7 @@ describe('/coaching/me/training, the reader’s own Training tab (P18.5-T4 AC-3)
       .toEqual(['http://api.test/api/v1/training/progress']);
   });
 
-  it('P18.5-T4 AC-3 draws the coaching renderer, read-only: every category with its counts, no link, no toggle', async () => {
+  it('P18.2-T4 AC-3 draws the coaching renderer, read-only: every category with its counts, no link, no toggle', async () => {
     show();
     await sales();
     expect(screen.getByRole('heading', { level: 2, name: 'Product (0/0)' })).toBeInTheDocument();
@@ -51,7 +51,7 @@ describe('/coaching/me/training, the reader’s own Training tab (P18.5-T4 AC-3)
     expect(screen.queryByRole('group', { name: 'Status' })).not.toBeInTheDocument();
   });
 
-  it('P18.5-T4 AC-3 shows why the read failed, and asks again', async () => {
+  it('P18.2-T4 AC-3 shows why the read failed, and asks again', async () => {
     const failed = { status: 500, body: { error: { code: 'INTERNAL_ERROR', message: 'Something went wrong.', requestId: 'r-9' } } };
     show({ 'GET /training/progress': [failed, { body: progressView() }] });
     expect(await screen.findByRole('alert')).toHaveTextContent('Something went wrong.');
@@ -59,12 +59,12 @@ describe('/coaching/me/training, the reader’s own Training tab (P18.5-T4 AC-3)
     await sales();
   });
 
-  it('P18.5-T4 AC-3 waits under a skeleton', () => {
+  it('P18.2-T4 AC-3 waits under a skeleton', () => {
     show();
     expect(screen.getByText('Loading training…')).toBeInTheDocument();
   });
 
-  it('P18.5-T4 AC-3 is refused, with no read, to a reader without coaching_session:read', async () => {
+  it('P18.2-T4 AC-3 is refused, with no read, to a reader without coaching_session:read', async () => {
     const { calls } = show({}, makeMe({ ...LEARNER, permissions: ['training_progress:read'] }));
     await screen.findByRole('heading', { level: 1 });
     expect(calls.some((c) => c.url.includes('/training/progress'))).toBe(false);
@@ -75,7 +75,7 @@ describe('/coaching/me/training, the reader’s own Training tab (P18.5-T4 AC-3)
    * the same way — the same categories, counts, rows and statuses — because they are one renderer over
    * one read (`?for=` and without). The server's half is `training.controller.int.spec.ts`'s.
    */
-  it('P18.5-T4 AC-4 draws what the coach’s tab draws for the same record: one renderer, one read', async () => {
+  it('P18.2-T4 AC-4 draws what the coach’s tab draws for the same record: one renderer, one read', async () => {
     show();
     await sales();
     const mine = { headings: screen.getAllByRole('heading', { level: 2 }).slice(1).map((h) => h.textContent), rows: rowsShown() };
@@ -106,7 +106,7 @@ describe('/coaching/me/training, the reader’s own Training tab (P18.5-T4 AC-3)
       { me: coach },
     );
     await sales();
-    // The coach's tab: the coachee's name is its page title since P18.95-T7 AC-2, so every h2 is a category.
+    // The coach's tab: the coachee's name is its page title since P18.7-T7 AC-2, so every h2 is a category.
     expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(mine.headings);
     expect(rowsShown()).toEqual(mine.rows);
   });

@@ -4,7 +4,7 @@ import { SLUG_MAX, toSlug } from './slug';
 /** The server's own pattern, so the property below is checked against the real contract. */
 const SERVER = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
-describe('toSlug (P3.5-T14 AC-7)', () => {
+describe('toSlug (P3.1-T14 AC-7)', () => {
   it.each([
     ['Prudential', 'prudential'],
     ['PT Prudential Life Assurance', 'pt-prudential-life-assurance'],

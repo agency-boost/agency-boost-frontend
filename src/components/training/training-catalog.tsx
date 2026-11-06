@@ -3,7 +3,6 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
-import { LanguageSwitch } from '@/components/language-switch';
 import { Page } from '@/components/page';
 import { SkillCards } from '@/components/training/training-parts';
 import { Button, Card, ErrorBanner } from '@/components/ui/field';
@@ -23,7 +22,7 @@ import {
 
 /**
  * **The learner's training** (`/training`, `/training/[categoryCode]`; `Overall.html:3708-3732`, logic
- * `:7768-7810`, `:7857-7897`; P18.5-T1 AC-4; redrawn by Phase 18.99 T10 after the UI V1 report, UI-063 to UI-066,
+ * `:7768-7810`, `:7857-7897`; P18.2-T1 AC-4; redrawn by Phase 18.11 T10 after the UI V1 report, UI-063 to UI-066,
  * UI-071).
  *
  * **One read for every address under `/training`**: the offered catalog with the reader's statuses,
@@ -93,18 +92,10 @@ export function TrainingLanding() {
   if (error && !view) return <ReadFailed error={error} onRetry={reload} />;
   if (!view || first) return <CatalogSkeleton />;
   return (
-    <Page title={t.title} control={<TitleLanguage />}>
+    <Page title={t.title}>
       <EmptyCard title={t.noTraining} sub={t.noTrainingSub} />
     </Page>
   );
-}
-
-/**
- * *ID | EN* on the title row below 1024px (ADR-0180 §3: **Training keeps its title-row pill**, as its mockup draws).
- * From 1024px the page header carries the switch, as every page's does.
- */
-function TitleLanguage() {
-  return <LanguageSwitch tone="page" />;
 }
 
 /**
@@ -112,6 +103,11 @@ function TitleLanguage() {
  * **on a desktop only** (UI-063), the category row **directly under the title when the office offers two or more**,
  * and the skills — no *Skills List* heading (UI-063). A category offering nothing keeps the prototype's empty card
  * (`:3771-3776`) and *coming soon*. **No footer** (OD-150).
+ *
+ * *Changed 2026-11-04 (P19.1-T1 AC-1, ADR-0196; UI-112, which names Training twice):* **no *ID | EN* pill on the title
+ * row** — ADR-0180 §3 had kept Training's — and **no description under the title at any size**: the field shell draws
+ * no grey sub-line from 768px (`PageHeader`), so UI-063's desktop line goes with the rest. The switch is in the *Lainnya*
+ * sheet and the account menu.
  */
 export function TrainingCategory({ code }: { code: string }) {
   const { view, error, reload, compact } = useTrainingCatalog();
@@ -132,7 +128,6 @@ export function TrainingCategory({ code }: { code: string }) {
       subtitle={hasModules ? (category.description ?? undefined) : t.comingSoon}
       subtitleOnPhone={false}
       subtitleOnTablet={false}
-      control={<TitleLanguage />}
     >
       {offered.length >= 2 && <TrainingSubtabs categories={offered} current={category.code} />}
       <div className="flex flex-col gap-3">
@@ -189,13 +184,13 @@ export function TrainingSubtabs({
               'max-md:flex max-md:min-h-11 max-md:items-center',
               // A tablet and a desktop: an underline tab.
               'md:border-b-2 md:px-0.5 md:pb-3 md:pt-1',
-              on ? 'md:border-amber md:text-navy' : 'md:border-transparent md:text-muted md:hover:text-navy',
+              on ? 'md:border-primary md:text-navy' : 'md:border-transparent md:text-muted md:hover:text-navy',
             )}
           >
             <span
               className={cn(
                 'max-md:flex max-md:h-9 max-md:items-center max-md:rounded-pill max-md:px-3.5',
-                on ? 'max-md:bg-navy max-md:text-white' : 'max-md:bg-card max-md:text-pill-grey-ink',
+                on ? 'max-md:bg-secondary max-md:text-secondary-contrast' : 'max-md:bg-card max-md:text-pill-grey-ink',
               )}
             >
               {c.label}
@@ -257,7 +252,7 @@ export function ReadFailed({ error, onRetry }: { error: ApiError; onRetry: () =>
 /**
  * **The list on its way, shaped like the list** (UI-071: the old one drew four tabs and two cards over a page of one
  * tab and six cards, and the page jumped). The title, then — below 1024px — one card of skill headers and rows, and —
- * from 1024px — two columns of skill cards. **No category row**: before the read nobody knows whether there will be
+ * from 1024px — the skill cards, one to a row up to 1279px and two from 1280px (P19.1-T1 AC-6). **No category row**: before the read nobody knows whether there will be
  * two, and one category, the common case, draws none. Both shapes are drawn and the stylesheet keeps one, so the first
  * frame is already the right one at any width.
  */
@@ -282,7 +277,7 @@ export function CatalogSkeleton({ label }: { label?: string }) {
           </div>
         ))}
       </div>
-      <div className="grid grid-cols-2 items-start gap-4 max-lg:hidden">
+      <div className="grid items-start gap-4 max-lg:hidden xl:grid-cols-2">
         {[3, 2, 2, 1].map((rows, i) => (
           <div key={i} className="rounded-lg border border-card-edge bg-card px-5 py-4">
             <SkeletonBar className="h-5 w-40" />

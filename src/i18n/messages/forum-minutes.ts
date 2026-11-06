@@ -2,7 +2,7 @@ import { defineMessages, type MessagesOf } from '@/i18n/catalogue';
 import { kept } from '@/i18n/kept';
 
 /**
- * **A forum meeting's minutes: *Agenda* and *Action Items*, and the print of both** (P18.98-T4, people and forum;
+ * **A forum meeting's minutes: *Agenda* and *Action Items*, and the print of both** (P18.10-T4, people and forum;
  * `functional/leader-forum.md`, *Agenda*, *Action Items*, *Printing* and *The module's own strings*) — the three
  * sections, *+ Add item*, the tracker's headers, statuses and controls, each field's name for a screen reader, the
  * access note and the lines a write says. Drawn by `components/leader-forum/agenda.tsx`, `action-items.tsx` and
@@ -24,7 +24,7 @@ const en = {
   /** *PIC*: a tracker column, and the agenda's *"PIC: {name}"* (written with its colon by the screen). */
   pic: 'PIC',
   addItem: '+ Add item',
-  /** An agenda item's empty PIC, to an editor (P18.97-T2 AC-5): a prompt in the field, which saves nothing. */
+  /** An agenda item's empty PIC, to an editor (P18.9-T2 AC-5): a prompt in the field, which saves nothing. */
   addPic: 'Add a PIC',
   /** A ticked *During* item read-only: the strike-through said to a screen reader. */
   done: 'Done',

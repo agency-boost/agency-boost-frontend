@@ -7,10 +7,10 @@ import { isKept, kept, type Kept } from './kept';
 const KEPT_TERMS: ReadonlySet<string> = new Set(Object.values(KEPT_ENGLISH).flat());
 
 /**
- * **P18.98-T1 AC-7: the approved kept-English list is one list in the catalogue** (OD-237; the glossary for approval's
+ * **P18.10-T1 AC-7: the approved kept-English list is one list in the catalogue** (OD-237; the glossary for approval's
  * §A), and a kept term reads the same in both languages and is marked.
  */
-describe('P18.98-T1 AC-7 the kept-English list', () => {
+describe('P18.10-T1 AC-7 the kept-English list', () => {
   it.each(Object.entries(KEPT_ENGLISH))('lists each term of §A’s %s once, as it is drawn', (_, terms) => {
     const list = terms as readonly string[];
     expect(list.length).toBeGreaterThan(0);
@@ -23,7 +23,11 @@ describe('P18.98-T1 AC-7 the kept-English list', () => {
       join(__dirname, '..', '..', '..', 'backend', 'src', 'domain', 'constants', 'metrics.ts'), 'utf8',
     );
     const names = [...registry.matchAll(/\{ key: '[A-Z0-9_]+', name: '([^']+)'/g)].map((m) => m[1]);
-    expect(names).toHaveLength(79);
+    // 82 since P19.1-T6: the *Potensi* tab's three (ADR-0193). 84 since P19.3-T1: two retired (`NET_APE`,
+    // `ACTIVITY_LOGGED_THIS_MONTH`) and four registered (`MOC_APE` and the data sources' three; ADR-0200 to ADR-0203).
+    // 90 since P19.5-T4: the surveys' six (ADR-0216 §4). 92 since P19.5-T2: the Data upload's two (ADR-0214 §10, §11).
+    // 112 on 2026-11-06: P19.7-T2's `PROPOSALS_MADE` (ADR-0221 §6) and P19.5-T3's advanced analytics' nineteen.
+    expect(names).toHaveLength(112);
     expect([...KEPT_ENGLISH.metrics].sort()).toEqual([...names].sort());
   });
 
@@ -31,18 +35,18 @@ describe('P18.98-T1 AC-7 the kept-English list', () => {
     expect(SAME_IN_INDONESIAN.filter((word) => KEPT_TERMS.has(word))).toEqual([]);
   });
 
-  it('P18.98-T4 lists as kept elsewhere only words a part of §A keeps, so a translated homonym is one by name', () => {
+  it('P18.10-T4 lists as kept elsewhere only words a part of §A keeps, so a translated homonym is one by name', () => {
     expect(KEPT_ELSEWHERE.filter((word) => !KEPT_TERMS.has(word))).toEqual([]);
   });
 });
 
-describe('P18.98-T1 AC-7 kept()', () => {
+describe('P18.10-T1 AC-7 kept()', () => {
   it('reads the same in both languages: it is the term itself', () => {
     const term: string = kept('Leads management');
     expect(term).toBe('Leads management');
   });
 
-  it('marks what it names, so that ID mode can give it lang="en" (P18.98-T7)', () => {
+  it('marks what it names, so that ID mode can give it lang="en" (P18.10-T7)', () => {
     expect(isKept('Strategic Leader Forum')).toBe(false);
     kept('Strategic Leader Forum');
     expect(isKept('Strategic Leader Forum')).toBe(true);

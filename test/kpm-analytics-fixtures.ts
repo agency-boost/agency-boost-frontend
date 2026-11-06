@@ -1,14 +1,15 @@
 import { makeMe } from './harness';
 import { percentOf } from '@/lib/format';
 import type {
-  AabUnitRow, AgencyRow, AnalyticsHead, AnalyticsPeriod, KpmAnalyticsView, Moc, UnitFigures,
+  AabUnitRow, AgencyRow, AnalyticsHead, AnalyticsLeader, AnalyticsPeriod, KpmAnalyticsView, Moc, UnitFigures,
 } from '@/lib/kpm-analytics';
 
 /**
- * KPM analytics as the server answers it (P18-T2): three AB agencies — Hendra's with two AAB units and
+ * KPM analytics as the server answers it (P18-T2, P19.3-T3): three AB agencies — Hendra's with two AAB units and
  * *Star Club*, the Owner's own with *Chairman's Club*, and Budi's, furthest behind, with no file this
- * month — plus Fajar, an AB two levels down under Hendra, in a row of his own (D-units). The total is the
- * sum of the rows, as the server makes it.
+ * month — plus Fajar, an AB two levels down under Hendra, in a row of his own (D-units). **The Leader list** (UI-152):
+ * the four AB and three AAB — Ika and Yoga under Hendra, and Dewi, an AAB under Hendra who leads nobody — lowest APE %
+ * first, as the server orders them. Two custom groups, *Core Leader* and *Top Producers 2026*.
  */
 
 /** Rupiah millions to minor units (sen). */
@@ -26,12 +27,12 @@ function figures(over: Partial<Figures> = {}): Figures {
     coached7d: { count: 2, of: 4, pct: 50 },
     activeAgents: 3 as number | null,
     leads: { sales: 4, salesPotential: 2, recruit: 1, recruitPotential: 1 },
-    manpower: { aab: 0, agents: 3, total: 4 },
+    manpower: { ab: 1, aab: 0, agents: 3, total: 4 },
     ...over,
   };
   // The share's base (OD-235): this month's manpower, unless a case says otherwise — a past month's members.
   const activeOf = over.activeOf ?? row.manpower.total;
-  // The share the server serves beside the count (P18.97-T3 AC-10): its `rateOver` over that base.
+  // The share the server serves beside the count (P18.9-T3 AC-10): its `rateOver` over that base.
   const activePct = 'activePct' in over ? (over.activePct as number | null)
     : row.activeAgents === null ? null : percentOf(row.activeAgents, activeOf);
   return { ...row, activePct, activeOf };
@@ -42,7 +43,7 @@ export const MOC_MET: Moc = {
   path: 'Met via the standard three-criteria path.',
   missing: null,
   criteria: [
-    { code: 'NET_APE', label: 'Net APE', current: rp(1300), required: rp(600), met: true, period: '2026-01..2026-09' },
+    { code: 'MOC_APE', label: 'APE', current: rp(1300), required: rp(600), met: true, period: '2026-01..2026-09' },
     { code: 'MONTHLY2_AA_DU', label: 'Monthly2 AA — DU', current: 5, required: 4, met: true, period: '2026-08..2026-09' },
     { code: 'MONTHLY2_AA_DG', label: 'Monthly2 AA — DG', current: 9, required: 6, met: true, period: '2026-08..2026-09' },
     { code: 'MOC_PERSISTENCY', label: 'Rolling Persistency — DU/DG', current: 82, required: 75, met: true, period: '2026-09' },
@@ -55,7 +56,7 @@ export const MOC_NOT_MET: Moc = {
   path: 'Needs to clear either the three standard criteria together, or reach 5 Direct ABs.',
   missing: null,
   criteria: [
-    { code: 'NET_APE', label: 'Net APE', current: rp(180), required: rp(600), met: false, period: '2026-01..2026-09' },
+    { code: 'MOC_APE', label: 'APE', current: rp(180), required: rp(600), met: false, period: '2026-01..2026-09' },
     { code: 'MONTHLY2_AA_DU', label: 'Monthly2 AA — DU', current: 1, required: 4, met: false, period: '2026-08..2026-09' },
     { code: 'MONTHLY2_AA_DG', label: 'Monthly2 AA — DG', current: 2, required: 6, met: false, period: '2026-08..2026-09' },
     { code: 'MOC_PERSISTENCY', label: 'Rolling Persistency — DU/DG', current: 70, required: 75, met: false, period: '2026-09' },
@@ -68,7 +69,7 @@ export const MOC_UNKNOWN: Moc = {
   path: 'Needs to clear either the three standard criteria together, or reach 5 Direct ABs.',
   missing: 'Not uploaded yet: Rolling Persistency — DU/DG.',
   criteria: [
-    { code: 'NET_APE', label: 'Net APE', current: rp(2100), required: rp(600), met: true, period: '2026-01..2026-09' },
+    { code: 'MOC_APE', label: 'APE', current: rp(2100), required: rp(600), met: true, period: '2026-01..2026-09' },
     { code: 'MOC_PERSISTENCY', label: 'Rolling Persistency — DU/DG', current: null, required: 75, met: null, period: '2026-09' },
   ],
 };
@@ -78,7 +79,7 @@ const AAB_MOC_NOT_MET: Moc = {
   path: 'AAB requirements have no alternate path — all three must be met.',
   missing: null,
   criteria: [
-    { code: 'NET_APE', label: 'Net APE', current: rp(150), required: rp(200), met: false, period: '2026-01..2026-09' },
+    { code: 'MOC_APE', label: 'APE', current: rp(150), required: rp(200), met: false, period: '2026-01..2026-09' },
     { code: 'MONTHLY2_AA', label: 'Monthly2 AA', current: 2, required: 2, met: true, period: '2026-08..2026-09' },
   ],
 };
@@ -115,14 +116,14 @@ export function agencies(period: AnalyticsPeriod = 'this_month'): AgencyRow[] {
         ...MONTH[period],
         apeAnnual: { achievedMinor: rp(1300), targetMinor: rp(1500), pct: 87 },
         coached7d: { count: 6, of: 31, pct: 19 },
-        manpower: { aab: 2, agents: 28, total: 31 },
+        manpower: { ab: 1, aab: 2, agents: 28, total: 31 },
       }),
       club: { code: 'STAR_CLUB', label: 'Star Club' },
       moc: MOC_MET,
-      direct: direct(HENDRA, { manpower: { aab: 0, agents: 8, total: 9 } }),
+      direct: direct(HENDRA, { manpower: { ab: 1, aab: 0, agents: 8, total: 9 } }),
       aabUnits: [
-        aab(IKA, AAB_MOC_NOT_MET, { manpower: { aab: 0, agents: 10, total: 11 } }),
-        aab(YOGA, null, { manpower: { aab: 0, agents: 10, total: 11 } }),
+        aab(IKA, AAB_MOC_NOT_MET, { manpower: { ab: 1, aab: 0, agents: 10, total: 11 } }),
+        aab(YOGA, null, { manpower: { ab: 1, aab: 0, agents: 10, total: 11 } }),
       ],
       members: [
         { membershipId: 'mem-dimas', name: 'Dimas Pratama', rung: { code: 'AGENT', label: 'Agent' } },
@@ -136,7 +137,7 @@ export function agencies(period: AnalyticsPeriod = 'this_month'): AgencyRow[] {
         apeAnnual: { achievedMinor: rp(3600), targetMinor: rp(1700), pct: 212 },
         coached7d: { count: 23, of: 28, pct: 82 },
         activeAgents: period === 'this_month' ? 27 : 23,
-        manpower: { aab: 0, agents: 27, total: 28 },
+        manpower: { ab: 1, aab: 0, agents: 27, total: 28 },
       }),
       club: { code: 'CHAIRMANS_CLUB', label: "Chairman's Club" },
       moc: MOC_UNKNOWN,
@@ -151,7 +152,7 @@ export function agencies(period: AnalyticsPeriod = 'this_month'): AgencyRow[] {
         apeAnnual: { achievedMinor: rp(180), targetMinor: rp(900), pct: 20 },
         coached7d: { count: 0, of: 5, pct: 0 },
         activeAgents: null,
-        manpower: { aab: 0, agents: 4, total: 5 },
+        manpower: { ab: 1, aab: 0, agents: 4, total: 5 },
       }),
       club: null,
       moc: MOC_NOT_MET,
@@ -162,7 +163,7 @@ export function agencies(period: AnalyticsPeriod = 'this_month'): AgencyRow[] {
     {
       // Two levels down, under Hendra (ADR-0014's promotion): a row of his own, his people out of Hendra's.
       head: FAJAR,
-      ...figures({ apeAnnual: { achievedMinor: rp(700), targetMinor: rp(1100), pct: 64 }, manpower: { aab: 0, agents: 3, total: 4 } }),
+      ...figures({ apeAnnual: { achievedMinor: rp(700), targetMinor: rp(1100), pct: 64 }, manpower: { ab: 1, aab: 0, agents: 3, total: 4 } }),
       club: null,
       moc: null,
       direct: direct(FAJAR),
@@ -179,44 +180,116 @@ export function analyticsView(period: AnalyticsPeriod = 'this_month', over: Part
     thresholds: { statusSplitPct: 70 },
     // What the server composes from the seeded MOC rules (the prototype's numbers, `KPM_Owner.html:1248`).
     mocRulesText: [
-      'AAB: Net APE ≥ Rp 200 jt AND Monthly2 AA ≥ 2 AND Rolling Persistency DU ≥ 75%.',
-      'AB: (Net APE ≥ Rp 600 jt AND Monthly2 AA DU ≥ 4 / DG ≥ 6 AND Rolling Persistency DU/DG ≥ 75%) OR Direct AB (AB on AB) ≥ 5.',
+      'AAB: APE ≥ Rp 200 jt AND Monthly2 AA ≥ 2 AND Rolling Persistency DU ≥ 75%.',
+      'AB: (APE ≥ Rp 600 jt AND Monthly2 AA DU ≥ 4 / DG ≥ 6 AND Rolling Persistency DU/DG ≥ 75%) OR Direct AB (AB on AB) ≥ 5.',
     ].join('\n'),
     agencies: agencies(period),
     total: {
-      leaversExcludedMinor: null,
       apeMonth: period === 'this_month'
         ? { achievedMinor: rp(302), targetMinor: rp(465), pct: 65 }
         : { achievedMinor: rp(370), targetMinor: rp(465), pct: 80 },
       apeAnnual: { achievedMinor: rp(5780), targetMinor: rp(5200), pct: 111 },
       coached7d: { count: 31, of: 68, pct: 46 },
       activeAgents: period === 'this_month' ? 54 : 47,
-      // 54 of 68 and 47 of 68, as the server serves them (P18.97-T3 AC-10), over the 68 it serves as their base (OD-235).
+      // 54 of 68 and 47 of 68, as the server serves them (P18.9-T3 AC-10), over the 68 it serves as their base (OD-235).
       activePct: period === 'this_month' ? 79 : 69,
       activeOf: 68,
       leads: { sales: 27, salesPotential: 15, recruit: 11, recruitPotential: 8 },
-      manpower: { aab: 2, agents: 62, total: 68 },
+      manpower: { ab: 4, aab: 3, agents: 61, total: 68 },
       abCount: 4,
       mocMet: 1,
       mocOf: 4,
     },
+    leaders: leaders(period),
+    groups: GROUPS,
+    group: null,
+    officePeople: 68,
+    // UI-091: six months ending with this one, October; August never uploaded.
     monthly: [
-      { month: '2026-04', apeMinor: rp(520) },
       { month: '2026-05', apeMinor: rp(610) },
       { month: '2026-06', apeMinor: rp(580) },
       { month: '2026-07', apeMinor: rp(700) },
       { month: '2026-08', apeMinor: null },
       { month: '2026-09', apeMinor: rp(800) },
+      { month: '2026-10', apeMinor: rp(302) },
     ],
     ...over,
   };
+}
+
+/** The office's custom groups (*All members → Groups*). */
+export const GROUPS = [
+  { groupId: 'grp-core', name: 'Core Leader', memberCount: 3 },
+  { groupId: 'grp-top', name: 'Top Producers 2026', memberCount: 6 },
+];
+
+export const DEWI = head('mem-dewi', 'Dewi Lestari', false, false);
+
+/** One leader, every figure over their Group (ADR-0204 §2). */
+export function leader(
+  h: AnalyticsHead, role: 'ab' | 'aab', over: Partial<Omit<AnalyticsLeader, 'head' | 'role'>> = {},
+): AnalyticsLeader {
+  return {
+    head: h,
+    role,
+    opens: true,
+    above: null,
+    group: 4,
+    unit: 2,
+    manpower: { ab: role === 'ab' ? 1 : 0, aab: role === 'aab' ? 1 : 0, agents: 3, total: 4 },
+    apeMonth: { achievedMinor: rp(50), targetMinor: rp(100), pct: 50 },
+    active: { count: 3, of: 4, pct: 75, unit: { count: 1, of: 2 }, aab: { count: 2, of: 2 } },
+    coached7d: { count: 1, of: 4, pct: 25 },
+    leads: { sales: 4, salesPotential: 2, recruit: 1, recruitPotential: 1 },
+    club: null,
+    moc: null,
+    ...over,
+  };
+}
+
+const ABOVE_HENDRA = { membershipId: HENDRA.membershipId, name: HENDRA.name };
+
+/** The Leader list, lowest APE % first, those with none after, A to Z (the server's order). */
+export function leaders(period: AnalyticsPeriod = 'this_month'): AnalyticsLeader[] {
+  return [
+    leader(HENDRA, 'ab', {
+      above: { membershipId: OWNER.membershipId, name: OWNER.name }, group: 31, unit: 9,
+      manpower: { ab: 2, aab: 3, agents: 26, total: 31 },
+      apeMonth: MONTH[period].apeMonth!,
+      active: { count: 21, of: 31, pct: 68, unit: { count: 6, of: 9 }, aab: { count: 15, of: 22 } },
+      coached7d: { count: 6, of: 31, pct: 19 },
+      leads: { sales: 48, salesPotential: 12, recruit: 19, recruitPotential: 2 },
+      club: { code: 'STAR_CLUB', label: 'Star Club' }, moc: MOC_MET,
+    }),
+    leader(IKA, 'aab', {
+      above: ABOVE_HENDRA, group: 11, unit: 11, apeMonth: { achievedMinor: rp(96), targetMinor: rp(185), pct: 52 },
+      manpower: { ab: 0, aab: 1, agents: 10, total: 11 }, moc: AAB_MOC_NOT_MET,
+    }),
+    leader(OWNER, 'ab', {
+      group: 68, unit: 28, apeMonth: { achievedMinor: rp(140), targetMinor: rp(140), pct: 100 },
+      manpower: { ab: 4, aab: 3, agents: 61, total: 68 }, club: { code: 'CHAIRMANS_CLUB', label: "Chairman's Club" }, moc: MOC_UNKNOWN,
+    }),
+    leader(BUDI, 'ab', {
+      group: 5, unit: 5, apeMonth: { achievedMinor: null, targetMinor: rp(75), pct: null },
+      active: { count: null, of: 5, pct: null, unit: { count: null, of: 5 }, aab: { count: null, of: 0 } }, moc: MOC_NOT_MET,
+    }),
+    leader(DEWI, 'aab', {
+      above: ABOVE_HENDRA, group: 1, unit: 1, manpower: { ab: 0, aab: 1, agents: 0, total: 1 },
+      apeMonth: { achievedMinor: rp(0), targetMinor: null, pct: null },
+      active: { count: 0, of: 1, pct: 0, unit: { count: 0, of: 1 }, aab: { count: 0, of: 0 } },
+      coached7d: { count: 0, of: 1, pct: 0 }, leads: { sales: 0, salesPotential: 0, recruit: 0, recruitPotential: 0 },
+    }),
+    leader(FAJAR, 'ab', {
+      above: ABOVE_HENDRA, apeMonth: { achievedMinor: rp(20), targetMinor: null, pct: null },
+    }),
+    leader(YOGA, 'aab', { above: ABOVE_HENDRA, group: 11, unit: 11, apeMonth: { achievedMinor: rp(12), targetMinor: null, pct: null } }),
+  ];
 }
 
 /** A team with no AB yet: no row to compare, the months still drawn. */
 export const NO_AB = analyticsView('this_month', {
   agencies: [],
   total: {
-    leaversExcludedMinor: null,
     apeMonth: { achievedMinor: null, targetMinor: null, pct: null },
     apeAnnual: { achievedMinor: null, targetMinor: null, pct: null },
     coached7d: { count: 0, of: 0, pct: null },
@@ -224,12 +297,13 @@ export const NO_AB = analyticsView('this_month', {
     activePct: null,
     activeOf: 0,
     leads: { sales: 0, salesPotential: 0, recruit: 0, recruitPotential: 0 },
-    manpower: { aab: 0, agents: 0, total: 0 },
+    manpower: { ab: 0, aab: 0, agents: 0, total: 0 },
     abCount: 0,
     mocMet: 0,
     mocOf: 0,
   },
-  monthly: ['2026-04', '2026-05', '2026-06', '2026-07', '2026-08', '2026-09'].map((month) => ({ month, apeMinor: null })),
+  leaders: [],
+  monthly: ['2026-05', '2026-06', '2026-07', '2026-08', '2026-09', '2026-10'].map((month) => ({ month, apeMinor: null })),
 });
 
 /** The Owner, who leads an agency of their own. */
@@ -255,7 +329,7 @@ export const ADMIN_ME = makeMe({
 });
 
 /**
- * **A Core Leader** (ADR-0159, P18.8-T5): Hendra Wibowo, an AB tagged *Core Leader*, holding the analytics' grant as
+ * **A Core Leader** (ADR-0159, P18.5-T5): Hendra Wibowo, an AB tagged *Core Leader*, holding the analytics' grant as
  * every AB does — the session's `isCoreLeader` is what lets him read it, in his own field shell.
  */
 export const CORE_LEADER_ME = makeMe({

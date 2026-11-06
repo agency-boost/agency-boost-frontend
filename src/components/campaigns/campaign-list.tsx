@@ -2,11 +2,11 @@
 
 import { usePathname, useRouter } from 'next/navigation';
 import {
-  createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode,
+  createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState,
+  type CSSProperties, type ReactNode,
 } from 'react';
 import { Button, ErrorBanner } from '@/components/ui/field';
 import { Skeleton, SkeletonBar } from '@/components/ui/skeleton';
-import { TermText, TermTip } from '@/components/ui/term-tip';
 import { Toast, useToast } from '@/components/ui/toast';
 import type { Language } from '@/i18n/language';
 import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
@@ -16,12 +16,11 @@ import { cn } from '@/lib/cn';
 import { CONTENT_TERM_KEYS, firstMentions, type TermKey } from '@/lib/terms';
 import {
   campaignHref, chaseCampaign, chaseToast, ratioUnitsOf, readCampaigns, requirementsLine,
-  seasonalFilters, seasonalSections, showsChase, structuralSections, unchaseCampaign,
-  type CampaignCard, type CampaignList as CampaignListView, type CampaignSection, type RatioUnits, type SeasonalFilter,
+  seasonalSections, showsChase, structuralSections, unchaseCampaign,
+  type CampaignCard, type CampaignList as CampaignListView, type CampaignSection, type RatioUnits,
 } from '@/lib/campaigns';
 import { useTenantConfig } from '@/lib/tenant-config-cache';
 import { usePhone } from '@/lib/use-phone';
-import { ChaseButton, Poster, PromotionLabel } from './campaign-parts';
 import { PhoneCampaignCard, PhoneEndedRow } from './campaign-phone';
 
 /** What the dialog beneath the list needs from it: how to close, and how to tell it a chase changed. */
@@ -44,7 +43,7 @@ export function useCampaignDialogHost(): CampaignDialogHost {
 export const toggleChase = (card: Pick<CampaignCard, 'code' | 'chasing'>) =>
   (card.chasing ? unchaseCampaign(card.code) : chaseCampaign(card.code));
 
-/** The toast a chase answer says (`:8144`): `lib/campaigns.ts`' (P18.99-T16), re-exported for the list's importers. */
+/** The toast a chase answer says (`:8144`): `lib/campaigns.ts`' (P18.11-T16), re-exported for the list's importers. */
 export { chaseToast } from '@/lib/campaigns';
 
 type CampaignType = 'seasonal' | 'structural';
@@ -52,7 +51,7 @@ const TYPES: readonly CampaignType[] = ['seasonal', 'structural'];
 
 /**
  * **Campaigns** (`/campaigns`, and its dialog at `/campaigns/[campaignCode]`; `Overall.html:3664-3702`, CSS
- * `:1857-1975`, logic `:7920-8243`; P18.5-T7).
+ * `:1857-1975`, logic `:7920-8243`; P18.2-T7).
  *
  * **It lives in the route's layout**, so it stays mounted while a campaign's dialog opens and closes at its
  * own address (P14's D-urls): Back closes the dialog and the list is where it was, its tab, its filter and
@@ -68,6 +67,18 @@ const TYPES: readonly CampaignType[] = ['seasonal', 'structural'];
  *
  * The states the prototype lacks are Fills: a skeleton while the list loads, an error with a retry. A
  * read-only support session reads what its member reads and draws no chase (roles §3.13; the server's `can`).
+ *
+ * **UI V1 on a phone** (UI-108, P18.11): *Musiman | Struktural* one segmented control, the groups with their counts and
+ * no status row, an empty group hidden, the compact card (`campaign-phone.tsx`).
+ *
+ * *Changed 2026-11-05 (P19.1-T5 AC-4, AC-5; UI-123, `campaign-event-tablet-desktop` 1 and 2):* **a tablet and a laptop
+ * draw the phone's list too** — *"Card content as UI-108"* — where they drew the prototype's: the segmented control,
+ * no *All · Running · Upcoming · Ended* row, each group's heading in sentence case with its count (*Berjalan 1*), an
+ * empty group hidden (D-08), the compact card and the ended row. **The cards in a grid** `repeat(auto-fill, minmax(300px,
+ * 1fr))`, and **a group of one or two cards shares a row** with the next (*Berjalan* | *Akan datang*): each group is as
+ * wide as its cards, so three cards stand in a row at 1280px. Kept from the wider card, the client's earlier request: a
+ * term's ⓘ where the list first names it (P18.7-T9 AC-3). The phone's markup is what it was, to the byte
+ * (`campaigns/campaigns-wide.spec.tsx`).
  */
 export function CampaignList({ children }: { children?: ReactNode }) {
   const t = useMessages(campaignsMessages);
@@ -79,15 +90,14 @@ export function CampaignList({ children }: { children?: ReactNode }) {
   const [error, setError] = useState<ApiError | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [type, setType] = useState<CampaignType>('seasonal');
-  const [filter, setFilter] = useState<SeasonalFilter>('all');
   const [busy, setBusy] = useState<string | null>(null);
   const [chaseError, setChaseError] = useState<{ code: string; error: ApiError } | null>(null);
   const { toast, show } = useToast();
   /** Whether this list pushed the dialog's address — so closing it can go back rather than forward. */
   const openedHere = useRef(false);
   /**
-   * **A ratio requirement in the office's unit for it** (P18.97-T7; ADR-0174 §2): *Recruitment success rate 30%*, as the
-   * settings write it since P18.97-T4 AC-8, where the card read *0,30*. From the office's published configuration.
+   * **A ratio requirement in the office's unit for it** (P18.9-T7; ADR-0174 §2): *Recruitment success rate 30%*, as the
+   * settings write it since P18.9-T4 AC-8, where the card read *0,30*. From the office's published configuration.
    */
   const { config } = useTenantConfig();
   const ratioUnits = useMemo(() => ratioUnitsOf(config?.ratios), [config]);
@@ -150,18 +160,19 @@ export function CampaignList({ children }: { children?: ReactNode }) {
   }), [close, replace, show, language]);
 
   const dialogOpen = pathname !== '/campaigns';
-  // On a phone there is no status row (UI-108: *no extra chip row*): every group, each with its count, the empty hidden.
+  // There is no status row (UI-108: *no extra chip row*; UI-123 at every size): every group, each with its count, the
+  // empty hidden (D-08).
   const sections = list
-    ? (type === 'seasonal' ? seasonalSections(list.campaigns, phone ? 'all' : filter, language) : structuralSections(list.campaigns, language))
+    ? (type === 'seasonal' ? seasonalSections(list.campaigns, 'all', language) : structuralSections(list.campaigns, language))
     : [];
   const phoneSections = sections.filter((section) => section.items.length > 0);
-  const terms = cardTerms(sections, ratioUnits, language, figures);
+  const terms = cardTerms(phoneSections, ratioUnits, language, figures);
 
   return (
     <DialogHost.Provider value={host}>
       {/* Behind the open dialog the list takes no focus and no click: the dialog is modal. */}
       <div className="min-w-0" inert={dialogOpen || undefined}>
-        <TypeTabs active={type} onSelect={setType}>
+        <TypeTabs active={type} onSelect={setType} phone={phone}>
           {error && (
             <div>
               <ErrorBanner {...error} />
@@ -169,8 +180,7 @@ export function CampaignList({ children }: { children?: ReactNode }) {
             </div>
           )}
           {!list && !error && <CampaignsSkeleton />}
-          {list && type === 'seasonal' && !phone && <StatusFilter active={filter} onSelect={setFilter} />}
-          {list && phone && phoneSections.length === 0 && sections[0] && (
+          {list && phoneSections.length === 0 && sections[0] && (
             <p className="px-[18px] py-10 text-center text-md text-muted">{sections[0].empty}</p>
           )}
           {list && phone && phoneSections.map((section) => (
@@ -191,23 +201,30 @@ export function CampaignList({ children }: { children?: ReactNode }) {
                 )))}
             </PhoneSection>
           ))}
-          {list && !phone && sections.map((section) => (
-            <Section key={section.id} section={section}>
-              {section.items.map((card) => (
-                <Card
-                  key={card.code}
-                  card={card}
-                  canChase={showsChase(card, list.can)}
-                  busy={busy === card.code}
-                  error={chaseError?.code === card.code ? chaseError.error : null}
-                  onChase={() => void chase(card)}
-                  onOpen={() => open(card.code)}
-                  terms={terms.get(card.code)}
-                  ratioUnits={ratioUnits}
-                />
+          {list && !phone && phoneSections.length > 0 && (
+            // A tablet and a laptop (P19.1-T5 AC-4; UI-123): the groups side by side while they fit, each as wide as its cards.
+            <div data-campaign-groups="" className="flex flex-wrap gap-x-2.5">
+              {phoneSections.map((section) => (
+                <PhoneSection key={section.id} section={section} style={shareOf(section.items.length)} wide>
+                  {section.items.map((card) => (card.kind === 'seasonal' && card.phase === 'ended'
+                    ? <PhoneEndedRow key={card.code} card={card} onOpen={() => open(card.code)} />
+                    : (
+                      <PhoneCampaignCard
+                        key={card.code}
+                        card={card}
+                        canChase={showsChase(card, list.can)}
+                        busy={busy === card.code}
+                        error={chaseError?.code === card.code ? chaseError.error : null}
+                        onChase={() => void chase(card)}
+                        onOpen={() => open(card.code)}
+                        ratioUnits={ratioUnits}
+                        terms={terms.get(card.code)}
+                      />
+                    )))}
+                </PhoneSection>
               ))}
-            </Section>
-          ))}
+            </div>
+          )}
         </TypeTabs>
       </div>
       {children}
@@ -221,8 +238,8 @@ export function CampaignList({ children }: { children?: ReactNode }) {
  * for the keyboard, ← and → between the two. Its one panel holds the view.
  */
 function TypeTabs({
-  active, onSelect, children,
-}: { active: CampaignType; onSelect: (type: CampaignType) => void; children: ReactNode }) {
+  active, onSelect, phone, children,
+}: { active: CampaignType; onSelect: (type: CampaignType) => void; phone: boolean; children: ReactNode }) {
   const t = useMessages(campaignsMessages);
   const group = useId();
   const refs = useRef<Partial<Record<CampaignType, HTMLButtonElement | null>>>({});
@@ -233,9 +250,19 @@ function TypeTabs({
   };
   return (
     <>
-      {/* On a phone, one segmented control, *Musiman | Struktural* (UI-108): the same tabs on a white pill track. */}
-      <div className="mb-[18px] border-b-[1.5px] border-hairline max-md:mb-0 max-md:mt-3 max-md:border-b-0">
-        <div role="tablist" aria-label={t.types} className="-mb-[1.5px] flex gap-[26px] max-md:mb-0 max-md:gap-0 max-md:rounded-pill max-md:bg-card">
+      {/*
+        * On a phone, one segmented control, *Musiman | Struktural* (UI-108): the same tabs on a white pill track. On a
+        * tablet and a laptop (P19.1-T5 AC-4; UI-123, `shared-2026-11-02.css`'s `.seg`) the same control as wide as its
+        * words, 44px on a tablet and 40px on a laptop — where the prototype's underlined tabs were.
+        */}
+      <div className={phone ? 'mb-[18px] border-b-[1.5px] border-hairline max-md:mb-0 max-md:mt-3 max-md:border-b-0' : 'mb-1'}>
+        <div
+          role="tablist"
+          aria-label={t.types}
+          className={phone
+            ? '-mb-[1.5px] flex gap-[26px] max-md:mb-0 max-md:gap-0 max-md:rounded-pill max-md:bg-card'
+            : 'inline-flex h-10 rounded-pill bg-card p-[3px] md:max-lg:h-11'}
+        >
           {TYPES.map((tab, i) => {
             const on = tab === active;
             return (
@@ -257,20 +284,25 @@ function TypeTabs({
                   else return;
                   e.preventDefault();
                 }}
-                className={cn(
+                className={phone ? cn(
                   'border-b-[2.5px] px-1 py-2.5 font-display text-[0.9375rem] font-bold',
-                  on ? 'border-amber text-navy' : 'border-transparent text-muted hover:text-navy',
+                  on ? 'border-primary text-navy' : 'border-transparent text-muted hover:text-navy',
                   'max-md:flex max-md:min-h-11 max-md:flex-1 max-md:rounded-pill max-md:border-b-0 max-md:p-[3px] max-md:text-base max-md:font-semibold',
+                ) : cn(
+                  'flex h-full items-center justify-center whitespace-nowrap rounded-pill px-3.5 text-md font-semibold',
+                  on ? 'bg-secondary text-secondary-contrast' : 'text-muted hover:text-navy',
                 )}
               >
-                <span
-                  className={cn(
-                    'max-md:flex max-md:w-full max-md:items-center max-md:justify-center max-md:rounded-pill',
-                    on && 'max-md:bg-navy max-md:text-white',
-                  )}
-                >
-                  {t[tab]}
-                </span>
+                {phone ? (
+                  <span
+                    className={cn(
+                      'max-md:flex max-md:w-full max-md:items-center max-md:justify-center max-md:rounded-pill',
+                      on && 'max-md:bg-secondary max-md:text-secondary-contrast',
+                    )}
+                  >
+                    {t[tab]}
+                  </span>
+                ) : t[tab]}
               </button>
             );
           })}
@@ -283,160 +315,66 @@ function TypeTabs({
   );
 }
 
-/** *All · Running · Upcoming · Ended* (`#seasonal-segmented`, `:3674-3679`; `.segmented`, `:1871-1876`). */
-function StatusFilter({ active, onSelect }: { active: SeasonalFilter; onSelect: (f: SeasonalFilter) => void }) {
-  const t = useMessages(campaignsMessages);
-  const language = useLanguage();
-  return (
-    <div role="group" aria-label={t.statusFilter} className="mb-[22px] inline-flex max-w-full flex-wrap rounded-[9px] border border-hairline bg-card p-[3px]">
-      {seasonalFilters(language).map((f) => (
-        <button
-          key={f.id}
-          type="button"
-          aria-pressed={f.id === active}
-          onClick={() => onSelect(f.id)}
-          className={cn(
-            'rounded-[6px] px-4 py-[7px] text-base font-semibold',
-            f.id === active ? 'bg-navy text-white' : 'text-muted hover:text-navy',
-          )}
-        >
-          {f.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-/** A section: its label in small grey capitals (`.section-label`, `:1878`), its grid, or its empty line. */
-function Section({ section, children }: { section: CampaignSection; children: ReactNode }) {
-  const id = useId();
-  return (
-    <section aria-labelledby={id} className="mb-8" data-section={section.id}>
-      <h2 id={id} className="mb-3 text-sm font-bold uppercase tracking-wide text-muted">{section.heading}</h2>
-      {section.items.length === 0 ? (
-        <p className="px-[18px] py-10 text-center text-md text-muted">{section.empty}</p>
-      ) : (
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,290px),1fr))] gap-4">{children}</div>
-      )}
-    </section>
-  );
-}
-
-/**
- * **One card** (`campaignCardHtml`, `:8040-8074`): the poster and its tags, *Promotion path*, the title and its
- * window, the blurb, 🏆 the prize, *Needs:* and each requirement in its words joined by *" + "* (P18.95-T10 AC-3,
- * where the prototype wrote *Requirements:* and *" | "*), and the foot — the chase and *View details*. An ended
- * card is grey (`.is-ended`, `:1884-1886`) and **draws no chase** (P18.95-T10 AC-2; UI-024), where D-lists drew
- * it disabled with its reason: the poster's *Ended* says why. Every authored word is text, never markup.
- */
 /**
  * **A group on a phone** (UI V1, UI-108; `campaign-event-mobile` 1): its heading in sentence case with its count —
  * *Berjalan 3* — not the small uppercase label, and its cards one under another.
+ *
+ * **`wide`, a tablet's and a laptop's** (P19.1-T5 AC-4; UI-123): the same heading over a grid of cards, each at least
+ * 300px, as many to a row as fit; `style` says how wide the group stands beside the others (`shareOf`).
  */
-function PhoneSection({ section, children }: { section: CampaignSection; children: ReactNode }) {
+function PhoneSection({ section, wide = false, style, children }: {
+  section: CampaignSection;
+  wide?: boolean;
+  style?: CSSProperties;
+  children: ReactNode;
+}) {
   const id = useId();
   return (
-    <section aria-labelledby={id} data-section={section.id}>
+    <section aria-labelledby={id} data-section={section.id} className={wide ? 'min-w-0' : undefined} style={style}>
       <h2 className="mx-0.5 mb-1.5 mt-3.5 flex items-baseline gap-1.5 text-lg font-bold text-navy">
         <span id={id}>{section.heading}</span>
         <span className="text-sm font-semibold text-muted">{section.items.length}</span>
       </h2>
-      <div className="flex flex-col gap-2">{children}</div>
+      <div className={wide ? WIDE_GRID : 'flex flex-col gap-2'}>{children}</div>
     </section>
   );
 }
 
-function Card({
-  card, canChase, busy, error, onChase, onOpen, terms = [], ratioUnits,
-}: {
-  card: CampaignCard;
-  canChase: boolean;
-  busy: boolean;
-  error: ApiError | null;
-  onChase: () => void;
-  onOpen: () => void;
-  /** The terms this card is the first to name: its title's, blurb's, prize's and *Needs:* line's (`cardTerms`). */
-  terms?: TermKey[][];
-  /** How the office writes each ratio, so a requirement on one reads in that unit (P18.97-T7). */
-  ratioUnits?: RatioUnits;
-}) {
-  const t = useMessages(campaignsMessages);
-  const language = useLanguage();
-  const figures = useFigureLanguage();
-  const titleId = useId();
-  const [titleTerms = [], blurbTerms = [], rewardTerms = [], needsTerms = []] = terms;
-  const title = <h3 id={titleId} className="text-[0.90625rem] font-bold leading-snug text-navy">{card.title}</h3>;
-  const ended = card.kind === 'seasonal' && card.phase === 'ended';
-  return (
-    <article
-      aria-labelledby={titleId}
-      data-campaign-card={card.code}
-      className={cn(
-        'min-w-0 overflow-hidden rounded-lg border border-card-edge bg-card transition-shadow hover:shadow-modal',
-        ended && 'grayscale-[45%] hover:grayscale-[20%]',
-      )}
-    >
-      <Poster campaign={card} size="card" />
-      <div className={cn('px-4 pb-4 pt-3.5', ended && 'bg-navy/[0.02]')}>
-        {card.subtype === 'promotion' && <PromotionLabel />}
-        <div className="mb-1.5 flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
-          {titleTerms.length === 0 ? title : (
-            // Beside the heading, not in it, so the card is still named by its title alone.
-            <span className="flex items-center gap-1">
-              {title}
-              {titleTerms.map((term) => <TermTip key={term} term={term} />)}
-            </span>
-          )}
-          <span className="whitespace-nowrap text-sm font-medium text-muted">{card.duration}</span>
-        </div>
-        {card.blurb && <p className="mb-3 text-[0.78125rem] leading-snug text-muted"><TermText text={card.blurb} terms={blurbTerms} /></p>}
-        {card.reward && (
-          // Navy words on the prize's amber wash, where the prototype's amber-dark is 2.6:1 (row 44).
-          <p className="mb-2.5 flex items-center gap-1.5 rounded-[7px] bg-amber/10 px-2.5 py-1.5 text-[0.78125rem] font-semibold text-navy">
-            <span aria-hidden="true" className="shrink-0">🏆</span>
-            <span className="min-w-0"><TermText text={card.reward} terms={rewardTerms} /></span>
-          </p>
-        )}
-        {card.requirements.length > 0 && (
-          <p className="mb-[9px] text-[0.78125rem] leading-normal text-navy">
-            <span className="font-bold text-muted">{t.needs}</span>{' '}
-            <TermText text={requirementsLine(card.requirements, ratioUnits, language, figures)} terms={needsTerms} />
-          </p>
-        )}
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          {canChase ? (
-            <ChaseButton chasing={card.chasing} blocked={card.chaseBlocked} busy={busy} onToggle={onChase} />
-          ) : <span />}
-          <Button
-            variant="secondary"
-            onClick={onOpen}
-            data-open-campaign
-            className="h-auto rounded-[7px] border-[1.5px] border-navy px-3.5 py-2 text-base"
-          >
-            {t.viewDetails}
-          </Button>
-        </div>
-        {error && <div className="mt-2.5"><ErrorBanner {...error} /></div>}
-      </div>
-    </article>
-  );
+/** A card's narrowest on a tablet and a laptop (UI-123: `minmax(300px, 1fr)`), and the gap between two. */
+const CARD_MIN_PX = 300;
+const CARD_GAP = '0.625rem';
+const WIDE_GRID = 'grid grid-cols-[repeat(auto-fill,minmax(min(100%,300px),1fr))] items-start gap-2.5';
+
+/**
+ * **How wide a group stands** (UI-123: *sections with only one or two cards share a row (Berjalan | Akan datang side by
+ * side), so no half-empty rows*): a group of one or two cards asks for their width — 300px a card and the gap — and
+ * grows by its share of what is left, so *Berjalan 1* and *Akan datang 2* share a 1280px row as three cards; a group of
+ * three or more takes a row of its own. Where two do not fit side by side they stack, each the row's width.
+ */
+export function shareOf(cards: number): CSSProperties {
+  if (cards > 2) return { flex: '1 1 100%' };
+  return { flex: `${cards} 1 calc(${cards} * ${CARD_MIN_PX}px + ${cards - 1} * ${CARD_GAP})` };
 }
 
 /**
- * **Which card first names each term, and where on it** (P18.95-T9 AC-3; UI-028: *APE*, *MDRT* unexplained): the
- * cards in the order they are drawn, each card's title, blurb, prize and *Needs:* line in reading order. A term the
- * list names on twelve cards gets one ⓘ, on the first.
+ * **Which card first names each term, and where on it** (P18.7-T9 AC-3; UI-028: *APE*, *MDRT* unexplained): the
+ * cards in the order they are drawn, each card's title, *Hadiah* and *Syarat* in reading order. A term the list names
+ * on twelve cards gets one ⓘ, on the first. An ended row draws none of the three, so it names nothing.
+ *
+ * *Changed 2026-11-05 (P19.1-T5 AC-4):* the compact card (UI-108) has no blurb — the description is the detail's — so
+ * a term is looked for in the three texts it draws.
  */
 function cardTerms(
   sections: readonly CampaignSection[], ratioUnits: RatioUnits | undefined, language: Language, figures: Language,
 ): Map<string, TermKey[][]> {
-  const cards = sections.flatMap((section) => section.items);
+  const cards = sections.flatMap((section) => section.items)
+    .filter((card) => !(card.kind === 'seasonal' && card.phase === 'ended'));
   const texts = cards.flatMap((card) => [
-    card.title, card.blurb, card.reward,
+    card.title, card.reward,
     card.requirements.length > 0 ? requirementsLine(card.requirements, ratioUnits, language, figures) : null,
   ]);
   const found = firstMentions(texts, CONTENT_TERM_KEYS);
-  return new Map(cards.map((card, i) => [card.code, found.slice(i * 4, i * 4 + 4)]));
+  return new Map(cards.map((card, i) => [card.code, found.slice(i * 3, i * 3 + 3)]));
 }
 
 /** Two sections of cards, shaped like the list that is coming. */

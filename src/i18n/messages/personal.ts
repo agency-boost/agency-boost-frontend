@@ -2,7 +2,7 @@ import { defineMessages, type MessagesOf } from '@/i18n/catalogue';
 import type { Gender, WorkStatus } from '@/lib/personal';
 
 /**
- * **What a person records, as a screen prints it** (P18.98-T4, coaching and unit; ADR-0158, P18.8-T4): the gender and
+ * **What a person records, as a screen prints it** (P18.10-T4, coaching and unit; ADR-0158, P18.5-T4): the gender and
  * the work status by their codes' labels, and *Not recorded* for one somebody has not given — `lib/personal.ts`' words,
  * which a member's page, `/profile` and `/register` show.
  *

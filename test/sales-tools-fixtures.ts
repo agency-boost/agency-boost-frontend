@@ -36,7 +36,7 @@ export const serverError = { status: 500, body: { error: { code: 'INTERNAL_ERROR
 export function card(over: Partial<CatalogCard> & { code: string }): CatalogCard {
   return {
     name: over.code, tagline: `${over.code}'s line.`, category: { code: 'life', label: 'Life' },
-    channel: 'conventional', lifecycle: 'active', needs: ['life-protection'], ...over,
+    channel: 'conventional', lifecycle: 'active', needs: ['life-protection'], currencies: ['IDR'], ...over,
   };
 }
 
@@ -59,8 +59,11 @@ export const SCRIPT: CatalogScript = {
   opening: 'Setting up retirement income isn’t easy.',
   benefits: ['Paid annually from 55.', 'Death cover.'],
   fullScript: 'Setting up retirement income alongside daily expenses isn’t easy. Shall I prepare an illustration?',
-  objectionTheySay: 'Retirement is too far away to think about right now.',
-  objectionYouSay: 'I hear that a lot — it doesn’t feel urgent yet.',
+  // One card, as the seed's pair became (P19.4-T4, ADR-0209 §9).
+  objections: [{
+    objection: 'Retirement is too far away to think about right now.',
+    answer: 'I hear that a lot — it doesn’t feel urgent yet.',
+  }],
   nextAction: 'Shall I prepare an illustration?',
 };
 
@@ -68,6 +71,7 @@ export function product(over: Partial<CatalogProduct> = {}): CatalogProduct {
   return {
     code: 'PRUMAPAN', name: 'PRUMapan', tagline: 'Dana pensiun yang cair rutin dari usia 55.',
     category: { code: 'life', label: 'Life' }, channel: 'conventional', lifecycle: 'active', needs: ['retirement'],
+    currencies: ['IDR'],
     benefits: ['Manfaat Dana Mapan paid annually.', 'Death cover.'],
     differentiator: 'The accessible retirement-income option.',
     bestFit: 'Sandwich-generation milenial and Gen Z.',
@@ -79,6 +83,7 @@ export function product(over: Partial<CatalogProduct> = {}): CatalogProduct {
       { slot: 'illustration', label: 'Illustration / Simulation', available: false },
       { slot: 'productDoc', label: 'Product Document', available: false },
     ],
+    riders: [],
     ...over,
   };
 }

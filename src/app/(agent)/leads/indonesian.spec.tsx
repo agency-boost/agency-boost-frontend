@@ -11,7 +11,7 @@ import LeadsPage from './page';
 import { LeadsTable } from '@/components/leads-table';
 
 /**
- * **Leads Management in ID mode** (P18.98-T4 AC-1 to AC-4, field selling): `/leads` — the table, its search and
+ * **Leads Management in ID mode** (P18.10-T4 AC-1 to AC-4, field selling): `/leads` — the table, its search and
  * filters, its ⋮ menu and questions, the lead's details, the closed cards, and on a phone the cards and the edit sheet —
  * in the approved glossary's Indonesian, each kept term English (§A: the title, *lead* / *leads*, *Sales*, *Recruit*,
  * *Closing*), what the office and the agent typed as typed, the figures Indonesian, and no English message of the
@@ -65,7 +65,16 @@ const BASE = {
   'outcome=lost': { body: page([]) },
 };
 
+/*
+ * *Changed 2026-11-05 (P19.1-T2, UI-116):* the table's words render the table itself — `/leads` draws the list beside the
+ * lead's pane from 1024px, as below it. The page's own title row renders the page (`renderPage`).
+ */
 const render = (routes: Record<string, unknown>) => {
+  const stub = stubFetch({ ...BASE, ...routes } as Parameters<typeof stubFetch>[0]);
+  renderInIndonesian(<AgentLayout><LeadsTable /></AgentLayout>, { me: AGENT });
+  return stub;
+};
+const renderPage = (routes: Record<string, unknown>) => {
   const stub = stubFetch({ ...BASE, ...routes } as Parameters<typeof stubFetch>[0]);
   renderInIndonesian(<AgentLayout><LeadsPage /></AgentLayout>, { me: AGENT });
   return stub;
@@ -76,15 +85,22 @@ const onPhone = () => vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
   media: query, matches: query === PHONE_QUERY, addEventListener: () => {}, removeEventListener: () => {},
 })));
 
-describe('P18.98-T4 Leads Management in Indonesian', () => {
+describe('P18.10-T4 Leads Management in Indonesian', () => {
   afterEach(() => vi.unstubAllGlobals());
+
+  it('AC-2 titles the page Leads, the kept term, and draws its Indonesian sub-line at no size', async () => {
+    renderPage({ '/leads': { body: page([lead()]) } });
+    await screen.findByRole('list', { name: 'Leads Anda' });
+
+    // *Leads* at every size since P19.1-T1 AC-1 (UI-112: the phone's title); the sub-line in the page, drawn at no size.
+    expect(screen.getByRole('heading', { name: 'Leads', level: 1 })).toBeInTheDocument();
+    expect(screen.getByText('Pantau dan follow up leads sales dan recruitment Anda.')).toHaveClass('md:hidden');
+  });
 
   it('AC-2 heads the table, its toolbar and its closed cards in Indonesian, the title and the kept terms English', async () => {
     render({ '/leads': { body: page([lead()]) } });
     await screen.findByDisplayValue('Pak Budi');
 
-    expect(screen.getByRole('heading', { name: 'Leads Management', level: 1 })).toBeInTheDocument();
-    expect(screen.getByText('Pantau dan follow up leads sales dan recruitment Anda.')).toBeInTheDocument();
     const table = screen.getByRole('table', { name: 'Leads Anda' });
     // A sortable heading's ⇅ is its button's glyph, not a word.
     expect(within(table).getAllByRole('columnheader').map((h) => h.textContent!.replace(/[⇅↑↓]/g, ''))).toEqual([
@@ -93,7 +109,7 @@ describe('P18.98-T4 Leads Management in Indonesian', () => {
     expect(screen.getByText('1 lead aktif')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '+ Tambah lead' })).toBeInTheDocument();
 
-    // The search and its two filters (P18.95-T4 AC-2): *Sales* and *Recruit* are the two types' names, kept.
+    // The search and its two filters (P18.7-T4 AC-2): *Sales* and *Recruit* are the two types' names, kept.
     const bar = within(screen.getByRole('search', { name: 'Cari dan filter leads' }));
     expect(bar.getByRole('searchbox', { name: 'Cari leads' })).toHaveAttribute('placeholder', 'Cari leads…');
     const options = (label: string) => within(bar.getByLabelText(label)).getAllByRole('option').map((o) => o.textContent);
@@ -103,7 +119,8 @@ describe('P18.98-T4 Leads Management in Indonesian', () => {
     // A row's controls, named for their row; the promise beside the box says which it is.
     expect(screen.getByRole('textbox', { name: 'Nama lead, baris 1' })).toHaveAttribute('placeholder', 'Nama lengkap');
     expect(screen.getByRole('combobox', { name: 'Jenis, baris 1' })).toHaveValue('sales');
-    expect(screen.getByRole('checkbox', { name: 'Closing bulan ini' })).toBeInTheDocument();
+    // P19.1-T2 AC-5 (UI-153 item 1, verbatim): the switch's words by the lead's type.
+    expect(screen.getByRole('switch', { name: 'Potensi closing bulan ini' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Aksi untuk Pak Budi' })).toBeInTheDocument();
 
     // The closed cards.
@@ -133,7 +150,8 @@ describe('P18.98-T4 Leads Management in Indonesian', () => {
     const menu = within(screen.getByRole('menu'));
     expect(menu.getByRole('menuitem', { name: 'Detail lead' })).toBeInTheDocument();
     const won = menu.getByRole('menuitem', { name: 'Tandai berhasil' });
-    expect(won).toHaveAccessibleDescription('Tersedia setelah status mencapai tahap akhir');
+    // P19.1-T2 AC-9 (UI-160 item 3, verbatim): *Aktif setelah status* and the office's own final stage.
+    expect(won).toHaveAccessibleDescription('Aktif setelah status Polis terbit');
     expect(menu.getByRole('menuitem', { name: 'Hapus' })).toBeInTheDocument();
     await userEvent.click(menu.getByRole('menuitem', { name: 'Tandai tidak berhasil' }));
 
@@ -232,7 +250,7 @@ describe('P18.98-T4 Leads Management in Indonesian', () => {
 
   it('UI-105 says the compact list in Indonesian: the search, the chips, the strip, the cards and the + — the stages as typed', async () => {
     onPhone();
-    render({
+    renderPage({
       '/leads': { body: page([
         lead(),
         lead({ id: 'l2', name: 'Ibu Wati', statusCode: 'BELUM_DIDEKATI', nextActionDate: null, nextActionNote: null }),
@@ -260,7 +278,7 @@ describe('P18.98-T4 Leads Management in Indonesian', () => {
 
   it('UI-105 says the lead sheet in Indonesian: Jenis, Status, Tindakan berikutnya, Keterangan, Riwayat, Hapus and Simpan', async () => {
     onPhone();
-    render({
+    renderPage({
       '/leads': { body: page([lead()]) },
       '/leads/l1': { body: { ...lead(), history: [{ at: '2026-10-27T03:00:00.000Z', fromStatusCode: null, toStatusCode: 'FOLLOW_UP' }] } },
     });
@@ -284,7 +302,7 @@ describe('P18.98-T4 Leads Management in Indonesian', () => {
   });
 });
 
-describe('P18.98-T4 lib/leads in Indonesian', () => {
+describe('P18.10-T4 lib/leads in Indonesian', () => {
   it('names a flag in the reader’s words, the server’s count of days in both', () => {
     expect(flagLabel('overdue', 14, 'id')).toBe('Terlambat 14 hari');
     expect(flagLabel('overdue', 1, 'id')).toBe('Terlambat 1 hari');

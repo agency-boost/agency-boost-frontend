@@ -25,7 +25,7 @@ vi.mock('next/navigation', () => ({
 }));
 
 /**
- * **A phone's sizes** (P18.95-T1 AC-8 to AC-10, AC-12; ADR-0167; the client's UI review of 2026-10-26:
+ * **A phone's sizes** (P18.7-T1 AC-8 to AC-10, AC-12; ADR-0167; the client's UI review of 2026-10-26:
  * UI-013, UI-014, UI-029).
  *
  * jsdom applies no stylesheet and lays nothing out, so what can be pinned here is what each component
@@ -99,7 +99,7 @@ describe('AC-8 one tab row on a phone', () => {
       render(<RouteTabs label="User Management" tabs={UM} />);
       const [on, off] = screen.getAllByRole('link');
       // UI V1 (UI-010): 44px tall below 1024px in the field shell (`TAB_TOUCH`), and unchanged elsewhere.
-      expect(wider(on)).toBe(`-mb-px border-b-2 px-0.5 pb-3 text-md font-semibold ${TAB_TOUCH} border-amber text-navy`);
+      expect(wider(on)).toBe(`-mb-px border-b-2 px-0.5 pb-3 text-md font-semibold ${TAB_TOUCH} border-primary text-navy`);
       expect(wider(off)).toBe(`-mb-px border-b-2 px-0.5 pb-3 text-md font-semibold ${TAB_TOUCH} border-transparent text-muted`);
       for (const tab of [on, off]) expect(phone(tab)).toEqual(tokens(TAB_PHONE));
     });
@@ -170,11 +170,11 @@ describe('AC-8 one tab row on a phone', () => {
       expect(phone(list)).toEqual(tokens(SEGMENTS_PHONE));
       const [on] = screen.getAllByRole('tab');
       // UI V1 (UI-010): 44px tall below 1024px in the field shell (`SEGMENT_TOUCH`).
-      expect(wider(on)).toBe(`flex-1 rounded-md px-2.5 py-2 text-base font-semibold transition-colors ${SEGMENT_TOUCH} bg-navy text-card`);
+      expect(wider(on)).toBe(`flex-1 rounded-md px-2.5 py-2 text-base font-semibold transition-colors ${SEGMENT_TOUCH} bg-secondary text-secondary-contrast`);
       expect(phone(on)).toEqual(tokens(SEGMENT_PHONE));
     });
 
-    it('P18.95-T5 AC-7: with phoneLayout="wrap", two options keep equal halves and wrap their words — below 768px only', () => {
+    it('P18.7-T5 AC-7: with phoneLayout="wrap", two options keep equal halves and wrap their words — below 768px only', () => {
       const TWO = [{ id: 'direct', label: 'Set APE target directly' }, { id: 'savings', label: 'Calculate from savings target' }];
       render(
         <Segmented label="How" tabs={TWO} active="direct" onSelect={() => {}} phoneLayout="wrap">
@@ -292,7 +292,7 @@ describe('AC-8 one tab row on a phone', () => {
       for (const tab of screen.getAllByRole('link')) expect(phone(tab)).toEqual(tokens(TAB_PHONE));
     });
 
-    it('P18.95-T6 AC-4 the scrollable filter row: a row of toggle buttons brings the pressed one into view', () => {
+    it('P18.7-T6 AC-4 the scrollable filter row: a row of toggle buttons brings the pressed one into view', () => {
       // The catalog's category pills (`product-catalog.tsx`): buttons with `aria-pressed`, not links or tabs.
       const PILLS = ['All products', 'Life', 'Health', 'Critical illness', 'Education', 'Investment-linked'];
       function Pills({ on }: { on: string }) {

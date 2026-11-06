@@ -10,7 +10,7 @@ vi.mock('next/navigation', () => ({
 }));
 
 /**
- * ***Bahasa* on *Profil saya*** (UI V1, UI-111; ADR-0180 §3; P18.98-T2 AC-4 before it): a row showing the language the
+ * ***Bahasa* on *Profil saya*** (UI V1, UI-111; ADR-0180 §3; P18.10-T2 AC-4 before it): a row showing the language the
  * screen is in, opening a small sheet of the two; choosing one is **the same preference as the *ID | EN* switch** —
  * the screen at once, the browser's cookie, the account (`useChooseLanguage`).
  */

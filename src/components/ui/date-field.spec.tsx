@@ -21,23 +21,23 @@ function Controlled({ initial = '', onChange, ...props }: { initial?: string } &
   );
 }
 
-describe('DateField (P18.96-T2 AC-4)', () => {
+describe('DateField (P18.8-T2 AC-4)', () => {
   afterEach(() => {
     delete (HTMLInputElement.prototype as { showPicker?: unknown }).showPicker;
   });
 
-  it('P18.96-T2 AC-4 shows the date as the app writes it — 22 Jul 2026 — never the browser’s mm/dd/yyyy', () => {
+  it('P18.8-T2 AC-4 shows the date as the app writes it — 22 Jul 2026 — never the browser’s mm/dd/yyyy', () => {
     render(<Controlled initial="2026-07-22" />);
     const face = faceOf('Join date');
     expect(face).toHaveTextContent('22 Jul 2026');
     expect(face).toHaveAttribute('aria-hidden', 'true');
     expect(face.textContent).not.toMatch(/\d{2}\/\d{2}\/\d{4}/);
-    // The reader's months, as every date the app writes (ADR-0167 §1; P18.98-T3): English, the specs' default.
+    // The reader's months, as every date the app writes (ADR-0167 §1; P18.10-T3): English, the specs' default.
     render(<Field label="Other" htmlFor="o"><DateField id="o" value="2026-10-05" onChange={() => undefined} /></Field>);
     expect(faceOf('Other')).toHaveTextContent('5 Oct 2026');
   });
 
-  it('P18.96-T2 AC-4 the native field is the control: labelled, typed date, holding the office date as YYYY-MM-DD', () => {
+  it('P18.8-T2 AC-4 the native field is the control: labelled, typed date, holding the office date as YYYY-MM-DD', () => {
     render(<Controlled initial="2026-07-22" />);
     const field = screen.getByLabelText('Join date');
     expect(field.tagName).toBe('INPUT');
@@ -45,19 +45,19 @@ describe('DateField (P18.96-T2 AC-4)', () => {
     expect(field).toHaveValue('2026-07-22');
   });
 
-  it('P18.96-T2 AC-4 says *Choose a date* when empty; a table cell says nothing', () => {
+  it('P18.8-T2 AC-4 says *Choose a date* when empty; a table cell says nothing', () => {
     render(<Controlled />);
     expect(faceOf('Join date')).toHaveTextContent(DATE_FIELD_EMPTY);
     render(<DateField aria-label="Next action date" density="cell" value={null} onChange={() => undefined} />);
     expect(faceOf('Next action date').textContent).toBe('');
   });
 
-  it('P18.96-T2 AC-4 waits for a whole year before it prints one: a year still being typed is not a date', () => {
+  it('P18.8-T2 AC-4 waits for a whole year before it prints one: a year still being typed is not a date', () => {
     render(<Controlled initial="0002-08-01" />);
     expect(faceOf('Join date')).toHaveTextContent(DATE_FIELD_EMPTY);
   });
 
-  it('P18.96-T2 AC-4 a click opens the device’s picker', async () => {
+  it('P18.8-T2 AC-4 a click opens the device’s picker', async () => {
     const showPicker = vi.fn();
     HTMLInputElement.prototype.showPicker = showPicker;
     render(<Controlled initial="2026-07-22" />);
@@ -65,14 +65,14 @@ describe('DateField (P18.96-T2 AC-4)', () => {
     expect(showPicker).toHaveBeenCalledTimes(1);
   });
 
-  it('P18.96-T2 AC-4 falls back to the focused field where there is no picker to show', async () => {
+  it('P18.8-T2 AC-4 falls back to the focused field where there is no picker to show', async () => {
     // jsdom has no `showPicker`: the refusal is caught, and the field keeps the focus to take digits.
     render(<Controlled initial="2026-07-22" />);
     await userEvent.click(screen.getByLabelText('Join date'));
     expect(screen.getByLabelText('Join date')).toHaveFocus();
   });
 
-  it('P18.96-T2 AC-4 is reached by Tab, and Enter, Space or Alt+↓ open the picker without submitting the form', async () => {
+  it('P18.8-T2 AC-4 is reached by Tab, and Enter, Space or Alt+↓ open the picker without submitting the form', async () => {
     const showPicker = vi.fn();
     HTMLInputElement.prototype.showPicker = showPicker;
     const onSubmit = vi.fn((e: React.FormEvent) => e.preventDefault());
@@ -85,17 +85,17 @@ describe('DateField (P18.96-T2 AC-4)', () => {
     expect(showPicker).toHaveBeenCalledTimes(3);
     expect(onSubmit).not.toHaveBeenCalled();
     // The focus ring is drawn on the face, from the field's own focus.
-    expect(faceOf('Join date').className).toContain('peer-focus-visible:outline-amber');
+    expect(faceOf('Join date').className).toContain('peer-focus-visible:outline-focus-ring');
   });
 
-  it('P18.96-T2 AC-4 passes min and max to the picker', () => {
+  it('P18.8-T2 AC-4 passes min and max to the picker', () => {
     render(<Controlled initial="2026-07-22" min="2025-10-27" max="2026-10-27" />);
     const field = screen.getByLabelText('Join date');
     expect(field).toHaveAttribute('min', '2025-10-27');
     expect(field).toHaveAttribute('max', '2026-10-27');
   });
 
-  it('P18.96-T2 AC-4 answers the date chosen as YYYY-MM-DD, and the face follows', () => {
+  it('P18.8-T2 AC-4 answers the date chosen as YYYY-MM-DD, and the face follows', () => {
     const onChange = vi.fn();
     render(<Controlled initial="2026-07-22" onChange={onChange} />);
     fireEvent.change(screen.getByLabelText('Join date'), { target: { value: '2026-08-03' } });
@@ -107,7 +107,7 @@ describe('DateField (P18.96-T2 AC-4)', () => {
     expect(faceOf('Join date')).toHaveTextContent(DATE_FIELD_EMPTY);
   });
 
-  it('P18.96-T2 AC-4 a read-only or disabled field opens nothing, and looks it', async () => {
+  it('P18.8-T2 AC-4 a read-only or disabled field opens nothing, and looks it', async () => {
     const showPicker = vi.fn();
     HTMLInputElement.prototype.showPicker = showPicker;
     render(
@@ -121,7 +121,7 @@ describe('DateField (P18.96-T2 AC-4)', () => {
     expect(faceOf('Off').className).toContain('text-muted');
   });
 
-  it('P18.96-T2 AC-4 carries a field’s hint and error to the control, and marks it invalid', () => {
+  it('P18.8-T2 AC-4 carries a field’s hint and error to the control, and marks it invalid', () => {
     render(
       <Field label="Starts" htmlFor="s" hint="From a 1st." error="Choose a start.">
         <DateField id="s" value="" invalid onChange={() => undefined} />
@@ -133,14 +133,14 @@ describe('DateField (P18.96-T2 AC-4)', () => {
     expect(faceOf('Starts').className).toContain('border-alert');
   });
 
-  it('P18.96-T2 AC-4 reads 16px on a phone, as every field does (UI-014)', () => {
+  it('P18.8-T2 AC-4 reads 16px on a phone, as every field does (UI-014)', () => {
     render(<Controlled initial="2026-07-22" />);
     expect(faceOf('Join date').className).toContain('max-md:text-lg');
   });
 });
 
 /**
- * The structural half of "no screen shows mm/dd/yyyy" (P18.96-T2 AC-4): a native date input writes its value in the
+ * The structural half of "no screen shows mm/dd/yyyy" (P18.8-T2 AC-4): a native date input writes its value in the
  * browser's locale, so none is drawn outside the shared field — read from the source, as `password-input.spec.tsx`
  * reads it for passwords.
  */
@@ -154,7 +154,7 @@ describe('every date field goes through DateField', () => {
     expect(files.length).toBeGreaterThan(20);
   });
 
-  it('P18.96-T2 AC-4 no screen declares type="date" itself', () => {
+  it('P18.8-T2 AC-4 no screen declares type="date" itself', () => {
     const offenders = files
       .filter((f) => !f.endsWith(join('ui', 'date-field.tsx')))
       .filter((f) => /type=["']date["']|type:\s*["']date["']/.test(readFileSync(f, 'utf8')))
@@ -163,9 +163,9 @@ describe('every date field goes through DateField', () => {
   });
 });
 
-/** P18.98-T3 AC-1: the face in the reader's language; the value the field holds and answers is ISO in both. */
-describe('P18.98-T3 DateField in each language', () => {
-  it('P18.98-T3 AC-1 writes the face 5 Okt 2026 in Indonesian and 5 Oct 2026 in English, the value ISO in both', () => {
+/** P18.10-T3 AC-1: the face in the reader's language; the value the field holds and answers is ISO in both. */
+describe('P18.10-T3 DateField in each language', () => {
+  it('P18.10-T3 AC-1 writes the face 5 Okt 2026 in Indonesian and 5 Oct 2026 in English, the value ISO in both', () => {
     render(<InLanguage language="id"><Field label="Hari" htmlFor="h"><DateField id="h" value="2026-10-05" onChange={() => undefined} /></Field></InLanguage>);
     render(<InLanguage language="en"><Field label="Day" htmlFor="d"><DateField id="d" value="2026-10-05" onChange={() => undefined} /></Field></InLanguage>);
     expect(faceOf('Hari')).toHaveTextContent('5 Okt 2026');
@@ -176,11 +176,11 @@ describe('P18.98-T3 DateField in each language', () => {
 });
 
 /**
- * **P18.98-T3 figures: the face in the figures' language** — the reader's chosen language, and Indonesian with no
+ * **P18.10-T3 figures: the face in the figures' language** — the reader's chosen language, and Indonesian with no
  * choice, whether or not the switch is live (`useFigureLanguage`). Until it is, a reader with no choice reads *5 Okt
  * 2026* beside English words, as every date field read before T3. Under the app's own provider.
  */
-describe('P18.98-T3 figures DateField', () => {
+describe('P18.10-T3 figures DateField', () => {
   afterEach(() => resetLanguage());
 
   const fields = (live: boolean) => render(
@@ -190,7 +190,7 @@ describe('P18.98-T3 figures DateField', () => {
     </LanguageProvider>,
   );
 
-  it('P18.98-T3 figures, unchosen and not live: 5 Okt 2026 beside English words, the value ISO', () => {
+  it('P18.10-T3 figures, unchosen and not live: 5 Okt 2026 beside English words, the value ISO', () => {
     fields(false);
     expect(faceOf('Join date')).toHaveTextContent('5 Okt 2026');
     expect(faceOf('Start date')).toHaveTextContent(DATE_FIELD_EMPTY);
@@ -198,19 +198,19 @@ describe('P18.98-T3 figures DateField', () => {
     expect(screen.getByLabelText('Join date')).toHaveValue('2026-10-05');
   });
 
-  it('P18.98-T3 figures, chosen English by the browser, not live: 5 Oct 2026', () => {
+  it('P18.10-T3 figures, chosen English by the browser, not live: 5 Oct 2026', () => {
     browserChose('en');
     fields(false);
     expect(faceOf('Join date')).toHaveTextContent('5 Oct 2026');
   });
 
-  it('P18.98-T3 figures, chosen Indonesian by the browser, not live: 5 Okt 2026', () => {
+  it('P18.10-T3 figures, chosen Indonesian by the browser, not live: 5 Okt 2026', () => {
     browserChose('id');
     fields(false);
     expect(faceOf('Join date')).toHaveTextContent('5 Okt 2026');
   });
 
-  it('P18.98-T3 figures, live and unchosen: 5 Okt 2026, in a screen whose language is Indonesian', () => {
+  it('P18.10-T3 figures, live and unchosen: 5 Okt 2026, in a screen whose language is Indonesian', () => {
     fields(true);
     expect(faceOf('Join date')).toHaveTextContent('5 Okt 2026');
     expect(document.documentElement.lang).toBe('id');

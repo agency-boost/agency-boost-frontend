@@ -11,7 +11,7 @@ const MONTHS_ID = [
 ] as const;
 
 /**
- * **Settings › Branch info** (`/kpm/settings/branch-info`, P4-T5; P18.98-T4): what the office is called and where it
+ * **Settings › Branch info** (`/kpm/settings/branch-info`, P4-T5; P18.10-T4): what the office is called and where it
  * is, two fields the platform sets shown read-only. *Save*, *Saving…* and *Saved.* are `settings.ts`'.
  *
  * **Content, shown as typed** (ADR-0179 §5): the office's code, branch name, address and phone, the company's name and

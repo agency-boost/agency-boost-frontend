@@ -6,7 +6,7 @@ export type PillTone = 'success' | 'alert' | 'neutral';
 const PILL: Record<PillTone, { box: string; dot: string }> = {
   success: { box: 'bg-success/10 text-success', dot: 'bg-success' },
   alert: { box: 'bg-alert/10 text-alert', dot: 'bg-alert' },
-  neutral: { box: 'bg-navy/[0.06] text-muted', dot: 'bg-muted' },
+  neutral: { box: 'bg-secondary/[0.06] text-muted', dot: 'bg-muted' },
 };
 
 /**
@@ -55,7 +55,7 @@ export function ResultHead({
   return (
     <div className="flex flex-wrap items-start justify-between gap-4 border-b border-hairline px-5 py-5 sm:flex-nowrap sm:px-6">
       <div className="min-w-0">
-        <p className="m-0 mb-1.5 text-xs font-bold uppercase tracking-wide text-amber-ink">{tag}</p>
+        <p className="m-0 mb-1.5 text-xs font-bold uppercase tracking-wide text-primary-ink">{tag}</p>
         <h2 ref={headingRef} tabIndex={-1} className="m-0 mb-[5px] break-words text-2xl font-bold text-navy">{title}</h2>
         <p className="m-0 text-md text-muted">{tagline}</p>
       </div>

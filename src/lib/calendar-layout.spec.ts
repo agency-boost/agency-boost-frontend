@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { busy, entry, trip, WEEK } from '@test/calendar-fixtures';
 import {
   allDayHeight, columnSpan, DAY_PX, ENTRY_LEADING, ENTRY_PAD_Y_PX, ENTRY_TIME_PX, ENTRY_TITLE_PX, ENTRY_WITH_TIME_PX,
-  HOUR_PX, itemsOnDay, layoutDay, MIN_ENTRY_PX, minutesOf, nextHalfHour, showsTime, slotFromSelection, snapMinutes,
-  stackBars, timedOn,
+  agendaBands, HOUR_PX, isWeekend, itemsOnDay, layoutDay, MIN_ENTRY_PX, minutesOf, nextHalfHour, OPEN_AT_HOUR,
+  openingHour, showsTime, slotFromSelection, snapMinutes, stackBars, timedOn,
 } from './calendar-layout';
 
 const at = (h: number, m = 0) => ((h * 60 + m) / 60) * HOUR_PX;
@@ -156,5 +156,38 @@ describe('what a day holds', () => {
   it('orders entries at one time by their id, and busy blocks without one', () => {
     const same = [entry({ entryId: 'y' }), entry({ entryId: 'x' }), busy({ date: '2026-09-28', start: '09:00', end: '09:30' })];
     expect(itemsOnDay(same, '2026-09-28').map((i) => ('entryId' in i ? i.entryId : 'busy'))).toEqual(['busy', 'x', 'y']);
+  });
+});
+
+describe('P19.1-T3 — the one time grid and the Agenda’s bands', () => {
+  it('P19.1-T3 AC-4 opens an hour before now when today is in view, and at 07.00 on any other days', () => {
+    // *now 10.20 − 1 h* opens at 09.00 (the 2 Nov mockups); 09.45 at 08.00.
+    expect(openingHour(WEEK, '2026-09-28', 10 * 60 + 20)).toBe(9);
+    expect(openingHour(WEEK, '2026-09-28', 585)).toBe(8);
+    expect(openingHour(WEEK, '2026-09-28', 30)).toBe(0);
+    expect(openingHour(WEEK, '2026-10-07', 585)).toBe(OPEN_AT_HOUR);
+    expect(openingHour(WEEK, '2026-09-28', null)).toBe(7);
+  });
+
+  it('P19.1-T3 AC-4 knows a weekend from its date alone', () => {
+    expect(WEEK.map(isWeekend)).toEqual([false, false, false, false, false, true, true]);
+  });
+
+  it('P19.1-T3 AC-7, AC-9 merges consecutive empty days into one band, today always its own: an empty week is two bands', () => {
+    const none = () => true;
+    expect(agendaBands(WEEK, '2026-09-28', none)).toEqual([
+      { from: '2026-09-28', to: '2026-09-28', empty: true },
+      { from: '2026-09-29', to: '2026-10-04', empty: true },
+    ]);
+    // Today in the middle splits the runs on either side of it.
+    expect(agendaBands(WEEK, '2026-09-30', none).map((b) => [b.from, b.to])).toEqual([
+      ['2026-09-28', '2026-09-29'], ['2026-09-30', '2026-09-30'], ['2026-10-01', '2026-10-04'],
+    ]);
+    // A day with something on it stands alone, and so does a single empty day between two such.
+    const busyOn = new Set(['2026-09-28', '2026-09-29', '2026-10-01']);
+    expect(agendaBands(WEEK, '2026-09-28', (d) => !busyOn.has(d)).map((b) => [b.from, b.to, b.empty])).toEqual([
+      ['2026-09-28', '2026-09-28', false], ['2026-09-29', '2026-09-29', false], ['2026-09-30', '2026-09-30', true],
+      ['2026-10-01', '2026-10-01', false], ['2026-10-02', '2026-10-04', true],
+    ]);
   });
 });

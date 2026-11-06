@@ -1,7 +1,7 @@
 import type { InviteView, RequestedTransferView, SharedInvite, TransferView } from '@/lib/invites';
 
 /**
- * **+ Add agent's fixtures** (P18.96-T3; ADR-0170): an invite as the server lists it, its shared form, a transfer, and
+ * **+ Add agent's fixtures** (P18.8-T3; ADR-0170): an invite as the server lists it, its shared form, a transfer, and
  * a join request — the rows `/new-hires`, the Unit Dashboard, *All Members* and the invite pages read.
  */
 export const TODAY = '2026-10-27';

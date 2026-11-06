@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { PageHeader } from '@/components/app-shell';
-import { useFieldChrome } from '@/components/field-nav';
+import { useFieldContent } from '@/components/field-nav';
 import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
 import { forumMessages } from '@/i18n/messages/forum';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
@@ -25,7 +25,7 @@ import { V1MeetingHead } from './v1-meeting';
 
 /**
  * *Details* and *Share*'s dialogs, downloaded when each is first opened and mounted from then on (`useOpenedOnce`;
- * P18.99-T16, the bundle).
+ * P18.11-T16, the bundle).
  */
 const MeetingDialog = dynamic(() => import('./meeting-dialog').then((m) => m.MeetingDialog), { ssr: false });
 const ShareDialog = dynamic(() => import('./share-dialog').then((m) => m.ShareDialog), { ssr: false });
@@ -114,7 +114,7 @@ export function MeetingScreen({ source, titled = false }: {
 /** A phone in the field shell: the owner's meeting page (UI-110). The console and wider screens as before. */
 function useV1(): boolean {
   const phone = usePhone();
-  const field = useFieldChrome() !== null;
+  const field = useFieldContent();
   return phone && field;
 }
 

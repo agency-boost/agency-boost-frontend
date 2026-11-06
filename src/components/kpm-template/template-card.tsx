@@ -19,7 +19,8 @@ export function TemplateCard({ companyId, template }: { companyId: string; templ
   return (
     <Link
       href={templateHref(companyId, template.id)}
-      className="group flex items-center gap-4 rounded-lg border border-card-edge bg-card px-5 py-4 hover:border-navy/30"
+      // At least 56px below 1024px, said where the audit reads it (P19.2-T2 AC-5; UI-135): two lines and 16px above and below.
+      className="group flex items-center gap-4 rounded-lg border border-card-edge bg-card px-5 py-4 hover:border-secondary/30 max-lg:min-h-14"
     >
       <span className="min-w-0 flex-1">
         <span className="flex flex-wrap items-center gap-2">

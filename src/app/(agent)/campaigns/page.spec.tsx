@@ -60,9 +60,20 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
-describe('/campaigns, the list (P18.5-T7)', () => {
+/**
+ * **The list as a desktop reads it** — jsdom answers no width, so these draw the laptop's list. *Changed 2026-11-05
+ * (P19.1-T5 AC-4, AC-5; UI-123: "Card content as UI-108"):* a tablet and a laptop draw the phone's compact list, so the
+ * prototype's underlined tabs, *All · Running · Upcoming · Ended* row, poster, blurb, *Chase* / *View details* buttons
+ * and the five empty lines are gone from here; the tests that pinned them now pin what replaced each. The grid and the
+ * groups sharing a row are pinned at their widths in `campaigns-wide.spec.tsx`.
+ */
+describe('/campaigns, the list (P18.2-T7)', () => {
+  /** An ended campaign's short row: a button whose name starts with its title. */
+  const endedRow = (title: string) => screen.getByRole('button', { name: new RegExp(`^${title}`) });
+  const star = (title: string) => screen.getByRole('button', { name: `Chase ${title}` });
+
   describe('the page, verbatim (AC-2)', () => {
-    it('P18.5-T7 AC-2 the nav item is live and current, its Upcoming pill gone', async () => {
+    it('P18.2-T7 AC-2 the nav item is live and current, its Upcoming pill gone', async () => {
       list();
       await listReady();
       // The field shell's sidebar since UI V1 (UI-004): *Campaign*, under *Program*.
@@ -72,31 +83,33 @@ describe('/campaigns, the list (P18.5-T7)', () => {
       expect(within(item).queryByText('Upcoming')).not.toBeInTheDocument();
     });
 
-    it('P18.5-T7 AC-2 the nav item stays current over a campaign’s dialog', async () => {
+    it('P18.2-T7 AC-2 the nav item stays current over a campaign’s dialog', async () => {
       dialogAt('APE_SPRINT');
       await dialog();
       expect(within(screen.getByRole('navigation', { name: 'Main' })).getByRole('link', { name: 'Campaign' }))
         .toHaveAttribute('aria-current', 'page');
     });
 
-    it('P18.5-T7 AC-2, P18.95-T9 AC-2 and AC-5 is titled as its nav item, sub-titled as drawn, and reads the list once', async () => {
+    it('P18.2-T7 AC-2, P18.7-T9 AC-2 and AC-5 is titled as its nav item, sub-titled as drawn, and reads the list once', async () => {
       const { calls } = list();
       await listReady();
-      // P18.95-T9 AC-2: the nav item's words, *Campaign list* — the prototype titled the page *Campaigns*.
+      // P18.7-T9 AC-2: the nav item's words, *Campaign list* — the prototype titled the page *Campaigns*.
       expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Campaign List$/);
-      // P18.95-T9 AC-5: *tap*, where the prototype said *click into*.
+      // P18.7-T9 AC-5: *tap*, where the prototype said *click into*.
       expect(screen.getByText(
         "Company and KPM campaigns — mark the ones you're chasing, tap any card for full requirements.",
       )).toBeInTheDocument();
       expect(calls.filter((c) => /\/campaigns$/.test(c.url))).toHaveLength(1);
     });
 
-    it('P18.5-T7 AC-2 Seasonal · Structural are a tab list, the chosen one navy over the amber rule', async () => {
+    it('P18.2-T7 AC-2, P19.1-T5 AC-4 Seasonal · Structural are a tab list: one segmented control, the chosen one navy', async () => {
       list();
       await listReady();
       const tabs = within(screen.getByRole('tablist', { name: 'Campaign types' })).getAllByRole('tab');
       expect(tabs.map((t) => [t.textContent, t.getAttribute('aria-selected')])).toEqual([['Seasonal', 'true'], ['Structural', 'false']]);
-      expect(tabs[0]).toHaveClass('border-amber', 'text-navy');
+      // Changed by P19.1-T5 (UI-123, `.seg`): navy on a white pill track, where it was navy words over an amber rule.
+      expect(tabs[0]).toHaveClass('bg-secondary', 'text-secondary-contrast', 'rounded-pill');
+      expect(tabs[0]).not.toHaveClass('border-primary');
       tabs[0].focus();
       await userEvent.keyboard('{ArrowRight}');
       expect(screen.getByRole('tab', { name: 'Structural' })).toHaveAttribute('aria-selected', 'true');
@@ -104,49 +117,50 @@ describe('/campaigns, the list (P18.5-T7)', () => {
       expect(screen.getByRole('tabpanel', { name: 'Structural' })).toBeInTheDocument();
     });
 
-    it('P18.5-T7 AC-2 All · Running · Upcoming · Ended say which is on, the chosen one navy (ADR-0137)', async () => {
+    it('P18.2-T7 AC-2, P19.1-T5 AC-4 no All · Running · Upcoming · Ended row (UI-108: no extra chip row)', async () => {
       list();
       await listReady();
-      const filter = within(screen.getByRole('group', { name: 'Show campaigns' })).getAllByRole('button');
-      expect(filter.map((b) => [b.textContent, b.getAttribute('aria-pressed')])).toEqual([
-        ['All', 'true'], ['Running', 'false'], ['Upcoming', 'false'], ['Ended', 'false'],
-      ]);
-      expect(filter[0]).toHaveClass('bg-navy', 'text-white');
-      expect(filter[0]).not.toHaveClass('bg-amber');
+      expect(screen.queryByRole('group', { name: 'Show campaigns' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'All' })).not.toBeInTheDocument();
     });
 
-    it('P18.5-T7 AC-2 the seasonal sections in order, each shown or hidden whole by the filter', async () => {
+    it('P18.2-T7 AC-2, P19.1-T5 AC-4 the seasonal groups in order, each in sentence case with its count', async () => {
       list();
       await listReady();
-      expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['Running', 'Upcoming', 'Ended']);
-      expect(within(screen.getByRole('region', { name: 'Running' })).getAllByRole('article').map((a) => a.getAttribute('aria-labelledby') && a.querySelector('h3')!.textContent))
+      expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['Running2', 'Upcoming1', 'Ended1']);
+      for (const h of screen.getAllByRole('heading', { level: 2 })) expect(h).not.toHaveClass('uppercase');
+      expect(within(screen.getByRole('region', { name: 'Running' })).getAllByRole('article').map((a) => a.querySelector('h3')!.textContent))
         .toEqual(['Q4 APE Sprint', 'October New Hire Blitz']);
-      await userEvent.click(screen.getByRole('button', { name: 'Ended' }));
-      expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['Ended']);
-      expect(screen.getByRole('button', { name: 'Ended' })).toHaveAttribute('aria-pressed', 'true');
+      expect(within(screen.getByRole('region', { name: 'Ended' })).getByRole('button', { name: /^Mid-Year Persistency Push/ })).toBeInTheDocument();
     });
 
-    it('P18.5-T7 AC-2 the structural sections, Promotion Criteria and Production Clubs, with no filter', async () => {
+    it('P18.2-T7 AC-2 the structural sections, Promotion Criteria and Production Clubs, with no filter', async () => {
       list();
       await listReady();
       await userEvent.click(screen.getByRole('tab', { name: 'Structural' }));
-      expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['Promotion Criteria', 'Production Clubs']);
+      expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['Promotion Criteria2', 'Production Clubs1']);
       expect(screen.queryByRole('group', { name: 'Show campaigns' })).not.toBeInTheDocument();
       expect(within(screen.getByRole('region', { name: 'Production Clubs' })).getByRole('article', { name: 'MDRT Qualification' })).toBeInTheDocument();
     });
 
-    it('P18.5-T7 AC-2 the five empty lines, verbatim', async () => {
+    it('P18.2-T7 AC-2, P19.1-T5 AC-5 an empty group is hidden; with nothing at all, one line, verbatim', async () => {
+      list({ 'GET /campaigns': { body: { campaigns: [CHALLENGE], can: { chase: true } } } });
+      await screen.findByRole('region', { name: 'Upcoming' });
+      // D-08 at every size (UI-123): *Running* and *Ended* have nothing, so neither is drawn — nor its empty line.
+      expect(screen.queryByRole('region', { name: 'Running' })).not.toBeInTheDocument();
+      expect(screen.queryByText('No running campaigns right now.')).not.toBeInTheDocument();
+      expect(screen.queryByText('No ended campaigns to show.')).not.toBeInTheDocument();
+      cleanup();
+      vi.unstubAllGlobals();
       list({ 'GET /campaigns': { body: { campaigns: [], can: { chase: true } } } });
-      await listReady();
-      expect(screen.getByText('No running campaigns right now.')).toBeInTheDocument();
-      expect(screen.getByText('No upcoming campaigns.')).toBeInTheDocument();
-      expect(screen.getByText('No ended campaigns to show.')).toBeInTheDocument();
+      expect(await screen.findByText('No running campaigns right now.')).toBeInTheDocument();
+      expect(screen.queryByText('No upcoming campaigns.')).not.toBeInTheDocument();
       await userEvent.click(screen.getByRole('tab', { name: 'Structural' }));
       expect(screen.getByText('No promotion criteria published yet.')).toBeInTheDocument();
-      expect(screen.getByText('No ongoing incentives right now.')).toBeInTheDocument();
+      expect(screen.queryByText('No ongoing incentives right now.')).not.toBeInTheDocument();
     });
 
-    it('P18.5-T7 AC-2 keeps the server’s order (D-lists): nothing on screen sorts', async () => {
+    it('P18.2-T7 AC-2 keeps the server’s order (D-lists): nothing on screen sorts', async () => {
       const later = campaign({ code: 'B', title: 'Ahead by title, after by date' });
       const sooner = campaign({ code: 'A', title: 'Zeta, first by its end' });
       list({ 'GET /campaigns': { body: { campaigns: [sooner, later], can: { chase: true } } } });
@@ -156,113 +170,113 @@ describe('/campaigns, the list (P18.5-T7)', () => {
     });
   });
 
-  describe('the card (AC-3)', () => {
-    it('P18.5-T7 AC-3 the poster: the emoji hidden, the colour a token, KPM and the status tag', async () => {
+  describe('the card (AC-3; UI-108’s since P19.1-T5)', () => {
+    it('P18.2-T7 AC-3, P19.1-T5 AC-4 a line icon in a tinted tile where the poster was, no emoji; KPM and the period', async () => {
       list();
       await listReady();
       const card = cardOf('Q4 APE Sprint');
-      const emoji = within(card).getByText('🚀');
-      expect(emoji).toHaveAttribute('aria-hidden', 'true');
-      expect(emoji.parentElement).toHaveClass('bg-amber');
-      expect(emoji.parentElement!.getAttribute('style')).toBeNull();
-      expect(within(card).getByText('KPM')).toHaveClass('bg-amber-dark', 'text-navy');
-      expect(within(card).getByText('Running')).toHaveClass('text-success');
-      expect(within(cardOf('Q1 APE Challenge')).getByText('Upcoming')).toBeInTheDocument();
-      expect(within(cardOf('Mid-Year Persistency Push')).getByText('Ended')).toBeInTheDocument();
+      expect(card.textContent).not.toMatch(/\p{Extended_Pictographic}/u);
+      const tile = card.querySelector('svg')!.parentElement!;
+      expect(tile).toHaveAttribute('aria-hidden', 'true');
+      expect(tile).toHaveClass('bg-amber/[0.14]');
+      expect(tile.getAttribute('style')).toBeNull();
+      expect(within(card).getByText('KPM')).toHaveClass('bg-pill-grey', 'text-pill-grey-ink');
+      expect(card).toHaveTextContent('1 Okt – 31 Des 2026');
       await userEvent.click(screen.getByRole('tab', { name: 'Structural' }));
-      expect(within(cardOf('MDRT Qualification')).getByText('Ongoing')).toHaveClass('text-amber-ink');
-      // The poster's 🏆 is the first; the prize line's is the second.
-      expect(within(cardOf('MDRT Qualification')).getAllByText('🏆')[0].parentElement).toHaveClass('bg-gold');
+      expect(cardOf('MDRT Qualification').querySelector('svg')!.parentElement).toHaveClass('bg-gold/[0.14]');
     });
 
-    it('P18.5-T7 AC-3, P18.95-T10 AC-3 the title and its window, the blurb, 🏆 the prize, Needs: in rupiah joined by " + "', async () => {
+    it('P18.2-T7 AC-3, P19.1-T5 AC-4 the title on one line and its window, Prize and Requirements aligned; the blurb is the detail’s', async () => {
       list();
       await listReady();
       const card = cardOf('Q4 APE Sprint');
       expect(within(card).getByRole('heading', { level: 3 })).toHaveTextContent(/^Q4 APE Sprint$/);
-      expect(within(card).getByText('1 Okt – 31 Des 2026')).toBeInTheDocument();
-      expect(within(card).getByText('Push for APE this quarter — top 10 unit-wide win a trip.')).toBeInTheDocument();
-      expect(card).toHaveTextContent('🏆Top 10 unit-wide: 3D2N Bali trip · All qualifiers: Rp 5.000.000 cash bonus');
-      expect(card).toHaveTextContent('Needs: IDR 500M APE + 1 new hire');
-      expect(card).not.toHaveTextContent('Requirements:');
+      expect(within(card).getByRole('heading', { level: 3 })).toHaveClass('truncate');
+      const rows = [...card.querySelectorAll('dt')].map((dt) => [dt.textContent, dt.nextElementSibling!.textContent]);
+      expect(rows).toEqual([
+        ['Prize', 'Top 10 unit-wide: 3D2N Bali trip · All qualifiers: Rp 5.000.000 cash bonus'],
+        ['Requirements', 'IDR 500M APE + 1 new hire'],
+      ]);
+      // UI-108: *description and full terms on the detail page only*.
+      expect(within(card).queryByText('Push for APE this quarter — top 10 unit-wide win a trip.')).not.toBeInTheDocument();
+      expect(card).not.toHaveTextContent('🏆');
     });
 
-    it('P18.95-T10 AC-3 the client’s example: Needs: Rp 16 jt APE + 3 new hires; a promotion’s Rp 1,2 M APE + 3 new active agents', async () => {
+    it('P18.7-T10 AC-3, P18.7-T9 AC-3 the client’s example: Rp 16 jt APE + 3 new hires, APE’s ⓘ where the list first names it', async () => {
       const sixteen = campaign({ code: 'SIXTEEN', title: 'Sixteen', requirements: [APE(16), NEW_HIRE(3)] });
       list({ 'GET /campaigns': { body: { campaigns: [sixteen, PROMO_AGENT], can: { chase: true } } } });
       await listReady();
-      // *APE*'s first appearance on the list carries its ⓘ (P18.95-T9 AC-3): its name and bubble sit after the word.
-      expect(cardOf('Sixteen')).toHaveTextContent(/Needs: IDR 16M APE ⓘWhat is APE\?.+ \+ 3 new hires/);
+      // *APE*'s first appearance on the list carries its ⓘ (P18.7-T9 AC-3, kept on the compact card from 768px).
+      expect(cardOf('Sixteen')).toHaveTextContent(/IDR 16M APE ⓘWhat is APE\?.+ \+ 3 new hires/);
       await userEvent.click(screen.getByRole('tab', { name: 'Structural' }));
-      expect(cardOf('Promotion: Agent → AAB')).toHaveTextContent(/Needs: IDR 1.2B APE ⓘWhat is APE\?.+ \+ 3 new active agents/);
+      expect(cardOf('Promotion: Agent → AAB')).toHaveTextContent(/IDR 1.2B APE ⓘWhat is APE\?.+ \+ 3 new active agents/);
     });
 
-    it('P18.5-T7 AC-3 Promotion path over a promotion’s title, and nowhere else', async () => {
-      list();
-      await listReady();
-      await userEvent.click(screen.getByRole('tab', { name: 'Structural' }));
-      expect(within(cardOf('Promotion: Agent → AAB')).getByText('Promotion path')).toHaveClass('text-amber-ink');
-      expect(within(cardOf('MDRT Qualification')).queryByText('Promotion path')).not.toBeInTheDocument();
-      expect(within(cardOf('Promotion: Agent → AAB')).getByText('Rolling 12-month window')).toBeInTheDocument();
-    });
-
-    it('P18.5-T7 AC-3 Chase and Chasing are action buttons, amber with navy words; the chased state by its label, a ✓ and aria-pressed', async () => {
-      list();
-      await listReady();
-      const chasing = within(cardOf('Q4 APE Sprint')).getByRole('button', { name: 'Chasing' });
-      expect(chasing).toHaveAttribute('aria-pressed', 'true');
-      expect(chasing).toHaveTextContent('✓ ⭐Chasing');
-      expect(chasing).toHaveClass('bg-amber', 'text-navy');
-      const chase = within(cardOf('October New Hire Blitz')).getByRole('button', { name: 'Chase' });
-      expect(chase).toHaveAttribute('aria-pressed', 'false');
-      expect(chase).toHaveTextContent('☆Chase');
-      expect(chase).not.toHaveTextContent('✓');
-      expect(chase).toHaveClass('bg-amber', 'text-navy');
-      expect(within(cardOf('October New Hire Blitz')).getByRole('button', { name: 'View details' })).toBeInTheDocument();
-    });
-
-    it('P18.5-T7 AC-3, P18.95-T10 AC-2 an ended card is grey and draws no chase — not even disabled; its tag says Ended', async () => {
-      list();
-      await listReady();
-      const card = cardOf('Mid-Year Persistency Push');
-      expect(card).toHaveClass('grayscale-[45%]');
-      expect(within(card).queryByRole('button', { name: /^Chas/ })).not.toBeInTheDocument();
-      expect(card.querySelector('[data-chase]')).toBeNull();
-      expect(within(card).queryByRole('button', { name: 'This campaign has ended.' })).not.toBeInTheDocument();
-      expect(within(card).getByText('Ended')).toBeInTheDocument();
-      // View details stays on the right, where the chase is not.
-      expect(within(card).getByRole('button', { name: 'View details' })).toBeInTheDocument();
-      expect(cardOf('Q4 APE Sprint')).not.toHaveClass('grayscale-[45%]');
-      expect(within(cardOf('Q4 APE Sprint')).getByRole('button', { name: 'Chasing' })).toBeEnabled();
-      expect(within(cardOf('Q1 APE Challenge')).getByRole('button', { name: 'Chase' })).toBeEnabled();
-    });
-
-    it('P18.5-T7 AC-3 a campaign not for the reader’s rung draws its chase disabled, saying why', async () => {
-      list();
-      await listReady();
-      await userEvent.click(screen.getByRole('tab', { name: 'Structural' }));
-      const card = cardOf('Promotion: AAB → AB');
-      expect(within(card).getByRole('button', { name: 'Chase' })).toBeDisabled();
-      expect(within(card).getByRole('button', { name: 'This campaign is not open to your role.' })).toBeInTheDocument();
-      expect(within(cardOf('Promotion: Agent → AAB')).getByRole('button', { name: 'Chase' })).toBeEnabled();
-    });
-
-    it('P18.5-T7 AC-1 a read-only support session reads the list and draws no chase', async () => {
-      list({ 'GET /campaigns': { body: { ...LIST, can: { chase: false } } } }, READ_ONLY_RINA);
-      await listReady();
-      expect(cardOf('Q4 APE Sprint')).toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: /^Chas/ })).not.toBeInTheDocument();
-      expect(screen.getAllByRole('button', { name: 'View details' }).length).toBeGreaterThan(0);
-    });
-
-    it('P18.5-T7 AC-3 is an article whose control is View details, not a clickable card', async () => {
+    it('P18.7-T9 AC-3 a term in a title carries its ⓘ beside the heading, not in it, and once on the list', async () => {
       list();
       await listReady();
       const card = cardOf('Q4 APE Sprint');
-      await userEvent.click(within(card).getByRole('heading', { level: 3 }));
+      expect(within(card).getByRole('heading', { level: 3 })).toHaveTextContent(/^Q4 APE Sprint$/);
+      expect(card).toHaveTextContent(/Q4 APE SprintⓘWhat is APE\?/);
+      expect(screen.getAllByText('What is APE?')).toHaveLength(1);
+    });
+
+    it('P18.2-T7 AC-3, P19.1-T5 AC-4 a promotion’s card shows its window; Promotion path is the detail’s', async () => {
+      list();
+      await listReady();
+      await userEvent.click(screen.getByRole('tab', { name: 'Structural' }));
+      expect(cardOf('Promotion: Agent → AAB')).toHaveTextContent('Rolling 12-month window');
+      expect(within(cardOf('Promotion: Agent → AAB')).queryByText('Promotion path')).not.toBeInTheDocument();
+    });
+
+    it('P18.2-T7 AC-3, P19.1-T5 AC-4 Kejar is a round star: its state aria-pressed, its name the campaign’s, amber when chased', async () => {
+      list();
+      await listReady();
+      expect(star('Q4 APE Sprint')).toHaveAttribute('aria-pressed', 'true');
+      expect(star('Q4 APE Sprint')).toHaveClass('bg-primary', 'text-primary-contrast');
+      expect(star('October New Hire Blitz')).toHaveAttribute('aria-pressed', 'false');
+      expect(star('October New Hire Blitz')).toHaveClass('bg-card');
+      expect(screen.queryByRole('button', { name: 'View details' })).not.toBeInTheDocument();
+    });
+
+    it('P18.2-T7 AC-3, P18.7-T10 AC-2 an ended campaign is a short greyed row with ›: no chase, not even disabled', async () => {
+      list();
+      await listReady();
+      const row = endedRow('Mid-Year Persistency Push');
+      expect(row.querySelector('[data-chase]')).toBeNull();
+      expect(within(row).queryByRole('button')).not.toBeInTheDocument();
+      expect(row.querySelector('svg')!.parentElement).toHaveClass('bg-pill-grey', 'text-muted');
+      expect(screen.queryByRole('article', { name: 'Mid-Year Persistency Push' })).not.toBeInTheDocument();
+      expect(star('Q4 APE Sprint')).toBeEnabled();
+      expect(star('Q1 APE Challenge')).toBeEnabled();
+    });
+
+    it('P18.2-T7 AC-3 a campaign not for the reader’s rung draws its chase held, saying why', async () => {
+      list();
+      await listReady();
+      await userEvent.click(screen.getByRole('tab', { name: 'Structural' }));
+      expect(star('Promotion: AAB → AB')).toBeDisabled();
+      expect(star('Promotion: AAB → AB')).toHaveAttribute('title', 'This campaign is not open to your role.');
+      expect(star('Promotion: Agent → AAB')).toBeEnabled();
+    });
+
+    it('P18.2-T7 AC-1 a read-only support session reads the list and draws no chase', async () => {
+      list({ 'GET /campaigns': { body: { ...LIST, can: { chase: false } } } }, READ_ONLY_RINA);
+      await listReady();
+      expect(cardOf('Q4 APE Sprint')).toBeInTheDocument();
+      expect(document.querySelector('[data-chase]')).toBeNull();
+      expect(screen.getByRole('button', { name: 'Q4 APE Sprint' })).toBeInTheDocument();
+    });
+
+    it('P18.2-T7 AC-3, P19.1-T5 AC-4 the whole card opens the detail; the star is its own target', async () => {
+      list();
+      await listReady();
+      await userEvent.click(star('October New Hire Blitz'));
       expect(nav.push).not.toHaveBeenCalled();
-      await userEvent.click(within(card).getByRole('button', { name: 'View details' }));
+      await userEvent.click(within(cardOf('Q4 APE Sprint')).getByRole('button', { name: 'Q4 APE Sprint' }));
       expect(nav.push).toHaveBeenCalledWith('/campaigns/APE_SPRINT', { scroll: false });
+      await userEvent.click(endedRow('Mid-Year Persistency Push'));
+      expect(nav.push).toHaveBeenCalledWith('/campaigns/PERSISTENCY_PUSH', { scroll: false });
     });
 
     it('row 25: authored words are text, never markup', async () => {
@@ -271,41 +285,41 @@ describe('/campaigns, the list (P18.5-T7)', () => {
       });
       list({ 'GET /campaigns': { body: { campaigns: [hostile], can: { chase: true } } } });
       await listReady();
-      expect(screen.getByText('<img src=x onerror=alert(1)>')).toBeInTheDocument();
-      expect(screen.getByText('<script>alert(1)</script>')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { level: 3, name: '<img src=x onerror=alert(1)>' })).toBeInTheDocument();
+      expect(screen.getByText('<b>prize</b>')).toBeInTheDocument();
       expect(document.querySelector('script, img[src="x"], b')).toBeNull();
     });
 
-    it('P18.5-T7 AC-3 the grid is one column on a phone, never wider than the page', async () => {
+    it('P18.2-T7 AC-3, P19.1-T5 AC-4 the grid: columns of at least 300px, never wider than the page', async () => {
       list();
       await listReady();
       const grid = cardOf('Q4 APE Sprint').parentElement!;
-      expect(grid).toHaveClass('grid-cols-[repeat(auto-fill,minmax(min(100%,290px),1fr))]');
+      expect(grid).toHaveClass('grid', 'grid-cols-[repeat(auto-fill,minmax(min(100%,300px),1fr))]');
     });
   });
 
   describe('chasing (AC-5)', () => {
-    it('P18.5-T7 AC-5 a chase is a PUT, its toast verbatim, the card the server’s answer', async () => {
+    it('P18.2-T7 AC-5 a chase is a PUT, its toast verbatim, the card the server’s answer', async () => {
       const { calls } = list({ 'PUT /campaigns/NEW_HIRE_BLITZ/chase': { body: { ...LIST.campaigns[1], chasing: true } } });
       await listReady();
-      await userEvent.click(within(cardOf('October New Hire Blitz')).getByRole('button', { name: 'Chase' }));
+      await userEvent.click(star('October New Hire Blitz'));
       expect(await screen.findByText('Now chasing "October New Hire Blitz"')).toBeInTheDocument();
-      expect(within(cardOf('October New Hire Blitz')).getByRole('button', { name: 'Chasing' })).toHaveAttribute('aria-pressed', 'true');
+      expect(star('October New Hire Blitz')).toHaveAttribute('aria-pressed', 'true');
       const put = calls.find((c) => c.init.method === 'PUT')!;
       expect(put.url).toBe('http://api.test/api/v1/campaigns/NEW_HIRE_BLITZ/chase');
       expect(put.init.body).toBeUndefined();
     });
 
-    it('P18.5-T7 AC-5 stopping is a DELETE, its toast verbatim', async () => {
+    it('P18.2-T7 AC-5 stopping is a DELETE, its toast verbatim', async () => {
       const { calls } = list({ 'DELETE /campaigns/APE_SPRINT/chase': { body: { ...SPRINT, chasing: false } } });
       await listReady();
-      await userEvent.click(within(cardOf('Q4 APE Sprint')).getByRole('button', { name: 'Chasing' }));
+      await userEvent.click(star('Q4 APE Sprint'));
       expect(await screen.findByText('Removed "Q4 APE Sprint" from your chase list')).toBeInTheDocument();
-      expect(within(cardOf('Q4 APE Sprint')).getByRole('button', { name: 'Chase' })).toHaveAttribute('aria-pressed', 'false');
+      expect(star('Q4 APE Sprint')).toHaveAttribute('aria-pressed', 'false');
       expect(calls.filter((c) => c.init.method === 'DELETE')).toHaveLength(1);
     });
 
-    it('P18.5-T7 AC-5 a refusal is said on the card, and the list read again so the card says why', async () => {
+    it('P18.2-T7 AC-5 a refusal is said on the card, and the list read again so the campaign moves to Ended', async () => {
       const ended: CampaignList = {
         ...LIST,
         campaigns: LIST.campaigns.map((c) => (c.code === 'NEW_HIRE_BLITZ' ? { ...c, phase: 'ended', chaseBlocked: 'ended' } : c)),
@@ -315,41 +329,46 @@ describe('/campaigns, the list (P18.5-T7)', () => {
         'PUT /campaigns/NEW_HIRE_BLITZ/chase': notOpen,
       });
       await listReady();
-      await userEvent.click(within(cardOf('October New Hire Blitz')).getByRole('button', { name: 'Chase' }));
-      expect(await screen.findByRole('alert')).toHaveTextContent('This campaign has ended, so it can no longer be chased or dropped.');
+      await userEvent.click(star('October New Hire Blitz'));
       await waitFor(() => expect(calls.filter((c) => /\/campaigns$/.test(c.url))).toHaveLength(2));
-      // P18.95-T10 AC-2: read again, the ended card draws no chase at all; the refusal stays said on it.
-      await waitFor(() => expect(within(cardOf('October New Hire Blitz')).queryByRole('button', { name: 'Chase' })).not.toBeInTheDocument());
-      expect(within(cardOf('October New Hire Blitz')).getByRole('alert')).toBeInTheDocument();
+      // P18.7-T10 AC-2: read again, it is an ended row under *Ended*, with no chase at all — where it says why.
+      await waitFor(() => expect(within(screen.getByRole('region', { name: 'Ended' })).getByRole('button', { name: /^October New Hire Blitz/ })).toBeInTheDocument());
+      expect(screen.queryByRole('button', { name: 'Chase October New Hire Blitz' })).not.toBeInTheDocument();
       expect(screen.queryByText(/^Now chasing/)).not.toBeInTheDocument();
+    });
+
+    it('P18.2-T7 AC-5 a refusal the list does not re-read is said under the card', async () => {
+      const { calls } = list({ 'PUT /campaigns/NEW_HIRE_BLITZ/chase': serverError });
+      await listReady();
+      await userEvent.click(star('October New Hire Blitz'));
+      expect(await within(cardOf('October New Hire Blitz')).findByRole('alert')).toHaveTextContent('Something went wrong.');
+      expect(calls.filter((c) => /\/campaigns$/.test(c.url))).toHaveLength(1);
     });
   });
 
   describe('the exit review’s fixes', () => {
-    it('P18.5-T7 AC-5 a chaser whose rung has changed can still drop the chase: only joining is closed to them', async () => {
+    it('P18.2-T7 AC-5 a chaser whose rung has changed can still drop the chase: only joining is closed to them', async () => {
       const moved = campaign({ code: 'MOVED', title: 'Closed to my new rung', chasing: true, eligible: false, chaseBlocked: 'not_eligible' });
       const { calls } = list({
         'GET /campaigns': { body: { campaigns: [moved], can: { chase: true } } },
         'DELETE /campaigns/MOVED/chase': { body: { ...moved, chasing: false } },
       });
       await listReady();
-      const chasing = within(cardOf('Closed to my new rung')).getByRole('button', { name: 'Chasing' });
-      expect(chasing).toBeEnabled();
-      expect(within(cardOf('Closed to my new rung')).queryByRole('button', { name: 'This campaign is not open to your role.' })).not.toBeInTheDocument();
-      await userEvent.click(chasing);
+      expect(star('Closed to my new rung')).toBeEnabled();
+      expect(star('Closed to my new rung')).not.toHaveAttribute('title');
+      await userEvent.click(star('Closed to my new rung'));
       expect(await screen.findByText('Removed "Closed to my new rung" from your chase list')).toBeInTheDocument();
       expect(calls.filter((c) => c.init.method === 'DELETE')).toHaveLength(1);
       // Dropped, the campaign is closed to the rung again: held, and why.
-      const chase = within(cardOf('Closed to my new rung')).getByRole('button', { name: 'Chase' });
-      expect(chase).toBeDisabled();
-      expect(within(cardOf('Closed to my new rung')).getByRole('button', { name: 'This campaign is not open to your role.' })).toBeInTheDocument();
+      expect(star('Closed to my new rung')).toBeDisabled();
+      expect(star('Closed to my new rung')).toHaveAttribute('title', 'This campaign is not open to your role.');
     });
 
-    it('P18.5-T7 AC-1 an elevated support session draws no chase either: the server’s can.chase decides', async () => {
+    it('P18.2-T7 AC-1 an elevated support session draws no chase either: the server’s can.chase decides', async () => {
       const elevated = { ...RINA_ME, isImpersonating: true, impersonationReadOnly: false, impersonatedBy: 'u-root' };
       list({ 'GET /campaigns': { body: { ...LIST, can: { chase: false } } } }, elevated);
       await listReady();
-      expect(screen.queryByRole('button', { name: /^Chas/ })).not.toBeInTheDocument();
+      expect(document.querySelector('[data-chase]')).toBeNull();
       vi.unstubAllGlobals();
       document.body.innerHTML = '';
       dialogAt('APE_SPRINT', { 'GET /campaigns/APE_SPRINT': { body: detail({ can: { chase: false } }) } }, elevated);
@@ -369,8 +388,8 @@ describe('/campaigns, the list (P18.5-T7)', () => {
   });
 });
 
-describe('/campaigns/[campaignCode], the dialog (P18.5-T7 AC-4, P18.5-T8 AC-6)', () => {
-  it('P18.5-T7 AC-4 is a dialog named by the campaign, the focus moved into it, over an inert list', async () => {
+describe('/campaigns/[campaignCode], the dialog (P18.2-T7 AC-4, P18.2-T8 AC-6)', () => {
+  it('P18.2-T7 AC-4 is a dialog named by the campaign, the focus moved into it, over an inert list', async () => {
     dialogAt('APE_SPRINT');
     const box = await dialog();
     expect(box).toHaveAttribute('aria-modal', 'true');
@@ -379,7 +398,7 @@ describe('/campaigns/[campaignCode], the dialog (P18.5-T7 AC-4, P18.5-T8 AC-6)',
     expect(document.querySelector('[data-campaign-card="APE_SPRINT"]')!.closest('[inert]')).not.toBeNull();
   });
 
-  it('P18.5-T7 AC-4 the poster, ✕ named Close, the tags, the title, 📅 the window, the description as text, the Prize', async () => {
+  it('P18.2-T7 AC-4 the poster, ✕ named Close, the tags, the title, 📅 the window, the description as text, the Prize', async () => {
     dialogAt('APE_SPRINT');
     const box = await dialog();
     expect(within(box).getByText('🚀')).toHaveAttribute('aria-hidden', 'true');
@@ -392,7 +411,7 @@ describe('/campaigns/[campaignCode], the dialog (P18.5-T7 AC-4, P18.5-T8 AC-6)',
     expect(box).toHaveTextContent('PrizeTop 10 unit-wide: 3D2N Bali trip · All qualifiers: Rp 5.000.000 cash bonus');
   });
 
-  it('P18.96-T1 AC-2 the dialog is capped at the dynamic viewport and scrolls inside, and the page behind holds still', async () => {
+  it('P18.8-T1 AC-2 the dialog is capped at the dynamic viewport and scrolls inside, and the page behind holds still', async () => {
     document.body.style.overflow = 'auto';
     try {
       dialogAt('APE_SPRINT');
@@ -409,14 +428,14 @@ describe('/campaigns/[campaignCode], the dialog (P18.5-T7 AC-4, P18.5-T8 AC-6)',
     }
   });
 
-  it('P18.5-T7 AC-4 Promotion path in a promotion’s dialog', async () => {
+  it('P18.2-T7 AC-4 Promotion path in a promotion’s dialog', async () => {
     dialogAt('PROMOTION_AGENT_AAB', { 'GET /campaigns/PROMOTION_AGENT_AAB': { body: detail({ ...PROMO_AGENT, progress: null }) } });
     const box = await dialog('Promotion: Agent → AAB');
     expect(within(box).getByText('Promotion path')).toBeInTheDocument();
     expect(within(box).getByText('Ongoing')).toBeInTheDocument();
   });
 
-  it('P18.5-T8 AC-6 each requirement row: "{current} of {target}", ✓ when met, Not uploaded yet — never ✕ — and the months read', async () => {
+  it('P18.2-T8 AC-6 each requirement row: "{current} of {target}", ✓ when met, Not uploaded yet — never ✕ — and the months read', async () => {
     dialogAt('APE_SPRINT');
     const box = await dialog();
     const requirements = within(box).getByRole('region', { name: /^Requirements/ });
@@ -430,7 +449,7 @@ describe('/campaigns/[campaignCode], the dialog (P18.5-T7 AC-4, P18.5-T8 AC-6)',
     expect(box).not.toHaveTextContent('✕Not');
   });
 
-  it('P18.5-T8 AC-6 a row not yet met reads its figure with no mark; one nothing measures says so', async () => {
+  it('P18.2-T8 AC-6 a row not yet met reads its figure with no mark; one nothing measures says so', async () => {
     dialogAt('APE_SPRINT', {
       'GET /campaigns/APE_SPRINT': {
         body: detail({
@@ -452,7 +471,7 @@ describe('/campaigns/[campaignCode], the dialog (P18.5-T7 AC-4, P18.5-T8 AC-6)',
     ]);
   });
 
-  it('P18.5-T8 AC-6 an activity requirement with nothing logged reads Nothing logged yet, not Not uploaded yet', async () => {
+  it('P18.2-T8 AC-6 an activity requirement with nothing logged reads Nothing logged yet, not Not uploaded yet', async () => {
     const ratio = {
       metricKey: 'SELLING_SUCCESS_RATE', metricName: 'Selling success rate', comparator: 'gte' as const, value: 0.15, unit: 'ratio', measured: true,
     };
@@ -472,14 +491,14 @@ describe('/campaigns/[campaignCode], the dialog (P18.5-T7 AC-4, P18.5-T8 AC-6)',
     expect(rows[0]).not.toHaveTextContent('Not uploaded yet');
   });
 
-  it('P18.5-T8 AC-6 an upcoming campaign’s rows are their targets alone, as drawn', async () => {
+  it('P18.2-T8 AC-6 an upcoming campaign’s rows are their targets alone, as drawn', async () => {
     dialogAt('APE_CHALLENGE_NEXT', { 'GET /campaigns/APE_CHALLENGE_NEXT': { body: detail({ ...CHALLENGE, progress: null }) } });
     const box = await dialog('Q1 APE Challenge');
     expect(within(box).getAllByRole('listitem').map((r) => r.textContent)).toEqual(['APE achievedIDR 300M']);
     expect(within(box).getByRole('heading', { level: 3 })).toHaveTextContent(/^Requirements$/);
   });
 
-  it('P18.5-T7 AC-4 ✕, the backdrop and Escape close it — to the list’s address when it was typed', async () => {
+  it('P18.2-T7 AC-4 ✕, the backdrop and Escape close it — to the list’s address when it was typed', async () => {
     dialogAt('APE_SPRINT');
     const box = await dialog();
     await userEvent.click(within(box).getByRole('button', { name: 'Close' }));
@@ -493,17 +512,18 @@ describe('/campaigns/[campaignCode], the dialog (P18.5-T7 AC-4, P18.5-T8 AC-6)',
     expect(nav.back).not.toHaveBeenCalled();
   });
 
-  it('P18.5-T7 AC-4 closing a dialog the list opened goes back, so Back and ✕ agree', async () => {
+  it('P18.2-T7 AC-4 closing a dialog the list opened goes back, so Back and ✕ agree', async () => {
     dialogAt('APE_SPRINT');
     await dialog();
     await listReady();
-    await userEvent.click(within(cardOf('Q4 APE Sprint')).getByRole('button', { name: 'View details' }), { pointerEventsCheck: 0 });
+    // The whole card opens it (UI-108 at every size since P19.1-T5): its stretched button, named by the title.
+    await userEvent.click(within(cardOf('Q4 APE Sprint')).getByRole('button', { name: 'Q4 APE Sprint', hidden: true }), { pointerEventsCheck: 0 });
     expect(nav.push).toHaveBeenCalledWith('/campaigns/APE_SPRINT', { scroll: false });
     await userEvent.click(screen.getByRole('button', { name: 'Close' }));
     expect(nav.back).toHaveBeenCalledTimes(1);
   });
 
-  it('P18.5-T7 AC-4 the focus stays inside it: Tab from the last control comes back to the first', async () => {
+  it('P18.2-T7 AC-4 the focus stays inside it: Tab from the last control comes back to the first', async () => {
     dialogAt('APE_SPRINT');
     const box = await dialog();
     const chase = within(box).getByRole('button', { name: 'Chasing' });
@@ -514,7 +534,7 @@ describe('/campaigns/[campaignCode], the dialog (P18.5-T7 AC-4, P18.5-T8 AC-6)',
     expect(document.activeElement).toBe(chase);
   });
 
-  it('P18.5-T7 AC-4 as it closes, the focus goes back to the card’s View details', async () => {
+  it('P18.2-T7 AC-4 as it closes, the focus goes back to the card’s own target (its View details until P19.1-T5)', async () => {
     const { view } = dialogAt('APE_SPRINT');
     await dialog();
     await listReady();
@@ -527,27 +547,27 @@ describe('/campaigns/[campaignCode], the dialog (P18.5-T7 AC-4, P18.5-T8 AC-6)',
       </SessionContext.Provider>,
     );
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-    expect(document.activeElement).toBe(within(cardOf('Q4 APE Sprint')).getByRole('button', { name: 'View details' }));
+    expect(document.activeElement).toBe(within(cardOf('Q4 APE Sprint')).getByRole('button', { name: 'Q4 APE Sprint' }));
   });
 
-  it('P18.5-T7 AC-5 a chase in the dialog updates the dialog and the card beneath, with one toast', async () => {
+  it('P18.2-T7 AC-5 a chase in the dialog updates the dialog and the card beneath, with one toast', async () => {
     dialogAt('APE_SPRINT', { 'DELETE /campaigns/APE_SPRINT/chase': { body: { ...SPRINT, chasing: false } } });
     const box = await dialog();
     await listReady();
     await userEvent.click(within(box).getByRole('button', { name: 'Chasing' }));
     expect(await screen.findByText('Removed "Q4 APE Sprint" from your chase list')).toBeInTheDocument();
     expect(within(box).getByRole('button', { name: 'Chase' })).toHaveAttribute('aria-pressed', 'false');
-    expect(within(cardOf('Q4 APE Sprint')).getByRole('button', { name: 'Chase', hidden: true })).toHaveAttribute('aria-pressed', 'false');
+    expect(within(cardOf('Q4 APE Sprint')).getByRole('button', { name: 'Chase Q4 APE Sprint', hidden: true })).toHaveAttribute('aria-pressed', 'false');
     expect(screen.getAllByText('Removed "Q4 APE Sprint" from your chase list')).toHaveLength(1);
   });
 
-  it('P18.5-T7 AC-1 a read-only support session’s dialog draws no chase', async () => {
+  it('P18.2-T7 AC-1 a read-only support session’s dialog draws no chase', async () => {
     dialogAt('APE_SPRINT', { 'GET /campaigns/APE_SPRINT': { body: detail({ can: { chase: false } }) } }, READ_ONLY_RINA);
     const box = await dialog();
     expect(within(box).queryByRole('button', { name: /^Chas/ })).not.toBeInTheDocument();
   });
 
-  it('P18.5-T7 AC-1 another office’s code, an archived one or a typo is the not-found state', async () => {
+  it('P18.2-T7 AC-1 another office’s code, an archived one or a typo is the not-found state', async () => {
     dialogAt('GADING_PUSH', { 'GET /campaigns/GADING_PUSH': notFound });
     expect(await screen.findByText('This campaign isn’t on your list.')).toBeInTheDocument();
     expect(screen.getByText('It may have been withdrawn, or the address may be mistyped.')).toBeInTheDocument();
@@ -556,13 +576,13 @@ describe('/campaigns/[campaignCode], the dialog (P18.5-T7 AC-4, P18.5-T8 AC-6)',
     expect(nav.replace).toHaveBeenCalledWith('/campaigns', { scroll: false });
   });
 
-  it('P18.5-T7 AC-1 /campaigns/chasing typed in the address is a campaign not found, and nothing reads it as one', async () => {
+  it('P18.2-T7 AC-1 /campaigns/chasing typed in the address is a campaign not found, and nothing reads it as one', async () => {
     const { calls } = dialogAt('chasing', { 'GET /campaigns/chasing': { body: { membershipId: 'mem-rina', campaigns: [] } } });
     expect(await screen.findByText('This campaign isn’t on your list.')).toBeInTheDocument();
     expect(calls.some((c) => c.url.endsWith('/campaigns/chasing'))).toBe(false);
   });
 
-  it('P18.5-T8 AC-6 two requirements on one metric each read their own progress row, by position', async () => {
+  it('P18.2-T8 AC-6 two requirements on one metric each read their own progress row, by position', async () => {
     dialogAt('APE_SPRINT', {
       'GET /campaigns/APE_SPRINT': {
         body: detail({
@@ -600,7 +620,7 @@ describe('/campaigns/[campaignCode], the dialog (P18.5-T7 AC-4, P18.5-T8 AC-6)',
     expect(box.querySelector('script, b')).toBeNull();
   });
 
-  it('P18.95-T10 AC-2 the dialog of an ended campaign the reader chased draws no chase; its tag says Ended', async () => {
+  it('P18.7-T10 AC-2 the dialog of an ended campaign the reader chased draws no chase; its tag says Ended', async () => {
     dialogAt('PERSISTENCY_PUSH', { 'GET /campaigns/PERSISTENCY_PUSH': { body: detail({ ...PUSH, progress: null }) } });
     const box = await dialog('Mid-Year Persistency Push');
     expect(within(box).queryByRole('button', { name: /^Chas/ })).not.toBeInTheDocument();
@@ -610,11 +630,11 @@ describe('/campaigns/[campaignCode], the dialog (P18.5-T7 AC-4, P18.5-T8 AC-6)',
 });
 
 /**
- * **A ratio requirement in the office's unit for it** (P18.97-T7; ADR-0174 §2, *one way of writing a percentage*): the
+ * **A ratio requirement in the office's unit for it** (P18.9-T7; ADR-0174 §2, *one way of writing a percentage*): the
  * card's *Needs:* line and the dialog's rows read *30%* where the office writes the ratio as a percentage, as its
- * settings have since P18.97-T4 AC-8 — where the card read *0,30*.
+ * settings have since P18.9-T4 AC-8 — where the card read *0,30*.
  */
-describe('P18.97-T7 a ratio requirement on the agents’ cards and dialog', () => {
+describe('P18.9-T7 a ratio requirement on the agents’ cards and dialog', () => {
   afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
@@ -636,20 +656,21 @@ describe('P18.97-T7 a ratio requirement on the agents’ cards and dialog', () =
     },
   });
 
-  it('P18.97-T7 writes the card’s Needs: line in the office’s unit for the ratio: 30%', async () => {
+  // The card's *Needs:* line is its *Requirements* row since P19.1-T5 (UI-108's card at every size).
+  it('P18.9-T7 writes the card’s Needs: line in the office’s unit for the ratio: 30%', async () => {
     list({ ...config('percent'), 'GET /campaigns': { body: { ...LIST, campaigns: [RECRUIT] } } });
     await listReady();
-    await waitFor(() => expect(cardOf('Recruitment Drive')).toHaveTextContent('Needs: Recruitment success rate 30%'));
+    await waitFor(() => expect(cardOf('Recruitment Drive')).toHaveTextContent('RequirementsRecruitment success rate 30%'));
     expect(cardOf('Recruitment Drive')).not.toHaveTextContent('0.30');
   });
 
-  it('P18.97-T7 keeps a ratio the office writes as a number a number: 0,30', async () => {
+  it('P18.9-T7 keeps a ratio the office writes as a number a number: 0,30', async () => {
     list({ ...config('decimal'), 'GET /campaigns': { body: { ...LIST, campaigns: [RECRUIT] } } });
     await listReady();
-    expect(cardOf('Recruitment Drive')).toHaveTextContent('Needs: Recruitment success rate 0.30');
+    expect(cardOf('Recruitment Drive')).toHaveTextContent('RequirementsRecruitment success rate 0.30');
   });
 
-  it('P18.97-T7 writes the dialog’s row in the same unit: the figure to its tenth, of the target as typed', async () => {
+  it('P18.9-T7 writes the dialog’s row in the same unit: the figure to its tenth, of the target as typed', async () => {
     dialogAt('RECRUIT_DRIVE', {
       ...config('percent'),
       'GET /campaigns': { body: { ...LIST, campaigns: [RECRUIT] } },
@@ -719,7 +740,7 @@ describe('UI-108 /campaigns on a phone', () => {
     await listReady();
     const tabs = screen.getByRole('tablist');
     expect(tabs).toHaveClass('max-md:rounded-pill', 'max-md:bg-card');
-    expect(within(tabs).getByRole('tab', { name: 'Seasonal' }).firstElementChild).toHaveClass('max-md:bg-navy');
+    expect(within(tabs).getByRole('tab', { name: 'Seasonal' }).firstElementChild).toHaveClass('max-md:bg-secondary');
     expect(screen.getByRole('heading', { level: 1 }).nextElementSibling).toHaveClass('max-md:hidden');
   });
 });

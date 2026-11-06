@@ -3,7 +3,7 @@
 import { useEffect, useLayoutEffect, useState } from 'react';
 
 /**
- * **The three sizes every screen is drawn for, named once** (P18.97-T6 AC-2, ADR-0178; the client's scope tags of
+ * **The three sizes every screen is drawn for, named once** (P18.9-T6 AC-2, ADR-0178; the client's scope tags of
  * 2026-10-27: *Mobile* below 768px, *Tablet* 768–1023px, *Desktop* 1024px and wider). A finding changes the sizes it
  * lists and no other, so a screen that changes by size asks for one of these, never a width of its own.
  *
@@ -15,6 +15,12 @@ export const MEDIA_RANGES = {
   phone: '(max-width: 767.98px)',
   tablet: '(min-width: 768px) and (max-width: 1023.98px)',
   desktop: '(min-width: 1024px)',
+  /**
+   * **The narrow desktop, 1024–1279px: part of *Desktop*, not a fourth size** (P19.1-T1 AC-4, ADR-0196; UI-114: an
+   * iPad in landscape hits 1024). The field shell's sidebar is the 64px rail here and full from 1280px, Tailwind's `xl`.
+   * Asked for by what changes there and nothing else; a screen's own layout says it with `lg:max-xl:` and `xl:`.
+   */
+  laptop: '(min-width: 1024px) and (max-width: 1279.98px)',
 } as const;
 
 export type MediaRange = keyof typeof MEDIA_RANGES;
@@ -33,7 +39,7 @@ const useBeforePaint = typeof window === 'undefined' ? useEffect : useLayoutEffe
  * **When it answers.** In an effect, by default — after the first paint, as `usePhone` always has, so a screen asks
  * where it mounts, before its read, and the frame before the answer is a skeleton. **`beforePaint`** answers before
  * the first paint instead, for what is drawn the moment it mounts and would otherwise show one frame of the other
- * size: the shell's sidebar, which opens on the rail on a tablet (P18.97-T6 AC-1). Its answer re-renders inside the
+ * size: the shell's sidebar, which opens on the rail on a tablet (P18.9-T6 AC-1). Its answer re-renders inside the
  * mounting commit, so it is kept to the one caller that needs it. A caller passes the same `beforePaint` for its life.
  *
  * **Ask for the range that changes something.** The desktop is what a screen draws when nothing answers, so a screen

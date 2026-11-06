@@ -163,7 +163,16 @@ export const saveGoal = (period: string, inputs: GoalBody, membershipId?: string
   );
 
 /**
- * **A plan worked out and not saved** (P18.99-T5, UI V1 UI-014): what the inputs the screen holds would mean, by the
+ * **The member's own estimate of the APE produced so far this year** (P19.1-T4, UI-157 item 4; ADR-0195 §2): the
+ * Summary's *Isi produksi sementara*, *Ubah* and *Hapus* — `null` is *Hapus*. One value with Goal Settings' *APE yang
+ * sudah dicapai tahun ini*. The reader's own plan only: no `for`. The server answers the plan, as a read does; `404`
+ * without a saved one.
+ */
+export const saveApeEstimate = (period: string, apeAchievedMinor: number | null) =>
+  api<Goal>(`/goals/${period}/ape-estimate`, { method: 'PUT', body: { apeAchievedMinor } });
+
+/**
+ * **A plan worked out and not saved** (P18.11-T5, UI V1 UI-014): what the inputs the screen holds would mean, by the
  * formula a save uses. `monthsLeft` is the figure in force — typed, or the office's calendar; `projected` is `null`
  * when the inputs cannot make a plan.
  */
@@ -176,7 +185,7 @@ export interface GoalPreview {
 }
 
 /**
- * **The cascade over the inputs on screen, written nowhere** (`POST /goals/:period/preview`, P18.99-T5): Goal
+ * **The cascade over the inputs on screen, written nowhere** (`POST /goals/:period/preview`, P18.11-T5): Goal
  * Settings' result card, its tiles and its commitment move with every change, and the screen still holds no copy
  * of the formula (P8-T3 AC-2). `membershipId` is a coachee's, as on a read — 404 outside the reader's reach. On
  * their plan the APE produced is what they stored, whatever was typed (ADR-0075).
@@ -227,7 +236,7 @@ export { formatRupiah, formatRupiahCompact, MINOR_UNITS_PER_MAJOR, toMajor, toMi
 
 /**
  * The same grouping, for what somebody is **typing**: `500000000` shows as `500.000.000` — `500,000,000` in English
- * (P18.98-T3 AC-3), the reader's `language` passed last, Indonesian when none is.
+ * (P18.10-T3 AC-3), the reader's `language` passed last, Indonesian when none is.
  *
  * The prototype's money fields are `type="text" inputmode="numeric"` carrying a grouped value
  * (`Overall.html:2874`), and its `parseNum` strips the dots back out. Ours were `type="number"`,
@@ -245,12 +254,12 @@ export const groupDigits = (major: number, language: Language = DEFAULT_LANGUAGE
  * **Digits only, deliberately.** A grouping separator in `id-ID` is `.`, which is also a decimal
  * point in most of the world — so parsing `1.500` as a decimal would read one and a half rupiah
  * where fifteen hundred was meant. Rupiah has no subunit anybody types, so there is nothing to lose.
- * So it reads **both languages' grouping** (P18.98-T3 AC-3): `1.500.000` and `1,500,000` are the same sum.
+ * So it reads **both languages' grouping** (P18.10-T3 AC-3): `1.500.000` and `1,500,000` are the same sum.
  */
 export const parseDigits = (typed: string) => Number(typed.replace(/\D/g, '')) || 0;
 
 /**
- * **Months left, in words** (P18.95-T5 AC-5; the client's UI review, UI-018: *2.2 months* is a precision
+ * **Months left, in words** (P18.7-T5 AC-5; the client's UI review, UI-018: *2.2 months* is a precision
  * nobody plans by): the commitment's *(about 2 months left)*.
  *
  * The rule, once (`metrics-and-definitions.md`, `MONTHS_LEFT_IN_YEAR`, *Display*): **the nearest whole
@@ -258,7 +267,7 @@ export const parseDigits = (typed: string) => Number(typed.replace(/\D/g, '')) |
  * month, *less than a month***, so December's last fortnight never reads *about 0 months*. The figure the plan
  * divides by is unchanged: the server's, to one decimal, and the *Months left this year* box still shows it.
  *
- * **In two languages** (P18.98-T4): the whole month is a figure, written in `figures` — Indonesian when none is
+ * **In two languages** (P18.10-T4): the whole month is a figure, written in `figures` — Indonesian when none is
  * passed — and the words are `words`' — English when none is, as the spec reads them (`goal-words.ts`: *sekitar 2
  * bulan*, *kurang dari sebulan*). A screen passes `useFigureLanguage()` and `useLanguage()`.
  */
@@ -283,7 +292,7 @@ export function monthsLeftInWords(
  * The revisions of a plan are still stored, every version and who saved it (ADR-0042); no screen
  * lists them since P10.1-T6 retired the history card and its route.
  *
- * **In two languages** (P18.98-T4): the month is a figure, written in `figures` (P18.98-T3, *As of Oct 2026* in
+ * **In two languages** (P18.10-T4): the month is a figure, written in `figures` (P18.10-T3, *As of Oct 2026* in
  * English, Indonesian when none is passed); the words are `words`' (`goal-words.ts`), English when none is passed, so
  * a screen not moved yet reads as it did. A screen passes `useFigureLanguage()` and `useLanguage()`. About a coachee,
  * Indonesian says *-nya* whatever their pronoun, and no word names the office in either language.
@@ -300,9 +309,9 @@ export function producedFrom(
   span: 'month' | 'year',
   /** The coachee's pronoun, on a coaching tab; absent on the reader's own screen. */
   subject?: Pronoun,
-  /** The figures' language: the month is written in it (P18.98-T3), *As of Oct 2026*. */
+  /** The figures' language: the month is written in it (P18.10-T3), *As of Oct 2026*. */
   figures: Language = DEFAULT_LANGUAGE,
-  /** The words' language (P18.98-T4), last: English when none is passed. */
+  /** The words' language (P18.10-T4), last: English when none is passed. */
   words: Language = SOURCE_LANGUAGE,
 ): string {
   const t = messagesIn(goalWordMessages, words).produced;
@@ -324,7 +333,7 @@ export function producedFrom(
   if (!source.month) return named(said);
   const month = formatMonth(source.month, figures);
   /*
-   * **The client's words for the office's year to date** (P18.95-T7 AC-1, grey text row 18; ADR-0167 §7): *As of Okt
+   * **The client's words for the office's year to date** (P18.7-T7 AC-1, grey text row 18; ADR-0167 §7): *As of Okt
    * 2026*, at every size, where it read *"From your office’s upload, year to date as of Okt 2026"*. The reader's own,
    * from the upload: a correction still says who made it, and a coachee's still names the upload.
    */

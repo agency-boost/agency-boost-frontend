@@ -9,7 +9,7 @@ import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { reopenSession, type CoachingSession } from '@/lib/coaching';
 
 /*
- * **Edit again's dialog, in a module of its own** (P18.99-T16, the bundle): the Coaching Session and the record load it
+ * **Edit again's dialog, in a module of its own** (P18.11-T16, the bundle): the Coaching Session and the record load it
  * with `next/dynamic` on the first *Edit again*, so neither carries it in its first load.
  */
 

@@ -1,4 +1,5 @@
 import { screen, within } from '@testing-library/react';
+import { objectionCardsMessages } from '@/i18n/messages/objection-cards';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { atWidth, makeMe, renderInIndonesian, stubFetch, wears } from '@test/harness';
@@ -26,14 +27,13 @@ const script = (over: Record<string, unknown> = {}) => ({
   opening: field('Halo, boleh saya tanya sebentar?'),
   benefits: field(['Proteksi jiwa']),
   fullScript: field('Halo. Ini scriptnya.'),
-  objectionTheySay: field('Terlalu mahal.'),
-  objectionYouSay: field('Preminya bisa disesuaikan.'),
+  objections: field([{ objection: 'Terlalu mahal.', answer: 'Preminya bisa disesuaikan.' }]),
   nextAction: field('Boleh saya siapkan ilustrasinya?'),
   ...over,
 });
 const product = (over: Record<string, unknown> = {}) => ({
   productId: 'p1', code: 'PRUMAPAN', companyName: 'PRUMapan', channel: 'conventional', category: 'life',
-  lifecycle: 'active', sellable: true, active: field(true), displayName: field('PRUMapan'),
+  kind: 'base', attachesTo: [], lifecycle: 'active', sellable: true, active: field(true), displayName: field('PRUMapan'),
   description: field('Dana pensiun yang cair rutin dari usia 55.'), script: script(), reviewState: 'none',
   rejectionReason: null,
   documents: [
@@ -69,15 +69,15 @@ const SHELF = [
 ];
 
 /** The screen's English that ID mode must not show — its own, and the settings frame's it draws. */
-const PRODUCTS_ENGLISH = englishOnly(settingsProductsMessages, settingsMessages);
+const PRODUCTS_ENGLISH = englishOnly(settingsProductsMessages, settingsMessages, objectionCardsMessages);
 const noEnglishLeft = () => expect(englishShown(document.body, PRODUCTS_ENGLISH)).toEqual([]);
 
 /**
- * **P18.98-T4, Settings › Products in ID mode** (ADR-0179 §3–§5): the shelf, a product opened and *Script approvals* in
+ * **P18.10-T4, Settings › Products in ID mode** (ADR-0179 §3–§5): the shelf, a product opened and *Script approvals* in
  * the approved glossary's Indonesian; the title, the tabs, *Attack Plan*, *Documents* and *KPM* English (§A); the
  * company's name, every product's name, description, script and document as typed. In English: `page.spec.tsx`.
  */
-describe('P18.98-T4 Settings › Products in Indonesian', () => {
+describe('P18.10-T4 Settings › Products in Indonesian', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it('AC-2 the shelf: its line, the count, the badges and the switch in Indonesian, the company and products as typed', async () => {
@@ -126,10 +126,15 @@ describe('P18.98-T4 Settings › Products in Indonesian', () => {
     expect(screen.getByRole('heading', { name: 'Attack Plan' })).toBeInTheDocument();
     for (const label of [
       '0 · Cocok untuk', '1 · Kalimat pembuka', '2 · Tekankan manfaat berikut', '3 · Script lengkap — cara menyampaikannya',
-      '4a · Jika ada keberatan — dia berkata', '4b · Jika ada keberatan — Anda menjawab', '5 · Tindakan berikutnya',
+      '5 · Tindakan berikutnya',
     ]) {
       expect(screen.getByLabelText(label)).toHaveAccessibleDescription('Mengikuti Allianz Life.');
     }
+    // The cards since P19.4-T4 (AC-1): the office's own list, or its company's.
+    const cards = screen.getByRole('group', { name: '4 · Jika ada keberatan' });
+    expect(within(cards).getByText('Mengikuti Allianz Life.')).toBeInTheDocument();
+    expect(within(cards).getByLabelText('Keberatan 1 — dia berkata')).toHaveValue('Terlalu mahal.');
+    expect(within(cards).getByRole('button', { name: '+ Tambah keberatan' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Documents' })).toBeInTheDocument();
     expect(screen.getByText('Diunggah oleh KPM Anda — kami.pdf')).toBeInTheDocument();
     expect(screen.getByText('Dari katalog Allianz Life')).toBeInTheDocument();

@@ -22,15 +22,6 @@ export const ENTRY_TONE: Record<EntryType, string> = {
   travel: 'border-teal bg-teal/[0.12]',
 };
 
-/** The legend's swatch (`:310-314`). */
-export const TYPE_SWATCH: Record<EntryType, string> = {
-  meeting: 'bg-navy-soft',
-  coaching: 'bg-amber-dark',
-  client: 'bg-alert',
-  task: 'bg-success',
-  travel: 'bg-teal',
-};
-
 /**
  * The detail's badge (`:219-224`). *Coaching* is navy on its tint where the prototype's amber-dark is
  * 2.61:1, and *Travel* teal-ink where its teal is 4.20:1 (H-19).
@@ -81,7 +72,7 @@ export function Avatar({
       className={cn(
         'flex shrink-0 items-center justify-center rounded-full font-bold',
         AVATAR_SIZE[size],
-        me ? 'bg-amber text-navy' : 'bg-navy-soft text-white',
+        me ? 'bg-primary text-primary-contrast' : 'bg-secondary-hover text-secondary-contrast',
         className,
       )}
     >
@@ -100,7 +91,7 @@ export interface PaneHead {
 
 /**
  * A pane's head (`:320-324`, `:974-979`): the avatar, the name, the rung, and a compared pane's
- * *"Drag to block"* pill. **One head for every view** — the week's pane, and since P18.95-T8 AC-2 a
+ * *"Drag to block"* pill. **One head for every view** — the week's pane, and since P18.7-T8 AC-2 a
  * month and an agenda drawn beside somebody compared — so a person reads the same in all three.
  */
 export function PaneHeadBar({ head, pill }: { head: PaneHead; pill?: ReactNode }) {

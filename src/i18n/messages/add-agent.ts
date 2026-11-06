@@ -2,7 +2,7 @@ import { defineMessages, type MessagesOf } from '@/i18n/catalogue';
 import { kept } from '@/i18n/kept';
 
 /**
- * **+ Add agent and an invite's share step** (P18.98-T4, new hires and activation; `functional/org-hierarchy.md`,
+ * **+ Add agent and an invite's share step** (P18.10-T4, new hires and activation; `functional/org-hierarchy.md`,
  * *Adding an agent*; ADR-0170 §1, §2): the one form — on `/new-hires` and the Unit Dashboard's roster header — its
  * refusals said under their fields, the share step an invite turns it into (*Share on WhatsApp*, *Copy link*, a QR), and
  * **the words sent with the link on WhatsApp** (`lib/invites.ts`' `inviteMessage`).
@@ -14,7 +14,7 @@ import { kept } from '@/i18n/kept';
  *
  * **The WhatsApp message is the invitee's, not the reader's**: it is written in the language of the person it is sent
  * to, who has chosen none — so Bahasa Indonesia, the language a reader with no choice reads (ADR-0179 §1), as the client
- * wrote it (P18.96-T3 AC-2) — whichever language the leader's screen is in. Its English is the catalogue's source, for a
+ * wrote it (P18.8-T3 AC-2) — whichever language the leader's screen is in. Its English is the catalogue's source, for a
  * recipient whose language is known.
  *
  * **Typed content stays as typed**: a name, an agent code, a number, the link. **A figure is never a message's**: a
@@ -59,7 +59,7 @@ const en = {
   namePlaceholder: 'Full name',
   phonePlaceholder: 'e.g. 812 3456 7890',
 
-  /** An invite's three ways out (P18.96-T3 AC-2): ours, no prototype draws an invite to one person. */
+  /** An invite's three ways out (P18.8-T3 AC-2): ours, no prototype draws an invite to one person. */
   share: {
     shareOnWhatsApp: 'Share on WhatsApp',
     copyLink: 'Copy link',
@@ -111,7 +111,7 @@ const id: MessagesOf<typeof en> = {
     noNumber: 'Nomor itu tidak dapat dibuka di WhatsApp. Salin tautannya dan kirim dengan cara lain.',
   },
 
-  /** The client's own sample (P18.96-T3 AC-2), unchanged. */
+  /** The client's own sample (P18.8-T3 AC-2), unchanged. */
   whatsAppMessage: ({ name, link }) => `Halo ${name}, saya mengundang Anda bergabung di tim saya di ${kept('AgencyBoost')}: ${link}`,
 };
 

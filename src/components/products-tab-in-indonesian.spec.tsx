@@ -2,15 +2,16 @@ import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { englishOnly, englishShown } from '@test/english-left';
-import { makeMe, renderInIndonesian, stubFetch } from '@test/harness';
+import { atWidth, makeMe, renderInIndonesian, stubFetch } from '@test/harness';
 import { adminTemplateProductsMessages } from '@/i18n/messages/admin-template-products';
+import { objectionCardsMessages } from '@/i18n/messages/objection-cards';
 import { productCatalogMessages } from '@/i18n/messages/product-catalog';
 import { salesAttackPlanMessages } from '@/i18n/messages/sales-attack-plan';
 import { settingsMessages } from '@/i18n/messages/settings';
 import { ProductsTab } from './products-tab';
 
 /**
- * **P18.98-T6, the Company template's *Products* tab in ID mode** (AC-1 as T4's AC-1 to AC-3; area "admin-template"):
+ * **P18.10-T6, the Company template's *Products* tab in ID mode** (AC-1 as T4's AC-1 to AC-3; area "admin-template"):
  * the tab's words the approved glossary's Indonesian (`admin-template-products.tsx`, with the agents' catalogue's words
  * for a channel, a need, a budget band and a commission year), the catalogue's categories and *Commission rate* kept
  * English (§A.3, §A.4), a product's name, tagline, benefits and attack plan as the company typed them (ADR-0179 §5),
@@ -19,7 +20,9 @@ import { ProductsTab } from './products-tab';
  * **English left** (`englishShown`) is read against the areas the tab draws words from; *Code*, a read-only code's
  * label, is `CodeField`'s (`components/ui/`), the shared pieces', and is left out.
  */
-const ENGLISH = englishOnly(adminTemplateProductsMessages, settingsMessages, productCatalogMessages, salesAttackPlanMessages)
+const ENGLISH = englishOnly(
+  adminTemplateProductsMessages, settingsMessages, productCatalogMessages, salesAttackPlanMessages, objectionCardsMessages,
+)
   .filter((words) => words !== 'Code');
 const noEnglishLeft = () => expect(englishShown(document.body, ENGLISH)).toEqual([]);
 
@@ -34,13 +37,15 @@ const SUPER_ADMIN = makeMe({
 
 const product = (over: Record<string, unknown> = {}) => ({
   id: 'p1', companyId: 'c1', code: 'PRUMAPAN', name: 'PRUMapan', tagline: 'Proteksi jiwa dengan manfaat pensiun',
-  channel: 'syariah', category: 'investment', primaryNeeds: ['retirement'], eligibleAgeBands: [1], eligibleBudgetBands: [1],
+  channel: 'syariah', category: 'investment', kind: 'base', attachesTo: [], currencies: ['IDR', 'USD'],
+  primaryNeeds: ['retirement'], eligibleAgeBands: [1], eligibleBudgetBands: [1],
   benefits: ['Dana Mapan tiap tahun dari usia 55'], differentiator: 'Pilihan pensiun paling terjangkau.',
   bestFor: 'Profesional generasi sandwich',
   defaultAttackPlan: {
     goodFit: 'Profesional generasi sandwich', opening: 'Menyiapkan dana pensiun memang tidak mudah.',
-    benefits: ['Dana Mapan'], fullScript: 'Boleh saya siapkan ilustrasinya?', objectionTheySay: 'Pensiun masih lama.',
-    objectionYouSay: 'Justru lebih ringan dimulai sekarang.', nextAction: 'Siapkan ilustrasi.',
+    benefits: ['Dana Mapan'], fullScript: 'Boleh saya siapkan ilustrasinya?',
+    objections: [{ objection: 'Pensiun masih lama.', answer: 'Justru lebih ringan dimulai sekarang.' }],
+    nextAction: 'Siapkan ilustrasi.',
   },
   commissionSchedule: [{ year: 1, rate: 0.125 }], lifecycle: 'closed_to_new_business', replacedByProductId: null,
   activeByDefault: true, sortOrder: 1, version: 3,
@@ -52,7 +57,7 @@ function mount(rows: unknown[] = [product()]) {
   renderInIndonesian(<ProductsTab companyId="c1" />, { me: SUPER_ADMIN });
 }
 
-describe('P18.98-T6 the Products tab in Indonesian', () => {
+describe('P18.10-T6 the Products tab in Indonesian', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it('reads the English it is looking for, so a silent zero cannot pass', () => {
@@ -61,25 +66,35 @@ describe('P18.98-T6 the Products tab in Indonesian', () => {
 
   it('AC-1, AC-2, AC-4 the shelf: the card in Indonesian, the category kept, the product as typed', async () => {
     mount();
-    const card = (await screen.findByText('PRUMapan')).closest('li')!;
+    const card = (await screen.findByRole('button', { name: 'PRUMapan' })).closest('tr')!;
     expect(screen.getByText('Katalog ini langsung berlaku.')).toBeInTheDocument();
+    // P19.2-T2 AC-7 (UI-136, Appendix A): the rest of the explanation behind its ⓘ, its words unchanged.
+    await userEvent.click(screen.getByRole('button', { name: 'Tentang katalog ini' }));
     expect(screen.getByText(/^Katalog ini tidak punya draf dan versi/)).toBeInTheDocument();
     expect(screen.getByText('1 produk · 0 aktif · 1 aktif secara default di KPM baru')).toBeInTheDocument();
-    expect(screen.getByText('Seret ⠿ untuk mengubah urutan, atau fokuskan lalu tekan ↑ atau ↓.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Tambah produk' })).toBeInTheDocument();
-    expect(within(card).getByText('Proteksi jiwa dengan manfaat pensiun')).toBeInTheDocument();
+    // P19.2-T2 AC-2 (UI-131): one line per product — the tagline is in the product's sheet (the next case), the
+    // table's columns the mockup's words but *Kanal*, and the reorder hint drawn in *Ubah urutan* only.
+    expect(within(card).queryByText('Proteksi jiwa dengan manfaat pensiun')).not.toBeInTheDocument();
+    expect(screen.getAllByRole('columnheader').map((h) => h.textContent))
+      .toEqual(['#', 'Produk', 'Kanal', 'Kategori', 'Status', 'Default di KPM baru', 'Buka']);
     // The channel in the catalogue's words, the category kept (§A.3), the lifecycle in Indonesian.
     expect(within(card).getByText('Syariah')).toBeInTheDocument();
     expect(within(card).getByText('Investment')).toBeInTheDocument();
     expect(within(card).getByText('Ditutup untuk penjualan baru')).toBeInTheDocument();
-    expect(within(card).getByText('Aktif secara default')).toBeInTheDocument();
+    expect(within(card).getByText('Ya')).toBeInTheDocument();
+    expect(screen.queryByText('Seret ⠿ untuk mengubah urutan, atau fokuskan lalu tekan ↑ atau ↓.')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Ubah urutan' }));
+    expect(screen.getByText('Seret ⠿ untuk mengubah urutan, atau fokuskan lalu tekan ↑ atau ↓.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Selesai' })).toBeInTheDocument();
     noEnglishLeft();
   });
 
   it('AC-1, AC-3 a product opened: its fields, its fit in Indonesian figures and its needs by name', async () => {
     mount();
-    const card = (await screen.findByText('PRUMapan')).closest('li')!;
-    await userEvent.click(within(card).getByRole('button', { name: 'Ubah' }));
+    // The row opens the product's sheet (P19.2-T2 AC-2; UI-131), closed by its ✕.
+    await userEvent.click(await screen.findByRole('button', { name: 'PRUMapan' }));
+    const card = screen.getByRole('dialog', { name: 'PRUMapan' });
     expect(within(card).getByRole('button', { name: 'Tutup' })).toBeInTheDocument();
 
     expect(within(card).getByText('Versi')).toBeInTheDocument();
@@ -107,16 +122,21 @@ describe('P18.98-T6 the Products tab in Indonesian', () => {
 
   it('AC-1, AC-2 the default attack plan, the commission in Indonesian figures, the lifecycle with its bold phrase', async () => {
     mount();
-    const card = (await screen.findByText('PRUMapan')).closest('li')!;
-    await userEvent.click(within(card).getByRole('button', { name: 'Ubah' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'PRUMapan' }));
+    const card = screen.getByRole('dialog', { name: 'PRUMapan' });
 
     expect(within(card).getByRole('heading', { name: 'Attack Plan default' })).toBeInTheDocument();
     expect(within(card).getByLabelText('0 · Cocok untuk')).toHaveValue('Profesional generasi sandwich');
     expect(within(card).getByLabelText('3 · Script lengkap')).toBeInTheDocument();
-    expect(within(card).getByLabelText('4a · Jika ada keberatan — dia berkata')).toHaveValue('Pensiun masih lama.');
+    // The cards since P19.4-T4 (AC-1): *"+ Tambah keberatan"*, as the handover words it.
+    expect(within(card).getByRole('group', { name: '4 · Jika ada keberatan' })).toBeInTheDocument();
+    expect(within(card).getByLabelText('Keberatan 1 — dia berkata')).toHaveValue('Pensiun masih lama.');
+    expect(within(card).getByLabelText('Keberatan 1 — Anda menjawab')).toHaveValue('Justru lebih ringan dimulai sekarang.');
+    expect(within(card).getByRole('button', { name: '+ Tambah keberatan' })).toBeInTheDocument();
+    expect(within(card).getByRole('button', { name: 'Hapus keberatan 1' })).toBeInTheDocument();
     expect(within(card).getByLabelText('5 · Tindakan berikutnya')).toBeInTheDocument();
 
-    // UI V1 (UI-006): *Commission rate* is Indonesian in ID mode — *Persentase komisi* (proposed in §B.10, P18.99).
+    // UI V1 (UI-006): *Commission rate* is Indonesian in ID mode — *Persentase komisi* (proposed in §B.10, P18.11).
     const table = within(card).getByRole('table', { name: 'Persentase komisi' });
     expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['Tahun', 'Persentase (%)']);
     expect(within(table).getByRole('rowheader')).toHaveTextContent('Tahun 1');
@@ -138,6 +158,37 @@ describe('P18.98-T6 the Products tab in Indonesian', () => {
     );
     expect(within(card).getByRole('button', { name: 'Buka kembali' })).toBeInTheDocument();
     expect(within(card).getByRole('button', { name: 'Simpan produk' })).toBeInTheDocument();
+    noEnglishLeft();
+  });
+
+  it('P19.2-T2 AC-2 at 375px the phone’s lines, search, chips, filter sheet and add sheet in the mockup’s Indonesian', async () => {
+    atWidth(375);
+    mount([product(), product({ id: 'p2', code: 'PRUSMART', name: 'PRUSmart Plan', channel: 'conventional', sortOrder: 2 })]);
+    const line = (await screen.findByRole('button', { name: 'PRUMapan' })).closest('li')!;
+    // `admin-mobile` screen 3's words: *Cari produk*, *Semua n · Konvensional · Syariah*, *Ubah urutan*.
+    expect(screen.getByRole('searchbox', { name: 'Cari produk' })).toBeInTheDocument();
+    expect(within(screen.getByRole('group', { name: 'Saring menurut kanal' })).getAllByRole('button').map((b) => b.textContent))
+      .toEqual(['Semua2', 'Konvensional', 'Syariah']);
+    expect(within(line).getByText('Syariah')).toBeInTheDocument();
+    expect(within(line).getByText('Ditutup untuk penjualan baru')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Ubah urutan' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Tambah produk' })).toBeInTheDocument();
+    noEnglishLeft();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Filter' }));
+    const sheet = screen.getByRole('dialog', { name: 'Filter' });
+    expect(within(sheet).getByRole('radiogroup', { name: 'Kategori' })).toBeInTheDocument();
+    expect(within(sheet).getByRole('radiogroup', { name: 'Jenis' })).toBeInTheDocument();
+    expect(within(sheet).getByRole('checkbox', { name: 'Tampilkan ditarik' })).toBeInTheDocument();
+    noEnglishLeft();
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Tutup' }));
+
+    await userEvent.click(screen.getByRole('button', { name: 'Tambah produk' }));
+    const add = screen.getByRole('dialog', { name: 'Tambah produk' });
+    expect(within(within(add).getByRole('radiogroup', { name: 'Kanal' })).getAllByRole('radio').map((r) => r.textContent))
+      .toEqual(['Konvensional', 'Syariah']);
+    expect(within(add).getByRole('radiogroup', { name: 'Kategori' })).toBeInTheDocument();
+    expect(within(add).getByRole('button', { name: 'Batal' })).toBeInTheDocument();
     noEnglishLeft();
   });
 

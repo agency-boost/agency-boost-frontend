@@ -6,18 +6,24 @@ import { kept } from '@/i18n/kept';
 const words = (...parts: ReactNode[]) => createElement(Fragment, null, ...parts);
 
 /**
- * **The company role ladder** (`/admin/org-levels`, P3.5-T7, ADR-0012, ADR-0156, ADR-0168 §3; P18.98-T6, area
+ * **The company role ladder** (`/admin/org-levels`, P3.1-T7, ADR-0012, ADR-0156, ADR-0168 §3; P18.10-T6, area
  * "admin-template"; `functional/org-levels.md`, *The module's own strings*): a company's rungs, junior first — each
- * rung's leader tier, saved as it is chosen, and its state — the reading order, and *Add a rung*.
+ * rung's label and leader tier, saved as they are changed, and its state, *Archive*, *Restore* and, for an archived one,
+ * *Delete* (ADR-0213 §1, §2) — the reading order, and *Add a rung*.
  *
  * **English is the source**, every word as it was; the Indonesian is the approved glossary's — *Arsipkan · Pulihkan*
  * (§B.1), *Menambahkan…* (§B.2), *Aktif · Diarsipkan* (§B.3), *Kode · Status · Aksi · Label* (§B.4) — with the API's
- * words for the same things (P18.98-T5's rows of §B.10): a rung a ***jenjang***, the ladder a ***susunan jenjang***, a
+ * words for the same things (P18.10-T5's rows of §B.10): a rung a ***jenjang***, the ladder a ***susunan jenjang***, a
  * leader tier a ***tingkat leader***. **Kept English** (§A): the title (§A.1's *Org role ladder*), the two tiers, the
  * client's names (*Senior Leader*, *Associate Leader*, ADR-0156 — for approval), *AgencyBoost*, *leader* (§A.6); the
  * platform's library is *Template bawaan AgencyBoost* (ADR-0185 §1).
  * **Content stays as typed** (ADR-0179 §5): a company's name, a rung's label and code; the example codes *AGENT, AAB,
  * AB* are identifiers, the same in both languages.
+ *
+ * *Changed 2026-11-06 (P19.2-T2 AC-1, AC-3, AC-4; UI-126, UI-133, UI-134; `admin-mobile` screen 4):* below 1024px a
+ * rung is a row — its tier a pill opening its choices, *Ganti nama · Arsipkan / Pulihkan · Hapus* in its ⋯ — and *Tambah
+ * jenjang* a sheet from the title row at every size: `rename`, `rowArchived`, `save`, `required` (the companies sheet's
+ * *Wajib diisi.*), proposed in §B.10 where the mockup gives no word.
  *
  * @moved app/(admin)/admin/org-levels/
  */
@@ -56,10 +62,28 @@ const en = {
   tierInUse: ({ n, rung }: { n: number; rung: string }) =>
     `${n === 1 ? '1 person stands' : `${n} people stand`} on ${rung}, so its leader tier cannot change. Move them to `
     + 'another rung first, or add a new rung.',
+  /** A change refused because somebody else changed the rung first (P19-T6 AC-2); the ladder is read again with it. */
+  savedElsewhere: ({ rung }: { rung: string }) => `Someone else changed ${rung} after you opened this page, so your `
+    + 'change was not saved. The ladder now shows what is stored; check it and try again.',
   active: 'Active',
   archived: 'Archived',
   archive: 'Archive',
   restore: 'Restore',
+  /** A rung's label, edited in its cell and saved as it is left (ADR-0213 §1, B1-6); the line its save status sits on. */
+  labelOf: ({ rung }: { rung: string }) => `Label of ${rung}`,
+  labelStatus: ({ rung }: { rung: string }) => `Label, ${rung}`,
+  /** Below 1024px (P19.2-T2 AC-1): the label from the row's ⋯, in a sheet titled by the rung's code. */
+  rename: 'Rename',
+  save: 'Save',
+  /** A row's meta below 1024px: the code, and *Archived* where it is. */
+  rowArchived: ({ code }: { code: string }) => `${code} · Archived`,
+  /** A field left empty, said on it when *Add rung* is pressed (UI-133: *the main button is enabled*). */
+  required: 'Required.',
+  /** *Hapus*, on an archived rung (ADR-0213 §2): asked first; the server refuses one anything names, saying what. */
+  delete: 'Delete',
+  deleteQuestion: ({ rung, code }: { rung: string; code: string }) => `Delete ${rung}? Only an archived rung that `
+    + `nothing in this company names can be deleted — the server checks, and says what names it if anything does. `
+    + `${code} can then be used again.`,
 
   /** Under the table: the active rungs in order, bold — `ladder` the joined labels, or `null` for none. */
   readingOrder: ({ ladder, strong }: { ladder: string | null; strong: (words: string) => ReactNode }) => words(
@@ -71,7 +95,8 @@ const en = {
   /** *Add a rung*. */
   addTitle: 'Add a rung',
   code: 'Code',
-  codeHint: 'Stable and semantic — AGENT, AAB, AB. Upper-cased on the way in, and never changed or reused afterwards.',
+  codeHint: 'Stable and semantic — AGENT, AAB, AB. Upper-cased on the way in, and never changed afterwards; reused only '
+    + 'once its rung is deleted.',
   codeShape: 'Letters, digits and underscores, starting with a letter.',
   label: 'Label',
   labelHint: 'What a reader sees. This one you can change.',
@@ -110,10 +135,23 @@ const id: MessagesOf<typeof en> = {
   // One form for one and many (§B.0 rule 8), as the API's refusal says it.
   tierInUse: ({ n, rung }) => `${n} orang berada di ${rung}, jadi tingkat ${kept('leader')}-nya tidak dapat diubah. `
     + 'Pindahkan mereka ke jenjang lain terlebih dahulu, atau tambahkan jenjang baru.',
+  savedElsewhere: ({ rung }) => `Orang lain mengubah ${rung} setelah Anda membuka halaman ini, jadi perubahan Anda tidak `
+    + 'tersimpan. Susunan jenjang kini menampilkan yang tersimpan; periksa, lalu coba lagi.',
   active: 'Aktif',
   archived: 'Diarsipkan',
   archive: 'Arsipkan',
   restore: 'Pulihkan',
+  labelOf: ({ rung }) => `Label ${rung}`,
+  labelStatus: ({ rung }) => `Label, ${rung}`,
+  // UI-142's own word for it on the Owner's pages (*Ganti nama*).
+  rename: 'Ganti nama',
+  save: 'Simpan',
+  rowArchived: ({ code }) => `${code} · Diarsipkan`,
+  required: 'Wajib diisi.',
+  delete: 'Hapus',
+  deleteQuestion: ({ rung, code }) => `Hapus ${rung}? Hanya jenjang yang sudah diarsipkan dan tidak dipakai apa pun di `
+    + `perusahaan ini yang dapat dihapus — server memeriksanya, dan menyebut apa yang memakainya bila ada. Kode ${code} `
+    + 'lalu dapat dipakai lagi.',
 
   readingOrder: ({ ladder, strong }) => words(
     'Urutan baca dari yang paling junior: ',
@@ -124,7 +162,7 @@ const id: MessagesOf<typeof en> = {
   addTitle: 'Tambah jenjang',
   code: 'Kode',
   codeHint: 'Stabil dan bermakna — AGENT, AAB, AB. Diubah menjadi huruf besar saat dimasukkan, dan tidak pernah diubah '
-    + 'atau dipakai ulang sesudahnya.',
+    + 'sesudahnya; dipakai ulang hanya setelah jenjangnya dihapus.',
   codeShape: 'Huruf, angka, dan garis bawah, diawali huruf.',
   label: 'Label',
   labelHint: 'Yang dilihat pembaca. Yang ini boleh Anda ubah.',

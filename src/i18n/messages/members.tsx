@@ -3,7 +3,7 @@ import { defineMessages, type MessagesOf } from '@/i18n/catalogue';
 import { kept } from '@/i18n/kept';
 
 /**
- * **All Members** — `/people/members`, the office's roster (P18.98-T4, people and forum; `functional/org-hierarchy.md`,
+ * **All Members** — `/people/members`, the office's roster (P18.10-T4, people and forum; `functional/org-hierarchy.md`,
  * *The directory*, *Deciding*, *The role change log*, groups): its line, the filter, the roster as a table and as a
  * phone's cards, *Pending* with its approvals, *Removed*, *Role change log* and *Groups*.
  *
@@ -28,6 +28,13 @@ const en = {
   searchExample: 'Name, email or agent code',
   role: 'Role',
   everyRole: 'Every role',
+  /**
+   * **The filter on a phone and a tablet** (P19.2-T3 AC-2; UI-140): the search pill's words, which the ticket gives, and
+   * the role chips' group and first chip — *Semua 28 · AB 5 · AAB 4 · Agent 19*, each rung by its badge's name.
+   */
+  searchPill: 'Search name or agent code',
+  roleChips: 'Filter by role',
+  allRoles: 'All',
   /** *Role change log* (P3-T6 AC-4). */
   log: {
     caption: 'Role changes, newest first',
@@ -118,6 +125,8 @@ const en = {
     /** *Unit*: whom a leader leads; *No team* for one who leads nobody (ADR-0176 §2). */
     unitCounts: ({ direct, unit }: { direct: number; unit: number }) => `${direct} direct · ${unit} in unit`,
     noTeam: 'No team',
+    /** A row's leader on a phone and a tablet, by their first name (UI-140: *ke <leader first name>*). */
+    under: ({ name }: { name: string }) => `under ${name}`,
     rejoined: 'Rejoined',
     /** `date` the day they came back, written. */
     rejoinedOn: ({ date }: { date: ReactNode }) => <>Rejoined {date}</>,
@@ -133,6 +142,9 @@ const id: MessagesOf<typeof en> = {
   searchExample: 'Nama, email, atau kode agen',
   role: 'Peran',
   everyRole: 'Semua peran',
+  searchPill: 'Cari nama atau kode agen',
+  roleChips: 'Saring menurut peran',
+  allRoles: 'Semua',
   log: {
     caption: 'Perubahan peran, terbaru dulu',
     columns: { when: 'Kapan', who: 'Siapa', change: 'Perubahan', why: 'Alasan', changedBy: 'Diubah oleh' },
@@ -216,6 +228,7 @@ const id: MessagesOf<typeof en> = {
     tagTitle: `Tag sebagai ${kept('Core Leader')}`,
     unitCounts: ({ direct, unit }) => `${direct} langsung · ${unit} di ${kept('unit')}`,
     noTeam: 'Tanpa tim',
+    under: ({ name }) => `ke ${name}`,
     rejoined: 'Bergabung kembali',
     rejoinedOn: ({ date }) => <>Bergabung kembali {date}</>,
     previous: 'Sebelumnya',

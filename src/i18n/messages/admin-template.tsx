@@ -2,7 +2,7 @@ import { defineMessages, type MessagesOf } from '@/i18n/catalogue';
 import { kept } from '@/i18n/kept';
 
 /**
- * **The Super Admin's KPM template** (ADR-0185; ADR-0115, ADR-0164; P18.99-T20; `functional/tenant-config.md`, *The KPM
+ * **The Super Admin's KPM template** (ADR-0185; ADR-0115, ADR-0164; P18.11-T20; `functional/tenant-config.md`, *The KPM
  * template*): a company's page — its two tabs, *KPM template* and *Company settings* — the card of each of its templates,
  * a template's checklist of six sections with *Publish all* and the offices on an older version, a section's editor with
  * its draft saved as it is made, *New template* with its one *Start from* picker, *Rename*, *Make default*, *Duplicate*
@@ -53,12 +53,16 @@ const en = {
     waiting: ({ n }: { n: number }) => (n === 1 ? '1 change not published' : `${n} changes not published`),
     open: 'Open',
     newTemplate: 'New template',
-    none: 'This company has no template yet.',
+    /** A company has none until the Super Admin makes one (ADR-0213 §3): the first becomes its default. */
+    none: 'This company has no template yet. Its first, made empty or copied from any template, becomes its default.',
     loading: 'Loading the templates…',
     retry: 'Try again',
   },
 
-  /** The six sections of a template (ADR-0185 §3), in the order an Owner's settings list them. */
+  /**
+   * The seven sections of a template (ADR-0185 §3), in the order an Owner's settings list them — then *Rekrutmen*, the
+   * recruitment playbook, a section since ADR-0210 (B1-11).
+   */
   sections: {
     activity: 'Activities & ratios',
     leads: 'Lead pipeline',
@@ -66,6 +70,11 @@ const en = {
     training: kept('Training'),
     capability: kept('Capability Mapping'),
     events: kept('Events'),
+    recruitment: 'Recruitment',
+    // P19.5-T1 (spec §1): *Advanced analytics* in ID and in EN, like *Capability Mapping*.
+    analytics: kept('Advanced analytics'),
+    // P19.6-T1 (ADR-0218 §3): the KPMs' default branding.
+    branding: 'Branding',
   },
   /** The two kinds of *Activities & ratios*, as a row's detail names them. */
   parts: {
@@ -85,6 +94,11 @@ const en = {
     tiers: kept('Production club tiers'),
     moc: kept('Maintenance of Contract'),
     promotion: kept('Promotion paths'),
+    // P19.5-T1: *Advanced analytics*' four pill tabs (the template mockup's `TABS`).
+    bagian: 'Sections',
+    data: kept('Data upload'),
+    survei: 'Surveys',
+    ambang: 'Thresholds & benchmarks',
   },
 
   /** A template's checklist (ADR-0185 §3). */
@@ -115,23 +129,60 @@ const en = {
   publishAll: {
     title: 'Publish all changes?',
     lead: 'These sections will be published:',
-    note: 'Offices that already exist do not change; only new offices use this version.',
+    note: 'Afterwards you choose whether the offices that already exist take it too.',
     confirm: 'Publish all',
     published: ({ sections }: { sections: string }) => `Published: ${sections}.`,
     refused: ({ section, message }: { section: string; message: string }) => `${section} was not published: ${message}`,
   },
 
-  /** The offices on an older version (ADR-0185 §4): information only. */
-  offices: {
-    title: 'Offices on an older version',
-    lead: 'Publishing changes no office that already exists.',
+  /**
+   * ***Apply to existing offices too?*** (ADR-0208 §4; SA UI-012): asked after a publish, and opened from *Used by N
+   * offices* — the offices made from the template in two groups, each changed one saying what differs, and the second
+   * confirmation before an office's own changes are replaced.
+   */
+  apply: {
+    title: 'Apply to existing offices too?',
+    lead: ({ sections }: { sections: string }) => `The newest version of ${sections} can also go to the offices made from `
+      + 'this template.',
+    unchanged: 'Not changed by the office',
+    changed: 'Changed by the office',
     office: ({ code, branch }: { code: string; branch: string }) => `KPM ${code} · ${branch}`,
-    behindOn: ({ sections }: { sections: string }) => `Older: ${sections}`,
-    unrecorded: ({ n }: { n: number }) => (n === 1
-      ? '1 other office was created before its version was recorded.'
-      : `${n} other offices were created before their version was recorded.`),
+    current: ({ n }: { n: number }) => (n === 1
+      ? '1 office already uses the newest version.'
+      : `${n} offices already use the newest version.`),
+    none: 'No office has been made from this template yet.',
+    added: ({ items }: { items: string }) => `Added: ${items}`,
+    removed: ({ items }: { items: string }) => `Removed: ${items}`,
+    changedItems: ({ items }: { items: string }) => `Changed: ${items}`,
+    ownMaterial: ({ n }: { n: number }) => (n === 1 ? '1 module uses its own material' : `${n} modules use their own material`),
+    confirm: ({ n }: { n: number }) => (n === 1 ? 'Apply to 1 office' : `Apply to ${n} offices`),
+    notNow: 'Not now',
+    applying: 'Applying…',
+    replaceTitle: 'Replace the offices’ own changes?',
+    replaceLead: 'These offices changed the section themselves. Applying replaces what is listed; an office’s own files '
+      + 'stay readable in the module’s history.',
+    replaceConfirm: 'Yes, replace',
+    back: 'Back',
+    applied: ({ n }: { n: number }) => (n === 1 ? 'Applied to 1 office.' : `Applied to ${n} offices.`),
+    waiting: ({ code }: { code: string }) => `KPM ${code} had changes of its own waiting: what was applied reaches its `
+      + 'agents when it publishes.',
+    refused: ({ code, message }: { code: string; message: string }) => `KPM ${code}: ${message}`,
     loading: 'Loading the offices…',
+    retry: 'Try again',
     close: 'Close',
+  },
+
+  /** A template module's material (ADR-0208 §1): the dialog a module row's *Material* opens, and the section's count. */
+  material: {
+    open: ({ n }: { n: number }) => `Material (${n})`,
+    openName: ({ title }: { title: string }) => `Material for ${title}`,
+    title: ({ title }: { title: string }) => `Material: ${title}`,
+    lead: 'Every office made from this template shows this material until it adds its own. It goes live with Publish.',
+    count: ({ x, y }: { x: number; y: number }) => `${x} / ${y} modules have material`,
+    save: 'Save material',
+    saving: 'Saving…',
+    cancel: 'Cancel',
+    remove: 'Remove',
   },
 
   /** A section's editor (ADR-0185 §3): its draft, saved as it is made, and its own *Publish*. */
@@ -147,13 +198,22 @@ const en = {
     publishing: 'Publishing…',
     nothingToPublish: 'Nothing has changed since the last publish.',
     saveFirst: 'Wait for the draft to be saved.',
-    published: 'Published. Offices that already exist do not change.',
+    published: 'Published.',
     retry: 'Try again',
+    /** A draft save refused because somebody else saved or published the section first (P19-T6 AC-2). */
+    savedElsewhere: 'Someone else saved this section after you opened it, so your change was not saved. Reload to see '
+      + 'what is stored now.',
+    reload: 'Reload',
     archived: 'Archived: read only.',
     unknown: 'This section does not exist.',
     loading: 'Loading the section…',
     /** A kind the screen has no editor for. */
     noEditor: 'This section has no editor yet. It is stored and copied into new offices exactly as it is.',
+    /**
+     * *Rekrutmen* only (ADR-0210 §4; data honesty): unlike every other section, what is published here reaches the KPMs
+     * that exist at once — they read it live — so there is no *apply to existing KPMs* after it.
+     */
+    playbookLive: 'What is published here reaches every KPM made from this template at once: they read it live.',
   },
 
   /** *Company settings* (ADR-0185 §2): the company's own, read live by its offices. */
@@ -161,7 +221,6 @@ const en = {
     line: 'Applies at once to every office of this company.',
     products: 'Products',
     campaigns: 'Campaigns',
-    recruitment: 'Recruitment',
     campaignQuestion: 'Publish these campaign rules? They apply at once to every office of this company, including the '
       + 'ones that already exist.',
     campaignEmpty: 'Nothing is published yet.',
@@ -202,6 +261,18 @@ const en = {
     defaultOption: ({ name }: { name: string }) => `${name} · Default`,
     loadingSources: 'Loading the templates…',
     noSource: 'There is no template to copy yet.',
+    /**
+     * *Salin dari…*'s rung map (ADR-0213 §4, B1-7): asked when the source names a role this company's ladder lacks. Role
+     * codes are the ladder's, as typed. `codes` the missing ones, listed.
+     */
+    rungMap: 'Map the roles',
+    rungMapHint: ({ codes }: { codes: string }) => `This company’s ladder has no ${codes}. Choose the role each one becomes `
+      + 'in the copy: every setting that names it is changed to match.',
+    rungTo: ({ code }: { code: string }) => `${code} becomes`,
+    chooseRung: 'Choose a role',
+    /** A role in the map's select: its label as typed and its code. */
+    rungOption: ({ label, code }: { label: string; code: string }) => `${label} (${code})`,
+    noRungs: 'This company has no active role to map to. Add one on the role ladder first.',
   },
 
   /** The dialogs' shared controls and their name field. */
@@ -261,7 +332,8 @@ const id: MessagesOf<typeof en> = {
     waiting: ({ n }) => `${n} perubahan belum terbit`,
     open: 'Buka',
     newTemplate: 'Template baru',
-    none: 'Perusahaan ini belum punya template.',
+    none: 'Perusahaan ini belum punya template. Template pertamanya, kosong atau salinan template mana pun, menjadi '
+      + 'default-nya.',
     loading: 'Memuat template…',
     retry: 'Coba lagi',
   },
@@ -273,6 +345,9 @@ const id: MessagesOf<typeof en> = {
     training: kept('Training'),
     capability: kept('Capability Mapping'),
     events: kept('Events'),
+    recruitment: 'Rekrutmen',
+    analytics: kept('Advanced analytics'),
+    branding: 'Tampilan',
   },
   parts: {
     activity_taxonomy: 'Aktivitas',
@@ -290,6 +365,10 @@ const id: MessagesOf<typeof en> = {
     tiers: kept('Production club tiers'),
     moc: kept('Maintenance of Contract'),
     promotion: kept('Promotion paths'),
+    bagian: 'Bagian',
+    data: kept('Data upload'),
+    survei: 'Survei',
+    ambang: 'Ambang & benchmark',
   },
 
   checklist: {
@@ -315,20 +394,52 @@ const id: MessagesOf<typeof en> = {
   publishAll: {
     title: 'Terbitkan semua perubahan?',
     lead: 'Bagian berikut akan diterbitkan:',
-    note: `${kept('KPM')} yang sudah ada tidak berubah; hanya ${kept('KPM')} baru yang memakai versi ini.`,
+    note: `Setelah itu, Anda memilih apakah ${kept('KPM')} yang sudah ada ikut memakainya.`,
     confirm: 'Terbitkan semua',
     published: ({ sections }) => `Terbit: ${sections}.`,
     refused: ({ section, message }) => `${section} tidak diterbitkan: ${message}`,
   },
 
-  offices: {
-    title: `${kept('KPM')} yang memakai versi lama`,
-    lead: `Menerbitkan tidak mengubah ${kept('KPM')} yang sudah ada.`,
+  apply: {
+    title: `Terapkan juga ke ${kept('KPM')} yang sudah ada?`,
+    lead: ({ sections }) => `Versi terbaru ${sections} dapat juga diterapkan ke ${kept('KPM')} yang dibuat dari template ini.`,
+    unchanged: `Belum diubah ${kept('KPM')}`,
+    changed: `Sudah diubah ${kept('KPM')}`,
     office: ({ code, branch }) => `${kept('KPM')} ${code} · ${branch}`,
-    behindOn: ({ sections }) => `Versi lama: ${sections}`,
-    unrecorded: ({ n }) => `${n} ${kept('KPM')} lain dibuat sebelum versinya tercatat.`,
+    current: ({ n }) => `${n} ${kept('KPM')} sudah memakai versi terbaru.`,
+    none: `Belum ada ${kept('KPM')} yang dibuat dari template ini.`,
+    added: ({ items }) => `Ditambah: ${items}`,
+    removed: ({ items }) => `Dihapus: ${items}`,
+    changedItems: ({ items }) => `Diubah: ${items}`,
+    ownMaterial: ({ n }) => `${n} modul memakai materi sendiri`,
+    confirm: ({ n }) => `Terapkan ke ${n} ${kept('KPM')}`,
+    notNow: 'Tidak sekarang',
+    applying: 'Menerapkan…',
+    replaceTitle: `Ganti perubahan milik ${kept('KPM')}?`,
+    replaceLead: `${kept('KPM')} berikut sudah mengubah bagian ini sendiri. Menerapkan template mengganti yang tercantum; `
+      + `file milik ${kept('KPM')} tetap dapat dibaca di riwayat modul.`,
+    replaceConfirm: 'Ya, ganti',
+    back: 'Kembali',
+    applied: ({ n }) => `Diterapkan ke ${n} ${kept('KPM')}.`,
+    waiting: ({ code }) => `${kept('KPM')} ${code} punya perubahan sendiri yang belum terbit: yang diterapkan sampai ke `
+      + 'agennya saat KPM itu menerbitkan.',
+    refused: ({ code, message }) => `${kept('KPM')} ${code}: ${message}`,
     loading: `Memuat ${kept('KPM')}…`,
+    retry: 'Coba lagi',
     close: 'Tutup',
+  },
+
+  material: {
+    open: ({ n }) => `Materi (${n})`,
+    openName: ({ title }) => `Materi untuk ${title}`,
+    title: ({ title }) => `Materi: ${title}`,
+    lead: `Setiap ${kept('KPM')} yang dibuat dari template ini menampilkan materi ini sampai ${kept('KPM')} menambahkan `
+      + 'miliknya sendiri. Materi terbit bersama Terbitkan.',
+    count: ({ x, y }) => `${x} / ${y} modul punya materi`,
+    save: 'Simpan materi',
+    saving: 'Menyimpan…',
+    cancel: 'Batal',
+    remove: 'Hapus',
   },
 
   editor: {
@@ -344,19 +455,22 @@ const id: MessagesOf<typeof en> = {
     publishing: 'Menerbitkan…',
     nothingToPublish: 'Belum ada perubahan sejak terakhir terbit.',
     saveFirst: 'Tunggu sampai draf tersimpan.',
-    published: `Terbit. ${kept('KPM')} yang sudah ada tidak berubah.`,
+    published: 'Terbit.',
     retry: 'Coba lagi',
+    savedElsewhere: 'Orang lain menyimpan bagian ini setelah Anda membukanya, jadi perubahan Anda tidak tersimpan. Muat '
+      + 'ulang untuk melihat yang tersimpan sekarang.',
+    reload: 'Muat ulang',
     archived: 'Diarsipkan: hanya dapat dibaca.',
     unknown: 'Bagian ini tidak ada.',
     loading: 'Memuat bagian…',
     noEditor: `Bagian ini belum punya editor. Isinya disimpan dan disalin ke ${kept('KPM')} baru persis apa adanya.`,
+    playbookLive: `Yang terbit di sini langsung dibaca setiap ${kept('KPM')} yang dibuat dari template ini.`,
   },
 
   settings: {
     line: `Berlaku langsung untuk semua ${kept('KPM')} perusahaan ini.`,
     products: 'Produk',
     campaigns: kept('Campaign'),
-    recruitment: 'Rekrutmen',
     campaignQuestion: `Terbitkan aturan ${kept('campaign')} ini? Berlaku langsung untuk setiap ${kept('KPM')} perusahaan `
       + 'ini, termasuk yang sudah ada.',
     campaignEmpty: 'Belum ada yang terbit.',
@@ -394,6 +508,13 @@ const id: MessagesOf<typeof en> = {
     defaultOption: ({ name }) => `${name} · Default`,
     loadingSources: 'Memuat template…',
     noSource: 'Belum ada template untuk disalin.',
+    rungMap: 'Petakan peran',
+    rungMapHint: ({ codes }) => `Susunan jenjang perusahaan ini tidak memiliki ${codes}. Pilih peran yang menggantikan `
+      + 'masing-masing dalam salinan: setiap pengaturan yang menyebutnya diubah menyesuaikan.',
+    rungTo: ({ code }) => `${code} menjadi`,
+    chooseRung: 'Pilih peran',
+    rungOption: ({ label, code }) => `${label} (${code})`,
+    noRungs: 'Perusahaan ini belum punya peran aktif untuk dipetakan. Tambahkan dulu di susunan jenjang.',
   },
 
   name: 'Nama',

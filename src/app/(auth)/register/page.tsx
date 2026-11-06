@@ -20,6 +20,7 @@ import { REMOVED_ON_PHONE } from '@/components/ui/phone';
 import { cn } from '@/lib/cn';
 import { heldBecause } from '@/lib/disabled-reason';
 import { PublicTitle } from '@/components/public-title';
+import { LinkBranding } from '@/components/branding/link-branding';
 
 /**
  * Self-signup.
@@ -34,7 +35,7 @@ import { PublicTitle } from '@/components/public-title';
  * so it belongs to the account, and the account exists before any office admits them.
  * `GET /companies` is the one company question a visitor may ask without a token.
  *
- * **And what a person records** (ADR-0158, P18.8-T4): their date of birth, the month they joined the
+ * **And what a person records** (ADR-0158, P18.5-T4): their date of birth, the month they joined the
  * insurer — the label names it, *Joined Prudential*, once one is chosen — whether they work full-time
  * or part-time, and their gender. All four required. Whether the birth date is 18 years ago and the
  * month not still to come is the server's to say, and its sentence is shown under the field it names.
@@ -61,7 +62,7 @@ export default function RegisterPage() {
  */
 function Register() {
   const token = inviteTokenOf(useSearchParams());
-  // The personal details' labels in the reader's language (`lib/personal.ts`, P18.98-T4).
+  // The personal details' labels in the reader's language (`lib/personal.ts`, P18.10-T4).
   const language = useLanguage();
   const genders = genderLabels(language);
   const workStatuses = workStatusLabels(language);
@@ -120,7 +121,7 @@ function Register() {
   const fieldError = (f: PersonalField) => (refusedField === f ? error?.message : undefined);
 
   /*
-   * **What *Create account* waits for, said under it** (P18.95-T7 AC-3; UI-030): the fields still empty, by their
+   * **What *Create account* waits for, said under it** (P18.7-T7 AC-3; UI-030): the fields still empty, by their
    * labels and in the form's order, or — once none is — that the password is wrong, which its own field says.
    */
   const joinedLabel = t.joined({ insurer: insurerName ?? null });
@@ -163,6 +164,8 @@ function Register() {
   if (token && !invite) {
     return (
       <main className={AUTH_PAGE}>
+        {/* P19.6-T1 AC-13 (ADR-0218 §9): the link's KPM, `?kpm=` or the invitation's. */}
+        <LinkBranding />
         <PublicTitle>
           <h1 className="mb-6 font-display text-3xl font-bold text-navy">{t.title}</h1>
         </PublicTitle>
@@ -185,8 +188,10 @@ function Register() {
 
   return (
     <main className={AUTH_PAGE}>
+      {/* P19.6-T1 AC-13 (ADR-0218 §9): the link's KPM, `?kpm=` or the invitation's. */}
+      <LinkBranding />
       {/*
-        * The line under the title is the client's *Remove* on a phone (P18.95-T7 AC-1, grey text row 26): from 768px it
+        * The line under the title is the client's *Remove* on a phone (P18.7-T7 AC-1, grey text row 26): from 768px it
         * reads as before. On a phone the title keeps the line's gap below it, so the form does not start against it.
         * **Never on an invite** (a production walk, 2026-10-27): accepting one places them in the leader's office, so
         * the line would contradict the banner under it. The title keeps its gap at every size then.
@@ -201,7 +206,7 @@ function Register() {
       )}
 
       {invite && (
-        <Card className="mb-4 border-l-4 border-l-amber" density="compact">
+        <Card className="mb-4 border-l-4 border-l-primary" density="compact">
           <p className="font-display text-lg font-bold text-navy">{t.invite.banner({ leader: invite.leaderName, kpm: invite.kpm.code })}</p>
           <p className="mt-1 text-md text-muted">{t.invite.bannerLine({ branch: invite.kpm.branchName, company: invite.companyName })}</p>
         </Card>
@@ -293,7 +298,7 @@ function Register() {
             <Field
               label={t.agentCode}
               htmlFor="agentCode"
-              // The client's words at every size (P18.95-T7 AC-1, grey text row 26).
+              // The client's words at every size (P18.7-T7 AC-1, grey text row 26).
               hint={t.agentCodeHint}
             >
               <TextInput

@@ -44,19 +44,21 @@ async function firstPaint(ui: React.ReactNode) {
 }
 
 /**
- * **One hook names the three sizes** (P18.97-T6 AC-2, ADR-0178; the client's scope tags of 2026-10-27): a phone below
+ * **One hook names the three sizes** (P18.9-T6 AC-2, ADR-0178; the client's scope tags of 2026-10-27): a phone below
  * 768px, a tablet from 768 to 1023px, a desktop from 1024px. It generalises `usePhone`, which is now its phone, and
  * keeps `usePhone`'s rules: false on the server and the first render, false with no `matchMedia`, the answer in an
  * effect — or before the first paint, for the shell's sidebar, which asks for that.
  */
-describe('useMediaQuery (P18.97-T6 AC-2)', () => {
+describe('useMediaQuery (P18.9-T6 AC-2)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('P18.97-T6 AC-2 names the three ranges once, on Tailwind’s md and lg lines', () => {
+  it('P18.9-T6 AC-2 names the three ranges once, on Tailwind’s md and lg lines', () => {
     expect(MEDIA_RANGES).toEqual({
       phone: '(max-width: 767.98px)',
       tablet: '(min-width: 768px) and (max-width: 1023.98px)',
       desktop: '(min-width: 1024px)',
+      // P19.1-T1 AC-4 (UI-114): the narrow desktop, where the field shell's sidebar is the rail; full from xl's 1280px.
+      laptop: '(min-width: 1024px) and (max-width: 1279.98px)',
     });
     // The phone's string is the one every phone-only stub in the suite answers.
     expect(PHONE_QUERY).toBe('(max-width: 767.98px)');
@@ -68,14 +70,14 @@ describe('useMediaQuery (P18.97-T6 AC-2)', () => {
     [768, { phone: 'false', tablet: 'true', desktop: 'false' }],
     [1023, { phone: 'false', tablet: 'true', desktop: 'false' }],
     [1024, { phone: 'false', tablet: 'false', desktop: 'true' }],
-  ])('P18.97-T6 AC-2 at %ipx answers each range for that width alone', (px, expected) => {
+  ])('P18.9-T6 AC-2 at %ipx answers each range for that width alone', (px, expected) => {
     atWidth(px);
     render(<><Probe ranges="phone" /><Probe ranges="tablet" /><Probe ranges="desktop" /></>);
     expect({ phone: said('phone'), tablet: said('tablet'), desktop: said('desktop') }).toEqual(expected);
   });
 
   it.each([[767, 'true'], [768, 'true'], [1023, 'true'], [1024, 'false']])(
-    'P18.97-T6 AC-2 at %ipx, below 1024px — a phone or a tablet — reads %s',
+    'P18.9-T6 AC-2 at %ipx, below 1024px — a phone or a tablet — reads %s',
     (px, expected) => {
       atWidth(px);
       render(<Probe ranges={['phone', 'tablet']} />);
@@ -83,7 +85,16 @@ describe('useMediaQuery (P18.97-T6 AC-2)', () => {
     },
   );
 
-  it('P18.97-T6 AC-2 usePhone is its phone: true at 767px, false at 768px', () => {
+  it.each([[1023, 'false'], [1024, 'true'], [1152, 'true'], [1279, 'true'], [1280, 'false']])(
+    'P19.1-T1 AC-4 at %ipx the narrow desktop (UI-114’s 1024–1279px) reads %s',
+    (px, expected) => {
+      atWidth(px);
+      render(<Probe ranges="laptop" />);
+      expect(said('laptop')).toBe(expected);
+    },
+  );
+
+  it('P18.9-T6 AC-2 usePhone is its phone: true at 767px, false at 768px', () => {
     function Phone() { return <output aria-label="usePhone">{String(usePhone())}</output>; }
     const width = atWidth(767);
     render(<Phone />);
@@ -92,7 +103,7 @@ describe('useMediaQuery (P18.97-T6 AC-2)', () => {
     expect(said('usePhone')).toBe('false');
   });
 
-  it('P18.97-T6 AC-2 is false on the server, and on the first client render', () => {
+  it('P18.9-T6 AC-2 is false on the server, and on the first client render', () => {
     atWidth(800);
     // No effect runs on the server, so the media query is never asked there.
     expect(renderToString(<Probe ranges="tablet" />)).toContain('false');
@@ -107,13 +118,13 @@ describe('useMediaQuery (P18.97-T6 AC-2)', () => {
     }
   });
 
-  it('P18.97-T6 AC-2 is false for every range where there is no matchMedia — jsdom, and every spec of the desktop', () => {
+  it('P18.9-T6 AC-2 is false for every range where there is no matchMedia — jsdom, and every spec of the desktop', () => {
     expect(typeof window.matchMedia).not.toBe('function');
     render(<><Probe ranges="phone" /><Probe ranges="tablet" /><Probe ranges="desktop" /><Probe ranges={['phone', 'tablet']} /></>);
     for (const name of ['phone', 'tablet', 'desktop', 'phone or tablet']) expect(said(name)).toBe('false');
   });
 
-  it('P18.97-T6 AC-2 follows the width across each line, both ways', () => {
+  it('P18.9-T6 AC-2 follows the width across each line, both ways', () => {
     const width = atWidth(1280);
     render(<><Probe ranges="tablet" /><Probe ranges={['phone', 'tablet']} /></>);
     expect([said('tablet'), said('phone or tablet')]).toEqual(['false', 'false']);
@@ -125,7 +136,7 @@ describe('useMediaQuery (P18.97-T6 AC-2)', () => {
     expect([said('tablet'), said('phone or tablet')]).toEqual(['false', 'false']);
   });
 
-  it('P18.97-T6 AC-2 asks once per range, however often it renders, and stops listening when it goes', () => {
+  it('P18.9-T6 AC-2 asks once per range, however often it renders, and stops listening when it goes', () => {
     const added = vi.fn();
     const removed = vi.fn();
     const matchMedia = vi.fn((query: string) => ({
@@ -148,12 +159,12 @@ describe('useMediaQuery (P18.97-T6 AC-2)', () => {
    * it, so the first frame a browser paints is the width's; the default answers in an effect — a later task, after a
    * paint — as `usePhone` always has, and a screen asks it before its read so that frame is a skeleton.
    */
-  it('P18.97-T6 AC-2 with beforePaint, answers before the browser can paint the first frame', async () => {
+  it('P18.9-T6 AC-2 with beforePaint, answers before the browser can paint the first frame', async () => {
     atWidth(800);
     expect(await firstPaint(<Probe ranges="tablet" beforePaint />)).toBe('true');
   });
 
-  it('P18.97-T6 AC-2 by default answers in an effect, after the first paint — usePhone’s timing, unchanged', async () => {
+  it('P18.9-T6 AC-2 by default answers in an effect, after the first paint — usePhone’s timing, unchanged', async () => {
     atWidth(800);
     expect(await firstPaint(<Probe ranges="tablet" />)).toBe('false');
     atWidth(375);

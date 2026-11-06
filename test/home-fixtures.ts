@@ -2,7 +2,7 @@ import type { HomeTeamPerson, HomeView } from '@/lib/home';
 import { makeMe } from './harness';
 
 /**
- * **Home's fixtures** (Phase 18.99 T11; UI-100, UI-101): the mockup's leader — Agus Prasetyo, AB, on 30 October 2026 at
+ * **Home's fixtures** (Phase 18.11 T11; UI-100, UI-101): the mockup's leader — Agus Prasetyo, AB, on 30 October 2026 at
  * 09:05 in Jakarta, nothing logged today and five yesterday — and an agent's Home, as `GET /home` answers them. Shared by
  * the page's spec and the axe sweep, so both read the same screen.
  */
@@ -54,6 +54,22 @@ export const LEADER: HomeView = {
     activeAgent: { count: 4, of: 12, unit: { count: 1, of: 4 }, aab: { count: 3, of: 8 } },
     coached7d: { count: 2, of: 12, unit: { count: 1, of: 4 }, aab: { count: 1, of: 8 } },
     team: TEAM,
+    members: 11,
+    recruitmentPipeline: 5,
+    newHires: 3,
+  },
+};
+
+/** A leader by role with nobody yet (P19-T4 AC-2): the block at zero, the server's answer since ADR-0189 §4. */
+export const NEW_LEADER: HomeView = {
+  ...LEADER,
+  leader: {
+    activeAgent: { count: 0, of: 0, unit: { count: 0, of: 0 }, aab: { count: 0, of: 0 } },
+    coached7d: { count: 0, of: 0, unit: { count: 0, of: 0 }, aab: { count: 0, of: 0 } },
+    team: [],
+    members: 0,
+    recruitmentPipeline: 0,
+    newHires: 0,
   },
 };
 

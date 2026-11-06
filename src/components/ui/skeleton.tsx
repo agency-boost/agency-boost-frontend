@@ -21,7 +21,7 @@ import { cn } from '@/lib/cn';
  * a person using a screen reader gets no other signal that a wait began.
  *
  * Not a client component, so `loading.tsx` can render it directly. **Its label is the caller's, in the caller's
- * language; with none it says *Loading…* in the reader's** (P18.98-T4, the shared pieces), through `LoadingWords`, a
+ * language; with none it says *Loading…* in the reader's** (P18.10-T4, the shared pieces), through `LoadingWords`, a
  * client component of its own.
  */
 export function Skeleton({
@@ -33,7 +33,7 @@ export function Skeleton({
   label?: ReactNode;
   className?: string;
   /**
-   * **The whole page, while the session is read** (P18.98-T2): what a signed-in route is before it hydrates — every
+   * **The whole page, while the session is read** (P18.10-T2): what a signed-in route is before it hydrates — every
    * one is prerendered so. It carries `data-session-wait`, which tells `globals.css` that the page has no word to paint
    * in the wrong language yet, so a reader whose language is not the one the pages are prerendered in is not held back
    * for it (`data-lang-pending`): the shell arrives with the session, already in theirs.
@@ -215,7 +215,7 @@ export function SkeletonTree({
  * be, then a body.
  *
  * The chrome is **not** here. It belongs to the group layout, which stays mounted across
- * the boundary — that is the whole reason the shells moved out of the pages in P3.5-T14
+ * the boundary — that is the whole reason the shells moved out of the pages in P3.1-T14
  * Stage 2. A loading boundary that blanked the sidebar too would be worse than the
  * previous-page-frozen behaviour it replaces.
  */

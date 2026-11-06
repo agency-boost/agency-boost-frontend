@@ -14,9 +14,9 @@
  * The decimal places live here and nowhere else: the backend holds the unit and never
  * formats, so this is not a second copy of anything (invariant §7).
  *
- * **In the reader's language since P18.98-T3** (ADR-0174 §6, ADR-0179 §6): every function that writes a figure takes
+ * **In the reader's language since P18.10-T3** (ADR-0174 §6, ADR-0179 §6): every function that writes a figure takes
  * the `language` last — Indonesian when a caller passes none — and writes the same figure in each, `29,6%` and
- * `29.6%`, `0,30` and `0.30`. **The words beside a figure** (*points*, *A number*) are the catalogue's since P18.98-T4
+ * `29.6%`, `0,30` and `0.30`. **The words beside a figure** (*points*, *A number*) are the catalogue's since P18.10-T4
  * (`messages/ratio-words.ts`): a function that writes one takes the words' language after the figures' — `words`,
  * English when none is passed, so a screen not moved yet reads as it did — and its caller passes `useLanguage()` and
  * `useFigureLanguage()`.
@@ -35,7 +35,7 @@ export type RatioDisplayUnit = 'percent' | 'decimal' | 'points';
 
 /**
  * **What each unit is called where an Owner chooses one**, with an example figure in it — *A percentage — 15%*, *A
- * number — 0,30* — in the reader's `words` and its figure in the `figures` language (P18.98-T4).
+ * number — 0,30* — in the reader's `words` and its figure in the `figures` language (P18.10-T4).
  */
 export function displayUnitLabels(
   words: Language = SOURCE_LANGUAGE, figures: Language = DEFAULT_LANGUAGE,
@@ -129,7 +129,7 @@ export function formatRatioValue(
  * **A number and a lean keep that rule**, which UI-080 does not touch: the status is judged on the exact value and the
  * display rounds, so `8 ÷ 27` is 0.296 — below a 0.30 benchmark — and would read `0,30`; one more decimal is written,
  * `0,296`. A lean of 30.43 points outside a ±30 band reads `30,4 points`. **Read back from what is written**, in `id-ID`
- * whatever the reader's language (P18.98-T3 AC-2), so both languages add the same place.
+ * whatever the reader's language (P18.10-T3 AC-2), so both languages add the same place.
  */
 export function formatRatioForStatus(
   value: number | null,
@@ -157,7 +157,7 @@ export function formatRatioForStatus(
 
 /**
  * What goes in the input for a stored value: `15` for 0.15 shown as a percentage, `0,3` for 0.3 as a
- * number — a comma, as the figure beside it is written (ADR-0167 §1); `0.3` in English (P18.98-T3 AC-3).
+ * number — a comma, as the figure beside it is written (ADR-0167 §1); `0.3` in English (P18.10-T3 AC-3).
  */
 export function benchmarkToInput(value: number, unit: RatioDisplayUnit, language: Language = DEFAULT_LANGUAGE): string {
   // Rounded before printing so 0.155 × 100 reads `15,5`, not `15,500000000000002`.
@@ -167,7 +167,7 @@ export function benchmarkToInput(value: number, unit: RatioDisplayUnit, language
 /**
  * The stored value for what was typed, or `NaN` when it is not a number.
  *
- * **A comma or a point, in either language** (ADR-0167 §1, AC-3; P18.98-T3 AC-3): `15,5` and `15.5` are both fifteen
+ * **A comma or a point, in either language** (ADR-0167 §1, AC-3; P18.10-T3 AC-3): `15,5` and `15.5` are both fifteen
  * and a half percent. A
  * benchmark is a small value — a percentage, a ratio near 1, points under 100 — so a single point is a
  * decimal, never a thousands separator: `1.250` is 1,25 (`parseDecimal` states the rule).

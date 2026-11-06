@@ -48,7 +48,7 @@ export function KpiTile({
       className={cn(
         'rounded-md border px-3 py-2.5',
         variant === 'plain' && 'border-hairline bg-base',
-        variant === 'insight' && 'border-amber/35 bg-amber/[0.08]',
+        variant === 'insight' && 'border-primary/35 bg-primary/[0.08]',
         variant === 'complete' && 'border-success/35 bg-success/[0.08]',
         variant === 'overdue' && 'border-alert/30 bg-alert/[0.08]',
         className,
@@ -58,7 +58,7 @@ export function KpiTile({
       <span
         className={cn(
           'font-body text-2xl font-bold leading-tight',
-          variant === 'insight' && 'text-amber-deep',
+          variant === 'insight' && 'text-primary-deep',
           variant === 'complete' && 'text-success',
           variant === 'overdue' && 'text-alert',
           variant === 'plain' && 'text-navy',

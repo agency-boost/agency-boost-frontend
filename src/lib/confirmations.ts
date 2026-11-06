@@ -1,7 +1,7 @@
 import { confirmationMessages } from '@/i18n/messages/confirmations';
 
 /**
- * **The confirmations, once** (P18.95-T1 AC-6; ADR-0167 §5, OD-200; the client's UI review of 2026-10-26,
+ * **The confirmations, once** (P18.7-T1 AC-6; ADR-0167 §5, OD-200; the client's UI review of 2026-10-26,
  * UI-008: *"no shared toast"*). A whole-form save and a one-tap action keep what they show today and add
  * one of these, through the shell's toast (`components/ui/toast.tsx`); **a failure toasts nothing**, and
  * its error stays where it is shown.
@@ -12,7 +12,7 @@ import { confirmationMessages } from '@/i18n/messages/confirmations';
  * after a dash (`withDetail`): *Session started ✓ — unfinished items and tips from last week carried
  * forward.*, *Joined ✓ — you're going to Product Launch*.
  *
- * **Their words are the catalogue's** (`i18n/messages/confirmations.ts`, P18.98-T4): a screen toasts them in the
+ * **Their words are the catalogue's** (`i18n/messages/confirmations.ts`, P18.10-T4): a screen toasts them in the
  * reader's language from `useMessages(confirmationMessages)`; `CONFIRMED` is their English, for a module not moved yet.
  */
 export const CONFIRMED = confirmationMessages.en;

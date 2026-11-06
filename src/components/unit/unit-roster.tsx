@@ -17,7 +17,7 @@ import {
 } from '@/lib/unit-dashboard';
 
 /**
- * ***Roster tim Anda*** (UI V1, Phase 18.99 T4; UI-002, UI-005, UI-007, UI-009, UI-011, UI-028;
+ * ***Roster tim Anda*** (UI V1, Phase 18.11 T4; UI-002, UI-005, UI-007, UI-009, UI-011, UI-028;
  * `unit-dashboard-mobile` screens 1–2, `unit-dashboard-desktop` *Overview*). **Three drawings of one roster**, each for
  * its range, never one restyled (the report's *Rules*):
  *
@@ -29,6 +29,11 @@ import {
  * - **From 1024px, a table of nine and a ›** (UI-009): *Nama · Progres goal · Leads penjualan · Closing · Leads rekrut ·
  *   Potensi rekrut · Aktivitas · 1:1 terakhir · Status*; each unit's header row with its totals and *Active n/m*;
  *   every unit open, its header able to close it; the header sticky; nothing scrolls sideways.
+ *
+ * ***Proposal*** (P19.7-T2 AC-13; ADR-0221 §7): how many proposals each person first saved as a PDF in the period
+ * (`PROPOSALS_MADE`), and nothing about the clients — a column after *Potensi rekrut* on a laptop and a tablet (before
+ * *Aktivitas* on a tablet, which draws no lead columns), its unit's sum on the header row; on a phone the document icon
+ * and the count beside the person's name, only above zero, heard as *"{n} proposal"*. The coaching roster carries none.
  *
  * **Every row is a link, whole** (UI-011): the reader's own to `/summary`, anybody else's to their agent page on the
  * *Personal Summary* tab, `?from=` this page so its ‹ comes back; somebody whose pages the reader may not open is a
@@ -140,7 +145,7 @@ function StatusChips({
       className={cn(
         'inline-flex min-h-11 items-center whitespace-nowrap rounded-pill px-3 text-sm font-semibold lg:min-h-8',
         tint,
-        filter === id && 'outline outline-2 outline-offset-1 outline-navy',
+        filter === id && 'outline outline-2 outline-offset-1 outline-secondary',
       )}
     >
       {label}
@@ -148,7 +153,7 @@ function StatusChips({
   );
   return (
     <div role="group" aria-label={t.filterLabel} className="flex flex-wrap gap-1.5">
-      {chip('all', t.all({ n: tally.all }), filter === 'all' ? 'bg-navy text-white' : 'border border-line bg-card text-ink')}
+      {chip('all', t.all({ n: tally.all }), filter === 'all' ? 'bg-secondary text-secondary-contrast' : 'border border-line bg-card text-ink')}
       {tally.needs_attention > 0 && chip(
         'needs_attention', t.withCount({ status: rosterStatusLabel('needs_attention', language), n: tally.needs_attention }),
         'bg-pill-red text-pill-red-ink',
@@ -233,6 +238,33 @@ function marksOf(row: UnitRow): ReactNode {
   );
 }
 
+/**
+ * **A phone row's proposal count** (P19.7-T2 AC-13): the document icon and the number, only above zero — one image to a
+ * screen reader, *"3 proposal"*.
+ */
+function ProposalsMark({ n }: { n: number }) {
+  const figures = useFigureLanguage();
+  const t = useMessages(unitDashboardMessages).own;
+  return (
+    <span role="img" aria-label={t.proposalsMade({ n })} data-proposals-made={n} className="inline-flex shrink-0 items-center gap-0.5 text-xs font-semibold text-navy">
+      <LineIcon name="document" className="h-3.5 w-3.5" />
+      <span aria-hidden="true">{formatNumber(n, {}, figures)}</span>
+    </span>
+  );
+}
+
+/** A phone row's marks: the ✓, *New hire*, and its proposals above zero (P19.7-T2 AC-13). `null` with none. */
+function phoneMarksOf(row: UnitRow): ReactNode {
+  const marks = marksOf(row);
+  if (!(row.proposalsMade > 0)) return marks;
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      {marks}
+      <ProposalsMark n={row.proposalsMade} />
+    </span>
+  );
+}
+
 /** One unit of the roster, as both drawings walk it: its name, its people, its total, the units inside it. */
 interface Section {
   key: string;
@@ -311,14 +343,14 @@ function AccordionSection({
           onClick={() => onToggle(section.key)}
           className={cn(
             'flex min-h-12 w-full items-center gap-2 border-t border-divider px-3 text-left text-md font-semibold text-ink',
-            expanded && 'bg-amber/[0.06]',
+            expanded && 'bg-primary/[0.06]',
           )}
         >
           <LineIcon name={expanded ? 'chevronDown' : 'chevronRight'} className="h-4 w-4 shrink-0 text-signal-grey" />
           <span className="min-w-0 flex-1 truncate">{t.v1.unitCount({ label: section.label, n: section.count })}</span>
           {bar !== null && (
             <span aria-hidden="true" className="h-1.5 w-[60px] shrink-0 overflow-hidden rounded-sm bg-base">
-              <span className="block h-full bg-navy" style={{ width: `${bar}%` }} />
+              <span className="block h-full bg-secondary" style={{ width: `${bar}%` }} />
             </span>
           )}
           <span className="shrink-0 tabular-nums">
@@ -340,7 +372,7 @@ function AccordionSection({
                   href={rowHref(row, from) ?? undefined}
                   height={60}
                   nameClassName="text-md md:max-lg:text-md"
-                  badge={marksOf(row)}
+                  badge={phoneMarksOf(row)}
                   meta={<GoalLine goal={row.goal} />}
                   trailing={period === 'month' ? <StatusPill status={row.status} /> : undefined}
                   className="rounded-none"
@@ -388,6 +420,8 @@ function Touches({ touches }: { touches: { logged: number; target: number | null
 
 const HEAD = 'bg-hover-row px-2 py-2 text-xs font-semibold leading-tight text-muted [overflow-wrap:anywhere] lg:px-1.5 xl:px-2.5';
 const CELL = 'px-2 lg:px-1.5 xl:px-2.5';
+/** The laptop's second header row (UI-114): stuck under the groups' 2rem row, its names right-aligned over the figures. */
+const SUB_HEAD = 'text-right !top-[calc(env(safe-area-inset-top)+2rem)]';
 
 function RosterTable({
   view, period, filter, from, wide, headingId, statusInfo,
@@ -412,55 +446,77 @@ function RosterTable({
     <table aria-labelledby={headingId} data-roster-table={wide ? 'desktop' : 'tablet'} className="relative w-full table-fixed border-collapse text-left text-base">
       {wide ? (
         <colgroup>
-          <col className="w-[16%] xl:w-[17%]" />
-          <col className="w-[12%] xl:w-[19%]" />
-          <col className="w-[9%] xl:w-[7%]" />
+          <col className="w-[15%] xl:w-[16%]" />
+          <col className="w-[12%] xl:w-[17%]" />
           <col className="w-[8%] xl:w-[6.5%]" />
-          <col className="w-[9%] xl:w-[7%]" />
-          <col className="w-[9%] xl:w-[7%]" />
-          <col className="w-[9%] xl:w-[8%]" />
-          <col className="w-[10%] xl:w-[10%]" />
-          <col className="w-[16%] xl:w-[15.5%]" />
+          <col className="w-[7.5%] xl:w-[6%]" />
+          <col className="w-[8%] xl:w-[6.5%]" />
+          <col className="w-[8%] xl:w-[6.5%]" />
+          {/* P19.7-T2 AC-13: *Proposal*, after *Potensi rekrut*. */}
+          <col className="w-[7.5%] xl:w-[6.5%]" />
+          <col className="w-[8.5%] xl:w-[7.5%]" />
+          <col className="w-[9.5%] xl:w-[10%]" />
+          <col className="w-[14%] xl:w-[14.5%]" />
           <col className="w-[2%] xl:w-[3%]" />
         </colgroup>
       ) : (
         <colgroup>
-          <col className="w-[34%]" />
-          <col className="w-[32%]" />
+          <col className="w-[30%]" />
+          <col className="w-[27%]" />
+          {/* P19.7-T2 AC-13: *Proposal*, before *Aktivitas*. */}
+          <col className="w-[11%]" />
           <col className="w-[14%]" />
-          <col className="w-[16%]" />
+          <col className="w-[14%]" />
           <col className="w-[4%]" />
         </colgroup>
       )}
       {/* The head sticks below the top inset, never under a Home Screen app's clock (staging review, 2026-10-31). */}
       <thead className="[&_th]:sticky [&_th]:top-[env(safe-area-inset-top)] [&_th]:z-[1]">
         <tr>
-          <th scope="col" className={HEAD}>{t.columns.name}</th>
-          <th scope="col" className={HEAD}>{t.columns.goal}</th>
+          <th scope="col" rowSpan={wide ? 2 : undefined} className={HEAD}>{t.columns.name}</th>
+          <th scope="col" rowSpan={wide ? 2 : undefined} className={HEAD}>{t.columns.goal}</th>
+          {/*
+           * **Grouped headers on a laptop** (P19.1-T1 AC-3, UI-114: *Leads penjualan → Leads | Closing, Leads rekrut →
+           * Leads | Potensi*): two groups over four short columns, so no header breaks inside a word at 1024; the one long
+           * name left, *Potensi rekrut*, is the short column's ⓘ.
+           */}
           {wide && (
             <>
-              <th scope="col" className={cn(HEAD, 'text-right')}>{t.v1.columns.salesLeads}</th>
-              <th scope="col" className={cn(HEAD, 'text-right')}>{t.v1.columns.closing}</th>
-              <th scope="col" className={cn(HEAD, 'text-right')}>{t.v1.columns.recruitLeads}</th>
-              <th scope="col" className={cn(HEAD, 'text-right')}>{t.v1.columns.potentialRecruits}</th>
+              <th scope="colgroup" colSpan={2} className={cn(HEAD, 'h-8 whitespace-nowrap text-center')}>{t.v1.columns.salesLeads}</th>
+              <th scope="colgroup" colSpan={2} className={cn(HEAD, 'h-8 whitespace-nowrap text-center')}>{t.v1.columns.recruitLeads}</th>
             </>
           )}
-          <th scope="col" className={cn(HEAD, 'text-right')}>
+          <th scope="col" rowSpan={wide ? 2 : undefined} className={cn(HEAD, 'text-right')}>{t.v1.columns.proposal}</th>
+          <th scope="col" rowSpan={wide ? 2 : undefined} className={cn(HEAD, 'text-right')}>
             <span className="inline-flex items-center gap-1">
               {t.columns.activity}
               {/* ADR-0165 §2: the figure is *goal activities*; the heading's ⓘ names the three types it counts. */}
               <TippedGlyph glyph="ⓘ" name={t.own.activityInfo} tip={t.own.activityRule} align="fit" className={STATUS_TIP} />
             </span>
           </th>
-          {wide && <th scope="col" className={HEAD}>{t.columns.last}</th>}
-          <th scope="col" className={HEAD}>
+          {wide && <th scope="col" rowSpan={2} className={HEAD}>{t.columns.last}</th>}
+          <th scope="col" rowSpan={wide ? 2 : undefined} className={HEAD}>
             <span className="inline-flex items-center gap-1">
               {t.columns.status}
               {statusInfo}
             </span>
           </th>
-          <th scope="col" className={HEAD}><span className="sr-only">{t.own.details}</span></th>
+          <th scope="col" rowSpan={wide ? 2 : undefined} className={HEAD}><span className="sr-only">{t.own.details}</span></th>
         </tr>
+        {wide && (
+          // Under the groups, stuck below their row (2rem): the four short names.
+          <tr>
+            <th scope="col" className={cn(HEAD, SUB_HEAD)}>{t.v1.columns.leads}</th>
+            <th scope="col" className={cn(HEAD, SUB_HEAD)}>{t.v1.columns.closing}</th>
+            <th scope="col" className={cn(HEAD, SUB_HEAD)}>{t.v1.columns.leads}</th>
+            <th scope="col" className={cn(HEAD, SUB_HEAD)}>
+              <span className="inline-flex items-center gap-1">
+                {t.v1.columns.potensi}
+                <TippedGlyph glyph="ⓘ" name={t.v1.columns.potentialRecruits} tip={t.v1.columns.potentialRecruits} align="fit" className={STATUS_TIP} />
+              </span>
+            </th>
+          </tr>
+        )}
       </thead>
       {flat.filter(({ section }) => section.rows.some((r) => matchesFilter(r, filter)) || filter === 'all').map(({ section, depth }) => (
         <UnitRows
@@ -495,7 +551,7 @@ function UnitRows({
     : null;
   return (
     <tbody id={bodyId} data-unit-rows={section.key}>
-      <tr className="border-t border-divider bg-amber/[0.06] font-semibold text-ink">
+      <tr className="border-t border-divider bg-primary/[0.06] font-semibold text-ink">
         <th scope="rowgroup" className={cn(CELL, 'h-11 text-left font-semibold')} colSpan={1}>
           <button
             type="button"
@@ -525,6 +581,7 @@ function UnitRows({
             <td className={cn(CELL, 'text-right')}><Count n={total.leadsCounts.recruitNominated} /></td>
           </>
         )}
+        <td className={cn(CELL, 'text-right')} data-proposals-made={total.proposalsMade}><Count n={total.proposalsMade} /></td>
         <td className={cn(CELL, 'text-right')}><Touches touches={total.touches} /></td>
         {wide && <td className={CELL} />}
         <td className={cn(CELL, 'whitespace-nowrap')}>{t.v1.active({ count: total.potentialActive.count, of: total.potentialActive.of })}</td>
@@ -554,7 +611,7 @@ function PersonTableRow({ row, period, from, wide, depth }: { row: UnitRow; peri
           {href ? (
             <Link
               href={href}
-              className="min-w-0 truncate font-semibold uppercase text-ink after:absolute after:inset-0 after:content-[''] focus-visible:outline-none focus-visible:after:outline focus-visible:after:outline-2 focus-visible:after:outline-amber"
+              className="min-w-0 truncate font-semibold uppercase text-ink after:absolute after:inset-0 after:content-[''] focus-visible:outline-none focus-visible:after:outline focus-visible:after:outline-2 focus-visible:after:outline-focus-ring"
             >
               {name}
             </Link>
@@ -578,6 +635,7 @@ function PersonTableRow({ row, period, from, wide, depth }: { row: UnitRow; peri
           <td className={cn(CELL, 'text-right tabular-nums')}><Count n={row.leadsCounts.recruitNominated} tone="font-semibold text-lavender" /></td>
         </>
       )}
+      <td className={cn(CELL, 'text-right tabular-nums')} data-proposals-made={row.proposalsMade}><Count n={row.proposalsMade} /></td>
       <td className={cn(CELL, 'text-right')}><Touches touches={row.activity.touches} /></td>
       {wide && (
         <td className={cn(CELL, 'truncate')}>

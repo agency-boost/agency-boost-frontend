@@ -2,7 +2,7 @@ import { defineMessages, type MessagesOf } from '@/i18n/catalogue';
 import { kept } from '@/i18n/kept';
 
 /**
- * **KPM Analytics' *Compliance, Events, and Campaigns*, in words** (P18.98-T4, the office reporting;
+ * **KPM Analytics' *Compliance, Events, and Campaigns*, in words** (P18.10-T4, the office reporting;
  * `functional/kpm-analytics.md`, *Compliance*): the heading and its counted sub-line, the six chips, Training's tabs, the
  * event and campaign pickers, Activity's note, search and sort, the tree's sections, cards and rows, each status pill
  * (`lib/kpm-compliance.ts`), and the override of a final campaign standing (`components/analytics/standing-override.tsx`,
@@ -127,7 +127,7 @@ const en = {
   /** A past event's *—* for a member nobody has confirmed yet (D-status), for a screen reader. */
   awaitingConfirmation: 'awaiting confirmation',
 
-  /** **The override of a final standing** (P18.6-T2 AC-8; ADR-0144 §4): our words, the prototype draws none. */
+  /** **The override of a final standing** (P18.3-T2 AC-8; ADR-0144 §4): our words, the prototype draws none. */
   override: {
     /** The cell's button, after the pill's own word (WCAG 2.5.3), and the dialog's title. */
     overrideFor: ({ name, campaign }: { name: string; campaign: string }) => `Override ${name}’s result for ${campaign}`,

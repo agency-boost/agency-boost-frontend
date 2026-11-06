@@ -47,11 +47,11 @@ function open() {
 const state = () => screen.getByTestId('state');
 
 /**
- * **P18.98-T2 AC-5: the cookie against the account** (ADR-0179 §2). The session reads who is signed in and hands the
+ * **P18.10-T2 AC-5: the cookie against the account** (ADR-0179 §2). The session reads who is signed in and hands the
  * language provider the account's language in the same render: a saved one wins and rewrites the cookie; an account
  * with none keeps the browser's and writes nothing — not the cookie, and not the account.
  */
-describe('P18.98-T2 AC-5 the cookie against the account', () => {
+describe('P18.10-T2 AC-5 the cookie against the account', () => {
   beforeEach(() => {
     setAccessToken(null);
     setImpersonating(false);

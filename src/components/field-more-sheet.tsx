@@ -5,11 +5,15 @@ import { useEffect, useRef, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { FieldAvatar, MORE_SHEET_ID, type FieldChrome } from '@/components/field-nav';
 import { LanguageSwitch } from '@/components/language-switch';
+import { PoweredBy, useBranding } from '@/components/kpm-brand';
+import { SurveyCards } from '@/components/surveys/survey-cards';
 import { NavIcon } from '@/components/ui/nav-icon';
 import { useMessages } from '@/i18n/language-provider';
 import { shellMessages } from '@/i18n/messages/shell';
 import { cn } from '@/lib/cn';
 import type { FieldDestination } from '@/lib/field-nav';
+import { PANDUAN_GLYPH } from '@/lib/panduan';
+import { hasSurveyDot, useSurveyPending } from '@/lib/surveys';
 import { useScrollLock } from '@/lib/use-scroll-lock';
 
 /** What Tab can land on inside the sheet. A *Segera hadir* tile is no link, and is not. */
@@ -30,7 +34,9 @@ const SWIPE_CLOSE_PX = 72;
  *   most two lines, the whole tile the target — in the order and with the members `fieldNav` gives: what the reader may
  *   open today, and a group with nothing in it left out. *Advanced analytics* is greyed with *Segera hadir* and opens
  *   nothing.
- * - **For an Owner or an Admin in their field view, *Open Owner view*** (ADR-0114), then **Keluar**, last, in red.
+ * - ***📘 Panduan***, then **Keluar**, last, in red (P19.6-T5 AC-1: the guide spec's account menu, *"between Akun Anda and
+ *   Keluar"*, which on a phone is this sheet — its account row at the top, *Keluar* at the foot). *Open Owner view*
+ *   (ADR-0114) went with P19.2-T1: the views are the avatar's menu (ADR-0198 §3; UI-169 item 3).
  *
  * A modal dialog named *Lainnya*, drawn at the end of `<body>` so nothing on the page stands over it; the page behind
  * holds still (`useScrollLock`). Following any link in it closes it.
@@ -45,10 +51,14 @@ export function MoreSheet({
   returnTo: RefObject<HTMLButtonElement | null>;
 }) {
   const t = useMessages(shellMessages);
+  const branding = useBranding();
   const box = useRef<HTMLDivElement>(null);
   const closer = useRef<HTMLButtonElement>(null);
   const dragFrom = useRef<number | null>(null);
   const { account, nav } = chrome;
+  // P19.5-T4 (C-R2): the surveys waiting — the cards above the groups, and the *Survei* tile's dot.
+  const surveys = useSurveyPending(nav.groups.some((g) => g.items.some((i) => i.id === 'surveys')));
+  const surveyDot = hasSurveyDot(surveys);
 
   useScrollLock(true);
 
@@ -141,6 +151,9 @@ export function MoreSheet({
           </div>
         </div>
 
+        {/* P19.5-T4 (C-R2, C-R9): *Perlu diisi*, one card per survey waiting, heading the sheet — or the thanks. */}
+        <SurveyCards pending={surveys} />
+
         {nav.groups.map((group) => (
           <section key={group.id} aria-labelledby={`more-group-${group.id}`} data-more-group={group.id}>
             <h2 id={`more-group-${group.id}`} className="mb-2 mt-3.5 text-xs font-semibold text-muted">
@@ -148,20 +161,29 @@ export function MoreSheet({
             </h2>
             <ul className="grid grid-cols-4 gap-2">
               {group.items.map((item) => (
-                <li key={item.id}><Tile item={item} soon={t.soon} doneSuffix={t.doneSuffix} /></li>
+                <li key={item.id}>
+                  <Tile item={item} soon={t.soon} doneSuffix={t.doneSuffix} dot={item.id === 'surveys' && surveyDot} dotSuffix={t.surveyWaiting} />
+                </li>
               ))}
             </ul>
           </section>
         ))}
 
-        {account.viewSwitch && (
-          <Link
-            href={account.viewSwitch.href}
-            className="mt-4 flex min-h-11 items-center gap-2 border-t border-divider px-1 pt-3 text-md font-semibold text-navy"
+        {/* P19.6-T5 AC-1 (ADR-0219 §5): the reader's own guide, in a new tab; the sheet closes as for any link. */}
+        {account.guideHref && (
+          <a
+            href={account.guideHref}
+            target="_blank"
+            rel="noopener"
+            data-panduan=""
+            aria-label={`${t.guide}${t.opensInNewTab}`}
+            className="mt-3 flex min-h-11 w-full items-center gap-2 px-1 text-md font-semibold text-ink"
           >
-            {account.viewSwitch.label}
-          </Link>
+            <span aria-hidden="true" className="w-5 shrink-0 text-center text-lg leading-none">{PANDUAN_GLYPH}</span>
+            {t.guide}
+          </a>
         )}
+
         <button
           type="button"
           onClick={account.onSignOut}
@@ -169,13 +191,15 @@ export function MoreSheet({
           aria-busy={account.signingOut || undefined}
           className={cn(
             'flex min-h-11 w-full items-center gap-2 border-t border-divider px-1 pt-3 text-md font-semibold text-pill-red-ink',
-            account.viewSwitch ? 'mt-1' : 'mt-4',
+            'mt-4',
             'disabled:opacity-60',
           )}
         >
           <NavIcon name="logout" className="h-5 w-5" />
           {account.signingOut ? t.signingOut : t.signOut}
         </button>
+        {/* P19.6-T1 AC-14 (ADR-0218 §11): under a KPM's own logo only; nothing is added otherwise. */}
+        <PoweredBy branding={branding} className="mt-2 px-1 text-center text-muted" />
       </div>
     </>,
     document.body,
@@ -187,17 +211,32 @@ export function MoreSheet({
  * tile is navy. A *Segera hadir* tile is greyed, says so under its name, and is no link — named in words for a screen
  * reader, as the sidebar's *Upcoming* items are.
  */
-function Tile({ item, soon, doneSuffix }: { item: FieldDestination; soon: string; doneSuffix: string }) {
+function Tile({
+  item, soon, doneSuffix, dot = false, dotSuffix = '',
+}: { item: FieldDestination; soon: string; doneSuffix: string; dot?: boolean; dotSuffix?: string }) {
+  /*
+   * **A live count rides the icon** (P19.2-T1 AC-9): the Super Admin's *Leaders past the limit*, as the console's drawer
+   * drew its badge — the alert-red pill at the icon's corner, and the number in the tile's name. No field item has one.
+   */
+  const count = item.badge !== undefined && item.badge > 0 ? item.badge : 0;
   const icon = (
     <span
       aria-hidden="true"
       className={cn(
         'flex h-10 w-10 items-center justify-center rounded-[12px]',
-        item.active ? 'bg-navy text-white' : 'bg-pill-grey text-pill-grey-ink',
+        item.active ? 'bg-secondary text-secondary-contrast' : 'bg-pill-grey text-pill-grey-ink',
         item.soon && 'opacity-50',
+        (count > 0 || dot) && 'relative',
       )}
     >
       <NavIcon name={item.icon} className="h-[21px] w-[21px]" />
+      {/* P19.5-T4 (C-R2): the red dot on *Survei* while a survey waits, said in its name. */}
+      {dot && <span data-survey-dot="" className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-card bg-alert" />}
+      {count > 0 && (
+        <span className="absolute -right-1 -top-1 inline-flex h-[17px] min-w-[17px] items-center justify-center rounded-pill bg-alert px-1 text-2xs font-bold text-white">
+          {count}
+        </span>
+      )}
     </span>
   );
   const face = 'flex min-h-16 flex-col items-center gap-1 rounded-row px-0.5 py-1 text-center text-xs leading-tight';
@@ -214,6 +253,8 @@ function Tile({ item, soon, doneSuffix }: { item: FieldDestination; soon: string
     <Link
       href={item.href}
       aria-current={item.active ? 'page' : undefined}
+      // A count is in the name, as the sidebar's rail says it (*Leaders past the limit, 2*); none otherwise.
+      aria-label={count > 0 ? `${item.short}, ${count}` : dot ? `${item.short}${dotSuffix}` : undefined}
       data-tile={item.id}
       className={cn(face, 'text-ink hover:bg-hover-row', item.active && 'font-semibold')}
     >

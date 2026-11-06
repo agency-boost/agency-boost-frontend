@@ -4,7 +4,7 @@ import {
 } from './coaching';
 
 /**
- * **The *Capability mapping* tab as UI V1 draws it** (Phase 18.99 T10; UI-035, UI-036): the ladder with each criterion
+ * **The *Capability mapping* tab as UI V1 draws it** (Phase 18.11 T10; UI-035, UI-036): the ladder with each criterion
  * once, and the *Skill tracker*'s sections with their counts. Read from the profile the server sends
  * (`GET …/profile`), never worked out against it: the stage is still the server's.
  *

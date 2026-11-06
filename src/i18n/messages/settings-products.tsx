@@ -7,10 +7,10 @@ import type { ScriptReviewState } from '@/lib/tenant-config';
 const words = (...parts: ReactNode[]) => createElement(Fragment, null, ...parts);
 
 /** The seven fields of a product's attack plan an office may rewrite, in the override modal's order. */
-type ScriptField = 'goodFit' | 'opening' | 'benefits' | 'fullScript' | 'objectionTheySay' | 'objectionYouSay' | 'nextAction';
+type ScriptField = 'goodFit' | 'opening' | 'benefits' | 'fullScript' | 'objections' | 'nextAction';
 
 /**
- * **Settings › Products** (`/kpm/settings/products`, P5-T5, P5-T10, P17-T9; P18.98-T4, settings-products): what an office
+ * **Settings › Products** (`/kpm/settings/products`, P5-T5, P5-T10, P17-T9; P18.10-T4, settings-products): what an office
  * sells from its company's catalog — the shelf, a product's own words (its name, its description, the seven fields of
  * its attack plan, its three documents) — and *Script approvals*, the office's own gate on them. The frame and the shared
  * controls (*Save*, *Cancel*, the publish bar) are `settings.ts`'; a document's PDF upload is `recruitment-pitch.ts`'; a
@@ -37,7 +37,7 @@ const en = {
 
   /** The shelf. */
   noProducts: ({ company }: { company: string }) => `${company} has no products on its catalog yet.`,
-  /** The shelf's one grey sentence, in the client's words (P18.97-T4 AC-6). */
+  /** The shelf's one grey sentence, in the client's words (P18.9-T4 AC-6). */
   shelfNote: 'Your changes apply to this office only.',
   /** The shelf's count, as built (*1 products* included); `selling` is drawn bold; `withdrawn` null when none is. */
   shelfCount: ({ n, selling, withdrawn, company }: {
@@ -57,6 +57,10 @@ const en = {
   } satisfies Record<Exclude<ScriptReviewState, 'none'>, string>,
   reviewButton: 'Review',
   reviewName: ({ name }: { name: string }) => `Review ${name}`,
+  /** The shelf on a phone (P19.2-T3 AC-3; UI-141, `kpm-owner-mobile` 7): its search and its chips. */
+  search: 'Search products',
+  noMatch: 'No product matches.',
+  chips: { label: 'Filter products', all: 'All', pending: 'Waiting', rejected: 'Sent back' },
   agentsSellIt: 'Agents sell it',
   agentsSellItFor: ({ name }: { name: string }) => `Agents sell it, ${name}`,
   customize: 'Customize',
@@ -102,10 +106,16 @@ const en = {
     opening: '1 · Opening line',
     benefits: '2 · Lead with these benefits',
     fullScript: '3 · Full script — how to narrate it',
-    objectionTheySay: '4a · If they push back — they say',
-    objectionYouSay: '4b · If they push back — you say',
+    // The cards since P19.4-T4 (ADR-0209 §9): the whole list is the office's or the company's.
+    objections: '4 · If they push back',
     nextAction: '5 · Next action',
   } satisfies Record<ScriptField, string>,
+  /** A rider under its base (P19.4-T4 AC-8; the riders spec's rule 6): no switch of its own. */
+  ridersUnder: 'Riders sold with it',
+  riderChip: kept('Rider'),
+  riderFollows: ({ on }: { on: boolean }): string => (on
+    ? 'Sold with its base products — it has no switch of its own.'
+    : 'Not sold: none of its base products is. It has no switch of its own.'),
   documents: kept('Documents'),
   uploadedByOffice: ({ file }: { file: string }) => `Uploaded by your office — ${file}`,
   fromCatalog: ({ company }: { company: string }) => `From ${company}’s catalog`,
@@ -116,6 +126,24 @@ const en = {
   upload: '+ Upload',
   replaceName: ({ label }: { label: string }) => `Replace ${label}`,
   uploadName: ({ label }: { label: string }) => `Upload ${label}`,
+  /**
+   * **The proposal's FAQ and plan highlights, the office's own** (P19.7-T1 AC-3; ADR-0225 §5; the proposal spec's
+   * decision 6): held for approval with the script, as every sentence an agent repeats to a client is.
+   */
+  proposalLine: ({ company }: { company: string }) =>
+    `What agents read beside a proposal starts from ${company}’s. Anything you change waits for your approval with the `
+    + 'script.',
+  saveFaq: 'Save questions and answers',
+  planHighlights: 'Plan highlights',
+  planHighlight: ({ plan, n, part }: { plan: string; n: number; part: 'label' | 'value' }) =>
+    `${plan}, highlight ${n}, ${part === 'label' ? 'label' : 'value'}`,
+  popularPlan: 'Most chosen',
+  addHighlight: ({ plan }: { plan: string }) => `+ Add a highlight to ${plan}`,
+  removeHighlight: ({ plan, n }: { plan: string; n: number }) => `Remove ${plan}’s highlight ${n}`,
+  saveHighlights: 'Save plan highlights',
+  /** The approval queue's lines for the two (P19.7-T1 AC-3). */
+  faqToApprove: 'Questions and answers',
+  highlightsToApprove: ({ plan }: { plan: string }) => `Highlights of ${plan}`,
 };
 
 const id: MessagesOf<typeof en> = {
@@ -143,6 +171,9 @@ const id: MessagesOf<typeof en> = {
   },
   reviewButton: 'Tinjau',
   reviewName: ({ name }) => `Tinjau ${name}`,
+  search: 'Cari produk',
+  noMatch: 'Tidak ada produk yang cocok.',
+  chips: { label: 'Saring produk', all: 'Semua', pending: 'Menunggu', rejected: 'Dikembalikan' },
   agentsSellIt: 'Agent menjualnya',
   agentsSellItFor: ({ name }) => `Agent menjualnya, ${name}`,
   customize: 'Sesuaikan',
@@ -188,10 +219,14 @@ const id: MessagesOf<typeof en> = {
     opening: '1 · Kalimat pembuka',
     benefits: '2 · Tekankan manfaat berikut',
     fullScript: `3 · ${kept('Script')} lengkap — cara menyampaikannya`,
-    objectionTheySay: '4a · Jika ada keberatan — dia berkata',
-    objectionYouSay: '4b · Jika ada keberatan — Anda menjawab',
+    objections: '4 · Jika ada keberatan',
     nextAction: '5 · Tindakan berikutnya',
   },
+  ridersUnder: `${kept('Rider')} yang ikut dijual`,
+  riderChip: kept('Rider'),
+  riderFollows: ({ on }) => (on
+    ? 'Dijual bersama produk dasarnya — tidak punya tombol sendiri.'
+    : 'Tidak dijual: tidak ada produk dasarnya yang dijual. Tidak punya tombol sendiri.'),
   documents: kept('Documents'),
   uploadedByOffice: ({ file }) => `Diunggah oleh ${kept('KPM')} Anda — ${file}`,
   fromCatalog: ({ company }) => `Dari katalog ${company}`,
@@ -201,6 +236,18 @@ const id: MessagesOf<typeof en> = {
   upload: '+ Unggah',
   replaceName: ({ label }) => `Ganti ${label}`,
   uploadName: ({ label }) => `Unggah ${label}`,
+  proposalLine: ({ company }) =>
+    `Yang dibaca agent di samping proposal dimulai dari milik ${company}. Apa pun yang Anda ubah menunggu persetujuan Anda `
+    + `bersama ${kept('script')}.`,
+  saveFaq: 'Simpan tanya-jawab',
+  planHighlights: 'Angka utama plan',
+  planHighlight: ({ plan, n, part }) => `${plan}, angka utama ${n}, ${part === 'label' ? 'label' : 'nilai'}`,
+  popularPlan: 'Paling banyak dipilih',
+  addHighlight: ({ plan }) => `+ Tambah angka utama ${plan}`,
+  removeHighlight: ({ plan, n }) => `Hapus angka utama ${n} ${plan}`,
+  saveHighlights: 'Simpan angka utama plan',
+  faqToApprove: 'Tanya-jawab',
+  highlightsToApprove: ({ plan }) => `Angka utama ${plan}`,
 };
 
 export const settingsProductsMessages = defineMessages({ en, id });

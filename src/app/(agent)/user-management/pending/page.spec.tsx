@@ -6,10 +6,10 @@ import { makeMe, renderInLayout, stubFetch } from '@test/harness';
 import { dayInZone, OFFICE_TIME_ZONE } from '@/lib/format';
 import PendingPage from './page';
 
-/** The office's today, the join date approving defaults to (P18.96-T3 AC-5). */
+/** The office's today, the join date approving defaults to (P18.8-T3 AC-5). */
 const TODAY = dayInZone(OFFICE_TIME_ZONE, new Date());
 
-/** *Approve* opens the row's join date, and *Approve* again sends it (P18.96-T3 AC-5, ADR-0170 §5). */
+/** *Approve* opens the row's join date, and *Approve* again sends it (P18.8-T3 AC-5, ADR-0170 §5). */
 async function approve() {
   await userEvent.click(await screen.findByRole('button', { name: 'Approve' }));
   await userEvent.click(screen.getByRole('button', { name: 'Approve' }));
@@ -148,7 +148,7 @@ describe('the approval inbox (P3-T5)', () => {
     expect(JSON.parse(post.init.body as string)).toEqual({ joinDate: TODAY });
   });
 
-  it('P18.96-T3 AC-5 approving asks for the join date, today by default, and sends the one chosen; a day after today holds it', async () => {
+  it('P18.8-T3 AC-5 approving asks for the join date, today by default, and sends the one chosen; a day after today holds it', async () => {
     const { calls } = stubFetch({
       '/join/requests/routing': { body: [] },
       '/join/requests/req-1/approve': { body: [] },
@@ -173,7 +173,7 @@ describe('the approval inbox (P3-T5)', () => {
     expect(JSON.parse(post.init.body as string)).toEqual({ joinDate: '2026-01-05' });
   });
 
-  it('P18.96-T3 AC-5 backs out of approving with Cancel, sending nothing', async () => {
+  it('P18.8-T3 AC-5 backs out of approving with Cancel, sending nothing', async () => {
     const { calls } = stubFetch({
       '/join/requests/routing': { body: [] },
       '/join/requests': { body: [request()] },
@@ -276,7 +276,7 @@ describe('the approval inbox (P3-T5)', () => {
 
     const tab = await screen.findByRole('link', { name: /Pending Requests/ });
     await vi.waitFor(() => expect(tab.querySelector('[data-count]')).toHaveTextContent('2'));
-    expect(tab.querySelector('[data-count]')!.className).toContain('bg-amber');
+    expect(tab.querySelector('[data-count]')!.className).toContain('bg-primary');
     // Here the inbox is read once, and the tab row asks nothing of its own.
     expect(calls.filter((c) => c.url.endsWith('/join/requests/count'))).toHaveLength(0);
   });
@@ -342,10 +342,10 @@ describe('the approval inbox (P3-T5)', () => {
   });
 
   /*
-   * P18.8-T2 AC-6 (ADR-0157): an approval past the limit may wait for AgencyBoost — *Ask AgencyBoost to approve*
+   * P18.5-T2 AC-6 (ADR-0157): an approval past the limit may wait for AgencyBoost — *Ask AgencyBoost to approve*
    * asks to let the joiner in, and the row then says it is waiting, with *Cancel request*, in place of Approve.
    */
-  describe('P18.8-T2 — a leader past the limit waits for AgencyBoost', () => {
+  describe('P18.5-T2 — a leader past the limit waits for AgencyBoost', () => {
     const ASKER = makeMe({
       membership: AB.membership,
       permissions: [...AB.permissions, 'leader_limit_request:create', 'leader_limit_request:read'],

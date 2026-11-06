@@ -69,7 +69,7 @@ const options = (choices: readonly Choice[]) => choices.map((c) => ({ value: c.c
  * that keeps the brief, and the playbook-empty state of a company with no playbook, which points to *Pitch
  * Materials* — that tab does not depend on the playbook.
  *
- * **On a phone** (ADR-0167; P18.95-T6 AC-1, UI-015) the chips are two to a row and *Build recruitment plan* sits
+ * **On a phone** (ADR-0167; P18.7-T6 AC-1, UI-015) the chips are two to a row and *Build recruitment plan* sits
  * in a bar fixed to the bottom of the screen, with room left under the brief for it; 768px and wider, as drawn.
  * The chips' words are the server's, the client's shorter ones since 2026-10-26 (AC-2).
  *
@@ -78,7 +78,7 @@ const options = (choices: readonly Choice[]) => choices.map((c) => ({ value: c.c
  * question, **not pinned and always active** (`PlanButton`); the plan as the phone's layout — the answers with *Ubah*,
  * the candidate in a navy card, four numbered sections and *Buka Pitch Materials ›* (`PhonePlan`). From 768px as before.
  *
- * **Our words are the catalogue's** (P18.98-T4; ADR-0179 §4): `messages/recruitment-plan.ts` and the two plans'
+ * **Our words are the catalogue's** (P18.10-T4; ADR-0179 §4): `messages/recruitment-plan.ts` and the two plans'
  * `messages/plan.ts`, in the reader's language. **The playbook's are the company's**, shown as typed in both (ADR-0179
  * §5): the chips, the profile, the openings, the push-backs, the next action.
  */
@@ -220,7 +220,7 @@ export function RecruitmentPlanScreen({ address }: { address: RecruitmentAddress
         <button
           type="button"
           onClick={backToBrief}
-          className={cn('mb-4 inline-flex items-center gap-1 rounded-sm text-base font-semibold text-amber-ink hover:underline', TAP_HEIGHT)}
+          className={cn('mb-4 inline-flex items-center gap-1 rounded-sm text-base font-semibold text-primary-ink hover:underline', TAP_HEIGHT)}
         >
           <span aria-hidden="true">←</span>
           {p.back}
@@ -390,7 +390,7 @@ function PhonePlan({ plan, headingRef, onBack }: {
         <div className="flex flex-col gap-2.5">
           {plan.openings.map((o) => (
             <div key={o.motivation.code} data-opening={o.motivation.code}>
-              {tagged && <p className="m-0 mb-1 text-sm font-bold text-amber-ink">{o.motivation.label}</p>}
+              {tagged && <p className="m-0 mb-1 text-sm font-bold text-primary-ink">{o.motivation.label}</p>}
               <PhoneQuote text={o.text} />
             </div>
           ))}
@@ -426,7 +426,7 @@ function NoPlaybook() {
     <div className="rounded-lg border border-card-edge bg-card px-6 py-[22px]" data-state="no-playbook">
       <p className="m-0 text-md font-semibold text-navy">{t.noPlaybook}</p>
       <p className="m-0 mt-1 text-base text-muted">{t.noPlaybookHint}</p>
-      <Link href={PITCH_MATERIALS_HREF} className={cn('mt-2 inline-block rounded-sm text-base font-semibold text-amber-ink hover:underline', TEXT_TAP)}>
+      <Link href={PITCH_MATERIALS_HREF} className={cn('mt-2 inline-block rounded-sm text-base font-semibold text-primary-ink hover:underline', TEXT_TAP)}>
         {t.toPitchMaterials}
       </Link>
     </div>

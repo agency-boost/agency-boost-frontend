@@ -3,14 +3,15 @@ import { defineMessages, type MessagesOf } from '@/i18n/catalogue';
 import { kept } from '@/i18n/kept';
 
 /**
- * **The Super Admin's offices** (P18.98-T6; `functional/tenant-provisioning.md`, *The module's own strings*): *All KPMs*
+ * **The Super Admin's offices** (P18.10-T6; `functional/tenant-provisioning.md`, *The module's own strings*): *All KPMs*
  * (`/admin/tenants`) with *Edit subscription* (`components/subscription-dialog.tsx`), *New office*
  * (`/admin/tenants/new`), an office's page with its *Profile*, *Owner*, *People* and *Lifecycle* cards
- * (`/admin/tenants/[kpmId]`), *Assign owner* · *Transfer owner* (`…/owner`), *Import a roster*'s heading (`…/roster`;
- * the import itself is `roster-import.tsx`'s), and *KPM Owners & Admins* (`/admin/tenant-admins`).
+ * (`/admin/tenants/[kpmId]`), *Assign owner* · *Transfer owner* (`…/owner`), and *KPM Owners & Admins*
+ * (`/admin/tenant-admins`). *Import a roster* (`…/roster`) is retired (P19.4-T2; ADR-0206 §6): the address redirects
+ * to the office's page, and its words went with it — the Owner imports, on `/people/import`.
  *
  * **English is the source**, byte for byte what the console wrote before. The Indonesian is the approved glossary's:
- * §A.2's sentence titles (*KPM baru*, *Tetapkan Owner · Pindahkan Owner*, *Impor roster*), §B.1 to §B.5, *office* is
+ * §A.2's sentence titles (*KPM baru*, *Tetapkan Owner · Pindahkan Owner*), §B.1 to §B.5, *office* is
  * *KPM* (§B.9), *Ubah langganan* for *Edit subscription* (§B.10, agreed with the leader limit's advice), *template*
  * (ADR-0185), *bagian* for a section and *susunan jenjang* for the ladder (§B.10). **Kept** (§A): the pages' titles that are
  * names (*All KPMs*, *Office*, *KPM Owners & Admins*), *KPM*, the roles, *Capability Mapping*, *AgencyBoost*, *leader*
@@ -23,9 +24,6 @@ import { kept } from '@/i18n/kept';
  * @moved app/(admin)/admin/tenant-admins/
  * @moved components/subscription-dialog.tsx
  */
-
-/** A run of words drawn bold, or as a link. */
-type Wrap = (words: string) => ReactNode;
 
 const en = {
   /** `KPM 0417 · BSD City Branch`: an office as the console names it. */
@@ -52,6 +50,16 @@ const en = {
     editSubscriptionFor: ({ code, branch }: { code: string; branch: string }) =>
       `Edit subscription for KPM ${code} · ${branch}`,
     savedFor: ({ code }: { code: string }) => `Subscription saved for KPM ${code}.`,
+    /**
+     * A KPM's row below 1024px (P19.2-T2 AC-1; UI-126): *Prudential · 12 members · Sep 2026*, the month left out while
+     * nothing is uploaded — *No data yet* is said there instead.
+     */
+    rowMeta: ({ company, n, members, data }: { company: string; n: number; members: string; data: string | null }) =>
+      `${company} · ${members} ${n === 1 ? 'member' : 'members'} · ${data ?? 'No data yet'}`,
+    /** The row's Owner, named before the chip that says how far they are. */
+    ownerIs: ({ name }: { name: string }) => `Owner: ${name}`,
+    /** Past the limit, the row's count before *3 over*: *Leaders 13 / 10*. */
+    leadersAre: ({ count }: { count: string }) => `Leaders ${count}`,
   },
 
   /** *Edit subscription* (ADR-0112 §2, ADR-0113 §3, ADR-0157 §6). */
@@ -83,6 +91,12 @@ const en = {
       `This end date, ${day}, has passed. The office stays open because it is kept active.`,
     endPassed: ({ day }: { day: string }) =>
       `This end date, ${day}, has passed. Once you save, nobody in this office can use AgencyBoost until the date is moved or it is kept active.`,
+    // P19.4-T3 (ADR-0211 §1): *Paket*. Choosing one proposes the end date; both dates stay editable.
+    plan: 'Plan',
+    planNone: 'No plan',
+    planSixMonths: '6 months',
+    planAnnual: 'Annual',
+    planHint: 'Choosing a plan proposes the end date: the start plus the plan, less a day.',
   },
 
   /** *New office* (`/admin/tenants/new`; ADR-0115 §4, ADR-0164 §5, ADR-0168 §2, ADR-0185 §5). */
@@ -117,6 +131,8 @@ const en = {
     timeZoneReason: 'Every day boundary in this office — what counts as today, which week a figure falls in, when a month closes — is worked out in this zone, not in yours and not in the server\'s. v1 runs every office on Jakarta time.',
     creating: 'Creating…',
     submit: 'Create office',
+    /** A field left empty, said on it when *Create office* is pressed (P19.2-T2 AC-3; UI-133: the main button enabled). */
+    required: 'Required.',
   },
 
   /** An office's page (`/admin/tenants/[kpmId]`). */
@@ -137,11 +153,29 @@ const en = {
     owner: kept('Owner'),
     noOwner: 'No owner. Nobody can administer this office until one is assigned.',
     openAsOwner: 'Open as Owner',
-    transferOwner: 'Transfer owner',
+    /** UI-168 point 4: *Ganti Owner*, the client's words (P19-T3 AC-5). */
+    transferOwner: 'Change owner',
     assignOwner: 'Assign owner',
+    /** *Pindahkan ke perusahaan lain* (ADR-0191 §5, P19-T3 AC-6). */
+    changeCompany: 'Move to another company',
+    newCompany: 'New company',
+    moveHint: 'Only for an office with no member but its Owner. Its settings are copied again from the new company’s default template.',
+    move: 'Move',
+    moving: 'Moving…',
+    /** `company` the new one's name, as stored. */
+    moved: ({ company }: { company: string }) => `Moved to ${company}. Its settings now come from ${company}’s default template.`,
+    /** *Hapus KPM* (P19-T3 AC-7): a soft delete of an empty office; one with people or data is archived. */
+    deleteOffice: 'Delete KPM',
+    deleteAsk: ({ office, members, records }: { office: string; members: number; records: number }) =>
+      `Delete ${office}? It has ${members} ${members === 1 ? 'member' : 'members'} and ${records} `
+      + `${records === 1 ? 'record' : 'records'}. It leaves every list, and its code is free for the company again.`,
+    cannotDelete: ({ office, members, records }: { office: string; members: number; records: number }) =>
+      `${office} has ${members} ${members === 1 ? 'member' : 'members'} and ${records} `
+      + `${records === 1 ? 'record' : 'records'}, so it cannot be deleted. Archive it instead?`,
+    archive: 'Archive',
     people: kept('People'),
-    peopleLine: 'Fill a new office from a spreadsheet rather than one person at a time. Each account is created with a password to pass on, and is asked to choose its own on first sign-in.',
-    importRoster: 'Import a roster',
+    /** P19.4-T2 AC-3, AC-8 (UI-151, Overview case 10): who adds the people now — no link, the import is not the Super Admin's. */
+    peopleLine: 'The KPM’s Owner or one of its Admins adds its members, one by one or from a file, on their own People page.',
     lifecycle: 'Lifecycle',
     lifecycleLine: 'A suspended office refuses its members with a distinct error, so they are told their office is suspended rather than that they lack permission.',
     /** `reason` as the Super Admin typed it. */
@@ -156,7 +190,7 @@ const en = {
   /** *Assign owner* · *Transfer owner* (`/admin/tenants/[kpmId]/owner`). */
   owner: {
     assignTitle: 'Assign owner',
-    transferTitle: 'Transfer owner',
+    transferTitle: 'Change owner',
     /** `name` drawn bold, `email` the bracketed address or nothing. */
     current: ({ name, email }: { name: ReactNode; email: ReactNode }) => (
       <>
@@ -164,20 +198,30 @@ const en = {
         the office&apos;s administration rights away from the outgoing one.
       </>
     ),
-    email: 'Email',
-    emailHint: 'The account must already exist. If it does not, send them to Create an account first.',
+    /** *Ganti Owner*'s picker (ADR-0191 §5, P19-T3 AC-5): an existing account, by name or email. */
+    search: 'Find the account',
+    searchHint: 'Type part of a name or an email address. Typing the whole address works too.',
+    searching: 'Searching…',
+    noMatch: 'No account matches that.',
     unknown: 'No account uses that address.',
-    noAccount: ({ link }: { link: Wrap }) => (
-      <>No account yet? {link('Create one')} — the office cannot be owned by someone who has not registered.</>
-    ),
-    transfer: 'Transfer',
+    /*
+     * The `mailto:` *Kirim undangan* (UI-168 point 2) is retired with its four strings (P19.4-T3; ADR-0212 §3): an address
+     * nobody holds is made the Owner and invited by the API now — `admin-kpm-owner.tsx`, `newPerson`.
+     */
+    /** What an account already holds, beside its name. */
+    ownerOf: ({ office }: { office: string }) => `Owner · ${office}`,
+    memberOf: ({ office }: { office: string }) => `Member · ${office}`,
+    pendingIn: ({ office }: { office: string }) => `Waiting · ${office}`,
+    noOffice: 'In no office',
+    /** Why an account cannot own this office, said on its row. */
+    unverified: 'Email address not verified: cannot own an office yet',
+    otherCompany: ({ company }: { company: string }) => `Signed up with ${company}, not this office’s company`,
+    noCompany: 'No company or agent code on the account',
+    deactivated: 'Account deactivated',
+    choose: ({ name }: { name: string }) => `Choose ${name}`,
+    chosen: ({ name }: { name: string }) => `${name} chosen`,
+    transfer: 'Change',
     assign: 'Assign',
-  },
-
-  /** *Import a roster*'s heading (`/admin/tenants/[kpmId]/roster`). */
-  roster: {
-    title: 'Import a roster',
-    subtitle: 'Create everybody in this office from a spreadsheet.',
   },
 
   /** *KPM Owners & Admins* (`/admin/tenant-admins`). */
@@ -216,6 +260,9 @@ const id: MessagesOf<typeof en> = {
     editSubscription: 'Ubah langganan',
     editSubscriptionFor: ({ code, branch }) => `Ubah langganan untuk ${kept('KPM')} ${code} · ${branch}`,
     savedFor: ({ code }) => `Langganan tersimpan untuk ${kept('KPM')} ${code}.`,
+    rowMeta: ({ company, members, data }) => `${company} · ${members} anggota · ${data ?? 'Belum ada data'}`,
+    ownerIs: ({ name }) => `${kept('Owner')}: ${name}`,
+    leadersAre: ({ count }) => `Jumlah ${kept('leader')} ${count}`,
   },
 
   subscription: {
@@ -244,6 +291,11 @@ const id: MessagesOf<typeof en> = {
       `Tanggal berakhir ini, ${day}, sudah lewat. ${kept('KPM')} tetap terbuka karena diatur tetap aktif.`,
     endPassed: ({ day }) =>
       `Tanggal berakhir ini, ${day}, sudah lewat. Setelah Anda menyimpan, tidak ada seorang pun di ${kept('KPM')} ini yang dapat menggunakan ${kept('AgencyBoost')} sampai tanggalnya diubah atau ${kept('KPM')} ini diatur tetap aktif.`,
+    plan: 'Paket',
+    planNone: 'Tanpa paket',
+    planSixMonths: '6 bulan',
+    planAnnual: 'Tahunan',
+    planHint: 'Memilih paket mengisi tanggal berakhir: tanggal mulai ditambah lama paket, dikurangi sehari.',
   },
 
   create: {
@@ -274,6 +326,8 @@ const id: MessagesOf<typeof en> = {
     timeZoneReason: `Setiap batas hari di ${kept('KPM')} ini — apa yang dihitung sebagai hari ini, minggu mana suatu angka masuk, kapan sebuah bulan ditutup — dihitung di zona ini, bukan di zona Anda dan bukan di zona server. v1 menjalankan setiap ${kept('KPM')} dengan waktu Jakarta.`,
     creating: 'Membuat…',
     submit: `Buat ${kept('KPM')}`,
+    // As the company and the rung sheets say it (`admin-template-companies`, `admin-template-org-levels`).
+    required: 'Wajib diisi.',
   },
 
   detail: {
@@ -293,11 +347,23 @@ const id: MessagesOf<typeof en> = {
     owner: kept('Owner'),
     noOwner: `Belum ada ${kept('Owner')}. Tidak ada yang dapat mengelola ${kept('KPM')} ini sampai ${kept('Owner')} ditetapkan.`,
     openAsOwner: `Buka sebagai ${kept('Owner')}`,
-    transferOwner: `Pindahkan ${kept('Owner')}`,
+    transferOwner: `Ganti ${kept('Owner')}`,
     assignOwner: `Tetapkan ${kept('Owner')}`,
+    changeCompany: 'Pindahkan ke perusahaan lain',
+    newCompany: 'Perusahaan baru',
+    moveHint: `Hanya untuk ${kept('KPM')} tanpa anggota selain ${kept('Owner')}-nya. Pengaturannya disalin ulang dari template default perusahaan baru.`,
+    move: 'Pindahkan',
+    moving: 'Memindahkan…',
+    moved: ({ company }) => `Dipindahkan ke ${company}. Pengaturannya kini berasal dari template default ${company}.`,
+    deleteOffice: `Hapus ${kept('KPM')}`,
+    deleteAsk: ({ office, members, records }) =>
+      `Hapus ${office}? ${kept('KPM')} ini memiliki ${members} anggota dan ${records} data. ${kept('KPM')} ini hilang dari `
+      + 'setiap daftar, dan kodenya dapat dipakai lagi oleh perusahaannya.',
+    cannotDelete: ({ office, members, records }) =>
+      `${office} memiliki ${members} anggota dan ${records} data, jadi tidak dapat dihapus. Arsipkan saja?`,
+    archive: 'Arsipkan',
     people: kept('People'),
-    peopleLine: `Isi ${kept('KPM')} baru dari spreadsheet, bukan satu per satu. Setiap akun dibuat dengan kata sandi untuk diteruskan, dan diminta membuat kata sandinya sendiri saat pertama kali masuk.`,
-    importRoster: 'Impor roster',
+    peopleLine: `${kept('Owner')} ${kept('KPM')} atau salah satu ${kept('Admin')}-nya yang menambahkan anggota, satu per satu atau dari file, di halaman ${kept('People')} mereka sendiri.`,
     lifecycle: 'Siklus hidup',
     lifecycleLine: `${kept('KPM')} yang ditangguhkan menolak anggotanya dengan pesan tersendiri, sehingga mereka tahu ${kept('KPM')}-nya ditangguhkan, bukan bahwa mereka tidak punya izin.`,
     suspended: ({ reason }) => `Ditangguhkan: ${reason}`,
@@ -310,26 +376,30 @@ const id: MessagesOf<typeof en> = {
 
   owner: {
     assignTitle: `Tetapkan ${kept('Owner')}`,
-    transferTitle: `Pindahkan ${kept('Owner')}`,
+    transferTitle: `Ganti ${kept('Owner')}`,
     current: ({ name, email }) => (
       <>
         {kept('Owner')} saat ini adalah {name}{email}. Pemindahan dicatat di audit bersama orang yang keluar dan yang
         masuk, dan mencabut hak pengelolaan {kept('KPM')} dari {kept('Owner')} yang lama.
       </>
     ),
-    email: 'Email',
-    emailHint: 'Akunnya harus sudah ada. Jika belum, minta dia membuat akun terlebih dahulu.',
+    search: 'Cari akun',
+    searchHint: 'Ketik sebagian nama atau alamat email. Mengetik alamat lengkap juga bisa.',
+    searching: 'Mencari…',
+    noMatch: 'Tidak ada akun yang cocok.',
     unknown: 'Tidak ada akun yang memakai alamat itu.',
-    noAccount: ({ link }) => (
-      <>Belum punya akun? {link('Buat akun')} — {kept('KPM')} tidak dapat dimiliki oleh orang yang belum mendaftar.</>
-    ),
-    transfer: 'Pindahkan',
+    ownerOf: ({ office }) => `${kept('Owner')} · ${office}`,
+    memberOf: ({ office }) => `Anggota · ${office}`,
+    pendingIn: ({ office }) => `Menunggu · ${office}`,
+    noOffice: `Belum di ${kept('KPM')} mana pun`,
+    unverified: `Alamat email belum terverifikasi: belum dapat menjadi ${kept('Owner')} ${kept('KPM')}`,
+    otherCompany: ({ company }) => `Mendaftar di ${company}, bukan perusahaan ${kept('KPM')} ini`,
+    noCompany: 'Akun belum memiliki perusahaan atau kode agen',
+    deactivated: 'Akun dinonaktifkan',
+    choose: ({ name }) => `Pilih ${name}`,
+    chosen: ({ name }) => `${name} dipilih`,
+    transfer: 'Ganti',
     assign: 'Tetapkan',
-  },
-
-  roster: {
-    title: 'Impor roster',
-    subtitle: `Buat semua orang di ${kept('KPM')} ini dari spreadsheet.`,
   },
 
   admins: {

@@ -95,7 +95,7 @@ export function V1Agenda({ meeting }: { meeting: MeetingView }) {
                   <button
                     type="button"
                     onClick={() => add(section)}
-                    className="flex min-h-11 w-full items-center gap-1.5 px-3 text-base font-semibold text-amber-ink"
+                    className="flex min-h-11 w-full items-center gap-1.5 px-3 text-base font-semibold text-primary-ink"
                   >
                     <LineIcon name="plus" className="h-4 w-4" />
                     {v.addItem}
@@ -169,7 +169,7 @@ function AgendaLine({
         )}
       </div>
       {readOnly ? (
-        item.pic && <span className="shrink-0 text-sm font-semibold text-amber-ink">{item.pic}</span>
+        item.pic && <span className="shrink-0 text-sm font-semibold text-primary-ink">{item.pic}</span>
       ) : (
         <button
           type="button"
@@ -181,7 +181,7 @@ function AgendaLine({
         >
           <span className={cn(
             'whitespace-nowrap rounded-pill px-2 py-0.5 text-sm font-semibold',
-            item.pic ? 'bg-amber/15 text-amber-ink' : 'border border-dashed border-amber text-amber-ink',
+            item.pic ? 'bg-primary/15 text-primary-ink' : 'border border-dashed border-primary text-primary-ink',
           )}>
             {item.pic || v.picChip}
           </span>
@@ -213,7 +213,7 @@ function PicSheet({
               onClick={() => onPick(name)}
               className={cn(
                 'flex min-h-12 items-center rounded-row px-3 text-left text-md',
-                on ? 'bg-amber/[0.12] font-semibold text-ink ring-[1.5px] ring-inset ring-amber' : 'bg-hover-row text-ink',
+                on ? 'bg-primary/[0.12] font-semibold text-ink ring-[1.5px] ring-inset ring-primary' : 'bg-hover-row text-ink',
               )}
             >
               {name || v.noPic}
@@ -347,7 +347,7 @@ export function V1Actions({ meeting }: { meeting: MeetingView }) {
 
       {!writer.readOnly && (
         <div className="mt-2 overflow-hidden rounded-lg bg-card">
-          <button type="button" onClick={add} className="flex min-h-11 w-full items-center gap-1.5 px-3 text-base font-semibold text-amber-ink">
+          <button type="button" onClick={add} className="flex min-h-11 w-full items-center gap-1.5 px-3 text-base font-semibold text-primary-ink">
             <LineIcon name="plus" className="h-4 w-4" />
             {v.addAction}
           </button>
@@ -444,7 +444,7 @@ function ActionSheet({
                   onClick={() => { if (s !== status) onStatus(item, s); }}
                   className={cn(
                     'flex flex-1 items-center justify-center rounded-pill px-1.5 text-sm font-semibold',
-                    s === status ? 'bg-navy text-white' : 'text-muted',
+                    s === status ? 'bg-secondary text-secondary-contrast' : 'text-muted',
                   )}
                 >
                   {t.statuses[s]}

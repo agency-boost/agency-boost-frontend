@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import AdminLayout from '@/app/(admin)/layout';
 import { englishOnly, englishShown } from '@test/english-left';
-import { InLanguage, makeMe, renderWithSession, stubFetch } from '@test/harness';
+import { atWidth, InLanguage, makeMe, renderWithSession, stubFetch } from '@test/harness';
 import { adminTemplateOrgLevelsMessages } from '@/i18n/messages/admin-template-org-levels';
 import OrgLevelsPage from './page';
 
@@ -13,7 +13,7 @@ vi.mock('next/navigation', () => ({
 }));
 
 /**
- * **P18.98-T6, the *Org role ladder* in ID mode** (AC-1 as T4's AC-1 to AC-3; area "admin-template"): the ladder and
+ * **P18.10-T6, the *Org role ladder* in ID mode** (AC-1 as T4's AC-1 to AC-3; area "admin-template"): the ladder and
  * *Add a rung* in the approved glossary's Indonesian (`admin-template-org-levels.tsx`), the title and the two tiers
  * kept English (§A), the library *Template bawaan AgencyBoost* (ADR-0185 §1), and a company's name and a rung's label
  * and code as stored. The same page in
@@ -53,7 +53,7 @@ function mount(levels: unknown[] = LADDER, extra: Record<string, unknown> = {}) 
   return stub;
 }
 
-describe('P18.98-T6 the Org role ladder in Indonesian', () => {
+describe('P18.10-T6 the Org role ladder in Indonesian', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it('reads the English it is looking for, so a silent zero cannot pass', () => {
@@ -65,7 +65,8 @@ describe('P18.98-T6 the Org role ladder in Indonesian', () => {
     const table = await screen.findByRole('table', { name: 'Susunan jenjang, dari yang paling junior' });
 
     expect(screen.getByRole('heading', { level: 1, name: 'Org role ladder' })).toBeInTheDocument();
-    expect(screen.getByText(/^Jenjang tempat perusahaan mempromosikan orang\./)).toBeInTheDocument();
+    // P19.2-T2 AC-7 (UI-136, Appendix A): the page's sub-line removed at every size.
+    expect(screen.queryByText(/^Jenjang tempat perusahaan mempromosikan orang\./)).toBeNull();
     expect(screen.getByLabelText('Perusahaan')).toHaveDisplayValue('Prudential');
     expect(within(table).getAllByRole('columnheader').map((h) => h.textContent))
       .toEqual(['Urutan', 'Jenjang', 'Tingkat leader', 'Status', 'Aksi']);
@@ -102,18 +103,39 @@ describe('P18.98-T6 the Org role ladder in Indonesian', () => {
     )).toBeInTheDocument();
   });
 
+  // A sheet opened from *+ Tambah jenjang* on the title row since P19.2-T2 AC-3 (UI-133), its tier three choice rows
+  // (AC-4, UI-134), its main button enabled.
   it('AC-1 Add a rung: its fields, a code refused and the place it goes, in Indonesian', async () => {
     mount();
     await screen.findByRole('table', { name: 'Susunan jenjang, dari yang paling junior' });
-    expect(screen.getByRole('heading', { name: 'Tambah jenjang' })).toBeInTheDocument();
-    const code = screen.getByLabelText('Kode');
+    expect(screen.queryByRole('heading', { name: 'Tambah jenjang' })).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Tambah jenjang' }));
+    const sheet = await screen.findByRole('dialog', { name: 'Tambah jenjang' });
+    expect(within(sheet).getByRole('heading', { name: 'Tambah jenjang' })).toBeInTheDocument();
+    const code = within(sheet).getByLabelText('Kode');
     expect(code).toHaveAccessibleDescription(expect.stringMatching(/^Stabil dan bermakna — AGENT, AAB, AB\./));
     await userEvent.type(code, '9X');
     expect(code).toHaveAccessibleDescription(expect.stringContaining('Huruf, angka, dan garis bawah, diawali huruf.'));
-    expect(screen.getByLabelText('Label')).toHaveAccessibleDescription('Yang dilihat pembaca. Yang ini boleh Anda ubah.');
-    expect(screen.getByLabelText('Tingkat leader', { selector: '#leader-tier' })).toHaveDisplayValue('Bukan leader');
-    expect(screen.getByText('Jenjang ini ditambahkan di akhir susunan, di posisi 5.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Tambah jenjang' })).toBeDisabled();
+    expect(within(sheet).getByLabelText('Label')).toHaveAccessibleDescription('Yang dilihat pembaca. Yang ini boleh Anda ubah.');
+    const tier = within(sheet).getByRole('radiogroup', { name: 'Tingkat leader' });
+    expect(within(tier).getByRole('radio', { name: 'Bukan leader' })).toHaveAttribute('aria-checked', 'true');
+    expect(within(sheet).getByText('Jenjang ini ditambahkan di akhir susunan, di posisi 5.')).toBeInTheDocument();
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Tambah jenjang' }));
+    expect(within(sheet).getByLabelText('Label')).toHaveAccessibleDescription(expect.stringContaining('Wajib diisi.'));
+    expect(within(sheet).getByRole('button', { name: 'Batal' })).toBeInTheDocument();
+    noEnglishLeft();
+  });
+
+  it('P19.2-T2 AC-1 AC-4 at 375px the ladder as rows, the company and each tier a pill, in Indonesian', async () => {
+    atWidth(375);
+    mount();
+    const list = await screen.findByRole('list', { name: 'Susunan jenjang, dari yang paling junior' });
+    expect(screen.getByRole('button', { name: 'Perusahaan: Prudential' })).toBeInTheDocument();
+    expect(within(list).getByRole('button', { name: 'Tingkat leader Agency Builder: Senior Leader' })).toBeInTheDocument();
+    expect(within(list).getByText('OLD · Diarsipkan')).toBeInTheDocument();
+    await userEvent.click(within(list).getByRole('button', { name: 'Tingkat leader Agent: Bukan leader' }));
+    const sheet = await screen.findByRole('dialog', { name: 'Pilih tingkat leader agent' });
+    expect(within(sheet).getAllByRole('radio').map((r) => r.textContent)).toEqual(['Senior Leader', 'Associate Leader', 'Bukan leader']);
     noEnglishLeft();
   });
 

@@ -4,14 +4,19 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { CoachingRoster } from '@/components/coaching-roster';
 import { Page } from '@/components/page';
+import { NoDataLine, SamplePreview, useSampleName } from '@/components/sample-preview';
 import { EmptyState } from '@/components/ui/empty-state';
-import { Card, ErrorBanner } from '@/components/ui/field';
+import { ButtonLink, Card, ErrorBanner } from '@/components/ui/field';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { useMessages } from '@/i18n/language-provider';
 import { coachingMessages } from '@/i18n/messages/coaching';
+import { samplePreviewMessages } from '@/i18n/messages/sample-preview';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import { readRoster, type Roster } from '@/lib/coaching';
+import { leadsByRole } from '@/lib/field-nav';
+import { sampleRoster } from '@/lib/sample-data';
+import { useSession } from '@/lib/session';
 
 /**
  * Coaching Session (`Overall.html:3955-3967`, `:10596-10664`) — the roster, a leader's way into coaching.
@@ -43,12 +48,27 @@ function MyNotesPill() {
     <Link
       href="/coaching/me"
       className={cn(
-        'inline-flex min-h-11 shrink-0 items-center whitespace-nowrap rounded-pill border border-amber bg-card px-3.5',
-        'text-base font-semibold text-amber-ink hover:bg-amber/10 lg:min-h-9',
+        'inline-flex min-h-11 shrink-0 items-center whitespace-nowrap rounded-pill border border-primary bg-card px-3.5',
+        'text-base font-semibold text-primary-ink hover:bg-primary/10 lg:min-h-9',
       )}
     >
       {t.myNotes}
     </Link>
+  );
+}
+
+/** An empty roster: the line, then `CoachingRoster`'s own drawing of three sample agents, and *Tambah agent pertama*. */
+function EmptyRoster({ today }: { today: string }) {
+  const next = useMessages(samplePreviewMessages).next;
+  const { person } = useSampleName();
+  return (
+    <>
+      <NoDataLine className="mt-0" />
+      <SamplePreview
+        sample={<CoachingRoster roster={sampleRoster(person, today)} />}
+        action={<ButtonLink href="/new-hires">{next.addFirstAgent}</ButtonLink>}
+      />
+    </>
   );
 }
 
@@ -66,19 +86,20 @@ function RosterBody() {
   }, []);
 
   const nobody = roster !== null && roster.directAgents.length === 0 && roster.units.length === 0;
+  const leader = leadsByRole(useSession().me?.membership);
 
   return (
     <div className="mx-auto max-w-[980px]">
       {error && <ErrorBanner {...error} />}
       {!roster && !error && <SkeletonCards count={4} label={t.loading} />}
       {nobody && (
-        // Ours (L-01). The nav and the landing offer this screen only to a leader, but its gate is
-        // `coaching_session:read`, which every active member holds for their own sessions, and the
-        // API answers anyone it reaches nobody for with an empty roster, never a refusal. So this is
-        // what an Agent, or an AB or AAB who leads nobody, sees on a typed URL.
-        <Card className="p-0">
-          <EmptyState title={t.empty} />
-        </Card>
+        // The API answers anyone it reaches nobody for with an empty roster, never a refusal. Since ADR-0189 the nav
+        // offers this screen to every leader by role, team or none: so its normal layout, *Belum ada data*, and the roster
+        // as it will look, greyed and labelled *Contoh*, with the next step (P19-T4 AC-3; D-37, UI-159 item 3).
+        leader ? <EmptyRoster today={roster.today} /> : (
+          // Anybody else on a typed address (an Agent): the plain line, as before (L-01).
+          <Card className="p-0"><EmptyState title={t.empty} /></Card>
+        )
       )}
       {roster && !nobody && <CoachingRoster roster={roster} />}
     </div>

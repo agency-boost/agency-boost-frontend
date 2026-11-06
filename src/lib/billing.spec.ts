@@ -1,8 +1,10 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   addDays, addMonths, BILLING_OWN_COPY, START_DAYS_AHEAD, costMissingWords, defaultDates, leaderCountOf, maskAmount,
-  maskDate, money, officeToday, parseDmy, perLeaderDiscount, planEnd, priceQuote, quoteDay, savePct, saveWords, subscriptionCosts,
-  subscriptionMonths, tierFor, tierLabel, toDmy, validateQuote,
+  maskDate, money, officeToday, parseDmy, perLeaderDiscount, periodPlanOf, planEnd, planPeriodOf, priceQuote, quoteDay,
+  quoteRequestOf, savePct, saveWords, subscriptionCosts, subscriptionMonths, tierFor, tierLabel, toDmy, validateQuote,
   type BillingTier, type CalculatorInput,
 } from './billing';
 
@@ -239,10 +241,10 @@ describe('the dialog’s dates (P13.2-T2 AC-6)', () => {
 });
 
 /*
- * P18.8-T3 AC-1, AC-3 (ADR-0157 §6): the *Edit subscription* dialog's three cost lines — the month for the whole
+ * P18.5-T3 AC-1, AC-3 (ADR-0157 §6): the *Edit subscription* dialog's three cost lines — the month for the whole
  * quota, the duration and the cost over it — and why a line reads *—*.
  */
-describe('the subscription’s cost (P18.8-T3)', () => {
+describe('the subscription’s cost (P18.5-T3)', () => {
   const costs = (over: Partial<Parameters<typeof subscriptionCosts>[0]> = {}) => subscriptionCosts({
     pricePerLeaderMinor: rp(350_000), maxLeaders: 10, startDate: '2026-01-06', endDate: '2027-01-05', ...over,
   });
@@ -300,19 +302,90 @@ describe('the subscription’s cost (P18.8-T3)', () => {
 });
 
 /** ADR-0167 §1: the quote's paper writes dates as every screen does; the card's saving whole (ADR-0174 §1, OD-213). */
-describe('the quote’s dates and the cards’ saving in id-ID (P18.95-T1 AC-1, AC-3)', () => {
+describe('the quote’s dates and the cards’ saving in id-ID (P18.7-T1 AC-1, AC-3)', () => {
   it('prints a typed DD/MM/YYYY date as `15 Okt 2026`, and what is not a day as it was typed', () => {
     expect(quoteDay('15/10/2026')).toBe('15 Okt 2026');
     expect(quoteDay(' 14/04/2027 ')).toBe('14 Apr 2027');
     expect(quoteDay('31/02/2027')).toBe('31/02/2027');
   });
 
-  it('P18.97-T3 AC-1 writes the six-month saving as `Save 20%`, the registry’s whole percent with no ,0', () => {
+  it('P18.9-T3 AC-1 writes the six-month saving as `Save 20%`, the registry’s whole percent with no ,0', () => {
     expect(TIERS.slice(0, 4).map(saveWords)).toEqual(['Save 20%', 'Save 21%', 'Save 22%', 'Save 29%']);
   });
 
-  it('P18.97-T3 AC-3 keeps every price in full: a price is exact, and the quote is a document', () => {
+  it('P18.9-T3 AC-3 keeps every price in full: a price is exact, and the quote is a document', () => {
     expect(money(40_000_000)).toBe('Rp 400.000');
     expect(perLeaderDiscount(1_875_000)).toBe('-Rp 18.750/leader/mo');
+  });
+});
+
+/**
+ * **One fixture, two copies of the function** (P19.4-T3 AC-10; ADR-0211 §5): the server prices the quote it sends
+ * (`backend/src/modules/billing/price-quote.ts`) and this file's `priceQuote` prices the calculator as it is typed. Both
+ * read `price-quote.fixture.json` from the backend's tree — its spec there, and this one here — so neither can drift
+ * from the other without one of them failing (invariant §7).
+ */
+describe('P19.4-T3 AC-10 the calculator prices the server’s fixture', () => {
+  interface FixtureCase {
+    case: string;
+    input: {
+      leaders: number;
+      plan: 'six_months' | 'annual';
+      discount: { type: 'percent'; percent: string } | { type: 'flat'; amountMinor: number } | null;
+    };
+    expected: Record<string, number | string>;
+  }
+  const fixture = JSON.parse(readFileSync(
+    join(__dirname, '..', '..', '..', 'backend', 'src', 'modules', 'billing', 'price-quote.fixture.json'), 'utf8',
+  )) as { cases: FixtureCase[] };
+
+  /** The fixture's normalised inputs, typed as the calculator's fields hold them. */
+  const typed = ({ leaders, plan, discount }: FixtureCase['input']): CalculatorInput => ({
+    leaders: String(leaders),
+    period: planPeriodOf(plan),
+    discountType: discount?.type === 'flat' ? 'flat' : 'percent',
+    discount: discount === null ? '0' : discount.type === 'percent' ? discount.percent : String(discount.amountMinor / 100),
+  });
+
+  it.each(fixture.cases.map((c) => [c.case, c] as const))('P19.4-T3 AC-10 %s', (_name, { input: given, expected }) => {
+    const p = priceQuote(PRICES, typed(given));
+    expect(p.discountError).toBeNull();
+    expect({
+      tierCode: p.tier.code, baseMinor: p.baseMinor, finalMinor: p.finalMinor, monthlyTotalMinor: p.monthlyTotalMinor,
+      periodTotalMinor: p.periodTotalMinor, annualDiscountMinor: p.annualDiscountMinor,
+      manualDiscountMinor: p.manualDiscountMinor,
+    }).toEqual(expected);
+  });
+
+  it('P19.4-T3 AC-10 what is sent is the fixture’s own input: the calculator normalised, no figure', () => {
+    const details = { kpm: 'KPM 0417 · BSD City', pic: ' Rina ', sales: 'Maya ', start: '15/10/2026', end: '14/10/2027' };
+    for (const { input: given } of fixture.cases) {
+      const calc = typed(given);
+      const body = quoteRequestOf(calc, priceQuote(PRICES, calc), details);
+      // A 0% or Rp 0 discount takes nothing off, so it is sent as none, as the server prices it.
+      const none = given.discount === null || priceQuote(PRICES, calc).manualDiscountMinor === 0;
+      expect(body).toEqual({
+        leaders: given.leaders, plan: given.plan, discount: none ? null : given.discount,
+        startDate: '2026-10-15', endDate: '2027-10-14', pic: 'Rina', salesBy: 'Maya',
+      });
+    }
+  });
+
+  it('P19.4-T3 AC-10 a typed comma, a leading point and a trailing point reach the server as decimal digits', () => {
+    const body = (discount: string) => quoteRequestOf(
+      input({ period: 'annual', discount }), priceQuote(PRICES, input({ period: 'annual', discount })),
+      { kpm: '', pic: 'a', sales: 'b', start: '01/01/2027', end: '31/12/2027' },
+    ).discount;
+    expect(body('10,5')).toEqual({ type: 'percent', percent: '10.5' });
+    expect(body(',5')).toEqual({ type: 'percent', percent: '0.5' });
+    expect(body('10.')).toEqual({ type: 'percent', percent: '10' });
+    expect(body('0')).toBeNull();
+  });
+
+  it('P19.4-T3 AC-10 a plan is a period, and back', () => {
+    expect(planPeriodOf('six_months')).toBe('sixMonth');
+    expect(planPeriodOf('annual')).toBe('annual');
+    expect(periodPlanOf('sixMonth')).toBe('six_months');
+    expect(periodPlanOf('annual')).toBe('annual');
   });
 });

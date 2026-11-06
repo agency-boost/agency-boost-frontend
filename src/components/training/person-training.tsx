@@ -16,10 +16,10 @@ import {
 
 /**
  * **The coaching *Training* tab** (`renderPersonTrainingStatus`, `Overall.html:7663-7765`; the tab `:3991`,
- * `:4331-4335`, and the reader's own `:4400`, `:4569-4572`; P18.5-T4).
+ * `:4331-4335`, and the reader's own `:4400`, `:4569-4572`; P18.2-T4).
  *
  * Every category in the office's order, each under *"{Label} ({done}/{total})"* with the counts muted
- * (`:7749`), then its skills, numbered from 1 again, **by the learner's list rules** (Phase 18.99 T10; UI-065, UI-066):
+ * (`:7749`), then its skills, numbered from 1 again, **by the learner's list rules** (Phase 18.11 T10; UI-065, UI-066):
  * one card of rows below 1024px, two columns of cards with *Module · Format · Status* from 1024px — **read-only**: no
  * link, no ›, no hover (contradiction 13). A category with nothing offered is its heading at
  * *(0/0)* and nothing under it, which is what the prototype's renderer draws over an empty list. A module

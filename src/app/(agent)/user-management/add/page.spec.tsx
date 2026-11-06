@@ -29,7 +29,7 @@ const LEADER = makeMe({
  * This fixture carried `member:invite` and `member:revoke_invite` until 2026-09-08.
  * `roles-and-permissions.md:372` denies both to `AGENT` and calls it *"the single largest
  * leak in the prototype"* — so the fixture was asserting against a role that cannot
- * exist, and it is why nothing caught the screen being open to them (P3.6-T2 AC-3).
+ * exist, and it is why nothing caught the screen being open to them (P3.2-T2 AC-3).
  */
 const AGENT = makeMe({
   membership: {
@@ -44,7 +44,7 @@ const AGENT = makeMe({
  *
  * This fixture carried `inviteId`, `label`, `autoApprove`, `maxUses`, `useCount`,
  * `expiresAt`, `revokedAt` and `state` until 2026-09-09 — every one of them a way to
- * bound a credential somebody could mint again (P3.6-T1).
+ * bound a credential somebody could mint again (P3.2-T1).
  */
 const MY_CODE = { code: 'JOR417', url: 'https://agencyboost.app/join?code=JOR417' };
 
@@ -68,7 +68,7 @@ async function pickRole(label: string, name = 'Rina Wijaya') {
 describe('inviting people (P3-T4)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('P3.5-T14: clears the search results before the next search answers', async () => {
+  it('P3.1-T14: clears the search results before the next search answers', async () => {
     // The untagged search refetched on every keystroke and cleared nothing, so the
     // previous query's people sat there looking exactly like an answer to the new one.
     // Somebody types three more letters and acts on a list that answers the search
@@ -110,7 +110,7 @@ describe('inviting people (P3-T4)', () => {
     await screen.findAllByText('Budi Santoso');
   });
 
-  it('P18.95-T7 AC-1 says what the invite is for in the client’s words, at every size (grey text row 4)', async () => {
+  it('P18.7-T7 AC-1 says what the invite is for in the client’s words, at every size (grey text row 4)', async () => {
     stubFetch({
       '/members/my-team': { body: [] },
       '/join/my-code': { body: MY_CODE }, '/join/untagged': { body: [] } });
@@ -232,7 +232,7 @@ describe('inviting people (P3-T4)', () => {
     // whether they can change a role or remove anybody, so that is the gate.
     //
     // The reader here used to be AGENT. An Agent cannot open this screen at all now
-    // (P3.6-T2), so proving *this* gate needs somebody who can — a leader whose team
+    // (P3.2-T2), so proving *this* gate needs somebody who can — a leader whose team
     // permissions have been taken away.
     const noTeamPowers = makeMe({
       membership: {
@@ -332,7 +332,7 @@ describe('inviting people (P3-T4)', () => {
     renderInLayout(AgentLayout, <AddAgentsPage />, { me: LEADER });
 
     await screen.findByText('Invite someone');
-    // The prototype has neither control, and neither do we (P3.6-T1).
+    // The prototype has neither control, and neither do we (P3.2-T1).
     expect(screen.queryByRole('button', { name: 'Create an invite' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Withdraw' })).toBeNull();
     // Nor the form that fed them.
@@ -483,7 +483,7 @@ describe('inviting people (P3-T4)', () => {
 
       const sheet = await pickRole('AAB');
       // The chosen rung is drawn chosen: the accent's border and tint.
-      expect(within(sheet).getByRole('radio', { name: 'AAB' }).closest('label')!.className).toContain('border-amber');
+      expect(within(sheet).getByRole('radio', { name: 'AAB' }).closest('label')!.className).toContain('border-primary');
       await userEvent.click(screen.getByRole('button', { name: 'Confirm change' }));
       expect(await screen.findByText('Saved ✓')).toBeInTheDocument();
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
@@ -542,10 +542,14 @@ describe('inviting people (P3-T4)', () => {
       expect((await screen.findAllByText(/leads 3/)).length).toBeGreaterThan(0);
     });
 
-    it('tells a leader with nobody under them', async () => {
+    it('P19-T4 AC-3 shows a leader with nobody under them No data yet, the Example and Invite an agent', async () => {
       stub([]);
       renderInLayout(AgentLayout, <AddAgentsPage />, { me: LEADER });
-      expect(await screen.findByText('Nobody reports to you yet.')).toBeInTheDocument();
+      const card = await screen.findByTestId('team-card');
+      expect(await within(card).findByText('No data yet')).toBeInTheDocument();
+      expect(within(card).getByText('Example')).toBeInTheDocument();
+      expect(card.querySelector('[data-sample]')!.textContent).toContain('Sample agent 2');
+      expect(within(card).getByRole('link', { name: 'Invite an agent' })).toHaveAttribute('href', '/new-hires');
     });
   });
 
@@ -882,11 +886,11 @@ describe('inviting people (P3-T4)', () => {
   });
 
 /*
- * P18.8-T2 (ADR-0157): past the limit a leader's role change, or a pending leader tagged into their unit, may wait
+ * P18.5-T2 (ADR-0157): past the limit a leader's role change, or a pending leader tagged into their unit, may wait
  * for AgencyBoost — *Ask AgencyBoost to approve* asks for exactly what was refused, and the row says it is waiting.
  * And OD-50: the team's role select is the company's ladder, a rung it added included, none that makes an AB.
  */
-describe('P18.8-T2 — a leader past the limit waits for AgencyBoost', () => {
+describe('P18.5-T2 — a leader past the limit waits for AgencyBoost', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   const ASKER = makeMe({

@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Page } from '@/components/page';
 import { RouteTabs } from '@/components/ui/route-tabs';
+import { adminPlatformReadsMessages } from '@/i18n/messages/admin-platform-reads';
+import { useCan } from '@/lib/session';
 import { LineIcon } from '@/components/ui/line-icon';
 import { isTemplateLibrary, listCompanies, type Company } from '@/lib/admin';
 import { companyHref, settingsHref } from '@/lib/template-sections';
@@ -35,10 +37,13 @@ export function useCompanyName(company: Company | null | undefined): string {
   return isTemplateLibrary(company) ? t.library : company.name;
 }
 
-/** The way back, as a link with its chevron: to the companies, a company, or a template. */
+/**
+ * The way back, as a link with its chevron: to the companies, a company, or a template. **44px tall below 1024px**
+ * (P19.2-T2 AC-5; UI-135: ≥ 44px on a phone and a tablet), 32px from it as before.
+ */
 export function BackLink({ href, children }: { href: string; children: ReactNode }) {
   return (
-    <Link href={href} className="inline-flex min-h-8 items-center gap-1 text-md font-semibold text-navy underline">
+    <Link href={href} className="inline-flex min-h-8 items-center gap-1 text-md font-semibold text-navy underline max-lg:min-h-11">
       <LineIcon name="chevronLeft" className="h-4 w-4" />
       {children}
     </Link>
@@ -65,11 +70,13 @@ export function CompanyFrame({
   children: ReactNode;
 }) {
   const t = useMessages(adminTemplateMessages).companyPage;
+  const kpmData = useMessages(adminPlatformReadsMessages).kpmData.tab;
+  const canSeeKpms = useCan('platform_kpm_figures:read');
   const name = useCompanyName(company);
   return (
+    // No sub-line (P19.2-T2 AC-7; UI-136, Appendix A's first row: page subtitles removed at every size).
     <Page
       title={name}
-      subtitle={company && isTemplateLibrary(company) ? t.libraryLead : undefined}
       permission={permission}
       actions={(
         <div className="flex flex-wrap items-center gap-4">
@@ -85,6 +92,10 @@ export function CompanyFrame({
         tabs={[
           { href: companyHref(companyId), label: t.templates },
           { href: settingsHref(companyId), label: t.settings },
+          // P19.4-T3 AC-15 (A2): *KPM & data*, for an insurer — the Template library holds no KPM — and a reader holding the
+          // grant; the API refuses anybody else.
+          ...(company && !isTemplateLibrary(company) && canSeeKpms
+            ? [{ href: `/admin/companies/${companyId}/kpms`, label: kpmData }] : []),
         ]}
       />
       {children}

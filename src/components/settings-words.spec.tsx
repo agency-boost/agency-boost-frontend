@@ -25,11 +25,11 @@ const OWNER = makeMe({
 });
 
 /**
- * **P18.98-T4, the settings screens' frame in ID mode** (`messages/settings.ts`): the tab rows, the two bars and a
+ * **P18.10-T4, the settings screens' frame in ID mode** (`messages/settings.ts`): the tab rows, the two bars and a
  * staged row's mark — what every Settings screen draws, the training, events, campaigns and products screens too.
  * The English is each component's own spec's, untouched.
  */
-describe('P18.98-T4 the settings frame in Indonesian', () => {
+describe('P18.10-T4 the settings frame in Indonesian', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it('names the tab rows in Indonesian and keeps the tabs English', () => {
@@ -98,10 +98,10 @@ describe('P18.98-T4 the settings frame in Indonesian', () => {
 });
 
 /**
- * **P18.98-T4, the activity binding's editor in ID mode** (`messages/activity-binding.ts`): the Super Admin's two
+ * **P18.10-T4, the activity binding's editor in ID mode** (`messages/activity-binding.ts`): the Super Admin's two
  * places. The three stages are the client's own and kept English (§A.6); a type's name is the office's, as typed.
  */
-describe('P18.98-T4 the activity binding’s editor in Indonesian', () => {
+describe('P18.10-T4 the activity binding’s editor in Indonesian', () => {
   const TYPES = [
     { code: 'LEADS_CONTACTED', label: 'Menghubungi leads', status: 'active' as const },
     { code: 'SELL_PRESENTATION', label: 'Presentasi penjualan', status: 'active' as const },
@@ -131,8 +131,8 @@ describe('P18.98-T4 the activity binding’s editor in Indonesian', () => {
   });
 });
 
-/** **P18.98-T4, a section's tile refused in the reader's words** (`messages/summary-tiles.ts`). */
-describe('P18.98-T4 the summary tile’s refusals in each language', () => {
+/** **P18.10-T4, a section's tile refused in the reader's words** (`messages/summary-tiles.ts`). */
+describe('P18.10-T4 the summary tile’s refusals in each language', () => {
   const SECTIONS = [
     { code: 'SELLING', label: 'Penjualan', summaryGroupCode: null, summaryGroupLabel: null },
     { code: 'RECRUITING', label: 'Rekrutmen', summaryGroupCode: null, summaryGroupLabel: null },
@@ -165,8 +165,8 @@ describe('P18.98-T4 the summary tile’s refusals in each language', () => {
   });
 });
 
-/** **P18.98-T4, the pitch's figures and its English for code with no reader** (`lib/recruitment-pitch.ts`). */
-describe('P18.98-T4 the pitch’s file size in each language', () => {
+/** **P18.10-T4, the pitch's figures and its English for code with no reader** (`lib/recruitment-pitch.ts`). */
+describe('P18.10-T4 the pitch’s file size in each language', () => {
   it('writes a size in the reader’s marks — Indonesian when none is passed — MB and KB alike in both', () => {
     expect(formatFileSize(2.4 * 1024 * 1024, 'en')).toBe('2.4 MB');
     expect(formatFileSize(2.4 * 1024 * 1024)).toBe('2,4 MB');

@@ -1,7 +1,7 @@
 import { api } from './api-client';
 
 /**
- * **Home** (UI V1, 2026-10-30, Phase 18.99 T11; UI-100, UI-101; `functional/home.md`): `GET /home`, every block of the
+ * **Home** (UI V1, 2026-10-30, Phase 18.11 T11; UI-100, UI-101; `functional/home.md`): `GET /home`, every block of the
  * page in one read. The screen draws the server's figures and adds nothing up: the tiles are the Unit Dashboard's, the
  * schedule Calendar's, the counts Activity Management's.
  *
@@ -118,11 +118,21 @@ export interface HomeTeamPerson {
   today: number | null;
 }
 
+/**
+ * The leader's part of Home — sent for **every leader by role**, at zero with no team yet (ADR-0189 §4, P19-T4 AC-2);
+ * `null` for an Agent.
+ */
 export interface HomeLeader {
   activeAgent: HomeSplit;
   coached7d: HomeSplit;
   /** In UI-101's order: nobody-reported first. */
   team: HomeTeamPerson[];
+  /** *Tim saya · Anggota tim*: everybody in the reader's Group but the reader. */
+  members: number;
+  /** *Tim saya · Recruitment pipeline*: `RECRUITMENT_PIPELINE_NOW` over the reader's Group, the reader included. */
+  recruitmentPipeline: number;
+  /** *Tim saya · New hires*: the Group's new hires before a first sale. */
+  newHires: number;
 }
 
 export interface HomeView {

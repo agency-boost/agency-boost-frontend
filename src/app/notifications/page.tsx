@@ -65,7 +65,7 @@ export default function NotificationsPage() {
   const pages = inbox ? Math.max(1, Math.ceil(inbox.total / (inbox.pageSize || INBOX_PAGE_SIZE))) : 1;
 
   return (
-    // The sub-line is not drawn on a phone: the client's *Remove* (P18.95-T7 AC-1, grey text row 25). The shell draws
+    // The sub-line is not drawn on a phone: the client's *Remove* (P18.7-T7 AC-1, grey text row 25). The shell draws
     // the header, so the page says it through the context rather than a prop.
     <SubtitleOnPhone.Provider value={false}>
       <RoleShell

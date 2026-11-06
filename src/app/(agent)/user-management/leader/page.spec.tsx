@@ -56,10 +56,10 @@ describe('find your leader (P3-T3)', () => {
   });
 
   /*
-   * P18.95-T7 AC-1 (ADR-0167 §7; the client's *Grey text* table, rows 1–3): the client's words at every size, and its
+   * P18.7-T7 AC-1 (ADR-0167 §7; the client's *Grey text* table, rows 1–3): the client's words at every size, and its
    * *Remove* below 768px only — the sentence keeps its words from 768px, where the client has not reviewed it yet.
    */
-  it('P18.95-T7 AC-1 heads the search Find a leader, says They’ll need to approve.', async () => {
+  it('P18.7-T7 AC-1 heads the search Find a leader, says They’ll need to approve.', async () => {
     stubFetch({ '/join/me': { body: REGISTERED }, '/join/leaders': { body: LEADERS } });
     renderInLayout(AgentLayout, <FindLeaderPage />, { me: JOINER });
 
@@ -96,7 +96,7 @@ describe('find your leader (P3-T3)', () => {
     expect(await screen.findByText('Request sent')).toBeInTheDocument();
   });
 
-  it('P18.95-T1 AC-6: says Request sent ✓ in the shell’s toast once the request is in', async () => {
+  it('P18.7-T1 AC-6: says Request sent ✓ in the shell’s toast once the request is in', async () => {
     stubFetch({
       '/join/leader-request': { body: { ...REGISTERED, pendingRequestTo: 'mem-ab' } },
       '/join/leaders': [
@@ -136,7 +136,7 @@ describe('find your leader (P3-T3)', () => {
     expect(calls.some((c) => c.init.method === 'DELETE')).toBe(true);
   });
 
-  it('P18.96-T3 AC-6 a reader with a leader sees who it is and one line in place of the search, which is never asked', async () => {
+  it('P18.8-T3 AC-6 a reader with a leader sees who it is and one line in place of the search, which is never asked', async () => {
     const { calls } = stubFetch({
       '/join/me': { body: { ...REGISTERED, status: 'active', leaderMembershipId: 'mem-ab', leaderName: 'Wilson Tanoto' } },
     });
@@ -187,7 +187,7 @@ describe('find your leader (P3-T3)', () => {
     expect(screen.queryAllByText(/^Any of the three does the same thing/).filter((el) => el.tagName === 'P')).toEqual([]);
   });
 
-  it('P18.96-T3 AC-6 a reader with no leader still searches, and the list is the server’s — never the reader’s own unit', async () => {
+  it('P18.8-T3 AC-6 a reader with no leader still searches, and the list is the server’s — never the reader’s own unit', async () => {
     // The exclusion is the server's (`GET /join/leaders`); the screen draws what it is served.
     stubFetch({ '/join/me': { body: REGISTERED }, '/join/leaders': { body: LEADERS } });
     renderInLayout(AgentLayout, <FindLeaderPage />, { me: JOINER });
@@ -228,7 +228,7 @@ describe('find your leader (P3-T3)', () => {
 
     await userEvent.click((await screen.findAllByRole('button', { name: 'Send request' }))[0]);
     expect(await screen.findByRole('alert')).toHaveTextContent('not available in this office');
-    // P18.95-T1 AC-6: a refusal toasts nothing.
+    // P18.7-T1 AC-6: a refusal toasts nothing.
     expect(screen.queryByText('Request sent ✓')).not.toBeInTheDocument();
   });
 });

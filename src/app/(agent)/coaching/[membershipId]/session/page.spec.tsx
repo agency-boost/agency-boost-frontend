@@ -183,7 +183,7 @@ const echoSave: StubReply = ({ body }) => {
   };
 };
 
-/** The session tab, in English (every spec's default) or, asked for, in Indonesian (P18.98-T3). */
+/** The session tab, in English (every spec's default) or, asked for, in Indonesian (P18.10-T3). */
 const show = (routes: Record<string, StubReply | StubReply[]> = {}, language?: Language) => {
   const stub = stubFetch({
     '/kpm/config': { body: { activity: [], ratios: [], leadPipelines: PIPELINES, version: 1 } },
@@ -226,18 +226,18 @@ describe('the session workspace (P11-T8)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   describe('the header and the start', () => {
-    it('P11-T8 AC-1, P18.95-T7 AC-2, UI-032 heads the tab with the office’s today and Not started, before anything starts', async () => {
+    it('P11-T8 AC-1, P18.7-T7 AC-2, UI-032 heads the tab with the office’s today and Not started, before anything starts', async () => {
       show({ 'GET /coaching/coachees/mem-rina/sessions': { body: history() } });
 
       await screen.findByRole('button', { name: 'Start coaching session' });
       const heading = within(sessionCard()).getByRole('heading', { level: 2 });
       expect(heading).toHaveTextContent(/^Today’s session ?Friday, 2 Oct 2026$/);
-      // P18.95-T7 AC-2 (UI-021): *Not started*, not the prototype's *Draft* of a session nobody has opened.
+      // P18.7-T7 AC-2 (UI-021): *Not started*, not the prototype's *Draft* of a session nobody has opened.
       expect(within(sessionCard()).getByText('Not started')).toHaveAttribute('data-tone', 'grey');
       expect(sessionCard()).not.toHaveTextContent('Draft');
     });
 
-    it('P18.95-T7 AC-2 tags a session Draft once it is open, and Finalized once it is done', () => {
+    it('P18.7-T7 AC-2 tags a session Draft once it is open, and Finalized once it is done', () => {
       expect(sessionTag(null)).toBe('Not started');
       expect(sessionTag({ status: 'draft' })).toBe('Draft');
       expect(sessionTag({ status: 'reopened' })).toBe('Draft');
@@ -301,7 +301,7 @@ describe('the session workspace (P11-T8)', () => {
 
       await userEvent.click(await screen.findByRole('button', { name: 'Start coaching session' }));
 
-      // *Session started ✓* first since 2026-10-26 (P18.95-T1 AC-6), the prototype's sentence after it.
+      // *Session started ✓* first since 2026-10-26 (P18.7-T1 AC-6), the prototype's sentence after it.
       await toastSays('Session started ✓ — unfinished items and tips from last week carried forward.');
       expect(sent(calls, 'POST', '/coaching/coachees/mem-rina/sessions')).toHaveLength(1);
       expect(screen.queryByRole('button', { name: 'Start coaching session' })).not.toBeInTheDocument();
@@ -401,7 +401,7 @@ describe('the session workspace (P11-T8)', () => {
   });
 
   describe('the Goal card', () => {
-    it('P18.98-T3 AC-1 in Indonesian: the header’s day, the Goal tiles’ sums in juta and the ratios whole', async () => {
+    it('P18.10-T3 AC-1 in Indonesian: the header’s day, the Goal tiles’ sums in juta and the ratios whole', async () => {
       show({}, 'id');
       const goal = await card('Goal');
       await within(goal).findByText(/Rp 65,6 jt/);
@@ -576,7 +576,7 @@ describe('the session workspace (P11-T8)', () => {
 
       await userEvent.click(drill);
 
-      // Its module is fetched on the first opening (P18.99-T16).
+      // Its module is fetched on the first opening (P18.11-T16).
       const dialog = await screen.findByRole('dialog', { name: 'Rina Wijaya — Activity Dashboard' });
       expect(dialog).toHaveAccessibleDescription('Last 7 days · category breakdown');
       const rows = within(dialog).getAllByRole('row').map((r) => [...r.children].map((c) => c.textContent));
@@ -754,8 +754,8 @@ describe('the session workspace (P11-T8)', () => {
       const tips = await card('Coaching tips');
       const next = await card('Next action items');
       for (const add of [within(tips).getByRole('button', { name: 'Add tip' }), within(next).getByRole('button', { name: 'Add action' })]) {
-        expect(add).toHaveClass('bg-amber', 'text-navy', 'rounded-full');
-        expect(add).not.toHaveClass('bg-navy');
+        expect(add).toHaveClass('bg-primary', 'text-primary-contrast', 'rounded-full');
+        expect(add).not.toHaveClass('bg-secondary');
         expect(add).toHaveAttribute('type', 'button');
       }
     });
@@ -931,7 +931,7 @@ describe('the session workspace (P11-T8)', () => {
       expect(pill).toHaveClass('rounded-pill', 'bg-card', 'shadow-modal', 'lg:rounded-none', 'lg:shadow-none');
       expect(within(pill).getByText('Draft · 3 actions')).toHaveClass('min-w-0', 'flex-1');
       // The pill's 44px accent button below 1024px; the column's 50px one from 1024px.
-      expect(finalize).toHaveClass('min-h-11', 'rounded-pill', 'bg-amber', 'font-bold', 'lg:h-[50px]', 'lg:flex-1');
+      expect(finalize).toHaveClass('min-h-11', 'rounded-pill', 'bg-primary', 'font-bold', 'lg:h-[50px]', 'lg:flex-1');
       // Room under the last card for the pill: the floating bar's one room class.
       expect(document.querySelector('[data-session-workspace]')).toHaveClass(FLOATING_BAR_ROOM);
       expect(document.querySelector('[data-session-workspace]')).not.toHaveClass('max-lg:pb-28');
@@ -1027,7 +1027,7 @@ describe('the session workspace (P11-T8)', () => {
 
       await userEvent.click(await screen.findByRole('button', { name: 'Edit again' }));
 
-      // Its module is fetched on the first opening (P18.99-T16).
+      // Its module is fetched on the first opening (P18.11-T16).
       const dialog = await screen.findByRole('dialog', { name: 'Edit this session again?' });
       expect(dialog).toHaveAccessibleDescription(
         'Say why it needs changing. The reason stays with the session, and everyone who reads the session reads it — Rina Wijaya included.',
@@ -1136,14 +1136,14 @@ describe('the session workspace (P11-T8)', () => {
   });
 
   /**
-   * **A field that saves itself says so** (P18.95-T1 AC-5; ADR-0167 §5; the client's UI review of 2026-10-26, UI-007):
+   * **A field that saves itself says so** (P18.7-T1 AC-5; ADR-0167 §5; the client's UI review of 2026-10-26, UI-007):
    * the draft is saved as it is edited, and each field — a tip, an action item, last week's tick and date — says
    * *Saving… → Saved ✓* beside it, or *Couldn't save — retry*.
    */
-  describe('P18.95-T1 AC-5 — the draft’s fields say their save', () => {
+  describe('P18.7-T1 AC-5 — the draft’s fields say their save', () => {
     const tip = 'Slow down on the opening line — let the client finish before pitching.';
 
-    it('P18.95-T1 AC-5: a tip left changed says Saved ✓ under it; one left untouched says nothing', async () => {
+    it('P18.7-T1 AC-5: a tip left changed says Saved ✓ under it; one left untouched says nothing', async () => {
       const { calls } = show();
       const tips = await card('Coaching tips');
       const box = within(tips).getByLabelText('Tip 1');
@@ -1160,7 +1160,7 @@ describe('the session workspace (P11-T8)', () => {
       expect(sent(calls, 'PUT', '/coaching/sessions/s-1')).toHaveLength(1);
     });
 
-    it('P18.95-T1 AC-5: a refused save offers the retry beside the tip, which sends the same words again', async () => {
+    it('P18.7-T1 AC-5: a refused save offers the retry beside the tip, which sends the same words again', async () => {
       const { calls } = show({
         'PUT /coaching/sessions/s-1': [refused(500, 'INTERNAL_ERROR', 'Something went wrong.'), echoSave],
       });
@@ -1181,7 +1181,7 @@ describe('the session workspace (P11-T8)', () => {
       expect(within(tips).getByLabelText('Tip 1')).toHaveFocus();
     });
 
-    it('P18.95-T1 AC-5: the draft is saved whole, so a later save that lands takes an earlier failure’s retry away', async () => {
+    it('P18.7-T1 AC-5: the draft is saved whole, so a later save that lands takes an earlier failure’s retry away', async () => {
       show({ 'PUT /coaching/sessions/s-1': [refused(500, 'INTERNAL_ERROR', 'Something went wrong.'), echoSave] });
       const tips = await card('Coaching tips');
       await userEvent.type(within(tips).getByLabelText('Tip 1'), '!');
@@ -1195,7 +1195,7 @@ describe('the session workspace (P11-T8)', () => {
       expect(within(tips).queryByRole('button', { name: /^Couldn't save/ })).not.toBeInTheDocument();
     });
 
-    it('P18.95-T1 AC-5: last week’s tick says Saved ✓ at its row’s end', async () => {
+    it('P18.7-T1 AC-5: last week’s tick says Saved ✓ at its row’s end', async () => {
       show();
       const lastWeek = await card("Last week's action items");
       const box = within(lastWeek).getByRole('checkbox', { name: 'Done: Follow up with Alvin Sanjaya — no contact in 8 days' });
@@ -1205,7 +1205,7 @@ describe('the session workspace (P11-T8)', () => {
       expect(box.closest('li')).toContainElement(said);
     });
 
-    it('P18.95-T1 AC-5: a stale save reads the session again and leaves nothing to retry', async () => {
+    it('P18.7-T1 AC-5: a stale save reads the session again and leaves nothing to retry', async () => {
       show({
         'PUT /coaching/sessions/s-1': refused(409, 'VERSION_CONFLICT', 'Somebody saved first.'),
         'GET /coaching/sessions/s-1': [

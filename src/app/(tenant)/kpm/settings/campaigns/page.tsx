@@ -9,7 +9,10 @@ import { POSTER_FILL } from '@/components/campaigns/campaign-parts';
 import { useLadder } from '@/components/ui/role-badge';
 import { DateField } from '@/components/ui/date-field';
 import { Button, Card, Field, Select, Textarea, TextInput } from '@/components/ui/field';
+import { ListCard, ListRow } from '@/components/ui/list-rows';
+import { ResponsiveSheet } from '@/components/ui/responsive-sheet';
 import { SkeletonCards } from '@/components/ui/skeleton';
+import { TonePill } from '@/components/ui/tone-pill';
 import { messagesIn } from '@/i18n/catalogue';
 import type { Language } from '@/i18n/language';
 import { kept } from '@/i18n/kept';
@@ -27,6 +30,8 @@ import { useCan } from '@/lib/session';
 import { byPhaseAndDate } from '@/lib/settings-order';
 import { useTenantConfig } from '@/lib/tenant-config-cache';
 import { useHashTab } from '@/lib/use-hash-tab';
+import { usePhone } from '@/lib/use-phone';
+import { ARCHIVED_SWITCH_ROW, CHECK_LINE_TOUCH } from '../settings-touch';
 import {
   archiveCampaign, createCampaign, listCampaigns, listMetrics, listQualificationRules, restoreCampaign,
   updateCampaign,
@@ -54,7 +59,7 @@ const wordFor = (words: Readonly<Record<string, string>>, value: string) => word
  * `idr_minor` is integer sen, rendered as rupiah — the prototype stores *"Rp 600,000,000"* as a
  * display string and one campaign's reward in **pesos**, so neither can be compared or totalled.
  * Written as the campaign cards write it (`figureWords`, ADR-0167 §1): *Rp 600 jt*, in full where
- * compact writing would round the rule. **A rate as a percentage** (P18.97-T4 AC-8, ADR-0176 §8; UI-030): a
+ * compact writing would round the rule. **A rate as a percentage** (P18.9-T4 AC-8, ADR-0176 §8; UI-030): a
  * requirement on one of the office's ratios is written in that ratio's own unit, `ratioUnits` — *Recruitment success
  * rate at least 30%*, where it read *0,30* — and one the office does not hold as a number, as before.
  */
@@ -78,7 +83,7 @@ const toInstant = (day: string, edge: 'start' | 'end') => (day ? officeDayEdge(d
 const localDate = (iso: string | null) => (iso ? officeDay(iso) : '');
 
 /**
- * One requirement in the form (P18.5-T7 AC-9): its metric, its comparator **as stored**, and its target as typed
+ * One requirement in the form (P18.2-T7 AC-9): its metric, its comparator **as stored**, and its target as typed
  * — rupiah for money. `stored` is the requirement as read: one the Owner has not touched goes back exactly as it
  * came, so a requirement a campaign can no longer measure is kept, never rewritten or dropped.
  */
@@ -150,10 +155,17 @@ export default function CampaignsSettingsPage() {
   const ladder = useLadder();
   /**
    * How the office writes each of its ratios (P4-T25), by code — a ratio's code is its metric's key — so a requirement
-   * on one reads as the ratio card does (P18.97-T4 AC-8). Read from the office's published configuration.
+   * on one reads as the ratio card does (P18.9-T4 AC-8). Read from the office's published configuration.
    */
   const { config } = useTenantConfig();
   const ratioUnits = ratioUnitsOf(config?.ratios);
+  /*
+   * **Below 768px a campaign is one line, and its card and its form are its sheet** (P19.2-T3 AC-3; UI-141: *Activity
+   * types and Campaigns: same row + sheet*, 3.5 screens at 375). From 768px the cards and the form are as they were.
+   */
+  const phone = usePhone();
+  /** The campaign whose sheet is open, on a phone. */
+  const [sheetFor, setSheetFor] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -194,13 +206,13 @@ export default function CampaignsSettingsPage() {
 
   function campaignsTab() {
     if (campaigns === null) return <SkeletonCards count={3} />;
-    // Upcoming, then running, then ended — each by date (P18.97-T4 AC-8, ADR-0176 §8; UI-030: the three were mixed).
+    // Upcoming, then running, then ended — each by date (P18.9-T4 AC-8, ADR-0176 §8; UI-030: the three were mixed).
     const shown = byPhaseAndDate(campaigns.filter((c) => showArchived || c.status === 'active'));
 
     return (
       <div className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <label className="flex items-center gap-2 text-md text-navy">
+          <label className={cn('flex items-center gap-2 text-md text-navy', ARCHIVED_SWITCH_ROW)}>
             <input
               type="checkbox"
               checked={showArchived}
@@ -218,66 +230,32 @@ export default function CampaignsSettingsPage() {
           )}
         </div>
 
-        {editing && panel()}
+        {editing && !phone && panel()}
 
         {shown.length === 0 ? (
           <EmptyState title={t.empty} />
+        ) : phone ? (
+          <ListCard label={t.title}>
+            {shown.map((campaign) => (
+              <ListRow
+                key={campaign.id}
+                data-row={campaign.id}
+                title={campaign.title}
+                meta={`${wordFor(t.phases, campaign.phase)} · ${t.thisOffice}`}
+                trailing={campaign.status === 'archived' ? <TonePill tone="grey">{s.archivedBadge}</TonePill> : undefined}
+                haspopup
+                onSelect={() => { setEditing(null); setSheetFor(campaign.id); }}
+              />
+            ))}
+          </ListCard>
         ) : (
           <ul className="flex flex-col gap-3">
             {shown.map((campaign) => (
               <li key={campaign.id}>
                 <Card>
                   <div className="flex flex-wrap items-center gap-3">
-                    <div className="min-w-0 flex-1">
-                      <h2 className="text-md font-semibold text-navy">{campaign.title}</h2>
-                      {campaign.description && (
-                        <p className="mt-0.5 text-sm text-muted">{campaign.description}</p>
-                      )}
-                      <p className="mt-1 flex flex-wrap items-center gap-2">
-                        <ConfigBadge tone={PHASE_TONE[campaign.phase]}>
-                          {wordFor(t.phases, campaign.phase)}
-                        </ConfigBadge>
-                        {/* *This office* (P18.97-T4 AC-8; UI-030), where it read *Your office’s*: run here, not by the insurer. */}
-                        <ConfigBadge tone="open">{t.thisOffice}</ConfigBadge>
-                        {campaign.status === 'archived' && (
-                          <ConfigBadge tone="open">{s.archivedBadge}</ConfigBadge>
-                        )}
-                      </p>
-                      {campaign.requirements.length > 0 && (
-                        <ul className="mt-2 flex flex-col gap-1">
-                          {campaign.requirements.map((r) => (
-                            <li key={r.metricKey} className="flex flex-wrap items-center gap-2 text-md text-navy">
-                              {readRequirement(r, ratioUnits, language, figures)}
-                              {/* A requirement stored before the evaluable set, naming what a campaign cannot measure (T8 AC-1). */}
-                              {r.measured === false && <ConfigBadge tone="open">{c.notMeasured}</ConfigBadge>}
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                      {campaign.reward && (
-                        <p className="mt-1 text-sm text-muted">{t.reward({ reward: campaign.reward })}</p>
-                      )}
-                    </div>
-                    {canWrite && (
-                      <div className="flex flex-wrap gap-2">
-                        <Button
-                          variant="inline"
-                          disabled={busy}
-                          onClick={() => { setDraft(draftOf(campaign)); setEditing(campaign.id); }}
-                        >
-                          {s.edit}
-                        </Button>
-                        <Button
-                          variant="inlineDanger"
-                          disabled={busy}
-                          onClick={() => void run(() => (campaign.status === 'archived'
-                            ? restoreCampaign(campaign.id)
-                            : archiveCampaign(campaign.id)))}
-                        >
-                          {campaign.status === 'archived' ? s.restore : s.archive}
-                        </Button>
-                      </div>
-                    )}
+                    {campaignDetails(campaign)}
+                    {campaignActions(campaign)}
                   </div>
                 </Card>
               </li>
@@ -285,6 +263,68 @@ export default function CampaignsSettingsPage() {
           </ul>
         )}
       </div>
+    );
+  }
+
+  /** A campaign's card: its title, description, phase, *This office*, its requirements and its reward. */
+  function campaignDetails(campaign: CampaignRow) {
+    return (
+      <div className="min-w-0 flex-1">
+        <h2 className="text-md font-semibold text-navy">{campaign.title}</h2>
+        {campaign.description && (
+          <p className="mt-0.5 text-sm text-muted">{campaign.description}</p>
+        )}
+        <p className="mt-1 flex flex-wrap items-center gap-2">
+          <ConfigBadge tone={PHASE_TONE[campaign.phase]}>
+            {wordFor(t.phases, campaign.phase)}
+          </ConfigBadge>
+          {/* *This office* (P18.9-T4 AC-8; UI-030), where it read *Your office’s*: run here, not by the insurer. */}
+          <ConfigBadge tone="open">{t.thisOffice}</ConfigBadge>
+          {campaign.status === 'archived' && (
+            <ConfigBadge tone="open">{s.archivedBadge}</ConfigBadge>
+          )}
+        </p>
+        {campaign.requirements.length > 0 && (
+          <ul className="mt-2 flex flex-col gap-1">
+            {campaign.requirements.map((r) => (
+              <li key={r.metricKey} className="flex flex-wrap items-center gap-2 text-md text-navy">
+                {readRequirement(r, ratioUnits, language, figures)}
+                {/* A requirement stored before the evaluable set, naming what a campaign cannot measure (T8 AC-1). */}
+                {r.measured === false && <ConfigBadge tone="open">{c.notMeasured}</ConfigBadge>}
+              </li>
+            ))}
+          </ul>
+        )}
+        {campaign.reward && (
+          <p className="mt-1 text-sm text-muted">{t.reward({ reward: campaign.reward })}</p>
+        )}
+      </div>
+    );
+  }
+
+  /** A campaign's *Edit* and *Archive* / *Restore* — on its card from 768px, in its sheet below it. */
+  function campaignActions(campaign: CampaignRow) {
+    return (
+      canWrite && (
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="inline"
+            disabled={busy}
+            onClick={() => { setDraft(draftOf(campaign)); setEditing(campaign.id); }}
+          >
+            {s.edit}
+          </Button>
+          <Button
+            variant="inlineDanger"
+            disabled={busy}
+            onClick={() => void run(() => (campaign.status === 'archived'
+              ? restoreCampaign(campaign.id)
+              : archiveCampaign(campaign.id)))}
+          >
+            {campaign.status === 'archived' ? s.restore : s.archive}
+          </Button>
+        </div>
+      )
     );
   }
 
@@ -329,7 +369,7 @@ export default function CampaignsSettingsPage() {
         </div>
 
         {/*
-          * D-fields (P18.5-T7 AC-9): what the agent's card draws — the tab it sits under, its section, the window
+          * D-fields (P18.2-T7 AC-9): what the agent's card draws — the tab it sits under, its section, the window
           * it is read over, who it is for, its poster and its line. A Fill: the prototype's *+ Create campaign*
           * is an `alert()` (`KPM_Owner.html:1681`), so no form is drawn; the field names are the agent screen's.
           */}
@@ -414,7 +454,7 @@ export default function CampaignsSettingsPage() {
           <p id="c-rungs-hint" className="mb-1.5 text-sm text-muted">{t.openToHint}</p>
           <div className="flex flex-wrap gap-x-4 gap-y-1.5" aria-describedby="c-rungs-hint">
             {ladder.map((rung) => (
-              <label key={rung.code} className="flex items-center gap-2 text-md text-navy">
+              <label key={rung.code} className={cn('flex items-center gap-2 text-md text-navy', CHECK_LINE_TOUCH)}>
                 <input
                   type="checkbox"
                   checked={draft.rungs.includes(rung.code)}
@@ -478,7 +518,7 @@ export default function CampaignsSettingsPage() {
         </Field>
 
         {/*
-          * **Every requirement, each a row** (P18.5-T7 AC-9): the metric, its comparison as stored and its target,
+          * **Every requirement, each a row** (P18.2-T7 AC-9): the metric, its comparison as stored and its target,
           * *Remove* on each and *+ Add requirement* beneath. The prototype draws no form (`Owner:1681`); one row was
           * this form's first draft, and saving an edit of a campaign holding two dropped the second. A Fill, the
           * smallest that keeps a campaign's requirements whole.
@@ -506,7 +546,7 @@ export default function CampaignsSettingsPage() {
                       <option value="" disabled>{t.chooseMetric}</option>
                       {/*
                         * From the registry, not from this file (P5-T9, invariant 7), and only the metrics a campaign
-                        * can measure (P18.5-T8 AC-1, D-evaluable): a production figure over whole months, logged
+                        * can measure (P18.2-T8 AC-1, D-evaluable): a production figure over whole months, logged
                         * activity, the five ratios, a unit's active agents.
                         */}
                       {metrics.filter((m) => m.campaign).map((m) => (
@@ -616,6 +656,30 @@ export default function CampaignsSettingsPage() {
     );
   }
 
+  /**
+   * **A campaign on a phone, in its sheet** (P19.2-T3 AC-3): the card it was, with *Edit* and *Archive* / *Restore*; *Edit*
+   * turns the sheet into the campaign's form, and *Add a campaign* opens the same form in it.
+   */
+  function campaignSheet() {
+    const campaign = sheetFor === null ? null : campaigns?.find((row) => row.id === sheetFor) ?? null;
+    const adding = editing === 'new';
+    const open = adding || campaign !== null;
+    return (
+      <ResponsiveSheet
+        open={open}
+        title={adding ? t.addCampaign : campaign?.title ?? ''}
+        onClose={() => { setSheetFor(null); setEditing(null); }}
+      >
+        {open && (editing !== null ? panel() : campaign && (
+          <div className="flex flex-col gap-3 pb-2">
+            {campaignDetails(campaign)}
+            {campaignActions(campaign)}
+          </div>
+        ))}
+      </ResponsiveSheet>
+    );
+  }
+
   function tiersTab() {
     if (rules === null) return <SkeletonCards count={3} />;
     const tiers = rules.filter((r) => r.kind === 'production_club');
@@ -700,11 +764,12 @@ export default function CampaignsSettingsPage() {
       bars={<PublishBar />}
     >
       {error && campaigns !== null && (
-        <div role="alert" className="mb-4 rounded-md border border-amber bg-card p-4">
+        <div role="alert" className="mb-4 rounded-md border border-primary bg-card p-4">
           <p className="text-md text-navy">{error.message}</p>
         </div>
       )}
       {tab === '#tiers' ? tiersTab() : campaignsTab()}
+      {phone && tab !== '#tiers' && campaignSheet()}
     </SettingsScreen>
   );
 }

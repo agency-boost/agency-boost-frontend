@@ -4,7 +4,7 @@ import { kpmComplianceMessages } from '@/i18n/messages/kpm-compliance';
 import { api } from './api-client';
 
 /**
- * **The override of a final campaign standing** (P18.6-T2 AC-5, AC-8; ADR-0144 §4; D-override): the Owner or an
+ * **The override of a final campaign standing** (P18.3-T2 AC-5, AC-8; ADR-0144 §4; D-override): the Owner or an
  * Admin sets a chaser's frozen result to *Achieved* or *Not achieved* with a reason, or clears it with one. Its
  * only control is the compliance tree's *Achieved* cell (`components/analytics/standing-override.tsx`).
  *
@@ -76,7 +76,7 @@ const EN = messagesIn(kpmComplianceMessages, SOURCE_LANGUAGE).override;
  * **Our words, in English**: the prototype draws no override (contradiction 11). Plain, and none of OD-39's six words.
  * `campaign` is the campaign's title, `name` the member's. The catalogue's source, in the shapes this module's callers
  * and spec have always read; **the cell reads the reader's language** (`useMessages(kpmComplianceMessages).override`,
- * P18.98-T4).
+ * P18.10-T4).
  */
 export const OVERRIDE_COPY = {
   /** The cell's button, after the pill's own word (WCAG 2.5.3), and the dialog's title. */

@@ -12,7 +12,7 @@ export interface CascadeColumn {
   readonly label: string;
   /**
    * The activity this column counts against, by the name Log Activity gives it — *Set Appointment* — where it
-   * was the log's number, *Activity #3* (P18.95-T5 AC-5). Never the stored code, an internal id (ADR-0062 §3);
+   * was the log's number, *Activity #3* (P18.7-T5 AC-5). Never the stored code, an internal id (ADR-0062 §3);
    * omitted while the name is unknown, or when it would only repeat `label`.
    */
   readonly chip?: string;
@@ -68,7 +68,7 @@ export function CascadeRow({
             data-hero={col.hero ? 'true' : undefined}
             className={cn(
               'min-w-0 flex-1 rounded-md border px-2.5 py-3.5 text-center',
-              col.hero ? 'border-amber/50 bg-amber/[0.14]' : 'border-amber/35 bg-amber/[0.08]',
+              col.hero ? 'border-primary/50 bg-primary/[0.14]' : 'border-primary/35 bg-primary/[0.08]',
             )}
           >
             <span className="mx-auto mb-2 flex h-[34px] w-[34px] items-center justify-center rounded-md border border-hairline bg-card text-navy">
@@ -84,7 +84,7 @@ export function CascadeRow({
                 </ConfigBadge>
               ) : null}
             </span>
-            <span className="block font-body text-2xl font-bold leading-none text-amber-deep">
+            <span className="block font-body text-2xl font-bold leading-none text-primary-deep">
               {col.month}
             </span>
             {col.week ? <span className="mt-1 block text-md font-semibold text-navy-soft">{col.week}</span> : null}

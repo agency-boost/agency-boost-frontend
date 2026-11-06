@@ -8,13 +8,14 @@ import { unitDashboardMessages } from '@/i18n/messages/unit-dashboard';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
 import { moneyPrefix } from '@/lib/format';
 import {
-  dialogGroups, everyRow, inputsOf, productionChanges, regroup, rowName, updateUnitProduction,
+  dialogGroups, everyRow, inputsOf, prefill, productionChanges, regroup, rowName, updateUnitProduction,
   type ProductionCadence, type ProductionInputs, type UnitDashboardView,
 } from '@/lib/unit-dashboard';
 
 /**
- * *Update production* (`Overall.html:4679-4701`, `:7508-7555`; OD-137, ADR-0121): the month's and the
- * year's APE achieved for everybody on the roster, typed from the company report and saved together.
+ * *Update production* (`Overall.html:4679-4701`, `:7508-7555`; OD-137, ADR-0121): the month's APE achieved for
+ * everybody on the roster, typed from the company report and saved together — and, beside it, **the year's, read-only**:
+ * since P19.5-T2 (R4; ADR-0214 §10) a year to date is the sum of the months, and the server refuses one typed.
  *
  * **Each changed cell is a correction of the month table**, written under the reader's name through the
  * same function the month table's own correction uses, and seen by every screen that reads production.
@@ -28,8 +29,8 @@ import {
  * dashboard again behind the dialog, so the next *Save all* is pinned to the new one; only what was typed
  * here is sent, so nobody else's figure is overwritten by a box nobody touched.
  *
- * **Its words are the catalogue's** (`messages/unit-dashboard.ts`, P18.98-T4); the money's mark in each heading is the
- * figures' (`moneyPrefix`), as the boxes beneath it are prefixed (P18.98-T3 AC-3).
+ * **Its words are the catalogue's** (`messages/unit-dashboard.ts`, P18.10-T4); the money's mark in each heading is the
+ * figures' (`moneyPrefix`), as the boxes beneath it are prefixed (P18.10-T3 AC-3).
  */
 export function UpdateProductionDialog({
   view, onClose, onSaved, onStale,
@@ -59,9 +60,9 @@ export function UpdateProductionDialog({
   const type = (membershipId: string, cadence: ProductionCadence, typed: string) =>
     setInputs((current) => ({ ...current, [membershipId]: { ...current[membershipId], [cadence]: regroup(typed, figures) } }));
 
-  /** The box a 422 names (`details.membershipId`, `details.cadence`), marked until the next save. */
+  /** The box a 422 names (`details.membershipId`), marked until the next save: this month's, the only one typed. */
   const refused = error?.details && typeof error.details.membershipId === 'string'
-    ? { membershipId: error.details.membershipId, cadence: error.details.cadence }
+    ? { membershipId: error.details.membershipId }
     : null;
 
   async function save() {
@@ -73,7 +74,9 @@ export function UpdateProductionDialog({
     setSaving(true);
     setError(null);
     try {
-      const result = await updateUnitProduction({ month: view.production.month, revision: view.production.revision, rows });
+      // The unit on screen, when it is not the reader's own: the server refuses the office's read-only view (P19.3-T3 AC-3).
+      const unit = view.head.isReader ? {} : { for: view.head.membershipId };
+      const result = await updateUnitProduction({ month: view.production.month, revision: view.production.revision, ...unit, rows });
       onSaved(result.updated);
     } catch (err) {
       const shown = toDisplayError(err);
@@ -141,7 +144,7 @@ export function UpdateProductionDialog({
                 <th
                   scope="rowgroup"
                   colSpan={3}
-                  className="border-b border-hairline bg-navy/[0.04] px-[22px] py-2 text-left text-sm font-bold text-navy"
+                  className="border-b border-hairline bg-secondary/[0.04] px-[22px] py-2 text-left text-sm font-bold text-navy"
                 >
                   {group.label}
                 </th>
@@ -156,25 +159,33 @@ export function UpdateProductionDialog({
                         {name}
                       </span>
                     </th>
-                    {(['monthly', 'ytd'] as const).map((cadence) => {
+                    {(() => {
                       const ref = first ? holdFirst : undefined;
                       first = false;
                       return (
-                        <td key={cadence} ref={ref} className="px-[22px] py-2">
+                        <td ref={ref} className="px-[22px] py-2">
                           <TextInput
                             prefix={unit}
                             type="text"
                             inputMode="numeric"
                             autoComplete="off"
-                            aria-label={`${cadence === 'monthly' ? month : year}, ${name}`}
-                            value={boxes?.[cadence] ?? ''}
-                            onChange={(e) => type(row.membershipId, cadence, e.target.value)}
-                            invalid={refused?.membershipId === row.membershipId && refused.cadence === cadence}
+                            aria-label={`${month}, ${name}`}
+                            value={boxes?.monthly ?? ''}
+                            onChange={(e) => type(row.membershipId, 'monthly', e.target.value)}
+                            invalid={refused?.membershipId === row.membershipId}
                             className="h-9 w-full"
                           />
                         </td>
                       );
-                    })}
+                    })()}
+                    {/*
+                      * **The year, read-only** (P19.5-T2; R4, ADR-0214 §10): the sum of the months the office holds, which
+                      * the server calculates and refuses to be sent. It follows the month once the dashboard reads again.
+                      */}
+                    <td data-year-read-only="" className="whitespace-nowrap px-[22px] py-2 text-right text-base font-semibold text-muted">
+                      {/* Grouped as the boxes are, under the heading that names its money: `620,000,000` (IDR). */}
+                      {prefill(row.production.ytd, figures) || '—'}
+                    </td>
                   </tr>
                 );
               })}

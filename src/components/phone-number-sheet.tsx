@@ -15,7 +15,7 @@ import {
 export type Channel = 'whatsapp' | 'call';
 
 /*
- * **The sheet in a module of its own** (P18.99-T16, the bundle): `ContactButtons` and New hire detail load it with
+ * **The sheet in a module of its own** (P18.11-T16, the bundle): `ContactButtons` and New hire detail load it with
  * `next/dynamic` when it is first needed; the lead sheet, itself loaded on demand, imports it.
  */
 
@@ -106,7 +106,7 @@ export function PhoneNumberSheet({
           type="submit"
           form={formId}
           disabled={saving}
-          className="min-h-12 w-full rounded-pill bg-amber px-5 text-md font-bold text-navy hover:bg-amber-dark disabled:cursor-not-allowed disabled:opacity-40"
+          className="min-h-12 w-full rounded-pill bg-primary px-5 text-md font-bold text-primary-contrast hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-40"
         >
           {saving ? t.contact.saving : t.contact.save}
         </button>
@@ -116,7 +116,7 @@ export function PhoneNumberSheet({
         <label htmlFor={fieldId} className="mb-1.5 block text-base font-semibold text-navy">{t.contact.field}</label>
         <div
           className={cn(
-            'flex h-12 items-center overflow-hidden rounded-md border bg-card focus-within:border-amber focus-within:ring-2 focus-within:ring-amber',
+            'flex h-12 items-center overflow-hidden rounded-md border bg-card focus-within:border-primary focus-within:ring-2 focus-within:ring-focus-ring',
             invalid ? 'border-alert' : 'border-line',
           )}
         >
