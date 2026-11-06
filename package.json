@@ -12,6 +12,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "test:browser": "BROWSER_SPECS=1 vitest run --no-file-parallelism",
     "check:secrets": "node scripts/check-no-demo-credentials.mjs",
     "vercel-build": "node scripts/vercel-build.mjs"
   },

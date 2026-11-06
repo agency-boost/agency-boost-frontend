@@ -202,8 +202,9 @@ describe('P19.1-T2 AC-3 from 1024px, list + detail (UI-116)', () => {
     expect(scroller).toHaveClass('min-h-0', 'flex-1', 'overflow-y-auto');
     const note = within(card('Felicia Elvina')).getByText(/^Ketemu di starbucks/);
     expect(note).toHaveClass('truncate');
-    // The mockup opens on the first card: the 2px accent outline, said as the current one.
-    expect(card('Felicia Elvina')).toHaveClass('shadow-[inset_0_0_0_2px_var(--color-primary)]');
+    // The mockup opens on the first card: the 2px accent outline, said as the current one. Chosen once the leads have
+    // arrived, a render after the list itself, so it is waited for (a slow runner looked between the two).
+    await waitFor(() => expect(card('Felicia Elvina')).toHaveClass('shadow-[inset_0_0_0_2px_var(--color-primary)]'));
     expect(within(card('Felicia Elvina')).getByRole('button', { name: 'Felicia Elvina' })).toHaveAttribute('aria-current', 'true');
     expect(within(card('Ibu Tari Anjani')).getByRole('button', { name: 'Ibu Tari Anjani' })).not.toHaveAttribute('aria-current');
     expect(await pane('Felicia Elvina')).toBeInTheDocument();

@@ -57,6 +57,11 @@ jobs:
       - name: Coverage ratchet
         run: pnpm test:coverage
 
+      # The specs that drive a real Chrome (the guides' policy, the lesson's sandbox), one file at a time: beside the
+      # jsdom suite on two vCPUs, two Chromes starting at once missed their 30 s hook (2026-11-06).
+      - name: Real-browser specs
+        run: pnpm test:browser
+
   build:
     runs-on: ubuntu-latest
     steps:

@@ -180,7 +180,7 @@ describe.skipIf(!CHROME)('P19.6-T2 a lesson in the sandboxed frame, in a real br
     tab = await Tab.open(devtools);
     await tab.send('Page.enable');
     await tab.send('Runtime.enable');
-  }, 30_000);
+  }, process.env.CI ? 120_000 : 30_000); // Chrome's cold start on a runner
 
   afterAll(async () => {
     tab?.close();

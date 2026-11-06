@@ -137,7 +137,7 @@ describe.skipIf(!CHROME)('P19.6-T5 AC-5 the guides under their own policy, in a 
     // The app's state, on the same host the guides are served from.
     await tab.send('Page.navigate', { url: `${origin}/` });
     await waitFor(`document.readyState === "complete" && localStorage.getItem('agencyboost.session') === '${SECRET}'`);
-  }, 30_000);
+  }, process.env.CI ? 120_000 : 30_000); // Chrome's cold start on a runner
 
   afterAll(async () => {
     tab?.socket.close();
