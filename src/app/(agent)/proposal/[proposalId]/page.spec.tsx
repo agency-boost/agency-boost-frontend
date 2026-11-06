@@ -127,7 +127,7 @@ describe('/proposal/[proposalId] (P19.7-T2)', () => {
         'GET /proposals/p-1': [{ body: p }, { body: { ...p, version: 7 } }],
         'PATCH /proposals/p-1/items/i-med': conflict,
       });
-      await userEvent.click(within(await drawn('PRUWELL_MEDICAL')).getByRole('button', { name: 'Silver' }));
+      await userEvent.click(await within(await drawn('PRUWELL_MEDICAL')).findByRole('button', { name: 'Silver' }));
       expect(await screen.findByText('This proposal was changed on another device.')).toBeInTheDocument();
       expect(calls.filter((c) => c.url.includes('/proposals/p-1') && !c.url.includes('items') && (c.init.method ?? 'GET') === 'GET'))
         .toHaveLength(2);
@@ -353,7 +353,7 @@ describe('/proposal/[proposalId] (P19.7-T2)', () => {
     it('P19.7-T2 AC-7 a product is removed from the proposal by its own button', async () => {
       const p = proposal({ items: [medical] });
       const { calls } = show(p, { 'DELETE /proposals/p-1/items/i-med': { body: { ...p, version: 5, items: [] } } });
-      await userEvent.click(within(await drawn('PRUWELL_MEDICAL')).getByRole('button', { name: 'Remove PRUWell Medical' }));
+      await userEvent.click(await within(await drawn('PRUWELL_MEDICAL')).findByRole('button', { name: 'Remove PRUWell Medical' }));
       await waitFor(() => expect(panel('PRUWELL_MEDICAL')).toBeNull());
       expect(writes(calls)).toEqual([{ method: 'DELETE', path: '/proposals/p-1/items/i-med?expectedVersion=4', body: undefined }]);
     });
@@ -363,7 +363,7 @@ describe('/proposal/[proposalId] (P19.7-T2)', () => {
     it('P19.7-T2 AC-8 one card per plan, stacked, cheapest first, Paling banyak dipilih on the owner’s; a tap chooses it', async () => {
       const p = proposal({ items: [medical] });
       const { calls } = show(p, { 'PATCH /proposals/p-1/items/i-med': { body: { ...p, version: 5 } } });
-      await userEvent.click(within(await drawn('PRUWELL_MEDICAL')).getByRole('button', { name: 'See all plans' }));
+      await userEvent.click(await within(await drawn('PRUWELL_MEDICAL')).findByRole('button', { name: 'See all plans' }));
       const sheet = await screen.findByRole('dialog', { name: 'PRUWell Medical plans' });
       const list = sheet.querySelector('[data-plan-cards]') as HTMLElement;
       expect(list.className).toMatch(/flex-col/);
