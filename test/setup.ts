@@ -1,4 +1,4 @@
-import { configure } from '@testing-library/react';
+import { configure, getConfig } from '@testing-library/react';
 import { afterAll, afterEach } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { LANGUAGE_COOKIE, LANGUAGE_PENDING } from '@/i18n/language';
@@ -9,6 +9,30 @@ import { LANGUAGE_COOKIE, LANGUAGE_PENDING } from '@/i18n/language';
  * Locally the default stands.
  */
 configure({ asyncUtilTimeout: process.env.CI ? 5_000 : 1_000 });
+
+/*
+ * **What a test waited for, it reads settled** (2026-11-06). A `findBy…` or `waitFor` resolves the moment the DOM it
+ * looks for is committed; the effects React runs after that commit — a screen asking its width, choosing the first
+ * card, setting the office's colours — are a task later, on the scheduler's `setImmediate`. Testing Library drains one
+ * `setTimeout(0)`, and on a loaded runner that came first: CI read the frame between, a different spec each run
+ * (the coaching roster's columns, the leads split's first card, a link's colours). So after the condition holds, the
+ * wrapper gives the scheduler a few turns before the test goes on, as a browser would before its next frame. The real
+ * timers are taken here, before any spec fakes them, as React's scheduler took them when it loaded.
+ */
+const realImmediate = globalThis.setImmediate;
+const realTimeout = globalThis.setTimeout;
+const turn = async () => {
+  await new Promise<void>((resolve) => { realImmediate(() => resolve()); });
+  await new Promise<void>((resolve) => { realTimeout(() => resolve(), 0); });
+};
+const settleAfter = getConfig().asyncWrapper;
+configure({
+  asyncWrapper: (cb) => settleAfter(async () => {
+    const result = await cb();
+    for (let i = 0; i < 3; i += 1) await turn();
+    return result;
+  }),
+});
 
 // The API origin is required, not optional — `apiOrigin()` throws without it, which is
 // deliberate: a build that silently calls a relative URL is worse than one that fails.

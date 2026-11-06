@@ -76,6 +76,9 @@ const BASE = {
   '/kpm/org-levels': { body: [] },
   'outcome=won': { body: page([]) },
   'outcome=lost': { body: page([]) },
+  // From 1024px the first lead opens in the pane, which reads it whole (`readLead`); without this the list's own
+  // `/leads` stub answered, a page where a lead belongs. A spec that stubs `/leads/l1` itself still wins.
+  '/leads/l1': { body: lead() },
 };
 
 /*

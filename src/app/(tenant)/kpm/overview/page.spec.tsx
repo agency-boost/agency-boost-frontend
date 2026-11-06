@@ -142,7 +142,10 @@ describe('KPM Overview (P18-T1)', () => {
       await loaded();
       expect(overviewCalls(calls)).toHaveLength(1);
       expect(overviewCalls(calls)[0].url).not.toContain('?');
-      expect(listCalls(calls)).toHaveLength(0);
+      // And the not-logged list once, never more: on a desktop the third card shows its first names as it mounts
+      // (P19.3-T2 AC-2, `NotLoggedCard`), and each read is audited. It read zero here only by being looked at before
+      // that card's effect had run (the test harness now lets it run, 2026-11-06).
+      expect(listCalls(calls)).toHaveLength(1);
     });
   });
 

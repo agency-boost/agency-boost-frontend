@@ -2550,7 +2550,17 @@ describe('UI-104 — Calendar: auto items, Tugas, 3 Hari, the coaching button, t
     const stub = show({
       [AGENDA_READ]: { body: agendaWith() },
       'PUT /leads/lead-wiwik/next-action/done': { body: { id: 'lead-wiwik', version: 4, nextActionDate: null, nextActionNote: null } },
-      '/leads/lead-wiwik': { body: { id: 'lead-wiwik', name: 'Ibu Wiwik Setyaningsih' } },
+      // The whole lead, as `GET /leads/:id` answers: the sheet the › opens draws its form from it, and a bare
+      // `{ id, name }` threw there once the test had finished (an unhandled error that fails the run).
+      '/leads/lead-wiwik': {
+        body: {
+          id: 'lead-wiwik', ownerMembershipId: 'mem-agus', type: 'sales', name: 'Ibu Wiwik Setyaningsih',
+          contact: { phone: '+6281234567890', email: null }, statusCode: null, thisMonth: false, remarks: null,
+          nextActionDate: null, nextActionNote: null, outcome: null, source: null,
+          dateRegistered: '2026-09-04T03:00:00.000Z', version: 4, flags: [], overdueDays: null, committedMonths: [],
+          lastEditedBy: null, history: [],
+        },
+      },
     });
     const list = within(today(await region())).getByRole('region', { name: 'Tasks' });
     await userEvent.click(within(list).getByRole('checkbox', { name: 'Done: Ibu Wiwik Setyaningsih' }));
