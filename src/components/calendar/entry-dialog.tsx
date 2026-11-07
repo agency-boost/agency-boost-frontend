@@ -1,7 +1,6 @@
 'use client';
 
 import { useId, useState, type FormEvent } from 'react';
-import { Dialog } from '@/components/ui/dialog';
 import { Modal } from '@/components/ui/modal';
 import { DateField } from '@/components/ui/date-field';
 import { Button, ErrorBanner, Field, Switch, Textarea, TextInput } from '@/components/ui/field';
@@ -10,7 +9,7 @@ import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-pro
 import { calendarMessages } from '@/i18n/messages/calendar';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import {
-  calendarWordsIn, createEntry, deleteEntry, ENTRY_TYPES, initialsOf, INVITEES_MAX, placeBlock, readEntry, titleOf, updateEntry,
+  calendarWordsIn, createEntry, deleteEntry, ENTRY_TYPES, initialsOf, INVITEES_MAX, placeBlock, readEntry, updateEntry,
   type CalendarEntry, type EntryType,
 } from '@/lib/calendar';
 import {
@@ -19,6 +18,7 @@ import {
 import { cn } from '@/lib/cn';
 import { usePhone } from '@/lib/use-phone';
 import { Avatar } from './calendar-parts';
+import { DeleteQuestion } from './delete-question';
 import { InviteField, type Picked } from './invite-field';
 
 /** What the entry dialog is opened for (`openEventModal`, `:708-773`). */
@@ -190,7 +190,6 @@ export function EntryDialog({
 
   const typeLabel = `${ids}-type`;
   const deletable = state.mode === 'edit' && canDelete && state.entry.readerIs === 'organiser';
-  const deleting = state.mode === 'edit' ? titleOf(base ?? state.entry, language) : '';
 
   return (
     <>
@@ -326,15 +325,8 @@ export function EntryDialog({
           {banner && <ErrorBanner {...banner} />}
         </form>
       </Modal>
-      {deletable && (
-        <Dialog
-          open={asking}
-          message={t.deleteQuestion({ title: deleting })}
-          confirmLabel={t.delete}
-          tone="danger"
-          onConfirm={() => void remove()}
-          onCancel={() => setAsking(false)}
-        />
+      {deletable && base && (
+        <DeleteQuestion open={asking} entry={base} onConfirm={() => void remove()} onCancel={() => setAsking(false)} />
       )}
     </>
   );

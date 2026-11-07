@@ -94,7 +94,20 @@ describe('P19.1-T2 AC-13 the phone as it was', () => {
     await list();
     await waitFor(() => expect(screen.getAllByRole('listitem').length).toBeGreaterThan(0));
     const root = document.querySelector('[data-leads-list]')!;
-    expect(digestAt(root, px)).toBe(BASELINE.list);
+    /*
+     * *Amended 2026-11-07 (P19.8-T1 AC-1; R6, MOB UI-171: the stage chips at weight 600):* each stage's name in the
+     * pipeline strip is a header control's 13px / 600, where it was 12px / 400, and is marked `data-stage-name`. The
+     * digest is taken with those names put back as they were, and still matches the baseline: nothing else moved.
+     */
+    const before = root.cloneNode(true) as Element;
+    const names = before.querySelectorAll('[data-stage-name]');
+    expect(names.length).toBeGreaterThan(0);
+    for (const name of names) {
+      expect(name).toHaveClass('text-base', 'font-semibold');
+      name.removeAttribute('data-stage-name');
+      name.setAttribute('class', 'line-clamp-2 text-xs leading-tight text-secondary-muted');
+    }
+    expect(digestAt(before, px)).toBe(BASELINE.list);
   });
 
   it.each([375, 768])('P19.1-T2 AC-13 at %ipx the lead sheet is drawn as before UI-116', async (px) => {
@@ -111,6 +124,29 @@ describe('P19.1-T2 AC-13 the phone as it was', () => {
     without.querySelector('[data-client-fields]')!.remove();
     expect(within(sheet).getByRole('group', { name: 'Age at next birthday' })).toBeInTheDocument();
     expect(digestAt(without, px)).toBe(px === 768 ? BASELINE.sheet768 : BASELINE.sheet375);
+  });
+});
+
+/**
+ * **The Leads chips are header controls** (P19.8-T1 AC-1; R6, D-38; MOB UI-171's table): *Semua · Sales · Recruit*
+ * 13px / 600 / 44px, as they were; **the stage chips' words at weight 600**, where they were 400 — at every size.
+ */
+describe('P19.8-T1 AC-1 the Leads chips at one header-control size (MOB UI-171)', () => {
+  it.each([360, 375, 768, 1024, 1280])('P19.8-T1 AC-1 MOB UI-171 at %ipx: the type chips and the stage chips are 13px / 600, 44px', async (px) => {
+    open(px);
+    await list();
+    for (const chip of within(screen.getByRole('group', { name: 'Lead type' })).getAllByRole('button')) {
+      expect(wears(chip, px).split(' ')).toEqual(expect.arrayContaining(['min-h-11', 'text-base', 'font-semibold']));
+    }
+    const strip = screen.getByRole('group', { name: 'Sales pipeline' });
+    const stages = within(strip).getAllByRole('button');
+    expect(stages).toHaveLength(5);
+    for (const chip of stages) {
+      expect(wears(chip, px).split(' ')).toContain('min-h-11');
+      const words = chip.querySelector('[data-stage-name]')!;
+      expect(wears(words, px).split(' ')).toEqual(expect.arrayContaining(['text-base', 'font-semibold']));
+      expect(wears(words, px).split(' ')).not.toContain('text-xs');
+    }
   });
 });
 

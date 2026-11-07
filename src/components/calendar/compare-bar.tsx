@@ -2,6 +2,8 @@
 
 import { useEffect, useId, useRef, useState, type RefObject } from 'react';
 import { Button } from '@/components/ui/field';
+import { HEADER_CONTROL } from '@/components/ui/header-control';
+import { LineIcon } from '@/components/ui/line-icon';
 import { useLanguage, useMessages } from '@/i18n/language-provider';
 import { calendarMessages } from '@/i18n/messages/calendar';
 import {
@@ -26,6 +28,11 @@ import { Avatar, CHIP } from './calendar-parts';
  * **`inline`** (P19.1-T3 AC-8; UI-118): from 768px the bar is not a card of its own — it shares one row with the type
  * chips under a laptop's toolbar, and sits in a tablet's *Filter* panel — so it draws no frame and no margin. A chip's
  * ✕ is a 44px target below 1024px, its circle unchanged.
+ *
+ * **`chips`** (P19.8-T3 AC-6; the brief's Calendar 3, the 7 November mockup's `.fp`): a phone's *Filter* panel holds
+ * *Melihat* alone — its small grey label over one row of chips at the header control's size (13px / 600 / 44px, MOB
+ * UI-171): ***✓ Kalender saya***, each person compared with their ✕, and ***Bandingkan dengan downline***, which opens the
+ * same list. No frame of its own: the panel is the card.
  */
 export function CompareBar({
   myInitials,
@@ -36,6 +43,7 @@ export function CompareBar({
   onRemove,
   onLostSeen,
   inline = false,
+  chips = false,
 }: {
   myInitials: string;
   canCompare: boolean;
@@ -46,9 +54,54 @@ export function CompareBar({
   onRemove: (membershipId: string) => void;
   onLostSeen: () => void;
   inline?: boolean;
+  /** A phone's *Filter* panel: *Melihat* over its chips, at the header control's size (P19.8-T3 AC-6). */
+  chips?: boolean;
 }) {
   const t = useMessages(calendarMessages);
   const toggle = useRef<HTMLButtonElement>(null);
+  if (chips) {
+    const chip = cn(HEADER_CONTROL, 'inline-flex items-center gap-1.5 rounded-pill border bg-card px-3 py-1 text-ink');
+    return (
+      <div data-compare-bar="" data-compare-chips="">
+        <p className="mb-2 mt-0.5 text-xs font-bold uppercase tracking-[0.04em] text-muted">{t.viewingLabel}</p>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className={cn(chip, 'border-secondary text-navy')}>
+            <LineIcon name="check" className="h-4 w-4 shrink-0" />
+            {t.myCalendar}
+          </span>
+          {compared.map((person) => (
+            <span key={person.membershipId} className={cn(chip, 'border-hairline pl-1.5 pr-1')}>
+              <Avatar initials={initialsOf(person.name)} />
+              <span className="min-w-0 break-words">{person.name}</span>
+              <button
+                type="button"
+                aria-label={t.remove({ name: person.name })}
+                onClick={() => {
+                  onRemove(person.membershipId);
+                  toggle.current?.focus();
+                }}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-navy hover:bg-alert/15 hover:text-alert"
+              >
+                <span aria-hidden="true">✕</span>
+              </button>
+            </span>
+          ))}
+          {canCompare && (
+            <ComparePopover
+              toggle={toggle}
+              compared={compared}
+              lost={lost}
+              onAdd={onAdd}
+              onClosed={onLostSeen}
+              label={t.compareChip}
+              toggleClassName={cn(chip, 'border-hairline hover:bg-hover-row')}
+            />
+          )}
+        </div>
+        {lost && <p role="status" className="mt-2 text-sm text-muted">{t.lost({ name: lost })}</p>}
+      </div>
+    );
+  }
   return (
     <div
       data-compare-bar=""
@@ -110,12 +163,17 @@ function ComparePopover({
   lost,
   onAdd,
   onClosed,
+  label,
+  toggleClassName,
 }: {
   toggle: RefObject<HTMLButtonElement | null>;
   compared: readonly CalendarDownlinePerson[];
   lost: string | null;
   onAdd: (person: CalendarDownlinePerson) => void;
   onClosed: () => void;
+  /** The toggle's words: *+ Compare with downline*, or a phone's chip, *Bandingkan dengan downline*. */
+  label?: string;
+  toggleClassName?: string;
 }) {
   const t = useMessages(calendarMessages);
   const [open, setOpen] = useState(false);
@@ -213,9 +271,9 @@ function ComparePopover({
         aria-expanded={open}
         aria-controls={popover}
         onClick={() => (open ? close() : setOpen(true))}
-        className="flex items-center gap-1.5 rounded-pill border-[1.3px] border-dashed border-hairline px-[13px] py-[7px] text-sm font-semibold text-navy-soft hover:border-secondary-hover hover:bg-secondary-hover/5"
+        className={toggleClassName ?? 'flex items-center gap-1.5 rounded-pill border-[1.3px] border-dashed border-hairline px-[13px] py-[7px] text-sm font-semibold text-navy-soft hover:border-secondary-hover hover:bg-secondary-hover/5'}
       >
-        {t.compare}
+        {label ?? t.compare}
       </button>
       <div
         id={popover}

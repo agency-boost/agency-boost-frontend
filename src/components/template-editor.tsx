@@ -38,6 +38,7 @@ import { checklistMessages } from '@/i18n/messages/settings-checklist';
 import { leadStatusesMessages } from '@/i18n/messages/settings-lead-statuses';
 import { ratioBenchmarksMessages } from '@/i18n/messages/settings-ratio-benchmarks';
 import { settingsMessages } from '@/i18n/messages/settings';
+import { ACTIVITY_SHORT_LABEL_MAX } from '@/lib/activity-text';
 import { TRAINING_DESCRIPTION_MAX } from '@/lib/training-text';
 
 export interface TaxonomyPayload {
@@ -53,6 +54,11 @@ export interface TaxonomyPayload {
   }[];
   types: {
     code: string; categoryCode: string; label: string;
+    /**
+     * *Nama singkat* (P19.8-T4, ADR-0229 §5; MOB UI-180): the one line the Unit Dashboard's activity table shows. Absent
+     * on a type authored before the field: an office made from it is given the platform's words by code; `null` for none.
+     */
+    shortLabel?: string | null;
     description: string | null; displayOrder: number;
   }[];
   /**
@@ -581,15 +587,23 @@ export function TaxonomyEditor({
                       code={type.code}
                       fields={[
                         { key: 'label', label: settings.name },
+                        // *Nama singkat* beside the name (P19.8-T4 AC-5, ADR-0229 §5; MOB UI-180), as the office edits it.
+                        {
+                          key: 'shortLabel',
+                          label: office.shortLabel,
+                          hint: office.shortLabelHint({ max: ACTIVITY_SHORT_LABEL_MAX }),
+                          maxLength: ACTIVITY_SHORT_LABEL_MAX,
+                        },
                         {
                           key: 'description',
                           label: settings.description,
                           hint: office.descriptionHint,
                         },
                       ]}
-                      values={{ label: type.label, description: type.description ?? '' }}
+                      values={{ label: type.label, shortLabel: type.shortLabel ?? '', description: type.description ?? '' }}
                       onSave={(next) => patchType(type.code, {
                         label: next.label.trim(),
+                        shortLabel: next.shortLabel.trim() || null,
                         description: next.description.trim() || null,
                       })}
                       actions={(
@@ -624,12 +638,20 @@ export function TaxonomyEditor({
             <AddRow
               disabled={disabled}
               noun="activityType"
-              fields={[{
-                key: 'description',
-                label: settings.description,
-                hint: office.descriptionHint,
-                wide: true,
-              }]}
+              fields={[
+                {
+                  key: 'shortLabel',
+                  label: office.shortLabel,
+                  hint: office.shortLabelHint({ max: ACTIVITY_SHORT_LABEL_MAX }),
+                  maxLength: ACTIVITY_SHORT_LABEL_MAX,
+                },
+                {
+                  key: 'description',
+                  label: settings.description,
+                  hint: office.descriptionHint,
+                  wide: true,
+                },
+              ]}
               onAdd={(code, label, extra) => onChange({
                 ...payload,
                 // Renumbered rather than counted: `types.length + 1` counts across
@@ -639,6 +661,7 @@ export function TaxonomyEditor({
                     code,
                     categoryCode: category.code,
                     label,
+                    shortLabel: extra.shortLabel?.trim() || null,
                     description: extra.description?.trim() || null,
                     displayOrder: 0,
                   }],
@@ -799,6 +822,8 @@ function AddRow({
   fields?: {
     key: string; label: string; hint?: string; wide?: true;
     options?: { value: string; label: string }[];
+    /** The longest text the field takes, the server's bound mirrored (an activity type's *Nama singkat*). */
+    maxLength?: number;
   }[];
 }) {
   const settings = useMessages(settingsMessages);
@@ -893,6 +918,7 @@ function AddRow({
               id={`add-${field.key}-${slug}`}
               value={extra[field.key] ?? ''}
               disabled={disabled}
+              maxLength={field.maxLength}
               onChange={(e) => setExtra((now) => ({ ...now, [field.key]: e.target.value }))}
             />
           )}

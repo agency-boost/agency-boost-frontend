@@ -1410,6 +1410,33 @@ describe('P19.1-T4 the goal card when production is not uploaded (UI-157)', () =
     expect(within(goal).queryByRole('button', { name: 'Enter interim production' })).not.toBeInTheDocument();
   });
 
+  /*
+   * **P19.8-T5 AC-5 (ADR-0230 §6; OD-279's default): typed after the upload, the estimate is the year's figure** — the
+   * month's own APE still the office's — labelled *your estimate* here as on any estimate (the Summary keeps *perkiraan
+   * Anda*, §4), with Edit and Delete; no *Replaced by* note.
+   */
+  it('P19.8-T5 AC-5 a figure typed over the upload: the year reads it, your estimate, Edit and Delete; the month the office’s', async () => {
+    showAs(AGENT, {
+      '/summary': {
+        body: summary({
+          yearly: {
+            ...figures({ targetMinor: 500 * M, actualMinor: 120 * M, attainmentPct: 24, gapMinor: 380 * M, policiesNeeded: 22 }),
+            source: { provenance: 'self_reported', month: null }, production: 'estimate', withoutProduction: null,
+          },
+          estimateReplaced: null,
+        }),
+      },
+    });
+    const goal = await goalCard();
+    // *Monthly*: the office's own month, and the year's estimate named as such under it.
+    expect(within(goal).getByText('IDR 30M')).toBeInTheDocument();
+    expect(goal.querySelector('[data-estimate-row]')).toHaveTextContent('APE already produced this year: IDR 120M · your estimate');
+    expect(within(goal).getByRole('button', { name: 'Delete' })).toBeInTheDocument();
+    expect(goal.querySelector('[data-estimate-replaced]')).toBeNull();
+    await yearly();
+    expect((await goalCard()).querySelector('[data-estimate]')).toHaveTextContent('IDR 120M · your estimate');
+  });
+
   it('P19.1-T4 AC-11 the office’s figure replaced the estimate: the figure is the office’s, and the card says when', async () => {
     showAs(AGENT, {
       '/summary': { body: summary({ estimateReplaced: { uploadedOn: '2026-09-12' } }) },

@@ -92,12 +92,15 @@ describe('P18.10-T4 the calendar in Indonesian', () => {
     noEnglishLeft();
   });
 
-  it('P18.10-T4 AC-1 a phone: the agenda by day, Filter, Agenda kept, a day with nothing on it', async () => {
+  it('P18.10-T4 AC-1, P19.8-T3 AC-1 a phone: the agenda by day, Filter, Agenda kept in the view menu, a day with nothing on it', async () => {
     atWidth(375);
     show();
     const region = await screen.findByRole('region', { name: `Kalender, ${RANGE}` });
-    expect(within(screen.getByRole('combobox', { name: 'Tampilan' })).getAllByRole('option').map((o) => o.textContent))
-      .toEqual(['Agenda', '3 Hari', 'Week', 'Month']);
+    // P19.8-T3 AC-1 (MOB UI-171): the picker's button, *Tampilan Agenda*, opens the menu under it.
+    await userEvent.click(screen.getByRole('button', { name: 'Tampilan Agenda' }));
+    const menu = await screen.findByRole('listbox', { name: 'Tampilan' });
+    expect(within(menu).getAllByRole('option').map((o) => o.textContent)).toEqual(['Agenda', '3 Hari', 'Week', 'Month']);
+    await userEvent.keyboard('{Escape}');
     expect(screen.getByRole('button', { name: 'Filter' })).toHaveAttribute('aria-expanded', 'false');
     expect(within(region).getByRole('heading', { level: 2, name: 'Senin, 28 Sep 2026 · Hari ini' })).toBeInTheDocument();
     expect(within(region).getAllByText('Tidak ada event').length).toBeGreaterThan(0);
@@ -117,16 +120,20 @@ describe('P18.10-T4 the calendar in Indonesian', () => {
     noEnglishLeft();
   });
 
-  it('P18.10-T4 AC-1 to AC-4 the organiser’s detail: labels, a meeting link, the notes as typed, Delete asks first', async () => {
+  it('P18.10-T4 AC-1 to AC-4, P19.8-T3 AC-7 MOB UI-169 the organiser’s detail: labels, a meeting link, the notes as typed, Hapus asks first', async () => {
     show();
     await userEvent.click(within(await grid()).getByRole('button', { name: /^Rapat internal: Weekly unit standup/ }));
     const box = await screen.findByRole('dialog', { name: 'Weekly unit standup' });
     for (const label of ['Kapan', 'Lokasi / catatan', 'Yang diundang']) expect(within(box).getByText(label)).toBeInTheDocument();
     expect(within(box).getByRole('link', { name: /^Gabung Zoom ?, terbuka di tab baru$/ })).toBeInTheDocument();
     expect(within(box).getByText('Tidak ada orang lain yang diundang')).toBeInTheDocument();
-    expect(within(box).getByRole('button', { name: 'Ubah' })).toBeInTheDocument();
+    // P19.8-T3 AC-7 (MOB UI-169): red-outline *Hapus*, then white *Ubah* and orange *Tutup*.
+    expect(within(box).getAllByRole('button').filter((b) => !b.closest('a')).map((b) => b.textContent).slice(-3)).toEqual(['Hapus', 'Ubah', 'Tutup']);
     await userEvent.click(within(box).getByRole('button', { name: 'Hapus' }));
-    expect(await screen.findByText('Hapus "Weekly unit standup"?')).toBeInTheDocument();
+    // *Hapus event ini?*, bold, over the title and the day; *Batal* · *Hapus*.
+    const question = await screen.findByRole('dialog', { name: 'Hapus event ini?' });
+    expect(question).toHaveAccessibleDescription('Weekly unit standup · Senin, 28 Sep 2026');
+    expect(within(question).getAllByRole('button').map((b) => b.textContent)).toEqual(['Batal', 'Hapus']);
     noEnglishLeft();
   });
 

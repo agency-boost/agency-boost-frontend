@@ -2,8 +2,10 @@
 
 import Link from 'next/link';
 import { useId, useState, type MouseEvent, type ReactNode } from 'react';
+import { HEADER_CONTROL } from '@/components/ui/header-control';
 import { LineIcon } from '@/components/ui/line-icon';
 import { PersonRow } from '@/components/ui/person-row';
+import { SectionTitle } from '@/components/ui/section-title';
 import { TippedGlyph } from '@/components/ui/tipped-glyph';
 import { TonePill, type PillTone } from '@/components/ui/tone-pill';
 import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
@@ -12,7 +14,7 @@ import { cn } from '@/lib/cn';
 import { lastOneOnOneLine, rosterStatusLabel, type RosterStatus } from '@/lib/coaching';
 import { formatNumber, formatPercent, formatRupiahCompactPair, formatShortDay } from '@/lib/format';
 import {
-  everyRow, goalMet, goalShare, matchesFilter, rowHref, rowName, rowsOf, statusTally,
+  everyRow, goalMet, goalShare, matchesFilter, rowHref, rowName, rowsOf, statusShown, statusTally,
   type RosterFilter, type UnitDashboardView, type UnitGroup, type UnitPeriod, type UnitRow, type UnitTotal,
 } from '@/lib/unit-dashboard';
 
@@ -24,7 +26,10 @@ import {
  * - **Below 768px, an accordion by leader** (UI-002): *Unit Anda · 4* first and open, each AAB unit closed, a unit nested
  *   in one inside it; each header 48px with the unit's goal bar and percentage, in place of the old *— Total* card; each
  *   person a 60px row — avatar, NAME, the goal's mini bar, percentage and *Rp 29 jt / 94,7 jt* — with the status pill on
- *   the right. No ⓘ per row, no ⌄, no *Perbarui produksi*, no *+ Tambah agent* (the owner, 30 Oct).
+ *   the right. No ⓘ per row, no ⌄, no *Perbarui produksi*, no *+ Tambah agent* (the owner, 30 Oct). **Since the owner's
+ *   mobile review of 7 November** (P19.8-T4 AC-3, MOB UI-178; ADR-0229 §3): the NAME on up to two lines, never cut; under
+ *   it the percentage in colour and *Rp 68 / 94,7 jt*, and under that **a 5px bar across the name column, for every
+ *   person**; the whole row a target with ›; and the chips **equal count tiles**, the count over its words.
  * - **768–1023px, a table of four** (UI-009): *Nama · Progres goal · Aktivitas · Status*.
  * - **From 1024px, a table of nine and a ›** (UI-009): *Nama · Progres goal · Leads penjualan · Closing · Leads rekrut ·
  *   Potensi rekrut · Aktivitas · 1:1 terakhir · Status*; each unit's header row with its totals and *Active n/m*;
@@ -40,7 +45,12 @@ import {
  * row that goes nowhere. **The status pill shows on *Bulan ini* alone** (UI-005), and so do the chips that filter by it
  * (*Semua 12 · Perlu perhatian 5 · Perlu dipantau 3*, UI-002); **one ⓘ** says how a status is decided (UI-007) — beside
  * the title on a phone, on the *Status* heading in a table. *⟳ Last updated 28 Okt 26* is the office's latest production
- * import (UI-028).
+ * import (UI-028) — on a phone *⟳ 28 Okt 26*, its words for a screen reader.
+ *
+ * **No status without production** (P19.8-T4 AC-2, MOB UI-177; ADR-0229 §2, at every size): a row whose figure is not
+ * uploaded shows the dashed bar and *Belum diunggah* and **no pill**, and counts in no status chip; a chip at 0 is not
+ * drawn, and **when only *Semua* would remain the chip row is not drawn at all — the title reads *Roster tim Anda · 12***.
+ * The title is the section titles' one size, 14px / 700 (MOB UI-185); the chips are header controls (MOB UI-171).
  */
 export interface RosterProps {
   view: UnitDashboardView;
@@ -62,13 +72,20 @@ export function UnitRoster({ view, period, from, size, actions, onLeave }: Roste
   const t = useMessages(unitDashboardMessages);
   const [filter, setFilter] = useState<RosterFilter>('all');
   const month = period === 'month';
-  const shownFilter: RosterFilter = month ? filter : 'all';
   const tally = statusTally(everyRow(view));
+  // Only *Semua* would remain (MOB UI-177): no chip row, and the count joins the title.
+  const onlyAll = tally.needs_attention === 0 && tally.watch_closely === 0;
+  const shownFilter: RosterFilter = month && !onlyAll ? filter : 'all';
 
   const statusInfo = month ? (
     <TippedGlyph glyph="ⓘ" name={t.prototype.statusInfo} tip={t.prototype.statusRules} align="fit" className={STATUS_TIP} />
   ) : null;
-  const chips = month ? <StatusChips tally={tally} filter={filter} onFilter={setFilter} language={language} /> : null;
+  const chips = month && !onlyAll
+    ? size === 'phone'
+      ? <CountTiles tally={tally} filter={shownFilter} onFilter={setFilter} language={language} />
+      : <StatusChips tally={tally} filter={shownFilter} onFilter={setFilter} language={language} />
+    : null;
+  const title = month && onlyAll ? t.v1.rosterCount({ title: t.prototype.roster, n: tally.all }) : t.prototype.roster;
 
   /** A row's link followed (a click on an `<a>` inside the roster): tell the screen, which keeps the scroll. */
   const leaving = (e: MouseEvent<HTMLElement>) => {
@@ -78,12 +95,18 @@ export function UnitRoster({ view, period, from, size, actions, onLeave }: Roste
   return (
     <section aria-labelledby={headingId} data-roster={size} onClickCapture={leaving} className="mt-3 overflow-clip rounded-lg bg-card lg:mt-4">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-2 px-3 pb-2 pt-3 md:px-4">
-        <h2 id={headingId} className="font-body text-lg font-semibold text-ink">{t.prototype.roster}</h2>
+        <SectionTitle id={headingId}>{title}</SectionTitle>
         {size === 'phone' && statusInfo}
         {view.lastUpload && (
           <span data-last-updated="" className="inline-flex items-center gap-1 text-sm text-signal-grey max-md:ml-auto">
             <LineIcon name="refresh" className="h-3.5 w-3.5" />
-            {t.v1.lastUpdated({ day: shortDayWithYear(view.lastUpload, figures) })}
+            {size === 'phone' ? (
+              // The phone's *⟳ 27 Okt 26* (the Unit mockup); its words for a screen reader.
+              <>
+                <span className="sr-only">{t.v1.lastUpdatedLabel}</span>
+                {shortDayWithYear(view.lastUpload, figures)}
+              </>
+            ) : t.v1.lastUpdated({ day: shortDayWithYear(view.lastUpload, figures) })}
           </span>
         )}
         {size !== 'phone' && (
@@ -93,7 +116,7 @@ export function UnitRoster({ view, period, from, size, actions, onLeave }: Roste
           </div>
         )}
       </div>
-      {size === 'phone' && chips && <div className="px-3 pb-2.5">{chips}</div>}
+      {size === 'phone' && chips && <div className="px-2.5 pb-3 pt-1">{chips}</div>}
 
       {size === 'phone'
         ? <RosterAccordion view={view} period={period} filter={shownFilter} from={from} />
@@ -128,6 +151,10 @@ function StatusPill({ status }: { status: RosterStatus }) {
   return <TonePill tone={STATUS_TONE[status]}>{rosterStatusLabel(status, language)}</TonePill>;
 }
 
+/** A row's pill: on *Bulan ini*, and only when its figure is uploaded (MOB UI-177) — `null` otherwise. */
+const pillOf = (row: UnitRow, period: UnitPeriod) =>
+  (period === 'month' && statusShown(row) ? <StatusPill status={row.status} /> : null);
+
 /**
  * *Semua 12 · Perlu perhatian 5 · Perlu dipantau 3* (UI-002): toggle buttons, one pressed; *Semua* navy, each status on
  * its own tint, its count beside its words. A status nobody holds has no chip.
@@ -143,7 +170,8 @@ function StatusChips({
       aria-pressed={filter === id}
       onClick={() => onFilter(id)}
       className={cn(
-        'inline-flex min-h-11 items-center whitespace-nowrap rounded-pill px-3 text-sm font-semibold lg:min-h-8',
+        'inline-flex items-center whitespace-nowrap rounded-pill px-3',
+        HEADER_CONTROL,
         tint,
         filter === id && 'outline outline-2 outline-offset-1 outline-secondary',
       )}
@@ -162,6 +190,49 @@ function StatusChips({
         'watch_closely', t.withCount({ status: rosterStatusLabel('watch_closely', language), n: tally.watch_closely }),
         'bg-pill-amber text-pill-amber-ink',
       )}
+    </div>
+  );
+}
+
+/**
+ * **The phone's count tiles** (P19.8-T4 AC-3, MOB UI-178; ADR-0229 §3; OD-281's default, as drawn): the chips as equal
+ * tiles on one row — the count on top, 16px / 800, its words under it, 12px — *12 Semua · 3 Perlu perhatian · 5 Perlu
+ * dipantau*; *Semua* navy when chosen, each status on its own tint. A status nobody holds has no tile. Toggle buttons,
+ * one pressed, as the chips are.
+ */
+function CountTiles({
+  tally, filter, onFilter, language,
+}: { tally: Record<RosterFilter, number>; filter: RosterFilter; onFilter: (f: RosterFilter) => void; language: Parameters<typeof rosterStatusLabel>[1] }) {
+  const t = useMessages(unitDashboardMessages).v1;
+  const figures = useFigureLanguage();
+  const tiles: { id: RosterFilter; label: string; tint: string }[] = [
+    { id: 'all', label: t.allTile, tint: filter === 'all' ? 'bg-secondary text-secondary-contrast' : 'bg-hover-row text-ink' },
+    ...(tally.needs_attention > 0
+      ? [{ id: 'needs_attention' as const, label: rosterStatusLabel('needs_attention', language), tint: 'bg-pill-red text-pill-red-ink' }]
+      : []),
+    ...(tally.watch_closely > 0
+      ? [{ id: 'watch_closely' as const, label: rosterStatusLabel('watch_closely', language), tint: 'bg-pill-amber text-pill-amber-ink' }]
+      : []),
+  ];
+  return (
+    <div role="group" aria-label={t.filterLabel} data-count-tiles="" className={cn('grid gap-1.5', tiles.length === 3 ? 'grid-cols-3' : 'grid-cols-2')}>
+      {tiles.map(({ id, label, tint }) => (
+        <button
+          key={id}
+          type="button"
+          aria-pressed={filter === id}
+          aria-label={`${formatNumber(tally[id], {}, figures)} ${label}`}
+          onClick={() => onFilter(id)}
+          className={cn(
+            'flex min-h-[3.25rem] min-w-0 flex-col items-center justify-center rounded-[14px] px-1.5 text-sm font-semibold leading-tight',
+            tint,
+            filter === id && id !== 'all' && 'outline outline-2 outline-offset-1 outline-secondary',
+          )}
+        >
+          <span data-count="" className="text-lg font-extrabold tabular-nums">{formatNumber(tally[id], {}, figures)}</span>
+          <span className="max-w-full truncate">{label}</span>
+        </button>
+      ))}
     </div>
   );
 }
@@ -201,6 +272,32 @@ function GoalLine({ goal, pair = true }: {
       {pair && (
         <span className="min-w-0 truncate text-signal-grey">{formatRupiahCompactPair(actual, target, '/', figures)}</span>
       )}
+    </span>
+  );
+}
+
+/**
+ * **A phone row's goal** (P19.8-T4 AC-3, MOB UI-178; ADR-0229 §3): the percentage in colour — green from 100%, red under
+ * it — and *Rp 68 jt / 94,7 jt* in grey, and under them **a 5px bar across the name column**, for every person with a
+ * figure, in the same colour. No goal: *Goal belum diatur*; no upload: the dashed bar and *Belum diunggah*; a year made
+ * before the month: *Target tahun ini tercapai*. **No figure is shown as 0.**
+ */
+function PhoneGoalLine({ goal }: { goal: UnitRow['goal'] }) {
+  const figures = useFigureLanguage();
+  const { targetMinor: target, actualMinor: actual } = goal;
+  if (goal.set === false || target === null || target === 0 || actual === null) return <GoalLine goal={goal} />;
+  const pct = goal.attainmentPct ?? 0;
+  const met = goalMet(pct);
+  const bar = goalShare({ ...goal, set: true }) ?? 0;
+  return (
+    <span className="flex w-full min-w-0 flex-col">
+      <span className="flex min-w-0 items-center gap-1.5 whitespace-nowrap">
+        <span className={cn('font-bold', met ? 'text-signal-green' : 'text-signal-red')}>{formatPercent(pct, {}, figures)}</span>
+        <span className="min-w-0 truncate text-signal-grey">{formatRupiahCompactPair(actual, target, '/', figures)}</span>
+      </span>
+      <span aria-hidden="true" data-goal-bar={bar} className="mt-[5px] block h-[5px] w-full overflow-hidden rounded-sm bg-base">
+        <span className={cn('block h-full rounded-sm', met ? 'bg-signal-green' : 'bg-signal-red')} style={{ width: `${bar}%` }} />
+      </span>
     </span>
   );
 }
@@ -371,10 +468,12 @@ function AccordionSection({
                   seed={row.membershipId}
                   href={rowHref(row, from) ?? undefined}
                   height={60}
-                  nameClassName="text-md md:max-lg:text-md"
+                  // 13px / 700, on up to two lines and never cut (MOB UI-178; PersonRow wraps it below 768px).
+                  nameClassName="text-base"
                   badge={phoneMarksOf(row)}
-                  meta={<GoalLine goal={row.goal} />}
-                  trailing={period === 'month' ? <StatusPill status={row.status} /> : undefined}
+                  meta={<PhoneGoalLine goal={row.goal} />}
+                  trailing={pillOf(row, period)}
+                  chevron
                   className="rounded-none"
                 />
               </li>
@@ -646,7 +745,7 @@ function PersonTableRow({ row, period, from, wide, depth }: { row: UnitRow; peri
               : <span className={last.overdue ? 'font-semibold text-signal-red' : 'text-ink'}>{lastOneOnOneLine(last, language)}</span>}
         </td>
       )}
-      <td className={CELL}>{period === 'month' && <StatusPill status={row.status} />}</td>
+      <td className={CELL}>{pillOf(row, period)}</td>
       <td className={cn(CELL, 'text-right')}>
         {href && <LineIcon name="chevronRight" className="ml-auto h-4 w-4 text-signal-grey" />}
       </td>

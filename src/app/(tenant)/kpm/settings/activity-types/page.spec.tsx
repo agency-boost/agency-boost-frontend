@@ -473,6 +473,90 @@ describe('the office activity taxonomy (P4-T1)', () => {
     });
   });
 
+  /*
+   * ***Nama singkat*** (P19.8-T4 AC-5, ADR-0229 §5; MOB UI-180): one field beside the name wherever the name is edited —
+   * the add form, the row's editor, the phone's sheet — held to the server's 20, sent as `shortLabel`, `null` when empty.
+   */
+  describe('P19.8-T4 AC-5 MOB UI-180 a type’s short name', () => {
+    it('P19.8-T4 AC-5 MOB UI-180 the add form takes a short name beside the name, and sends it', async () => {
+      const { calls } = render();
+      await userEvent.click(await screen.findByRole('button', { name: 'Add to Selling' }));
+      await userEvent.type(screen.getByLabelText('Code'), 'SELL_REFERRAL');
+      await userEvent.type(screen.getByLabelText('Label'), 'Meminta referensi dari nasabah lama');
+      await userEvent.type(screen.getByLabelText('Short name'), 'Referensi');
+      await userEvent.click(screen.getByRole('button', { name: 'Add' }));
+      expect((await saved(calls))[0]).toMatchObject({
+        op: 'type.create', body: { code: 'SELL_REFERRAL', label: 'Meminta referensi dari nasabah lama', shortLabel: 'Referensi' },
+      });
+    });
+
+    it('P19.8-T4 AC-5 MOB UI-180 the row’s editor holds the short name, sends a change, and sends null when it is cleared', async () => {
+      const { calls } = render(OWNER, [{
+        ...TAXONOMY[0],
+        types: [
+          type({ id: 't0', code: 'SELL_PRESENTATION', label: 'Presentasi penjualan', shortLabel: 'Presentasi', displayOrder: 1 }),
+          type({ shortLabel: 'Submission polis' }),
+        ],
+      }]);
+      await userEvent.click((await screen.findAllByRole('button', { name: 'Edit' }))[0]);
+      const field = screen.getByLabelText('Short name');
+      expect(field).toHaveValue('Presentasi');
+      expect(field).toHaveAttribute('maxlength', '20');
+      expect(screen.getByText(/at most 20 characters/)).toBeInTheDocument();
+      await userEvent.clear(field);
+      await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+      await userEvent.click((await screen.findAllByRole('button', { name: 'Edit' }))[1]);
+      await userEvent.clear(screen.getByLabelText('Short name'));
+      await userEvent.type(screen.getByLabelText('Short name'), 'SPAJ');
+      await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+      expect(await saved(calls)).toEqual([
+        expect.objectContaining({ op: 'type.update', id: 't0', body: expect.objectContaining({ label: 'Presentasi penjualan', shortLabel: null }) }),
+        expect.objectContaining({ op: 'type.update', id: 't1', body: expect.objectContaining({ shortLabel: 'SPAJ' }) }),
+      ]);
+    });
+
+    it('P19.8-T4 AC-5 MOB UI-180 at 375px the type’s sheet holds the short name under the name', async () => {
+      atWidth(375);
+      const { calls } = render(OWNER, [{ ...TAXONOMY[0], types: [type({ shortLabel: 'Submission polis' })] }]);
+      await userEvent.click(await screen.findByRole('button', { name: 'Submission polis' }));
+      const sheet = await screen.findByRole('dialog', { name: 'Submission polis' });
+      const labels = within(sheet).getAllByRole('textbox').map((box) => box.id.replace(/-t1$|-type-code-SELL_SUBMISSION$/, ''));
+      expect(labels).toEqual(['code', 'label', 'short-label', 'description']);
+      // Held to the server's 20: *Submission polis baru* would be 21, and the field stops at its last letter.
+      await userEvent.type(within(sheet).getByLabelText('Short name'), ' baru');
+      expect(within(sheet).getByLabelText('Short name')).toHaveValue('Submission polis bar');
+      await userEvent.click(within(sheet).getByRole('button', { name: 'Save' }));
+      expect((await saved(calls))[0]).toMatchObject({ op: 'type.update', id: 't1', body: { shortLabel: 'Submission polis bar' } });
+    });
+
+    it('P19.8-T4 AC-5 MOB UI-180 the server’s refusal of a short name is said in the screen’s banner, not swallowed', async () => {
+      render();
+      await screen.findByText('Submission polis');
+      stubFetch({
+        '/kpm/settings/activity-types': { body: TAXONOMY },
+        '/kpm/settings/publish-state': {
+          body: { publishedVersion: 1, workingVersion: 1, hasUnpublishedChanges: false, publishedAt: null },
+        },
+        '/kpm/settings/changes': {
+          status: 400,
+          body: { error: { code: 'VALIDATION_FAILED', message: 'shortLabel must be at most 20 characters.', requestId: 'r-2' } },
+        },
+      });
+      await userEvent.click((await screen.findAllByRole('button', { name: 'Edit' }))[0]);
+      await userEvent.type(screen.getByLabelText('Short name'), 'Presentasi penjualan');
+      await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+      const alerts = await screen.findAllByRole('alert');
+      expect(alerts.some((a) => a.textContent?.includes('shortLabel must be at most 20 characters.'))).toBe(true);
+    });
+
+    it('P19.8-T4 AC-5 MOB UI-180 a reader who cannot write is offered no short name field', async () => {
+      render(AGENT);
+      await screen.findByText('Submission polis');
+      expect(screen.queryByLabelText('Short name')).toBeNull();
+    });
+  });
+
   describe('drag to reorder (P4-T18)', () => {
     /** `userEvent` has no drag API, so the HTML5 events go in by hand. */
     // `setDragImage` too: the handle points it at the whole row, which is what stopped the
@@ -1212,7 +1296,8 @@ describe('P19.2-T3 AC-3 the activity types on a phone (UI-141)', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(screen.getByText('Edited — not saved yet')).toBeInTheDocument();
     expect(await saved(calls)).toEqual([
-      expect.objectContaining({ op: 'type.update', id: 't1', body: { label: 'Submission', description: '' } }),
+      // *Nama singkat* travels with the name since P19.8-T4 (AC-5): none here, so `null` (2026-11-07).
+      expect.objectContaining({ op: 'type.update', id: 't1', body: { label: 'Submission', shortLabel: null, description: '' } }),
     ]);
   });
 

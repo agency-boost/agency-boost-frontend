@@ -91,8 +91,10 @@ describe('+ Add agent on the Unit Dashboard (P18.8-T3 AC-1)', () => {
     vi.unstubAllGlobals();
     atWidth(375);
     show(EMPTY, { ...ADDER, membership: { ...ADDER.membership!, membershipId: 'mem-rina', directCount: 0 } });
-    // P19-T4 AC-3: the sample's next step is a link into User Management, never the dialog, on a phone.
-    expect(await screen.findByText('No data yet')).toBeInTheDocument();
+    // P19-T4 AC-3: the sample's next step is a link into User Management, never the dialog, on a phone — and, since
+    // P19.8-T4 AC-11 (MOB UI-181, OD-280), no *No data yet* line above it.
+    expect(await screen.findByText('Example')).toBeInTheDocument();
+    expect(screen.queryByText('No data yet')).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Add your first agent' })).toHaveAttribute('href', '/user-management/add');
     expect(screen.queryByRole('button', { name: '+ Add agent' })).not.toBeInTheDocument();
   });

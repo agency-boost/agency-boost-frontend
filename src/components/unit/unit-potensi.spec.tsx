@@ -1,13 +1,13 @@
 import { screen, waitFor, within } from '@testing-library/react';
+import { axe } from 'vitest-axe';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import UnitDashboardPage from '@/app/(agent)/unit/dashboard/page';
-import { InLanguage, makeMe, renderWithSession, stubFetch, type StubReply } from '@test/harness';
+import { atWidth, InLanguage, makeMe, renderWithSession, stubFetch, type StubReply } from '@test/harness';
 import { TenantConfigProvider } from '@/lib/tenant-config-cache';
 import { AGUS_ME, dashboard } from '@test/unit-dashboard-fixtures';
 import {
-  orderedPeople, pillsOf, potensiMonths, type PotensiPerson, type PotensiUnit, type UnitPotensiPersonView,
-  type UnitPotensiView,
+  potensiMonths, type PotensiPerson, type PotensiUnit, type UnitPotensiPersonView, type UnitPotensiView,
 } from '@/lib/unit-dashboard';
 
 const nav = vi.hoisted(() => ({ replace: vi.fn(), push: vi.fn(), search: '' }));
@@ -18,9 +18,14 @@ vi.mock('next/navigation', () => ({
 }));
 
 /**
- * **P19.1-T6 — the Unit Dashboard's *Potensi* tab** (UI-155, UI-159 item 4; the Potensi stop-motion, frames 11–31): the
- * tab and who sees it, the month picker, the two tiles that are the switch, the cards per unit with the leader first,
- * the pills and the rows in one order for both tiles, the read-only sheets, an earlier month and the empty states.
+ * **P19.1-T6 — the Unit Dashboard's *Potensi* tab** (UI-155, UI-159 item 4; the Potensi stop-motion, frames 11–31) —
+ * **as the owner's mobile review of 7 November 2026 redrew it** (P19.8-T4; MOB UI-171, UI-179, UI-182, UI-186; ADR-0229
+ * §1, §4, §8; `unit-mobile-stopmotion-2026-11-07.html?tab=potensi`): the tab and who sees it, the month picker (a menu
+ * under its button), the *Active Agent* and *Rekrut* tiles with their *potensi x*, the legend, the cards in the
+ * Overview's order with the whole team in every month, the marks, and the read-only sheets.
+ *
+ * *Rewritten 2026-11-07:* P19.1-T6's AC-3 order (units first, *Langsung ke AB* last), AC-4's pills and sorting, AC-9's
+ * one row per unit in an earlier month and AC-10's empty card gave way to ADR-0229; their tests went with them.
  */
 const LEADER = makeMe({
   ...AGUS_ME,
@@ -54,7 +59,7 @@ const unit = (kind: PotensiUnit['kind'], people: PotensiPerson[]): PotensiUnit =
   kind, leader: { membershipId: people[0].membershipId, name: people[0].name, rung: people[0].rung }, people, totals: totalsOf(people),
 });
 
-/** Agus's unit, as the stop-motion draws it: Sari's unit, then *Langsung ke AB Agus*. */
+/** Agus's group, as the server answers it since ADR-0229 §4: *Unit Anda* (Agus's own card) first, then Sari's unit. */
 const SARI_UNIT = unit('unit', [
   person('Sari Puspita', 'AAB', { isLeader: true, aa: { potensi: 1, aa: true, switched: 2 } }),
   person('Andi Nugroho', 'AGENT'),
@@ -72,7 +77,7 @@ const AGUS_UNIT = unit('direct', [
 const potensi = (over: Partial<UnitPotensiView> = {}): UnitPotensiView => ({
   month: '2026-11', currentMonth: '2026-11', today: '2026-11-04',
   head: { membershipId: 'mem-agus', name: 'Agus Prasetyo', isReader: true },
-  tiles: { aa: 4, rekrut: 1 }, units: [SARI_UNIT, AGUS_UNIT], ...over,
+  tiles: { aa: 4, rekrut: 1, potensi: { aa: 4, rekrut: 2 } }, units: [AGUS_UNIT, SARI_UNIT], ...over,
 });
 const SHEET: UnitPotensiPersonView = {
   month: '2026-11', currentMonth: '2026-11',
@@ -118,17 +123,14 @@ function render(view: UnitPotensiView | StubReply = potensi(), { me = LEADER, ro
   renderWithSession(language ? <InLanguage language={language}>{ui}</InLanguage> : ui, { me });
   return stub;
 }
-const tiles = () => screen.findByRole('radiogroup', { name: 'AA or Rekrut' });
+const tiles = () => screen.findByRole('radiogroup', { name: 'Active Agent or Rekrut' });
 const cards = () => screen.getAllByRole('region').filter((r) => r.hasAttribute('data-potensi-unit'));
-/** A row as read: its name (with a leader's role tag) and its pills, without the avatar's initials or the ›. */
-const rowNames = (card: HTMLElement) => within(card).getAllByRole('listitem')
-  .map((li) => `${li.querySelector('[data-potensi-name]')?.textContent}${li.querySelector('[data-potensi-pills]')?.textContent}`);
 
-describe('P19.1-T6 the Potensi tab (UI-155)', () => {
+describe('P19.1-T6, P19.8-T4 the Potensi tab', () => {
   beforeEach(() => { nav.replace.mockClear(); nav.search = ''; });
   afterEach(() => vi.unstubAllGlobals());
 
-  describe('AC-1 the tab, and who sees it', () => {
+  describe('AC-1 the tab, and who sees it (P19.1-T6)', () => {
     it('P19.1-T6 AC-1 the tabs read Overview | Activities | Potensi; the tab is ?tab=potensi and reads only its own endpoint', async () => {
       const { calls } = render();
       await tiles();
@@ -157,22 +159,20 @@ describe('P19.1-T6 the Potensi tab (UI-155)', () => {
     });
   });
 
-  describe('AC-2 the month picker and the two tiles', () => {
-    it('P19.1-T6 AC-2 opens on this month; the tiles are a switch, AA chosen; Rekrut swaps the list with no read', async () => {
+  describe('P19.8-T4 AC-12 MOB UI-171 the month picker: a menu under its button', () => {
+    it('P19.8-T4 AC-12 MOB UI-171 opens on this month, a header button — no native select; the menu holds this month and the eleven before it', async () => {
       const { calls } = render();
-      const group = await tiles();
-      expect(screen.getByRole('combobox', { name: 'Month' })).toHaveDisplayValue('November 2026');
-      const [aa, rekrut] = within(group).getAllByRole('radio');
-      expect(aa).toHaveAttribute('aria-checked', 'true');
-      expect(aa).toHaveClass('bg-secondary', 'text-secondary-contrast');
-      expect(aa).toHaveTextContent(/^AA4$/);
-      expect(rekrut).toHaveTextContent(/^Rekrut1$/);
-      const before = calls.length;
-      await userEvent.click(rekrut);
-      expect(rekrut).toHaveAttribute('aria-checked', 'true');
-      expect(aa).toHaveAttribute('aria-checked', 'false');
-      expect(within(cards()[0]).getByText('1 potensi · 1 rekrut')).toBeInTheDocument();
-      expect(calls.length).toBe(before);
+      await tiles();
+      expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+      expect(document.querySelector('select')).toBeNull();
+      const button = screen.getByRole('button', { name: 'Month November 2026' });
+      expect(button).toHaveClass('min-h-11', 'text-base', 'font-semibold');
+      await userEvent.click(button);
+      const menu = screen.getByRole('listbox', { name: 'Month' });
+      expect(within(menu).getAllByRole('option')).toHaveLength(12);
+      expect(within(menu).getByRole('option', { name: 'November 2026', selected: true })).toBeInTheDocument();
+      await userEvent.click(within(menu).getByRole('option', { name: 'October 2026' }));
+      await waitFor(() => expect(calls.some((c) => c.url.includes('/unit/dashboard/potensi?month=2026-10'))).toBe(true));
     });
 
     it('P19.1-T6 AC-2 the picker offers this month and the eleven before it', () => {
@@ -183,56 +183,140 @@ describe('P19.1-T6 the Potensi tab (UI-155)', () => {
     });
   });
 
-  describe('AC-3, AC-4 one list design for both tiles', () => {
-    it('P19.1-T6 AC-3 one card per unit below, then the head’s own; each leader first with a navy role tag', async () => {
-      render();
-      await tiles();
-      const [sari, agus] = cards();
-      expect(sari).toHaveAccessibleName('Unit AAB Sari Puspita');
-      expect(agus).toHaveAccessibleName('Direct to AB Agus');
-      expect(within(sari).getByRole('banner')).toHaveClass('uppercase');
-      expect(rowNames(sari)[0]).toMatch(/^AABSari Puspita/);
-      expect(within(sari).getAllByRole('listitem')[0].querySelector('.bg-secondary')).toHaveTextContent('AAB');
+  describe('P19.8-T4 AC-9 MOB UI-186 the tiles: Active Agent and Rekrut, each with potensi x', () => {
+    it('P19.8-T4 AC-9 MOB UI-186 the tiles read Active Agent and Rekrut, the number, and potensi x under it — not dari 12', async () => {
+      const { calls } = render();
+      const group = await tiles();
+      const [aa, rekrut] = within(group).getAllByRole('radio');
+      expect(aa).toHaveAttribute('aria-checked', 'true');
+      expect(aa).toHaveClass('bg-secondary', 'text-secondary-contrast');
+      expect(aa).toHaveTextContent(/^Active Agent4potensi 4$/);
+      expect(rekrut).toHaveTextContent(/^Rekrut1potensi 2$/);
+      expect(group.textContent).not.toMatch(/dari|of \d/);
+      const before = calls.length;
+      await userEvent.click(rekrut);
+      expect(rekrut).toHaveAttribute('aria-checked', 'true');
+      expect(rekrut).toHaveClass('bg-secondary');
+      expect(aa).toHaveAttribute('aria-checked', 'false');
+      // The answer holds both: no read.
+      expect(calls.length).toBe(before);
     });
 
-    it('P19.1-T6 AC-4 rows: the leader, then potensi only, then ✓, then ✕ — the same order on both tiles', async () => {
-      render();
-      await tiles();
-      expect(rowNames(cards()[0])).toEqual([
-        'AABSari Puspita1 potensiAA ✓', 'Rina Wijaya2 potensi', 'Budi Santoso1 potensi', 'Lina Marlina1 potensiAA ✓', 'Andi Nugroho✕',
-      ]);
-      expect(within(cards()[0]).getByText('5 potensi · 2 AA')).toBeInTheDocument();
-      await userEvent.click(screen.getByRole('radio', { name: /Rekrut/ }));
-      expect(rowNames(cards()[0])).toEqual([
-        'AABSari Puspita✕', 'Rina Wijaya1 potensi1 rekrut ✓', 'Andi Nugroho✕', 'Lina Marlina✕', 'Budi Santoso✕',
-      ]);
+    it('P19.8-T4 AC-9 MOB UI-186 the legend under the tiles: ✓ Active Agent · ① potensi, and ① potensi rekrut on Rekrut', async () => {
+      render(potensi(), { language: 'id' });
+      await screen.findByRole('radiogroup', { name: 'Active Agent atau Rekrut' });
+      const legend = document.querySelector('[data-potensi-legend]')!;
+      expect(legend.textContent).toBe('Active Agent1potensi');
+      await userEvent.click(screen.getAllByRole('radio')[1]);
+      expect(document.querySelector('[data-potensi-legend]')!.textContent).toBe('1potensi rekrut');
     });
 
-    it('P19.1-T6 AC-4 pills: n potensi in yellow left of the green ✓, or ✕ named with the person greyed', async () => {
+    it('P19.8-T4 AC-9 MOB UI-186 a person’s mark: the orange number, the green ✓, both, or the grey ✕ — per tile', async () => {
       render();
       await tiles();
-      const lina = within(cards()[0]).getAllByRole('listitem')[3];
-      const [pot, done] = within(lina).getAllByText(/potensi|AA ✓/);
-      expect(pot).toHaveClass('bg-potensi', 'text-potensi-ink');
-      expect(done).toHaveClass('bg-pill-green', 'text-pill-green-ink');
-      const andi = within(cards()[0]).getAllByRole('listitem')[4];
-      expect(within(andi).getByRole('img', { name: 'No potensi and no ✓ yet' })).toHaveClass('bg-pill-grey');
-      expect(within(andi).getByText('Andi Nugroho')).toHaveClass('text-pill-grey-ink');
-    });
-
-    it('P19.1-T6 AC-4 the order and pills are one rule, computed from the server’s figures', () => {
-      const rows = orderedPeople(SARI_UNIT, 'aa').map((p) => p.name);
-      expect(rows).toEqual(['Sari Puspita', 'Rina Wijaya', 'Budi Santoso', 'Lina Marlina', 'Andi Nugroho']);
-      expect(pillsOf(SARI_UNIT.people[3], 'rekrut')).toEqual({ potensi: 1, done: 1, none: false });
-      expect(pillsOf(SARI_UNIT.people[1], 'aa')).toEqual({ potensi: 0, done: 0, none: true });
+      const [agus, sari] = cards();
+      const rows = (card: HTMLElement) => within(card).getAllByRole('listitem');
+      const marks = (li: HTMLElement) => li.querySelector('[data-potensi-marks]')!;
+      // Sari: potensi 1 and Active Agent — the number, then the ✓.
+      const sariRow = rows(sari)[0];
+      const [number, check] = Array.from(marks(sariRow).children).filter((el) => el.getAttribute('aria-hidden') === 'true');
+      expect(number).toHaveTextContent('1');
+      expect(number).toHaveClass('bg-primary-50', 'text-primary-deep');
+      expect(check).toHaveClass('bg-pill-green', 'text-pill-green-ink');
+      expect(sariRow.querySelector('.sr-only')).toHaveTextContent('1 potensi, Active Agent');
+      // Eko: neither — the grey ✕.
+      const eko = rows(agus)[1];
+      expect(eko.querySelector('[data-potensi-marks] .text-signal-grey')).not.toBeNull();
+      expect(eko.querySelector('.sr-only')).toHaveTextContent('No potensi and no ✓ yet');
+      // No yellow pill and no green AA ✓ pill any more.
+      expect(document.querySelector('.bg-potensi')).toBeNull();
+      expect(document.body.textContent).not.toContain('AA ✓');
+      // On Rekrut: Rina's recruit potensi and her rekrut, Yosef's recruit potensi alone.
+      await userEvent.click(screen.getAllByRole('radio')[1]);
+      expect(rows(cards()[1])[3].querySelector('.sr-only')).toHaveTextContent('1 potensi, rekrut ✓');
+      expect(rows(cards()[0])[2].querySelector('.sr-only')).toHaveTextContent('1 potensi');
     });
   });
 
-  describe('AC-6, AC-7 the sheets', () => {
+  describe('P19.8-T4 AC-4 MOB UI-179 one group order and name, as the Overview', () => {
+    it('P19.8-T4 AC-4 MOB UI-179 Unit Anda first, then Unit Sari Puspita, in sentence case; each leader first with the navy role tag', async () => {
+      render(potensi(), { language: 'id' });
+      await screen.findByRole('radiogroup', { name: 'Active Agent atau Rekrut' });
+      const [agus, sari] = cards();
+      expect(agus).toHaveAccessibleName('Unit Anda');
+      expect(sari).toHaveAccessibleName('Unit Sari Puspita');
+      expect(within(sari).getByRole('heading', { name: 'Unit Sari Puspita' })).not.toHaveClass('uppercase');
+      expect(within(sari).getByRole('heading', { name: 'Unit Sari Puspita' })).toHaveClass('text-md', 'font-bold');
+      const firstRow = within(sari).getAllByRole('listitem')[0];
+      expect(firstRow.querySelector('[data-potensi-name]')!.textContent).toBe('AABSari Puspita');
+      expect(firstRow.querySelector('.bg-secondary')).toHaveTextContent('AAB');
+    });
+
+    it('P19.8-T4 AC-4 MOB UI-179 a unit below the reader names its head’s card Unit {name}', async () => {
+      render(potensi({ head: { membershipId: 'mem-agus', name: 'Agus Prasetyo', isReader: false } }), { language: 'id' });
+      await screen.findByRole('radiogroup', { name: 'Active Agent atau Rekrut' });
+      expect(cards()[0]).toHaveAccessibleName('Unit Agus Prasetyo');
+    });
+
+    it('P19.8-T4 AC-4 MOB UI-179 the rows keep the roster’s order on both tiles: the same people, the same places', async () => {
+      render();
+      await tiles();
+      const names = () => within(cards()[1]).getAllByRole('listitem').map((li) => li.querySelector('[data-potensi-name]')!.textContent);
+      const onAa = names();
+      expect(onAa).toEqual(['AABSari Puspita', 'Andi Nugroho', 'Lina Marlina', 'Rina Wijaya', 'Budi Santoso']);
+      await userEvent.click(screen.getAllByRole('radio')[1]);
+      expect(names()).toEqual(onAa);
+      expect(within(cards()[1]).getByText('1 potensi · 1 rekrut')).toBeInTheDocument();
+    });
+  });
+
+  describe('P19.8-T4 AC-10 MOB UI-182 the whole team in every month', () => {
+    it('P19.8-T4 AC-10 MOB UI-182 an earlier month lists everybody under each group; the headers keep their words', async () => {
+      render(potensi({ month: '2026-10' }));
+      await tiles();
+      const [agus, sari] = cards();
+      expect(within(sari).getAllByRole('listitem')).toHaveLength(5);
+      expect(within(agus).getAllByRole('listitem')).toHaveLength(3);
+      expect(within(sari).getByText('potensi 2/4 · 2 AA')).toBeInTheDocument();
+      expect(within(agus).getByText('2 AA')).toBeInTheDocument();
+      await userEvent.click(screen.getAllByRole('radio')[1]);
+      expect(within(sari).getByText('potensi 1/1 rekrut')).toBeInTheDocument();
+      expect(within(agus).getByText('potensi 0/1 rekrut')).toBeInTheDocument();
+    });
+
+    it('P19.8-T4 AC-10 MOB UI-182 a month with nothing switched on: the whole team, each ✕, and no empty line', async () => {
+      const quiet = (p: PotensiPerson): PotensiPerson => ({
+        ...p, aa: { potensi: 0, aa: false, switched: 0 }, rekrut: { potensi: 0, rekrut: 0, switched: 0 },
+      });
+      render(potensi({
+        month: '2025-12',
+        tiles: { aa: 0, rekrut: 0, potensi: { aa: 0, rekrut: 0 } },
+        units: [unit('direct', AGUS_UNIT.people.map(quiet)), unit('unit', SARI_UNIT.people.map(quiet))],
+      }), { language: 'id' });
+      await screen.findByRole('radiogroup', { name: 'Active Agent atau Rekrut' });
+      const rows = cards().flatMap((card) => within(card).getAllByRole('listitem'));
+      expect(rows).toHaveLength(8);
+      expect(rows.every((li) => li.getAttribute('data-potensi-row') === 'none')).toBe(true);
+      expect(screen.queryByText('Belum ada potensi.')).not.toBeInTheDocument();
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    it('P19.8-T4 AC-10 MOB UI-182 a person’s sheet opens from an earlier month, for that month', async () => {
+      const { calls } = render(potensi({ month: '2026-10' }), {
+        routes: { 'GET /unit/dashboard/potensi/m-rina': { body: { ...SHEET, month: '2026-10' } } },
+      });
+      await tiles();
+      await userEvent.click(screen.getByRole('button', { name: /^Open Rina Wijaya/ }));
+      expect(await screen.findByRole('dialog', { name: 'Agent Rina Wijaya · 2 potensi' })).toBeInTheDocument();
+      expect(calls.some((c) => c.url.endsWith('/unit/dashboard/potensi/m-rina?month=2026-10'))).toBe(true);
+    });
+  });
+
+  describe('AC-6, AC-7 the sheets (P19.1-T6)', () => {
     it('P19.1-T6 AC-6 a row opens Agent Rina’s sheet: her clients by name, the next step, the stage, and Chat Agent Rina', async () => {
       render();
       await tiles();
-      await userEvent.click(screen.getByRole('button', { name: 'Open Rina Wijaya' }));
+      await userEvent.click(screen.getByRole('button', { name: /^Open Rina Wijaya/ }));
       const sheet = within(await screen.findByRole('dialog', { name: 'Agent Rina Wijaya · 2 potensi' }));
       expect(sheet.getByText('Unit AAB Sari Puspita')).toBeInTheDocument();
       expect(await sheet.findByText('Ibu Kartika Dewanti')).toBeInTheDocument();
@@ -249,7 +333,7 @@ describe('P19.1-T6 the Potensi tab (UI-155)', () => {
         routes: { '/auth/leader-code': { body: { code: 'AGUS01' } }, 'POST /new-hires/agents': { body: { outcome: 'linked', member: { membershipId: 'm-arya', fullName: 'Arya Putra' } } } },
       });
       await userEvent.click(within(await tiles()).getAllByRole('radio')[1]);
-      await userEvent.click(screen.getByRole('button', { name: 'Open Rina Wijaya' }));
+      await userEvent.click(screen.getByRole('button', { name: /^Open Rina Wijaya/ }));
       const sheet = within(await screen.findByRole('dialog', { name: 'Agent Rina Wijaya · 1 potensi · 1 rekrut' }));
       expect(await sheet.findByText('Sdri. Tia Amelia')).toBeInTheDocument();
       expect(sheet.getByText('Potensi')).toHaveClass('bg-potensi');
@@ -268,14 +352,14 @@ describe('P19.1-T6 the Potensi tab (UI-155)', () => {
     });
   });
 
-  describe('AC-8 the words', () => {
+  describe('AC-8 the words (P19.1-T6)', () => {
     it('P19.1-T6 AC-8 the screen says potensi and rekrut — never calon, never kode — on both tiles and both sheets', async () => {
       render(potensi(), { language: 'id' });
-      const group = await screen.findByRole('radiogroup', { name: 'AA atau Rekrut' });
+      const group = await screen.findByRole('radiogroup', { name: 'Active Agent atau Rekrut' });
       const words = [document.body.textContent ?? ''];
       await userEvent.click(within(group).getAllByRole('radio')[1]);
       words.push(document.body.textContent ?? '');
-      await userEvent.click(screen.getByRole('button', { name: 'Buka Rina Wijaya' }));
+      await userEvent.click(screen.getByRole('button', { name: /^Buka Rina Wijaya/ }));
       const sheet = await screen.findByRole('dialog', { name: 'Agent Rina Wijaya · 1 potensi · 1 rekrut' });
       await within(sheet).findByText('Sdri. Tia Amelia');
       words.push(document.body.textContent ?? '');
@@ -285,36 +369,22 @@ describe('P19.1-T6 the Potensi tab (UI-155)', () => {
         expect(text).toMatch(/potensi/);
       }
       expect(words[1]).toMatch(/rekrut/);
-      expect(screen.getAllByText('LANGSUNG KE AB AGUS'.toLowerCase(), { exact: false, normalizer: (s) => s.toLowerCase() }).length).toBeGreaterThan(0);
     });
   });
 
-  describe('AC-9, AC-10 an earlier month, and nothing yet', () => {
-    it('P19.1-T6 AC-9 an earlier month: the tiles, and one row per unit — potensi x/y · n AA, potensi x/y rekrut', async () => {
-      const { calls } = render(potensi({ month: '2026-10' }));
+  describe('P19.8-T4 AC-1, AC-15 on a phone, 375 and 360', () => {
+    it.each([375, 360])('P19.8-T4 AC-15 MOB UI-182 at %ipx: the picker under the slider, names never cut; axe clean', async (px) => {
+      atWidth(px);
+      render();
       await tiles();
-      const list = screen.getByRole('list', { name: 'October 2026' });
-      expect(within(list).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
-        'Unit AAB Sari Puspitapotensi 2/4 · 2 AA', 'Direct to AB Agus2 AA',
-      ]);
-      await userEvent.click(screen.getByRole('radio', { name: /Rekrut/ }));
-      expect(within(list).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
-        'Unit AAB Sari Puspitapotensi 1/1 rekrut', 'Direct to AB Aguspotensi 0/1 rekrut',
-      ]);
-      // The month picked is asked for.
-      await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Month' }), '2026-09');
-      await waitFor(() => expect(calls.some((c) => c.url.includes('/unit/dashboard/potensi?month=2026-09'))).toBe(true));
-    });
-
-    it('P19.1-T6 AC-10 nobody with a potensi or a ✓: Belum ada potensi., and the line — never an error', async () => {
-      const quiet = unit('direct', [person('Dewi Lestari', 'AAB', { isLeader: true, isReader: true })]);
-      render(potensi({ tiles: { aa: 0, rekrut: 0 }, units: [quiet] }), { language: 'id' });
-      await screen.findByRole('radiogroup', { name: 'AA atau Rekrut' });
-      expect(screen.getByText('Belum ada potensi.')).toBeInTheDocument();
-      expect(screen.getByText('Agent menyalakannya di Leads.')).toBeInTheDocument();
-      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-      await userEvent.click(screen.getAllByRole('radio')[1]);
-      expect(screen.getByText('Belum ada potensi rekrut.')).toBeInTheDocument();
+      // The slider on its own row, the month picker on the row below it.
+      const slider = screen.getByRole('tablist', { name: 'Unit Dashboard' });
+      const picker = screen.getByRole('button', { name: 'Month November 2026' });
+      expect(slider.parentElement!.contains(picker)).toBe(false);
+      for (const name of document.querySelectorAll('[data-potensi-name]')) expect(name.className).not.toMatch(/truncate|line-clamp/);
+      // Contrast is the tokens' (a11y.spec.tsx); the landmarks are the layout's, which `screens.a11y.spec.tsx` renders.
+      const results = await axe(document.body, { rules: { 'color-contrast': { enabled: false }, region: { enabled: false } } });
+      expect(results.violations.map((v) => `${v.id} (${v.nodes.length})`)).toEqual([]);
     });
   });
 });

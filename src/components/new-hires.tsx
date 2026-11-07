@@ -15,6 +15,7 @@ import { DateField } from '@/components/ui/date-field';
 import { NoDataLine, SamplePreview, useSampleName } from '@/components/sample-preview';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button, ButtonLink, Card, ErrorBanner, Textarea } from '@/components/ui/field';
+import { HEADER_CONTROL } from '@/components/ui/header-control';
 import { LineIcon } from '@/components/ui/line-icon';
 import { NumberBadge } from '@/components/ui/number-badge';
 import { PersonRow, TreeIndent, TreeNode, TreeToggle } from '@/components/ui/person-row';
@@ -273,7 +274,7 @@ function WaitingTile({ count, onOpen }: { count: number; onOpen: () => void }) {
   );
 }
 
-/** *Semua · Teraktivasi · Belum* with their counts (UI-024): a segmented choice, 40px, flex widths. */
+/** *Semua · Teraktivasi · Belum* with their counts (UI-024): a segmented choice of header controls, flex widths. */
 function FilterBar({ roster, filter, onFilter }: { roster: NewHiresRoster; filter: NewHireFilter; onFilter: (f: NewHireFilter) => void }) {
   const t = useMessages(newHiresMessages).list;
   const counts = newHireCounts(roster);
@@ -287,8 +288,10 @@ function FilterBar({ roster, filter, onFilter }: { roster: NewHiresRoster; filte
           aria-pressed={filter === key}
           onClick={() => onFilter(key)}
           className={cn(
-            // 44px on a phone and a tablet (the report's *tap targets*), 40px on a desktop.
-            'min-h-10 flex-1 whitespace-nowrap rounded-pill px-2 text-sm font-semibold max-lg:min-h-11',
+            // A header control at every size (P19.8-T1 AC-1; R6, MOB UI-171): 13px, 600, 44px. It was 12px, and 40px on a
+            // desktop.
+            'flex-1 whitespace-nowrap rounded-pill px-2',
+            HEADER_CONTROL,
             filter === key ? 'bg-ink text-white' : 'text-ink hover:bg-hover-row',
           )}
         >

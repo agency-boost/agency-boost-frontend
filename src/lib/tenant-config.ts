@@ -8,6 +8,11 @@ export interface ActivityTypeRow {
   code: string;
   categoryCode: string;
   label: string;
+  /**
+   * ***Nama singkat*** (P19.8-T4, ADR-0229 §5; MOB UI-180): the one line the Unit Dashboard's activity table shows, the
+   * full `label` on tap — a second field beside the name, never the name reworded. `null` for none; absent read as none.
+   */
+  shortLabel?: string | null;
   description: string | null;
   /** Inherited from the category and never stored here. Empty means every rung. */
   appliesToOrgLevelCodes: string[];
@@ -67,6 +72,7 @@ export const createActivityType = (body: {
   code: string;
   categoryCode: string;
   label: string;
+  shortLabel?: string | null;
   description?: string;
 }) => api<ActivityTypeRow>('/kpm/settings/activity-types', { method: 'POST', body });
 

@@ -2,49 +2,61 @@
 
 import { useEffect, useRef, useState, type CSSProperties, type TouchEvent } from 'react';
 import { addDays, isHiddenTask, type CalendarEntry, type CalendarRead } from '@/lib/calendar';
-import { segmentOn, tasksPerDay } from '@/lib/calendar-layout';
+import { tasksPerDay, timedOn } from '@/lib/calendar-layout';
 import type { Slot } from '@/lib/calendar-form';
 import { cn } from '@/lib/cn';
-import type { AgendaPerson } from './agenda';
-import { useCalendarTasks, type TaskPerson } from './calendar-tasks';
-import { TimeGrid, type GridItem, type GridPlaced, type ScrollGroup } from './time-grid';
+import { PaneHeadBar, type PaneHead } from './calendar-parts';
+import { useCalendarTasks } from './calendar-tasks';
+import { TimeGrid, type GridItem, type ScrollGroup } from './time-grid';
 
 /** How far a finger must travel, at least, for a swipe to page (a fifth of the width when that is more). */
 const SWIPE_MIN_PX = 50;
 
 /**
  * **3 Hari** (UI V1, 2026-10-30, UI-104 point 5; P19.1-T3, UI-117 and UI-144): three day columns starting with the day
- * asked for — today when it opens — drawn by **the one time grid Week draws** (`TimeGrid`): the hours *07.00*, opened an
- * hour before now, the *Tugas* row's blue counts, today shaded on a phone and circled from 768px.
+ * asked for — today when it opens — drawn by **the one time grid Week draws** (`TimeGrid`): the hours *07.00*, the
+ * *Tugas* row's blue counts, today shaded on a phone and circled from 768px.
  *
  * - **The page's one toolbar** (UI-117, UI-144): no range, arrows or second *3 Hari ⌄* inside the grid any more — the
  *   toolbar above is the same in every view.
  * - **Paged like Outlook mobile**: a horizontal swipe moves exactly three days and snaps — it never stops between days
  *   (`usePagedSwipe`); ‹ › do the same; *Hari ini* returns to today and the two days after it. The days either side are
- *   drawn as the finger moves, their heads named, their grid empty until the read for them arrives.
- * - **On a phone it is full-bleed** (UI-104 point 5, kept): no side padding, no card or border, the page scrolling under
- *   the pinned heads and *Tugas* row and the grid running to the bottom edge behind the floating tab bar. **From 768px**
- *   it is a card with its own scroll box, as Week is.
- * - **Compared people** (point 9): their timed things in the same columns, each with the person's small avatar, their
- *   tasks in the count and the popup.
+ *   drawn as the finger moves, their heads named, their grid empty until the read for them arrives. **A tap takes a slot**
+ *   on a phone, since a horizontal finger there turns the page.
+ *
+ * *Changed 2026-11-07 (P19.8-T3; MOB UI-172, UI-175; the brief's Calendar 1):*
+ *
+ * - **On a phone it opens at the top of the page and the page never scrolls** — where it scrolled the page to an hour
+ *   before now, 632px down, the title and the toolbar gone. The grid has **its own scroll box, opened with 07.00 at its
+ *   top** (00.00–07.00 above it, a swipe down inside the grid), **running the screen's full width to its foot** behind
+ *   the floating tab bar (`fill`), under the day heads and the *Tugas* row, which stay put. From 768px a card with its
+ *   own box, as before.
+ * - **Compared people are drawn as Week draws them**: no person row on the reader's own calendar; with *Bandingkan
+ *   dengan downline*, a person row above each person's grid (`head`; the compared panes are the page's, as Week's are)
+ *   — where their things joined the reader's columns, each with an avatar (UI-104 point 9; D-36, one grid for both).
  */
 export function ThreeDays({
   read,
-  others = [],
+  head,
   nowMinute,
   phone,
+  fill = false,
   regionLabel,
   scroll,
   onStep,
   onOpen,
   onSlot,
   onTasks,
+  className,
 }: {
   read: CalendarRead;
-  others?: readonly AgendaPerson[];
+  /** The person row above the grid: only where somebody is compared (MOB UI-175). */
+  head?: PaneHead;
   nowMinute: number | null;
-  /** Below 768px: full-bleed, the page scrolling; wider, a card with a scroll box of its own. */
+  /** Below 768px: opens at 07.00, a tap takes a slot; wider, a drag. */
   phone: boolean;
+  /** The reader's own calendar alone on a phone: the grid runs to the foot of the screen, the page still. */
+  fill?: boolean;
   regionLabel: string;
   scroll: ScrollGroup;
   /** Three days back (`-1`) or on (`1`): a swipe, as ‹ › are. */
@@ -52,45 +64,38 @@ export function ThreeDays({
   onOpen: (entry: CalendarEntry) => void;
   onSlot?: (slot: Slot) => void;
   onTasks: (day: string) => void;
+  className?: string;
 }) {
   const { struck } = useCalendarTasks();
   const days = read.days.map((d) => d.date);
   const swipe = usePagedSwipe(read.from, onStep);
-
-  const people: { who: TaskPerson | null; read: CalendarRead }[] = [
-    { who: null, read },
-    ...others.filter((o): o is AgendaPerson & { read: CalendarRead } => o.read !== null).map((o) => ({ who: o.person, read: o.read })),
-  ];
-  const trips = people.flatMap(({ read: r }) => r.entries.filter((item) => item.allDay));
-  const counts = tasksPerDay(people.flatMap(({ read: r }) => r.tasks.filter((task) => isHiddenTask(task) || !struck.has(task.taskId))));
-  const placedOn = (day: string): GridPlaced[] => people.flatMap(({ who, read: r }) => [...r.entries, ...r.events]
-    .map((item) => segmentOn(item, day))
-    .filter((item): item is GridItem => item !== null)
-    .map((item) => ({ item, who })));
+  // *Tugas* by day, a tick in this visit taken off at once (UI-104 point 4); a hidden person's are counts only.
+  const counts = tasksPerDay(read.tasks.filter((task) => isHiddenTask(task) || !struck.has(task.taskId)));
+  const timed: GridItem[] = [...read.entries, ...read.events];
 
   return (
-    <div
+    <section
+      aria-label={head?.name}
       data-three-days=""
       onTouchStart={swipe.start}
       onTouchMove={swipe.move}
       onTouchEnd={swipe.end}
       onTouchCancel={swipe.cancel}
-      className={cn(
-        'touch-pan-y bg-card',
-        'max-md:-mx-4 max-md:-mb-[calc(var(--tab-bar-space)+1.5rem)]',
-        'md:overflow-hidden md:rounded-lg',
-      )}
+      className={cn('flex min-w-0 flex-1 touch-pan-y flex-col bg-card', className)}
     >
+      {head && <PaneHeadBar head={head} />}
       <TimeGrid
         days={days}
         today={read.today}
         nowMinute={nowMinute}
         regionLabel={regionLabel}
-        mode={phone ? 'page' : 'box'}
-        placedOn={placedOn}
-        trips={trips}
+        morning={phone}
+        fill={fill}
+        slotBy={phone ? 'tap' : 'drag'}
+        placedOn={(day) => timedOn(timed, day).map((item) => ({ item, who: null }))}
+        trips={read.entries.filter((item) => item.allDay)}
         counts={counts}
-        opensTasks={(day) => people.some(({ read: r }) => r.tasks.some((task) => task.date === day && !isHiddenTask(task)))}
+        opensTasks={(day) => read.tasks.some((task) => task.date === day && !isHiddenTask(task))}
         onTasks={onTasks}
         onOpen={onOpen}
         onSlot={onSlot}
@@ -101,7 +106,7 @@ export function ThreeDays({
           style: swipe.style,
         }}
       />
-    </div>
+    </section>
   );
 }
 

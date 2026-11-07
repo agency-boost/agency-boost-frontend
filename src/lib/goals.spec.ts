@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { stubFetch } from '@test/harness';
-import { goalBodyOf, goalInputsOf, groupDigits, monthsLeftInWords, producedFrom, saveGoal, type Goal } from './goals';
+import {
+  automaticOf, caretAfterDigits, goalBodyOf, goalInputsOf, groupDigits, monthsLeftInWords, producedFrom, saveGoal,
+  typedInForceOf, type Goal,
+} from './goals';
 
 /**
  * The provenance marker's words (ADR-0063 §5, P10.1-T6 AC-1): where the APE produced came from, and
@@ -118,9 +121,64 @@ describe('saving a plan from a coaching session (P11-T8 AC-4)', () => {
   it('P11-T8 AC-4 sends back the six inputs a goal holds, its months left only when they were typed over', () => {
     const goal = {
       ...inputs, mode: 'from_savings', monthsLeft: 2.9, monthsLeftIsOverride: false, period: '2026',
+      achieved: { minor: 0, provenance: 'self_reported', month: null },
     } as unknown as Goal;
-    expect(goalInputsOf(goal)).toEqual({ ...inputs, mode: 'from_savings', monthsLeft: null });
+    // Nothing typed is no typed figure: `null`, the automatic one (P19.8-T5, ADR-0230).
+    expect(goalInputsOf(goal)).toEqual({ ...inputs, mode: 'from_savings', monthsLeft: null, apeAchievedMinor: null });
     expect(goalInputsOf({ ...goal, monthsLeftIsOverride: true }).monthsLeft).toBe(2.9);
+  });
+});
+
+/**
+ * **P19.8-T5 — the typed figure in force, or the automatic one** (MOB UI-190; ADR-0230): what Goal Settings' pill holds
+ * as typed, what it puts back, and where the caret goes as the figure is grouped while it is typed.
+ */
+describe('P19.8-T5 the APE produced on Goal Settings (ADR-0230)', () => {
+  const M = 1_000_000 * 100;
+  const office = { minor: 67 * M, provenance: 'imported' as const, month: '2026-10' };
+  const inputs = {
+    mode: 'direct' as const, annualApeTargetMinor: 500 * M, savingsTargetMinor: 0, commissionRatePct: 10, monthsLeft: null,
+    caseSizeMinor: 18 * M, leadsToApptPct: 30, closingRatePct: 30,
+  };
+  const plan = (over: Partial<Goal>) => ({
+    apeAchievedMinor: 0, achieved: { minor: 0, provenance: 'self_reported', month: null }, ...over,
+  }) as Goal;
+
+  it('P19.8-T5 AC-1 the pill holds the typed figure while it is in force, else null — the automatic figure', () => {
+    // Typed after the upload: the server measures against it.
+    expect(typedInForceOf(plan({ apeAchievedMinor: 120 * M, achieved: { minor: 120 * M, provenance: 'self_reported', month: null } })))
+      .toBe(120 * M);
+    // Typed before the upload, which replaced it: stored still, and not in force.
+    expect(typedInForceOf(plan({ apeAchievedMinor: 120 * M, achieved: { ...office } }))).toBeNull();
+    // Nothing typed.
+    expect(typedInForceOf(plan({}))).toBeNull();
+  });
+
+  it('P19.8-T5 AC-4 the automatic figure is the office’s — from `official`, or from a reply that predates it', () => {
+    expect(automaticOf(plan({ official: office, achieved: { minor: 120 * M, provenance: 'self_reported', month: null } }))).toEqual(office);
+    expect(automaticOf(plan({ official: null }))).toBeNull();
+    expect(automaticOf(plan({ achieved: { ...office } }))).toEqual(office);
+    expect(automaticOf(plan({}))).toBeNull();
+  });
+
+  it('P19.8-T5 AC-4 Pakai otomatis, saved, sends null: the typed figure cleared', () => {
+    const read = { ...inputs, apeAchievedMinor: 120 * M };
+    expect(goalBodyOf({ ...read, apeAchievedMinor: null }, read)).toEqual({ ...read, apeAchievedMinor: null });
+    // Put back before it was saved: the plan as read, nothing to send.
+    const automatic = { ...inputs, apeAchievedMinor: null };
+    expect(goalBodyOf(automatic, automatic)).not.toHaveProperty('apeAchievedMinor');
+  });
+
+  it.each([
+    ['67.000.000', 0, 0],
+    ['67.000.000', 1, 1],
+    ['67.000.000', 2, 2],
+    ['67.000.000', 3, 4],
+    ['67.000.000', 8, 10],
+    ['67.000.000', 12, 10],
+    ['1.200', 2, 3],
+  ])('P19.8-T5 AC-2 in %s the caret after %i digits is at %i — the dots skipped', (grouped, digits, at) => {
+    expect(caretAfterDigits(grouped, digits)).toBe(at);
   });
 });
 

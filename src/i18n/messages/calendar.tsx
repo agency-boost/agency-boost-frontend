@@ -59,8 +59,11 @@ const en = {
 
   /** The compare bar and its popover (`:296-307`, `:905-965`). */
   viewing: 'Viewing:',
+  /** A phone's *Filter* panel (P19.8-T3 AC-6): *Melihat* as the label over its chips, and the compare chip's words. */
+  viewingLabel: 'Viewing',
   myCalendar: 'My Calendar',
   compare: '+ Compare with downline',
+  compareChip: 'Compare with downline',
   searchDownline: 'Search your downline…',
   added: ' · added ✓',
   compareCap: ({ max }: { max: number }) => `You're comparing ${max} people already — remove one below to add another.`,
@@ -117,8 +120,14 @@ const en = {
   edit: 'Edit',
   delete: 'Delete',
   cancel: 'Cancel',
-  /** The prototype's question less its second sentence, which a soft delete makes false (H-06, I-101). */
-  deleteQuestion: ({ title }: { title: string }) => `Delete "${title}"?`,
+  /**
+   * **The question *Hapus* asks first** (P19.8-T3 AC-7; MOB UI-169, ADR-0228 §5): the owner's words, bold, with the
+   * entry's title and day in grey under it (`deleteWhat`) — the detail's and *Edit event*'s alike. Never the
+   * prototype's *This can't be undone.*, which a soft delete makes false (H-06, I-101).
+   */
+  deleteQuestion: 'Delete this event?',
+  /** The line under it: *Kickoff 2026 · Wednesday, 11 Nov 2026*, the day written by the caller in the figures' language. */
+  deleteWhat: ({ title, day }: { title: string; day: string }) => (day ? `${title} · ${day}` : title),
   /** A meeting link in *Location / notes* (P18.7-T8 AC-2), and what a screen reader hears after it. */
   joinZoom: 'Join Zoom',
   joinMeeting: 'Join meeting',
@@ -247,8 +256,10 @@ const id: MessagesOf<typeof en> = {
   newEvent: `+ ${kept('Event')} baru`,
 
   viewing: 'Melihat:',
+  viewingLabel: 'Melihat',
   myCalendar: 'Kalender saya',
   compare: `+ Bandingkan dengan ${kept('downline')}`,
+  compareChip: `Bandingkan dengan ${kept('downline')}`,
   searchDownline: `Cari ${kept('downline')} Anda…`,
   added: ' · ditambahkan ✓',
   compareCap: ({ max }) => `Anda sudah membandingkan ${max} orang — hapus satu di bawah untuk menambah yang lain.`,
@@ -290,7 +301,8 @@ const id: MessagesOf<typeof en> = {
   edit: 'Ubah',
   delete: 'Hapus',
   cancel: 'Batal',
-  deleteQuestion: ({ title }) => `Hapus "${title}"?`,
+  deleteQuestion: `Hapus ${kept('event')} ini?`,
+  deleteWhat: ({ title, day }) => (day ? `${title} · ${day}` : title),
   joinZoom: 'Gabung Zoom',
   joinMeeting: 'Gabung rapat',
   newTab: ', terbuka di tab baru',

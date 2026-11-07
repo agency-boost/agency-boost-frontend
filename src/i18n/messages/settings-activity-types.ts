@@ -36,6 +36,10 @@ const en = {
   /** Why a type's code cannot change, in its edit. */
   codeReason: 'Every activity logged, every ratio and every goal points at it.',
   descriptionHint: "Optional. Shown under the name on the agent's screen.",
+  /** *Nama singkat* (P19.8-T4, ADR-0229 §5; MOB UI-180): a type's second name, beside its name in every edit. */
+  shortLabel: 'Short name',
+  shortLabelHint: ({ max }: { max: number }) =>
+    `Optional, at most ${max} characters. One line in the Unit Dashboard’s activity table; the full name shows on tap.`,
   /** The chip on a bound type: the cascade stage it counts as (P18.9-T4 AC-1), and its tooltip. */
   countsAs: ({ stage }: { stage: string }) => `Counts as: ${stage}`,
   countsAsTip: ({ stage }: { stage: string }) =>
@@ -64,6 +68,10 @@ const id: MessagesOf<typeof en> = {
   archiveSectionHint: 'Mengarsipkan bagian ini beserta semua isinya.',
   codeReason: `Setiap aktivitas yang tercatat, setiap ${kept('ratio')}, dan setiap ${kept('goal')} merujuk ke kode ini.`,
   descriptionHint: 'Opsional. Ditampilkan di bawah nama di layar agent.',
+  shortLabel: 'Nama singkat',
+  shortLabelHint: ({ max }) =>
+    `Opsional, paling banyak ${max} karakter. Satu baris di tabel aktivitas ${kept('Unit Dashboard')}; nama lengkap `
+    + 'tampil saat diketuk.',
   countsAs: ({ stage }) => `Dihitung sebagai: ${stage}`,
   countsAsTip: ({ stage }) =>
     `Ringkasan dan rencana ${kept('goal')} menghitung ini sebagai ${stage}. Ubah aktivitas mana yang dihitung di `

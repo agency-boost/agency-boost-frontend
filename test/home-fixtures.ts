@@ -1,3 +1,4 @@
+import type { CalendarEntry } from '@/lib/calendar';
 import type { HomeTeamPerson, HomeView } from '@/lib/home';
 import { makeMe } from './harness';
 
@@ -9,6 +10,34 @@ import { makeMe } from './harness';
 export const AGUS = makeMe({
   user: { ...makeMe().user, fullName: 'Agus Prasetyo' },
   permissions: ['personal_summary:read', 'unit_dashboard:read', 'member:update_phone'],
+});
+
+/**
+ * **The AB as the 7 November review signed in** (P19.8-T2): Agus with his writes — *Buat proposal* (`proposal:create`),
+ * *Tambah user* (`member:invite`) and the Calendar's entries — on an AB rung, leading people.
+ */
+export const AGUS_AB = makeMe({
+  ...AGUS,
+  membership: { ...AGUS.membership!, hierarchyRole: 'ab', directCount: 3 },
+  permissions: [
+    ...AGUS.permissions, 'proposal:read', 'proposal:create', 'member:invite', 'member:search_untagged_pool',
+    'calendar_entry:create', 'calendar_entry:update', 'calendar_entry:delete', 'calendar_entry:answer',
+  ],
+});
+
+/** An AAB who leads nobody (the review's Dewi): every leader's tile and the team report, at zero. */
+export const DEWI_AAB = makeMe({
+  ...AGUS_AB,
+  user: { ...AGUS.user, fullName: 'Dewi Lestari' },
+  membership: { ...AGUS.membership!, hierarchyRole: 'aab', directCount: 0 },
+});
+
+/** An Agent: *Buat proposal* only, no leader tile; New Hires in the menu only where they coach a new hire. */
+export const RINA_AGENT = makeMe({
+  user: { ...makeMe().user, fullName: 'Rina Wijaya' },
+  membership: { ...AGUS.membership!, hierarchyRole: 'agent', directCount: 0 },
+  permissions: ['personal_summary:read', 'proposal:read', 'proposal:create', 'calendar_entry:create', 'calendar_entry:update', 'calendar_entry:delete', 'calendar_entry:answer'],
+  newHires: false,
 });
 
 const person = (name: string, over: Partial<HomeTeamPerson> = {}): HomeTeamPerson => ({
@@ -50,27 +79,40 @@ export const LEADER: HomeView = {
     },
     { kind: 'agenda', source: 'entry', id: 'e-1', type: 'meeting', title: 'Weekly unit huddle', date: '2026-10-31', start: '15:00' },
   ],
+  leads: 16,
+  newHires: 3,
   leader: {
     activeAgent: { count: 4, of: 12, unit: { count: 1, of: 4 }, aab: { count: 3, of: 8 } },
     coached7d: { count: 2, of: 12, unit: { count: 1, of: 4 }, aab: { count: 1, of: 8 } },
     team: TEAM,
-    members: 11,
-    recruitmentPipeline: 5,
-    newHires: 3,
   },
 };
 
-/** A leader by role with nobody yet (P19-T4 AC-2): the block at zero, the server's answer since ADR-0189 §4. */
+/**
+ * A leader by role with nobody yet (ADR-0189 §4; the review's empty AAB, MOB UI-166): the block at zero, the server's
+ * answer — nothing logged, nothing to do, no lead, no new hire.
+ */
 export const NEW_LEADER: HomeView = {
   ...LEADER,
+  activity: { today: 0, yesterday: 0, total: 0, days: LEADER.activity.days.map((d) => ({ ...d, count: 0 })) },
+  schedule: { meetings: 0, tasks: 0 },
+  actions: [],
+  leads: 0,
+  newHires: 0,
   leader: {
     activeAgent: { count: 0, of: 0, unit: { count: 0, of: 0 }, aab: { count: 0, of: 0 } },
     coached7d: { count: 0, of: 0, unit: { count: 0, of: 0 }, aab: { count: 0, of: 0 } },
     team: [],
-    members: 0,
-    recruitmentPipeline: 0,
-    newHires: 0,
   },
+};
+
+/** The entry *Aksi hari ini*'s third row opens over Home (P19.8-T2 AC-7): Agus organises it, with nobody invited. */
+export const HUDDLE_ENTRY: CalendarEntry = {
+  entryId: 'e-1', type: 'meeting', title: 'Weekly unit huddle', notes: 'Kantor — Ruang Rapat A',
+  date: '2026-10-31', start: '15:00', end: '16:00', startsOn: null, endsOn: null, allDay: false,
+  startsAt: '2026-10-31T08:00:00.000Z', endsAt: '2026-10-31T09:00:00.000Z',
+  organiser: { membershipId: 'mem-agus', name: 'Agus Prasetyo' }, invitees: [], readerIs: 'organiser',
+  myAnswer: null, version: 3,
 };
 
 export const AGENT_VIEW: HomeView = {
@@ -78,6 +120,8 @@ export const AGENT_VIEW: HomeView = {
   activity: { ...LEADER.activity, today: 2, yesterday: 0 },
   schedule: { meetings: 0, tasks: 0 },
   actions: [],
+  leads: 5,
+  newHires: 0,
   leader: null,
 };
 

@@ -23,9 +23,14 @@ export { EntryBlock } from './time-grid';
  * reader's, and on a compared pane only once the panes stack below 980px, so that every stacked pane
  * can be read on its own (`hoursWhenStacked`; contradiction 8, D-phone).
  *
- * **A phone's week fits its seven days** (P19.1-T3 AC-4; UI-144, *Conflicts* row 155): a 36px gutter and seven columns
- * of ~41px at 360px, *Sen* to *Min* in view with nothing to scroll sideways — where it was 52px of hours and seven
- * 48px columns scrolling inside the pane (D-phone; P12-T2 AC-13). An entry there is its colour, which opens its details.
+ * **A phone's week fits its seven days** (P19.1-T3 AC-4; UI-144, *Conflicts* row 155): *Sen* to *Min* in view with
+ * nothing to scroll sideways — where it was 52px of hours and seven 48px columns scrolling inside the pane (D-phone;
+ * P12-T2 AC-13). An entry there is its colour, which opens its details.
+ *
+ * *Changed 2026-11-07 (P19.8-T3; MOB UI-172, UI-174, UI-175):* **no person row on the reader's own calendar** — the head
+ * is drawn only where somebody is compared (`head`), as 3 Hari draws it; **on a phone it opens with 07.00 at its top**
+ * (`phone`) and, the reader's own alone, **runs the screen's full width to its foot** (`fill`): a 46px gutter and seven
+ * ~45px columns at 360px.
  */
 export function WeekPane({
   read,
@@ -38,10 +43,13 @@ export function WeekPane({
   onSlot,
   onTasks,
   scroll,
+  phone = false,
+  fill = false,
   className,
 }: {
   read: CalendarRead;
-  head: PaneHead;
+  /** The person row above the grid: only where somebody is compared (MOB UI-175). */
+  head?: PaneHead;
   pill?: ReactNode;
   regionLabel: string;
   /** A compared pane: hours only when stacked. */
@@ -54,6 +62,10 @@ export function WeekPane({
   /** A day's *Tugas* count pill (UI-104 point 3): its popup. Absent — a hidden person — the counts open nothing. */
   onTasks?: (day: string) => void;
   scroll: ScrollGroup;
+  /** Below 768px: the grid opens at 07.00 (MOB UI-172). */
+  phone?: boolean;
+  /** The reader's own week alone on a phone: the grid runs to the foot of the screen, the page still. */
+  fill?: boolean;
   className?: string;
 }) {
   const { struck } = useCalendarTasks();
@@ -64,14 +76,15 @@ export function WeekPane({
   const timed: GridItem[] = [...read.entries, ...read.events];
 
   return (
-    <section aria-label={head.name} className={cn('flex min-w-0 flex-1 flex-col bg-card', className)}>
-      <PaneHeadBar head={head} pill={pill} />
+    <section aria-label={head?.name} data-week-pane="" className={cn('flex min-w-0 flex-1 flex-col bg-card', className)}>
+      {head && <PaneHeadBar head={head} pill={pill} />}
       <TimeGrid
         days={days}
         today={read.today}
         nowMinute={nowMinute}
         regionLabel={regionLabel}
-        mode="box"
+        morning={phone}
+        fill={fill}
         placedOn={(day) => timedOn(timed, day).map((item) => ({ item, who: null }))}
         trips={read.entries.filter((item) => item.allDay)}
         counts={counts}
@@ -89,6 +102,6 @@ export function WeekPane({
 }
 
 /** The pane's frame while its read is on its way: the grid's shape, nothing in it (L-01, a Fill). */
-export function WeekSkeleton({ columns = 7 }: { columns?: number }) {
-  return <TimeGridSkeleton columns={columns} />;
+export function WeekSkeleton({ columns = 7, head = true }: { columns?: number; head?: boolean }) {
+  return <TimeGridSkeleton columns={columns} head={head} />;
 }

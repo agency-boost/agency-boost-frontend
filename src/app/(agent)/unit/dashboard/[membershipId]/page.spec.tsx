@@ -98,7 +98,9 @@ describe('a unit below the reader (P15-T4 AC-2)', () => {
   it('P15-T4 AC-2 keeps the period on a unit below, and its switch reads that unit again', async () => {
     const { calls } = render([{ body: { ...SARI_UNIT, period: 'year' } }, { body: SARI_UNIT }], AGUS_ME, 'year');
     await screen.findByRole('table');
-    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Period' }), 'month');
+    // The period is a menu under its button since P19.8-T4 (AC-12, MOB UI-171), where it was a native select.
+    await userEvent.click(screen.getByRole('button', { name: 'Period This year' }));
+    await userEvent.click(screen.getByRole('option', { name: 'This month' }));
     // UI V1: the address carries the period only when it is not the first, *Bulan ini*.
     expect(nav.replace).toHaveBeenCalledWith('/unit/dashboard/mem-sari', { scroll: false });
     await screen.findByRole('table');
@@ -114,7 +116,7 @@ describe('a unit below the reader (P15-T4 AC-2)', () => {
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Unit Dashboard$/);
     expect(screen.getByRole('link', { name: 'Your Unit Dashboard' })).toHaveAttribute('href', '/unit/dashboard');
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
-    expect(screen.queryByRole('combobox', { name: 'Period' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Period / })).not.toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/Sari|office|KPM|reports to|tagged to|untagged|unassigned/);
   });
 

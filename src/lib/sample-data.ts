@@ -211,6 +211,9 @@ export function sampleHomeView(today: string, quote: HomeView['quote']): HomeVie
     activity: { today: 3, yesterday: 0, days, total: counts.reduce((a, b) => a + b, 0) },
     schedule: { meetings: 2, tasks: 1 },
     actions: [],
+    // *Leads* (P19.8-T2 AC-4): every reader's tile, the Agent's too; *New hires* is not this reader's.
+    leads: 4,
+    newHires: 0,
     leader: null,
   };
 }

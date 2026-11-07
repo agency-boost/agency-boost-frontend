@@ -281,18 +281,21 @@ export const RATIOS = {
  * ── UI V1 (Phase 18.11 T4): the Activities tab ─────────────────────────────────────────────────
  */
 
-/** The seed's office sections, as the office named them (content: never translated). */
+/**
+ * The seed's office sections, as the office named them (content: never translated), each type with its *Nama singkat*
+ * (P19.8-T4, MOB UI-180) — but *Sales meeting*, which the office gave none, so a phone shows its name on two lines.
+ */
 const SECTIONS: UnitActivitiesView['sections'] = [
   { code: 'LEADS_GENERATION', label: 'Leads Generation', status: 'active', types: [
-    { code: 'LEADS_CONTACTED', label: 'Set Appointment', status: 'active' },
-    { code: 'NEW_PROSPECT', label: 'Mendapatkan calon prospek baru', status: 'active' },
+    { code: 'LEADS_CONTACTED', label: 'Set Appointment', shortLabel: 'Set appointment', status: 'active' },
+    { code: 'NEW_PROSPECT', label: 'Mendapatkan calon prospek baru', shortLabel: 'Prospek baru', status: 'active' },
   ] },
   { code: 'SELLING', label: 'Selling', status: 'active', types: [
-    { code: 'SELL_PRESENTATION', label: 'Sales meeting', status: 'active' },
-    { code: 'SELL_SUBMISSION', label: 'Submission polis', status: 'active' },
+    { code: 'SELL_PRESENTATION', label: 'Sales meeting', shortLabel: null, status: 'active' },
+    { code: 'SELL_SUBMISSION', label: 'Submission polis', shortLabel: 'Submission polis', status: 'active' },
   ] },
   { code: 'RECRUITMENT', label: 'Recruitment', status: 'active', types: [
-    { code: 'RECRUIT_PRESENTATION', label: 'Melakukan presentasi recruitment', status: 'active' },
+    { code: 'RECRUIT_PRESENTATION', label: 'Melakukan presentasi recruitment', shortLabel: 'Presentasi rekrut', status: 'active' },
   ] },
 ];
 
@@ -335,6 +338,7 @@ export function activities(over: Partial<UnitActivitiesView> = {}): UnitActiviti
         ratio({ value: 0.33, numeratorCount: 10, denominatorCount: 30 }),
         ratio({ code: 'RECRUITMENT_SUCCESS_RATE', label: 'Recruitment success rate', value: 0.5, numeratorCount: 2, denominatorCount: 4 }),
       ] as UnitActivitiesView['ratios']['group'],
+      person: null,
     },
     ...over,
   };

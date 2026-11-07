@@ -521,16 +521,17 @@ describe('Goal Settings (P8-T3) as UI V1 draws it (P18.11-T5)', () => {
   });
 
   describe('UI-020 — the two prefilled figures look alike, and editable', () => {
-    it('P19.1-T4 AC-1, AC-2 both in one white pill, the same width, the figure in normal ink, no ✎; each marked ⚡, the APE with its ⓘ', async () => {
+    it('P19.1-T4 AC-1, P19.8-T5 AC-2 both in one white pill, the same width, the figure in normal ink, no ✎; each with its line', async () => {
       render({ '/goals': { body: goal({ apeAchievedMinor: 290_000_000_00, monthsLeft: 2.1 }) } });
       await resultCard();
 
       const months = screen.getByRole('textbox', { name: 'Months left this year' });
       const produced = screen.getByRole('textbox', { name: 'APE already produced this year' });
-      // A real value, not a placeholder; short until tapped.
+      // A real value, not a placeholder. The months short; the APE in full rupiah since ADR-0230 §2 (MOB UI-190).
       expect(months).toHaveValue('2.1');
       expect(months).not.toHaveAttribute('placeholder');
-      expect(produced).toHaveValue('IDR 290M');
+      expect(produced).toHaveValue('290,000,000');
+      expect(produced.previousElementSibling).toHaveTextContent('IDR');
       for (const field of [months, produced]) {
         expect(field).toHaveClass('text-ink', 'font-bold');
         expect(field.parentElement).toHaveClass('h-12', 'rounded-pill', 'border-[1.5px]', 'bg-card');
@@ -538,13 +539,10 @@ describe('Goal Settings (P8-T3) as UI V1 draws it (P18.11-T5)', () => {
         expect(field.closest('label')!.querySelector('svg')).toBeNull();
       }
       expect(months.parentElement).toHaveTextContent('months');
-      // The ⚡ on both (D-25), no *OTOMATIS* chip; the APE keeps its ⓘ, saying whose the figure is.
-      const monthsLabel = screen.getByText('Months left this year').parentElement!;
-      expect(monthsLabel.querySelector('[data-auto-marker]')).not.toBeNull();
+      // The months are the office's calendar: ⚡ *Automatic* under the name. The APE is the reader's own: *Edited by you*.
+      expect(months).toHaveAccessibleDescription('Automatic');
+      expect(produced).toHaveAccessibleDescription('Edited by you');
       expect(screen.queryByText(/^auto$|^OTOMATIS$/i)).not.toBeInTheDocument();
-      const producedMarker = screen.getByText('APE already produced this year').parentElement!.querySelector('[data-auto-marker]');
-      expect(producedMarker).not.toBeNull();
-      expect(within(producedMarker as HTMLElement).getByRole('button', { name: /APE already produced this year/ })).toBeInTheDocument();
     });
 
     it('P19.1-T4 AC-1 the two pills are the same width, in a row below 1024px and in their column from it', async () => {
@@ -561,7 +559,7 @@ describe('Goal Settings (P8-T3) as UI V1 draws it (P18.11-T5)', () => {
       }
     });
 
-    it('P19.1-T4 AC-2 values read short until focused: 2 months, IDR 290M — and 2 months whole at 1024', async () => {
+    it('P19.1-T4 AC-2, P19.8-T5 AC-2 the months read short — 2 months, whole at 1024 — and the APE in full, IDR 290,000,000', async () => {
       atWidth(1024);
       render({ '/goals': { body: goal({ apeAchievedMinor: 290_000_000_00, monthsLeft: 2 }) } });
       await resultCard();
@@ -571,19 +569,26 @@ describe('Goal Settings (P8-T3) as UI V1 draws it (P18.11-T5)', () => {
       // The pill takes the column's whole width from 1024px, two to a row: the figure and its unit never share 1/4 of it.
       expect(months.closest('label')).toHaveClass('w-full');
       expect(document.querySelector('[data-step-two="fields"]')).toHaveClass('grid-cols-2');
-      expect(screen.getByRole('textbox', { name: 'APE already produced this year' })).toHaveValue('IDR 290M');
+      // Never *M* (*jt*) in the pill (ADR-0230 §2, an All-sizes item).
+      const produced = screen.getByRole('textbox', { name: 'APE already produced this year' });
+      expect(produced).toHaveValue('290,000,000');
+      expect(produced.previousElementSibling).toHaveTextContent('IDR');
     });
 
-    it('P19.1-T4 AC-10 the APE produced is the reader’s estimate, labelled your estimate under its name', async () => {
+    it('P19.1-T4 AC-10, P19.8-T5 AC-4 the reader’s own estimate reads Edited by you here — ADR-0230 §4 replaces your estimate', async () => {
       render({ '/goals': { body: goal({ apeAchievedMinor: 120_000_000_00 }) } });
       await resultCard();
-      expect(document.querySelector('[data-estimate-label]')).toHaveTextContent('your estimate');
+      expect(document.querySelector('[data-figure-line="edited"]')).toHaveTextContent('Edited by you');
+      expect(document.querySelector('[data-estimate-label]')).toBeNull();
+      // Nothing uploaded, so no automatic figure to go back to (AC-4).
+      expect(screen.queryByRole('button', { name: /^Use automatic/ })).not.toBeInTheDocument();
     });
 
-    it('P19.1-T4 AC-10 nothing typed is no estimate: no label', async () => {
+    it('P19.1-T4 AC-10, P19.8-T5 AC-4 nothing typed and nothing uploaded: no line under the APE — no figure is claimed', async () => {
       render({ '/goals': { body: goal({ apeAchievedMinor: 0 }) } });
       await resultCard();
       expect(document.querySelector('[data-estimate-label]')).toBeNull();
+      expect(screen.getByRole('textbox', { name: 'APE already produced this year' })).not.toHaveAttribute('aria-describedby');
     });
 
     it('UI-020 the months: null while the office’s, the typed figure once overridden, null again once cleared', async () => {
@@ -611,7 +616,7 @@ describe('Goal Settings (P8-T3) as UI V1 draws it (P18.11-T5)', () => {
       expect(sent(calls, 'PUT')[2].monthsLeft).toBeNull();
     });
 
-    it('UI-020 the agent’s own APE: every digit once tapped, grouped as typed, sent in sen — and short again after', async () => {
+    it('UI-020, P19.8-T5 AC-2 the agent’s own APE: grouped as typed, sent in sen — and still in full after', async () => {
       const { calls } = render({ '/goals': [{ body: goal() }, { body: goal() }] });
       await resultCard();
       const produced = screen.getByRole('textbox', { name: 'APE already produced this year' });
@@ -621,7 +626,7 @@ describe('Goal Settings (P8-T3) as UI V1 draws it (P18.11-T5)', () => {
       expect(produced).toHaveValue('120,000,000');
       expect(status()).toHaveTextContent('Not saved yet');
       await userEvent.tab();
-      expect(produced).toHaveValue('IDR 120M');
+      expect(produced).toHaveValue('120,000,000');
 
       await save();
       await waitFor(() => expect(sent(calls, 'PUT')).toHaveLength(1));
@@ -893,22 +898,23 @@ describe('Goal Settings — the APE already produced, once the office holds prod
   });
 
   /*
-   * The staging review of 2026-10-31: the office's figure looked exactly like the field beside it. It is plain figures
-   * now — short, normal ink, the row's height — with no pill frame, no fill and no ✎; ⚡ and ⓘ still say whose.
+   * The staging review of 2026-10-31 drew the office's figure as plain figures; **since ADR-0230 (D-36, MOB UI-190) it is
+   * the member's to type over**: the same pill as the months, prefilled with the office's figure in full, *⚡ Automatic ·
+   * as of Aug 2026* under its name. Only a coach still reads it plain (ADR-0183; the coachee's tab).
    */
-  it('UI-020 P9-T6 the office’s figure is plain figures, short and in normal ink, with no pill, no ✎ and no field: ⚡, and ⓘ says whose', async () => {
+  it('P19.8-T5 AC-1 MOB UI-190 the office’s figure is the pill, prefilled in full, ⚡ Automatic · as of its month — no ✎', async () => {
     render({ '/goals': { body: imported() } });
     await resultCard();
 
-    const shown = screen.getByText('APE already produced this year').closest('dl')!;
-    expect(shown.querySelector('dd')).toHaveTextContent(/^IDR 120M$/);
-    expect(shown.querySelector('dd')).toHaveClass('h-12', 'text-ink', 'font-bold');
-    expect(shown.querySelector('dd')!.className).not.toMatch(/\b(rounded-pill|border-line|border-\[1\.5px\]|bg-card)\b/);
-    expect(shown.querySelector('dd svg')).toBeNull();
-    expect(screen.queryByRole('textbox', { name: 'APE already produced this year' })).not.toBeInTheDocument();
-    expect(shown.querySelector('[data-auto-marker]')).not.toBeNull();
-    await userEvent.click(within(shown).getByRole('button', { name: 'Why APE already produced this year is automatic' }));
-    expect(await screen.findByText('As of Aug 2026')).toBeInTheDocument();
+    const produced = screen.getByRole('textbox', { name: 'APE already produced this year' });
+    expect(produced).toHaveValue('120,000,000');
+    expect(produced).toHaveAttribute('inputmode', 'numeric');
+    expect(produced.closest('label')).toHaveClass('h-12', 'rounded-pill', 'border-[1.5px]', 'bg-card');
+    expect(produced.closest('label')!.querySelector('svg')).toBeNull();
+    expect(produced).toHaveAccessibleDescription('Automatic · as of Aug 2026');
+    expect(document.querySelector('[data-read-only]')).toBeNull();
+    // Nothing typed over it: nothing to go back to.
+    expect(screen.queryByRole('button', { name: /^Use automatic/ })).not.toBeInTheDocument();
   });
 
   it('says so when the office corrected it by hand', async () => {
@@ -959,4 +965,238 @@ describe('P18.10-T3 Goal Settings in each language', () => {
     expect(produced).toHaveValue('120,000,000');
     expect(produced.previousElementSibling).toHaveTextContent('IDR');
   });
+});
+
+/**
+ * **P19.8-T5 — Goal Setting's step ②, as the draft mockup draws it** (MOB UI-190, MOB UI-191; D-36, D-21; ADR-0230;
+ * `revisions/2026-11-09/files/UI/mockups/goals-mobile-stopmotion-2026-11-07.html`). The mockup's own plan: Rp 500 jt for
+ * the year, 1,8 months left, the office's Rp 67 jt *per Okt 2026*; the member types Rp 120 jt.
+ */
+describe('P19.8-T5 MOB UI-190 the member types over the automatic APE (ADR-0230)', () => {
+  const OFFICE = { minor: 67_000_000_00, provenance: 'imported', month: '2026-10' };
+  const automatic = (over: Record<string, unknown> = {}) => goal({
+    monthsLeft: 1.8, apeAchievedMinor: 0, achieved: { ...OFFICE }, official: OFFICE,
+    projected: projection({
+      apeAchievedMinor: 67_000_000_00, remainingApeMinor: 433_000_000_00, monthlyApeTargetMinor: 240_555_555_56,
+      policiesPerMonth: 14, appointmentsPerMonth: 47, leadsPerMonth: 94,
+    }),
+    ...over,
+  });
+  /** The mockup's Rp 120 jt, worked out by the server: Sisa Rp 380 jt, Rp 211,1 jt a month, 12 · 40 · 80. */
+  const TYPED = previewOf({
+    monthsLeft: 1.8,
+    achieved: { minor: 120_000_000_00, provenance: 'self_reported', month: null },
+    projected: projection({
+      apeAchievedMinor: 120_000_000_00, remainingApeMinor: 380_000_000_00, monthlyApeTargetMinor: 211_111_111_11,
+      policiesPerMonth: 12, appointmentsPerMonth: 40, leadsPerMonth: 80,
+    }),
+  });
+  const field = () => screen.getByRole('textbox', { name: 'APE already produced this year' }) as HTMLInputElement;
+  const tileValue = (label: string) => screen.getByText(label).closest('[data-variant]')!.textContent;
+
+  for (const px of [375, 360]) {
+    it(`P19.8-T5 AC-1 MOB UI-190 at ${px}: the pill is the field, prefilled with the office’s figure, ⚡ Automatic · as of Oct 2026, no ✎`, async () => {
+      atWidth(px);
+      render({ '/goals': { body: automatic() } });
+      await resultCard();
+      const produced = field();
+      const pill = produced.closest('label')!;
+      expect(pill).toHaveAttribute('for', produced.id);
+      expect(pill).toHaveClass('h-12', 'rounded-pill', 'border-[1.5px]', 'bg-card', 'cursor-text');
+      expect(pill.querySelector('svg')).toBeNull();
+      expect(produced).toHaveAttribute('inputmode', 'numeric');
+      // 16px, so a phone does not zoom when it is tapped (AC-5 of T6 walks it on an iPhone).
+      expect(produced).toHaveClass('[font-size:16px]');
+      expect(produced).toHaveValue('67,000,000');
+      expect(produced).toHaveAccessibleDescription('Automatic · as of Oct 2026');
+      // The ⚡ is drawn beside the words, in the accent's ink (D-25).
+      const line = produced.closest('[data-pill-line]')!.querySelector('[data-figure-line="auto"]')!;
+      expect(line.querySelector('svg')).not.toBeNull();
+      expect(line).toHaveClass('text-primary-ink', 'text-xs', 'font-semibold');
+      await userEvent.click(pill);
+      expect(produced).toHaveFocus();
+    });
+
+    it(`P19.8-T5 AC-6 MOB UI-191 at ${px}: the label takes the free width at 15px, the pill 150px on the right, the line under the label`, async () => {
+      atWidth(px);
+      render({ '/goals': { body: automatic() } });
+      await resultCard();
+      const row = field().closest('[data-pill-line]')!;
+      const labelColumn = row.querySelector('span')!;
+      const name = labelColumn.firstElementChild!;
+      expect(wears(labelColumn, px)).toContain('flex-1');
+      expect(wears(name, px).split(' ')).toEqual(expect.arrayContaining(['text-[0.9375rem]', 'font-normal']));
+      expect(wears(field().closest('label')!, px).split(' ')).toContain('w-[9.375rem]');
+      // The ⚡ line is under the name, inside the label's column; the pill follows it, on the right.
+      expect(labelColumn.querySelector('[data-figure-line="auto"]')).not.toBeNull();
+      expect(labelColumn.compareDocumentPosition(field().closest('label')!)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+      // The months' row is the same: its label the free width, its pill as wide.
+      const months = screen.getByRole('textbox', { name: 'Months left this year' }).closest('label')!;
+      expect(wears(months, px).split(' ')).toContain('w-[9.375rem]');
+    });
+  }
+
+  it('P19.8-T5 AC-6 a tablet keeps its row: 160px pills, the 14px label (ADR-0226 §4)', async () => {
+    atWidth(768);
+    render({ '/goals': { body: automatic() } });
+    await resultCard();
+    const row = field().closest('[data-pill-line]')!;
+    const labelColumn = row.querySelector('span')!;
+    expect(wears(labelColumn, 768)).not.toContain('flex-1');
+    expect(wears(labelColumn.firstElementChild!, 768).split(' ')).toEqual(expect.arrayContaining(['text-md', 'font-medium']));
+    expect(wears(field().closest('label')!, 768).split(' ')).toContain('w-40');
+    expect(wears(field().closest('label')!, 768)).not.toContain('w-[9.375rem]');
+  });
+
+  it('P19.8-T5 AC-2 typed as the full rupiah figure, the dots added while typing — never M in the pill', async () => {
+    atWidth(375);
+    render({ '/goals': { body: automatic() }, [PREVIEW]: { body: TYPED } });
+    await resultCard();
+    await userEvent.click(field().closest('label')!);
+    await waitFor(() => expect([field().selectionStart, field().selectionEnd]).toEqual([0, field().value.length]));
+    await userEvent.keyboard('1200');
+    expect(field()).toHaveValue('1,200');
+    await userEvent.keyboard('00');
+    expect(field()).toHaveValue('120,000');
+    await userEvent.keyboard('000');
+    expect(field()).toHaveValue('120,000,000');
+    await userEvent.tab();
+    expect(field()).toHaveValue('120,000,000');
+    expect(field().closest('label')).not.toHaveTextContent(/M$/);
+  });
+
+  it('P19.8-T5 AC-2 a digit typed in the middle keeps the caret beside it as the dots move', async () => {
+    atWidth(375);
+    render({ '/goals': { body: automatic() }, [PREVIEW]: { body: TYPED } });
+    await resultCard();
+    const produced = field();
+    produced.focus();
+    // The browser's own edit: a 5 typed after *67,0*, the caret after it.
+    fireEvent.change(produced, { target: { value: '67,0500,000', selectionStart: 5, selectionEnd: 5 } });
+    expect(produced).toHaveValue('670,500,000');
+    // Four digits before the caret: after *670,5*.
+    await waitFor(() => expect([produced.selectionStart, produced.selectionEnd]).toEqual([5, 5]));
+    // A digit deleted: *670,500,000* less the 5 is *67,000,000*, the caret after *67,0*.
+    fireEvent.change(produced, { target: { value: '670,00,000', selectionStart: 4, selectionEnd: 4 } });
+    expect(produced).toHaveValue('67,000,000');
+    await waitFor(() => expect(produced.selectionStart).toBe(4));
+  });
+
+  it('P19.8-T5 AC-3 D-21 typing recalculates Remaining, This month’s target, the policies, meetings and appointments; Not saved yet until Save goal', async () => {
+    atWidth(375);
+    const { calls } = render({ '/goals': [{ body: automatic() }, { body: automatic() }], [PREVIEW]: { body: TYPED } });
+    const card = await resultCard();
+    expect(tileValue('Remaining needed')).toContain('IDR 433M');
+    expect(status()).toHaveTextContent('Saved');
+
+    await userEvent.click(field().closest('label')!);
+    await userEvent.keyboard('120000000');
+    // The server's preview, asked of the figure as it is typed, in sen.
+    await waitFor(() => expect(sent(calls, 'POST').at(-1)).toMatchObject({ apeAchievedMinor: 120_000_000_00 }));
+    await waitFor(() => expect(tileValue('Remaining needed')).toContain('IDR 380M'));
+    expect(tileValue("This month's APE target")).toContain('IDR 211.1M');
+    expect(tile(card, 'Set appointment')).toHaveTextContent('80');
+    expect(tile(card, 'Sales meeting')).toHaveTextContent('40');
+    expect(tile(card, 'Submission polis')).toHaveTextContent('12');
+    expect(status()).toHaveTextContent('Not saved yet');
+
+    await save();
+    await waitFor(() => expect(sent(calls, 'PUT')).toHaveLength(1));
+    expect(sent(calls, 'PUT')[0].apeAchievedMinor).toBe(120_000_000_00);
+  });
+
+  it('P19.8-T5 AC-4 typed over it: Edited by you with a person, the pill’s edge in the second colour, ↶ Use automatic (IDR 67M) puts it back', async () => {
+    atWidth(375);
+    render({ '/goals': { body: automatic() }, [PREVIEW]: { body: TYPED } });
+    await resultCard();
+    await userEvent.click(field().closest('label')!);
+    await userEvent.keyboard('120000000');
+    await userEvent.tab();
+
+    const line = document.querySelector('[data-figure-line="edited"]')!;
+    expect(line).toHaveTextContent('Edited by you');
+    expect(line.querySelector('svg')).not.toBeNull();
+    expect(field()).toHaveAccessibleDescription('Edited by you');
+    expect(field().closest('label')).toHaveClass('border-secondary');
+    expect(status()).toHaveTextContent('Not saved yet');
+
+    const back = screen.getByRole('button', { name: 'Use automatic (IDR 67M)' });
+    await userEvent.click(back);
+    expect(field()).toHaveValue('67,000,000');
+    expect(field()).toHaveAccessibleDescription('Automatic · as of Oct 2026');
+    expect(screen.queryByRole('button', { name: /^Use automatic/ })).not.toBeInTheDocument();
+    // Back at the plan as saved: nothing to save.
+    await waitFor(() => expect(status()).toHaveTextContent('Saved'));
+  });
+
+  it('P19.8-T5 AC-4 a saved figure typed over the office’s: Use automatic, saved, clears it — null in the body', async () => {
+    atWidth(375);
+    const typedOver = automatic({
+      apeAchievedMinor: 120_000_000_00, achieved: { minor: 120_000_000_00, provenance: 'self_reported', month: null },
+    });
+    const { calls } = render({ '/goals': [{ body: typedOver }, { body: automatic() }], [PREVIEW]: { body: previewOf({ achieved: { ...OFFICE } }) } });
+    await resultCard();
+    expect(field()).toHaveValue('120,000,000');
+    expect(field()).toHaveAccessibleDescription('Edited by you');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Use automatic (IDR 67M)' }));
+    expect(status()).toHaveTextContent('Not saved yet');
+    await save();
+    await waitFor(() => expect(sent(calls, 'PUT')).toHaveLength(1));
+    expect(sent(calls, 'PUT')[0]).toHaveProperty('apeAchievedMinor', null);
+    // The server's answer: the office's figure again.
+    await waitFor(() => expect(field()).toHaveAccessibleDescription('Automatic · as of Oct 2026'));
+  });
+
+  it('P19.8-T5 AC-4 emptied, the field is the automatic figure again once left', async () => {
+    atWidth(375);
+    render({ '/goals': { body: automatic() }, [PREVIEW]: { body: TYPED } });
+    await resultCard();
+    await userEvent.click(field().closest('label')!);
+    await userEvent.keyboard('5');
+    expect(field()).toHaveValue('5');
+    await userEvent.clear(field());
+    expect(field()).toHaveValue('');
+    await userEvent.tab();
+    expect(field()).toHaveValue('67,000,000');
+    expect(field()).toHaveAccessibleDescription('Automatic · as of Oct 2026');
+  });
+
+  /*
+   * **AC-9: the draft mockup's frames, in its own words** (Indonesian, as the mockup is drawn): *Fixed* (the pill
+   * prefilled, *⚡ Otomatis · per Okt 2026*), the tap and the typing (*Rp 120.000.000*), the recalculation and *Belum
+   * disimpan*, *Diubah oleh Anda*, and *↶ Pakai otomatis* putting *Rp 67.000.000* back — at 375 and at 360.
+   */
+  for (const px of [375, 360]) {
+    it(`P19.8-T5 AC-9 at ${px}: the draft mockup’s frames, verbatim`, async () => {
+      atWidth(px);
+      stubFetch({ ...base, '/goals': { body: automatic() }, [PREVIEW]: { body: TYPED } } as Parameters<typeof stubFetch>[0]);
+      renderWithSession(<InLanguage language="id"><AgentLayout><GoalSettingsPage /></AgentLayout></InLanguage>, { me: AGENT });
+      const produced = await screen.findByRole('textbox', { name: 'APE yang sudah dicapai tahun ini' }) as HTMLInputElement;
+      // *Fixed*.
+      expect(screen.getByRole('heading', { name: 'Progres Anda saat ini' })).toBeInTheDocument();
+      expect(screen.getByRole('textbox', { name: 'Sisa bulan tahun ini' })).toHaveValue('1,8');
+      expect(screen.getByRole('textbox', { name: 'Sisa bulan tahun ini' })).toHaveAccessibleDescription('Otomatis');
+      expect(produced).toHaveValue('67.000.000');
+      expect(produced.previousElementSibling).toHaveTextContent('Rp');
+      expect(produced).toHaveAccessibleDescription('Otomatis · per Okt 2026');
+      // The tap, the keypad, the figure typed with its dots.
+      await userEvent.click(produced.closest('label')!);
+      await userEvent.keyboard('1200');
+      expect(produced).toHaveValue('1.200');
+      await userEvent.keyboard('00000');
+      expect(produced).toHaveValue('120.000.000');
+      // Everything recalculated, and not saved yet.
+      await waitFor(() => expect(screen.getByText('Sisa yang dibutuhkan').closest('[data-variant]')).toHaveTextContent('Rp 380 jt'));
+      expect(screen.getByText('Target APE bulan ini').closest('[data-variant]')).toHaveTextContent('Rp 211,1 jt');
+      expect(within(document.querySelector('[data-floating-save]') as HTMLElement).getByRole('status')).toHaveTextContent('Belum disimpan');
+      expect(screen.getByRole('button', { name: 'Simpan goal' })).toBeInTheDocument();
+      await userEvent.tab();
+      expect(produced).toHaveAccessibleDescription('Diubah oleh Anda');
+      // *Pakai otomatis* — the findings' words, the short figure (ADR-0226 §2).
+      await userEvent.click(screen.getByRole('button', { name: 'Pakai otomatis (Rp 67 jt)' }));
+      expect(produced).toHaveValue('67.000.000');
+      expect(produced).toHaveAccessibleDescription('Otomatis · per Okt 2026');
+    });
+  }
 });

@@ -8,7 +8,8 @@ import {
   namesMissing, namesNewHires, newHireWords, onPaceWords, OWN_COPY, periodFrom, prefill, productionChanges, productionToast,
   PROTOTYPE_COPY, provenanceWords, readUnitDashboard, readerName, recruitLine, regroup, rowName, salesLine, STATUS_TOOLTIP,
   totalNote, totalRecruitLine, touchesWords, UNIT_PERIODS, unitPeriods, updateUnitProduction,
-  goalMet, heatStep, matchesFilter, readUnitActivities, rowHref, splitMoney, statusTally, tabFrom, type UnitRow,
+  goalMet, marksOf, matchesFilter, readUnitActivities, rowHref, sectionCount, splitMoney, statusShown, statusTally, tabFrom,
+  type UnitRow,
 } from './unit-dashboard';
 import { formatMonthLong } from './format';
 
@@ -411,19 +412,46 @@ describe('UI V1 (Phase 18.11 T4): the page’s small rules', () => {
     for (const value of [undefined, null, '', 'overview', 'ACTIVITIES', 'ratios']) expect(tabFrom(value)).toBe('overview');
   });
 
-  it('UI-001 the heat map’s steps: 0 for nothing, then a third, two thirds, more of the largest cell', () => {
-    expect([0, 1, 3, 4, 6, 7, 9].map((n) => heatStep(n, 9))).toEqual([0, 1, 1, 2, 2, 3, 3]);
-    expect(heatStep(1, 1)).toBe(3);
-    expect(heatStep(0, 0)).toBe(0);
+  /*
+   * *Retired 2026-11-07:* UI-001's heat map (`heatStep`, D-17) — the owner replaced it with plain numbers and a subtotal
+   * per category (P19.8-T4 AC-6, MOB UI-183; ADR-0229 §6). Its test went with it.
+   */
+  it('P19.8-T4 AC-6 MOB UI-183 a category’s subtotal sums its types’ counts by code; a code it lacks counts nothing', () => {
+    const section = { types: [{ code: 'A' }, { code: 'B' }] } as Parameters<typeof sectionCount>[1];
+    expect(sectionCount([{ code: 'A', count: 2 }, { code: 'B', count: 3 }, { code: 'C', count: 9 }], section)).toBe(5);
+    expect(sectionCount([], section)).toBe(0);
   });
 
+  const uploaded = (status: UnitRow['status']) => ({ status, goal: goalCell() }) as UnitRow;
+  const notUploaded = (status: UnitRow['status']) => ({ status, goal: goalCell({ actualMinor: null }) }) as UnitRow;
+
   it('UI-002 the chips’ counts are the rows’ statuses, and a chip keeps the rows it names', () => {
-    const rows = [
-      { status: 'needs_attention' }, { status: 'watch_closely' }, { status: 'needs_attention' }, { status: 'on_track' },
-    ] as UnitRow[];
+    const rows = [uploaded('needs_attention'), uploaded('watch_closely'), uploaded('needs_attention'), uploaded('on_track')];
     expect(statusTally(rows)).toEqual({ all: 4, needs_attention: 2, watch_closely: 1 });
     expect(rows.filter((r) => matchesFilter(r, 'needs_attention'))).toHaveLength(2);
     expect(rows.filter((r) => matchesFilter(r, 'all'))).toHaveLength(4);
+  });
+
+  it('P19.8-T4 AC-2 MOB UI-177 a row with no production shows no status and counts in no status chip — only in Semua', () => {
+    expect([statusShown(uploaded('needs_attention')), statusShown(notUploaded('needs_attention'))]).toEqual([true, false]);
+    const rows = [notUploaded('needs_attention'), notUploaded('needs_attention'), uploaded('watch_closely'), notUploaded('on_track')];
+    expect(statusTally(rows)).toEqual({ all: 4, needs_attention: 0, watch_closely: 1 });
+    expect(rows.filter((r) => matchesFilter(r, 'needs_attention'))).toHaveLength(0);
+    expect(rows.filter((r) => matchesFilter(r, 'watch_closely'))).toHaveLength(1);
+    expect(rows.filter((r) => matchesFilter(r, 'all'))).toHaveLength(4);
+  });
+
+  it('P19.8-T4 AC-9 MOB UI-186 a person’s mark: the orange number, the ✓, both, or ✕ — by the tile chosen', () => {
+    const p = (potensi: number, aa: boolean, rekrutPotensi: number, rekrut: number) => ({
+      aa: { potensi, aa, switched: potensi }, rekrut: { potensi: rekrutPotensi, rekrut, switched: rekrutPotensi },
+    });
+    expect(marksOf(p(1, false, 0, 0), 'aa')).toEqual({ potensi: 1, done: false, none: false });
+    expect(marksOf(p(1, true, 0, 0), 'aa')).toEqual({ potensi: 1, done: true, none: false });
+    expect(marksOf(p(0, true, 0, 0), 'aa')).toEqual({ potensi: 0, done: true, none: false });
+    expect(marksOf(p(0, false, 0, 0), 'aa')).toEqual({ potensi: 0, done: false, none: true });
+    // On *Rekrut*: the recruit potensi, and a rekrut this month as the ✓.
+    expect(marksOf(p(2, true, 0, 2), 'rekrut')).toEqual({ potensi: 0, done: true, none: false });
+    expect(marksOf(p(2, true, 1, 0), 'rekrut')).toEqual({ potensi: 1, done: false, none: false });
   });
 
   it('UI-011 a row opens the reader’s own Summary, a coachee’s Personal Summary tab with ‹ back here, or nothing', () => {
@@ -457,9 +485,12 @@ describe('UI-001 the Activities read', () => {
     const { calls } = stubFetch({ 'GET /unit/dashboard/activities': { body: {} } });
     await readUnitActivities();
     await readUnitActivities({ span: 'month', date: '2026-10-21', for: 'mem-sari' });
+    await readUnitActivities({ for: 'mem-sari', ratioFor: 'mem-budi' });
     expect(calls.map((c) => c.url)).toEqual([
       'http://api.test/api/v1/unit/dashboard/activities',
       'http://api.test/api/v1/unit/dashboard/activities?span=month&date=2026-10-21&for=mem-sari',
+      // P19.8-T4 AC-7 (MOB UI-184): one person's ratios.
+      'http://api.test/api/v1/unit/dashboard/activities?for=mem-sari&ratioFor=mem-budi',
     ]);
   });
 });

@@ -28,6 +28,7 @@ import { projectStaged, unstageRow } from '@/lib/staged-projection';
 import { planSummaryTile, summaryGroups, summaryTileName, tileRefusal } from '@/lib/summary-tiles';
 import { reservedRefusal } from '@/lib/reserved-types';
 import { BINDING_ROLE_LABEL, readOwnActivityBinding, rolesByCode, type BindingRole } from '@/lib/activity-binding';
+import { ACTIVITY_SHORT_LABEL_MAX } from '@/lib/activity-text';
 import { useTenantConfig } from '@/lib/tenant-config-cache';
 import { useMediaQuery } from '@/lib/use-media-query';
 import { usePhone } from '@/lib/use-phone';
@@ -113,9 +114,15 @@ export default function ActivityTypesPage() {
   const [published, setPublished] = useState(0);
   const [busy, setBusy] = useState<string | null>(null);
   const [adding, setAdding] = useState<string | null>(null);
-  const [draft, setDraft] = useState({ code: '', label: '', description: '' });
+  const [draft, setDraft] = useState({ code: '', label: '', shortLabel: '', description: '' });
   const [editing, setEditing] = useState<string | null>(null);
   const [editLabel, setEditLabel] = useState('');
+  /*
+   * ***Nama singkat*** (P19.8-T4 AC-5, ADR-0229 §5; MOB UI-180): a type's second name, the one line the Unit Dashboard's
+   * activity table shows. One field beside the name wherever the name is edited (ADR-0062: the smallest footprint) — the
+   * phone's sheet, the row's editor, the add form — sent as `shortLabel`, `null` when left empty.
+   */
+  const [editShortLabel, setEditShortLabel] = useState('');
   const [editDescription, setEditDescription] = useState('');
   // Section-level controls (P4-T18). The ladder is the company's (ADR-0012): this reads it.
   const { ladder } = useTenantConfig();
@@ -366,6 +373,7 @@ export default function ActivityTypesPage() {
           code: String(body.code ?? ''),
           categoryCode: category.code,
           label: String(body.label ?? ''),
+          shortLabel: body.shortLabel ? String(body.shortLabel) : null,
           description: body.description ? String(body.description) : null,
           appliesToOrgLevelCodes: [],
           displayOrder: category.types.length + 1,
@@ -455,6 +463,7 @@ export default function ActivityTypesPage() {
             onSelect={() => {
               setSheetFor(type.id);
               setEditLabel(type.label);
+              setEditShortLabel(type.shortLabel ?? '');
               setEditDescription(type.description ?? '');
             }}
           />
@@ -489,7 +498,7 @@ export default function ActivityTypesPage() {
                 op: 'type.update',
                 id: type.id,
                 expectedVersion: type.version,
-                body: { label: editLabel, description: editDescription },
+                body: { label: editLabel, shortLabel: editShortLabel.trim() || null, description: editDescription },
               });
               close();
             }}
@@ -524,6 +533,13 @@ export default function ActivityTypesPage() {
                 <Field label={s.label} htmlFor={`label-${type.id}`}>
                   <TextInput id={`label-${type.id}`} value={editLabel} onChange={(e) => setEditLabel(e.target.value)} />
                 </Field>
+                <ShortLabelField
+                  id={`short-label-${type.id}`}
+                  value={editShortLabel}
+                  onChange={setEditShortLabel}
+                  label={t.shortLabel}
+                  hint={t.shortLabelHint({ max: ACTIVITY_SHORT_LABEL_MAX })}
+                />
                 <Field label={s.description} htmlFor={`description-${type.id}`} hint={t.descriptionHint}>
                   <TextInput
                     id={`description-${type.id}`}
@@ -1057,6 +1073,14 @@ export default function ActivityTypesPage() {
                                   onChange={(e) => setEditLabel(e.target.value)}
                                 />
                               </Field>
+                              <ShortLabelField
+                                id={`short-label-${type.id}`}
+                                value={editShortLabel}
+                                onChange={setEditShortLabel}
+                                label={t.shortLabel}
+                                hint={t.shortLabelHint({ max: ACTIVITY_SHORT_LABEL_MAX })}
+                                className="min-w-48"
+                              />
                               <Field
                                 label={s.description}
                                 htmlFor={`description-${type.id}`}
@@ -1078,7 +1102,7 @@ export default function ActivityTypesPage() {
                                     op: 'type.update',
                                     id: type.id,
                                     expectedVersion: type.version,
-                                    body: { label: editLabel, description: editDescription },
+                                    body: { label: editLabel, shortLabel: editShortLabel.trim() || null, description: editDescription },
                                   });
                                   setEditing(null);
                                 }}
@@ -1135,6 +1159,7 @@ export default function ActivityTypesPage() {
                             onClick={() => {
                               setEditing(type.id);
                               setEditLabel(type.label);
+                              setEditShortLabel(type.shortLabel ?? '');
                               setEditDescription(type.description ?? '');
                             }}
                           >
@@ -1190,6 +1215,14 @@ export default function ActivityTypesPage() {
                       onChange={(e) => setDraft({ ...draft, label: e.target.value })}
                     />
                   </Field>
+                  <ShortLabelField
+                    id={`new-short-label-${category.id}`}
+                    value={draft.shortLabel}
+                    onChange={(shortLabel) => setDraft({ ...draft, shortLabel })}
+                    label={t.shortLabel}
+                    hint={t.shortLabelHint({ max: ACTIVITY_SHORT_LABEL_MAX })}
+                    className="min-w-48"
+                  />
                   {/* `draft.description` was sent from the first day and no input was ever
                       bound to it, so it was always the empty string. */}
                   <Field
@@ -1215,11 +1248,12 @@ export default function ActivityTypesPage() {
                             code: draft.code,
                             categoryCode: category.code,
                             label: draft.label,
+                            ...(draft.shortLabel.trim() ? { shortLabel: draft.shortLabel.trim() } : {}),
                             description: draft.description || undefined,
                           },
                         });
                         setAdding(null);
-                        setDraft({ code: '', label: '', description: '' });
+                        setDraft({ code: '', label: '', shortLabel: '', description: '' });
                       }}
                     >
                       {s.add}
@@ -1231,7 +1265,7 @@ export default function ActivityTypesPage() {
                 <Button
                   variant="secondary"
                   className="mt-3"
-                  onClick={() => { setAdding(category.code); setDraft({ code: '', label: '', description: '' }); }}
+                  onClick={() => { setAdding(category.code); setDraft({ code: '', label: '', shortLabel: '', description: '' }); }}
                 >
                   {t.addTo({ name: category.label })}
                 </Button>
@@ -1252,5 +1286,21 @@ export default function ActivityTypesPage() {
         </datalist>
       )}
     </SettingsScreen>
+  );
+}
+
+/**
+ * ***Nama singkat*** (P19.8-T4 AC-5, ADR-0229 §5; MOB UI-180): one field beside the name, held to the server's bound
+ * (`ACTIVITY_SHORT_LABEL_MAX`, mirrored) so the limit is heard before a round trip; the hint says where the words show.
+ */
+function ShortLabelField({
+  id, value, onChange, label, hint, className,
+}: {
+  id: string; value: string; onChange: (next: string) => void; label: string; hint: string; className?: string;
+}) {
+  return (
+    <Field label={label} htmlFor={id} hint={hint} className={className}>
+      <TextInput id={id} value={value} maxLength={ACTIVITY_SHORT_LABEL_MAX} onChange={(e) => onChange(e.target.value)} />
+    </Field>
   );
 }

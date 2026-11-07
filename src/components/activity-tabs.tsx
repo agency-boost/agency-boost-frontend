@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { HEADER_CONTROL } from '@/components/ui/header-control';
 import { kept } from '@/i18n/kept';
 import { cn } from '@/lib/cn';
 
@@ -72,8 +73,11 @@ export function ActivityTabs() {
             href={tab.href}
             aria-current={current ? 'page' : undefined}
             className={cn(
-              'flex min-h-11 flex-1 items-center justify-center whitespace-nowrap rounded-pill px-2 text-base font-semibold',
-              'md:flex-none md:px-3.5 md:text-md',
+              'flex flex-1 items-center justify-center whitespace-nowrap rounded-pill px-2',
+              // **The reference header control** (P19.8-T1 AC-1; R6, D-38, MOB UI-171): 13px, 600, 44px — a phone's as it
+              // was; from 768px it is 13px too, where it was 14px, since the rule holds at every size.
+              HEADER_CONTROL,
+              'md:flex-none md:px-3.5',
               current ? 'bg-secondary text-secondary-contrast' : 'text-muted hover:text-navy',
             )}
           >

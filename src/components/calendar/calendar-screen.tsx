@@ -2,8 +2,10 @@
 
 import dynamic from 'next/dynamic';
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Button, ErrorBanner, Select } from '@/components/ui/field';
+import { Button, ErrorBanner } from '@/components/ui/field';
+import { HEADER_BUTTON, HEADER_CONTROL } from '@/components/ui/header-control';
 import { LineIcon } from '@/components/ui/line-icon';
+import { PickerMenu } from '@/components/ui/picker-menu';
 import { shortOfRung } from '@/components/ui/role-badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Toast, useToast } from '@/components/ui/toast';
@@ -52,11 +54,13 @@ const EntryDialog = dynamic(() => import('./entry-dialog').then((m) => m.EntryDi
 const TILE = 'overflow-hidden rounded-lg border border-hairline';
 
 /**
- * **One size for every control in the toolbar** (P19.1-T3 AC-3; UI-156, R1): 16px, 600, 48px tall, at every size — the
- * view picker's 16px, which keeps iOS from zooming on a tap, and its neighbours brought up to it, ‹ › at the same weight.
+ * **One size for every control in the toolbar**, at every size: since P19.8-T3 AC-1 (MOB UI-171, D-38, ADR-0227 §1)
+ * **the header control's 13px, 600, 44px** (`HEADER_BUTTON`, the white pill), as Activity's *Log Activity · Dashboard ·
+ * Ratio* — where P19.1-T3 AC-3 (UI-156, superseded) raised them to 16px / 48px for the native view select, which is gone.
  */
-const TOOL = 'inline-flex h-12 shrink-0 items-center justify-center gap-1 rounded-md border border-hairline bg-card px-2 '
-  + 'text-lg font-semibold text-navy hover:bg-hover-row disabled:opacity-40';
+const TOOL = cn(HEADER_BUTTON, 'shrink-0');
+/** A phone's first row fits 360px with *Agenda* whole (MOB UI-171): its buttons 10px either side, 4px inside. */
+const TIGHT = 'max-md:gap-1 max-md:px-2.5';
 
 /**
  * **The last view chosen, on this device** (P19.1-T3 AC-9; UI-119): a convenience, so a storage that refuses — a private
@@ -134,6 +138,17 @@ function keepView(view: CalendarDisplay) {
  * - **The default view by size** — the Agenda on a phone, 3 Hari on a tablet, Week on a laptop — and **the last one
  *   chosen remembered** on the device from 768px (UI-119).
  * - **3 Hari and Week are one time grid** (`TimeGrid`), opened an hour before now (UI-117, UI-144).
+ *
+ * **Phase 19.8 (P19.8-T3; MOB UI-171 to UI-175, the brief's Calendar, the 7 November mockup)**:
+ *
+ * - **Every toolbar control 13px / 600 / 44px, at every size**; on a phone **the view picker is a button that opens a
+ *   small menu right under it** (`PickerMenu`: *Agenda · 3 Hari · Week · Month*), never a native select (MOB UI-171).
+ * - **3 Hari and Week on a phone open at the top of the page, and the page never scrolls**: the grid has its own box,
+ *   opened with 07.00 at its top and running to the foot of the screen (MOB UI-172); a 46px hour column (MOB UI-174).
+ * - **No person row on *Kalender saya***; compared people are a pane each, with a person row, in 3 Hari as in Week (MOB
+ *   UI-175). The Agenda still draws theirs among the reader's own.
+ * - **A phone's *Filter* holds *Melihat* alone** (the brief's Calendar 3); a tablet and a laptop keep *Jenis* (ADR-0226
+ *   §4).
  */
 export function CalendarScreen({
   initialView,
@@ -315,8 +330,8 @@ export function CalendarScreen({
   const goToday = () => {
     setGone(false);
     if (raw) setDate(raw.today);
-    // Back to an hour before now (UI-117): today is the day in view once the read lands.
-    scroll.reset(raw ? openingHour([raw.today], raw.today, nowMinute) : undefined);
+    // Back to an hour before now (UI-117) — 07.00 on a phone (MOB UI-172): today is the day in view once the read lands.
+    scroll.reset(raw && !phone ? openingHour([raw.today], raw.today, nowMinute) : undefined);
   };
 
   /*
@@ -382,8 +397,11 @@ export function CalendarScreen({
     : view === 'three_days'
       ? { previous: t.previousDays, next: t.nextDays }
       : { previous: t.previousWeek, next: t.nextWeek };
-  /** Where Week and 3 Hari open, and go back to when the panes change: an hour before now, or 07.00 (UI-117). */
-  const openAt = () => (shown ? openingHour(shown.days.map((d) => d.date), shown.today, nowMinute) : undefined);
+  /**
+   * Where Week and 3 Hari open, and go back to when the panes change: from 768px an hour before now, or 07.00 (UI-117);
+   * **on a phone 07.00, always** (P19.8-T3 AC-2; MOB UI-172).
+   */
+  const openAt = () => (shown && !phone ? openingHour(shown.days.map((d) => d.date), shown.today, nowMinute) : undefined);
 
   // What a compared read asks for: the period shown, by its first day (a month's own first day).
   const comparedDate = shown ? (shown.view === 'month' ? shown.days.find((d) => d.inPeriod)?.date ?? shown.from : shown.from) : '';
@@ -395,10 +413,11 @@ export function CalendarScreen({
   } : null;
 
   /*
-   * **The Agenda's and 3 Hari's compared people** (UI-104 point 9): read here, so their things go among the reader's
-   * own. At most two (`COMPARE_MAX`), so two fixed reads; Week and Month read theirs in their own panes.
+   * **The Agenda's compared people** (UI-104 point 9): read here, so their things go among the reader's own. At most two
+   * (`COMPARE_MAX`), so two fixed reads; 3 Hari, Week and Month read theirs in their own panes — 3 Hari since P19.8-T3
+   * AC-5 (MOB UI-175), a person row above each person's grid, as Week does.
    */
-  const merged = display === 'agenda' || display === 'three_days';
+  const merged = display === 'agenda';
   const lostPerson = (person: CalendarDownlinePerson) => {
     forget(person.membershipId);
     setLost(person.name);
@@ -413,7 +432,10 @@ export function CalendarScreen({
     } : null))
     .filter((o): o is AgendaPerson => o !== null);
 
-  /** ‹ and ›: a phone's one pill of two 44px halves, as it was; wider, two buttons (UI-117's `[‹] [›]`). */
+  /**
+   * ‹ and ›: a phone's one pill of two 38px halves (the mockup's `.nav`); wider, two 44px buttons (UI-117's `[‹] [›]`).
+   * The header control's 44px and 600 (MOB UI-171), the glyph 16px as the mockup's chevron.
+   */
   const stepButton = (direction: 'previous' | 'next', className: string) => (
     <button
       type="button"
@@ -422,45 +444,54 @@ export function CalendarScreen({
       onClick={() => shown && step(shown[direction])}
       className={className}
     >
-      <span aria-hidden="true">{direction === 'previous' ? '‹' : '›'}</span>
+      {/* The prototype's glyph, at the mockup's 16px chevron size; the control itself is 13px / 600. */}
+      <span aria-hidden="true" className="text-lg leading-none">{direction === 'previous' ? '‹' : '›'}</span>
     </button>
   );
-  const halves = 'h-full w-11 text-lg font-semibold text-navy hover:bg-hover-row disabled:opacity-40';
+  const halves = cn(HEADER_CONTROL, 'inline-flex w-[38px] items-center justify-center text-ink hover:bg-hover-row disabled:opacity-40');
   const nav = phone ? (
-    <div className="inline-flex h-12 shrink-0 overflow-hidden rounded-md border border-hairline bg-card">
+    <div data-step-pill="" className="inline-flex h-11 shrink-0 overflow-hidden rounded-pill border border-hairline bg-card">
       {stepButton('previous', halves)}
       {stepButton('next', halves)}
     </div>
   ) : (
     <>
-      {stepButton('previous', cn(TOOL, 'w-12 px-0'))}
-      {stepButton('next', cn(TOOL, 'w-12 px-0'))}
+      {stepButton('previous', cn(TOOL, 'w-11 px-0'))}
+      {stepButton('next', cn(TOOL, 'w-11 px-0'))}
     </>
   );
   // Never cut (UI-144): the range keeps its one line, and on a laptop it gives way before the controls do.
   const rangeLabel = (className: string) => (
     <span aria-live="polite" className={cn('whitespace-nowrap font-display font-bold text-navy', className)}>{label}</span>
   );
-  const todayButton = <button type="button" onClick={goToday} className={TOOL}>{t.today}</button>;
+  const todayButton = <button type="button" onClick={goToday} className={cn(TOOL, TIGHT)}>{t.today}</button>;
+  /** *+ Event baru*: the orange pill at the header control's size (MOB UI-171), the one action on the toolbar. */
   const newEventControl = may.create && (
-    <Button ref={newEventButton} onClick={newEvent} className="h-12 shrink-0 px-4 text-lg font-semibold">{t.newEvent}</Button>
+    <Button ref={newEventButton} onClick={newEvent} className={cn(HEADER_CONTROL, 'h-11 shrink-0 rounded-pill px-3.5')}>{t.newEvent}</Button>
   );
-  const viewSelect = (
-    <Select
-      aria-label={t.view}
+  /**
+   * **A phone's view picker** (P19.8-T3 AC-1; MOB UI-171, the brief's Calendar 4): a button that opens a small menu right
+   * under it — never the native select, which was 16px so an iPhone would not zoom, and cut *Agenda* to *Agend▾*. It
+   * takes the row's free width, so *Agenda* is whole at 360px.
+   */
+  const viewPicker = (
+    <PickerMenu
+      label={t.view}
       value={display}
-      onChange={(e) => changeView(e.target.value as CalendarDisplay)}
-      className="h-12 min-w-0 flex-1 px-2 text-lg font-semibold"
-    >
-      {DISPLAYS.map((v) => <option key={v} value={v}>{t[v]}</option>)}
-    </Select>
+      options={DISPLAYS.map((v) => ({ value: v, label: t[v] }))}
+      onChange={(v) => changeView(v)}
+      className={cn('min-w-0 flex-1', TIGHT)}
+    />
   );
-  /** The switcher from 768px: *Agenda · 3 Hari · Week · Month*, the chosen one navy. Across a tablet's second row. */
+  /**
+   * The switcher from 768px: *Agenda · 3 Hari · Week · Month*, the chosen one navy. Across a tablet's second row. Its
+   * segments at the header control's size (MOB UI-171).
+   */
   const switcher = (
     <div
       role="group"
       aria-label={t.view}
-      className={cn('inline-flex h-12 shrink-0 rounded-[9px] border border-hairline bg-card p-[3px]', tablet && 'min-w-0 flex-1')}
+      className={cn('inline-flex h-11 shrink-0 rounded-[9px] border border-hairline bg-card p-[3px]', tablet && 'min-w-0 flex-1')}
     >
       {DISPLAYS.map((v) => (
         <button
@@ -469,7 +500,7 @@ export function CalendarScreen({
           aria-pressed={display === v}
           onClick={() => changeView(v)}
           className={cn(
-            'whitespace-nowrap rounded-[6px] px-3 text-lg font-semibold',
+            'whitespace-nowrap rounded-[6px] px-3 text-base font-semibold',
             tablet && 'flex-1',
             display === v ? 'bg-secondary text-secondary-contrast' : 'text-muted hover:text-navy',
           )}
@@ -487,11 +518,12 @@ export function CalendarScreen({
       onClick={() => setFiltersOpen((now) => !now)}
       className={cn(
         TOOL,
+        TIGHT,
         // Navy while its panel is open (D-30; UI-118) — a phone's and a tablet's. A laptop's row is shown as it was drawn.
         filtersOpen && !laptop && 'border-secondary bg-secondary text-secondary-contrast hover:bg-secondary',
       )}
     >
-      <LineIcon name="adjust" className="h-4 w-4" />
+      <LineIcon name="adjust" className="h-4 w-4 shrink-0" />
       {t.filters}
     </button>
   );
@@ -510,6 +542,7 @@ export function CalendarScreen({
       compared={compared}
       lost={lost}
       inline={!phone}
+      chips={phone}
       onAdd={(person) => {
         if (compared.length >= COMPARE_MAX || compared.some((c) => c.membershipId === person.membershipId)) return;
         setLost(null);
@@ -548,6 +581,16 @@ export function CalendarScreen({
       scroll={scroll}
     />
   )) : [];
+  /** The reader's own calendar alone on a phone: 3 Hari's and Week's grid runs to the foot of the screen (MOB UI-172). */
+  const fill = phone && compared.length === 0;
+  /**
+   * Full-bleed on a phone with nothing compared (the mockup's `.gw`): the screen's whole width, its top corners rounded,
+   * and down over the page's foot room to the screen's foot, behind the floating tab bar. Otherwise a tile, as Week's.
+   */
+  const bleed = 'max-md:-mx-4 max-md:-mb-[calc(var(--tab-bar-space)+1.5rem)] max-md:overflow-hidden max-md:rounded-t-row';
+  // 3 Hari from 768px is the card it was (`md:rounded-lg`); beside somebody compared, a tile as Week's panes are.
+  const threeFrame = fill ? bleed : compared.length > 0 ? TILE : 'md:overflow-hidden md:rounded-lg';
+  const weekFrame = fill ? bleed : TILE;
 
   // The popup's people: each compared person's tasks, in Week and Month from their panes' reads too.
   const popupOthers: ComparedTasks[] = merged
@@ -568,7 +611,9 @@ export function CalendarScreen({
   } else if (!shown || !ownHead) {
     body = (
       <Skeleton label={t.loading} className={cn(TILE, 'bg-card')}>
-        {display === 'week' || display === 'three_days' ? <WeekSkeleton columns={display === 'week' ? 7 : 3} /> : display === 'month' ? <MonthSkeleton phone={phone} /> : <AgendaSkeleton />}
+        {display === 'week' || display === 'three_days'
+          ? <WeekSkeleton columns={display === 'week' ? 7 : 3} head={compared.length > 0} />
+          : display === 'month' ? <MonthSkeleton phone={phone} /> : <AgendaSkeleton />}
       </Skeleton>
     );
   } else if (display === 'month') {
@@ -591,12 +636,14 @@ export function CalendarScreen({
     );
   } else if (display === 'three_days') {
     body = (
-      <div ref={panes}>
+      <div ref={panes} className="flex flex-col gap-2 min-[980px]:flex-row">
         <ThreeDays
+          className={threeFrame}
           read={shown}
-          others={others}
+          head={compared.length > 0 ? ownHead : undefined}
           nowMinute={nowMinute}
           phone={phone}
+          fill={fill}
           regionLabel={t.region({ range: label })}
           scroll={scroll}
           onStep={(direction) => step(direction < 0 ? shown.previous : shown.next)}
@@ -604,17 +651,21 @@ export function CalendarScreen({
           onSlot={may.create ? (slot) => open({ mode: 'new', slot }) : undefined}
           onTasks={setPopupDay}
         />
+        {comparedPanes}
       </div>
     );
   } else {
     body = (
       <div ref={panes} className="flex flex-col gap-2 min-[980px]:flex-row">
         <WeekPane
-          className={TILE}
+          className={weekFrame}
           read={shown}
-          head={ownHead}
+          // No person row on the reader's own calendar (P19.8-T3 AC-5; MOB UI-175): only beside somebody compared.
+          head={compared.length > 0 ? ownHead : undefined}
           regionLabel={t.region({ range: label })}
           nowMinute={nowMinute}
+          phone={phone}
+          fill={fill}
           onOpen={setDetail}
           onSlot={may.create ? (slot) => open({ mode: 'new', slot }) : undefined}
           onTasks={setPopupDay}
@@ -633,13 +684,13 @@ export function CalendarScreen({
   if (phone) {
     toolbar = (
       <div className="mb-3 flex flex-col gap-2">
-        <div data-toolbar="" className="flex flex-nowrap items-center gap-1">
+        <div data-toolbar="" className="flex flex-nowrap items-center gap-1.5">
           {todayButton}
           {nav}
-          {viewSelect}
+          {viewPicker}
           {filterButton}
         </div>
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex min-h-11 items-center justify-between gap-2">
           {rangeLabel('text-lg')}
           {newEventControl}
         </div>
@@ -689,12 +740,18 @@ export function CalendarScreen({
               {chips}
             </div>
           </div>
-        ) : (
+        ) : tablet ? (
           // In place, not a dialog: what it holds is the page's own, and it stays put while the reader works.
-          <div id={filtersId} hidden={!filtersOpen} className={cn('mb-3', tablet && 'rounded-lg bg-card p-3.5')}>
+          <div id={filtersId} hidden={!filtersOpen} className="mb-3 rounded-lg bg-card p-3.5">
             {compareBar}
-            <p className={cn('mb-1.5 text-xs font-bold text-muted', tablet && 'mt-3')}>{t.type}</p>
+            <p className="mb-1.5 mt-3 text-xs font-bold text-muted">{t.type}</p>
             {chips}
+          </div>
+        ) : (
+          // A phone's panel holds *Melihat* alone (P19.8-T3 AC-6; the brief's Calendar 3): *Kalender saya* · *Bandingkan
+          // dengan downline*, no *Jenis* — a white card under the toolbar, as the mockup's `.fp`.
+          <div id={filtersId} hidden={!filtersOpen} data-filter-panel="" className="mb-3 rounded-row bg-card p-3">
+            {compareBar}
           </div>
         )}
 
@@ -982,7 +1039,7 @@ function ComparedPane({
   if (!read) {
     return (
       <Skeleton label={t.loading} className={cn(TILE, 'min-w-0 flex-1 bg-card')}>
-        {display === 'month' ? <MonthSkeleton phone={phone} /> : <WeekSkeleton />}
+        {display === 'month' ? <MonthSkeleton phone={phone} /> : <WeekSkeleton columns={display === 'three_days' ? 3 : 7} />}
       </Skeleton>
     );
   }
@@ -1016,6 +1073,8 @@ function ComparedPane({
       onSlot={canBlock ? onBlock : undefined}
       onTasks={onTasks}
       scroll={scroll}
+      // A phone's compared grid opens at 07.00 with the reader's own (MOB UI-172); never filling: the page holds them all.
+      phone={phone}
     />
   );
 }

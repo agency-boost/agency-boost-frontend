@@ -12,7 +12,7 @@
  * Strings only, and every class written out whole, as Tailwind finds a class only by its literal text.
  *
  * **Fixed in the primitives, not in pages** (UI-010: *fix the primitives, not pages*): `Button` and `buttonClass`,
- * `TextInput` and `Select`, `TippedGlyph`'s ⓘ, `Segmented`'s segments and `RouteTabs`' tabs.
+ * `TextInput` and `Select`, `TippedGlyph`'s ⓘ, `Segmented`'s segments (and `RouteTabs`' tabs until P19.8-T1, below).
  */
 
 /** The condition every class here carries: the field shell's frame is in the document. */
@@ -44,5 +44,8 @@ export const TAP_AREA_TABLET = 'md:max-lg:[:root:has([data-surface=v1])_&]:after
 /** A segment of `Segmented`: **44px tall below 1024px** (UI-010: *mode tabs 35px*, *Bulanan/Tahunan 35px*). */
 export const SEGMENT_TOUCH = 'max-lg:[:root:has([data-surface=v1])_&]:min-h-11';
 
-/** An underlined tab of `RouteTabs`: **44px tall below 1024px**, its words at the foot as before (UI-010: *tabs 34px*). */
-export const TAB_TOUCH = 'max-lg:[:root:has([data-surface=v1])_&]:pt-3';
+/*
+ * An underlined tab of `RouteTabs` was 44px tall below 1024px by `TAB_TOUCH`'s 12px above its words (UI-010: *tabs 34px*).
+ * *Removed 2026-11-07 (P19.8-T1 AC-1; R6, MOB UI-171):* every tab is a header control, 44px tall at every size
+ * (`header-control.ts`), so the field shell's half of it has nothing left to do.
+ */

@@ -1,11 +1,12 @@
 import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { axe } from 'vitest-axe';
 import { atWidth, makeMe, renderInLayout, renderWithSession, stubFetch, type StubReply } from '@test/harness';
 import {
   activities, AGUS_ME, dashboard, EMPTY, NEW_HIRE_VIEW, RATIOS, rp, UNITS,
 } from '@test/unit-dashboard-fixtures';
-import type { UnitDashboardView } from '@/lib/unit-dashboard';
+import type { UnitDashboardView, UnitGroup, UnitRow } from '@/lib/unit-dashboard';
 import AgentLayout from '../../layout';
 import UnitDashboardPage from './page';
 
@@ -127,7 +128,8 @@ describe('the Unit Dashboard (P15-T2; UI V1, Phase 18.11 T4)', () => {
       expect(within(within(grid).getByRole('columnheader', { name: 'Agus Santoso' })).getByText('Agus')).toHaveAttribute('aria-hidden', 'true');
       // The sticky columns: Aktivitas at the edge, Total beside it; only the person columns slide on a phone.
       expect(within(grid).getByRole('columnheader', { name: 'Activity' }).className).toMatch(/sticky left-0/);
-      expect(within(grid).getByRole('columnheader', { name: 'Total' }).className).toMatch(/sticky left-\[7\.5rem\]/);
+      // 132px for *Aktivitas* on a phone (the Unit mockup), 7.5rem from 768px (P19.8-T4 AC-5).
+      expect(within(grid).getByRole('columnheader', { name: 'Total' }).className).toMatch(/sticky left-\[8\.25rem\] .*md:left-\[7\.5rem\]/);
       expect(grid.parentElement).toHaveClass('overflow-x-auto');
       for (const type of ['Set Appointment', 'Mendapatkan calon prospek baru', 'Sales meeting', 'Submission polis']) {
         const [totalCell, ...people] = cells(within(grid).getByRole('rowheader', { name: type }).closest('tr')!);
@@ -156,41 +158,167 @@ describe('the Unit Dashboard (P15-T2; UI V1, Phase 18.11 T4)', () => {
       await waitFor(() => expect(calls.at(-1)!.url).toBe('http://api.test/api/v1/unit/dashboard/activities?span=month'));
     });
 
-    it('UI-001 a zero is a light · a screen reader hears as 0; cells tint by size; a closed section shows its total', async () => {
+    /*
+     * *Rewritten 2026-11-07* (P19.8-T4 AC-6; MOB UI-183; ADR-0229 §6): UI-001's heat map and a closed section's *· n*
+     * gave way to plain numbers and a subtotal row per category, open or closed.
+     */
+    it('P19.8-T4 AC-6 MOB UI-183 cells are plain numbers, no tint; a zero is a light · a screen reader hears as 0', async () => {
       await openActivities();
       const grid = screen.getByRole('table', { name: 'Activities · Unit' });
       const row = within(grid).getByRole('rowheader', { name: 'Set Appointment' }).closest('tr')!;
       const [, agus, indah] = within(row).getAllByRole('cell');
       expect(agus).toHaveTextContent('·0');
-      expect(agus.className).not.toMatch(/bg-primary/);
-      // Indah's 9 is the table's largest: the strongest tint; Agus's 1 on the next row the lightest.
-      expect(indah.className).toMatch(/bg-primary\/45/);
-      expect(within(within(grid).getByRole('rowheader', { name: 'Mendapatkan calon prospek baru' }).closest('tr')!).getAllByRole('cell')[1].className)
-        .toMatch(/bg-primary\/10/);
-      // Leads generation and Selling open; Recruitment closed, its total beside its name.
-      const closed = within(grid).getByRole('button', { name: 'Show Recruitment' });
-      expect(closed).toHaveAttribute('aria-expanded', 'false');
-      expect(closed).toHaveTextContent('Recruitment · 0');
-      await userEvent.click(closed);
-      expect(within(grid).getByRole('rowheader', { name: 'Melakukan presentasi recruitment' })).toBeInTheDocument();
+      expect(indah).toHaveTextContent('9');
+      expect(grid.querySelector('[class*="bg-primary"]')).toBeNull();
     });
 
-    it('UI-001 the ratio card: Ratio · last 30 days, its own Unit | Group, Unit first; switching changes the values', async () => {
+    it('P19.8-T4 AC-6 MOB UI-183 each category row is a subtotal row — its Total and a bold count per person, · for 0 — open or closed', async () => {
+      await openActivities();
+      const grid = screen.getByRole('table', { name: 'Activities · Unit' });
+      const subtotal = (label: string) => within(grid).getByRole('button', { name: label }).closest('tr')!;
+      // Leads Generation, open: Agus 1, Indah 15, Siti 0 — and its Total, 16.
+      expect(cells(subtotal('Hide Leads Generation'))).toEqual([16, 1, 15, 0]);
+      expect(within(subtotal('Hide Leads Generation')).getAllByRole('cell')[2].querySelector('.font-extrabold')).toHaveTextContent('15');
+      expect(within(subtotal('Hide Leads Generation')).getAllByRole('cell')[3]).toHaveTextContent('·0');
+      // Selling, open; Recruitment, closed — its subtotal row stays, at 0 in the Unit.
+      expect(cells(subtotal('Hide Selling'))).toEqual([5, 0, 5, 0]);
+      const closed = within(grid).getByRole('button', { name: 'Show Recruitment' });
+      expect(closed).toHaveAttribute('aria-expanded', 'false');
+      expect(closed).toHaveTextContent(/^Recruitment$/);
+      expect(cells(closed.closest('tr')!)).toEqual([0, 0, 0, 0]);
+      await userEvent.click(closed);
+      expect(within(grid).getByRole('rowheader', { name: 'Melakukan presentasi recruitment' })).toBeInTheDocument();
+      // The Group: Arief's recruiting in Recruitment's subtotal, closed or open.
+      await userEvent.click(within(screen.getAllByRole('group', { name: 'Unit or Group' })[0]).getByRole('button', { name: 'Group' }));
+      const group = await screen.findByRole('table', { name: 'Activities · Group' });
+      expect(cells(within(group).getByRole('button', { name: 'Hide Recruitment' }).closest('tr')!)).toEqual([4, 0, 0, 0, 4]);
+    });
+
+    it('P19.8-T4 AC-5 MOB UI-180 on a phone a type reads its short name on one line, a type with none its name on two; a tap shows the name in full', async () => {
+      for (const px of [375, 360]) {
+        atWidth(px);
+        await openActivities();
+        const grid = screen.getByRole('table', { name: 'Activities · Unit' });
+        // A screen reader hears the office's name; the eye reads the short one.
+        const prospect = within(grid).getByRole('rowheader', { name: 'Mendapatkan calon prospek baru' });
+        expect(within(prospect).getByText('Prospek baru')).toBeInTheDocument();
+        expect(within(prospect).getByText('Prospek baru').closest('button')).toHaveClass('whitespace-nowrap');
+        // *Sales meeting* has no short name: its own name, on up to two lines.
+        const meeting = within(grid).getByRole('rowheader', { name: 'Sales meeting' });
+        expect(within(meeting).getAllByText('Sales meeting')[0].closest('button')).toHaveClass('line-clamp-2');
+        await userEvent.click(within(prospect).getByRole('button', { name: 'Mendapatkan calon prospek baru' }));
+        expect(within(prospect).getByRole('tooltip', { hidden: true })).toHaveTextContent('Mendapatkan calon prospek baru');
+        expect(within(prospect).getByRole('tooltip', { hidden: true })).not.toHaveAttribute('hidden');
+        cleanup();
+        vi.unstubAllGlobals();
+      }
+    });
+
+    it('P19.8-T4 AC-5 MOB UI-180 from 768px the table keeps the office’s names', async () => {
+      atWidth(1024);
+      await openActivities();
+      const grid = screen.getByRole('table', { name: 'Activities · Unit' });
+      const prospect = within(grid).getByRole('rowheader', { name: 'Mendapatkan calon prospek baru' });
+      expect(within(prospect).queryByText('Prospek baru')).not.toBeInTheDocument();
+      expect(within(prospect).getByText('Mendapatkan calon prospek baru')).toHaveAttribute('title', 'Mendapatkan calon prospek baru');
+    });
+
+    /*
+     * *Rewritten 2026-11-07* (P19.8-T4 AC-7; MOB UI-184; ADR-0229 §7): the card's *Unit | Group* became one picker, with
+     * every person of the Group.
+     */
+    it('P19.8-T4 AC-7 MOB UI-184 the ratio card: one picker, Unit ⌄ — Unit, Group, PER PERSON, every person — Unit first', async () => {
       await openActivities();
       const card = screen.getByRole('region', { name: 'Ratio · last 30 days' });
-      const switcher = within(card).getByRole('group', { name: 'Unit or Group' });
-      expect(within(switcher).getByRole('button', { name: 'Unit' })).toHaveAttribute('aria-pressed', 'true');
+      expect(within(card).queryByRole('group', { name: 'Unit or Group' })).not.toBeInTheDocument();
+      const picker = within(card).getByRole('button', { name: 'Ratio for Unit' });
       expect(within(card).getByText('Selling success rate').closest('li')).toHaveTextContent('18%');
-      await userEvent.click(within(switcher).getByRole('button', { name: 'Group' }));
+      await userEvent.click(picker);
+      const menu = screen.getByRole('listbox', { name: 'Ratio for' });
+      expect(within(menu).getAllByRole('option').map((o) => o.textContent)).toEqual([
+        expect.stringContaining('Unit'), 'Group', 'Agus Santoso', 'Indah Lestari', 'Siti Rahma', 'Arief Wibowo',
+      ]);
+      expect(within(menu).getByText('PER PERSON')).toBeInTheDocument();
+      await userEvent.click(within(menu).getByRole('option', { name: 'Group' }));
       expect(within(card).getByText('Selling success rate').closest('li')).toHaveTextContent('33%');
       // The table's own switch is unchanged by the card's.
       expect(screen.getByRole('table', { name: 'Activities · Unit' })).toBeInTheDocument();
     });
 
-    it('UI-001 somebody who leads nobody meets the empty unit on this tab too', async () => {
+    it('P19.8-T4 AC-7 MOB UI-184 picking a person reads their five ratios and shows them, green or red against the target; the table stays', async () => {
+      const mine = activities();
+      const hers = activities({
+        ratios: {
+          ...mine.ratios,
+          person: {
+            membershipId: 'mem-indah',
+            ratios: [
+              { ...RATIOS.ratios[0], value: 0.33, status: 'success' },
+              { ...RATIOS.ratios[1], value: 0.2, status: 'alert' },
+            ] as typeof mine.ratios.unit,
+          },
+        },
+      });
+      nav.search = 'tab=activities';
+      const { calls } = stubFetch({ 'GET /unit/dashboard/activities': [{ body: mine }, { body: hers }] });
+      renderWithSession(<UnitDashboardPage />, { me: AGUS_ME });
+      await screen.findByRole('table', { name: 'Activities · Unit' });
+      const card = screen.getByRole('region', { name: 'Ratio · last 30 days' });
+      await userEvent.click(within(card).getByRole('button', { name: 'Ratio for Unit' }));
+      await userEvent.click(screen.getByRole('option', { name: 'Indah Lestari' }));
+      await waitFor(() => expect(calls.at(-1)!.url).toBe('http://api.test/api/v1/unit/dashboard/activities?span=week&ratioFor=mem-indah'));
+      expect(await within(card).findByRole('button', { name: 'Ratio for Indah Lestari' })).toBeInTheDocument();
+      const selling = within(card).getByText('Selling success rate').closest('li')!;
+      expect(selling).toHaveTextContent('33%');
+      expect(selling.querySelector('.text-on-navy-green')).not.toBeNull();
+      expect(within(card).getByText('Recruitment success rate').closest('li')!.querySelector('.text-on-navy-red')).not.toBeNull();
+      expect(screen.getByRole('table', { name: 'Activities · Unit' })).toBeInTheDocument();
+    });
+
+    it('P19.8-T4 AC-8 MOB UI-185 the ratio card’s title is the section titles’ size, 14px / 700', async () => {
+      await openActivities();
+      const card = screen.getByRole('region', { name: 'Ratio · last 30 days' });
+      expect(within(card).getByRole('heading', { name: 'Ratio · last 30 days' })).toHaveClass('text-md', 'font-bold');
+    });
+
+    it('P19.8-T4 AC-12 MOB UI-171 Minggu | Bulan and Unit | Group: 13px / 600 / 44px at every size', async () => {
+      for (const px of [375, 1280]) {
+        atWidth(px);
+        await openActivities();
+        for (const group of [screen.getByRole('group', { name: 'Period' }), screen.getAllByRole('group', { name: 'Unit or Group' })[0]]) {
+          for (const button of within(group).getAllByRole('button')) {
+            expect(button).toHaveClass('min-h-11', 'text-base', 'font-semibold');
+            expect(button.className).not.toMatch(/lg:min-h-8/);
+          }
+        }
+        cleanup();
+        vi.unstubAllGlobals();
+      }
+    });
+
+    /* *Rewritten 2026-11-07* (P19.8-T4 AC-11; MOB UI-181; ADR-0229 §9): a leader by role sees the normal table. */
+    it('P19.8-T4 AC-11 MOB UI-181 a leader by role with nobody yet: the normal table at 0, no person column, the ratio card with –', async () => {
+      nav.search = 'tab=activities';
+      const none = RATIOS.ratios.map((r) => ({ ...r, value: null, share: null, numeratorCount: 0, denominatorCount: 0, status: 'neutral' }));
+      stubFetch(ACTIVITIES(activities({
+        empty: true, people: [], totals: { unit: { counts: [], total: 0 }, group: { counts: [], total: 0 } },
+        ratios: { ...activities().ratios, unit: none as never, group: none as never },
+      })));
+      renderWithSession(<UnitDashboardPage />, { me: AGUS_ME });
+      const grid = await screen.findByRole('table', { name: 'Activities · Unit' });
+      expect(screen.queryByText('Nobody is in your unit yet.')).not.toBeInTheDocument();
+      expect(within(grid).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['Activity', 'Total']);
+      expect(cells(within(grid).getByRole('button', { name: 'Hide Leads Generation' }).closest('tr')!)).toEqual([0]);
+      expect(cells(within(grid).getByRole('rowheader', { name: 'Total' }).closest('tr')!)).toEqual([0]);
+      const card = screen.getByRole('region', { name: 'Ratio · last 30 days' });
+      expect(within(card).getByText('Selling success rate').closest('li')).toHaveTextContent('–');
+    });
+
+    it('UI-001 an Agent who leads nobody meets the empty unit on this tab', async () => {
       nav.search = 'tab=activities';
       stubFetch(ACTIVITIES(activities({ empty: true, people: [], totals: { unit: { counts: [], total: 0 }, group: { counts: [], total: 0 } } })));
-      renderWithSession(<UnitDashboardPage />, { me: AGUS_ME });
+      const agent = makeMe({ ...AGUS_ME, membership: { ...AGUS_ME.membership!, orgLevelCode: 'AGENT', hierarchyRole: 'agent', directCount: 0 } });
+      renderWithSession(<UnitDashboardPage />, { me: agent });
       expect(await screen.findByText('Nobody is in your unit yet.')).toBeInTheDocument();
       expect(screen.queryByRole('table')).not.toBeInTheDocument();
     });
@@ -299,7 +427,7 @@ describe('the Unit Dashboard (P15-T2; UI V1, Phase 18.11 T4)', () => {
       await table();
       // The ninth cell since *Proposal* (P19.7-T2 AC-13) joined the row after *Potensi rekrut*.
       const pill = (name: string) => within(rowOf(name)).getAllByRole('cell')[8].querySelector('[data-tone]')!;
-      expect([pill('Siti Rahma'), pill('Dimas Pratama'), pill('Indah Lestari'), pill('Sari Wulandari')].map((p) => [p.textContent, p.getAttribute('data-tone')]))
+      expect([pill('Wahyu Hidayat'), pill('Dimas Pratama'), pill('Indah Lestari'), pill('Sari Wulandari')].map((p) => [p.textContent, p.getAttribute('data-tone')]))
         .toEqual([['Needs attention', 'red'], ['Watch closely', 'amber'], ['On track', 'green'], ['No goal set', 'grey']]);
       expect(within(rowOf('Dimas Pratama')).getByText('82%')).toHaveClass('text-signal-red');
       expect(within(rowOf('You (Agus)')).getByText('135%')).toHaveClass('text-signal-green');
@@ -322,15 +450,60 @@ describe('the Unit Dashboard (P15-T2; UI V1, Phase 18.11 T4)', () => {
       expect(within(within(grid).getAllByRole('columnheader')[7]).getByRole('button', { name: 'How is status decided?' })).toBeInTheDocument();
     });
 
-    it('UI-002, UI-009 the chips filter the rows; their counts are the statuses’', async () => {
+    it('UI-002, UI-009 the chips filter the rows; their counts are the statuses’ of the rows uploaded (MOB UI-177)', async () => {
       render();
       const grid = await table();
       const chips = screen.getByRole('group', { name: 'Filter by status' });
-      expect(within(chips).getAllByRole('button').map((b) => b.textContent)).toEqual(['All 14', 'Needs attention 4', 'Watch closely 6']);
-      await userEvent.click(within(chips).getByRole('button', { name: 'Needs attention 4' }));
-      expect(within(chips).getByRole('button', { name: 'Needs attention 4' })).toHaveAttribute('aria-pressed', 'true');
+      // Siti and Yanti have no figure this month: in *All*, in no status (P19.8-T4 AC-2).
+      expect(within(chips).getAllByRole('button').map((b) => b.textContent)).toEqual(['All 14', 'Needs attention 3', 'Watch closely 5']);
+      await userEvent.click(within(chips).getByRole('button', { name: 'Needs attention 3' }));
+      expect(within(chips).getByRole('button', { name: 'Needs attention 3' })).toHaveAttribute('aria-pressed', 'true');
       expect(within(grid).getAllByRole('link').map((a) => a.textContent).sort())
-        .toEqual(['Budi Santoso', 'Dewi Kartika', 'Siti Rahma', 'Wahyu Hidayat']);
+        .toEqual(['Budi Santoso', 'Dewi Kartika', 'Wahyu Hidayat']);
+    });
+
+    it('P19.8-T4 AC-2 MOB UI-177 a row with no production: the dashed bar, Not uploaded yet, and no pill — at every size', async () => {
+      for (const px of [1280, 800]) {
+        atWidth(px);
+        render();
+        await table();
+        const siti = rowOf('Siti Rahma');
+        expect(siti).toHaveTextContent('Not uploaded yet');
+        expect(siti.querySelector('[data-goal-bar="none"]')).toHaveClass('border-dashed');
+        expect(siti.querySelector('[data-tone]')).toBeNull();
+        expect(rowOf('Yanti Puspita').querySelector('[data-tone]')).toBeNull();
+        cleanup();
+        vi.unstubAllGlobals();
+      }
+    });
+
+    it('P19.8-T4 AC-2 MOB UI-177 only All left: no chip row, and the title reads Your team’s roster · 14', async () => {
+      const unuploaded = (r: UnitRow): UnitRow => ({ ...r, goal: { ...r.goal, actualMinor: null, attainmentPct: null } });
+      const view = dashboard();
+      render(dashboard({
+        yourUnit: { ...view.yourUnit, rows: view.yourUnit.rows.map(unuploaded) },
+        units: view.units.map(function strip(u: UnitGroup): UnitGroup {
+          return { ...u, head: unuploaded(u.head), members: u.members.map(unuploaded), units: u.units.map(strip) };
+        }),
+      }));
+      await screen.findByRole('table', { name: 'Your team’s roster · 14' });
+      expect(screen.queryByRole('group', { name: 'Filter by status' })).not.toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Your team’s roster · 14' })).toBeInTheDocument();
+      expect(document.querySelector('[data-tone]')).toBeNull();
+    });
+
+    it('P19.8-T4 AC-8 MOB UI-185 Your team’s roster is the section titles’ size, 14px / 700', async () => {
+      render();
+      await table();
+      expect(screen.getByRole('heading', { name: 'Your team’s roster' })).toHaveClass('text-md', 'font-bold', 'text-ink');
+    });
+
+    it('P19.8-T4 AC-12 MOB UI-171 the status chips are header controls, 13px / 600 / 44px', async () => {
+      render();
+      await table();
+      for (const chip of within(screen.getByRole('group', { name: 'Filter by status' })).getAllByRole('button')) {
+        expect(chip).toHaveClass('min-h-11', 'text-base', 'font-semibold');
+      }
     });
 
     it('UI-009 + Add agent and Update production in the roster’s header row, beside the chips', async () => {
@@ -421,21 +594,79 @@ describe('the Unit Dashboard (P15-T2; UI V1, Phase 18.11 T4)', () => {
       expect(row('Indah Lestari')).toHaveTextContent(/^IL/);
     });
 
-    it('UI-002 the chips filter the list and open the units that hold a match', async () => {
+    it('UI-002 the count tiles filter the list and open the units that hold a match', async () => {
       render();
       await screen.findByRole('button', { name: /^Your Unit · 4/ });
-      await userEvent.click(screen.getByRole('button', { name: 'Needs attention 4' }));
-      expect(screen.getAllByRole('link').map((a) => a.textContent)).toEqual(['Siti Rahma', 'Wahyu Hidayat', 'Dewi Kartika', 'Budi Santoso']);
+      await userEvent.click(screen.getByRole('button', { name: '3 Needs attention' }));
+      expect(screen.getAllByRole('link').map((a) => a.textContent)).toEqual(['Wahyu Hidayat', 'Dewi Kartika', 'Budi Santoso']);
     });
 
-    it('UI-002, UI-007 no + Add agent, no Update production, one status ⓘ beside the title, Last updated', async () => {
+    it('UI-002, UI-007 no + Add agent, no Update production, one status ⓘ beside the title, ⟳ and the day', async () => {
       render(dashboard(), { me: { ...AGUS_ME, permissions: [...AGUS_ME.permissions, 'member:invite'] } });
       const heading = await screen.findByRole('heading', { name: 'Your team’s roster' });
       expect(screen.queryByRole('button', { name: '+ Add agent' })).not.toBeInTheDocument();
       expect(screen.queryByRole('button', { name: 'Update production' })).not.toBeInTheDocument();
       expect(screen.getAllByRole('button', { name: 'How is status decided?' })).toHaveLength(1);
       expect(within(heading.parentElement!).getByRole('button', { name: 'How is status decided?' })).toBeInTheDocument();
-      expect(within(heading.parentElement!).getByText('Last updated 7 Oct 26')).toBeInTheDocument();
+      // The phone's *⟳ 7 Oct 26* (the Unit mockup); *Last updated* for a screen reader.
+      const updated = heading.parentElement!.querySelector('[data-last-updated]')!;
+      expect(updated).toHaveTextContent('Last updated7 Oct 26');
+      expect(within(updated as HTMLElement).getByText('Last updated')).toHaveClass('sr-only');
+    });
+
+    it.each([375, 360])('P19.8-T4 AC-3 MOB UI-178 at %ipx: equal count tiles — the count 16px / 800 over its words — in one row', async (px) => {
+      atWidth(px);
+      render();
+      await screen.findByRole('button', { name: /^Your Unit · 4/ });
+      const tiles = screen.getByRole('group', { name: 'Filter by status' });
+      expect(tiles).toHaveClass('grid', 'grid-cols-3');
+      expect(within(tiles).getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual(['14 All', '3 Needs attention', '5 Watch closely']);
+      for (const tile of within(tiles).getAllByRole('button')) {
+        expect(tile.querySelector('[data-count]')).toHaveClass('text-lg', 'font-extrabold');
+        expect(tile).toHaveClass('text-sm');
+      }
+      expect(within(tiles).getByRole('button', { name: '14 All' })).toHaveClass('bg-secondary');
+    });
+
+    it.each([375, 360])('P19.8-T4 AC-3 MOB UI-178 at %ipx: a row — NAME never cut, % and Rp x / y, a 5px bar across the name column, the pill, ›', async (px) => {
+      atWidth(px);
+      const long = 'Mohammad Rizky Pratama Wijayakusuma Hadi';
+      const view = dashboard();
+      view.yourUnit.rows = view.yourUnit.rows.map((r) => (r.membershipId === 'mem-dimas' ? { ...r, name: long } : r));
+      render(view);
+      await screen.findByRole('button', { name: /^Your Unit · 4/ });
+      const name = screen.getByRole('link', { name: long });
+      expect(name.className).toMatch(/max-md:whitespace-normal/);
+      expect(name).toHaveClass('text-base');
+      const row = name.closest('[data-person-row]')!;
+      expect(row).toHaveTextContent('82%IDR 65.6M / 80M');
+      const bar = row.querySelector('[data-goal-bar="82"]')!;
+      expect(bar).toHaveClass('h-[5px]', 'w-full');
+      expect(bar.firstElementChild).toHaveClass('bg-signal-red');
+      expect(row.querySelector('[data-tone="amber"]')).toHaveTextContent('Watch closely');
+      // The whole row a target, with ›.
+      expect(name.className).toMatch(/after:absolute after:inset-0/);
+      expect(row.querySelectorAll('svg').length).toBeGreaterThan(0);
+      // Agus at 135%: green.
+      const agus = screen.getByRole('link', { name: 'You (Agus)' }).closest('[data-person-row]')!;
+      expect(agus.querySelector('[data-goal-bar="100"]')!.firstElementChild).toHaveClass('bg-signal-green');
+      expect(within(agus as HTMLElement).getByText('135%')).toHaveClass('text-signal-green');
+    });
+
+    it.each([375, 360])('P19.8-T4 AC-1 MOB UI-176 at %ipx: the slider full width on its own row, 44px; Bulan ini on the row below', async (px) => {
+      atWidth(px);
+      render();
+      await screen.findByRole('button', { name: /^Your Unit · 4/ });
+      const slider = screen.getByRole('tablist', { name: 'Unit Dashboard' });
+      expect(slider).toHaveClass('max-md:basis-full', 'max-md:p-0');
+      for (const tab of within(slider).getAllByRole('tab')) expect(tab).toHaveClass('flex-1', 'min-h-11', 'text-base', 'font-semibold');
+      expect(slider.parentElement).toHaveClass('max-md:flex-wrap');
+      // The period is the picker after the slider in its row, which wraps to the next line below 768px.
+      const period = screen.getByRole('button', { name: 'Period This month' });
+      expect(slider.parentElement!.contains(period)).toBe(true);
+      expect(slider.compareDocumentPosition(period) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(period).toHaveClass('min-h-11', 'text-base', 'font-semibold');
+      expect(document.querySelector('select')).toBeNull();
     });
   });
 
@@ -543,12 +774,18 @@ describe('the Unit Dashboard (P15-T2; UI V1, Phase 18.11 T4)', () => {
       ]);
     });
 
-    it('P15-T2 AC-8, P19-T4 AC-3 shows a leader who leads nobody the normal layout at zero, No data yet and the Example', async () => {
+    /* *Changed 2026-11-07* (P19.8-T4 AC-11; MOB UI-181; OD-280; ADR-0229 §9): no *No data yet* line; *0 of –*. */
+    it('P15-T2 AC-8, P19-T4 AC-3, P19.8-T4 AC-11 MOB UI-181 shows a leader who leads nobody the normal layout at zero, 0 of –, and the Example', async () => {
       stubFetch({ 'GET /unit/dashboard': { body: EMPTY } });
       renderWithSession(<UnitDashboardPage />, { me: AGUS_ME });
-      expect(await screen.findByText('No data yet')).toBeInTheDocument();
-      // The normal layout: the period pill, and the sample of the roster under the Example label, greyed and inert.
-      expect(screen.getByRole('combobox', { name: 'Period' })).toBeInTheDocument();
+      expect(await screen.findByText('Example')).toBeInTheDocument();
+      expect(screen.queryByText('No data yet')).not.toBeInTheDocument();
+      const active = screen.getByText('Active Agent October').closest<HTMLElement>('[data-stat-tile]')!;
+      expect(active).toHaveTextContent('0of –');
+      expect(active).toHaveTextContent('Unit 0/–AAB 0/–');
+      expect(within(active).getByRole('img')).toHaveAccessibleName(/–/);
+      // The normal layout: the period picker, and the sample of the roster under the Example label, greyed and inert.
+      expect(screen.getByRole('button', { name: 'Period This month' })).toBeInTheDocument();
       const sample = document.querySelector('[data-sample]')!;
       expect(sample).toHaveAttribute('aria-hidden', 'true');
       expect(sample.hasAttribute('inert')).toBe(true);
@@ -614,6 +851,79 @@ describe('the Unit Dashboard (P15-T2; UI V1, Phase 18.11 T4)', () => {
       // The field shell's sidebar since UI V1 (UI-004): *Unit Dashboard*, in its first section.
       expect(within(main).getByRole('link', { name: 'Unit Dashboard' })).toHaveAttribute('aria-current', 'page');
     });
+  });
+});
+
+/*
+ * **P19.8-T4 — the owner's mobile review, the Overview's period and the three tabs through axe** (AC-12, AC-13, AC-15;
+ * MOB UI-171; ADR-0227 §2; `unit-mobile-stopmotion-2026-11-07.html`, each `?tab=`).
+ */
+describe('P19.8-T4 the three tabs on a phone', () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const LEADER = makeMe({ ...AGUS_ME, permissions: [...AGUS_ME.permissions, 'unit_dashboard:read_potensi'] });
+  const POTENSI = {
+    month: '2026-10', currentMonth: '2026-10', today: '2026-10-08',
+    head: { membershipId: 'mem-agus', name: 'Agus Santoso', isReader: true },
+    tiles: { aa: 0, rekrut: 0, potensi: { aa: 1, rekrut: 0 } },
+    units: [{
+      kind: 'direct', leader: { membershipId: 'mem-agus', name: 'Agus Santoso', rung: { code: 'AB', label: 'AB' } },
+      people: [
+        { membershipId: 'mem-agus', name: 'Agus Santoso', photoUrl: null, rung: { code: 'AB', label: 'AB' }, isLeader: true, isReader: true, opens: true, aa: { potensi: 0, aa: false, switched: 0 }, rekrut: { potensi: 0, rekrut: 0, switched: 0 } },
+        { membershipId: 'mem-indah', name: 'Indah Lestari', photoUrl: null, rung: { code: 'AGENT', label: 'Agent' }, isLeader: false, isReader: false, opens: true, aa: { potensi: 1, aa: false, switched: 1 }, rekrut: { potensi: 0, rekrut: 0, switched: 0 } },
+      ],
+      totals: { aa: { potensi: 1, aa: 0, switchedPeople: 1, switchedPeopleAa: 0 }, rekrut: { potensi: 0, rekrut: 0, switchedPeople: 0, switchedPeopleRekrut: 0 } },
+    }],
+  };
+  const open = async (tab: string, px: number) => {
+    atWidth(px);
+    nav.search = tab === 'overview' ? '' : `tab=${tab}`;
+    stubFetch({
+      ...SHELL,
+      'GET /unit/dashboard': { body: dashboard() },
+      'GET /unit/dashboard/activities': { body: activities() },
+      'GET /unit/dashboard/potensi': { body: POTENSI },
+    });
+    renderInLayout(AgentLayout, <UnitDashboardPage />, { me: LEADER });
+    await screen.findByRole('tablist', { name: 'Unit Dashboard' });
+    if (tab === 'overview') await screen.findByRole('button', { name: /^Your Unit · 4/ });
+    if (tab === 'activities') await screen.findByRole('table', { name: 'Activities · Unit' });
+    if (tab === 'potensi') await screen.findByRole('radiogroup', { name: 'Active Agent or Rekrut' });
+  };
+
+  it.each([
+    ['overview', 375], ['overview', 360], ['activities', 375], ['activities', 360], ['potensi', 375], ['potensi', 360],
+  ] as const)('P19.8-T4 AC-13, AC-15 the %s tab at %ipx: no native select, the slider in place, axe clean', async (tab, px) => {
+    await open(tab, px);
+    expect(document.querySelector('select')).toBeNull();
+    const slider = screen.getByRole('tablist', { name: 'Unit Dashboard' });
+    expect(within(slider).getAllByRole('tab').map((t) => t.textContent)).toEqual(['Overview', 'Activities', 'Potensi']);
+    expect(slider).toHaveClass('max-md:basis-full');
+    const results = await axe(document.body, { rules: { 'color-contrast': { enabled: false } } });
+    expect(results.violations.map((v) => `${v.id} (${v.nodes.length})`)).toEqual([]);
+  });
+
+  it.each([375, 360])('P19.8-T4 AC-11 MOB UI-181 at %ipx an empty unit: 0 of –, the Example roster’s count tiles on one row, Add your first agent, no No data yet', async (px) => {
+    atWidth(px);
+    nav.search = '';
+    stubFetch({ ...SHELL, 'GET /unit/dashboard': { body: EMPTY } });
+    renderInLayout(AgentLayout, <UnitDashboardPage />, { me: LEADER });
+    await screen.findByText('Example');
+    expect(screen.queryByText('No data yet')).not.toBeInTheDocument();
+    expect(document.querySelector('[data-sample] [data-count-tiles]')).toHaveClass('grid', 'grid-cols-3');
+    expect(screen.getByRole('link', { name: 'Add your first agent' })).toHaveAttribute('href', '/user-management/add');
+    const active = document.querySelector('[data-label-long]')!.closest<HTMLElement>('[data-stat-tile]')!;
+    expect(active).toHaveTextContent('0of –');
+    // The phone's label: *Active Agent* and the month's chip, *Oct*.
+    expect(active.querySelector('[data-month-chip]')).toHaveTextContent('Oct');
+  });
+
+  it('P19.8-T4 AC-12 MOB UI-171 the Overview’s period: Last 7 days · This month · This year in a menu; a choice reads that period', async () => {
+    await open('overview', 375);
+    await userEvent.click(screen.getByRole('button', { name: 'Period This month' }));
+    const menu = screen.getByRole('listbox', { name: 'Period' });
+    expect(within(menu).getAllByRole('option').map((o) => o.textContent?.replace('✓', '').trim())).toEqual(['Last 7 days', 'This month', 'This year']);
+    await userEvent.click(within(menu).getByRole('option', { name: 'Last 7 days' }));
+    expect(nav.replace).toHaveBeenCalledWith('/unit/dashboard?period=7d', { scroll: false });
   });
 });
 

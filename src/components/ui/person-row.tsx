@@ -49,8 +49,10 @@ const HEIGHT = { 48: 'min-h-12', 56: 'min-h-14', 60: 'min-h-[3.75rem]', 64: 'min
  *   controls in `trailing` — WhatsApp, a role pill, a ⌄ — stay their own targets, above it, never inside a link.
  * - **The focus ring is the row's**, drawn when the name has the keyboard's focus.
  * - **`chevron`** draws the › of a tappable row (D-09); the Group Tree, the owner's exception (UI-072), leaves it off.
- * - **Names** in capitals, 15px/700 on a phone, 16px on a tablet, 14px on a desktop, one line, *…* only when they cannot
- *   fit (UI-059). A caller with another size passes `nameClassName`.
+ * - **Names** in capitals, 700: 13px on a phone and a tablet, 14px on a desktop (UI-059; P19.8-T1 AC-4, MOB UI-168: it
+ *   was 15px on a phone). **On a phone a name is never cut** — it wraps to a second line and the row grows (P19.8-T1
+ *   AC-5; R6, MOB UI-165, MOB UI-178); from 768px it stays on one line, *…* only when it cannot fit. A caller with another
+ *   size passes `nameClassName`, which stands at every width (13 to 14px on a phone).
  */
 export function PersonRow({
   name,
@@ -99,8 +101,16 @@ export function PersonRow({
 }) {
   const live = tone !== 'muted' && (href !== undefined || onSelect !== undefined);
   const nameClass = cn(
-    'block truncate font-bold uppercase tracking-[0.2px]',
-    tone === 'muted' ? 'text-sm' : 'text-[0.9375rem] md:max-lg:text-base lg:text-md',
+    // **Never cut on a phone** (P19.8-T1 AC-5; R6, MOB UI-165, MOB UI-178): below 768px the name wraps to a second line
+    // and the row grows, rather than ending in *…*. From 768px it keeps its one line, as the tablet and laptop layouts do.
+    'block truncate font-bold uppercase tracking-[0.2px] max-md:whitespace-normal max-md:break-words',
+    /*
+     * 13px on a phone (P19.8-T1 AC-4; MOB UI-168: *list names 13–14px*; the mockups' rosters at 13px), where it was the
+     * bare 15px — **unless the caller names its own size**, which stands at every width as before. The bare class stays
+     * in the list, worn at no width without a caller's size, so that from 768px — which MOB UI-168 does not reach — the
+     * markup is the baseline's to the byte (`digestAt`).
+     */
+    tone === 'muted' ? 'text-sm' : cn('text-[0.9375rem] md:max-lg:text-base lg:text-md', !nameClassName && 'max-md:text-base'),
     tone === 'self' ? 'text-secondary-contrast' : tone === 'muted' ? 'text-muted' : 'text-ink',
     nameClassName,
   );

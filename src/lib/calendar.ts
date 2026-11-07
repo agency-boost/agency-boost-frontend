@@ -542,8 +542,12 @@ export const OWN_COPY = {
   comparedRegion: (name: string, range: string) => EN.comparedRegion({ name, range }),
   busy: EN.busy,
   view: EN.view,
-  /** The prototype's question less its second sentence, which a soft delete makes false (H-06, I-101). */
-  deleteQuestion: (title: string) => EN.deleteQuestion({ title }),
+  /**
+   * The question *Hapus* asks first (P19.8-T3 AC-7; MOB UI-169), and the title and day under it — never the prototype's
+   * second sentence, which a soft delete makes false (H-06, I-101).
+   */
+  deleteQuestion: EN.deleteQuestion,
+  deleteWhat: (title: string, day: string) => EN.deleteWhat({ title, day }),
   chooseDate: EN.chooseDate,
   endAfterStart: EN.endAfterStart,
   returnAfterDeparture: EN.returnAfterDeparture,

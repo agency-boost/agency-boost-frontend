@@ -119,20 +119,15 @@ export interface HomeTeamPerson {
 }
 
 /**
- * The leader's part of Home — sent for **every leader by role**, at zero with no team yet (ADR-0189 §4, P19-T4 AC-2);
- * `null` for an Agent.
+ * The leader's part of Home — sent for **every leader by role**, at zero with no team yet (ADR-0189 §4, ADR-0228 §4);
+ * `null` for an Agent. *Changed 2026-11-07 (P19.8-T2): `members` and `recruitmentPipeline` left with *Tim saya*;
+ * `newHires` is the view's.*
  */
 export interface HomeLeader {
   activeAgent: HomeSplit;
   coached7d: HomeSplit;
-  /** In UI-101's order: nobody-reported first. */
+  /** *Laporan aktivitas tim*, in UI-101's order: nobody-reported first. */
   team: HomeTeamPerson[];
-  /** *Tim saya · Anggota tim*: everybody in the reader's Group but the reader. */
-  members: number;
-  /** *Tim saya · Recruitment pipeline*: `RECRUITMENT_PIPELINE_NOW` over the reader's Group, the reader included. */
-  recruitmentPipeline: number;
-  /** *Tim saya · New hires*: the Group's new hires before a first sale. */
-  newHires: number;
 }
 
 export interface HomeView {
@@ -144,13 +139,29 @@ export interface HomeView {
   activity: HomeActivity;
   schedule: HomeSchedule;
   actions: HomeAction[];
+  /** *Leads* (`OWN_OPEN_LEADS`, OD-283): the reader's own open leads, Sales and Recruit. */
+  leads: number;
+  /** *New hires*: the reader's Group's new hires before a first sale; 0 when they lead nobody. */
+  newHires: number;
   leader: HomeLeader | null;
 }
 
 export const readHome = () => api<HomeView>('/home');
 
-/** *Laporan tim* shows five, then *Semua ›* (UI-101). */
+/** *Laporan aktivitas tim* shows five, then *Semua ›* (UI-101, MOB UI-165). */
 export const HOME_TEAM_SHOWN = 5;
+
+/**
+ * Where *Semua ›* under *Laporan aktivitas tim* goes (P19.8-T2 AC-8; OD-278 by its default, ADR-0228 §6): the Unit
+ * Dashboard's *Aktivitas* tab, everybody's activity by person — where it opened the rest in place.
+ */
+export const TEAM_REPORT_ALL_HREF = '/unit/dashboard?tab=activities';
+
+/** Where *Tambah user* goes (P19.8-T2 AC-3; OD-277 by its default, ADR-0228 §3): the existing *Add New Agents* page. */
+export const ADD_USER_HREF = '/user-management/add';
+
+/** Where *Tambah agent pertama →* goes (P19.8-T2 AC-9; ADR-0228 §6): New Hires, where *+ Tambah agent* is. */
+export const FIRST_AGENT_HREF = '/new-hires';
 
 /** A part of the day, for the greeting: *Pagi*, *Siang*, *Sore*, *Malam*. */
 export type DayPart = 'morning' | 'midday' | 'afternoon' | 'evening';

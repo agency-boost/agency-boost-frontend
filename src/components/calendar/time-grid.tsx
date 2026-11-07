@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react';
 import { LineIcon } from '@/components/ui/line-icon';
 import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
 import { calendarMessages } from '@/i18n/messages/calendar';
@@ -9,8 +9,8 @@ import {
   entryName, hhmm, isBusy, titleOf, type CalendarEntry, type CalendarItem, type CalendarJoinedItem,
 } from '@/lib/calendar';
 import {
-  allDayHeight, BAR_GAP_PX, BAR_PX, DAY_PX, HOUR_PX, isWeekend, layoutDay, openingHour, showsTime, slotFromSelection,
-  stackBars,
+  allDayHeight, BAR_GAP_PX, BAR_PX, DAY_PX, HOUR_PX, isWeekend, layoutDay, OPEN_AT_HOUR, openingHour, showsTime,
+  slotFromSelection, stackBars,
 } from '@/lib/calendar-layout';
 import type { Slot } from '@/lib/calendar-form';
 import { formatDayHeader, formatHour, formatTimeSpan, formatWeekdayDay } from '@/lib/format';
@@ -45,15 +45,24 @@ export interface Pager {
 }
 
 /**
- * **The hour gutter** (P19.1-T3 AC-4; UI-144): 36px on a phone — *36px of hours and 7 × 41px* is how Week fits a 360px
- * screen with no sideways scroll — and 56px from 768px, as `calendar-tablet-desktop` draws it.
+ * **The hour gutter** (P19.1-T3 AC-4; UI-144): 56px from 768px, as `calendar-tablet-desktop` draws it.
+ *
+ * *Changed 2026-11-07 (P19.8-T3 AC-4; MOB UI-174):* **46px on a phone**, where it was 36px: *Tugas* and the hours
+ * right-aligned 4px from the line, clear of the screen's edge. Week still fits its seven days at 360px — the grid runs
+ * the screen's full width there, so 46px of hours and 7 × ~45px.
  */
-export const GUTTER = 'w-9 md:w-14';
+export const GUTTER = 'w-[46px] md:w-14';
 
 /** **Today on a phone**: the whole column shaded (UI-154; OD-252) — its head, its *Tugas* cell and every hour. */
 export const TODAY_SHADE = 'max-md:bg-today';
 /** **Today's date**: today's ink on the shade on a phone, the amber circle from 768px (UI-117; OD-252). */
 export const TODAY_DATE = 'max-md:text-today-ink md:bg-primary md:text-primary-contrast';
+
+/**
+ * **The least a grid that fills the screen is** (P19.8-T3 AC-2): five hours, so a short screen — a phone on its side —
+ * still shows a working stretch of the day and lets the page scroll for the rest.
+ */
+const FILL_MIN_PX = 5 * HOUR_PX;
 
 /** The hour lines, every hour, in the hairline token rather than in boxes — the colour stays the design system's. */
 const HOUR_LINES = `repeating-linear-gradient(to bottom, transparent, transparent ${HOUR_PX - 1}px, var(--color-hairline) ${HOUR_PX - 1}px, var(--color-hairline) ${HOUR_PX}px)`;
@@ -62,22 +71,31 @@ const HOURS = Array.from({ length: 24 }, (_, h) => h);
 /**
  * **The one time grid** (P19.1-T3 AC-4; UI-117, UI-144): 3 Hari and Week draw this, at every size, so the two read the
  * same — the hours *07.00*, **top-aligned in their row** and never under the *Tugas* row; the day heads and the *Tugas*
- * row held in view (`sticky` over the page, or above the grid's own scroll box); **opened an hour before now**, or at
- * 07.00 on other days (`openingHour`); the now-line in orange. **Today** is the column shaded on a phone and the amber
- * circle from 768px (UI-154, OD-252); a *Tugas* count is the blue pill (UI-154; *Decisions* 6).
+ * row held in view above the grid's own scroll box, moved with the compared panes' (`scroll`); **opened an hour before
+ * now**, or at 07.00 on other days (`openingHour`); the now-line in orange. **Today** is the column shaded on a phone and
+ * the amber circle from 768px (UI-154, OD-252) — its head, its *Tugas* cell and every hour, one unbroken stripe (MOB
+ * UI-173); a *Tugas* count is the blue pill (UI-154; *Decisions* 6).
  *
- * What differs between the two is passed in, never re-drawn: **`box`** — Week's own scroll box, moved with the compared
- * panes' (`scroll`), a drag on a column taking a slot — or **`page`** — 3 Hari on a phone, the page scrolling under a
- * pinned head and a tap taking the slot, since a horizontal finger turns its page (`pager`). A compared pane side by side
- * draws no gutter (`gutter: 'stacked'`, contradiction 8). On a phone's Week the blocks are their colour alone
- * (`blocks: 'colour'`, below 768px only) — 41px holds no title — and still open their details, named in full.
+ * *Changed 2026-11-07 (P19.8-T3 AC-2; MOB UI-172, the brief's Calendar 1):* **always a scroll box of its own** — the
+ * phone's 3 Hari no longer scrolls the page (it jumped 632px on open, the title and the toolbar gone). **On a phone the
+ * box opens with 07.00 at its top** (`morning`), whatever the hour, 00.00–07.00 above it for a swipe down; and where it
+ * is the reader's own calendar alone it **runs to the foot of the screen** behind the tab bar (`fill`), so the page itself
+ * never scrolls and the title, the toolbar, the range, the day heads and the *Tugas* row stay put. From 768px it opens an
+ * hour before now in a box of at most 620px, as before.
+ *
+ * What differs between the views is passed in, never re-drawn: how a slot is taken — a drag on a column, or a tap where a
+ * horizontal finger turns 3 Hari's page (`slotBy`, `pager`). A compared pane side by side draws no gutter (`gutter:
+ * 'stacked'`, contradiction 8). On a phone's Week the blocks are their colour alone (`blocks: 'colour'`, below 768px
+ * only) — ~45px holds no title — and still open their details, named in full.
  */
 export function TimeGrid({
   days,
   today,
   nowMinute,
   regionLabel,
-  mode,
+  morning = false,
+  fill = false,
+  slotBy = 'drag',
   placedOn,
   trips,
   counts,
@@ -95,7 +113,12 @@ export function TimeGrid({
   /** The office's minute of today, from the read, moved each minute; `null` while unknown. */
   nowMinute: number | null;
   regionLabel: string;
-  mode: 'box' | 'page';
+  /** A phone (P19.8-T3 AC-2; MOB UI-172): the box opens with 07.00 at its top, whatever the hour. */
+  morning?: boolean;
+  /** The reader's own calendar alone on a phone: the box runs to the foot of the screen, and the page never scrolls. */
+  fill?: boolean;
+  /** How an empty slot is taken: a drag (a click is half an hour), or a tap — where a horizontal finger turns the page. */
+  slotBy?: 'drag' | 'tap';
   placedOn: (day: string) => GridPlaced[];
   /** The all-day trips in view: the Trip row, drawn only when one falls in these days (UI-104 point 8). */
   trips: readonly CalendarItem[];
@@ -104,7 +127,7 @@ export function TimeGrid({
   opensTasks: (day: string) => boolean;
   onTasks?: (day: string) => void;
   onOpen: (entry: CalendarEntry) => void;
-  /** A drag (`box`) or a tap (`page`) on an empty slot. Absent, the grid takes none. */
+  /** A drag or a tap on an empty slot (`slotBy`). Absent, the grid takes none. */
   onSlot?: (slot: Slot) => void;
   gutter?: 'always' | 'stacked';
   scroll?: ScrollGroup;
@@ -114,28 +137,19 @@ export function TimeGrid({
   const t = useMessages(calendarMessages);
   const language = useFigureLanguage();
   const box = useRef<HTMLDivElement>(null);
-  const head = useRef<HTMLDivElement>(null);
-  const page = useRef<HTMLDivElement>(null);
   const shown = gutter === 'always' ? 'block' : 'hidden max-[979.98px]:block';
   const shownFlex = gutter === 'always' ? 'flex' : 'hidden max-[979.98px]:flex';
   const { bars, lanes } = stackBars(trips, days);
-  const opening = openingHour(days, today, nowMinute);
+  const opening = morning ? OPEN_AT_HOUR : openingHour(days, today, nowMinute);
+  useFillToFoot(box, fill);
 
-  // Opened an hour before now — or 07.00 on days that are not today's — and, in a box, one of the group from then on.
+  // Opened at its hour — 07.00 on a phone; from 768px an hour before now, or 07.00 on days that are not today's — and one
+  // of the group from then on. The page is never scrolled (MOB UI-172).
   useEffect(() => {
-    if (mode === 'box') {
-      const el = box.current;
-      if (!el) return undefined;
-      el.scrollTop = opening * HOUR_PX;
-      return scroll?.register(el);
-    }
-    const el = page.current;
+    const el = box.current;
     if (!el) return undefined;
-    const top = el.getBoundingClientRect().top + (window.scrollY || 0) + opening * HOUR_PX - (head.current?.offsetHeight ?? 0);
-    // The page's own scroll, set rather than animated: it opens there.
-    const root = document.scrollingElement ?? document.documentElement;
-    root.scrollTop = Math.max(0, top);
-    return undefined;
+    el.scrollTop = opening * HOUR_PX;
+    return scroll?.register(el);
     // Once, as the view opens: a page turned keeps the hour the reader scrolled to.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scroll]);
@@ -152,15 +166,7 @@ export function TimeGrid({
   ) : <div className={cn('flex min-w-0 flex-1', className)}>{days.map((day) => cell(day, true))}</div>);
 
   const heads = (
-    <div
-      ref={head}
-      data-grid-head=""
-      className={cn(
-        'border-b border-hairline bg-card',
-        // Below the top inset, never under a Home Screen app's clock (staging review, 2026-10-31).
-        mode === 'page' && 'sticky top-[env(safe-area-inset-top)] z-20',
-      )}
-    >
+    <div data-grid-head="" className="border-b border-hairline bg-card">
       <div className="flex">
         <div aria-hidden="true" className={cn(GUTTER, 'shrink-0 border-r border-hairline', shown)} />
         {lane((day, current) => <DayHead key={day} day={day} today={day === today} current={current} />)}
@@ -199,8 +205,8 @@ export function TimeGrid({
         <div
           className={cn(
             GUTTER,
-            // *Tugas* fits a phone's 36px gutter whole (UI-154): 12px, tight, nearly to the line.
-            'shrink-0 items-center justify-end whitespace-nowrap border-r border-hairline pr-0.5 text-xs font-semibold tracking-tight text-signal-grey md:justify-center md:pr-0',
+            // *Tugas* in a phone's 46px gutter, right-aligned 4px from the line and clear of the edge (MOB UI-174).
+            'shrink-0 items-center justify-end whitespace-nowrap border-r border-hairline pr-1 text-xs font-semibold text-signal-grey md:justify-center md:pr-0',
             shownFlex,
           )}
         >
@@ -223,7 +229,7 @@ export function TimeGrid({
         // Top-aligned in its own hour, under its line, so no label is ever cut by the row above it (UI-117).
         <div
           key={h}
-          className="pr-0.5 pt-0.5 text-right text-xs leading-tight tracking-tight text-muted md:pr-2 md:tracking-normal"
+          className="pr-1 pt-0.5 text-right text-xs leading-tight text-muted md:pr-2"
           style={{ height: HOUR_PX }}
         >
           {formatHour(h, language)}
@@ -241,22 +247,11 @@ export function TimeGrid({
       nowMinute={day === today ? nowMinute : null}
       onOpen={onOpen}
       onSlot={onSlot}
-      slotBy={mode === 'box' ? 'drag' : 'tap'}
+      slotBy={slotBy}
       blocks={blocks}
     />
   ) : <div key={day} className="flex-1 border-r border-hairline" style={{ height: DAY_PX, backgroundImage: HOUR_LINES }} />);
 
-  if (mode === 'page') {
-    return (
-      <>
-        {heads}
-        <div ref={page} role="region" aria-label={regionLabel} tabIndex={-1} data-time-grid="page" className="relative flex pb-[var(--tab-bar-space)] md:pb-0">
-          {hours}
-          {lane(column)}
-        </div>
-      </>
-    );
-  }
   return (
     <>
       {heads}
@@ -266,16 +261,51 @@ export function TimeGrid({
         aria-label={regionLabel}
         tabIndex={0}
         data-time-grid="box"
+        data-fill={fill || undefined}
         onScroll={(e) => scroll?.sync(e.currentTarget)}
-        className="relative max-h-[620px] overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className={cn(
+          'relative overflow-y-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
+          !fill && 'max-h-[620px]',
+        )}
       >
         <div className="relative flex" style={{ height: DAY_PX }}>
           {hours}
           {lane(column)}
         </div>
+        {/* Filling the screen, its last hours scroll clear of the floating tab bar. */}
+        {fill && <div aria-hidden="true" className="h-[var(--tab-bar-space)]" />}
       </div>
     </>
   );
+}
+
+/**
+ * **A box that runs to the foot of the screen** (P19.8-T3 AC-2; MOB UI-172): its height the window's less where it
+ * starts on the page, so the page holds exactly one screen and never scrolls — the box does. Measured again on every
+ * render (a *Filter* panel opened above it moves it down), on a resize, and when the page above it changes size (a
+ * banner arriving). Off, the box keeps the height its class gives it.
+ */
+function useFillToFoot(ref: RefObject<HTMLDivElement | null>, on: boolean) {
+  const size = useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    const next = on
+      ? `${Math.max(FILL_MIN_PX, Math.round(window.innerHeight - (el.getBoundingClientRect().top + (window.scrollY || 0))))}px`
+      : '';
+    if (el.style.height !== next) el.style.height = next;
+  }, [ref, on]);
+  // Every render: something above it may have moved it.
+  useLayoutEffect(() => size());
+  useEffect(() => {
+    if (!on) return undefined;
+    window.addEventListener('resize', size);
+    const watch = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => size());
+    watch?.observe(document.body);
+    return () => {
+      window.removeEventListener('resize', size);
+      watch?.disconnect();
+    };
+  }, [on, size]);
 }
 
 /**
@@ -556,13 +586,16 @@ export function EntryBlock({
 }
 
 /** The grid's frame while its read is on its way: its heads and hours, nothing in them (L-01, a Fill). */
-export function TimeGridSkeleton({ columns = 7 }: { columns?: number }) {
+export function TimeGridSkeleton({ columns = 7, head = true }: { columns?: number; head?: boolean }) {
   return (
     <div aria-hidden="true" className="flex flex-col">
-      <div className="flex items-center gap-[9px] border-b border-hairline bg-base px-3.5 py-[11px]">
-        <span className="h-[26px] w-[26px] rounded-full bg-hairline" />
-        <span className="h-3 w-32 animate-pulse rounded-sm bg-hairline motion-reduce:animate-none" />
-      </div>
+      {/* The person row only where the pane will draw one (P19.8-T3 AC-5; MOB UI-175). */}
+      {head && (
+        <div className="flex items-center gap-[9px] border-b border-hairline bg-base px-3.5 py-[11px]">
+          <span className="h-[26px] w-[26px] rounded-full bg-hairline" />
+          <span className="h-3 w-32 animate-pulse rounded-sm bg-hairline motion-reduce:animate-none" />
+        </div>
+      )}
       <div className="flex border-b border-hairline">
         <div className={cn(GUTTER, 'shrink-0 border-r border-hairline')} />
         {Array.from({ length: columns }, (_, i) => (

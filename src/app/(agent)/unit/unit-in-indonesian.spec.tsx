@@ -74,9 +74,12 @@ describe('P18.10-T4 the Unit Dashboard in Indonesian', () => {
     await roster();
     expect(screen.getByRole('heading', { level: 1, name: 'Unit Dashboard' })).toBeInTheDocument();
     expect(within(screen.getByRole('tablist')).getAllByRole('tab').map((t) => t.textContent)).toEqual(['Overview', 'Aktivitas']);
-    const period = screen.getByRole('combobox', { name: 'Periode' });
-    expect(within(period).getAllByRole('option').map((o) => o.textContent)).toEqual(['7 hari terakhir', 'Bulan ini', 'Tahun ini']);
-    expect(period).toHaveValue('month');
+    // A menu under its button since P19.8-T4 (AC-12, MOB UI-171), where it was a native select.
+    await userEvent.click(screen.getByRole('button', { name: 'Periode Bulan ini' }));
+    const period = screen.getByRole('listbox', { name: 'Periode' });
+    expect(within(period).getAllByRole('option').map((o) => o.textContent)).toEqual(['7 hari terakhir', expect.stringContaining('Bulan ini'), 'Tahun ini']);
+    expect(within(period).getByRole('option', { name: 'Bulan ini', selected: true })).toBeInTheDocument();
+    await userEvent.keyboard('{Escape}');
     // UI-003's labels, the month in full in the reader's figures; *4 dari 12* as the report writes it.
     expect(tileOf('Tim Anda')).toHaveTextContent('16agent4 langsung12 AAB');
     expect(tileOf('Produksi Group')).toHaveTextContent('78%Rp 1Mdari Rp 1,3 M');
@@ -91,7 +94,8 @@ describe('P18.10-T4 the Unit Dashboard in Indonesian', () => {
     const table = await roster();
     expect(screen.getByText('Last updated 7 Okt 26')).toBeInTheDocument();
     expect(within(screen.getByRole('group', { name: 'Filter menurut status' })).getAllByRole('button').map((b) => b.textContent))
-      .toEqual(['Semua 14', 'Perlu perhatian 4', 'Perlu dipantau 6']);
+      // Siti and Yanti have no figure this month: in *Semua*, in no status (P19.8-T4 AC-2, MOB UI-177).
+      .toEqual(['Semua 14', 'Perlu perhatian 3', 'Perlu dipantau 5']);
     expect(within(table).getAllByRole('columnheader').map((h) => (h.textContent ?? '').split('ⓘ')[0])).toEqual([
       // P19.1-T1 AC-3 (UI-114): the leads columns grouped on a laptop, the short names in a second row.
       // P19.7-T2 AC-13: *Proposal*, after *Potensi rekrut* — the proposal spec's own word.
@@ -101,8 +105,9 @@ describe('P18.10-T4 the Unit Dashboard in Indonesian', () => {
     expect(within(table).getByRole('button', { name: 'Unit Anda · 4' }).closest('tr')).toHaveTextContent('Aktif 3/4');
     expect(within(table).getByRole('button', { name: 'Unit Sari Wulandari · 6' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Anda (Agus)' })).toHaveAttribute('href', '/summary');
-    expect(within(rowOf('Siti Rahma')).getByText('Perlu perhatian')).toHaveAttribute('data-tone', 'red');
+    expect(within(rowOf('Wahyu Hidayat')).getByText('Perlu perhatian')).toHaveAttribute('data-tone', 'red');
     expect(within(rowOf('Siti Rahma')).getByText('Belum diunggah')).toBeInTheDocument();
+    expect(within(rowOf('Siti Rahma')).queryByText('Perlu perhatian')).not.toBeInTheDocument();
     expect(within(rowOf('Sari Wulandari')).getAllByText('Goal belum diatur').length).toBeGreaterThan(0);
     expect(within(rowOf('Dimas Pratama')).getByText('Rp 65,6 jt / 80 jt')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Bagaimana status ditentukan?' })).toBeInTheDocument();
@@ -184,10 +189,12 @@ describe('P18.10-T4 the Unit Dashboard in Indonesian', () => {
   });
 
 
-  it('P18.10-T4 AC-1, P19-T4 AC-3 a leader who leads nobody: the tiles at zero, Belum ada data and the Contoh', async () => {
+  /* *Changed 2026-11-07* (P19.8-T4 AC-11; MOB UI-181; OD-280): no *Belum ada data* line; *0 dari –*. */
+  it('P18.10-T4 AC-1, P19-T4 AC-3, P19.8-T4 AC-11 MOB UI-181 a leader who leads nobody: the tiles at zero, 0 dari – and the Contoh', async () => {
     show(EMPTY);
-    expect(await screen.findByText('Belum ada data')).toBeInTheDocument();
-    expect(screen.getByText('Contoh')).toBeInTheDocument();
+    expect(await screen.findByText('Contoh')).toBeInTheDocument();
+    expect(screen.queryByText('Belum ada data')).not.toBeInTheDocument();
+    expect(tileOf('Active Agent Oktober')).toHaveTextContent('0dari –');
     expect(document.querySelector('[data-sample]')!.textContent).toContain('Agen contoh 1');
     noEnglishLeft();
   });

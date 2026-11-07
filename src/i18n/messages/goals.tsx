@@ -66,6 +66,15 @@ const en = {
   /** The months field's unit, beside its box. */
   months: 'months',
   produced: 'APE already produced this year',
+  /**
+   * **Step 2's line under a figure's name** (P19.8-T5; MOB UI-190, ADR-0230 §1, §4; the draft mockup's words): the
+   * automatic figure's — *Automatic*, with the month the office's year to date reads when there is one — and a figure
+   * the reader typed over it. `month` written by the caller.
+   */
+  automatic: ({ month }: { month: string | null }) => (month ? `Automatic · as of ${month}` : 'Automatic'),
+  edited: 'Edited by you',
+  /** Puts the automatic figure back (ADR-0230 §4, the findings' words): `amount` written short by the caller, *IDR 67M*. */
+  useAutomatic: ({ amount }: { amount: string }) => `Use automatic (${amount})`,
   remaining: 'Remaining needed',
   monthlyTarget: "This month's APE target",
 
@@ -152,6 +161,11 @@ const id: MessagesOf<typeof en> = {
   monthsLeftThisYear: 'Sisa bulan tahun ini',
   months: 'bulan',
   produced: 'APE yang sudah dicapai tahun ini',
+  // The draft mockup's and the findings' own words (MOB UI-190): *⚡ Otomatis · per Okt 2026*, *Diubah oleh Anda*,
+  // *↶ Pakai otomatis (Rp 67 jt)*.
+  automatic: ({ month }) => (month ? `Otomatis · per ${month}` : 'Otomatis'),
+  edited: 'Diubah oleh Anda',
+  useAutomatic: ({ amount }) => `Pakai otomatis (${amount})`,
   remaining: 'Sisa yang dibutuhkan',
   monthlyTarget: 'Target APE bulan ini',
 

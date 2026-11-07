@@ -26,9 +26,10 @@ describe('P19.1-T1 AC-5 Home’s tiles (UI-124)', () => {
     return document.querySelector('[data-home-tiles]') as HTMLElement;
   };
 
-  it('P19.1-T1 AC-5 at 768px: the four tiles two by two, across the full width', async () => {
+  it('P19.1-T1 AC-5 at 768px: the tiles two by two, across the full width', async () => {
     const tiles = await open(768);
-    expect(tiles.querySelectorAll(':scope > a')).toHaveLength(4);
+    // *Changed 2026-11-07 (P19.8-T2 AC-4; ADR-0228 §4):* a leader's six — *Leads* and *New hires* join the four.
+    expect(tiles.querySelectorAll(':scope > a')).toHaveLength(6);
     const worn = wears(tiles, 768).split(' ');
     expect(worn).toContain('grid-cols-2');
     expect(worn).not.toContain('grid-cols-4');

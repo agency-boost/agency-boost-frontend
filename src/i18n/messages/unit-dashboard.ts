@@ -254,6 +254,20 @@ const en = {
     showSection: ({ label }: { label: string }) => `Show ${label}`,
     hideSection: ({ label }: { label: string }) => `Hide ${label}`,
     loadingActivities: 'Loading the activities…',
+    /**
+     * **The owner's mobile review of 7 November 2026** (P19.8-T4; ADR-0229): the ratio card's picker (MOB UI-184), its
+     * *PER ORANG* label — the revision's word, in capitals as a group label — the roster's title with its count when no
+     * chip is left but *Semua* (MOB UI-177), and the count tiles' *Semua* (MOB UI-178).
+     */
+    ratioFilter: 'Ratio for',
+    perPerson: 'PER PERSON',
+    rosterCount: ({ title, n }: { title: string; n: number }) => `${title} · ${n}`,
+    allTile: 'All',
+    /** The phone's *⟳ 27 Okt 26*: the words a screen reader hears before the day. */
+    lastUpdatedLabel: kept('Last updated'),
+    /** The phone's month chip on a tile's label (the Unit mockup's *Active Agent Nov*): `month` the month short. */
+    activeAgentShort: kept('Active Agent'),
+    recruitmentShort: kept('Recruitment'),
   },
 };
 
@@ -420,6 +434,14 @@ const id: MessagesOf<typeof en> = {
     showSection: ({ label }) => `Tampilkan ${label}`,
     hideSection: ({ label }) => `Sembunyikan ${label}`,
     loadingActivities: 'Memuat aktivitas…',
+    ratioFilter: 'Ratio untuk',
+    // MOB UI-184, verbatim.
+    perPerson: 'PER ORANG',
+    rosterCount: ({ title, n }) => `${title} · ${n}`,
+    allTile: 'Semua',
+    lastUpdatedLabel: kept('Last updated'),
+    activeAgentShort: kept('Active Agent'),
+    recruitmentShort: kept('Recruitment'),
   },
 };
 

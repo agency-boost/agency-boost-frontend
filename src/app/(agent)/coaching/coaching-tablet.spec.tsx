@@ -161,9 +161,19 @@ describe('P19.1-T5 AC-1 /coaching on a tablet: the phone’s rows, no table (UI-
     expect(screen.getByRole('list', { name: 'Wulan Sari’s unit' })).toHaveClass('ml-[19px]');
   });
 
+  /*
+   * *Amended 2026-11-07 (P19.8-T1 AC-5; R6, MOB UI-165, MOB UI-178):* on a phone a person's name is never cut —
+   * `PersonRow` adds `max-md:whitespace-normal max-md:break-words` to every name. The digest is taken with those two put
+   * back as they were, and still matches the baseline: nothing else moved, and from 768px nothing did.
+   */
   it.each([375, 1024, 1280] as const)('P19.1-T5 AC-1 at %ipx the roster is drawn as before, to the byte', async (px) => {
     const roster = await open(px);
-    expect(digestAt(roster, px)).toBe(BEFORE_T5[px]);
+    const before = roster.cloneNode(true) as HTMLElement;
+    const added = new Set(['max-md:whitespace-normal', 'max-md:break-words']);
+    for (const name of before.querySelectorAll('[data-person-row] [data-row-main], [data-person-row] span.uppercase')) {
+      name.setAttribute('class', (name.getAttribute('class') ?? '').split(' ').filter((c) => !added.has(c)).join(' '));
+    }
+    expect(digestAt(before, px)).toBe(BEFORE_T5[px]);
   });
 
   it('P19.1-T5 AC-1 passes axe at 768px', async () => {

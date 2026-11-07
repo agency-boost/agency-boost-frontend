@@ -24,19 +24,20 @@ async function open(me = PROPOSER, indonesian = false) {
 afterEach(() => vi.unstubAllGlobals());
 
 /**
- * **Home's *Buat proposal*** (P19.7-T2 AC-1; ADR-0221 §8): one 48px pill under the reader's tiles, with the document icon,
- * to step 1 — by role (`proposal:create`), never by what the reader has saved.
+ * **Home's *Buat proposal*** (P19.7-T2 AC-1; ADR-0221 §8): a pill with the document icon, to step 1 — by role
+ * (`proposal:create`), never by what the reader has saved. *Changed 2026-11-07 (P19.8-T2 AC-3; ADR-0228 §3, which amends
+ * ADR-0221 §8):* a 44px pill in the button row above the tiles, where it was one 48px pill under them.
  */
 describe('P19.7-T2 AC-1 Home’s Buat proposal pill', () => {
-  it('P19.7-T2 AC-1 one 48px pill under the tiles, with the document icon, to /proposal/new', async () => {
+  it('P19.7-T2 AC-1 (as P19.8-T2 AC-3 moves it) one 44px pill above the tiles, with the document icon, to /proposal/new', async () => {
     await open();
     const pill = screen.getByRole('link', { name: 'Make a proposal' });
     expect(pill).toHaveAttribute('href', '/proposal/new');
-    expect(pill.className).toMatch(/min-h-12/);
+    expect(pill.className).toMatch(/min-h-11/);
     expect(pill.className).toMatch(/rounded-pill/);
     expect(pill.querySelector('svg')).not.toBeNull();
     const tiles = document.querySelector('[data-home-tiles]')!;
-    expect(tiles.compareDocumentPosition(pill) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(pill.compareDocumentPosition(tiles) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('P19.7-T2 AC-1 reads Buat proposal in Indonesian', async () => {

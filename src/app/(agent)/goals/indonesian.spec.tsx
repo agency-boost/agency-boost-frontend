@@ -122,10 +122,12 @@ describe('P18.10-T4 Goal Settings in Indonesian', () => {
     // UI-020: the two prefilled figures, the months the office's with its ⚡.
     expect(screen.getByRole('textbox', { name: 'Sisa bulan tahun ini' })).toHaveValue('5');
     expect(screen.getByRole('textbox', { name: 'Sisa bulan tahun ini' }).parentElement).toHaveTextContent('bulan');
-    // P19.1-T4 AC-2 (UI-122): both prefilled figures carry the ⚡, each named *Otomatis* for a screen reader.
-    expect(screen.getAllByText('Otomatis')).toHaveLength(2);
-    for (const marker of screen.getAllByText('Otomatis')) expect(marker).toHaveClass('sr-only');
-    expect(screen.getByRole('textbox', { name: 'APE yang sudah dicapai tahun ini' })).toHaveValue('Rp 0');
+    // P19.8-T5 (MOB UI-190, the draft mockup): the months' ⚡ line reads *Otomatis*; the APE, with nothing uploaded and
+    // nothing typed, claims no figure — no line — and reads its full figure, *Rp 0*.
+    expect(screen.getByRole('textbox', { name: 'Sisa bulan tahun ini' })).toHaveAccessibleDescription('Otomatis');
+    const produced = screen.getByRole('textbox', { name: 'APE yang sudah dicapai tahun ini' });
+    expect(produced).toHaveValue('0');
+    expect(produced.previousElementSibling).toHaveTextContent('Rp');
     expect(screen.getByText('Sisa yang dibutuhkan').closest('[data-variant]')).toHaveTextContent('Rp 500 jt');
     expect(screen.getByText('Target APE bulan ini').closest('[data-variant]')).toHaveTextContent('Rp 100 jt');
     expect(screen.getByText('Polis per bulan').closest('[data-variant]')).toHaveTextContent('6polis');
@@ -200,12 +202,11 @@ describe('P18.10-T4 Goal Settings in Indonesian', () => {
     noEnglishLeft();
   });
 
-  it('AC-1 UI-020 marks the office’s figure ⚡, its ⓘ saying whose, the month Indonesian (ADR-0063 §5)', async () => {
+  it('AC-1 UI-020, P19.8-T5 AC-1 the office’s figure: ⚡ Otomatis · per Agu 2026, in full; a correction’s ⓘ says whose', async () => {
     show({ body: goal({ achieved: { minor: 120_000_000_00, provenance: 'imported', month: '2026-08' } }) });
-    const why = await screen.findByRole('button', { name: 'Kenapa APE yang sudah dicapai tahun ini otomatis' });
-    const field = why.closest('dl')!;
-    expect(field.querySelector('dd')).toHaveTextContent(/^Rp 120 jt$/);
-    expect(why).toHaveAccessibleDescription('Per Agu 2026');
+    const produced = await screen.findByRole('textbox', { name: 'APE yang sudah dicapai tahun ini' });
+    expect(produced).toHaveValue('120.000.000');
+    expect(produced).toHaveAccessibleDescription('Otomatis · per Agu 2026');
     noEnglishLeft();
     vi.unstubAllGlobals();
     document.body.innerHTML = '';
@@ -213,12 +214,19 @@ describe('P18.10-T4 Goal Settings in Indonesian', () => {
     show({ body: goal({ achieved: { minor: 120_000_000_00, provenance: 'corrected', month: '2026-08' } }) });
     expect(await screen.findByRole('button', { name: 'Kenapa APE yang sudah dicapai tahun ini otomatis' }))
       .toHaveAccessibleDescription('Dikoreksi manual, sejak awal tahun per Agu 2026');
-    vi.unstubAllGlobals();
-    document.body.innerHTML = '';
+  });
 
-    show({ body: goal({ achieved: { minor: 120_000_000_00, provenance: 'corrected', month: '2026-08', correctedBy: { name: 'Sari Puspita' } } }) });
-    expect(await screen.findByRole('button', { name: 'Kenapa APE yang sudah dicapai tahun ini otomatis' }))
-      .toHaveAccessibleDescription('Dikoreksi oleh Sari Puspita, sejak awal tahun per Agu 2026');
+  it('P19.8-T5 AC-4 typed over the office’s figure: Diubah oleh Anda, and ↶ Pakai otomatis (Rp 120 jt)', async () => {
+    show({ body: goal({
+      apeAchievedMinor: 67_000_000_00,
+      achieved: { minor: 67_000_000_00, provenance: 'self_reported', month: null },
+      official: { minor: 120_000_000_00, provenance: 'imported', month: '2026-10' },
+    }) });
+    const produced = await screen.findByRole('textbox', { name: 'APE yang sudah dicapai tahun ini' });
+    expect(produced).toHaveValue('67.000.000');
+    expect(produced).toHaveAccessibleDescription('Diubah oleh Anda');
+    expect(screen.getByRole('button', { name: 'Pakai otomatis (Rp 120 jt)' })).toBeInTheDocument();
+    noEnglishLeft();
   });
 
   it('AC-1 UI-019 says an edit is not yet saved, saved again once undone, and saved once it is', async () => {

@@ -5,7 +5,7 @@ import { kept } from '@/i18n/kept';
 import { SOURCE_LANGUAGE, type Language } from '@/i18n/language';
 import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
 import { unitDashboardMessages } from '@/i18n/messages/unit-dashboard';
-import { formatMonthLong, formatNumber, formatPercent, formatRupiahCompact, percentOf } from '@/lib/format';
+import { formatMonthLong, formatMonthName, formatNumber, formatPercent, formatRupiahCompact, percentOf } from '@/lib/format';
 import {
   everyRow, goalShare, missingWords, namesMissing, namesNewHires, newHireWords, splitMoney, totalNote,
   type UnitDashboardView, type UnitPeriod,
@@ -27,7 +27,11 @@ import {
  * **Every figure is the server's** (`GET /unit/dashboard`'s `tiles`); the ring's share is the two figures it shows, by
  * the shared `percentOf`, whole (UI-080). The production's ⓘ still names who holds no figure and the new hires before a
  * first sale it leaves out (the report's *Don't change*: *missing-upload explanations behind ⓘ*). The month in two
- * labels is the office's, in full, in the figures' language.
+ * labels is the office's, in full, in the figures' language — **on a phone a 12px grey chip of it, *Nov***, as the
+ * owner's mobile mockup draws both labels (P19.8-T4, `unit-mobile-stopmotion-2026-11-07`; MOB UI-167's chip on Home).
+ *
+ * **An empty unit** (P19.8-T4 AC-11, MOB UI-181; ADR-0229 §9): *Active Agent* reads ***0 dari –*** as Home does, with *–*
+ * in its ring and its chips (*Unit 0/–*, *AAB 0/–*), where it read *0 dari 0*.
  */
 export function UnitTiles({ view, period }: { view: UnitDashboardView; period: UnitPeriod }) {
   const language = useLanguage();
@@ -51,6 +55,9 @@ export function UnitTiles({ view, period }: { view: UnitDashboardView; period: U
       : target === 0 ? t.own.targetMade
         : t.v1.of({ of: formatRupiahCompact(target, {}, figures) });
   const recruits = potentialRecruits.yourUnit + potentialRecruits.aabs;
+  // Nobody to count (MOB UI-181): *–*, never a denominator of 0.
+  const of = (n: number) => (view.empty ? '–' : number(n));
+  const short = formatMonthName(view.month, figures);
   const productionHeading = (
     <span className="inline-flex items-center gap-1">
       <span>{t.v1.groupProduction}</span>
@@ -75,17 +82,17 @@ export function UnitTiles({ view, period }: { view: UnitDashboardView; period: U
         sub={sub === null ? undefined : period === '7d' ? `${sub} · ${t.own.thisMonth}` : sub}
       />
       <StatTile
-        label={t.v1.activeAgent({ month })}
+        label={<MonthLabel short={t.v1.activeAgentShort} month={short} long={t.v1.activeAgent({ month })} />}
         value={number(active.count)}
-        unit={t.v1.of({ of: number(active.of) })}
-        ring={{ percent: percentOf(active.count, active.of) }}
+        unit={t.v1.of({ of: of(active.of) })}
+        ring={{ percent: view.empty ? null : percentOf(active.count, active.of) }}
         chips={[
-          { key: 'unit', label: <>{t.v1.scope.unit} <b>{number(active.unit.count)}</b>/{number(active.unit.of)}</> },
-          { key: 'aab', label: <>{AAB} <b>{number(active.aab.count)}</b>/{number(active.aab.of)}</> },
+          { key: 'unit', label: <>{t.v1.scope.unit} <b>{number(active.unit.count)}</b>/{of(active.unit.of)}</> },
+          { key: 'aab', label: <>{AAB} <b>{number(active.aab.count)}</b>/{of(active.aab.of)}</> },
         ]}
       />
       <StatTile
-        label={t.v1.recruitment({ month })}
+        label={<MonthLabel short={t.v1.recruitmentShort} month={short} long={t.v1.recruitment({ month })} />}
         value={number(recruits)}
         unit={t.v1.candidateUnit({ n: recruits })}
         chips={[
@@ -94,6 +101,23 @@ export function UnitTiles({ view, period }: { view: UnitDashboardView; period: U
         ]}
       />
     </div>
+  );
+}
+
+/**
+ * **A tile's label and its month** (the Unit mockup, `unit-mobile-stopmotion-2026-11-07`): on a phone one line — *Active
+ * Agent* and a 12px grey chip, *Nov* — as Home's (MOB UI-167); from 768px *Active Agent November*, as before. A screen
+ * reader hears the month in full at every size.
+ */
+function MonthLabel({ short, month, long }: { short: string; month: string; long: string }) {
+  return (
+    <>
+      <span data-label-short="" aria-hidden="true" className="inline-flex items-center gap-1 whitespace-nowrap md:hidden">
+        {short}
+        <span data-month-chip="" className="rounded-pill bg-hover-row px-[7px] text-sm font-semibold text-muted">{month}</span>
+      </span>
+      <span data-label-long="" className="max-md:sr-only">{long}</span>
+    </>
   );
 }
 

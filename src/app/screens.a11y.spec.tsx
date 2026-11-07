@@ -1026,7 +1026,10 @@ describe('screens have no axe violations', () => {
       await userEvent.click(await screen.findByRole('tab', { name: 'Activities' }));
       await screen.findByRole('table', { name: 'Activities · Unit' });
       await userEvent.click(screen.getByRole('button', { name: 'Show Recruitment' }));
-      await userEvent.click(within(screen.getByRole('region', { name: 'Ratio · last 30 days' })).getByRole('button', { name: 'Group' }));
+      // The card's *Unit ⌄* picker since P19.8-T4 (AC-7, MOB UI-184): its menu open, then Group chosen.
+      await userEvent.click(within(screen.getByRole('region', { name: 'Ratio · last 30 days' })).getByRole('button', { name: 'Ratio for Unit' }));
+      await expectClean('unit/dashboard activities (ratio picker open)');
+      await userEvent.click(screen.getByRole('option', { name: 'Group' }));
       await expectClean('unit/dashboard activities');
     });
 
@@ -1051,7 +1054,8 @@ describe('screens have no axe violations', () => {
         'GET /unit/dashboard/potensi': {
           body: {
             month: '2026-11', currentMonth: '2026-11', today: '2026-11-04',
-            head: { membershipId: 'mem-agus', name: 'Agus Prasetyo', isReader: true }, tiles: { aa: 1, rekrut: 1 },
+            head: { membershipId: 'mem-agus', name: 'Agus Prasetyo', isReader: true },
+            tiles: { aa: 1, rekrut: 1, potensi: { aa: 2, rekrut: 1 } },
             units: [{ kind: 'unit', leader: { membershipId: 'm-sari', name: 'Sari Puspita', rung: { code: 'AAB', label: 'AAB' } }, people, totals }],
           },
         },
@@ -1069,9 +1073,13 @@ describe('screens have no axe violations', () => {
         me: { ...UNIT_READER, permissions: [...UNIT_READER.permissions, 'unit_dashboard:read_potensi'] },
       });
       await userEvent.click(await screen.findByRole('tab', { name: 'Potensi' }));
-      await screen.findByRole('radiogroup', { name: 'AA or Rekrut' });
+      await screen.findByRole('radiogroup', { name: 'Active Agent or Rekrut' });
       await expectClean('unit/dashboard potensi');
-      await userEvent.click(screen.getByRole('button', { name: 'Open Rina Wijaya' }));
+      // The month picker's menu open (P19.8-T4 AC-12, MOB UI-171).
+      await userEvent.click(screen.getByRole('button', { name: 'Month November 2026' }));
+      await expectClean('unit/dashboard potensi (month menu open)');
+      await userEvent.keyboard('{Escape}');
+      await userEvent.click(screen.getByRole('button', { name: /^Open Rina Wijaya/ }));
       await screen.findByText('Ibu Kartika Dewanti');
       await expectClean('unit/dashboard potensi sheet');
     });
@@ -1085,7 +1093,8 @@ describe('screens have no axe violations', () => {
       await screen.findByRole('button', { name: /^Your Unit · 4/ });
       await expectClean('unit/dashboard (phone)');
       await userEvent.click(screen.getByRole('button', { name: /^Sari Wulandari’s Unit/ }));
-      await userEvent.click(screen.getByRole('button', { name: 'Needs attention 4' }));
+      // The count tiles since P19.8-T4 (AC-3, MOB UI-178); Siti's month not uploaded, in no status (AC-2).
+      await userEvent.click(screen.getByRole('button', { name: '3 Needs attention' }));
       await expectClean('unit/dashboard (phone, opened and filtered)');
     });
 
@@ -1111,8 +1120,8 @@ describe('screens have no axe violations', () => {
     it('empty: somebody who leads nobody', async () => {
       stubFetch({ ...shell, 'GET /unit/dashboard': { body: UNIT_EMPTY } });
       renderInLayout(AgentLayout, page(), { me: UNIT_READER });
-      // P19-T4 AC-3: the tiles at zero, No data yet, and the roster's greyed Example.
-      await screen.findByText('No data yet');
+      // P19-T4 AC-3: the tiles at zero and the roster's greyed Example — no *No data yet* since P19.8-T4 AC-11 (OD-280).
+      await screen.findByText('Example');
       await expectClean('unit/dashboard (empty)');
     });
 
@@ -2248,6 +2257,42 @@ describe('screens have no axe violations', () => {
     await expectClean('goals (phone)');
   });
 
+  it.each([375, 360])('P19.8-T5 AC-9 goal settings at %ipx: the APE typed over the office’s figure — Diubah oleh Anda, Pakai otomatis (MOB UI-190)', async (px) => {
+    atWidth(px);
+    const period = String(new Date().getFullYear());
+    stubFetch({
+      '/kpm/config': { body: { activity: GOAL_CASCADE_CONFIG, ratios: [], leadPipelines: [], version: 1 } },
+      '/kpm/org-levels': { body: [] },
+      '/goals': {
+        body: {
+          period, mode: 'direct', annualApeTargetMinor: 500_000_000_00, savingsTargetMinor: 50_000_000_00,
+          commissionRatePct: 10, monthsLeft: 1.8, monthsLeftIsOverride: false, apeAchievedMinor: 120_000_000_00,
+          achieved: { minor: 120_000_000_00, provenance: 'self_reported', month: null },
+          official: { minor: 67_000_000_00, provenance: 'imported', month: '2026-10' },
+          caseSizeMinor: 18_000_000_00, leadsToApptPct: 50, closingRatePct: 30,
+          snapshot: { monthlyApeTargetMinor: 211_111_111_11, policiesPerMonth: 12, appointmentsPerMonth: 40, leadsPerMonth: 80 },
+          projected: {
+            annualApeTargetMinor: 500_000_000_00, apeAchievedMinor: 120_000_000_00, remainingApeMinor: 380_000_000_00,
+            monthlyApeTargetMinor: 211_111_111_11, policiesPerMonth: 12, policiesPerWeek: 2.8, appointmentsPerMonth: 40,
+            appointmentsPerWeek: 9, leadsPerMonth: 80, leadsPerWeek: 18, targetMet: false,
+          },
+          cascadeMapping: { leadsCode: 'LEADS_CONTACTED', appointmentsCode: 'SELL_PRESENTATION', closingsCode: 'SELL_SUBMISSION' },
+          cascadeBinding: { leads: ['LEADS_CONTACTED'], appointments: ['SELL_PRESENTATION'], closings: ['SELL_SUBMISSION'] },
+          measured: null, savedAt: '2026-11-07T04:00:00.000Z', savedByMembershipId: 'mem-1',
+        },
+      },
+    });
+    renderWithSession(
+      <InLanguage language="id"><AgentLayout><GoalSettingsPage /></AgentLayout></InLanguage>,
+      { me: makeMe({ permissions: ['goal:read', 'goal:update'] }) },
+    );
+
+    const produced = await screen.findByRole('textbox', { name: 'APE yang sudah dicapai tahun ini' });
+    expect(produced).toHaveAccessibleDescription('Diubah oleh Anda');
+    expect(screen.getByRole('button', { name: 'Pakai otomatis (Rp 67 jt)' })).toBeInTheDocument();
+    await expectClean(`goals typed over the office’s figure (${px})`);
+  });
+
   it('P18.11-T5 goal settings on a tablet: the phone’s layout, the floating save, the disclaimer behind an ⓘ (UI-015, UI-018)', async () => {
     atWidth(768);
     const period = String(new Date().getFullYear());
@@ -3148,7 +3193,7 @@ describe('screens have no axe violations', () => {
       await open();
       await userEvent.click(screen.getByRole('button', { name: /^Internal meeting: Weekly unit standup/ }));
       await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
-      await screen.findByRole('dialog', { name: 'Delete "Weekly unit standup"?' });
+      await screen.findByRole('dialog', { name: 'Delete this event?' });
       await expectClean('calendar (delete question)');
     });
 
@@ -6495,7 +6540,7 @@ describe('P18.10-T4 coaching and the Unit Dashboard in Indonesian', () => {
     await screen.findByRole('table', { name: 'Roster tim Anda' });
     await expectClean('unit/dashboard (id)');
     await userEvent.click(screen.getByRole('button', { name: 'Unit Anda · 4' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Perlu perhatian 4' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Perlu perhatian 3' }));
     await expectClean('unit/dashboard (id, closed and filtered)');
     await userEvent.click(screen.getByRole('button', { name: 'Perbarui produksi' }));
     await screen.findByRole('dialog', { name: 'Perbarui produksi' });
@@ -6512,7 +6557,7 @@ describe('P18.10-T4 coaching and the Unit Dashboard in Indonesian', () => {
 
   it('unit/dashboard: empty, and a unit below the reader', async () => {
     const { unmount } = unitShow(UNIT_EMPTY);
-    await screen.findByText('Belum ada data');
+    await screen.findByText('Contoh');
     await expectClean('unit/dashboard (id, empty)');
     unmount();
     vi.unstubAllGlobals();
@@ -8062,6 +8107,35 @@ describe('UI V1 T11 Home through axe', () => {
     await expectClean(named(language, 'home (UI V1, agent, nothing logged)'));
   });
 
+  it.each(['en', 'id'] as const)('P19.8-T2 the AAB who leads nobody, and an entry’s detail over Home with its question (%s)', async (language) => {
+    const { default: HomePage } = await import('./(agent)/home/page');
+    const home = await import('@test/home-fixtures');
+    nav.pathname = '/home';
+    atWidth(375);
+    stubFetch({ '/home': { body: home.NEW_LEADER }, '/notifications': { body: { items: [], unread: 0 } } });
+    const empty = <AgentLayout><HomePage /></AgentLayout>;
+    const first = renderWithSession(language === 'id' ? <InLanguage language="id">{empty}</InLanguage> : empty, { me: home.DEWI_AAB });
+    await waitFor(() => expect(document.querySelector('[data-home-team] [data-first-agent]')).not.toBeNull());
+    await expectClean(named(language, 'home (P19.8-T2, the AAB who leads nobody)'));
+    first.unmount();
+    vi.unstubAllGlobals();
+
+    stubFetch({
+      '/home': { body: home.LEADER },
+      '/notifications': { body: { items: [], unread: 0 } },
+      'GET /calendar/entries/e-1': { body: home.HUDDLE_ENTRY },
+    });
+    const ui = <AgentLayout><HomePage /></AgentLayout>;
+    renderWithSession(language === 'id' ? <InLanguage language="id">{ui}</InLanguage> : ui, { me: home.AGUS_AB });
+    await waitFor(() => expect(document.querySelector('[data-home-actions]')).not.toBeNull());
+    await userEvent.click(within(document.querySelector('[data-home-actions]') as HTMLElement).getByRole('button', { name: /Weekly unit huddle/ }));
+    await screen.findByRole('dialog', { name: 'Weekly unit huddle' });
+    await expectClean(named(language, 'home (P19.8-T2, the entry’s detail over Home)'));
+    await userEvent.click(screen.getByRole('button', { name: language === 'id' ? 'Hapus' : 'Delete' }));
+    await screen.findByRole('dialog', { name: language === 'id' ? 'Hapus event ini?' : 'Delete this event?' });
+    await expectClean(named(language, 'home (P19.8-T2, Hapus event ini?)'));
+  });
+
   it.each(['en', 'id'] as const)('UI-104 the Calendar: the Agenda’s Tugas and the popup, 3 Hari, the Week’s Tugas row and the 1:1’s coaching button (%s)', async (language) => {
     const tasks = [coachingTask(), leadTask()];
     const oneToOne = entry({
@@ -8094,7 +8168,11 @@ describe('UI V1 T11 Home through axe', () => {
         await expectClean(named(language, 'calendar (UI V1, 1:1 with Start coaching session)'));
         await userEvent.keyboard('{Escape}');
       } else {
-        await userEvent.selectOptions(screen.getByRole('combobox', { name: language === 'id' ? 'Tampilan' : 'View' }), 'three_days');
+        // P19.8-T3 AC-1 (MOB UI-171): the view picker is a button that opens a small menu under it, not a native select.
+        await userEvent.click(screen.getByRole('button', { name: /^(Tampilan|View) / }));
+        await screen.findByRole('listbox', { name: language === 'id' ? 'Tampilan' : 'View' });
+        await expectClean(named(language, 'calendar (P19.8-T3, the view menu open)'));
+        await userEvent.click(screen.getByRole('option', { name: language === 'id' ? '3 Hari' : '3 Days' }));
         await waitFor(() => expect(document.querySelector('[data-three-days]')).not.toBeNull());
         await expectClean(named(language, 'calendar (UI V1, 3 Hari)'));
       }

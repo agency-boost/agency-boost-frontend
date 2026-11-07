@@ -6,6 +6,7 @@ import AgentLayout from '@/app/(agent)/layout';
 import { atWidth, digestAt, renderInLayout, stubFetch, wears } from '@test/harness';
 import { ROSTER, SARI_ME, SHELL_STUBS } from '@test/activation-fixtures';
 import { invite, JOINING_PERMISSIONS, requestedTransfer, TODAY } from '@test/joining-fixtures';
+import { HEADER_CONTROL } from '@/components/ui/header-control';
 import NewHiresPage from './page';
 
 vi.mock('next/navigation', () => ({
@@ -52,6 +53,24 @@ const BEFORE_T5: Record<375 | 1024 | 1280, string> = {
   1024: '03f2b41cc286ea1a602605c93fc9d54b15b863c83495564edd9f7ac622a1e2b7',
   1280: '03f2b41cc286ea1a602605c93fc9d54b15b863c83495564edd9f7ac622a1e2b7',
 };
+
+/**
+ * **The page with P19.8-T1's two changes put back** (AC-1, AC-4, AC-5): the filter's buttons as they were written, and the
+ * phone's three new classes on a person's name taken off. A copy; the page is not touched.
+ */
+function asBeforeP198(root: HTMLElement): HTMLElement {
+  const copy = root.cloneNode(true) as HTMLElement;
+  for (const button of copy.querySelectorAll('[role="group"][aria-label="Show"] > button')) {
+    const on = button.getAttribute('aria-pressed') === 'true';
+    button.setAttribute('class', `min-h-10 flex-1 whitespace-nowrap rounded-pill px-2 text-sm font-semibold max-lg:min-h-11 ${
+      on ? 'bg-ink text-white' : 'text-ink hover:bg-hover-row'}`);
+  }
+  const added = new Set(['max-md:text-base', 'max-md:whitespace-normal', 'max-md:break-words']);
+  for (const name of copy.querySelectorAll('[data-person-row] [data-row-main], [data-person-row] span.uppercase')) {
+    name.setAttribute('class', (name.getAttribute('class') ?? '').split(' ').filter((c) => !added.has(c)).join(' '));
+  }
+  return copy;
+}
 
 const EVERYONE = [
   'Fikri Ramadhan', 'Dimas Saputra', 'Indah Permata', 'Lukman Hakim', 'Kemal Pratama', 'Tari Wulandari', 'Novi Lestari',
@@ -132,9 +151,23 @@ describe('P19.1-T5 AC-2 /new-hires on a tablet: the phone’s page, the tiles on
     for (const button of within(filter).getAllByRole('button')) expect(wears(button, 768).split(' ')).toContain('min-h-11');
   });
 
+  /*
+   * *Amended 2026-11-07 (P19.8-T1 AC-1, AC-4, AC-5; R6, MOB UI-171, MOB UI-168):* two things move, on purpose. The
+   * filter *Semua · Teraktivasi · Belum* is a header control at every size — 13px, 600, 44px, where it was 12px and 40px
+   * on a desktop — and on a phone a person's name is 13px and wraps rather than being cut. The digest is taken with those
+   * two put back as they were (`asBeforeP198`), and still matches the baseline: nothing else moved.
+   */
   it.each([375, 1024, 1280] as const)('P19.1-T5 AC-2 at %ipx the page is drawn as before, to the byte', async (px) => {
     const root = await open(px);
-    expect(digestAt(root, px)).toBe(BEFORE_T5[px]);
+    expect(digestAt(asBeforeP198(root), px)).toBe(BEFORE_T5[px]);
+  });
+
+  it.each([375, 768, 1024, 1280])('P19.8-T1 AC-1 MOB UI-171 at %ipx the filter is three header controls — 13px, 600, 44px', async (px) => {
+    await open(px);
+    for (const button of within(screen.getByRole('group', { name: 'Show' })).getAllByRole('button')) {
+      expect(wears(button, px).split(' ')).toEqual(expect.arrayContaining(HEADER_CONTROL.split(' ')));
+      expect(wears(button, px).split(' ')).not.toContain('text-sm');
+    }
   });
 
   it('P19.1-T5 AC-2 passes axe at 768px', async () => {

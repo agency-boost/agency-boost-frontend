@@ -858,6 +858,46 @@ describe('a create form offers what its edit panel does', () => {
   });
 });
 
+/*
+ * ***Nama singkat*** in the template's activity section (P19.8-T4 AC-5, ADR-0229 §5; MOB UI-180): the field the office
+ * edits, beside the name — on Add and on Edit — held to the server's 20, written into the draft, `null` when empty.
+ */
+describe('P19.8-T4 AC-5 MOB UI-180 the template’s activity short names', () => {
+  const card = () => screen.getByRole('heading', { name: 'Selling' }).closest('.rounded-lg') as HTMLElement;
+
+  it('P19.8-T4 AC-5 MOB UI-180 takes a short name on Add, beside the name, held to 20', async () => {
+    const onChange = vi.fn();
+    render(<TaxonomyEditor payload={TAXONOMY} onChange={onChange} />);
+    await userEvent.click(within(card()).getByRole('button', { name: 'Add an activity type' }));
+    await userEvent.type(within(card()).getByLabelText('Code'), 'SELL_REFERRAL');
+    await userEvent.type(within(card()).getByLabelText('Name'), 'Meminta referensi dari nasabah lama');
+    const short = within(card()).getByLabelText('Short name');
+    expect(short).toHaveAttribute('maxlength', '20');
+    await userEvent.type(short, 'Referensi');
+    await userEvent.click(within(card()).getByRole('button', { name: 'Add' }));
+    expect(onChange.mock.calls[0][0].types.find((t: { code: string }) => t.code === 'SELL_REFERRAL'))
+      .toMatchObject({ label: 'Meminta referensi dari nasabah lama', shortLabel: 'Referensi' });
+  });
+
+  it('P19.8-T4 AC-5 MOB UI-180 edits a type’s short name into the draft, and clearing it writes none', async () => {
+    const onChange = vi.fn();
+    const payload: TaxonomyPayload = {
+      ...TAXONOMY,
+      types: TAXONOMY.types.map((t) => (t.code === 'SELL_PRESENTATION' ? { ...t, shortLabel: 'Presentasi' } : t)),
+    };
+    render(<TaxonomyEditor payload={payload} onChange={onChange} />);
+    const row = within(card()).getByText('Presentasi', { selector: 'p' }).closest('li')!;
+    await userEvent.click(within(row).getByRole('button', { name: 'Edit' }));
+    const short = within(row).getByLabelText('Short name');
+    expect(short).toHaveValue('Presentasi');
+    expect(within(row).getByText(/at most 20 characters/)).toBeInTheDocument();
+    await userEvent.clear(short);
+    await userEvent.click(within(row).getByRole('button', { name: 'Save' }));
+    expect(onChange.mock.calls[0][0].types.find((t: { code: string }) => t.code === 'SELL_PRESENTATION'))
+      .toMatchObject({ label: 'Presentasi', shortLabel: null });
+  });
+});
+
 describe('EventTypesEditor (P5-T9)', () => {
   it('renders an unauthored preset as empty instead of crashing', () => {
     render(<EventTypesEditor payload={{} as EventTypesPayload} onChange={vi.fn()} />);

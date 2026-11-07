@@ -370,6 +370,8 @@ export function LeadsList({ split = false, addRequest = 0 }: {
           aria-label={t.list.chipSaid({ label: typeName(type), n: counts[type] })}
           onClick={() => chooseChip(type)}
           className={cn(
+            // Already a header control — 13px / 600 / 44px (P19.8-T1 AC-1; R6, MOB UI-171: *Semua · Sales · Recruit*, ok) —
+            // and written as it was, so the phone's list is drawn to the byte as before (`HEADER_CONTROL`'s three in it).
             'flex min-h-11 items-center gap-1.5 rounded-pill px-3.5 text-base font-semibold',
             chip === type ? 'bg-secondary text-secondary-contrast' : 'bg-card text-navy hover:bg-hover-row',
           )}
@@ -407,7 +409,8 @@ export function LeadsList({ split = false, addRequest = 0 }: {
             )}
           >
             <span className="text-[1.25rem] font-bold leading-tight tabular-nums">{open ? n : '–'}</span>
-            <span className="line-clamp-2 text-xs leading-tight text-secondary-muted">{short}</span>
+            {/* The stage's words at a header control's 13px / 600 (P19.8-T1 AC-1; MOB UI-171: they were weight 400). */}
+            <span data-stage-name="" className="line-clamp-2 text-base font-semibold leading-tight text-secondary-muted">{short}</span>
           </button>
         );
       })}

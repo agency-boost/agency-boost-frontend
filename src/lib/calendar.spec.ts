@@ -152,8 +152,9 @@ describe('the words', () => {
     expect(PROTOTYPE_COPY.more(3).startsWith(OWN_COPY.moreShort(3))).toBe(true);
   });
 
-  it('asks the delete question without *This can’t be undone.* — the delete is soft (H-06, I-101)', () => {
-    expect(OWN_COPY.deleteQuestion('Weekly unit standup')).toBe('Delete "Weekly unit standup"?');
+  it('asks the delete question without *This can’t be undone.* — the delete is soft (H-06, I-101); P19.8-T3 AC-7 MOB UI-169 the owner’s question, the title and day under it', () => {
+    expect(OWN_COPY.deleteQuestion).toBe('Delete this event?');
+    expect(OWN_COPY.deleteWhat('Kickoff 2026', 'Wednesday, 11 Nov 2026')).toBe('Kickoff 2026 · Wednesday, 11 Nov 2026');
   });
 });
 

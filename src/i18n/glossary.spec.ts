@@ -27,7 +27,8 @@ describe('P18.10-T1 AC-7 the kept-English list', () => {
     // `ACTIVITY_LOGGED_THIS_MONTH`) and four registered (`MOC_APE` and the data sources' three; ADR-0200 to ADR-0203).
     // 90 since P19.5-T4: the surveys' six (ADR-0216 §4). 92 since P19.5-T2: the Data upload's two (ADR-0214 §10, §11).
     // 112 on 2026-11-06: P19.7-T2's `PROPOSALS_MADE` (ADR-0221 §6) and P19.5-T3's advanced analytics' nineteen.
-    expect(names).toHaveLength(112);
+    // 113 since P19.8-T2: Home's `OWN_OPEN_LEADS` (ADR-0228 §4, OD-283).
+    expect(names).toHaveLength(113);
     expect([...KEPT_ENGLISH.metrics].sort()).toEqual([...names].sort());
   });
 
