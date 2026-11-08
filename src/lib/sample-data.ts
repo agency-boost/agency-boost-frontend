@@ -101,6 +101,7 @@ export function sampleNewHires(name: SampleName, today: string): NewHiresRoster 
   }));
   return {
     today,
+    year: 'current',
     window: { from: today, to: today },
     days: 90,
     activation3M: { all: share, byMonth: [] },
@@ -123,6 +124,8 @@ export function sampleUnitView(base: UnitDashboardView, name: SampleName): UnitD
       membershipId,
       name: name(i + 1),
       photoUrl: null,
+      // No phone (ADR-0189 §3): a sample's WhatsApp is drawn as it will look, inert.
+      phone: null,
       isReader: false,
       rung: { code: 'AGENT', label: 'Agent' },
       depth: 1,

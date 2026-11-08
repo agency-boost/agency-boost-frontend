@@ -35,6 +35,8 @@ export function unitRow(membershipId: string, name: string, over: Partial<UnitRo
   return {
     membershipId,
     name,
+    // P19.9-T4 AC-1: no number on file unless a row says so.
+    phone: null,
     isReader: false,
     rung: { code: 'AGENT', label: 'Agent' },
     depth: 1,
@@ -93,7 +95,7 @@ export const DIMAS = unitRow('mem-dimas', 'Dimas Pratama', {
   followUp: { text: 'Role-play objection handling before next presentation', dueDate: '2026-10-05', overdueDays: 3 },
 });
 export const INDAH = unitRow('mem-indah', 'Indah Lestari', {
-  status: 'on_track', closings: 2,
+  status: 'on_track', closings: 2, phone: '+6281234567001',
   leadsCounts: { salesOpen: 6, salesClosing: 2, recruitOpen: 2, recruitNominated: 1 },
   goal: goalCell({
     source: {

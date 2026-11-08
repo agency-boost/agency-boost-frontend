@@ -15,9 +15,9 @@ import { Toast, useHostToast, useToast } from '@/components/ui/toast';
 import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
 import { activationMessages } from '@/i18n/messages/activation';
 import {
-  attributionOf, correctionOf, graduateMyActivation, isComplete, isDataBacked, isManual, isTickedByHandLink, ITEM_NOTE_MAX,
-  MY_COACHING_ACTIVATION_HREF, readMyActivation, readMyClosings, saveMyItem,
-  type ActivationItemProgress, type ActivationRecordInput, type ActivationView, type MyItemInput,
+  attributionOf, correctionOf, graduateMyActivation, isComplete, isDataBacked, isEmptyActivation, isManual, isTickedByHandLink,
+  ITEM_NOTE_MAX, MY_COACHING_ACTIVATION_HREF, readMyActivation, readMyClosings, saveMyItem,
+  type ActivationEmpty, type ActivationItemProgress, type ActivationRecordInput, type ActivationView, type MyItemInput,
 } from '@/lib/activation';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
@@ -78,6 +78,8 @@ export function MyActivation() {
   const { save: track, statusOf } = useInlineSave();
 
   const [view, setView] = useState<ActivationView | null>(null);
+  // P19.9-T3 AC-5 (OD-289): past the first year the server answers it empty, and the page says so in one card.
+  const [firstYearOver, setFirstYearOver] = useState<ActivationEmpty | null>(null);
   const [missing, setMissing] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -102,7 +104,11 @@ export function MyActivation() {
     let live = true;
     setError(null);
     readMyActivation()
-      .then((next) => { if (live) setView(next); })
+      .then((next) => {
+        if (!live) return;
+        if (isEmptyActivation(next)) setFirstYearOver(next);
+        else setView(next);
+      })
       .catch((err) => {
         if (!live) return;
         if (err instanceof ApiRequestError && err.status === 404) setMissing(true);
@@ -168,6 +174,7 @@ export function MyActivation() {
     }
   };
 
+  if (firstYearOver) return <FirstYearOver view={firstYearOver} />;
   if (missing || (view && view.state !== 'open')) {
     return <NotOffered view={missing ? null : view} coachingLink={mayReadCoaching} />;
   }
@@ -459,6 +466,24 @@ function NotOffered({ view, coachingLink }: { view: ActivationView | null; coach
           {t.checklistElsewhere}{' '}
           <Link href={MY_COACHING_ACTIVATION_HREF} className="font-semibold text-navy underline">{t.ownCoaching}</Link>
         </p>
+      )}
+    </Card>
+  );
+}
+
+/**
+ * `/activation` past the reader's first year (P19.9-T3 AC-5; OD-289, ADR-0233, the owner's R5): the menu still opens it,
+ * and it is empty — the card the page's other not-offered states use, saying the activation covers the first year
+ * after joining only and the day it ended, the server's. No link to the checklist: there is none to read any more.
+ */
+function FirstYearOver({ view }: { view: ActivationEmpty }) {
+  const t = useMessages(activationMessages);
+  const figures = useFigureLanguage();
+  return (
+    <Card>
+      <h2 className="font-display text-lg font-bold text-navy">{t.firstYearTitle}</h2>
+      {view.firstYearEndsOn && (
+        <p className="mt-1 text-md text-muted">{t.firstYearLine({ on: formatShortDay(view.firstYearEndsOn, { year: true }, figures) })}</p>
       )}
     </Card>
   );

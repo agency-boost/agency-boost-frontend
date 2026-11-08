@@ -113,9 +113,20 @@ export interface HomeTeamPerson {
   /** A signed link; `null` draws initials. */
   photoUrl: string | null;
   inUnit: boolean;
+  /**
+   * **Their rung** (P19.9-T2 AC-2; ADR-0235): the code and the company's own label — the *Group* tab's tag, in the
+   * company's short words (`RungTag`: *AB · AAB · Agent*).
+   */
+  rung: HomeRung;
   /** The day's saved total, `null` for no saved day. */
   yesterday: number | null;
   today: number | null;
+}
+
+/** A rung as `GET /home` names it: its code on the company's ladder, and the company's label for it. */
+export interface HomeRung {
+  code: string;
+  label: string;
 }
 
 /**
@@ -139,7 +150,7 @@ export interface HomeView {
   activity: HomeActivity;
   schedule: HomeSchedule;
   actions: HomeAction[];
-  /** *Leads* (`OWN_OPEN_LEADS`, OD-283): the reader's own open leads, Sales and Recruit. */
+  /** *Leads* (`OWN_OPEN_LEADS`; P19.9-T1 AC-5, ADR-0232): every open lead the reader owns — what `/leads` opens on. */
   leads: number;
   /** *New hires*: the reader's Group's new hires before a first sale; 0 when they lead nobody. */
   newHires: number;
@@ -148,14 +159,11 @@ export interface HomeView {
 
 export const readHome = () => api<HomeView>('/home');
 
-/** *Laporan aktivitas tim* shows five, then *Semua ›* (UI-101, MOB UI-165). */
-export const HOME_TEAM_SHOWN = 5;
-
 /**
- * Where *Semua ›* under *Laporan aktivitas tim* goes (P19.8-T2 AC-8; OD-278 by its default, ADR-0228 §6): the Unit
- * Dashboard's *Aktivitas* tab, everybody's activity by person — where it opened the rest in place.
+ * *Laporan aktivitas tim* shows five, then *Semua ›* (UI-101, MOB UI-165), which **opens the rest in place** (P19.9-T2
+ * AC-1, R8; ADR-0235, OD-278 option 3) — where from P19.8-T2 it went to the Unit Dashboard's *Aktivitas* tab.
  */
-export const TEAM_REPORT_ALL_HREF = '/unit/dashboard?tab=activities';
+export const HOME_TEAM_SHOWN = 5;
 
 /** Where *Tambah user* goes (P19.8-T2 AC-3; OD-277 by its default, ADR-0228 §3): the existing *Add New Agents* page. */
 export const ADD_USER_HREF = '/user-management/add';

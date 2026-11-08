@@ -2099,8 +2099,14 @@ describe('P18.7-T8 — the calendar on a phone, its links and its names (UI-020)
     removeEventListener: () => undefined,
   })));
   const agenda = (range = RANGE) => screen.findByRole('region', { name: `Calendar, ${range}` });
-  /** The week's bands: today, a day with things on it, then the five empty days merged into one (P19.1-T3 AC-7, UI-144). */
-  const BANDS = ['Monday, 28 Sep 2026 · Today', 'Tuesday, 29 Sep 2026', 'Wednesday, 30 Sep – Sunday, 4 Oct'];
+  /**
+   * The week's bands: **every day its own** (P19.9-T5 AC-1, R11; OD-290) — today, a day with things on it, then each empty
+   * day under its own band, where P19.1-T3 AC-7 (UI-144) merged the five into *Wednesday, 30 Sep – Sunday, 4 Oct*.
+   */
+  const BANDS = [
+    'Monday, 28 Sep 2026 · Today', 'Tuesday, 29 Sep 2026', 'Wednesday, 30 Sep 2026', 'Thursday, 1 Oct 2026',
+    'Friday, 2 Oct 2026', 'Saturday, 3 Oct 2026', 'Sunday, 4 Oct 2026',
+  ];
   const dayOf = (region: HTMLElement, date: string) => region.querySelector<HTMLElement>(`[data-day="${date}"]`)!;
 
   describe('P18.7-T8 AC-1 the agenda', () => {
@@ -2118,7 +2124,9 @@ describe('P18.7-T8 — the calendar on a phone, its links and its names (UI-020)
         'Travel: Client trip — Surabaya', 'Task: Prospecting call block, 10:00–11:30',
       ]);
       expect(within(dayOf(region, '2026-09-30')).getByText('No events')).toBeInTheDocument();
-      expect(dayOf(region, '2026-09-30')).toHaveAttribute('data-days', '2026-09-30/2026-10-04');
+      // P19.9-T5 AC-1: no merged band — the next empty day is a band of its own.
+      expect(within(dayOf(region, '2026-10-01')).getByText('No events')).toBeInTheDocument();
+      expect(region.querySelector('[data-days]')).toBeNull();
       // No hours: it is not the grid. One read, the week's, and nothing else asked for.
       expect(within(region).queryByText('07:00')).not.toBeInTheDocument();
       expect(viewButton()).toHaveAccessibleName('View Agenda');
@@ -2155,8 +2163,8 @@ describe('P18.7-T8 — the calendar on a phone, its links and its names (UI-020)
       expect(within(menu).getAllByRole('option').map((o) => o.textContent)).toEqual(['Agenda', '3 Days', 'Week', 'Month']);
       expect(within(menu).getByRole('option', { name: 'Week' })).toHaveAttribute('aria-selected', 'true');
       await userEvent.click(within(menu).getByRole('option', { name: 'Agenda' }));
-      // P19.1-T3 AC-7: the empty days after Tuesday are one band.
-      expect(within(await agenda()).getAllByRole('heading', { level: 2 })).toHaveLength(3);
+      // P19.9-T5 AC-1 (R11): every day its own band, the empty days after Tuesday included.
+      expect(within(await agenda()).getAllByRole('heading', { level: 2 })).toHaveLength(7);
       // UI-104 point 10: the Agenda asks for its own seven days from the office's today.
       expect(calls(stub, AGENDA_READ)[0].url).toMatch(/\?view=agenda&date=2026-09-28$/);
       expect(calls(stub, WEEK_READ)).toHaveLength(1);
@@ -2880,6 +2888,26 @@ describe('UI-104 — Calendar: auto items, Tugas, 3 Hari, the coaching button, t
     expect(within(await screen.findByRole('dialog', { name: 'Open 1:1' })).getByRole('button', { name: 'Pick who to coach' })).toBeInTheDocument();
   });
 
+  it('P19.9-T6 AC-2 an Agent who leads coaches from their 1:1 — Coach <name> for whom the server says they coach — and is offered no picker that would find nobody (ADR-0234)', async () => {
+    const AGENT_COACH = makeMe({
+      ...COACH,
+      membership: { ...COACH.membership!, orgLevelCode: 'AGENT', hierarchyRole: 'agent', directCount: 1 },
+    });
+    const theirs = entry({
+      entryId: 'e-14', type: 'coaching', title: '1:1 coaching — Tari',
+      invitees: [{ membershipId: 'mem-tari', name: 'Tari Anggraini', placed: false, answer: 'accepted', readerCoaches: true }],
+    });
+    const nobody = entry({ entryId: 'e-15', type: 'coaching', title: 'Open 1:1', date: '2026-09-29', invitees: [] });
+    show({ [WEEK_READ]: { body: weekRead({ entries: [theirs, nobody] }) } }, AGENT_COACH);
+    await grid();
+    await userEvent.click(screen.getByRole('button', { name: /^1:1 coaching: 1:1 coaching — Tari/ }));
+    expect(within(await screen.findByRole('dialog', { name: '1:1 coaching — Tari' })).getByRole('link', { name: 'Start coaching session' }))
+      .toHaveAttribute('href', '/coaching/mem-tari/session');
+    await userEvent.keyboard('{Escape}');
+    await userEvent.click(screen.getByRole('button', { name: /^1:1 coaching: Open 1:1/ }));
+    expect(within(await screen.findByRole('dialog', { name: 'Open 1:1' })).queryByRole('button', { name: 'Pick who to coach' })).not.toBeInTheDocument();
+  });
+
   it('UI-104 #8 Travel’s Sepanjang hari is on by default; off, it takes a start and an end date and time, and saves allDay false', async () => {
     const stub = show({ 'POST /calendar/entries': { status: 201, body: trip({ allDay: false }) } });
     await grid();
@@ -3173,14 +3201,15 @@ describe('P19.1-T3 — Calendar: one toolbar, one time grid, Tugas blue, today',
     expect(list.className).toContain('border-tugas-edge');
   });
 
-  it('P19.1-T3 AC-7, AC-9 an empty week in the Agenda is two bands: today, and the rest merged with No events', async () => {
+  it('P19.9-T5 AC-1 an empty week in the Agenda is seven bands, each day its own with No events (was two, P19.1-T3 AC-7)', async () => {
     atWidth(375);
     show({ [AGENDA_READ]: { body: agendaRead({ entries: [] }) } });
     const region = await screen.findByRole('region', { name: `Calendar, ${RANGE}` });
     expect(within(region).getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
-      'Monday, 28 Sep 2026 · Today', 'Tuesday, 29 Sep – Sunday, 4 Oct',
+      'Monday, 28 Sep 2026 · Today', 'Tuesday, 29 Sep 2026', 'Wednesday, 30 Sep 2026', 'Thursday, 1 Oct 2026',
+      'Friday, 2 Oct 2026', 'Saturday, 3 Oct 2026', 'Sunday, 4 Oct 2026',
     ]);
-    expect(within(region).getAllByText('No events')).toHaveLength(2);
+    expect(within(region).getAllByText('No events')).toHaveLength(7);
   });
 
   it('P19.1-T3 AC-8 a laptop: Viewing and the type chips share one row under the toolbar, which Filters hides and shows', async () => {
@@ -3697,5 +3726,51 @@ describe('P19.8-T3 — Calendar: the header controls, 3 Hari at the top, today o
     await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
     await screen.findByRole('dialog', { name: 'Delete this event?' });
     await clean('Delete asks first');
+  });
+});
+
+/**
+ * **P19.9-T5 — the owner's requests of 6 November for the Calendar** (R11, R12; ADR-0235, OD-290; parity I-919, I-920):
+ * the Agenda lists every day under its own band, never a merged range; 3 Hari's *Tugas* row is one row whose cells fill
+ * it — today's orange unbroken and no white band — also when none of the three days has a task (the owner's screenshot).
+ * The row's heights are measured in a real browser, `time-grid.browser.spec.ts`; here, what the markup says.
+ */
+describe('P19.9-T5 — Calendar: each Agenda day its own band, 3 Hari’s Tugas row filled', () => {
+  const three = () => screen.findByRole('region', { name: 'Calendar, 28 – 30 Sep 2026' });
+
+  it.each([[375], [768], [1280]])('P19.9-T5 AC-1 at %ipx the Agenda heads each day with its own date — no range band anywhere', async (width) => {
+    atWidth(width);
+    show({ [AGENDA_READ]: { body: agendaRead({ entries: [] }) } }, AGUS, { view: 'agenda' });
+    const region = await screen.findByRole('region', { name: `Calendar, ${RANGE}` });
+    const headings = within(region).getAllByRole('heading', { level: 2 });
+    expect(headings).toHaveLength(7);
+    for (const heading of headings) expect(heading.textContent).not.toContain('–');
+    // Each band its day, each empty day its own *No events*; today's band today's shade.
+    expect([...region.querySelectorAll('[data-day]')].map((d) => d.getAttribute('data-day'))).toEqual([
+      '2026-09-28', '2026-09-29', '2026-09-30', '2026-10-01', '2026-10-02', '2026-10-03', '2026-10-04',
+    ]);
+    expect(headings[0]).toHaveAttribute('aria-current', 'date');
+    expect(headings[0]).toHaveClass('bg-today');
+  });
+
+  it.each([[375], [360]])('P19.9-T5 AC-2 at %ipx 3 Hari with no task on any of its three days: the strip fills the Tugas row, today’s cell shaded, a · in each', async (width) => {
+    atWidth(width);
+    show({ [AGENDA_READ]: { body: agendaRead() }, [THREE_READ]: { body: threeDayRead({ tasks: [] }) } });
+    await screen.findByRole('region', { name: `Calendar, ${RANGE}` });
+    await chooseView('three_days');
+    const head = (await three()).previousElementSibling as HTMLElement;
+    const row = head.querySelector<HTMLElement>('[data-task-row]')!;
+    expect(wears(row, width).split(' ')).toEqual(expect.arrayContaining(['flex', 'h-11']));
+    // The cause (I-920): the paged strip was as tall as its ·; it fills the row now, its transform untouched.
+    const strip = row.querySelector<HTMLElement>('[data-pager-strip]')!;
+    expect(wears(strip, width).split(' ')).toEqual(expect.arrayContaining(['flex', 'h-full', 'w-[300%]']));
+    expect(strip.style.transform).toMatch(/^translateX\(calc\(-100% \/ 3/);
+    const shown = strip.children[1] as HTMLElement;
+    const cells = [...shown.querySelectorAll<HTMLElement>('.place-items-center')];
+    expect(cells).toHaveLength(3);
+    // No task anywhere: no count pill, a · in each, and today's cell — the first — shaded all the same.
+    expect(within(row).queryAllByRole('button')).toEqual([]);
+    for (const cell of cells) expect(cell).toHaveTextContent('·');
+    expect(cells.filter((cell) => wears(cell, width).split(' ').includes('bg-today'))).toEqual([cells[0]]);
   });
 });

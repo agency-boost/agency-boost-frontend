@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { stubFetch } from '@test/harness';
 import {
   callLink, createLead, LEAD_PAGE_CAP, LEAD_ROWS_FIRST_SHOWN, listEveryLead, listLeads, PHONE_HELD, phoneHeld,
-  whatsAppLink, whatsAppNumber, WHATSAPP_DIGITS, type Lead,
+  readsTeamLeads, whatsAppLink, whatsAppNumber, WHATSAPP_DIGITS, type Lead,
 } from './leads';
 
 const rows = (n: number, from = 0) =>
@@ -188,5 +188,27 @@ describe('callLink and phoneHeld (P18.7-T4 AC-3)', () => {
     expect(whatsAppLink(phone)).toBeNull();
     expect(phoneHeld(phone)).toBe(PHONE_HELD.unusable);
     expect(PHONE_HELD.unusable).toBe('This number can’t be dialled — check it in Lead details.');
+  });
+});
+
+/**
+ * **P19.9-T1 AC-3 — who is offered *Leads milik: Tim*** (ADR-0232 §3; ADR-0234): a reader whose `lead:read` reaches
+ * beyond their own — the AB, the AAB, an Agent who leads somebody — and nobody who is not in the office yet.
+ */
+describe('P19.9-T1 readsTeamLeads', () => {
+  const member = (hierarchyRole: string, directCount: number, status = 'active') => ({ hierarchyRole, directCount, status });
+
+  it('P19.9-T1 AC-3 an AB and an AAB by role, with nobody yet too; an Agent only once they lead somebody', () => {
+    expect(readsTeamLeads(member('ab', 0))).toBe(true);
+    expect(readsTeamLeads(member('aab', 0))).toBe(true);
+    expect(readsTeamLeads(member('agent', 0))).toBe(false);
+    expect(readsTeamLeads(member('agent', 1))).toBe(true);
+  });
+
+  it('P19.9-T1 AC-3 nobody pending, removed or outside an office', () => {
+    expect(readsTeamLeads(member('ab', 3, 'pending'))).toBe(false);
+    expect(readsTeamLeads(member('aab', 3, 'removed'))).toBe(false);
+    expect(readsTeamLeads(null)).toBe(false);
+    expect(readsTeamLeads(undefined)).toBe(false);
   });
 });

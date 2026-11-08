@@ -42,6 +42,12 @@ export interface LeadEditor {
   name: string | null;
 }
 
+/** Whose lead it is, by name (P19.9-T1 AC-4; ADR-0232): `null` for a membership that can no longer be named. */
+export interface LeadOwner {
+  membershipId: string;
+  name: string | null;
+}
+
 /**
  * One lead, as `GET /leads` answers it.
  *
@@ -73,6 +79,11 @@ export interface Lead {
    * otherwise. A leader's edit carries their name; the agent's own does not need one.
    */
   lastEditedBy: LeadEditor | null;
+  /**
+   * **Whose lead it is, by name** (P19.9-T1 AC-4; ADR-0232): the card's *Milik Rina Wijaya* on a lead that is not the
+   * reader's. Always sent since P19.9; optional here, as `age` is, so an older answer reads as no owner named.
+   */
+  owner?: LeadOwner;
   remarks: string | null;
   nextActionDate: string | null;
   nextActionNote: string | null;
@@ -188,6 +199,26 @@ export interface LeadQuery {
    * reach and audits the read.
    */
   owner?: string;
+  /**
+   * ***Leads milik: Saya · Tim*** (P19.9-T1 AC-2, AC-3; ADR-0232, OD-286): `own` the reader's leads alone — what `/leads`
+   * opens on — and `team` everybody else their grant reaches. It narrows on the server and never widens. Absent, the
+   * server reads `own` too (ADR-0232 §3), except beside `owner`, whose one member's list it leaves as it is.
+   */
+  scope?: LeadScope;
+}
+
+/** Whose leads `/leads` holds (P19.9-T1): the reader's own, or their team's — their downline's, without their own. */
+export type LeadScope = 'own' | 'team';
+
+/**
+ * **Whether *Leads milik: Tim* is offered** (P19.9-T1 AC-3; ADR-0232): to a reader whose `lead:read` reaches beyond their
+ * own — an AB's downline, an AAB's unit, and since P19.9-T6 (ADR-0234) an Agent who leads somebody, whose `own-downline`
+ * reaches them. The server decides what `scope=team` holds whoever asks; this only decides whether the choice is drawn,
+ * so an Agent who leads nobody is not offered a list that is always empty.
+ */
+export function readsTeamLeads(membership: { status: string; hierarchyRole: string; directCount?: number } | null | undefined): boolean {
+  if (!membership || membership.status !== 'active') return false;
+  return membership.hierarchyRole === 'ab' || membership.hierarchyRole === 'aab' || (membership.directCount ?? 0) > 0;
 }
 
 /** The flags' words in English, the catalogue's source (`messages/leads.ts`). */

@@ -494,6 +494,21 @@ describe('/activation, the hire’s own 90-Day Activation (P13-T4)', () => {
     expect(await screen.findByRole('heading', { level: 2, name: 'Your 90-day activation has ended.' })).toBeInTheDocument();
     expect(screen.getByText('It ran for six months, until 30 Sep 2026.')).toBeInTheDocument();
   });
+
+  it('P19.9-T3 AC-5 past her first year it opens empty: the card says the activation covers the first year only — no checklist, no link to one', async () => {
+    show({
+      'GET /activation/me': {
+        body: {
+          empty: 'first_year_over', hire: RINA, today: '2026-11-08', joinDate: '2025-08-06', firstYearEndsOn: '2026-08-06', leader: null,
+        },
+      },
+    });
+    expect(await screen.findByRole('heading', { level: 2, name: 'Your 90-day activation was for your first year.' })).toBeInTheDocument();
+    expect(screen.getByText('It covers the first year after joining only, which ended on 6 Aug 2026.')).toBeInTheDocument();
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Your own coaching' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Mark checklist complete/ })).not.toBeInTheDocument();
+  });
 });
 
 /** Rina's view with every item done but *Set up company CRM system*: 15 of 16, one tick from complete. */

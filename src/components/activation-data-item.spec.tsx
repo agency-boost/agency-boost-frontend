@@ -190,7 +190,8 @@ describe('the data-backed checklist items (P18.8-T4)', () => {
     await waitFor(() => expect(writes(calls)).toEqual([['PUT', '/new-hires/mem-rina/items/WEEKLY_CHECK_IN', { done: false }]]));
   });
 
-  it('P18.8-T4 AC-3 an Agent who leads ticks none of the three by hand: their boxes are inert, no form opens', async () => {
+  // Was *an Agent who leads*: since P19.9-T6 (ADR-0234) they hold both session grants, so the case is any reader without them.
+  it('P18.8-T4 AC-3 a leader who holds no session grant ticks none of the three by hand: their boxes are inert, no form opens', async () => {
     const stub = stubFetch({ ...SHELL_STUBS, 'GET /new-hires/mem-rina': { body: leaderView() } });
     renderInLayout(AgentLayout, <NewHireDetailPage params={routeParams({ membershipId: 'mem-rina' })} />, {
       me: { ...SARI_ME, permissions: SARI_ME.permissions.filter((p) => !p.startsWith('coaching_session:')) },

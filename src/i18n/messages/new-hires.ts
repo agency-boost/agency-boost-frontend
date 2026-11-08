@@ -31,8 +31,8 @@ const en = {
   title: kept('New Hires'),
   subtitle: "Track your new agents' 90-day activation progress.",
   loading: 'Loading your new hires…',
-  /** Nobody who joined as a new hire in the year it lists (P18.8-T6). */
-  empty: 'No one you lead joined as a new hire in the last 12 months.',
+  /** Nobody who joined as a new hire this year or last (P18.8-T6; the two years since P19.9-T3, ADR-0233). */
+  empty: 'No one you lead joined as a new hire this year or last year.',
 
   /**
    * The 3M activation % (P18.8-T6 AC-2, AC-3): its counts, a share over nobody decided, its filter. **UI V1 (UI-023)**:
@@ -89,6 +89,8 @@ const en = {
     /** How an activation that is over ended, in the subtitle's place (parity L-89); `by` a name or *you*. */
     closedGraduated: ({ by, on }: { by: string; on: string }) => `Marked complete by ${by} on ${on}.`,
     closedExpired: ({ on }: { on: string }) => `Ended on ${on}, six months after it started.`,
+    /** P19.9-T3 AC-5 (OD-289): an activation past its first year, served empty — its one line, `on` the day it ended. */
+    firstYearOver: ({ on }: { on: string }) => `The ${kept('90-Day Activation')} covers the first year after joining only — it ended on ${on}.`,
     notFoundTitle: 'This person isn’t one of your new hires.',
     notFoundLine: 'They may have moved to another leader, or the address may be mistyped.',
   },
@@ -129,6 +131,13 @@ const en = {
     status: { activated: 'Activated', activated_late: 'Activated after 3M', not_yet: 'Not yet' },
     columns: { name: 'Name', status: 'Status', checklist: 'Checklist' },
     noWaiting: 'Nobody is waiting to join.',
+    /** P19.9-T3 AC-2 (ADR-0233, the owner's R3): the year control, its two choices, and a year with nobody in it. */
+    yearName: 'Year',
+    year: { current: 'This year', previous: 'Last year' },
+    yearEmpty: {
+      current: `No one has joined as a ${kept('new hire')} this year yet.`,
+      previous: `No one joined as a ${kept('new hire')} last year.`,
+    },
   },
 
   /** **UI V1 — one hire** (UI-027, D-25, D-26): the header, the strip, the tiles, the buttons, First Sale's date. */
@@ -205,7 +214,7 @@ const id: MessagesOf<typeof en> = {
   title: kept('New Hires'),
   subtitle: `Pantau progres ${kept('90-day activation')} agen baru Anda.`,
   loading: `Memuat ${kept('new hires')} Anda…`,
-  empty: `Tidak ada orang yang Anda pimpin yang bergabung sebagai ${kept('new hire')} dalam 12 bulan terakhir.`,
+  empty: `Tidak ada orang yang Anda pimpin yang bergabung sebagai ${kept('new hire')} tahun ini maupun tahun lalu.`,
 
   activation3M: 'Aktivasi 3M',
   counts: ({ activated, notActivated, inProgress }) =>
@@ -250,6 +259,7 @@ const id: MessagesOf<typeof en> = {
     startSaved: 'Tanggal bergabung diperbarui.',
     closedGraduated: ({ by, on }) => `Ditandai selesai oleh ${by} pada ${on}.`,
     closedExpired: ({ on }) => `Berakhir pada ${on}, enam bulan setelah dimulai.`,
+    firstYearOver: ({ on }) => `${kept('90-Day Activation')} hanya untuk tahun pertama sejak bergabung — berakhir pada ${on}.`,
     notFoundTitle: `Orang ini bukan ${kept('new hire')} Anda.`,
     notFoundLine: `Dia mungkin sudah pindah ke ${kept('leader')} lain, atau alamatnya salah ketik.`,
   },
@@ -283,6 +293,12 @@ const id: MessagesOf<typeof en> = {
     status: { activated: 'Teraktivasi', activated_late: 'Teraktivasi, lewat 3M', not_yet: 'Belum' },
     columns: { name: 'Nama', status: 'Status', checklist: 'Checklist' },
     noWaiting: 'Tidak ada yang menunggu bergabung.',
+    yearName: 'Tahun',
+    year: { current: 'Tahun berjalan', previous: 'Tahun lalu' },
+    yearEmpty: {
+      current: `Belum ada yang bergabung sebagai ${kept('new hire')} tahun ini.`,
+      previous: `Tidak ada yang bergabung sebagai ${kept('new hire')} tahun lalu.`,
+    },
   },
 
   hire: {

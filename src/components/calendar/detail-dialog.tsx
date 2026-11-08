@@ -18,7 +18,7 @@ import {
 import { coachingSessionHref } from '@/lib/coaching';
 import { formatDayClock, formatTripWhen, formatWhen } from '@/lib/format';
 import { cn } from '@/lib/cn';
-import { useCan } from '@/lib/session';
+import { useCan, useSession } from '@/lib/session';
 import { TEXT_TAP } from '@/components/ui/phone';
 
 /** *Pick who to coach*'s search (UI-012), loaded when it is asked for: most details never draw it. */
@@ -266,11 +266,17 @@ function NotesText({ notes }: { notes: string }) {
  * **Who they may coach is the server's**: `readerCoaches`, worked out when the entry is read (`COACH`, ADR-0099); the
  * agent search lists only people the reader reaches, and the session refuses anybody they do not coach. Held to
  * `coaching_session:create` as well, so a role that coaches nobody sees none of it.
+ *
+ * **An Agent who leads coaches since P19.9-T6** (ADR-0234), so their 1:1 offers its coachees' sessions — **but not *Pick
+ * who to coach***: the agent search reaches through `member:read_profile`, an Agent's `own`, and would list nobody for
+ * them. Their roster (*Tim saya › Coaching*) is the way to somebody not on the entry.
  */
 function CoachButtons({ entry }: { entry: CalendarEntry }) {
   const t = useMessages(calendarMessages);
   const router = useRouter();
+  const { me } = useSession();
   const mayCoach = useCan('coaching_session:create');
+  const mayPick = me?.membership?.hierarchyRole !== 'agent';
   const [picking, setPicking] = useState(false);
   if (entry.type !== 'coaching' || entry.readerIs !== 'organiser' || !mayCoach) return null;
   const coachable = entry.invitees.filter((person) => person.readerCoaches);
@@ -297,7 +303,7 @@ function CoachButtons({ entry }: { entry: CalendarEntry }) {
       </div>
     );
   }
-  if (entry.invitees.length > 0) return null;
+  if (entry.invitees.length > 0 || !mayPick) return null;
   return (
     <div className="mt-5">
       {picking ? (

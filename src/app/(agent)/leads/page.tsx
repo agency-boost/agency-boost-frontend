@@ -32,8 +32,9 @@ const LeadsList = dynamic(() => import('@/components/leads-list').then((m) => m.
  * Which one is decided once the window has answered (`useMediaQuery`): until then a skeleton, so neither reads the leads
  * only to be replaced by the other.
  *
- * **A leader's screen shows their scope** — their own leads and their unit's or downline's — because
- * that is what `GET /leads` answers for their grant (P7-T7). Nothing here narrows it.
+ * **Every reader opens on their own leads** (P19.9-T1 AC-2, R10; ADR-0232): `GET /leads?scope=own`. A leader's unit's or
+ * downline's — what their grant reaches (P7-T7) — are one choice away, *Leads milik: Tim* in the filter sheet; it was
+ * their own and their team's together until then.
  */
 export default function LeadsPage() {
   const t = useMessages(leadsMessages);

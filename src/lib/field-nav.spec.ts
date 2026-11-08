@@ -260,6 +260,17 @@ describe('UI-004 fieldNav: the tab bar, the Lainnya sheet and the sidebar, from 
       expect(ids(fieldNav(member({ directCount: 3 }), '/goals'))).toEqual(LEADER_NAV);
     });
 
+    it('P19.9-T6 AC-3 an Agent who leads somebody has Coaching in Tim saya, on the sheet and the sidebar; one who leads nobody has none (ADR-0234)', () => {
+      const leads = fieldNav(member({ directCount: 1 }), '/coaching');
+      const timSaya = leads.groups.find((g) => g.id === 'timSaya')!;
+      expect(timSaya.items.map((i) => i.id)).toContain('coaching');
+      expect(timSaya.items.find((i) => i.id === 'coaching')).toMatchObject({ href: '/coaching', active: true });
+      // The sheet and the sidebar are drawings of these groups; the bar does not hold it, so *Lainnya* is current.
+      expect(leads.inSheet).toBe(true);
+      const alone = fieldNav(AGENT, '/coaching');
+      expect(alone.groups.flatMap((g) => g.items).map((i) => i.id)).not.toContain('coaching');
+    });
+
     it('P19-T4 AC-6 an Agent with a hire in reach keeps New Hires beside User Management (ADR-0106, kept)', () => {
       expect(ids(fieldNav(member({}, { newHires: true }), '/goals')).groups.timSaya).toEqual(['newHires', 'userManagement']);
     });

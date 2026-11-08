@@ -105,7 +105,7 @@ const render = (routes: Record<string, unknown> = {}, width = 360) => {
 
 const list = () => screen.findByRole('list', { name: 'Your leads' });
 const cardOf = async (name: string) => within(await list()).getByRole('button', { name }).closest('li')!;
-/** The *Semua* chip: the list opens on *Sales*, and Mas Andi is a Recruit lead. */
+/** The *Semua* chip, where the list opens since P19.9-T1 AC-1 (ADR-0232): pressed again, it changes nothing. */
 const showAll = async () => userEvent.click(await screen.findByRole('button', { name: /^All, / }));
 
 describe('P19.7-T2 AC-12 proposals on the Leads page', () => {
@@ -185,6 +185,8 @@ describe('P19.7-T2 AC-12 proposals on the Leads page', () => {
       await list();
       await userEvent.click(screen.getByRole('button', { name: 'Filter and sort' }));
       const sheet = within(await screen.findByRole('dialog', { name: 'Filter and sort' }));
+      // The list opens on *Semua* (P19.9-T1 AC-1), which has no stages: *Sales* first.
+      await userEvent.click(within(sheet.getByRole('group', { name: 'Type' })).getByRole('button', { name: 'Sales' }));
       await userEvent.click(within(sheet.getByRole('group', { name: 'Status' })).getByRole('button', { name: 'Follow-up' }));
       await userEvent.click(within(sheet.getByRole('group', { name: 'Proposal' })).getByRole('button', { name: 'Has a proposal' }));
       await waitFor(() => expect(calls.some((c) => /hasProposal=true/.test(c.url))).toBe(true));

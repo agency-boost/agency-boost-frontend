@@ -10,6 +10,7 @@ import { Avatar, initialsFor } from '@/components/ui/avatar';
 import { PickerMenu } from '@/components/ui/picker-menu';
 import { ResponsiveSheet } from '@/components/ui/responsive-sheet';
 import { rungShort } from '@/components/ui/role-badge';
+import { RungTag } from '@/components/ui/rung-tag';
 import { Skeleton, SkeletonBar } from '@/components/ui/skeleton';
 import { TonePill } from '@/components/ui/tone-pill';
 import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
@@ -280,11 +281,8 @@ function PersonRow({ person, view, onOpen }: { person: PotensiPerson; view: Pote
     <>
       <Avatar name={person.name} photoUrl={person.photoUrl} seed={person.membershipId} size={36} />
       <span data-potensi-name="" className="min-w-0 flex-1 text-base font-bold uppercase leading-snug text-ink [overflow-wrap:anywhere]">
-        {person.isLeader && (
-          <span className="mr-1.5 inline-block rounded-[6px] bg-secondary px-1.5 py-px align-[1px] text-sm font-extrabold text-secondary-contrast">
-            {rungShort(person.rung)}
-          </span>
-        )}
+        {/* The shared level tag (P19.9-T4 AC-1), which the Overview's roster wears on every row. */}
+        {person.isLeader && <RungTag rung={person.rung} className="mr-1.5" />}
         {person.name}
       </span>
       <span data-potensi-marks="" className="flex shrink-0 items-center gap-1.5">

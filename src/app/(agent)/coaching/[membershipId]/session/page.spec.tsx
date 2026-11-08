@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AgentLayout from '@/app/(agent)/layout';
 import { InLanguage, makeMe, renderInLayout, renderWithSession, routeParams, stubFetch, type StubReply } from '@test/harness';
 import type { Language } from '@/i18n/language';
+import type { Me } from '@/lib/session';
 import { act } from 'react';
 import CoachingPersonLayout from '../layout';
 import CoachingSessionTabPage from './page';
@@ -184,7 +185,7 @@ const echoSave: StubReply = ({ body }) => {
 };
 
 /** The session tab, in English (every spec's default) or, asked for, in Indonesian (P18.10-T3). */
-const show = (routes: Record<string, StubReply | StubReply[]> = {}, language?: Language) => {
+const show = (routes: Record<string, StubReply | StubReply[]> = {}, language?: Language, me: Me = LEADER) => {
   const stub = stubFetch({
     '/kpm/config': { body: { activity: [], ratios: [], leadPipelines: PIPELINES, version: 1 } },
     '/kpm/org-levels': { body: [] },
@@ -202,8 +203,8 @@ const show = (routes: Record<string, StubReply | StubReply[]> = {}, language?: L
   });
   const tab = <CoachingPersonLayout params={routeParams({ membershipId: 'mem-rina' })}><CoachingSessionTabPage /></CoachingPersonLayout>;
   const view = language
-    ? renderWithSession(<InLanguage language={language}><AgentLayout>{tab}</AgentLayout></InLanguage>, { me: LEADER })
-    : renderInLayout(AgentLayout, tab, { me: LEADER });
+    ? renderWithSession(<InLanguage language={language}><AgentLayout>{tab}</AgentLayout></InLanguage>, { me })
+    : renderInLayout(AgentLayout, tab, { me });
   return { ...stub, ...view };
 };
 
@@ -291,6 +292,21 @@ describe('the session workspace (P11-T8)', () => {
       // Every one of these reads is audited; the pre-start state draws none of them.
       expect(calls.some((c) => /\/summary\?|\/activity\/|\/leads|\/goals\//.test(c.url))).toBe(false);
       expect(screen.queryByRole('region', { name: 'Goal' })).not.toBeInTheDocument();
+    });
+
+    it('P19.9-T6 AC-2 an Agent who leads holds the coach’s grants and is offered the same start, which goes to the API', async () => {
+      // The server's grants decide (ADR-0234): no rung is read here, so the Agent-rung coach's tab is the AB's.
+      const AGENT_COACH = makeMe({
+        ...LEADER,
+        membership: { ...LEADER.membership!, orgLevelCode: 'AGENT', hierarchyRole: 'agent', directCount: 1 },
+      });
+      const { calls } = show({
+        'GET /coaching/coachees/mem-rina/sessions': { body: history() },
+        'POST /coaching/coachees/mem-rina/sessions': { status: 201, body: session() },
+      }, undefined, AGENT_COACH);
+      await userEvent.click(await screen.findByRole('button', { name: 'Start coaching session' }));
+      await waitFor(() => expect(sent(calls, 'POST', '/coaching/coachees/mem-rina/sessions')).toHaveLength(1));
+      expect(screen.queryByText(/permission/i)).not.toBeInTheDocument();
     });
 
     it('P11-T8 AC-2 starts: one POST, the prototype’s toast, and last week’s unfinished items and tips carried in', async () => {

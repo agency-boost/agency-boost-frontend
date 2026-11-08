@@ -17,8 +17,8 @@ import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import { dayInZone, OFFICE_TIME_ZONE } from '@/lib/format';
 import {
-  countByStage, countByType, listEveryLead, nameMatches, reorderLeads, setLeadOutcome, LEAD_ROWS_FIRST_SHOWN,
-  type Lead, type LeadOutcome, type LeadType, type LeadTypeChip,
+  countByStage, countByType, listEveryLead, nameMatches, readsTeamLeads, reorderLeads, setLeadOutcome, LEAD_ROWS_FIRST_SHOWN,
+  type Lead, type LeadOutcome, type LeadScope, type LeadType, type LeadTypeChip,
 } from '@/lib/leads';
 import { useCan, useSession } from '@/lib/session';
 import type { LeadStatusRow } from '@/lib/tenant-config';
@@ -46,8 +46,13 @@ const sameSelection = (a: Selection, b: Selection) =>
  *
  * - **One row: a search pill, *Cari nama lead*, and a round filter button** — a sheet with the type, the status and the
  *   order, as chips (no native select); the accent's small mark on the button while a filter or an order is on.
- * - **The type chips, *Semua 67 · Sales 58 · Recruit 9***, each with its count. It opens on *Sales* where the reader has a
- *   Sales lead (the approved mockup's), else *Recruit*, else *Semua*.
+ * - **The reader's own leads, always first** (P19.9-T1 AC-2, R10; ADR-0232): `GET /leads?scope=own`, the open list and
+ *   both closed ones. ***Leads milik: Saya · Tim*** heads the filter sheet for a reader whose grant reaches beyond their
+ *   own (`readsTeamLeads`); *Tim* is everybody else it reaches — their downline, without their own (OD-286) — and counts
+ *   as a filter on (the mark, *Hapus filter*). A card that is not the reader's says whose: *Milik Rina Wijaya*.
+ * - **The type chips, *Semua 67 · Sales 58 · Recruit 9***, each with its count. **It opens on *Semua*, always** (P19.9-T1
+ *   AC-1, R1 and R9; ADR-0232) — where it opened on *Sales* when the reader had a Sales lead (the approved mockup's,
+ *   UI-105) — so the list holds the number Home's *Leads* tile says.
  * - **The pipeline strip** (D-18): navy, a cell per stage of the chosen type with its count, from every open lead the
  *   reader holds (`listEveryLead`); a tap filters the list to that stage, a second tap clears it. *Semua* has no strip:
  *   the two ladders share no stage.
@@ -88,7 +93,11 @@ export function LeadsList({ split = false, addRequest = 0 }: {
   const [open, setOpen] = useState<List | null>(null);
   const [loadError, setLoadError] = useState<ApiError | null>(null);
   const [reloads, setReloads] = useState(0);
-  const [chosenChip, setChosenChip] = useState<LeadTypeChip | null>(null);
+  /** *Semua* until the reader chooses (P19.9-T1 AC-1): what Home's *Leads* tile counts. */
+  const [chip, setChip] = useState<LeadTypeChip>('all');
+  /** ***Leads milik*** (P19.9-T1 AC-2, AC-3): *Saya* until the reader chooses *Tim*, which only some are offered. */
+  const [scope, setScope] = useState<LeadScope>('own');
+  const readsTeam = readsTeamLeads(me?.membership);
   const [stage, setStage] = useState<string | null>(null);
   /**
    * ***Sudah ada proposal* / *Belum ada proposal*** (P19.7-T2 AC-12; Acc. 5): `hasProposal`, asked of the server — which
@@ -111,7 +120,7 @@ export function LeadsList({ split = false, addRequest = 0 }: {
     const isCurrent = () => load.current === generation;
     setLoadError(null);
     void listEveryLead(
-      { outcome: 'open', sort: sort?.key, dir: sort?.dir, ...(hasProposal === null ? {} : { hasProposal }) },
+      { outcome: 'open', scope, sort: sort?.key, dir: sort?.dir, ...(hasProposal === null ? {} : { hasProposal }) },
       (rows, total, first) => {
         setOpen((current) => (first || !current
           ? { rows, total }
@@ -120,18 +129,21 @@ export function LeadsList({ split = false, addRequest = 0 }: {
       isCurrent,
     ).catch((err) => { if (isCurrent()) setLoadError(toDisplayError(err)); });
     return () => { load.current += 1; };
-  }, [sort?.key, sort?.dir, hasProposal, reloads]);
+  }, [scope, sort?.key, sort?.dir, hasProposal, reloads]);
 
-  /* The closed lists, as the table's: again after a reopen or an outcome, which move a lead between them. */
+  /*
+   * The closed lists, as the table's: again after a reopen or an outcome, which move a lead between them — and over the
+   * same *Leads milik* as the open list (P19.9-T1 AC-2).
+   */
   useEffect(() => {
     let current = true;
     for (const [outcome, set] of [['won', setWon], ['lost', setLost]] as const) {
-      loadClosed(outcome, set, () => current).catch((err) => {
+      loadClosed(outcome, set, () => current, undefined, scope).catch((err) => {
         if (current) setClosedError((e) => ({ ...e, [outcome]: toDisplayError(err) }));
       });
     }
     return () => { current = false; };
-  }, [reloads]);
+  }, [scope, reloads]);
 
   const pipelines = useMemo(() => config?.leadPipelines ?? [], [config]);
   const ladderFor = useCallback(
@@ -142,21 +154,26 @@ export function LeadsList({ split = false, addRequest = 0 }: {
 
   const held = open?.rows ?? [];
   const counts = countByType(held);
-  /** Before the reader chooses: *Sales* where they have one, as the approved mockup opens, else *Recruit*, else all. */
-  const chip: LeadTypeChip = chosenChip ?? (counts.sales > 0 ? 'sales' : counts.recruitment > 0 ? 'recruitment' : 'all');
   const ladder = chip === 'all' ? [] : ladderFor(chip).filter((s) => s.status === 'active');
   const stageCounts = chip === 'all' ? new Map<string, number>() : countByStage(held, chip, ladder);
   const shown = held.filter((lead) => (chip === 'all' || lead.type === chip)
     && (stage === null || lead.statusCode === stage)
     && (term.trim() === '' || nameMatches(lead.name, term)));
   const drawn = expanded ? shown : shown.slice(0, LEAD_ROWS_FIRST_SHOWN);
-  const filterOn = stage !== null || sort !== null || hasProposal !== null;
+  const filterOn = stage !== null || sort !== null || hasProposal !== null || scope === 'team';
   const today = dayInZone(OFFICE_TIME_ZONE, new Date());
   const typeName = (type: LeadTypeChip) => (type === 'all' ? t.list.all : t.types[type]);
   const orderWords = t.sort[ORDERS.find((o) => sameSort(o.sort, sort))?.words ?? 'saved'];
 
   const chooseChip = (next: LeadTypeChip) => {
-    setChosenChip(next);
+    setChip(next);
+    setStage(null);
+    setExpanded(false);
+  };
+  /** *Saya* or *Tim*: a proposal is its owner's alone, so *Tim* drops the proposal filter it cannot answer. */
+  const chooseScope = (next: LeadScope) => {
+    setScope(next);
+    if (next === 'team') setHasProposal(null);
     setStage(null);
     setExpanded(false);
   };
@@ -165,7 +182,10 @@ export function LeadsList({ split = false, addRequest = 0 }: {
   const replace = (lead: Lead) => setOpen((current) => {
     if (!current) return current;
     const at = current.rows.findIndex((r) => r.id === lead.id);
-    if (at === -1) return { rows: [lead, ...current.rows], total: current.total + 1 };
+    // A lead the reader adds is their own: on *Tim* it is not this list's (P19.9-T1 AC-3).
+    if (at === -1) return scope === 'team' && lead.ownerMembershipId === myMembership
+      ? current
+      : { rows: [lead, ...current.rows], total: current.total + 1 };
     return { ...current, rows: current.rows.map((r) => (r.id === lead.id ? lead : r)) };
   });
   const drop = (id: string) => setOpen((current) => current && {
@@ -489,6 +509,8 @@ export function LeadsList({ split = false, addRequest = 0 }: {
       onHasProposal={(next) => { setHasProposal(next); setExpanded(false); }}
       sort={sort}
       onSort={setSort}
+      scope={readsTeam ? scope : null}
+      onScope={chooseScope}
     />
   );
 
@@ -611,9 +633,11 @@ const sameSort = (a: Sort, b: Sort) => (a === null || b === null ? a === b : a.k
 /**
  * The filter button's sheet (UI-105): the type, the status and the order, as chips — no native select. **And the
  * proposal** (P19.7-T2 AC-12): *Sudah ada proposal* and *Belum ada proposal*, a second tap clearing it, after the status.
+ * **And, first, *Leads milik: Saya · Tim*** (P19.9-T1 AC-3; ADR-0232) for a reader whose grant reaches beyond their own
+ * leads; *Hapus filter* puts it back to *Saya*. Under *Tim* the proposal's group is not drawn: a proposal is its owner's.
  */
 function FilterSheet({
-  open, onClose, chip, onChip, typeName, ladder, stage, onStage, hasProposal, onHasProposal, sort, onSort,
+  open, onClose, chip, onChip, typeName, ladder, stage, onStage, hasProposal, onHasProposal, sort, onSort, scope, onScope,
 }: {
   open: boolean;
   onClose: () => void;
@@ -627,6 +651,9 @@ function FilterSheet({
   onHasProposal: (hasProposal: boolean | null) => void;
   sort: Sort;
   onSort: (sort: Sort) => void;
+  /** *Leads milik*, or `null` for a reader who is not offered it (an Agent who leads nobody). */
+  scope: LeadScope | null;
+  onScope: (scope: LeadScope) => void;
 }) {
   const t = useMessages(leadsMessages);
   const CHIP = 'flex min-h-11 items-center rounded-pill px-3.5 text-base font-semibold';
@@ -647,7 +674,7 @@ function FilterSheet({
         <div className="flex gap-2.5 pb-1">
           <button
             type="button"
-            onClick={() => { onStage(null); onSort(null); onHasProposal(null); }}
+            onClick={() => { onStage(null); onSort(null); onHasProposal(null); if (scope !== null) onScope('own'); }}
             className="min-h-12 rounded-pill border-[1.5px] border-line bg-card px-5 text-md font-bold text-navy hover:bg-hover-row"
           >
             {t.list.filters.clear}
@@ -662,6 +689,11 @@ function FilterSheet({
         </div>
       )}
     >
+      {scope !== null && group(t.list.filters.owners, ([['own', t.list.filters.mine], ['team', t.list.filters.team]] as const).map(([value, label]) => (
+        <button key={value} type="button" aria-pressed={scope === value} onClick={() => onScope(value)} className={cn(CHIP, look(scope === value))}>
+          {label}
+        </button>
+      )))}
       {group(t.list.filters.type, (['all', 'sales', 'recruitment'] as const).map((type) => (
         <button key={type} type="button" aria-pressed={chip === type} onClick={() => onChip(type)} className={cn(CHIP, look(chip === type))}>
           {typeName(type)}
@@ -683,7 +715,7 @@ function FilterSheet({
           </button>
         )),
       ])}
-      {group(t.list.filters.proposal, ([[true, t.list.filters.withProposal], [false, t.list.filters.withoutProposal]] as const).map(([value, label]) => (
+      {scope !== 'team' && group(t.list.filters.proposal, ([[true, t.list.filters.withProposal], [false, t.list.filters.withoutProposal]] as const).map(([value, label]) => (
         <button
           key={String(value)}
           type="button"

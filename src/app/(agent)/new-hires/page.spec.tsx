@@ -1,15 +1,19 @@
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AgentLayout from '@/app/(agent)/layout';
 import { atWidth, renderInLayout, stubFetch, type StubReply } from '@test/harness';
 import { notFound, readOnlySession, ROSTER, SARI_ME, SHELL_STUBS } from '@test/activation-fixtures';
 import { invite, JOINING_PERMISSIONS, requestedTransfer, TODAY } from '@test/joining-fixtures';
+import type { NewHiresRoster } from '@/lib/activation';
 import NewHiresPage from './page';
 
+const nav = vi.hoisted(() => ({ replace: vi.fn(), search: '' }));
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  useRouter: () => ({ push: vi.fn(), replace: nav.replace }),
   usePathname: () => '/new-hires',
+  // The year is the address's (P19.9-T3 AC-2): each test names its own, and starts from none.
+  useSearchParams: () => new URLSearchParams(nav.search),
 }));
 
 /** Agus, the AB the roster is his — who coaches, adds agents and decides requests. */
@@ -47,6 +51,8 @@ const show = (routes: Record<string, StubReply | StubReply[]> = {}, me = AGUS) =
   return { ...stub, ...view };
 };
 
+beforeEach(() => { nav.search = ''; nav.replace.mockClear(); });
+
 const group = (name: string) => screen.findByRole('group', { name });
 const toggleOf = (region: HTMLElement) => within(region).getAllByRole('button', { name: /team$/ })[0];
 
@@ -82,7 +88,9 @@ describe('/new-hires below 768px — UI V1 (UI-023 to UI-026, D-24)', () => {
       expect(closed).toHaveTextContent('AAB · 2');
     }
     await userEvent.click(toggleOf(await group('Arief Hidayat')));
-    expect(within(await group('Arief Hidayat')).getAllByRole('link').map((l) => l.textContent)).toEqual(['Tari Wulandari', 'Novi Lestari']);
+    // Tari, marked left, is listed and opens nothing (the Phase 19.9 exit review, L4; the test below).
+    expect(within(await group('Arief Hidayat')).getAllByRole('link').map((l) => l.textContent)).toEqual(['Novi Lestari']);
+    expect(await group('Arief Hidayat')).toHaveTextContent('Tari Wulandari');
   });
 
   it('UI-023 each person: the status circle, one line — Pecah telor di hari ke-X, amber after day 90, or Hari ke-X — and the checklist %', async () => {
@@ -98,15 +106,15 @@ describe('/new-hires below 768px — UI V1 (UI-023 to UI-026, D-24)', () => {
     expect(own).not.toHaveTextContent(/Join date|2026|Activated ·/);
   });
 
-  it('UI-024, UI-029 the whole row opens the person’s coaching page for a leader who coaches, with a ›', async () => {
+  it('P19.9-T3 AC-4 the whole row opens the person’s activation, with a › — for a leader who coaches too (was their coaching page, UI-029)', async () => {
     atWidth(375);
     show();
     const link = within(await group('Agus Prasetyo')).getByRole('link', { name: 'Dimas Saputra' });
-    expect(link).toHaveAttribute('href', '/coaching/mem-dimas/session?from=%2Fnew-hires');
+    expect(link).toHaveAttribute('href', '/new-hires/mem-dimas');
     expect(link.closest('[data-person-row]')!.querySelector('svg')).not.toBeNull();
   });
 
-  it('UI-024 an Agent who leads, who runs no coaching, opens the person’s detail instead', async () => {
+  it('P19.9-T3 AC-4 an Agent who leads, who runs no coaching, opens the same activation', async () => {
     atWidth(375);
     show({}, { ...AGUS, permissions: AGUS.permissions.filter((p) => p !== 'coaching_session:create') });
     expect(within(await group('Agus Prasetyo')).getByRole('link', { name: 'Dimas Saputra' })).toHaveAttribute('href', '/new-hires/mem-dimas');
@@ -154,7 +162,25 @@ describe('/new-hires below 768px — UI V1 (UI-023 to UI-026, D-24)', () => {
     await userEvent.click(toggleOf(await group('Arief Hidayat')));
     const page = document.body;
     expect(page).not.toHaveTextContent(/Left|Mark left|overdue/);
-    expect(within(await group('Arief Hidayat')).getByRole('link', { name: 'Tari Wulandari' })).toBeInTheDocument();
+    expect(within(await group('Arief Hidayat')).getByText('Tari Wulandari')).toBeInTheDocument();
+  });
+
+  /*
+   * *Added 2026-11-08 (the Phase 19.9 exit review, L4):* every row opens `/new-hires/{id}` since P19.9-T3 AC-4, and that
+   * answers *not found* for a new hire who left — nobody coaches them now. Their row stays on the list as data, as D-24
+   * keeps them, and opens nothing: no link and no ›, the name and its line as anybody's.
+   */
+  it('P19.9 exit review L4 a new hire who left is listed and opens nothing: no link, no ›, never /new-hires/{id}', async () => {
+    atWidth(375);
+    show();
+    await userEvent.click(toggleOf(await group('Arief Hidayat')));
+    const row = within(await group('Arief Hidayat')).getByText('Tari Wulandari').closest('[data-person-row]') as HTMLElement;
+    expect(row).toHaveTextContent('Not yetTari WulandariDay 4119%');
+    expect(within(row).queryByRole('link')).toBeNull();
+    expect(row.querySelector('svg')).toBeNull();
+    expect(document.querySelector('a[href^="/new-hires/mem-tari"]')).toBeNull();
+    // Her colleague in the same group still opens his activation.
+    expect(within(await group('Arief Hidayat')).getByRole('link', { name: 'Novi Lestari' })).toHaveAttribute('href', '/new-hires/mem-novi');
   });
 
   it('P19-T4 AC-3 the empty year: Aktivasi 3M at –, No data yet, the list as it will look, and Add your first agent', async () => {
@@ -195,10 +221,16 @@ describe('/new-hires from 1024px — UI V1 (UI-024, D-24)', () => {
     expect(leaders.map((h) => h.textContent)).toEqual([
       expect.stringContaining('Agus Prasetyo'), expect.stringContaining('Arief Hidayat'), expect.stringContaining('Sari Puspita'),
     ]);
-    expect(within(table).getAllByRole('link').map((l) => l.textContent)).toEqual([
+    // Tari, marked left, is a row header and no link (the Phase 19.9 exit review, L4).
+    expect(within(table).getAllByRole('rowheader').map((h) => h.textContent)).toEqual([
       'Fikri Ramadhan', 'Dimas Saputra', 'Indah Permata', 'Lukman Hakim', 'Kemal Pratama', 'Tari Wulandari', 'Novi Lestari',
       'Rina Wijaya', 'Budi Hartono',
     ]);
+    expect(within(table).getAllByRole('link').map((l) => l.textContent)).toEqual([
+      'Fikri Ramadhan', 'Dimas Saputra', 'Indah Permata', 'Lukman Hakim', 'Kemal Pratama', 'Novi Lestari', 'Rina Wijaya',
+      'Budi Hartono',
+    ]);
+    expect(within(table).getByRole('rowheader', { name: 'Tari Wulandari' }).querySelector('a, svg')).toBeNull();
     const lukman = within(table).getByRole('link', { name: 'Lukman Hakim' }).closest('tr')!;
     expect(lukman).toHaveTextContent('Activated after 3MFirst sale on day 96');
   });
@@ -214,7 +246,7 @@ describe('/new-hires from 1024px — UI V1 (UI-024, D-24)', () => {
     // The same filter, the same counts.
     const filter = screen.getByRole('group', { name: 'Show' });
     await userEvent.click(within(filter).getByRole('button', { name: 'Not yet 4' }));
-    expect(within(screen.getByRole('table')).getAllByRole('link').map((l) => l.textContent)).toEqual([
+    expect(within(screen.getByRole('table')).getAllByRole('rowheader').map((h) => h.textContent)).toEqual([
       'Fikri Ramadhan', 'Kemal Pratama', 'Tari Wulandari', 'Budi Hartono',
     ]);
   });
@@ -225,5 +257,68 @@ describe('/new-hires from 1024px — UI V1 (UI-024, D-24)', () => {
     await screen.findByRole('table');
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^New Hires$/);
     expect(screen.getByText('Track your new agents\' 90-day activation progress.')).toBeInTheDocument();
+  });
+});
+
+/**
+ * **The year** (P19.9-T3 AC-1, AC-2; ADR-0233, the owner's R2 and R3): *Tahun berjalan | Tahun lalu*, a header control
+ * above what it scopes; the address carries the other year, and a row carries it to the detail for its ‹.
+ */
+describe('/new-hires by year — P19.9-T3', () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const LAST_YEAR: NewHiresRoster = {
+    ...ROSTER, year: 'previous', window: { from: '2025-01-01', to: '2025-12-31' },
+    sections: { ...ROSTER.sections, inProgress: [], activated: ROSTER.sections.activated.slice(0, 1) },
+  };
+  const yearChoice = () => screen.findByRole('group', { name: 'Year' });
+
+  it('P19.9-T3 AC-1 opens on This year, asked for by name, the control’s two choices 13px/600/44px', async () => {
+    atWidth(375);
+    const { calls } = show();
+    const choice = await yearChoice();
+    const [current, previous] = within(choice).getAllByRole('button');
+    expect([current.textContent, previous.textContent]).toEqual(['This year', 'Last year']);
+    expect(current).toHaveAttribute('aria-pressed', 'true');
+    expect(previous).toHaveAttribute('aria-pressed', 'false');
+    for (const button of [current, previous]) expect(button).toHaveClass('min-h-11', 'text-base', 'font-semibold');
+    expect(calls.some((c) => c.url.endsWith('/new-hires?year=current'))).toBe(true);
+  });
+
+  it('P19.9-T3 AC-2 Last year goes to the address, replacing it', async () => {
+    atWidth(375);
+    show();
+    await userEvent.click(within(await yearChoice()).getByRole('button', { name: 'Last year' }));
+    expect(nav.replace).toHaveBeenCalledWith('/new-hires?year=previous', { scroll: false });
+  });
+
+  it('P19.9-T3 AC-2, AC-4 ?year=previous reads last year, and each row carries the year to the detail', async () => {
+    atWidth(375);
+    nav.search = 'year=previous';
+    const { calls } = show({ '/new-hires?year=previous': { body: LAST_YEAR } });
+    expect(within(await yearChoice()).getByRole('button', { name: 'Last year' })).toHaveAttribute('aria-pressed', 'true');
+    expect(calls.some((c) => c.url.endsWith('/new-hires?year=previous'))).toBe(true);
+    const link = (await screen.findAllByRole('link')).find((l) => l.getAttribute('href')?.startsWith('/new-hires/mem-'))!;
+    expect(link.getAttribute('href')).toMatch(/^\/new-hires\/mem-[a-z]+\?year=previous$/);
+  });
+
+  it('P19.9-T3 AC-2 a year with nobody says so in one line, the year control still there to go back', async () => {
+    atWidth(375);
+    nav.search = 'year=previous';
+    const nobody: NewHiresRoster = {
+      ...LAST_YEAR, units: [], sections: { inProgress: [], activated: [], notActivated: [] },
+      activation3M: { all: { activated: 0, notActivated: 0, late: 0, inProgress: 0, pct: null }, byMonth: [] },
+    };
+    show({ '/new-hires?year=previous': { body: nobody } });
+    expect(await screen.findByText('No one joined as a new hire last year.')).toBeInTheDocument();
+    expect(await yearChoice()).toBeInTheDocument();
+    expect(screen.queryByText('No one here.')).toBeNull();
+  });
+
+  it('P19.9-T3 AC-2 from 1024px the control sits above the table and its column, its words’ width', async () => {
+    atWidth(1280);
+    show();
+    const choice = await yearChoice();
+    expect(choice).toHaveClass('lg:w-fit');
+    expect(screen.getByTestId('new-hires-wide')).toBeInTheDocument();
   });
 });

@@ -255,7 +255,16 @@ const en = {
       proposal: 'Proposal',
       withProposal: 'Has a proposal',
       withoutProposal: 'No proposal yet',
+      /**
+       * ***Leads milik: Saya · Tim*** (P19.9-T1 AC-3; ADR-0232, OD-286): the filter's first group, for a reader whose
+       * grant reaches beyond their own leads. *Tim* is their downline's leads, without their own.
+       */
+      owners: 'Whose leads',
+      mine: 'Mine',
+      team: 'Team',
     },
+    /** A card whose lead is not the reader's (P19.9-T1 AC-4): whose it is, on the line under the name. */
+    ownedBy: ({ name }: { name: string }) => `${name}’s`,
     /**
      * **The card's proposal pill and its *Buat proposal*** (P19.7-T2 AC-1, AC-12): the pill's count where it has no
      * product's name (an empty draft), and the icon link's name. The pill's own name is `filters.proposal`.
@@ -524,7 +533,11 @@ const id: MessagesOf<typeof en> = {
       proposal: 'Proposal',
       withProposal: 'Sudah ada proposal',
       withoutProposal: 'Belum ada proposal',
+      owners: `${kept('Leads')} milik`,
+      mine: 'Saya',
+      team: 'Tim',
     },
+    ownedBy: ({ name }) => `Milik ${name}`,
     proposalCount: ({ n }) => `${n} proposal`,
     makeProposal: 'Buat proposal',
     makeProposalFor: ({ who }) => `Buat proposal untuk ${who}`,

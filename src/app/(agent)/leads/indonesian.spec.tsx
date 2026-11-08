@@ -267,6 +267,9 @@ describe('P18.10-T4 Leads Management in Indonesian', () => {
     expect(screen.getByRole('button', { name: 'Filter dan urutan' })).toBeInTheDocument();
     const chips = screen.getByRole('group', { name: 'Jenis lead' });
     expect(within(chips).getAllByRole('button').map((b) => b.textContent)).toEqual(['Semua3', 'Sales2', 'Recruit1']);
+    // It opens on *Semua* (P19.9-T1 AC-1; ADR-0232), which has no strip: *Sales* draws one.
+    expect(within(chips).getByRole('button', { name: /^Semua/ })).toHaveAttribute('aria-pressed', 'true');
+    await userEvent.click(within(chips).getByRole('button', { name: /^Sales, / }));
     const strip = screen.getByRole('group', { name: 'Pipeline Sales' });
     // A seeded stage's short word by its code (D-18's *Follow-up*); a stage the office added, in its own words.
     expect(within(strip).getAllByRole('button').map((b) => b.textContent)).toEqual(['1Belum didekati', '1Follow-up', '0Polis terbit']);
@@ -276,6 +279,26 @@ describe('P18.10-T4 Leads Management in Indonesian', () => {
     expect(within(wati).getByText('Isi tindakan')).toBeInTheDocument();
     expect(within(budi).getByRole('button', { name: 'Kirim pesan WhatsApp ke Pak Budi' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Tambah lead' })).toBeInTheDocument();
+    noEnglishLeft();
+  });
+
+  it('P19.9-T1 AC-3 AC-4 says Leads milik: Saya · Tim and Milik {nama} in Indonesian, to an Agent who leads somebody', async () => {
+    onPhone();
+    const stub = stubFetch({
+      ...BASE,
+      '/leads': { body: page([lead({ id: 'l9', name: 'Pak Joko', ownerMembershipId: 'mem-rina', owner: { membershipId: 'mem-rina', name: 'Rina Wijaya' } })]) },
+    } as Parameters<typeof stubFetch>[0]);
+    renderInIndonesian(<AgentLayout><LeadsPage /></AgentLayout>, {
+      me: makeMe({ membership: { ...AGENT.membership!, directCount: 1 }, permissions: AGENT.permissions }),
+    });
+    const list = await screen.findByRole('list', { name: 'Leads Anda' });
+    expect(within(list).getByText('Milik Rina Wijaya')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Filter dan urutan' }));
+    const sheet = within(await screen.findByRole('dialog', { name: 'Filter dan urutan' }));
+    const owners = within(sheet.getByRole('group', { name: 'Leads milik' }));
+    expect(owners.getAllByRole('button').map((b) => b.textContent)).toEqual(['Saya', 'Tim']);
+    expect(owners.getByRole('button', { name: 'Saya' })).toHaveAttribute('aria-pressed', 'true');
+    expect(stub.calls.some((c) => /scope=own/.test(c.url))).toBe(true);
     noEnglishLeft();
   });
 

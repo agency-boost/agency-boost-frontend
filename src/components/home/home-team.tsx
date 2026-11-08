@@ -1,19 +1,19 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import { MemberContactButtons } from '@/components/contact-buttons';
 import { HEADER_CONTROL } from '@/components/ui/header-control';
 import { LineIcon } from '@/components/ui/line-icon';
 import { PersonRow } from '@/components/ui/person-row';
+import { RungTag } from '@/components/ui/rung-tag';
 import { SectionHead } from '@/components/ui/section-title';
 import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
 import { homeMessages } from '@/i18n/messages/home';
 import { cn } from '@/lib/cn';
 import { formatNumber } from '@/lib/format';
 import {
-  FIRST_AGENT_HREF, firstNameOf, HOME_TEAM_SHOWN, logLink, reportedOn, TEAM_REPORT_ALL_HREF, teamIn,
-  type HomeScope, type HomeTeamPerson,
+  FIRST_AGENT_HREF, firstNameOf, HOME_TEAM_SHOWN, logLink, reportedOn, teamIn, type HomeScope, type HomeTeamPerson,
 } from '@/lib/home';
 import { useCan } from '@/lib/session';
 
@@ -23,8 +23,12 @@ import { useCan } from '@/lib/session';
  * today's activity and a WhatsApp reminder. *Laporan tim* until the owner's copy change of 7 November, at every size.
  *
  * - **The order is the server's** (`GET /home`: nobody-reported first, then not today, then the rest), filtered to the
- *   chosen scope; **five shown, then *Semua ›***, which opens the Unit Dashboard's *Aktivitas* tab
- *   (`/unit/dashboard?tab=activities`, OD-278's default) where it opened the rest in place.
+ *   chosen scope; **five shown, then *Semua ›***, which **opens the rest in place** (P19.9-T2 AC-1, R8; ADR-0235, OD-278
+ *   option 3) — a button, `aria-expanded`, that reads *Lebih sedikit* once open and closes them again; choosing *Unit* or
+ *   *Group* closes them too. From P19.8-T2 it went to the Unit Dashboard's *Aktivitas* tab, which the owner reversed.
+ * - **On *Group*, each person's level** (P19.9-T2 AC-2; R8): the navy tag before the name, in the company's short words
+ *   (`RungTag`, the Unit roster's and *Potensi*'s: *AB*, *AAB*, *Agent*). *Unit* holds the reader's direct agents, so it
+ *   draws none.
  * - **A day**: the orange count where they reported, a **grey ✕** where not — its name *Belum lapor* — where a two-line
  *   *Belum lapor* pill wrapped twice a row. A saved day of nothing is a ✕ too (ADR-0042), as the pill was.
  * - **The row** (the mockup's grid): avatar 32 · the name, **never cut** — two lines on a phone (`PersonRow`, P19.8-T1
@@ -41,9 +45,12 @@ export function HomeTeam({
 }: { team: readonly HomeTeamPerson[]; leaderName: string; className?: string }) {
   const t = useMessages(homeMessages).team;
   const [scope, setScope] = useState<HomeScope>('unit');
+  /** *Semua ›* pressed (P19.9-T2 AC-1): every row of the scope, in place. */
+  const [all, setAll] = useState(false);
   const [phones, setPhones] = useState<Record<string, string>>({});
   const people = useMemo(() => teamIn(team, scope), [team, scope]);
-  const shown = people.slice(0, HOME_TEAM_SHOWN);
+  const shown = all ? people : people.slice(0, HOME_TEAM_SHOWN);
+  const listId = useId();
   const host = typeof window === 'undefined' ? '' : window.location.host;
   const leader = firstNameOf(leaderName);
   // Saving somebody's number is an AB's and an AAB's, for their downline (`member:update_phone`): a leader on another
@@ -56,7 +63,7 @@ export function HomeTeam({
         <ScopePill
           label={t.scopeLabel}
           value={scope}
-          onChange={setScope}
+          onChange={(next) => { setScope(next); setAll(false); }}
           options={[{ id: 'unit', label: t.unit }, { id: 'group', label: t.group }]}
         />
       </SectionHead>
@@ -78,7 +85,8 @@ export function HomeTeam({
               <span className="w-[3.25rem] text-center">{t.today}</span>
               <span className="w-9" />
             </div>
-            <ul>
+            {/* Named only for *Semua ›*'s `aria-controls`: with five or fewer the list is drawn as it was. */}
+            <ul id={people.length > HOME_TEAM_SHOWN ? listId : undefined}>
               {shown.map((person) => {
                 const both = !reportedOn(person.yesterday) && !reportedOn(person.today);
                 return (
@@ -91,6 +99,7 @@ export function HomeTeam({
                       avatarSize={32}
                       className="gap-2.5 rounded-none bg-transparent py-1.5 lg:hover:bg-transparent"
                       nameClassName="text-md max-md:text-base md:max-lg:text-md lg:text-md"
+                      tag={scope === 'group' ? <RungTag rung={person.rung} /> : undefined}
                       trailing={(
                         <div className="flex shrink-0 items-center gap-2.5">
                           <DayCell label={t.yesterdayLong} count={person.yesterday} notReported={t.notReported} />
@@ -117,15 +126,18 @@ export function HomeTeam({
               })}
             </ul>
             {people.length > HOME_TEAM_SHOWN && (
-              <Link
-                href={TEAM_REPORT_ALL_HREF}
+              <button
+                type="button"
                 data-team-all=""
-                aria-label={t.allLabel({ n: people.length })}
+                aria-expanded={all}
+                aria-controls={listId}
+                aria-label={all ? undefined : t.allLabel({ n: people.length })}
+                onClick={() => setAll((was) => !was)}
                 className="flex min-h-11 w-full items-center justify-center gap-0.5 border-t border-divider text-md font-semibold text-muted hover:text-navy"
               >
-                {t.all}
-                <LineIcon name="chevronRight" className="h-4 w-4" />
-              </Link>
+                {all ? t.fewer : t.all}
+                <LineIcon name={all ? 'chevronUp' : 'chevronRight'} className="h-4 w-4" />
+              </button>
             )}
           </>
         )}

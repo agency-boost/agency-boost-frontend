@@ -42,15 +42,19 @@ export const RINA_AGENT = makeMe({
 
 const person = (name: string, over: Partial<HomeTeamPerson> = {}): HomeTeamPerson => ({
   membershipId: `m-${name.split(' ')[0].toLowerCase()}`, name, phone: '+6281211002200', photoUrl: null, inUnit: true,
-  yesterday: null, today: null, ...over,
+  rung: AGENT_RUNG, yesterday: null, today: null, ...over,
 });
+
+/** The seeded ladder's rungs, as `GET /home` names them (P19.9-T2 AC-2). */
+export const AGENT_RUNG = { code: 'AGENT', label: 'Agent' };
+export const AAB_RUNG = { code: 'AAB', label: 'AAB' };
 
 /** The mockup's leader (Agus, 30 Oct 2026): nothing logged today, five yesterday; the server's order. */
 export const TEAM: HomeTeamPerson[] = [
   person('Lukman Hakim', { phone: null }),
-  person('Herman Widjaja', { inUnit: false }),
+  person('Herman Widjaja', { inUnit: false, rung: AAB_RUNG }),
   person('Siti Rahmawati', { yesterday: 3 }),
-  person('Dewi Lestari', { inUnit: false, yesterday: 2 }),
+  person('Dewi Lestari', { inUnit: false, rung: AAB_RUNG, yesterday: 2 }),
   person('Rina Wijaya', { inUnit: false, yesterday: 1, today: 0 }),
   person('Indah Permatasari', { yesterday: 5, today: 2 }),
   person('Novi Andriani', { inUnit: false, yesterday: 4, today: 6 }),

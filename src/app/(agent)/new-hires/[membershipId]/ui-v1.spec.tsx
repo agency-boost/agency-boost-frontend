@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import AgentLayout from '@/app/(agent)/layout';
 import { atWidth, renderInLayout, routeParams, stubFetch, type StubReply } from '@test/harness';
 import { activationView, leaderView, LINKS, readOnlySession, rinaItems, SARI, SARI_ME, SHELL_STUBS } from '@test/activation-fixtures';
-import type { NewHireDetail, NewHireStanding } from '@/lib/activation';
+import type { ActivationEmpty, NewHireDetail, NewHireStanding } from '@/lib/activation';
 import NewHireDetailPage from './page';
 
 vi.mock('next/navigation', () => ({
@@ -206,5 +206,67 @@ describe('/new-hires/[membershipId] — UI V1 (UI-023, UI-025, UI-027; D-25, D-2
     const checkIn = document.querySelector('[data-code="WEEKLY_CHECK_IN"]') as HTMLElement;
     expect(checkIn.querySelector('[data-auto-marker]')).not.toBeNull();
     expect(LINKS['coaching:weekly:4'].form).toBe('one_on_one');
+  });
+});
+
+/**
+ * **The first year only, and the way back to the year** (P19.9-T3 AC-4, AC-5; OD-289, ADR-0233, the owner's R4 and R5):
+ * past the join date plus twelve months the server answers the activation empty, and the page is the person's header
+ * and one line; a listed new hire with none opens the same page; ‹ goes back to the year the row was opened from.
+ */
+describe('/new-hires/[membershipId] — P19.9-T3', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState(null, '', '/');
+  });
+  const empty = (over: Partial<ActivationEmpty> = {}): ActivationEmpty => ({
+    empty: 'first_year_over', hire: { membershipId: 'mem-rina', name: 'Rina Wijaya' }, today: '2026-11-08',
+    joinDate: '2025-08-06', firstYearEndsOn: '2026-08-06', leader: { ...SARI, role: 'aab' }, ...over,
+  });
+  const showEmpty = (body: ActivationEmpty) => {
+    const stub = stubFetch({ ...SHELL_STUBS, 'GET /new-hires/mem-rina': { body } });
+    renderInLayout(AgentLayout, <NewHireDetailPage params={routeParams({ membershipId: 'mem-rina' })} />, { me: SARI_V1 });
+    return stub;
+  };
+
+  it('P19.9-T3 AC-5 past her first year at 375px: ‹ NAME and the leader line, one line, and nothing of a checklist', async () => {
+    atWidth(375);
+    showEmpty(empty());
+    const page = await screen.findByTestId('hire-empty');
+    const header = within(page).getByTestId('hire-header-phone');
+    expect(within(header).getByRole('heading', { level: 1 })).toHaveTextContent(/^Rina Wijaya$/);
+    expect(header).toHaveTextContent(/You · Joined 6 (Aug|Agu) 2025/);
+    expect(page).toHaveTextContent(/The 90-Day Activation covers the first year after joining only — it ended on 6 (Aug|Agu) 2026\./);
+    // Nothing of the checklist, the strip, the tiles, the buttons or the note — and no ⋯.
+    expect(screen.queryByTestId('first-sale-strip')).toBeNull();
+    expect(screen.queryByRole('checkbox')).toBeNull();
+    expect(screen.queryByRole('button', { name: /More for/ })).toBeNull();
+    expect(screen.queryByRole('link', { name: /WhatsApp/ })).toBeNull();
+    expect(screen.queryByRole('textbox')).toBeNull();
+  });
+
+  it('P19.9-T3 AC-5 from 768px: the title, Kembali ke New Hires and the one line', async () => {
+    atWidth(1280);
+    showEmpty(empty());
+    expect(await screen.findByRole('heading', { level: 1, name: 'Rina Wijaya' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Back to New Hires' })).toHaveAttribute('href', '/new-hires');
+    expect(await screen.findByTestId('hire-empty')).toHaveTextContent(/covers the first year after joining only/);
+  });
+
+  it('P19.9-T3 AC-5 a listed new hire with no activation opens the same page with her own line — not “not one of your new hires”', async () => {
+    atWidth(375);
+    showEmpty(empty({ empty: 'no_activation', joinDate: '2026-08-01', firstYearEndsOn: '2027-08-01' }));
+    const page = await screen.findByTestId('hire-empty');
+    expect(page).toHaveAttribute('data-empty', 'no_activation');
+    expect(page).toHaveTextContent('Rina Wijaya has no 90-day activation.');
+    expect(screen.queryByText('This person isn’t one of your new hires.')).toBeNull();
+  });
+
+  it('P19.9-T3 AC-4 ‹ goes back to the year the row was opened from: ?year=previous to Tahun lalu', async () => {
+    atWidth(375);
+    window.history.replaceState(null, '', '/new-hires/mem-rina?year=previous');
+    show();
+    const header = await screen.findByTestId('hire-header-phone');
+    expect(within(header).getByRole('link', { name: 'Back to New Hires' })).toHaveAttribute('href', '/new-hires?year=previous');
   });
 });

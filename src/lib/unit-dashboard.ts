@@ -141,6 +141,12 @@ export interface UnitRow {
   name: string;
   /** Their profile photo as a signed link (UI V1, UI-111); `null` or absent for none: the avatar draws initials. */
   photoUrl?: string | null;
+  /**
+   * ***WhatsApp*** (P19.9-T4 AC-1; ADR-0235, OD-291): the number on their account, for the row's WhatsApp button at every
+   * period and size; `null` without one — *Isi nomor WhatsApp* for a reader who may save one — and always on the reader's
+   * own row and in the office's read-only view.
+   */
+  phone: string | null;
   /** The reader's own row: *You ({first name})* ★, *Last 1:1* —, its drills to their own screens. */
   isReader: boolean;
   rung: UnitRung;

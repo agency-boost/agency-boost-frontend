@@ -154,10 +154,16 @@ export function TimeGrid({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scroll]);
 
-  /** A row's day cells: these days, or — paged — the strip of the days before, these, and the days after. */
+  /**
+   * A row's day cells: these days, or — paged — the strip of the days before, these, and the days after. **The strip fills
+   * its row's height** (`h-full`; P19.9-T5 AC-2, R12, parity I-920): a block child of the lane, it was as tall as its
+   * content — ~20px of *·* in the *Tugas* row — so the day cells stopped short of the row's 44px and the head's white
+   * showed under them, today's orange cut and the column lines short. The lane is stretched by its row, so the strip's
+   * 100% is the row's; the transform that pages it is untouched.
+   */
   const lane = (cell: (day: string, current: boolean) => ReactNode, className?: string) => (pager ? (
     <div className="min-w-0 flex-1 overflow-hidden">
-      <div className="flex w-[300%]" style={pager.style}>
+      <div data-pager-strip="" className="flex h-full w-[300%]" style={pager.style}>
         {[pager.before, days, pager.after].map((list, i) => (
           <div key={i} className={cn('flex w-1/3', className)}>{list.map((day) => cell(day, i === 1))}</div>
         ))}

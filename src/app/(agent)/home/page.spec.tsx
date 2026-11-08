@@ -161,7 +161,12 @@ describe('UI-100 Home', () => {
 
 describe('UI-101 Laporan tim', () => {
   const rowsOf = () => [...document.querySelectorAll('[data-home-team] [data-person-row]')] as HTMLElement[];
-  const namesOf = () => rowsOf().map((r) => r.querySelector('[class*="uppercase"]')!.textContent);
+  // The name alone: the *Group* tab draws the level tag before it (P19.9-T2 AC-2).
+  const namesOf = () => rowsOf().map((r) => {
+    const line = r.querySelector('[class*="uppercase"]')!.cloneNode(true) as HTMLElement;
+    line.querySelector('[data-rung-tag]')?.remove();
+    return line.textContent;
+  });
 
   it('UI-101 starts on Unit, the server’s order kept, the leader never on it', async () => {
     await open(LEADER);
@@ -175,10 +180,14 @@ describe('UI-101 Laporan tim', () => {
     await user.click(screen.getByRole('button', { name: 'Group' }));
     expect(screen.getByRole('button', { name: 'Group' })).toHaveAttribute('aria-pressed', 'true');
     expect(namesOf()).toEqual(['Lukman Hakim', 'Herman Widjaja', 'Siti Rahmawati', 'Dewi Lestari', 'Rina Wijaya']);
-    // *Changed 2026-11-07 (P19.8-T2 AC-8; OD-278):* *Semua ›* opens the Unit Dashboard's *Aktivitas* tab, where it
-    // opened the rest in place.
-    expect(screen.getByRole('link', { name: 'All 7 on the Unit Dashboard' })).toHaveAttribute('href', '/unit/dashboard?tab=activities');
-    expect(screen.queryByRole('button', { name: /Show all/ })).toBeNull();
+    // *Changed 2026-11-08 (P19.9-T2 AC-1; ADR-0235, OD-278 option 3):* *Semua ›* opens the rest in place again, where
+    // from P19.8-T2 it opened the Unit Dashboard's *Aktivitas* tab.
+    const all = screen.getByRole('button', { name: 'All 7 people' });
+    expect(all).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('link', { name: /on the Unit Dashboard/ })).toBeNull();
+    await user.click(all);
+    expect(namesOf()).toHaveLength(7);
+    expect(screen.getByRole('button', { name: 'Show fewer' })).toHaveAttribute('aria-expanded', 'true');
   });
 
   it('UI-101 a day reads an orange count when they logged and Belum lapor when not — a saved 0 is Belum lapor too', async () => {

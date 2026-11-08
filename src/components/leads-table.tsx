@@ -28,7 +28,7 @@ import { formatCalendarDay } from '@/lib/format';
 import {
   callLink, createLead, deleteLead, finalStageOf, listEveryLead, phoneHeld, readLead, reorderLeads, setLeadOutcome, setLeadStatus,
   updateLead, whatsAppLink, LEAD_NAME_MIN, LEAD_ROWS_FIRST_SHOWN, type Lead, type LeadOutcome, type LeadQuery,
-  type LeadType,
+  type LeadScope, type LeadType,
 } from '@/lib/leads';
 import { useSession } from '@/lib/session';
 import { PotensiSwitch } from '@/components/potensi-switch';
@@ -1984,15 +1984,19 @@ function useCardLayout(): [React.RefObject<HTMLDivElement | null>, boolean] {
   return [frame, cards];
 }
 
-/** Both closed lists, page after page, into state as each lands. `/leads`' compact list reads them too (UI-105). */
+/**
+ * Both closed lists, page after page, into state as each lands. `/leads`' compact list reads them too (UI-105), by its
+ * *Leads milik* choice (`scope`, P19.9-T1 AC-2).
+ */
 export async function loadClosed(
   outcome: LeadOutcome,
   set: React.Dispatch<React.SetStateAction<List | null>>,
   isCurrent: () => boolean,
   owner?: string,
+  scope?: LeadScope,
 ) {
   await listEveryLead(
-    { outcome, sort: 'dateRegistered', dir: 'desc', owner },
+    { outcome, sort: 'dateRegistered', dir: 'desc', owner, scope },
     (rows, total, first) => set((list) => (first || !list
       ? { rows, total }
       : { ...list, rows: [...list.rows, ...rows.filter((r) => !list.rows.some((c) => c.id === r.id))] })),

@@ -50,6 +50,18 @@ describe('/coaching/me/activation, the reader’s own Activation tab (P13-T9 AC-
     expect(within(record).getByText('100% complete')).toBeInTheDocument();
   });
 
+  it('P19.9-T3 AC-5 past the first year the tab is one line — the checklist is no longer read', async () => {
+    show({
+      'GET /activation/me': {
+        body: {
+          empty: 'first_year_over', hire: RINA, today: '2026-11-08', joinDate: '2025-08-06', firstYearEndsOn: '2026-08-06', leader: null,
+        },
+      },
+    });
+    expect(await screen.findByText('Your 90-day activation covers your first year only, which ended on 6 Aug 2026.')).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: '90-Day Activation' })).not.toBeInTheDocument();
+  });
+
   it('P13-T9 AC-4 a reader with no activation opens on an empty state', async () => {
     show({ 'GET /activation/me': notFound }, { ...SARI_ME, activation: null });
     expect(await screen.findByText('You have no 90-day activation.')).toBeInTheDocument();

@@ -61,6 +61,7 @@ export function PersonRow({
   meta,
   trailing,
   badge,
+  tag,
   href,
   onSelect,
   chevron = false,
@@ -84,6 +85,12 @@ export function PersonRow({
    * added by Phase 18.11 T9). The name gives way with *…* first.
    */
   badge?: ReactNode;
+  /**
+   * **Before the name, inline** — the Unit roster's level tag (`RungTag`; P19.9-T4 AC-1, ADR-0235), as *Potensi* draws
+   * it: the name wraps after it on a phone, as words do. Outside the row's target, so the row is still named by the
+   * person's name alone; the tag is read just before it.
+   */
+  tag?: ReactNode;
   href?: string;
   onSelect?: () => void;
   /** The › of a tappable row (D-09). */
@@ -116,11 +123,15 @@ export function PersonRow({
   );
   // The target covers the row; the trailing controls sit above it.
   const stretch = 'text-left after:absolute after:inset-0 after:rounded-row after:content-[""] focus-visible:outline-none';
-  const target = live
+  // With a tag the name's line is a block holding the tag and the target inline, the target only the name (P19.9-T4).
+  const tagged = tag !== undefined && tag !== null;
+  const own = tagged ? undefined : nameClass;
+  const linked = live
     ? href !== undefined
-      ? <Link href={href} data-row-main="" className={cn(nameClass, stretch)}>{name}</Link>
-      : <button type="button" data-row-main="" onClick={onSelect} className={cn(nameClass, stretch, 'w-full')}>{name}</button>
-    : <span className={nameClass}>{name}</span>;
+      ? <Link href={href} data-row-main="" className={cn(own, stretch)}>{name}</Link>
+      : <button type="button" data-row-main="" onClick={onSelect} className={cn(own, stretch, !tagged && 'w-full')}>{name}</button>
+    : <span className={own}>{name}</span>;
+  const target = tagged ? <div className={nameClass}>{tag}{linked}</div> : linked;
 
   return (
     <div

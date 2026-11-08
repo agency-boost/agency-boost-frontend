@@ -149,6 +149,32 @@ export interface ActivationView {
   note: ActivationNote | null;
 }
 
+/** Why an activation is served empty (P19.9-T3 AC-5): its first year is over, or there never was one. */
+export type ActivationEmptyReason = 'first_year_over' | 'no_activation';
+
+/**
+ * **An activation served empty** (OD-289, ADR-0233; P19.9-T3 AC-5): from the join date plus twelve calendar months the
+ * person's activation is no longer read — `GET /activation/me` and `GET /new-hires/:membershipId` answer this in its
+ * place, and the leader's read answers it too for a new hire New Hires lists who has no activation at all. Nothing of a
+ * checklist is in it; the dates are the server's (the twelve months are never counted here). Told from the full view
+ * by `empty`, which only this shape carries (`isEmptyActivation`).
+ */
+export interface ActivationEmpty {
+  /** An `ActivationEmptyReason`, spelled out for `contract.spec.ts`. */
+  empty: 'first_year_over' | 'no_activation';
+  hire: ActivationPerson;
+  today: string;
+  /** Day 1; `null` for a membership with none. */
+  joinDate: string | null;
+  /** The first day it is empty: the join date plus twelve calendar months. `null` with no join date. */
+  firstYearEndsOn: string | null;
+  /** Who they report to, for the leader's header; `null` on the person's own read. */
+  leader: NewHireLeader | null;
+}
+
+/** Whether a read answered the empty shape (P19.9-T3 AC-5) rather than the activation. */
+export const isEmptyActivation = <T extends object>(view: T | ActivationEmpty): view is ActivationEmpty => 'empty' in view;
+
 /**
  * *Direct Unit*, or the nearest leader's unit below the reader (D-group): an AAB's, or — an AB under an
  * AB (ADR-0014) — an AB's, the card naming the rung (a Fix).
@@ -247,9 +273,28 @@ export interface NewHiresWindow {
   to: string;
 }
 
+/**
+ * **The two years `/new-hires` offers** (ADR-0233; P19.9-T3 AC-2, the owner's R2 and R3): *Tahun berjalan* — this
+ * calendar year, the default — and *Tahun lalu*. The address carries the other as `?year=previous`.
+ */
+export const NEW_HIRE_YEARS = ['current', 'previous'] as const;
+export type NewHireYear = (typeof NEW_HIRE_YEARS)[number];
+
+/** The year an address names, `current` when it names none or one it does not know. */
+export function newHireYearFrom(value: string | string[] | null | undefined): NewHireYear {
+  const one = Array.isArray(value) ? value[0] : value;
+  return one === 'previous' ? 'previous' : 'current';
+}
+
+/** `/new-hires` on a year: the default bare, the other with its `?year=`. */
+export const newHiresHref = (year: NewHireYear = 'current') => (year === 'previous' ? '/new-hires?year=previous' : '/new-hires');
+
 /** `GET /new-hires` (P18.8-T6): a year of new hires by their 3M result, and the 3M activation % at the top. */
 export interface NewHiresRoster {
   today: string;
+  /** Which year the server listed (P19.9-T3 AC-2): the one asked for — a `NewHireYear`, spelled out for `contract.spec.ts`. */
+  year: 'current' | 'previous';
+  /** The year's first day to today, or all of last year. */
   window: NewHiresWindow;
   /** The day the result is decided after: what *Day 64 of 90* prints. */
   days: number;
@@ -309,8 +354,8 @@ export interface MyItemInput {
  * to `api(...)` — sees each route this module calls.
  */
 
-/** The reader's own activation, any state. A 404 means they have none. */
-export const readMyActivation = () => api<ActivationView>('/activation/me');
+/** The reader's own activation, any state — or empty past their first year (P19.9-T3 AC-5). A 404 means they have none. */
+export const readMyActivation = () => api<ActivationView | ActivationEmpty>('/activation/me');
 
 /** Tick, untick, or note one of the reader's own manual items. Sets the state; never toggles it. */
 export const saveMyItem = (code: string, input: MyItemInput) =>
@@ -320,11 +365,18 @@ export const saveMyItem = (code: string, input: MyItemInput) =>
 export const graduateMyActivation = () =>
   api<ActivationView>('/activation/me/graduate', { method: 'POST' });
 
-/** The leader's roster. A 404 means the reader reaches no open activation. */
-export const readNewHires = () => api<NewHiresRoster>('/new-hires');
+/**
+ * The leader's roster for a year (P19.9-T3 AC-1, AC-2): this calendar year unless `previous` is asked for. A 404 means
+ * nobody the reader leads joined as a new hire this year or last.
+ */
+export const readNewHires = (year: NewHireYear = 'current') => api<NewHiresRoster>(`/new-hires?year=${year}`);
 
-/** One hire's activation as a leader reads it — also what the coaching *Activation* tab reads. */
-export const readNewHire = (membershipId: string) => api<NewHireDetail>(`/new-hires/${encodeURIComponent(membershipId)}`);
+/**
+ * One hire's activation as a leader reads it — also what the coaching *Activation* tab reads — or empty past their first
+ * year, or for a listed new hire with none (P19.9-T3 AC-5).
+ */
+export const readNewHire = (membershipId: string) =>
+  api<NewHireDetail | ActivationEmpty>(`/new-hires/${encodeURIComponent(membershipId)}`);
 
 /** A leader's tick on a hire's manual item — or a data-backed one's, with its record (P18.8-T4 AC-3). */
 export const saveHireItem = (membershipId: string, code: string, done: boolean, record?: ActivationRecordInput) =>
@@ -562,8 +614,12 @@ export function aspectTitle(label: string): string {
 /** *Day* as the tile and the roster print it: the day, or the window and a plus past it (`:6616`, `:6753`). */
 export const dayShown = (day: number, window: number) => (day > window ? `${window}+` : String(day));
 
-/** The way back to a hire's detail, and the detail's own address. */
-export const newHireHref = (membershipId: string) => `/new-hires/${encodeURIComponent(membershipId)}`;
+/**
+ * A hire's detail — where every reader's row opens (P19.9-T3 AC-4) — carrying the roster's year when it is not the
+ * default, so its ‹ goes back to the year it came from.
+ */
+export const newHireHref = (membershipId: string, year: NewHireYear = 'current') =>
+  `/new-hires/${encodeURIComponent(membershipId)}${year === 'previous' ? '?year=previous' : ''}`;
 
 /** `/coaching/me`'s *Activation* tab: in `lib/hrefs.ts`, so the coaching record's tabs link here without this module. */
 export { MY_COACHING_ACTIVATION_HREF } from './hrefs';

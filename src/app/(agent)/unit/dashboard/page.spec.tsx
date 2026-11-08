@@ -2,7 +2,7 @@ import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { axe } from 'vitest-axe';
-import { atWidth, makeMe, renderInLayout, renderWithSession, stubFetch, type StubReply } from '@test/harness';
+import { atWidth, makeMe, renderInLayout, renderWithSession, stubFetch, wears, type StubReply } from '@test/harness';
 import {
   activities, AGUS_ME, dashboard, EMPTY, NEW_HIRE_VIEW, RATIOS, rp, UNITS,
 } from '@test/unit-dashboard-fixtures';
@@ -562,7 +562,9 @@ describe('the Unit Dashboard (P15-T2; UI V1, Phase 18.11 T4)', () => {
       expect(screen.getByRole('button', { name: /^Arief Wibowo’s Unit · 3/ })).toHaveAttribute('aria-expanded', 'false');
       expect(screen.getByRole('button', { name: /^Sari Wulandari’s Unit · 6/ })).toHaveAttribute('aria-expanded', 'false');
       expect(screen.queryByRole('table')).not.toBeInTheDocument();
-      expect(screen.getAllByRole('link').map((a) => a.textContent)).toEqual(['You (Agus)', 'Dimas Pratama', 'Indah Lestari', 'Siti Rahma']);
+      // The rows' own links — P19.9-T4 AC-1 adds Indah's WhatsApp beside hers.
+      const rows = screen.getAllByRole('link').filter((a) => a.hasAttribute('data-row-main'));
+      expect(rows.map((a) => a.textContent)).toEqual(['You (Agus)', 'Dimas Pratama', 'Indah Lestari', 'Siti Rahma']);
       await userEvent.click(screen.getByRole('button', { name: /^Sari Wulandari’s Unit · 6/ }));
       // Sari's unit opens, and Wulan's inside it is its own, closed.
       expect(screen.getByRole('link', { name: 'Rina Wijaya' })).toBeInTheDocument();
@@ -636,8 +638,9 @@ describe('the Unit Dashboard (P15-T2; UI V1, Phase 18.11 T4)', () => {
       render(view);
       await screen.findByRole('button', { name: /^Your Unit · 4/ });
       const name = screen.getByRole('link', { name: long });
-      expect(name.className).toMatch(/max-md:whitespace-normal/);
-      expect(name).toHaveClass('text-base');
+      // Since P19.9-T4 AC-1 the name's line is a block holding the level tag and the link: it wraps, never cut.
+      expect(name.parentElement!.className).toMatch(/max-md:whitespace-normal/);
+      expect(name.parentElement).toHaveClass('text-base');
       const row = name.closest('[data-person-row]')!;
       expect(row).toHaveTextContent('82%IDR 65.6M / 80M');
       const bar = row.querySelector('[data-goal-bar="82"]')!;
@@ -724,6 +727,119 @@ describe('the Unit Dashboard (P15-T2; UI V1, Phase 18.11 T4)', () => {
       expect(within(dimas as HTMLElement).getByRole('img', { name: '3 proposals' })).toHaveAttribute('data-proposals-made', '3');
       const indah = screen.getByRole('link', { name: 'Indah Lestari' }).closest('[data-person-row]')!;
       expect(indah.querySelector('[data-proposals-made]')).toBeNull();
+    });
+  });
+
+  /*
+   * **P19.9-T4 — the level and WhatsApp on every row, and each unit's amount** (R6, R7; ADR-0235, OD-291; parity
+   * I-916–I-918): every row, at every period and size, carries the person's level — the navy tag *Potensi* draws — and a
+   * WhatsApp button by Home's rule; each unit's header carries its *Rp x / y* on a phone, and on a laptop below 1280px.
+   */
+  describe('P19.9-T4 the level and WhatsApp on every row, each unit’s amount', () => {
+    const SAVER = makeMe({ ...AGUS_ME, permissions: [...AGUS_ME.permissions, 'member:update_phone'] });
+    const tagOf = (row: Element) => row.querySelector('[data-rung-tag]');
+    /** The row's WhatsApp — a link with a number on file, a button that asks for one — named for the person. */
+    const whatsAppIn = (row: Element) => {
+      const found = row.querySelector<HTMLElement>('[data-channel="whatsapp"]');
+      if (found) expect(found).toHaveAccessibleName(/^Send a WhatsApp message to /);
+      return found;
+    };
+    const phoneRow = (name: string) => screen.getByRole('link', { name }).closest('[data-person-row]')!;
+
+    it.each(['7d', 'month', 'year'])('P19.9-T4 AC-1 at 375px, period=%s: every row’s level tag before the name, in the company’s short name', async (period) => {
+      atWidth(375);
+      render(dashboard({ period: period as UnitDashboardView['period'] }), { period });
+      await screen.findByRole('button', { name: /^Your Unit · 4/ });
+      const tags = ['You (Agus)', 'Dimas Pratama', 'Indah Lestari', 'Siti Rahma'].map((name) => tagOf(phoneRow(name)));
+      expect(tags.map((tag) => tag?.textContent)).toEqual(['AB', 'Agent', 'Agent', 'Agent']);
+      // Before the name, outside the row's link: the row is still named by the person alone, its level read first.
+      const name = screen.getByRole('link', { name: 'Dimas Pratama' });
+      expect(tags[1]!.nextElementSibling).toBe(name);
+      expect(tags[1]).toHaveClass('bg-secondary', 'text-secondary-contrast', 'normal-case');
+      // Unit Arief's AAB, once his unit is open.
+      await userEvent.click(screen.getByRole('button', { name: /^Arief Wibowo’s Unit · 3/ }));
+      expect(tagOf(phoneRow('Arief Wibowo'))).toHaveTextContent('AAB');
+    });
+
+    it.each(['month', 'year'])('P19.9-T4 AC-1 at 375px, period=%s: WhatsApp straight through with a number, Isi nomor for a reader who may save one, never on the reader’s row', async (period) => {
+      atWidth(375);
+      render(dashboard({ period: period as UnitDashboardView['period'] }), { me: SAVER, period });
+      await screen.findByRole('button', { name: /^Your Unit · 4/ });
+      expect(whatsAppIn(phoneRow('Indah Lestari'))).toHaveAttribute('href', 'https://wa.me/6281234567001');
+      const dimas = whatsAppIn(phoneRow('Dimas Pratama'))!;
+      expect(dimas.tagName).toBe('BUTTON');
+      expect(whatsAppIn(phoneRow('You (Agus)'))).toBeNull();
+      // On *Bulan ini* WhatsApp sits under the pill, the two in one column beside the ›.
+      const pill = phoneRow('Dimas Pratama').querySelector('[data-tone]');
+      if (period === 'month') expect(pill!.parentElement!.contains(dimas)).toBe(true);
+      else expect(pill).toBeNull();
+      await userEvent.click(dimas);
+      expect(await screen.findByRole('dialog')).toBeInTheDocument();
+    });
+
+    it('P19.9-T4 AC-1 a reader who may not save a number gets WhatsApp only where one is on file (Home’s rule)', async () => {
+      atWidth(375);
+      render();
+      await screen.findByRole('button', { name: /^Your Unit · 4/ });
+      expect(whatsAppIn(phoneRow('Indah Lestari'))).toHaveAttribute('href', 'https://wa.me/6281234567001');
+      for (const name of ['Dimas Pratama', 'Siti Rahma', 'You (Agus)']) expect(whatsAppIn(phoneRow(name))).toBeNull();
+    });
+
+    it('P19.9-T4 AC-1 the office’s read-only view draws every level and no WhatsApp at all', async () => {
+      atWidth(375);
+      const view = dashboard({ readOnly: true, head: { membershipId: 'mem-agus', name: 'Agus Santoso', isReader: false } });
+      render(view, { me: makeMe({ ...SAVER, membership: { ...SAVER.membership!, isKpmOwner: true } }) });
+      await screen.findByRole('button', { name: /^Agus Santoso’s Unit · 4/ });
+      expect(document.querySelectorAll('[data-rung-tag]').length).toBe(4);
+      expect(document.querySelectorAll('[data-channel="whatsapp"]')).toHaveLength(0);
+    });
+
+    it.each([[1024, 'month'], [1280, 'year']])('P19.9-T4 AC-1 at %ipx, period=%s: the level under the name, WhatsApp beside the ›', async (px, period) => {
+      atWidth(px);
+      render(dashboard({ period: period as UnitDashboardView['period'] }), { me: SAVER, period });
+      await table();
+      const header = rowOf('Dimas Pratama').querySelector('th')!;
+      expect(tagOf(header)).toHaveTextContent('Agent');
+      expect(header.querySelector('a')!.compareDocumentPosition(tagOf(header)!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      const last = [...rowOf('Indah Lestari').querySelectorAll('td')].at(-1)!;
+      expect(within(last).getByRole('link', { name: 'Send a WhatsApp message to Indah Lestari' })).toHaveAttribute('href', 'https://wa.me/6281234567001');
+      expect(last.querySelector('svg:last-child')).not.toBeNull();
+      expect(whatsAppIn(rowOf('You (Agus)'))).toBeNull();
+    });
+
+    it('P19.9-T4 AC-1 a tablet draws the same: the level under the name, WhatsApp beside the ›', async () => {
+      atWidth(800);
+      render(dashboard(), { me: SAVER });
+      await table();
+      expect(tagOf(rowOf('Siti Rahma'))).toHaveTextContent('Agent');
+      expect(whatsAppIn(rowOf('Siti Rahma'))).not.toBeNull();
+    });
+
+    it('P19.9-T4 AC-2 at 375px each unit’s header shows its amount under its label, the bar and the % kept; Not uploaded yet with none', async () => {
+      atWidth(375);
+      const view = dashboard();
+      view.units = view.units.map((u, i) => (i === 1
+        ? { ...u, total: { ...u.total, goal: { ...u.total.goal, actualMinor: null, attainmentPct: null } } } : u));
+      render(view);
+      const own = await screen.findByRole('button', { name: /^Your Unit · 4/ });
+      expect(own.querySelector('[data-unit-amount]')).toHaveTextContent('IDR 262.4M / 320M');
+      expect(own).toHaveTextContent('82%');
+      expect(screen.getByRole('button', { name: /^Sari Wulandari’s Unit · 6/ }).querySelector('[data-unit-amount]')).toHaveTextContent('IDR 131.2M / 240M');
+      expect(screen.getByRole('button', { name: /^Dewi Kartika’s Unit · 1/ }).querySelector('[data-unit-amount]')).toHaveTextContent('Not uploaded yet');
+    });
+
+    it('P19.9-T4 AC-2 a laptop below 1280px shows the unit’s amount on its own line, where it was read only by a screen reader', async () => {
+      atWidth(1024);
+      render();
+      await table();
+      const header = within(await table()).getByRole('button', { name: 'Your Unit · 4' }).closest('tr')!;
+      const amount = header.querySelector('[data-unit-amount]')!;
+      expect(amount).toHaveTextContent('IDR 262.4M / 320M');
+      const line = amount.parentElement!;
+      expect(wears(line, 1100).split(' ')).toEqual(expect.arrayContaining(['block']));
+      expect(wears(line, 1100).split(' ')).not.toContain('sr-only');
+      // From 1280px it sits beside the %, after a ·, as before.
+      expect(wears(line, 1280).split(' ')).not.toContain('block');
     });
   });
 

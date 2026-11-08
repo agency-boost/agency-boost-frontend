@@ -132,10 +132,10 @@ const SEEDED: readonly DemoGroup[] = [
         lands: 'A second office — sign in here to see that neither can reach the other',
       },
       {
-        role: 'Agent',
+        role: 'Agent · leads one',
         email: 'agent@kpm0555.test',
         password: FIELD,
-        lands: 'The same office, from the field',
+        lands: 'The same office, from the field. Lina recruited Fajar, so she coaches him: Tim saya › Coaching',
       },
     ],
   },

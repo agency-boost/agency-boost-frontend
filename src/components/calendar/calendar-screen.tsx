@@ -191,7 +191,8 @@ export function CalendarScreen({
   };
   const canBlock = useCan('calendar_entry:block') && !readOnly;
   // A leader is anybody with a direct report (ADR-0087), on a rung whose role reaches a downline: an
-  // Agent coaches nobody, so compares nobody. The server decides who is listed; this decides the button.
+  // Agent compares nobody (roles §3.15) — one who leads coaches since P19.9-T6, but the calendar's cells stayed. The
+  // server decides who is listed; this decides the button.
   const membership = me?.membership;
   const canCompare = (membership?.directCount ?? 0) > 0 && membership?.hierarchyRole !== 'agent';
 

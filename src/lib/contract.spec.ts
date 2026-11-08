@@ -830,6 +830,8 @@ const ACTIVATION_PAIRS: ReadonlyArray<[file: string, ours: string, theirs: strin
   // UI V1 (UI-023, UI-027): the detail's strip, and the leader and number in its header.
   ['activation.ts', 'NewHireStanding', 'NewHireStandingDto'],
   ['activation.ts', 'NewHireLeader', 'NewHireLeaderDto'],
+  // P19.9-T3 AC-5: an activation served empty past the first year, or for a listed new hire with none.
+  ['activation.ts', 'ActivationEmpty', 'ActivationEmptyDto'],
   ['session.ts', 'MeActivation', 'MeActivationDto'],
 ];
 

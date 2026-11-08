@@ -2,9 +2,11 @@
 
 import Link from 'next/link';
 import { useId, useState, type MouseEvent, type ReactNode } from 'react';
+import { MemberContactButtons } from '@/components/contact-buttons';
 import { HEADER_CONTROL } from '@/components/ui/header-control';
 import { LineIcon } from '@/components/ui/line-icon';
 import { PersonRow } from '@/components/ui/person-row';
+import { RungTag } from '@/components/ui/rung-tag';
 import { SectionTitle } from '@/components/ui/section-title';
 import { TippedGlyph } from '@/components/ui/tipped-glyph';
 import { TonePill, type PillTone } from '@/components/ui/tone-pill';
@@ -13,6 +15,7 @@ import { unitDashboardMessages } from '@/i18n/messages/unit-dashboard';
 import { cn } from '@/lib/cn';
 import { lastOneOnOneLine, rosterStatusLabel, type RosterStatus } from '@/lib/coaching';
 import { formatNumber, formatPercent, formatRupiahCompactPair, formatShortDay } from '@/lib/format';
+import { useCan } from '@/lib/session';
 import {
   everyRow, goalMet, goalShare, matchesFilter, rowHref, rowName, rowsOf, statusShown, statusTally,
   type RosterFilter, type UnitDashboardView, type UnitGroup, type UnitPeriod, type UnitRow, type UnitTotal,
@@ -51,6 +54,12 @@ import {
  * uploaded shows the dashed bar and *Belum diunggah* and **no pill**, and counts in no status chip; a chip at 0 is not
  * drawn, and **when only *Semua* would remain the chip row is not drawn at all — the title reads *Roster tim Anda · 12***.
  * The title is the section titles' one size, 14px / 700 (MOB UI-185); the chips are header controls (MOB UI-171).
+ *
+ * **Since the owner's requests of 6 November** (P19.9-T4; R6, R7; ADR-0235, OD-291): **every row, at every period and
+ * size, carries the person's level** — the navy tag *Potensi* draws (`RungTag`), before the name — **and a WhatsApp
+ * button** (`RowWhatsApp`), Home's rule: with a number on file, or for a reader who may save one; never on the reader's
+ * own row, never in the office's read-only view. **Each unit's header carries its amount**, *Rp x / y*, under its label
+ * on a phone and on its own line on a laptop below 1280px, where it was read only by a screen reader.
  */
 export interface RosterProps {
   view: UnitDashboardView;
@@ -362,6 +371,71 @@ function phoneMarksOf(row: UnitRow): ReactNode {
   );
 }
 
+/**
+ * **A row's WhatsApp** (P19.9-T4 AC-1; R6, ADR-0235, OD-291) — Home's *Laporan aktivitas tim* rule (`home-team.tsx`):
+ * the 36px green circle straight to WhatsApp with a number on file; without one, *Isi nomor WhatsApp* for a reader who
+ * may save it on the person's account (`member:update_phone`, an AB's and an AAB's) — and nothing for one who may not.
+ * **Never on the reader's own row, and never in the office's read-only view** (P19.3-T3 AC-3), whose rows carry no
+ * number. Where a row has none, an equal blank keeps the column straight — none at all in the read-only view.
+ */
+function RowWhatsApp({ row, readOnly }: { row: UnitRow; readOnly: boolean }) {
+  const canSavePhone = useCan('member:update_phone');
+  const [saved, setSaved] = useState<string | null>(null);
+  if (readOnly) return null;
+  const phone = saved ?? row.phone;
+  if (row.isReader || !(canSavePhone || phone)) return <span aria-hidden="true" className="w-9 shrink-0" />;
+  return (
+    // A 36px circle in a 36px column; its 44px target reaches 4px into the gap either side (as Home's).
+    <span data-row-whatsapp="" className="-mx-1 flex lg:mx-0">
+      <MemberContactButtons
+        membershipId={row.membershipId}
+        name={row.name}
+        phone={phone}
+        channels={['whatsapp']}
+        size={36}
+        onSaved={setSaved}
+      />
+    </span>
+  );
+}
+
+/**
+ * **A unit's amount** (P19.9-T4 AC-2; R7, ADR-0235): *Rp 262,4 jt / 320 jt* — the shared pair, beside its percentage —
+ * or *Belum diunggah* while none of its production is uploaded; nothing without a target. Each figure kept whole, so a
+ * narrow column wraps after the slash and never cuts a sum.
+ */
+function UnitAmount({ goal, className }: { goal: UnitTotal['goal']; className?: string }) {
+  const t = useMessages(unitDashboardMessages);
+  const figures = useFigureLanguage();
+  if (!goal.targetMinor) return null;
+  if (goal.actualMinor === null) return <span data-unit-amount="" className={className}>{t.own.notUploaded}</span>;
+  const [first, second] = formatRupiahCompactPair(goal.actualMinor, goal.targetMinor, '/', figures).split(' / ');
+  return (
+    <span data-unit-amount="" className={className}>
+      <span className="whitespace-nowrap">{first} /</span> <span className="whitespace-nowrap">{second}</span>
+    </span>
+  );
+}
+
+/**
+ * **A phone row's right side** (P19.9-T4 AC-1): the status pill on *Bulan ini* and **WhatsApp under it**, the two right-
+ * aligned in one column — side by side they left the name ~40px at 375px — and WhatsApp alone on the other periods. The
+ * row's › stays beside them.
+ */
+function PhoneTrailing({ row, period, readOnly }: { row: UnitRow; period: UnitPeriod; readOnly: boolean }) {
+  const pill = pillOf(row, period);
+  // The office's read-only view: the row's right side as it was, the pill alone.
+  if (readOnly) return pill;
+  const whatsApp = <RowWhatsApp row={row} readOnly={readOnly} />;
+  if (!pill) return whatsApp;
+  return (
+    <span className="flex flex-col items-end gap-1">
+      {pill}
+      <span className="-my-1 flex">{whatsApp}</span>
+    </span>
+  );
+}
+
 /** One unit of the roster, as both drawings walk it: its name, its people, its total, the units inside it. */
 interface Section {
   key: string;
@@ -411,17 +485,17 @@ function RosterAccordion({ view, period, filter, from }: { view: UnitDashboardVi
   return (
     <div data-roster-accordion="">
       {sections.filter((s) => holds(s, filter)).map((s) => (
-        <AccordionSection key={s.key} section={s} depth={0} open={open} onToggle={toggle} period={period} filter={filter} from={from} />
+        <AccordionSection key={s.key} section={s} depth={0} open={open} onToggle={toggle} period={period} filter={filter} from={from} readOnly={view.readOnly} />
       ))}
     </div>
   );
 }
 
 function AccordionSection({
-  section, depth, open, onToggle, period, filter, from,
+  section, depth, open, onToggle, period, filter, from, readOnly,
 }: {
   section: Section; depth: number; open: ReadonlySet<string>; onToggle: (key: string) => void;
-  period: UnitPeriod; filter: RosterFilter; from: string;
+  period: UnitPeriod; filter: RosterFilter; from: string; readOnly: boolean;
 }) {
   const t = useMessages(unitDashboardMessages);
   const language = useLanguage();
@@ -444,7 +518,11 @@ function AccordionSection({
           )}
         >
           <LineIcon name={expanded ? 'chevronDown' : 'chevronRight'} className="h-4 w-4 shrink-0 text-signal-grey" />
-          <span className="min-w-0 flex-1 truncate">{t.v1.unitCount({ label: section.label, n: section.count })}</span>
+          <span className="min-w-0 flex-1 py-1">
+            <span className="block truncate">{t.v1.unitCount({ label: section.label, n: section.count })}</span>
+            {/* P19.9-T4 AC-2 (R7): the unit's amount under its label, the bar and the % kept. */}
+            <UnitAmount goal={goal} className="block text-sm font-normal text-signal-grey" />
+          </span>
           {bar !== null && (
             <span aria-hidden="true" className="h-1.5 w-[60px] shrink-0 overflow-hidden rounded-sm bg-base">
               <span className="block h-full bg-secondary" style={{ width: `${bar}%` }} />
@@ -470,9 +548,10 @@ function AccordionSection({
                   height={60}
                   // 13px / 700, on up to two lines and never cut (MOB UI-178; PersonRow wraps it below 768px).
                   nameClassName="text-base"
+                  tag={<RungTag rung={row.rung} className="mr-1.5" />}
                   badge={phoneMarksOf(row)}
                   meta={<PhoneGoalLine goal={row.goal} />}
-                  trailing={pillOf(row, period)}
+                  trailing={<PhoneTrailing row={row} period={period} readOnly={readOnly} />}
                   chevron
                   className="rounded-none"
                 />
@@ -480,7 +559,7 @@ function AccordionSection({
             ))}
           </ul>
           {section.inner.filter((s) => holds(s, filter)).map((inner) => (
-            <AccordionSection key={inner.key} section={inner} depth={depth + 1} open={open} onToggle={onToggle} period={period} filter={filter} from={from} />
+            <AccordionSection key={inner.key} section={inner} depth={depth + 1} open={open} onToggle={onToggle} period={period} filter={filter} from={from} readOnly={readOnly} />
           ))}
         </div>
       )}
@@ -543,30 +622,35 @@ function RosterTable({
 
   return (
     <table aria-labelledby={headingId} data-roster-table={wide ? 'desktop' : 'tablet'} className="relative w-full table-fixed border-collapse text-left text-base">
+      {/*
+       * P19.9-T4 AC-1 (R6): the last column holds WhatsApp and the row's ›, ~64px. Its width comes from the count columns,
+       * which gave one to three digits up to 70px, measured against their headings in Inter (2026-11-08): at 1024px beside
+       * the rail every heading still fits whole, and *Status* holds its longest pill.
+       */}
       {wide ? (
         <colgroup>
-          <col className="w-[15%] xl:w-[16%]" />
-          <col className="w-[12%] xl:w-[17%]" />
-          <col className="w-[8%] xl:w-[6.5%]" />
-          <col className="w-[7.5%] xl:w-[6%]" />
-          <col className="w-[8%] xl:w-[6.5%]" />
+          <col className="w-[16%] xl:w-[16%]" />
+          <col className="w-[11%] xl:w-[15%]" />
+          <col className="w-[5.5%] xl:w-[6%]" />
+          <col className="w-[6.5%] xl:w-[6%]" />
+          <col className="w-[5.5%] xl:w-[6%]" />
           <col className="w-[8%] xl:w-[6.5%]" />
           {/* P19.7-T2 AC-13: *Proposal*, after *Potensi rekrut*. */}
           <col className="w-[7.5%] xl:w-[6.5%]" />
-          <col className="w-[8.5%] xl:w-[7.5%]" />
-          <col className="w-[9.5%] xl:w-[10%]" />
-          <col className="w-[14%] xl:w-[14.5%]" />
-          <col className="w-[2%] xl:w-[3%]" />
+          <col className="w-[9%] xl:w-[7.5%]" />
+          <col className="w-[8%] xl:w-[9%]" />
+          <col className="w-[15.5%] xl:w-[14.5%]" />
+          <col className="w-[7.5%] xl:w-[7%]" />
         </colgroup>
       ) : (
         <colgroup>
-          <col className="w-[30%]" />
-          <col className="w-[27%]" />
+          <col className="w-[28%]" />
+          <col className="w-[24%]" />
           {/* P19.7-T2 AC-13: *Proposal*, before *Aktivitas*. */}
-          <col className="w-[11%]" />
+          <col className="w-[10%]" />
           <col className="w-[14%]" />
-          <col className="w-[14%]" />
-          <col className="w-[4%]" />
+          <col className="w-[15%]" />
+          <col className="w-[9%]" />
         </colgroup>
       )}
       {/* The head sticks below the top inset, never under a Home Screen app's clock (staging review, 2026-10-31). */}
@@ -628,6 +712,7 @@ function RosterTable({
           filter={filter}
           from={from}
           wide={wide}
+          readOnly={view.readOnly}
         />
       ))}
     </table>
@@ -635,10 +720,10 @@ function RosterTable({
 }
 
 function UnitRows({
-  section, depth, open, onToggle, period, filter, from, wide,
+  section, depth, open, onToggle, period, filter, from, wide, readOnly,
 }: {
   section: Section; depth: number; open: boolean; onToggle: () => void; period: UnitPeriod; filter: RosterFilter;
-  from: string; wide: boolean;
+  from: string; wide: boolean; readOnly: boolean;
 }) {
   const t = useMessages(unitDashboardMessages);
   const figures = useFigureLanguage();
@@ -664,11 +749,16 @@ function UnitRows({
             <span className="min-w-0 truncate">{t.v1.unitCount({ label: section.label, n: section.count })}</span>
           </button>
         </th>
-        <td className={cn(CELL, 'truncate')}>
+        <td className={cn(CELL, wide ? 'xl:truncate' : 'truncate')}>
           {pct ?? '–'}
           {goal.actualMinor !== null && goal.targetMinor ? (
-            <span className={cn('font-normal text-signal-grey', wide && 'max-xl:sr-only')}>
-              {' · '}{formatRupiahCompactPair(goal.actualMinor, goal.targetMinor, '/', figures)}
+            /*
+             * P19.9-T4 AC-2 (R7): the amount beside the % — on a laptop below 1280px on its own line under it, where it was
+             * read only by a screen reader, each figure whole.
+             */
+            <span className={cn('font-normal text-signal-grey', wide && 'max-xl:block max-xl:text-sm max-xl:leading-tight')}>
+              <span className={cn(wide && 'max-xl:hidden')}>{' · '}</span>
+              <UnitAmount goal={goal} />
             </span>
           ) : null}
         </td>
@@ -687,13 +777,15 @@ function UnitRows({
         <td className={CELL} />
       </tr>
       {open && section.rows.filter((r) => matchesFilter(r, filter)).map((row) => (
-        <PersonTableRow key={row.membershipId} row={row} period={period} from={from} wide={wide} depth={depth} />
+        <PersonTableRow key={row.membershipId} row={row} period={period} from={from} wide={wide} depth={depth} readOnly={readOnly} />
       ))}
     </tbody>
   );
 }
 
-function PersonTableRow({ row, period, from, wide, depth }: { row: UnitRow; period: UnitPeriod; from: string; wide: boolean; depth: number }) {
+function PersonTableRow({
+  row, period, from, wide, depth, readOnly,
+}: { row: UnitRow; period: UnitPeriod; from: string; wide: boolean; depth: number; readOnly: boolean }) {
   const language = useLanguage();
   const t = useMessages(unitDashboardMessages);
   const href = rowHref(row, from);
@@ -718,6 +810,13 @@ function PersonTableRow({ row, period, from, wide, depth }: { row: UnitRow; peri
             <span className="min-w-0 truncate font-semibold uppercase text-ink">{name}</span>
           )}
           {marks}
+        </span>
+        {/*
+         * P19.9-T4 AC-1 (R6): the level on a line of its own under the name — the row keeps its height, and the name the
+         * width it had, where nine columns share the laptop's line.
+         */}
+        <span className="mt-px flex" style={depth ? { paddingLeft: depth * 14 } : undefined}>
+          <RungTag rung={row.rung} className="text-2xs leading-tight" />
         </span>
       </th>
       <td className={CELL}>
@@ -746,8 +845,12 @@ function PersonTableRow({ row, period, from, wide, depth }: { row: UnitRow; peri
         </td>
       )}
       <td className={CELL}>{pillOf(row, period)}</td>
-      <td className={cn(CELL, 'text-right')}>
-        {href && <LineIcon name="chevronRight" className="ml-auto h-4 w-4 text-signal-grey" />}
+      <td className="px-1 text-right">
+        {/* P19.9-T4 AC-1 (R6): WhatsApp, then the row's ›. */}
+        <span className="flex items-center justify-end gap-1">
+          <RowWhatsApp row={row} readOnly={readOnly} />
+          {href ? <LineIcon name="chevronRight" className="h-4 w-4 shrink-0 text-signal-grey" /> : <span aria-hidden="true" className="w-4 shrink-0" />}
+        </span>
       </td>
     </tr>
   );

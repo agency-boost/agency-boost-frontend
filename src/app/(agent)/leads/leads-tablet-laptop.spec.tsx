@@ -74,6 +74,8 @@ const open = (px: number, routes: Record<string, unknown> = {}) => {
 };
 
 const list = () => screen.findByRole('list', { name: 'Your leads' });
+/** *Sales*: the list opens on *Semua* since P19.9-T1 AC-1 (ADR-0232), so a test about the strip chooses it first. */
+const chooseSales = () => userEvent.click(within(screen.getByRole('group', { name: 'Lead type' })).getByRole('button', { name: /^Sales, / }));
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -93,6 +95,8 @@ describe('P19.1-T2 AC-13 the phone as it was', () => {
     open(px);
     await list();
     await waitFor(() => expect(screen.getAllByRole('listitem').length).toBeGreaterThan(0));
+    // *Amended 2026-11-08 (P19.9-T1 AC-1; ADR-0232):* the list opens on *Semua*; the baseline is *Sales*, chosen.
+    await chooseSales();
     const root = document.querySelector('[data-leads-list]')!;
     /*
      * *Amended 2026-11-07 (P19.8-T1 AC-1; R6, MOB UI-171: the stage chips at weight 600):* each stage's name in the
@@ -135,6 +139,7 @@ describe('P19.8-T1 AC-1 the Leads chips at one header-control size (MOB UI-171)'
   it.each([360, 375, 768, 1024, 1280])('P19.8-T1 AC-1 MOB UI-171 at %ipx: the type chips and the stage chips are 13px / 600, 44px', async (px) => {
     open(px);
     await list();
+    await chooseSales();
     for (const chip of within(screen.getByRole('group', { name: 'Lead type' })).getAllByRole('button')) {
       expect(wears(chip, px).split(' ')).toEqual(expect.arrayContaining(['min-h-11', 'text-base', 'font-semibold']));
     }
@@ -192,6 +197,7 @@ describe('P19.1-T2 AC-2 a tablet in portrait: the phone’s top block, cards two
     expect(screen.getByRole('searchbox', { name: 'Search lead names' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Filter and sort' })).toHaveClass('rounded-full');
     expect(screen.getByRole('group', { name: 'Lead type' })).toBeInTheDocument();
+    await chooseSales();
     expect(screen.getByRole('group', { name: 'Sales pipeline' })).toHaveClass('bg-secondary');
     const at768 = wears(ul, 768).split(' ');
     expect(at768).toEqual(expect.arrayContaining(['grid', 'grid-cols-2']));
@@ -438,6 +444,7 @@ describe('P19.1-T2 AC-3 the reader’s own order on the laptop’s list (I-295, 
     expect(screen.queryByRole('button', { name: /^Reorder/ })).not.toBeInTheDocument();
     await userEvent.clear(screen.getByRole('searchbox', { name: 'Search lead names' }));
     expect(screen.getAllByRole('button', { name: /^Reorder/ }).length).toBeGreaterThan(0);
+    await chooseSales();
     await userEvent.click(within(screen.getByRole('group', { name: 'Sales pipeline' })).getAllByRole('button')[1]);
     expect(screen.queryByRole('button', { name: /^Reorder/ })).not.toBeInTheDocument();
   });

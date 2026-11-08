@@ -124,6 +124,9 @@ const en = {
   graduatedLine: ({ on }: { on: string }) => `You marked it complete on ${on}.`,
   expiredTitle: 'Your 90-day activation has ended.',
   expiredLine: ({ on }: { on: string }) => `It ran for six months, until ${on}.`,
+  /** P19.9-T3 AC-5 (OD-289): past the first year, the page is this and nothing of the checklist; `on` the day it ended. */
+  firstYearTitle: `Your ${kept('90-day activation')} was for your first year.`,
+  firstYearLine: ({ on }: { on: string }) => `It covers the first year after joining only, which ended on ${on}.`,
   checklistElsewhere: 'Your checklist stays on your own coaching page.',
   ownCoaching: 'Your own coaching',
 
@@ -139,6 +142,8 @@ const en = {
     loading: 'Loading this activation…',
     coacheeNone: ({ name }: { name: string }) => `${name} has no 90-day activation.`,
     meNone: 'You have no 90-day activation.',
+    /** P19.9-T3 AC-5: the reader's own tab past their first year, `on` the day it ended. */
+    meFirstYear: ({ on }: { on: string }) => `Your ${kept('90-day activation')} covers your first year only, which ended on ${on}.`,
   },
 };
 
@@ -215,6 +220,8 @@ const id: MessagesOf<typeof en> = {
   graduatedLine: ({ on }) => `Anda menandainya selesai pada ${on}.`,
   expiredTitle: `${kept('90-day activation')} Anda sudah berakhir.`,
   expiredLine: ({ on }) => `Berlangsung selama enam bulan, hingga ${on}.`,
+  firstYearTitle: `${kept('90-day activation')} Anda hanya untuk tahun pertama.`,
+  firstYearLine: ({ on }) => `Hanya untuk tahun pertama sejak bergabung, yang berakhir pada ${on}.`,
   checklistElsewhere: `Checklist Anda tetap ada di halaman ${kept('coaching')} Anda sendiri.`,
   ownCoaching: `${kept('Coaching')} Anda sendiri`,
 
@@ -226,6 +233,7 @@ const id: MessagesOf<typeof en> = {
     loading: `Memuat ${kept('activation')} ini…`,
     coacheeNone: ({ name }) => `${name} tidak punya ${kept('90-day activation')}.`,
     meNone: `Anda tidak punya ${kept('90-day activation')}.`,
+    meFirstYear: ({ on }) => `${kept('90-day activation')} Anda hanya untuk tahun pertama, yang berakhir pada ${on}.`,
   },
 };
 

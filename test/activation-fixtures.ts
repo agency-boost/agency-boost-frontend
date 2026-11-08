@@ -189,7 +189,9 @@ const share = (activated: number, notActivated: number, inProgress: number, pct:
  */
 export const ROSTER: NewHiresRoster = {
   today: '2026-10-27',
-  window: { from: '2025-10-28', to: '2026-10-27' },
+  // P19.9-T3 AC-1: this calendar year, 1 January to today (ADR-0233; the last twelve months before it).
+  year: 'current',
+  window: { from: '2026-01-01', to: '2026-10-27' },
   days: 90,
   activation3M: {
     all: share(4, 1, 3, 80, 1),

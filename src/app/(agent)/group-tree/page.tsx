@@ -50,11 +50,9 @@ export default function GroupTreePage() {
   const t = useMessages(groupTreeMessages);
   const [query, setQuery] = useState('');
   const membership = me?.membership ?? null;
-  // A member on the agent rung who leads somebody reads their unit (ADR-0087) but coaches nobody: their
-  // coaching tabs and subject reads are `own` only, so a summary link would answer *not found*. The
-  // Owner and the Admin keep theirs, whatever rung they stand on.
-  const opensCoaching = !membership || membership.hierarchyRole !== 'agent' || membership.isKpmOwner || membership.isKpmAdmin;
-  const personHref = useMemo(() => (tree ? drillFor(tree, opensCoaching) : undefined), [tree, opensCoaching]);
+  // Every upline coaches since P19.9-T6 (ADR-0234): a member on the agent rung who leads somebody opens their people's
+  // coaching pages as an AB does. The rule is the tree's alone, never the reader's rung.
+  const personHref = useMemo(() => (tree ? drillFor(tree) : undefined), [tree]);
 
   useEffect(() => {
     void readOrgTree()
@@ -143,10 +141,10 @@ function Summary({ tree, search }: { tree: OrgTreeData; search: React.ReactNode 
  * **A Personal Summary only for somebody the reader coaches**, which is somebody below them in this tree
  * (ADR-0074). An Admin's field view holds the whole office, and a card outside the Admin's own downline
  * would open coaching's *not someone you coach*: it stays inert. A leader's card still opens their Unit
- * Dashboard, which the Admin reads office-wide, and whose own drills follow the same rule. A leader on the
- * agent rung opens no Personal Summary at all (`opensCoaching`): their coaching reads are their own.
+ * Dashboard, which the Admin reads office-wide, and whose own drills follow the same rule. **A leader on the agent rung
+ * opens them too** since P19.9-T6 (ADR-0234): every upline coaches, and their coaching reads reach their downline.
  */
-function drillFor(tree: OrgTreeData, opensCoaching: boolean): (membershipId: string) => string | undefined {
+function drillFor(tree: OrgTreeData): (membershipId: string) => string | undefined {
   const byId = new Map(tree.nodes.map((node) => [node.membershipId, node]));
   const self = tree.nodes.find((node) => node.isSelf) ?? (tree.selfId ? byId.get(tree.selfId) : undefined);
   const selfId = self?.membershipId ?? tree.selfId;
@@ -173,6 +171,6 @@ function drillFor(tree: OrgTreeData, opensCoaching: boolean): (membershipId: str
     if (!node || inert.has(membershipId)) return undefined;
     const id = encodeURIComponent(membershipId);
     if (node.isLeader) return `/unit/dashboard/${id}`;
-    return opensCoaching && coached.has(membershipId) ? `/coaching/${id}/summary` : undefined;
+    return coached.has(membershipId) ? `/coaching/${id}/summary` : undefined;
   };
 }

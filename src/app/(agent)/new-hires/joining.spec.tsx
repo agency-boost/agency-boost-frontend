@@ -10,6 +10,8 @@ import NewHiresPage from './page';
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
   usePathname: () => '/new-hires',
+  // The page reads its year from the address (P19.9-T3 AC-2): none here, so *Tahun berjalan*.
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 /** Sari, who may add agents and decides the requests addressed to her. */
@@ -179,9 +181,9 @@ describe('/new-hires: + Add agent, Review requests and Waiting to join (P18.8-T3
     await userEvent.type(screen.getByLabelText('Agent code'), '80008');
     await userEvent.type(screen.getByLabelText('Name'), 'Putri');
     await userEvent.type(screen.getByLabelText('WhatsApp number'), '0812-1111-2222');
-    const before = calls.filter((c) => c.url.endsWith('/api/v1/new-hires')).length;
+    const before = calls.filter((c) => c.url.endsWith('/api/v1/new-hires?year=current')).length;
     await userEvent.click(screen.getByRole('button', { name: 'Add & send invite' }));
     expect(await screen.findByText('Agent added ✓ — Putri Anggraini is in your unit now.')).toBeInTheDocument();
-    await vi.waitFor(() => expect(calls.filter((c) => c.url.endsWith('/api/v1/new-hires')).length).toBeGreaterThan(before));
+    await vi.waitFor(() => expect(calls.filter((c) => c.url.endsWith('/api/v1/new-hires?year=current')).length).toBeGreaterThan(before));
   });
 });

@@ -7,7 +7,8 @@ import {
   ACTIVATION_3M_LABEL, ACTIVATION_NOTE_MAX, aspectTitle, attributionOf, autoBadge, byHandBadge, correctionOf, correctStartDate,
   dayShown, earliestStart, fromDataWords, inFilter, newHireCounts, newHireGroups,
   FIRST_CASE_CLOSED, graduateMyActivation, groupTitle, isComplete, isDataBacked, isManual, isTickedByHandLink, isWholeDate, ITEM_NOTE_MAX,
-  newHireHref, OWN_COPY, PROTOTYPE_COPY, readHireClosings, readMyActivation, readMyClosings, readNewHire, readNewHires, recordHref,
+  isEmptyActivation, newHireHref, newHiresHref, newHireYearFrom, OWN_COPY, PROTOTYPE_COPY, readHireClosings, readMyActivation,
+  readMyClosings, readNewHire, readNewHires, recordHref,
   saveActivationNote, saveHireItem, saveMyItem, sourceLineOf, startDateAllowed, startDateRangeText, takesHandWrite,
 } from './activation';
 
@@ -33,12 +34,15 @@ describe('the activation’s calls (P13, the fixed contract)', () => {
   it('reads the roster and one hire, and writes a leader’s tick, start date and note, with the id encoded', async () => {
     const { calls } = stubFetch({ '/new-hires': { body: {} } });
     await readNewHires();
+    await readNewHires('previous');
     await readNewHire('mem/1');
     await saveHireItem('mem-1', 'CRM SETUP', false);
     await correctStartDate('mem-1', '2026-08-01');
     await saveActivationNote('mem-1', 'Keep going.');
     expect(calls.map((c) => [c.init.method, c.url.replace('http://api.test/api/v1', ''), c.init.body])).toEqual([
-      ['GET', '/new-hires', undefined],
+      // P19.9-T3 AC-1, AC-2: the year is always named, this calendar year unless the other is asked for.
+      ['GET', '/new-hires?year=current', undefined],
+      ['GET', '/new-hires?year=previous', undefined],
       ['GET', '/new-hires/mem%2F1', undefined],
       ['PUT', '/new-hires/mem-1/items/CRM%20SETUP', '{"done":false}'],
       ['PUT', '/new-hires/mem-1/start-date', '{"startDate":"2026-08-01"}'],
@@ -99,6 +103,23 @@ describe('the small readings', () => {
     expect(groupTitle({ kind: 'ab', leader: SARI })).toBe('AB: Sari Puspita');
     expect(groupTitle({ kind: 'aab', leader: null })).toBe('Direct Unit');
     expect(newHireHref('mem 1')).toBe('/new-hires/mem%201');
+  });
+
+  it('P19.9-T3 AC-2, AC-4 the year in an address: Tahun lalu only by name, carried to a detail and back', () => {
+    expect([newHireYearFrom(undefined), newHireYearFrom('previous'), newHireYearFrom('current'), newHireYearFrom('2025')])
+      .toEqual(['current', 'previous', 'current', 'current']);
+    expect(newHireYearFrom(['previous', 'current'])).toBe('previous');
+    expect([newHiresHref(), newHiresHref('current'), newHiresHref('previous')]).toEqual(['/new-hires', '/new-hires', '/new-hires?year=previous']);
+    expect(newHireHref('mem 1', 'previous')).toBe('/new-hires/mem%201?year=previous');
+    expect(newHireHref('mem-1', 'current')).toBe('/new-hires/mem-1');
+  });
+
+  it('P19.9-T3 AC-5 tells an activation served empty from the activation by its `empty`', () => {
+    const empty = {
+      empty: 'first_year_over' as const, hire: SARI, today: '2026-11-08', joinDate: '2025-08-06', firstYearEndsOn: '2026-08-06', leader: null,
+    };
+    expect(isEmptyActivation(empty)).toBe(true);
+    expect(isEmptyActivation({ hire: SARI, state: 'open' })).toBe(false);
   });
 
   it('a manual item is one with no link, or a link that does not work yet (ADR-0031)', () => {

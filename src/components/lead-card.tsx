@@ -80,8 +80,9 @@ export function LeadCard({
   const { me } = useSession();
   const canPropose = useCan('proposal:create');
   const ladder = given ?? config?.leadPipelines.find((p) => p.pipeline === lead.type)?.statuses ?? [];
+  const mine = lead.ownerMembershipId === me?.membership?.membershipId;
   // *Buat proposal* on the reader's own Sales lead (ADR-0221 §3: a proposal is for one of the owner's own Sales leads).
-  const proposable = canPropose && lead.type === 'sales' && lead.ownerMembershipId === me?.membership?.membershipId;
+  const proposable = canPropose && lead.type === 'sales' && mine;
   const state = nextActionState(lead, today);
   const late = state === 'overdue';
   const day = lead.nextActionDate
@@ -119,7 +120,14 @@ export function LeadCard({
         >
           {lead.name}
         </button>
-        <LeadPills lead={lead} ladder={ladder} proposals className="mt-1" />
+        <LeadPills
+          lead={lead}
+          ladder={ladder}
+          proposals
+          // *Milik Rina Wijaya* on a lead that is not the reader's (P19.9-T1 AC-4): a leader's card under *Tim*.
+          owner={!mine && lead.owner?.name ? t.list.ownedBy({ name: lead.owner.name }) : null}
+          className="mt-1"
+        />
         <p
           data-next-action={state}
           className={cn('mt-1 flex min-w-0 items-center gap-1.5 text-base', late || state === 'missing' ? 'text-signal-red' : 'text-pill-grey-ink')}
@@ -160,13 +168,16 @@ export function LeadCard({
 /**
  * **A lead's type and stage, as two pills** (UI-105): *Sales* or *Recruit* in the type's tint — *No type yet* in grey —
  * and the stage in its ladder's tone (`stageTone`), a stage the office retired by its code. The card's line, and the
- * pane's head under the NAME (UI-116).
+ * pane's head under the NAME (UI-116). **On the card, whose lead it is** when it is not the reader's (P19.9-T1 AC-4;
+ * ADR-0232): *Milik Rina Wijaya*, in grey words at the line's end — no pill, so it is never read as a status.
  */
-export function LeadPills({ lead, ladder, proposals = false, className }: {
+export function LeadPills({ lead, ladder, proposals = false, owner = null, className }: {
   lead: Pick<Lead, 'type' | 'statusCode' | 'proposals'>;
   ladder: readonly LeadStatusRow[];
   /** The card's third pill, the lead's proposal (P19.7-T2 AC-12). The pane's head leaves it to its *Proposal* section. */
   proposals?: boolean;
+  /** *Milik {nama}* (P19.9-T1 AC-4), the card's, on a lead that is not the reader's; `null` draws nothing. */
+  owner?: string | null;
   className?: string;
 }) {
   const t = useMessages(leadsMessages);
@@ -187,6 +198,7 @@ export function LeadPills({ lead, ladder, proposals = false, className }: {
       )}
       {stage && <TonePill tone={stageTone(ladder, lead.statusCode)} className="max-w-full truncate">{stage}</TonePill>}
       {proposals && lead.proposals && <ProposalPill proposals={lead.proposals} />}
+      {owner && <span data-lead-owner="" className="min-w-0 max-w-full truncate text-xs font-semibold leading-5 text-muted">{owner}</span>}
     </div>
   );
 }

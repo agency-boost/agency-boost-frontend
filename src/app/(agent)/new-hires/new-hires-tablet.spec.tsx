@@ -12,6 +12,8 @@ import NewHiresPage from './page';
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
   usePathname: () => '/new-hires',
+  // The page reads its year from the address (P19.9-T3 AC-2): none here, so *Tahun berjalan*.
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 /**
@@ -72,10 +74,44 @@ function asBeforeP198(root: HTMLElement): HTMLElement {
   return copy;
 }
 
+/**
+ * **The page with P19.9-T3's two changes put back** (AC-2, AC-4): the year control above the page taken off, and each
+ * row's address back to the person's coaching page, which a leader who coaches opened before. A copy, as above.
+ */
+function asBeforeP199(root: HTMLElement): HTMLElement {
+  const copy = root.cloneNode(true) as HTMLElement;
+  copy.querySelector('[role="group"][aria-label="Year"]')?.remove();
+  for (const link of copy.querySelectorAll('a[href^="/new-hires/mem-"]')) {
+    const id = link.getAttribute('href')!.slice('/new-hires/'.length);
+    link.setAttribute('href', `/coaching/${id}/session?from=%2Fnew-hires`);
+  }
+  return copy;
+}
+
+/**
+ * **The page with the Phase 19.9 exit review's L4 put back**: a new hire who left is a row that opens nothing — on the
+ * table, their name a plain span where it was a link with its ›. Each is drawn again as its neighbours' link is, to
+ * their own `/new-hires/{id}`, before `asBeforeP199` turns every such address back. A copy, as above.
+ */
+function asBeforeExitL4(root: HTMLElement): HTMLElement {
+  const copy = root.cloneNode(true) as HTMLElement;
+  const ids = new Map(Object.values(ROSTER.sections).flat().map((r) => [r.hire.name, r.hire.membershipId]));
+  const model = copy.querySelector('th[scope="row"] > a');
+  for (const name of copy.querySelectorAll('th[scope="row"] > span')) {
+    const link = model!.cloneNode(true) as HTMLElement;
+    link.setAttribute('href', `/new-hires/${ids.get(name.textContent!)}`);
+    link.firstChild!.textContent = name.textContent;
+    name.replaceWith(link);
+  }
+  return copy;
+}
+
 const EVERYONE = [
   'Fikri Ramadhan', 'Dimas Saputra', 'Indah Permata', 'Lukman Hakim', 'Kemal Pratama', 'Tari Wulandari', 'Novi Lestari',
   'Rina Wijaya', 'Budi Hartono',
 ];
+/** Who a row opens: everybody but Tari, marked left (the Phase 19.9 exit review, L4). */
+const OPENED = EVERYONE.filter((name) => name !== 'Tari Wulandari');
 
 async function open(px: number) {
   atWidth(px);
@@ -113,7 +149,9 @@ describe('P19.1-T5 AC-2 /new-hires on a tablet: the phone’s page, the tiles on
       expect(within(group).getAllByRole('button', { name: /team$/ })[0]).toHaveAttribute('aria-expanded', 'true');
     }
     const people = screen.getAllByRole('link').filter((a) => a.hasAttribute('data-row-main')).map((a) => a.textContent);
-    expect(people).toEqual(EVERYONE);
+    expect(people).toEqual(OPENED);
+    // Tari, marked left, on her row as anybody, opening nothing.
+    expect(within(screen.getByRole('group', { name: 'Arief Hidayat' })).getByText('Tari Wulandari').closest('a')).toBeNull();
     // The ⌄ still closes a group.
     const arief = screen.getByRole('group', { name: 'Arief Hidayat' });
     await userEvent.click(within(arief).getAllByRole('button', { name: /team$/ })[0]);
@@ -123,7 +161,7 @@ describe('P19.1-T5 AC-2 /new-hires on a tablet: the phone’s page, the tiles on
   it('P19.1-T5 AC-2 at 768px: no name on two lines, and no status pill to wrap — the phone’s circle says it', async () => {
     await open(768);
     for (const name of EVERYONE) {
-      const link = screen.getByRole('link', { name });
+      const link = screen.getByText(name);
       // `truncate`: one line, `nowrap`; a full row's width at 768px leaves every name whole.
       expect(link).toHaveClass('truncate');
     }
@@ -159,7 +197,7 @@ describe('P19.1-T5 AC-2 /new-hires on a tablet: the phone’s page, the tiles on
    */
   it.each([375, 1024, 1280] as const)('P19.1-T5 AC-2 at %ipx the page is drawn as before, to the byte', async (px) => {
     const root = await open(px);
-    expect(digestAt(asBeforeP198(root), px)).toBe(BEFORE_T5[px]);
+    expect(digestAt(asBeforeP198(asBeforeP199(asBeforeExitL4(root))), px)).toBe(BEFORE_T5[px]);
   });
 
   it.each([375, 768, 1024, 1280])('P19.8-T1 AC-1 MOB UI-171 at %ipx the filter is three header controls — 13px, 600, 44px', async (px) => {

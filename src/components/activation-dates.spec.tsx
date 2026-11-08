@@ -17,6 +17,8 @@ import { formatOfficeDay, formatShortDay } from '@/lib/format';
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
   usePathname: () => '/new-hires',
+  // The page reads its year from the address (P19.9-T3 AC-2): none here, so *Tahun berjalan*.
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 /**

@@ -92,6 +92,8 @@ const render = (routes: Record<string, unknown> = {}, width = 360) => {
 };
 
 const list = () => screen.findByRole('list', { name: 'Your leads' });
+/** *Sales*: the list opens on *Semua* since P19.9-T1 AC-1 (ADR-0232), so a test about the strip chooses it first. */
+const chooseSales = () => userEvent.click(within(screen.getByRole('group', { name: 'Lead type' })).getByRole('button', { name: /^Sales, / }));
 /** The question a destructive act asks first (`Dialog`): the newest dialog on the page. */
 const question = async () => {
   const asked = () => screen.getAllByRole('dialog').find((d) => !d.querySelector('[data-modal-head]'));
@@ -118,12 +120,18 @@ describe('UI-105 — /leads on a phone and a tablet', () => {
     expect(screen.queryByText(/active leads?$/)).not.toBeInTheDocument();
   });
 
-  it('UI-105 counts the chips — All 5 · Sales 4 · Recruit 1 — and opens on Sales, the strip counting every Sales lead', async () => {
+  // *Changed 2026-11-08 (P19.9-T1 AC-1, R1 and R9; ADR-0232):* it opened on *Sales* where the reader had a Sales lead.
+  it('P19.9-T1 AC-1 UI-105 counts the chips — All 5 · Sales 4 · Recruit 1 — and opens on All, always; Sales draws the strip counting every Sales lead', async () => {
     render();
     await list();
     const chips = screen.getByRole('group', { name: 'Lead type' });
     expect(within(chips).getAllByRole('button').map((b) => b.textContent)).toEqual(['All5', 'Sales4', 'Recruit1']);
-    expect(within(chips).getByRole('button', { name: 'Sales, 4 leads' })).toHaveAttribute('aria-pressed', 'true');
+    expect(within(chips).getByRole('button', { name: 'All, 5 leads' })).toHaveAttribute('aria-pressed', 'true');
+    expect(within(chips).getByRole('button', { name: 'Sales, 4 leads' })).toHaveAttribute('aria-pressed', 'false');
+    expect(within(await list()).getAllByRole('listitem')).toHaveLength(5);
+    expect(screen.getByText('5 leads · all')).toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: /pipeline/ })).not.toBeInTheDocument();
+    await chooseSales();
     const strip = screen.getByRole('group', { name: 'Sales pipeline' });
     expect(strip).toHaveClass('bg-secondary');
     // The report's short words for the seeded stages, by code.
@@ -135,6 +143,7 @@ describe('UI-105 — /leads on a phone and a tablet', () => {
   it('UI-105 filters the list from a stage of the strip, and a second tap clears it; the strip follows the type chip', async () => {
     render();
     await list();
+    await chooseSales();
     const strip = screen.getByRole('group', { name: 'Sales pipeline' });
     await userEvent.click(within(strip).getByRole('button', { name: /^Not yet/ }));
     expect(within(await list()).getAllByRole('listitem')).toHaveLength(2);
@@ -329,7 +338,8 @@ describe('UI-105 — /leads on a phone and a tablet', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Filter and sort' }));
     const sheet = within(await screen.findByRole('dialog', { name: 'Filter and sort' }));
     // *Proposal* since P19.7-T2 AC-12: *Has a proposal / No proposal yet*, before the order.
-    expect(sheet.getAllByRole('group').map((g) => g.getAttribute('aria-label'))).toEqual(['Type', 'Status', 'Proposal', 'Order']);
+    // *Whose leads* first since P19.9-T1 AC-3, for an AB; no *Status* under *All*, where the list opens (AC-1).
+    expect(sheet.getAllByRole('group').map((g) => g.getAttribute('aria-label'))).toEqual(['Whose leads', 'Type', 'Proposal', 'Order']);
     await userEvent.click(sheet.getByRole('button', { name: 'Name A–Z' }));
     await waitFor(() => expect(calls.some((c) => /outcome=open/.test(c.url) && /sort=name&dir=asc/.test(c.url))).toBe(true));
     expect(screen.getByText('Name A–Z', { selector: 'span' })).toBeInTheDocument();
@@ -341,6 +351,7 @@ describe('UI-105 — /leads on a phone and a tablet', () => {
   it('UI-105 draws the same list on a tablet, and a desktop draws it too, beside the pane (UI-116)', async () => {
     render({}, 800);
     expect(await list()).toBeInTheDocument();
+    await chooseSales();
     expect(screen.getByRole('group', { name: 'Sales pipeline' })).toBeInTheDocument();
     cleanup();
     vi.unstubAllGlobals();
@@ -348,9 +359,86 @@ describe('UI-105 — /leads on a phone and a tablet', () => {
     render({}, 1280);
     expect(await list()).toBeInTheDocument();
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    await chooseSales();
     expect(screen.getByRole('group', { name: 'Sales pipeline' })).toBeInTheDocument();
     // *Leads* at every size since P19.1-T1 AC-1 (UI-112: each page's title is its phone title).
     expect(screen.getByRole('heading', { level: 1, name: 'Leads' })).toBeInTheDocument();
+  });
+});
+
+/**
+ * **P19.9-T1 — *Leads milik: Saya · Tim*** (R9, R10; ADR-0232; OD-286 by its default): every reader opens on their own
+ * leads, the open list and both closed ones; a reader whose grant reaches further is offered *Tim* in the filter sheet,
+ * which counts as a filter on; a card that is not the reader's says whose it is.
+ */
+describe('P19.9-T1 — whose leads /leads shows', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const asked = (calls: { url: string }[], outcome: string) => calls
+    .filter((c) => new URL(c.url).pathname.endsWith('/leads') && c.url.includes(`outcome=${outcome}`))
+    .map((c) => new URL(c.url).searchParams.get('scope'));
+  const filters = async () => {
+    await userEvent.click(screen.getByRole('button', { name: /^Filter and sort/ }));
+    return within(await screen.findByRole('dialog', { name: 'Filter and sort' }));
+  };
+
+  it('P19.9-T1 AC-2 asks for the reader’s own leads, open, won and lost — scope=own, never the team’s by default', async () => {
+    const { calls } = render();
+    await list();
+    await waitFor(() => expect(asked(calls, 'lost')).not.toHaveLength(0));
+    for (const outcome of ['open', 'won', 'lost']) expect(asked(calls, outcome)).toEqual(['own']);
+  });
+
+  it('P19.9-T1 AC-3 Whose leads: Mine pressed; Team asks again for scope=team, marks the filter on and drops the proposal filter; Clear goes back to Mine', async () => {
+    const { calls } = render();
+    await list();
+    const sheet = await filters();
+    const owners = within(sheet.getByRole('group', { name: 'Whose leads' }));
+    expect(owners.getAllByRole('button').map((b) => b.textContent)).toEqual(['Mine', 'Team']);
+    expect(owners.getByRole('button', { name: 'Mine' })).toHaveAttribute('aria-pressed', 'true');
+    await userEvent.click(sheet.getByRole('button', { name: 'Has a proposal' }));
+    await userEvent.click(owners.getByRole('button', { name: 'Team' }));
+    expect(owners.getByRole('button', { name: 'Team' })).toHaveAttribute('aria-pressed', 'true');
+    for (const outcome of ['open', 'won', 'lost']) await waitFor(() => expect(asked(calls, outcome)).toContain('team'));
+    // A proposal is its owner's alone: the group goes, and the team's list is not asked for one.
+    expect(sheet.queryByRole('group', { name: 'Proposal' })).not.toBeInTheDocument();
+    const team = calls.filter((c) => /scope=team/.test(c.url) && /outcome=open/.test(c.url));
+    expect(team.every((c) => !/hasProposal/.test(c.url))).toBe(true);
+    expect(screen.getByRole('button', { name: 'Filter and sort, a filter is on' })).toBeInTheDocument();
+    await userEvent.click(sheet.getByRole('button', { name: 'Clear' }));
+    expect(owners.getByRole('button', { name: 'Mine' })).toHaveAttribute('aria-pressed', 'true');
+    await waitFor(() => expect(asked(calls, 'open').at(-1)).toBe('own'));
+    expect(screen.getByRole('button', { name: 'Filter and sort' })).toBeInTheDocument();
+  });
+
+  it('P19.9-T1 AC-3 an Agent who leads nobody is not offered Team; an Agent who leads somebody is (ADR-0234)', async () => {
+    const agent = (directCount: number) => makeMe({
+      membership: { ...AGENT.membership!, orgLevelCode: 'AGENT', hierarchyRole: 'agent', directCount },
+      permissions: AGENT.permissions,
+    });
+    for (const [me, offered] of [[agent(0), false], [agent(2), true]] as const) {
+      atWidth(360);
+      stubFetch(BASE as Parameters<typeof stubFetch>[0]);
+      renderInLayout(AgentLayout, <LeadsPage />, { me });
+      await list();
+      const sheet = await filters();
+      expect({ offered, group: sheet.queryByRole('group', { name: 'Whose leads' }) !== null }).toEqual({ offered, group: offered });
+      cleanup();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('P19.9-T1 AC-4 a card that is not the reader’s says whose it is, on its pill line; the reader’s own says nothing', async () => {
+    const rina = lead({ id: 'l9', name: 'Pak Joko', ownerMembershipId: 'mem-rina', owner: { membershipId: 'mem-rina', name: 'Rina Wijaya' } });
+    const mine = lead({ owner: { membershipId: 'mem-1', name: 'Agus Salim' } });
+    render({ 'outcome=open': { body: page([mine, rina]) } });
+    const joko = await cardOf('Pak Joko');
+    const owner = joko.querySelector('[data-lead-owner]')!;
+    expect(owner).toHaveTextContent('Rina Wijaya’s');
+    expect(owner).toHaveClass('text-xs', 'text-muted', 'truncate');
+    // On the line the card already has, after the pills — no new line, no pill.
+    expect(owner.parentElement!.querySelector('[data-tone]')).not.toBeNull();
+    expect((await cardOf('Ibu Sekar Arum')).querySelector('[data-lead-owner]')).toBeNull();
   });
 });
 

@@ -25,7 +25,7 @@ export const calendarToday = (today: string) => `/calendar?view=agenda&date=${to
  * | *Jadwal hari ini* | everybody | *2 meeting* | *Tugas 3* | `/calendar`, today in Agenda |
  * | *Active Agent* | a leader | *4 dari 12* and the ring; *0 dari –* with nobody | *Unit 1/4 · AAB 3/8* | `/unit/dashboard` |
  * | *Coaching 7 hari* | a leader | the same | the same | `/coaching` |
- * | ***Leads*** | everybody | `OWN_OPEN_LEADS` (OD-283) | — | `/leads` |
+ * | ***Leads*** | everybody | `OWN_OPEN_LEADS`: every open lead the reader owns, what `/leads` opens on (P19.9-T1 AC-5) | — | `/leads` |
  * | ***New hires*** | a leader; an Agent whose menu has New Hires | the Group's before a first sale | — | `/new-hires` |
  *
  * - **A leader** is who the server sends the leader's block to: every leader by role, at zero with nobody (ADR-0189 §4).

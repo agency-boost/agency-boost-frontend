@@ -338,6 +338,12 @@ describe('P19.8-T2 AC-7 MOB UI-169 Aksi hari ini: the row, the detail over Home,
 
 describe('P19.8-T2 AC-8 MOB UI-165 D-22 Laporan aktivitas tim', () => {
   const rowsOf = () => [...block('team')!.querySelectorAll<HTMLElement>('[data-person-row]')];
+  /** A row's name, without the level tag the *Group* tab draws before it (P19.9-T2 AC-2). */
+  const nameOf = (row: HTMLElement) => {
+    const line = row.querySelector('.uppercase')!.cloneNode(true) as HTMLElement;
+    line.querySelector('[data-rung-tag]')?.remove();
+    return line.textContent;
+  };
 
   it.each(PHONES)('P19.8-T2 AC-8 MOB UI-165 at %ipx: the title; a grey ✕ named Belum lapor where nobody reported, the orange count where they did', async (px) => {
     const user = userEvent.setup();
@@ -374,17 +380,68 @@ describe('P19.8-T2 AC-8 MOB UI-165 D-22 Laporan aktivitas tim', () => {
     expect(whatsApp.parentElement!.parentElement!.className).toContain('-mx-1');
   });
 
-  it('P19.8-T2 AC-8 OD-278 five rows, then Semua › to the Unit Dashboard’s Aktivitas tab; three in the Unit, no Semua', async () => {
+  /*
+   * *Changed 2026-11-08 (P19.9-T2 AC-1, R8; ADR-0235, OD-278 option 3):* *Semua ›* opens the rest in place, where from
+   * P19.8-T2 it was a link to the Unit Dashboard's *Aktivitas* tab.
+   */
+  it('P19.9-T2 AC-1 R8 five rows, then Semua › opens the rest in place — no navigation — and Lebih sedikit closes them; three in the Unit, no Semua', async () => {
     const user = userEvent.setup();
     await open(LEADER);
     expect(rowsOf()).toHaveLength(3);
     expect(block('team')!.querySelector('[data-team-all]')).toBeNull();
     await user.click(screen.getByRole('button', { name: 'Group' }));
     // The server's order, unchanged: nobody both days, then nobody today, then the rest.
-    expect(rowsOf().map((r) => r.querySelector('.uppercase')!.textContent)).toEqual(['Lukman Hakim', 'Herman Widjaja', 'Siti Rahmawati', 'Dewi Lestari', 'Rina Wijaya']);
-    const all = within(block('team')!).getByRole('link', { name: 'Semua 7 di Unit Dashboard' });
-    expect(all).toHaveAttribute('href', '/unit/dashboard?tab=activities');
+    expect(rowsOf().map(nameOf)).toEqual(['Lukman Hakim', 'Herman Widjaja', 'Siti Rahmawati', 'Dewi Lestari', 'Rina Wijaya']);
+    const all = within(block('team')!).getByRole('button', { name: 'Semua 7 orang' });
+    expect(all).toHaveAttribute('aria-expanded', 'false');
     expect(all).toHaveTextContent('Semua');
+    expect(all.tagName).toBe('BUTTON');
+    expect(document.getElementById(all.getAttribute('aria-controls')!)).toBe(block('team')!.querySelector('ul'));
+    await user.click(all);
+    expect(rowsOf().map(nameOf)).toEqual([
+      'Lukman Hakim', 'Herman Widjaja', 'Siti Rahmawati', 'Dewi Lestari', 'Rina Wijaya', 'Indah Permatasari', 'Novi Andriani',
+    ]);
+    expect(nav.push).not.toHaveBeenCalled();
+    const fewer = within(block('team')!).getByRole('button', { name: 'Lebih sedikit' });
+    expect(fewer).toHaveAttribute('aria-expanded', 'true');
+    await user.click(fewer);
+    expect(rowsOf()).toHaveLength(5);
+    expect(within(block('team')!).getByRole('button', { name: 'Semua 7 orang' })).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('P19.9-T2 AC-1 switching between Unit and Group closes the rows Semua opened', async () => {
+    const user = userEvent.setup();
+    await open(LEADER);
+    await user.click(screen.getByRole('button', { name: 'Group' }));
+    await user.click(within(block('team')!).getByRole('button', { name: 'Semua 7 orang' }));
+    expect(rowsOf()).toHaveLength(7);
+    await user.click(screen.getByRole('button', { name: 'Unit' }));
+    await user.click(screen.getByRole('button', { name: 'Group' }));
+    expect(rowsOf()).toHaveLength(5);
+    expect(within(block('team')!).getByRole('button', { name: 'Semua 7 orang' })).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it.each(PHONES)('P19.9-T2 AC-2 R8 at %ipx on Group each row shows the level tag before the name, in the company’s short words; Unit shows none', async (px) => {
+    const user = userEvent.setup();
+    await open(LEADER, { px });
+    expect(block('team')!.querySelectorAll('[data-rung-tag]')).toHaveLength(0);
+    await user.click(screen.getByRole('button', { name: 'Group' }));
+    const tags = rowsOf().map((r) => r.querySelector('[data-rung-tag]')!.textContent);
+    expect(tags).toEqual(['Agent', 'AAB', 'Agent', 'AAB', 'Agent']);
+    const herman = rowsOf()[1];
+    // The navy tag, as the Unit roster and Potensi draw it, before the name and outside the row's name.
+    expect(herman.querySelector('[data-rung-tag]')!.className).toContain('bg-secondary');
+    const line = herman.querySelector('.uppercase')!;
+    expect(line.firstElementChild).toBe(herman.querySelector('[data-rung-tag]'));
+    expect(line).toHaveTextContent(/^AABHerman Widjaja$/);
+    // A company that names its rungs longer: their label, as `rungShort` reads it.
+    vi.unstubAllGlobals();
+    document.body.innerHTML = '';
+    const bp = { code: 'BUSINESS_PARTNER', label: 'BP' };
+    await open({ ...LEADER, leader: { ...LEADER.leader!, team: TEAM.map((p) => ({ ...p, rung: bp })) } }, { px });
+    await user.click(screen.getByRole('button', { name: 'Group' }));
+    expect(rowsOf()[0].querySelector('[data-rung-tag]')).toHaveTextContent(/^BP$/);
+    expect((await axe(block('team')!, RULES)).violations).toEqual([]);
   });
 
   it('P19.8-T2 AC-8 MOB UI-171 Unit | Group at the header-control size, 13px / 600 / 44px, at every size', async () => {
@@ -432,7 +489,9 @@ describe('P19.8-T2 AC-12 the mockup’s frames at 375 and 360', () => {
     expect(href('Semua untuk hari ini di Kalender')).toBe('/calendar?view=agenda&date=2026-10-30');
     expect(within(block('chart')!).getByRole('link')).toHaveAttribute('href', '/activity/log');
     await user.click(screen.getByRole('button', { name: 'Group' }));
-    expect(href('Semua 7 di Unit Dashboard')).toBe('/unit/dashboard?tab=activities');
+    // *Semua ›* opens the rest in place since P19.9-T2 AC-1: a button, not a link.
+    expect(screen.queryByRole('link', { name: /^Semua 7/ })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Semua 7 orang' })).toHaveAttribute('aria-expanded', 'false');
     expect((await axe(document.body, RULES)).violations).toEqual([]);
   });
 

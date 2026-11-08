@@ -5759,11 +5759,25 @@ describe('P18.10-T4 the field’s selling screens in Indonesian', () => {
       'outcome=won': leadsPage([]),
       'outcome=lost': leadsPage([]),
     });
-    inIndonesian('/leads', <LeadsPage />, makeMe({ permissions: ['lead:read', 'lead:create', 'lead:update', 'lead:delete', 'lead:mark_outcome'] }));
+    // An AB since P19.9-T1, so the filter sheet draws *Leads milik* too.
+    inIndonesian('/leads', <LeadsPage />, makeMe({
+      membership: { ...makeMe().membership!, orgLevelCode: 'AB', hierarchyRole: 'ab' },
+      permissions: ['lead:read', 'lead:create', 'lead:update', 'lead:delete', 'lead:mark_outcome'],
+    }));
 
     const list = await screen.findByRole('list', { name: 'Leads Anda' });
+    await expectClean('leads (id, phone, Semua)');
+    // It opens on *Semua* since P19.9-T1 AC-1; *Sales* draws the strip.
+    await userEvent.click(screen.getByRole('button', { name: /^Sales, / }));
     expect(screen.getByRole('group', { name: 'Pipeline Sales' })).toBeInTheDocument();
     await expectClean('leads (id, phone)');
+    // P19.9-T1 AC-3: the filter sheet, *Leads milik: Saya · Tim* first.
+    await userEvent.click(screen.getByRole('button', { name: 'Filter dan urutan' }));
+    const filters = await screen.findByRole('dialog', { name: 'Filter dan urutan' });
+    expect(within(filters).getByRole('group', { name: 'Leads milik' })).toBeInTheDocument();
+    await expectClean('leads (id, phone, the filter sheet)');
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Filter dan urutan' })).not.toBeInTheDocument());
     await userEvent.click(within(list).getByRole('button', { name: 'Pak Budi' }));
     const sheet = await screen.findByRole('dialog', { name: 'Pak Budi' });
     await within(sheet).findByText(/Status → Belum didekati/);

@@ -286,26 +286,3 @@ export function isWeekend(day: string): boolean {
   const weekday = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
   return weekday === 0 || weekday === 6;
 }
-
-/** A band of the Agenda: one day, or a run of days with nothing on them, drawn as one (UI-119). */
-export interface AgendaBand {
-  from: string;
-  to: string;
-  empty: boolean;
-}
-
-/**
- * **The Agenda's bands** (P19.1-T3 AC-7, AC-9; UI-119, UI-144): each day in order, **consecutive empty days merged into
- * one band** — *Senin, 2 Nov – Sabtu, 7 Nov* and *Tidak ada event* — and **today always its own band**, empty or not, so
- * an empty week draws at most two. A single empty day stays a day of its own.
- */
-export function agendaBands(days: readonly string[], today: string, isEmpty: (day: string) => boolean): AgendaBand[] {
-  const bands: AgendaBand[] = [];
-  for (const day of days) {
-    const empty = isEmpty(day);
-    const last = bands.at(-1);
-    if (empty && day !== today && last?.empty && last.to !== today && last.from !== today) last.to = day;
-    else bands.push({ from: day, to: day, empty });
-  }
-  return bands;
-}

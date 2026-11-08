@@ -275,17 +275,6 @@ export function formatDayRange(from: string, to: string, language: Language = DE
 }
 
 /**
- * **The Agenda's band for a run of empty days** (P19.1-T3 AC-9; UI-119): `Senin, 2 Nov – Sabtu, 7 Nov` — each end its
- * weekday, its day and its month, no year.
- */
-export function formatWeekdayRange(from: string, to: string, language: Language = DEFAULT_LANGUAGE): string {
-  const [a, b] = [localDate(from), localDate(to)];
-  if (!a || !b) return '';
-  const end = (at: Date) => `${WEEKDAYS_LONG[language][at.getDay()]}, ${dayText(at, language, false)}`;
-  return `${end(a)} – ${end(b)}`;
-}
-
-/**
  * A week column's heading: its weekday, `Sen`, over its number — `28`, or `1 Okt` on the first of a
  * month (`Calendar_Section.html:327-333`).
  */
