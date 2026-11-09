@@ -181,7 +181,20 @@ function CodeJoin() {
     }
   }
 
-  const alreadyIn = Boolean(me?.membership);
+  /*
+   * **In an office means active in one** (P19.10-T2 AC-3; ADR-0236 §2). Somebody still waiting — registered to an office,
+   * with a request open or none — is placed by a code from that office, so they get the form; a code from another
+   * office is refused by the server, in words that say so.
+   */
+  const alreadyIn = me?.membership?.status === 'active';
+  /*
+   * **Signed out, the code goes with them** (P19.10-T2 AC-1): *Sign in* comes back here, and *Create one* registers on
+   * the code, which joins the leader's unit as the account is made. Until then both dropped it, and a newcomer on a
+   * leader's link ended up registered to the office and waiting for somebody to approve them.
+   */
+  const carried = code.trim();
+  const signInHref = carried ? signInPathFrom({ pathname: '/join', search: `?code=${encodeURIComponent(carried)}` }) : '/login';
+  const registerHref = carried ? `/register?code=${encodeURIComponent(carried)}` : '/register';
 
   return (
     <RoleShell
@@ -197,11 +210,11 @@ function CodeJoin() {
         {!loading && !me && (
           <div className="mb-4 rounded-md border border-hairline bg-base p-3">
             <p className="text-md text-navy">{t.signInFirst}</p>
-            <ButtonLink href="/login" className="mt-3">
+            <ButtonLink href={signInHref} className="mt-3">
               {t.signIn}
             </ButtonLink>
             <p className="mt-2 text-sm text-muted">
-              {t.noAccount({ link: (words) => <Link href="/register" className="underline">{words}</Link> })}
+              {t.noAccount({ link: (words) => <Link href={registerHref} className="underline">{words}</Link> })}
             </p>
           </div>
         )}

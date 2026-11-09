@@ -59,9 +59,17 @@ export default function RegisterPage() {
  * agent code and the join date filled in from the invite and read-only — the server takes the invite's whatever
  * arrives — and the name filled in and the person's to correct. *Register KPM* and *Find Your Leader* never come:
  * the account joins the leader's unit as it is made. A link that opens nothing says why, in the server's words.
+ *
+ * **On a leader's link** (`?code=…`, P19.10-T2 AC-2; ADR-0236 §1): the code, said in a banner, and sent with the form —
+ * the account joins the code's leader's unit as it is made, with nobody to approve it. The form is the ordinary one:
+ * who holds a code is read signed in, never by a visitor, so no leader or office is named here, and the server takes
+ * the code's office's insurer whatever is chosen. A code that opens nothing is refused in the server's words, with the
+ * way to make an account without one. An invite's token wins over a code: it names its own leader.
  */
 function Register() {
-  const token = inviteTokenOf(useSearchParams());
+  const params = useSearchParams();
+  const token = inviteTokenOf(params);
+  const leaderCode = token ? null : (params.get('code')?.trim() || null);
   // The personal details' labels in the reader's language (`lib/personal.ts`, P18.10-T4).
   const language = useLanguage();
   const genders = genderLabels(language);
@@ -93,6 +101,9 @@ function Register() {
       .catch((err) => { if (live) setInviteError(toDisplayError(err)); });
     return () => { live = false; };
   }, [token]);
+
+  // *Create an account without a code* stays on this page: the refusal about the code goes with the code.
+  useEffect(() => { setError(null); }, [leaderCode]);
 
   useEffect(() => {
     let live = true;
@@ -150,7 +161,10 @@ function Register() {
       // global validation rejects an unknown one — so sending the whole form object would
       // turn a correctly filled form into a 400.
       const { confirmPassword: _confirm, ...body } = form;
-      await api('/auth/register', { method: 'POST', body: invite && token ? { ...body, inviteToken: token } : body });
+      await api('/auth/register', {
+        method: 'POST',
+        body: invite && token ? { ...body, inviteToken: token } : leaderCode ? { ...body, leaderCode } : body,
+      });
       setDone(true);
     } catch (err) {
       setError(toDisplayError(err));
@@ -159,7 +173,12 @@ function Register() {
     }
   }
 
-  const signIn = token ? signInPathFrom({ pathname: '/join', search: `?invite=${encodeURIComponent(token)}` }) : '/login';
+  // An account that exists signs in and comes back to the invite, or to the code's page, to join from there.
+  const signIn = token
+    ? signInPathFrom({ pathname: '/join', search: `?invite=${encodeURIComponent(token)}` })
+    : leaderCode
+      ? signInPathFrom({ pathname: '/join', search: `?code=${encodeURIComponent(leaderCode)}` })
+      : '/login';
 
   if (token && !invite) {
     return (
@@ -197,9 +216,10 @@ function Register() {
         * the line would contradict the banner under it. The title keeps its gap at every size then.
         */}
       <PublicTitle>
-        <h1 className={cn('font-display text-3xl font-bold text-navy', invite ? 'mb-6' : 'max-md:mb-6')}>{t.title}</h1>
+        <h1 className={cn('font-display text-3xl font-bold text-navy', invite || leaderCode ? 'mb-6' : 'max-md:mb-6')}>{t.title}</h1>
       </PublicTitle>
-      {!invite && (
+      {/* Nor on a leader's link (P19.10-T2 AC-2): the code places them in the leader's office as the account is made. */}
+      {!invite && !leaderCode && (
         <p className={cn('mb-6 mt-1 text-md text-muted', REMOVED_ON_PHONE)}>
           {t.line}
         </p>
@@ -209,6 +229,13 @@ function Register() {
         <Card className="mb-4 border-l-4 border-l-primary" density="compact">
           <p className="font-display text-lg font-bold text-navy">{t.invite.banner({ leader: invite.leaderName, kpm: invite.kpm.code })}</p>
           <p className="mt-1 text-md text-muted">{t.invite.bannerLine({ branch: invite.kpm.branchName, company: invite.companyName })}</p>
+        </Card>
+      )}
+
+      {leaderCode && (
+        <Card className="mb-4 border-l-4 border-l-primary" density="compact">
+          <p className="font-display text-lg font-bold text-navy">{t.code.banner({ code: leaderCode.toUpperCase() })}</p>
+          <p className="mt-1 text-md text-muted">{t.code.bannerLine}</p>
         </Card>
       )}
 
@@ -226,6 +253,7 @@ function Register() {
             <p className="text-md text-navy">{t.sent({ email: <strong>{form.email}</strong> })}</p>
             <p className="mt-2 text-sm text-muted">{t.sentLine}</p>
             {invite && <p className="mt-2 text-sm text-muted">{t.invite.doneLine({ leader: invite.leaderName })}</p>}
+            {leaderCode && <p className="mt-2 text-sm text-muted">{t.code.doneLine}</p>}
             <Link href="/login" className="mt-4 inline-block text-sm text-muted underline">
               {t.backToSignIn}
             </Link>
@@ -233,6 +261,10 @@ function Register() {
         ) : (
           <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
             {error && !refusedField && <ErrorBanner {...error} />}
+            {/* A code that opens nothing (410): the way on without it, the ordinary sign-up. */}
+            {leaderCode && error?.code === 'ORG_INVITE_EXPIRED' && (
+              <ButtonLink href="/register" variant="secondary" className="self-start">{t.code.withoutCode}</ButtonLink>
+            )}
 
             <Field label={t.fullName} htmlFor="fullName">
               <TextInput

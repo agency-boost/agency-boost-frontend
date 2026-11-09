@@ -387,4 +387,69 @@ describe('register', () => {
         .toHaveAttribute('href', `/login?next=${encodeURIComponent(`/join?invite=${encodeURIComponent(TOKEN)}`)}`);
     });
   });
+
+  describe('on a leader’s link (P19.10-T2 AC-2, ADR-0236 §1)', () => {
+    afterEach(() => { query.current = ''; });
+
+    it('P19.10-T2 AC-2 says the code and that nobody has to approve it, and nothing of the office being added separately', async () => {
+      query.current = 'code=jor417';
+      const { calls } = stubFetch({ '/companies': { body: INSURERS } });
+      renderWithSession(<RegisterPage />, { me: null });
+      expect(await screen.findByText("You're joining with invite code JOR417")).toBeInTheDocument();
+      expect(screen.getByText(/in the team of the leader who shared this code\. Nobody has to approve it\./)).toBeInTheDocument();
+      expect(screen.queryByText(/added separately|just your login/)).not.toBeInTheDocument();
+      expect(screen.getByRole('heading', { level: 1, name: 'Create your account' })).toHaveClass('mb-6');
+      // No leader or office is read for a visitor: who holds a code is read signed in.
+      expect(calls.some((c) => c.url.includes('/join/invite'))).toBe(false);
+      // Already holding an account signs in and comes back to the code's page.
+      expect(screen.getByRole('link', { name: 'Already have an account? Sign in' }))
+        .toHaveAttribute('href', `/login?next=${encodeURIComponent('/join?code=jor417')}`);
+    });
+
+    it('P19.10-T2 AC-2 registers with the code, and says they are in the leader’s team once signed in', async () => {
+      query.current = 'code=JOR417';
+      const { calls } = stubFetch({
+        '/companies': { body: INSURERS },
+        '/auth/register': { status: 201, body: { status: 'verification_sent' } },
+      });
+      renderWithSession(<RegisterPage />, { me: null });
+      await fill();
+      await userEvent.click(screen.getByRole('button', { name: 'Create account' }));
+      const register = calls.find((c) => c.url.includes('/auth/register'))!;
+      expect(JSON.parse(register.init.body as string)).toMatchObject({
+        fullName: 'Rina Wijaya', companyId: 'co-2', agentCode: '88213', leaderCode: 'JOR417',
+      });
+      expect(await screen.findByText('Once you sign in, you are already in the team of the leader who shared the code.')).toBeInTheDocument();
+    });
+
+    it('P19.10-T2 AC-2 a code that opens nothing is refused in the server’s words, with the way on without it', async () => {
+      query.current = 'code=NOPE99';
+      stubFetch({
+        '/companies': { body: INSURERS },
+        '/auth/register': {
+          status: 410,
+          body: { error: { code: 'ORG_INVITE_EXPIRED', message: 'That invite is not valid.', requestId: 'r' } },
+        },
+      });
+      renderWithSession(<RegisterPage />, { me: null });
+      await fill();
+      await userEvent.click(screen.getByRole('button', { name: 'Create account' }));
+      expect(await screen.findByText('That invite is not valid.')).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'Create an account without a code' })).toHaveAttribute('href', '/register');
+    });
+
+    it('P19.10-T2 AC-2 an invite’s token wins over a code: it names its own leader', async () => {
+      query.current = 'invite=kpm-1.secret&code=JOR417';
+      stubFetch({
+        '/companies': { body: INSURERS },
+        '/invites/': { body: {
+          leaderName: 'Agus Prasetyo', kpm: { code: '0417', branchName: 'BSD City Branch' }, companyId: 'co-2', companyName: 'Prudential',
+          agentCode: '80777', joinDate: '2026-10-27', fullName: 'Yusuf Hidayat', existingAccount: false, expiresAt: '2026-11-10T03:00:00.000Z',
+        } },
+      });
+      renderWithSession(<RegisterPage />, { me: null });
+      expect(await screen.findByText("You're joining Agus Prasetyo's team · KPM 0417")).toBeInTheDocument();
+      expect(screen.queryByText(/invite code JOR417/)).not.toBeInTheDocument();
+    });
+  });
 });

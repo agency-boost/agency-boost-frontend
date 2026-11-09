@@ -167,12 +167,13 @@ describe('find your leader (P3-T3)', () => {
     expect(screen.queryByRole('link', { name: 'Use an invite instead' })).not.toBeInTheDocument();
   });
 
-  it('UI-086 offers no invite to somebody in an office with no leader either — /join refuses any member (T16)', async () => {
+  it('P19.10-T2 AC-3 offers the invite again to somebody in an office with no leader — a code from it places them', async () => {
+    // T16 took it away because /join refused any member; since ADR-0236 §2 it places a member still waiting.
     stubFetch({ '/join/me': { body: REGISTERED }, '/join/leaders': { body: LEADERS } });
     renderInLayout(AgentLayout, <FindLeaderPage />, { me: JOINER });
     await screen.findByRole('heading', { level: 2, name: 'Find a leader' });
-    expect(screen.queryByText("Have a leader's code, link or QR?")).not.toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'Use an invite instead' })).not.toBeInTheDocument();
+    expect(screen.getByText("Have a leader's code, link or QR?")).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Use an invite instead' })).toHaveAttribute('href', '/join');
   });
 
   it('UI-086 offers the invite to somebody with no office yet, its line behind ⓘ from 768px', async () => {

@@ -131,8 +131,9 @@ describe('P18.10-T4 User Management in Indonesian', () => {
     inIndonesian(<FindLeaderPage />, JOINER);
     expect(await screen.findByText('Wilson Tanoto')).toBeInTheDocument();
     expect(screen.getByText('Cari leader di KPM Anda dan minta untuk di-tag.')).toBeInTheDocument();
-    // UI-086 (T16): no invite for somebody already in an office, with a leader or without — `/join` refuses them.
-    expect(screen.queryByText(/^Punya kode, tautan, atau QR/)).not.toBeInTheDocument();
+    // P19.10-T2 AC-3 (ADR-0236 §2): the invite again for somebody in an office with no leader — a code from it places
+    // them. T16 had taken it away while `/join` refused any member.
+    expect(screen.getByRole('heading', { name: /^Punya kode, tautan, atau QR dari leader\?/ })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 2, name: 'Cari leader' })).toBeInTheDocument();
     expect(screen.getByText('Dia perlu menyetujuinya.')).toBeInTheDocument();
     expect(screen.getByLabelText('Cari berdasarkan nama')).toHaveAttribute('placeholder', 'Nama');

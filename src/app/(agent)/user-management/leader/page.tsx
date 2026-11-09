@@ -40,7 +40,8 @@ import {
  * the line a reader who has a leader sees in place of the search (ADR-0170 §6), verbatim among them. A leader's name,
  * their rung's badge and the office's label are shown as stored.
  *
- * **UI V1 (2026-10-30, Phase 18.11 T9).** **No invite card for somebody already in an office** (UI-086):
+ * **UI V1 (2026-10-30, Phase 18.11 T9).** **No invite card for somebody already in an office** (UI-086) — *since
+ * P19.10 (ADR-0236 §2), for somebody with a leader only: a member still waiting is placed by a code from their office*:
  * *Gunakan undangan saja* led to `/join`, which refuses anybody with a membership, with a leader or without one
  * (`GET /join/me`'s `kpmId` is the flag; widened from *with a leader* in T16). **One card for one fact** (UI-088): *Saat ini melapor ke* in sentence case over the
  * leader's name, and *Penggantian leader…* as 12px meta inside it — behind ⓘ on a phone; no orange left border. The
@@ -142,10 +143,11 @@ export default function FindLeaderPage() {
       )}
 
       {/*
-        UI-086: offered only to somebody with no office yet. `/join` refuses anybody who already has one, so for a member
-        with no leader the card was a dead end too; they ask a leader through the search above (decided 2026-10-30, T16).
+        UI-086: not offered to somebody with a leader — `/join` refuses them. *Changed 2026-11-09 (P19.10-T2 AC-3,
+        ADR-0236 §2):* offered again to a member **with no leader**, which T16 had taken away because `/join` refused any
+        member: a code from their own office now places them, with no approval to wait for.
       */}
-      {state && !registered && (
+      {state && !hasLeader && (
         <Card className="mb-4">
           <h2 className="flex items-center gap-1.5 font-display text-lg font-bold text-navy">
             {t.haveCode}

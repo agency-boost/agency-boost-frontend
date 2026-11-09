@@ -118,6 +118,16 @@ const en = {
       doneLine: ({ leader }: { leader: string }) => `Once you have verified it and signed in, you are in ${leader}'s team.`,
       checking: 'Checking your invite…',
     },
+    /**
+     * **On a leader's link** (`?code=…`, P19.10-T2 AC-2; ADR-0236 §1): the code the link carries, and that the account
+     * joins the team of whoever shared it. No leader is named: who holds a code is read signed in, never by a visitor.
+     */
+    code: {
+      banner: ({ code }: { code: string }) => `You're joining with invite code ${code}`,
+      bannerLine: 'Once your account is made, you are in the team of the leader who shared this code. Nobody has to approve it.',
+      doneLine: 'Once you sign in, you are already in the team of the leader who shared the code.',
+      withoutCode: 'Create an account without a code',
+    },
   },
   /** `/forgot-password`. */
   forgot: {
@@ -264,6 +274,13 @@ const id: MessagesOf<typeof en> = {
       withoutInvite: 'Buat akun tanpa undangan',
       doneLine: ({ leader }) => `Setelah Anda memverifikasinya dan masuk, Anda sudah berada di tim ${leader}.`,
       checking: 'Memeriksa undangan Anda…',
+    },
+    code: {
+      banner: ({ code }) => `Anda bergabung dengan kode undangan ${code}`,
+      bannerLine: `Setelah akun dibuat, Anda langsung masuk tim ${kept('leader')} yang membagikan kode ini. Tidak perlu `
+        + 'persetujuan siapa pun.',
+      doneLine: `Begitu Anda masuk, Anda sudah berada di tim ${kept('leader')} yang membagikan kode ini.`,
+      withoutCode: 'Buat akun tanpa kode',
     },
   },
   forgot: {
