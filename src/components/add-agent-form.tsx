@@ -21,7 +21,7 @@ import { nationalDigits, normalisedPhone, PHONE_COUNTRY_PREFIX, PHONE_NATIONAL_D
 
 /**
  * **The form's words, in English** (ADR-0170 §1): the client's four labels, and ours around them — the catalogue's
- * source (`i18n/messages/add-agent.ts`; P18.98-T4). Kept for the Unit Dashboard's header, whose words have not moved
+ * source (`i18n/messages/add-agent.ts`; P18.10-T4). Kept for the Unit Dashboard's header, whose words have not moved
  * yet (`ADD_AGENT_COPY.open`); **a screen reads the reader's language instead**: `useMessages(addAgentMessages)`.
  */
 export const ADD_AGENT_COPY = messagesIn(addAgentMessages, SOURCE_LANGUAGE);
@@ -32,7 +32,7 @@ const FIELD_OF: Record<string, 'agentCode' | 'fullName' | 'phone' | 'joinDate'> 
 };
 
 /**
- * **+ Add agent** (P18.96-T3 AC-1, ADR-0170 §1; the client's R1, UI-001): one form — *Agent code*, *Name*, *WhatsApp
+ * **+ Add agent** (P18.8-T3 AC-1, ADR-0170 §1; the client's R1, UI-001): one form — *Agent code*, *Name*, *WhatsApp
  * number*, *Join date* (today by default) — on `/new-hires` and the Unit Dashboard's roster header, for a leader's own
  * unit and, given `leader`, the Owner's or an Admin's choice of unit. A dialog on the shared `Modal`, its actions in
  * the footer.
@@ -42,7 +42,7 @@ const FIELD_OF: Record<string, 'agentCode' | 'fullName' | 'phone' | 'joinDate'> 
  * with no leader here is **linked** now; one under another leader is a **transfer requested**. The last two close the
  * dialog and the screen confirms them. A refusal stays in the dialog, under the field it names where it names one.
  *
- * **Its words are the catalogue's** (`add-agent.ts`; P18.98-T4), today's date in a refusal written in the figures'
+ * **Its words are the catalogue's** (`add-agent.ts`; P18.10-T4), today's date in a refusal written in the figures'
  * language. Why *Add agent* is held is `heldBecause`'s sentence (`lib/disabled-reason.ts`), the fields' own labels in it.
  *
  * **UI V1 (UI-024, owner 30 Oct)**: **a centred modal at every size**, scrolling inside itself above the tab bar. For the
@@ -56,7 +56,7 @@ const FIELD_OF: Record<string, 'agentCode' | 'fullName' | 'phone' | 'joinDate'> 
  * (`onSent`) — never before.
  */
 export function AddAgentDialog({
-  open, onClose, today, leader, onAdded, onSent,
+  open, onClose, today, leader, onAdded, onSent, fromRecruit,
 }: {
   open: boolean;
   onClose: () => void;
@@ -67,6 +67,11 @@ export function AddAgentDialog({
   onAdded: (result: AddAgentResult) => void;
   /** An invite sent on WhatsApp from the share step (UI-024): the modal has closed; the caller confirms it. */
   onSent?: (name: string) => void;
+  /**
+   * ***Tambahkan ke unit ›*** on the Unit Dashboard's *Potensi* tab (P19.1-T6 AC-7; UI-155): the kandidat's name, typed
+   * in, and their recruitment lead, which the server links to the membership the form makes.
+   */
+  fromRecruit?: { fullName: string; leadId: string } | null;
 }) {
   const t = useMessages(addAgentMessages);
   const confirmed = useMessages(confirmationMessages);
@@ -99,8 +104,8 @@ export function AddAgentDialog({
    * the first opening kept the device's day — and a device a day ahead held *Add agent* back as after today.
    */
   useEffect(() => {
-    if (open) setForm((f) => ({ ...f, joinDate: today }));
-  }, [open, today]);
+    if (open) setForm((f) => ({ ...f, joinDate: today, ...(fromRecruit ? { fullName: fromRecruit.fullName } : {}) }));
+  }, [open, today, fromRecruit]);
 
   // The reader's own leader code, for the share block — only for their own unit, and only once the modal opens.
   useEffect(() => {
@@ -141,6 +146,7 @@ export function AddAgentDialog({
         phone: normalisedPhone(form.phone) ?? form.phone.trim(),
         joinDate: form.joinDate,
         ...(leader ? { leaderMembershipId: leader.membershipId } : {}),
+        ...(fromRecruit ? { recruitLeadId: fromRecruit.leadId } : {}),
       });
       onAdded(result);
       if (result.outcome === 'invited') setShared({ invite: result.invite, link: result.link });

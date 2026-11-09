@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { InviteQr } from '@/components/ui/invite-qr';
 import { LineIcon } from '@/components/ui/line-icon';
+import { linkTail, MiddleEllipsis } from '@/components/ui/middle-ellipsis';
 import { ResponsiveSheet } from '@/components/ui/responsive-sheet';
 import { Toast, useToast } from '@/components/ui/toast';
 import { useMessages } from '@/i18n/language-provider';
@@ -12,7 +13,7 @@ import { uiMessages } from '@/i18n/messages/ui';
 import { cn } from '@/lib/cn';
 
 /**
- * **The invite share block** (UI V1, Phase 18.99 T9: UI-084, UI-090; D-08, D-22) — a leader's code and the four ways
+ * **The invite share block** (UI V1, Phase 18.11 T9: UI-084, UI-090; D-08, D-22) — a leader's code and the four ways
  * to hand it on: *Salin tautan*, *Salin kode*, the QR, and WhatsApp. Built once for User Management's *Undang seseorang*
  * and for New Hires' *+ Tambah agent* modal (UI-024, T6), which reuses it.
  *
@@ -78,7 +79,7 @@ export function InviteShareBlock({
   const whatsApp = `https://wa.me/?text=${encodeURIComponent(whatsAppText ?? link)}`;
   const pill = cn(
     'inline-flex h-11 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-pill border border-line bg-card px-2.5 text-md font-semibold text-navy',
-    'hover:bg-hover-row focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber md:px-3.5 lg:h-9',
+    'hover:bg-hover-row focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus-ring md:px-3.5 lg:h-9',
   );
   const copyLink = (
     <button type="button" className={pill} onClick={() => void copy('link')}>
@@ -96,7 +97,7 @@ export function InviteShareBlock({
       rel="noopener noreferrer"
       aria-label={t.whatsApp}
       data-channel="whatsapp"
-      className={cn('flex shrink-0 items-center justify-center rounded-full bg-whatsapp text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber', round)}
+      className={cn('flex shrink-0 items-center justify-center rounded-full bg-whatsapp text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus-ring', round)}
     >
       <LineIcon name="whatsapp" className="h-5 w-5" />
     </a>
@@ -166,11 +167,15 @@ export function InviteShareBlock({
         </div>
       </div>
 
-      {/* From 768px (UI-084): link · code · WhatsApp · the QR tile in one row. */}
+      {/*
+        * From 768px (UI-084): link · code · WhatsApp · the QR tile in one row. **The link on one line, cut in its middle,
+        * its code never split** (P19.1-T1 AC-5; UI-124: *"…?code=ACQD / QT"* wrapped at 768px): the whole of it is what
+        * *Salin tautan* copies, what a screen reader says and the tooltip.
+        */}
       <div className="flex items-end gap-6 max-md:hidden" data-testid="invite-share-wide">
         <div className="min-w-0 flex-1">
           <p className="text-sm text-muted">{t.linkLabel}</p>
-          <p className="mb-2 mt-0.5 break-all text-md text-ink">{link}</p>
+          <p className="mb-2 mt-0.5 min-w-0 text-md text-ink"><MiddleEllipsis text={link} tail={linkTail(link, code)} /></p>
           {copyLink}
         </div>
         <div className="shrink-0">

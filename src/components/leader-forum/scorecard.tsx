@@ -4,6 +4,7 @@ import { Fragment, useId, useRef, useState } from 'react';
 import { useMeetingWriter } from '@/components/leader-forum/meeting-writer';
 import { TextInput } from '@/components/ui/field';
 import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
+import { SOURCE_LANGUAGE } from '@/i18n/language';
 import { forumStatsMessages } from '@/i18n/messages/forum-stats';
 import { cn } from '@/lib/cn';
 import {
@@ -19,7 +20,7 @@ import { usePhone } from '@/lib/use-phone';
 
 /**
  * ***Overview & Stats*** — **the client's reference slide** (*FinWinner – Jakarta & Serpong: Oct 2026*; ADR-0175,
- * P18.97-T1; parity I-479 to I-495), where it was the prototype's table (`KPM_Owner.html:2780-2799`): the title and
+ * P18.9-T1; parity I-479 to I-495), where it was the prototype's table (`KPM_Owner.html:2780-2799`): the title and
  * *AS OF*, the KPI strip, the table — seven columns under *Full Year & YTD View* and *Monthly View*, the slide's nine
  * rows — and numbered footnotes in our metrics' words with one *(\*)* note per partial period.
  *
@@ -116,7 +117,7 @@ export function Chips({ chips }: { chips: ScorecardData['chips'] }) {
  * Every tint is opaque — the token mixed into the card — so the *Metrics* column that sticks on a tablet hides what
  * scrolls beneath it whatever the row's ground.
  */
-const HEAD_BG = 'bg-[color:color-mix(in_srgb,var(--color-navy)_2%,var(--color-card))]';
+const HEAD_BG = 'bg-[color:color-mix(in_srgb,var(--color-secondary)_2%,var(--color-card))]';
 const BAND_BG = 'bg-[color:color-mix(in_srgb,var(--color-alert)_4%,var(--color-card))]';
 const SECTION_BG = 'bg-[color:color-mix(in_srgb,var(--color-alert)_6%,var(--color-card))]';
 /** A cell's box, without its lines: an outlined cell draws its own. */
@@ -147,7 +148,7 @@ export function ScorecardTable({
   const t = useMessages(forumStatsMessages);
   const sections: Partial<Record<RowKey, string>> = t.sections;
   const { scorecard } = meeting;
-  const { marks } = numberedFootnotes(scorecard.rows.map((r) => r.key));
+  const { marks } = numberedFootnotes(scorecard.rows.map((r) => r.key), footnotesIn(SOURCE_LANGUAGE, scorecard.definitions));
   return (
     <div className="mb-2 overflow-hidden rounded-lg border border-card-edge bg-card">
       {/* The table keeps its shape and scrolls inside its card on a tablet; a phone draws the cards instead. */}
@@ -263,7 +264,7 @@ function CellContent({ row, cell }: { row: ScorecardRow; cell: ScorecardCell }) 
   const words = useLanguage();
   const language = useFigureLanguage();
   if (cell.kind === 'pending') return <span className="italic text-muted">{t.pending}</span>;
-  if (cell.kind === 'none' || cell.kind === 'unrecorded') {
+  if (cell.kind === 'none' || cell.kind === 'unrecorded' || cell.kind === 'not_uploaded') {
     return (
       <>
         <span aria-hidden="true">{NONE}</span>
@@ -301,7 +302,7 @@ function FigureCell({
 }
 
 /*
- * ── *Monthly Target*: a rate per unit (P18.97-T1 AC-10, ADR-0175 §4; I-487) ─────────────────────
+ * ── *Monthly Target*: a rate per unit (P18.9-T1 AC-10, ADR-0175 §4; I-487) ─────────────────────
  */
 
 /**
@@ -377,18 +378,18 @@ function TargetInput({
 }
 
 /*
- * ── A phone: one card per metric (UI-014; P18.97-T1 AC-17, I-493) ─────────────────────────────
+ * ── A phone: one card per metric (UI-014; P18.9-T1 AC-17, I-493) ─────────────────────────────
  */
 
 /**
  * **One card per metric**, the table not drawn, below 768px: the metric's name and footnote mark; *YTD {Y}* against
  * *YTD {Y−1}* and the change the server computed — a whole percentage of last year's, or, on *3M new agent %*, the
- * difference in percentage points (P18.97-T8 F1, parity F-256) — *—* where there is none; *This Month* against *Last
+ * difference in percentage points (P18.9-T8 F1, parity F-256) — *—* where there is none; *This Month* against *Last
  * Month*; and the target. A *Not tracked* figure is left off its card. The notes follow the cards.
  */
 function MetricCards({ meeting, readOnly }: { meeting: MeetingView; readOnly: boolean }) {
   const { scorecard } = meeting;
-  const { marks } = numberedFootnotes(scorecard.rows.map((r) => r.key));
+  const { marks } = numberedFootnotes(scorecard.rows.map((r) => r.key), footnotesIn(SOURCE_LANGUAGE, scorecard.definitions));
   return (
     <ul className="mb-2 flex flex-col gap-3">
       {scorecard.rows.map((row) => <MetricCard key={row.key} meeting={meeting} row={row} mark={marks[row.key]} readOnly={readOnly} />)}
@@ -405,7 +406,7 @@ export function MetricCard({
   const titleId = useId();
   const { periods } = meeting.scorecard;
   /*
-   * A column's name and its period, each kept whole (P18.97-T8 F2): where the two do not fit on one line they break
+   * A column's name and its period, each kept whole (P18.9-T8 F2): where the two do not fit on one line they break
    * between them — *YTD 2026* over *(Jan-Okt '26)* — never inside either.
    */
   const label = (column: ColumnKey) => {
@@ -447,7 +448,7 @@ export function MetricCard({
         )}
       </dl>
       {/*
-        * **The target on a line of its own, under the figures** (P18.97-T8 F2). In their grid an editor's field — 16px
+        * **The target on a line of its own, under the figures** (P18.9-T8 F2). In their grid an editor's field — 16px
         * on a phone, wider than any figure — set the width of every row's value column, and the labels beside the
         * figures wrapped mid-phrase. Here it sets nothing but its own line: the label, then the field filling the rest —
         * under the label on a card too narrow for both.
@@ -467,18 +468,19 @@ export function MetricCard({
 }
 
 /*
- * ── The notes (UI-009; P18.97-T1 AC-12, I-488) ────────────────────────────────────────────────
+ * ── The notes (UI-009; P18.9-T1 AC-12, I-488) ────────────────────────────────────────────────
  */
 
 /**
  * **The numbered footnotes, in our metrics' words, and one *(\*)* note per partial period**, under the table or the
- * cards — where the prototype drew twelve ⓘ, a *Note* line and a *Source* line. The slide's footnote 1, *Net APE*,
- * waits with OD-231, so the numbering starts at *Annual Active Agents*.
+ * cards — where the prototype drew twelve ⓘ, a *Note* line and a *Source* line. **No *Net APE* footnote** (ADR-0201
+ * §1, OD-231 answered: *"APE is APE"*), so the numbering starts at *FLC*. **The footnotes are the definitions the
+ * scorecard was computed with** (P19.3-T1, ADR-0202 §4): the data sources' six, or a kept scorecard's four from before.
  */
 export function ScorecardNotes({ scorecard }: { scorecard: ScorecardData }) {
   const words = useLanguage();
   const language = useFigureLanguage();
-  const { list } = numberedFootnotes(scorecard.rows.map((r) => r.key), footnotesIn(words));
+  const { list } = numberedFootnotes(scorecard.rows.map((r) => r.key), footnotesIn(words, scorecard.definitions));
   const notes = partialNotes(scorecard, language, words);
   return (
     <div className="mb-6 mt-2.5 text-xs leading-relaxed text-muted">

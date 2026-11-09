@@ -17,10 +17,11 @@ import { goalsMessages } from '@/i18n/messages/goals';
  * have. Each coachee's *Goal Setting* tab now does that with the leader's name on the save, so this
  * screen returns to the reader's own plan, as the prototype's is.
  *
- * **UI V1 (P18.99-T5)**: the title row is the shell's (UI-004) — no control on it, and the prototype's line under
- * the title on a desktop only, as the report's Appendix A has it. The calculator's layout is its own (UI-014 to UI-022).
+ * **UI V1 (P18.11-T5)**: the title row is the shell's (UI-004) — no control on it. The prototype's line under the title,
+ * kept on a desktop by Appendix A, is drawn at no size since UI-112 (the field shell's rule, P19.1-T1; the
+ * `goals-desktop-2026-11-02` mockup draws none). The calculator's layout is its own (UI-014 to UI-022, UI-122).
  *
- * **Its words are the catalogue's** (P18.98-T4; `i18n/messages/goals.tsx`): the title, kept English (§A.2), and the
+ * **Its words are the catalogue's** (P18.10-T4; `i18n/messages/goals.tsx`): the title, kept English (§A.2), and the
  * prototype's line (`Overall.html:10405`, verbatim in English), in the reader's language.
  */
 export default function GoalSettingsPage() {
@@ -32,7 +33,7 @@ export default function GoalSettingsPage() {
   const period = String(new Date().getFullYear());
 
   return (
-    // UI V1 (UI-004, the report's Appendix A): no title-row control, and the sub-line on a desktop alone.
+    // UI V1 (UI-004, the report's Appendix A): no title-row control; the sub-line drawn at no size since UI-112 (the shell's).
     <Page title={t.title} subtitle={t.subtitle} subtitleOnPhone={false} subtitleOnTablet={false} permission="goal:read">
       <GoalCalculator period={period} />
     </Page>

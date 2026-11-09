@@ -4,21 +4,20 @@ import { useId } from 'react';
 import { useMessages } from '@/i18n/language-provider';
 import { dataUploadMessages } from '@/i18n/messages/data-upload';
 import { cn } from '@/lib/cn';
-import {
-  AGENT_COLUMN, CADENCE_GROUP_LABEL, CADENCES, FIGURE_COLUMNS, METRIC_COLUMN_LABEL, PRODUCTION_METRICS, type Cadence,
-  type ProductionMetric,
-} from '@/lib/production';
+import { AGENT_COLUMN } from '@/lib/production';
 
-type Figure = { cadence: Cadence; metric: ProductionMetric };
+/** A column of the table: its cell's key (`cellKey`), its heading, and its group — this month, or the year to date. */
+export interface FigureColumn {
+  key: string;
+  label: string;
+  ytd: boolean;
+}
 
 /**
  * The prototype's divider between the groups: 2px of navy down the left of the first YTD column and of
  * *Active (MAA)*, heading and cells alike (`.upload-group-divider`, `KPM_Owner.html:851`).
  */
-export const GROUP_DIVIDER = 'border-l-2 border-l-navy';
-
-/** Does this figure open its group's divider? The first YTD column does. */
-export const opensGroup = (index: number) => index === PRODUCTION_METRICS.length;
+export const GROUP_DIVIDER = 'border-l-2 border-l-secondary';
 
 /**
  * `DataTable`'s compact density (`components/ui/data-table.tsx`), which this table has to draw for
@@ -37,33 +36,39 @@ const COMPACT = [
 const HEADING = 'px-4 py-2.5 text-sm font-semibold uppercase tracking-wide text-muted';
 
 /**
- * **The month's figures, in the prototype's two-row head** (`KPM_Owner.html:4836-4848`, P13.1-T7):
- * *Agent* and *Agent code* across both rows, then **This Month** over its six metrics, **YTD** over the
- * same six, and — for the month table — *Active (MAA)* to close the row. The template's columns run in
- * the same order (`production-template.ts`), so the file an operator fills reads like the screen.
+ * **A file's figures, in the prototype's two-row head** (`KPM_Owner.html:4836-4848`, P13.1-T7) — the preview's table:
+ * *Agent* and *Agent code* across both rows, then **This Month** over the template's columns the file is read for, and
+ * **YTD** over the uploaded years to date, when the file carries any (P19.5-T2: a summed year to date is never in a
+ * file). The columns run in the template's order, so the file an operator fills reads like the screen.
  *
- * **Each figure names both its headings.** A group heading spans six columns, and how a screen reader
- * pairs a cell with a heading two rows up varies; so each figure cell carries `headers` naming its
- * group and its metric — *This Month, APE* — and the group headings also carry `scope="colgroup"` over
- * a real `<colgroup>`. Ids come from `useId`, so the preview's table and the month's can share a page.
+ * **Each figure names both its headings.** A group heading spans several columns, and how a screen reader pairs a cell
+ * with a heading two rows up varies; so each figure cell carries `headers` naming its group and its column — *This
+ * Month, APE* — and the group headings also carry `scope="colgroup"` over a real `<colgroup>`. Ids come from `useId`,
+ * so two tables can share a page.
  *
- * `children` is handed the `headers` value for a figure, so a row cannot name the wrong one.
+ * `children` is handed the `headers` value for a column's key, so a row cannot name the wrong one.
  */
 export function FigureTable({
-  caption, active = false, tableClassName, children,
+  caption, columns, tableClassName, children,
 }: {
   caption: string;
-  /** The month table's *Active (MAA)*. A preview has no such column: a file says what to write. */
-  active?: boolean;
+  columns: readonly FigureColumn[];
   /** A minimum width, so the table scrolls in its own box and never the page. */
   tableClassName?: string;
-  children: (headersOf: (figure: Figure) => string) => React.ReactNode;
+  children: (headersOf: (key: string) => string) => React.ReactNode;
 }) {
   const t = useMessages(dataUploadMessages);
   const id = useId();
-  const groupId = (cadence: Cadence) => `${id}-${cadence}`;
-  const figureId = ({ cadence, metric }: Figure) => `${id}-${cadence}-${metric}`;
-  const headersOf = (figure: Figure) => `${groupId(figure.cadence)} ${figureId(figure)}`;
+  const groups = ([false, true] as const)
+    .map((ytd) => ({ ytd, columns: columns.filter((c) => c.ytd === ytd) }))
+    .filter((g) => g.columns.length > 0);
+  const groupId = (ytd: boolean) => `${id}-${ytd ? 'ytd' : 'monthly'}`;
+  const figureId = (key: string) => `${id}-${key}`;
+  const headersOf = (key: string) => {
+    const column = columns.find((c) => c.key === key);
+    return column ? `${groupId(column.ytd)} ${figureId(key)}` : figureId(key);
+  };
+  const ordered = groups.flatMap((g) => g.columns);
 
   return (
     <div className="overflow-x-auto rounded-lg border border-card-edge bg-card">
@@ -74,42 +79,36 @@ export function FigureTable({
           <col style={{ width: '11rem' }} />
           <col style={{ width: '6rem' }} />
         </colgroup>
-        {CADENCES.map((cadence) => (
-          <colgroup key={cadence}>
-            {PRODUCTION_METRICS.map((metric) => <col key={metric} style={{ width: '7.5rem' }} />)}
+        {groups.map((g) => (
+          <colgroup key={String(g.ytd)}>
+            {g.columns.map((c) => <col key={c.key} style={{ width: '7.5rem' }} />)}
           </colgroup>
         ))}
-        {active && (
-          <colgroup>
-            <col style={{ width: '6.5rem' }} />
-          </colgroup>
-        )}
         <thead>
           <tr className="border-b border-hairline">
             <th rowSpan={2} scope="col" className={HEADING}>{AGENT_COLUMN}</th>
             <th rowSpan={2} scope="col" className={HEADING}>{t.agentCode}</th>
-            {CADENCES.map((cadence, i) => (
+            {groups.map((g, i) => (
               <th
-                key={cadence}
-                id={groupId(cadence)}
-                colSpan={PRODUCTION_METRICS.length}
+                key={String(g.ytd)}
+                id={groupId(g.ytd)}
+                colSpan={g.columns.length}
                 scope="colgroup"
                 className={cn(HEADING, 'text-center', i > 0 && GROUP_DIVIDER)}
               >
-                {CADENCE_GROUP_LABEL[cadence]}
+                {g.ytd ? t.switchYtd : t.switchMonth}
               </th>
             ))}
-            {active && <th rowSpan={2} scope="col" className={cn(HEADING, GROUP_DIVIDER)}>{t.activeColumn}</th>}
           </tr>
           <tr className="border-b border-hairline">
-            {FIGURE_COLUMNS.map((figure, i) => (
+            {ordered.map((c, i) => (
               <th
-                key={`${figure.cadence}-${figure.metric}`}
-                id={figureId(figure)}
+                key={c.key}
+                id={figureId(c.key)}
                 scope="col"
-                className={cn(HEADING, opensGroup(i) && GROUP_DIVIDER)}
+                className={cn(HEADING, opensGroup(ordered, i) && GROUP_DIVIDER)}
               >
-                {METRIC_COLUMN_LABEL[figure.metric]}
+                {c.label}
               </th>
             ))}
           </tr>
@@ -119,6 +118,10 @@ export function FigureTable({
     </div>
   );
 }
+
+/** Does this column open its group's divider? The first YTD column does. */
+export const opensGroup = (columns: readonly FigureColumn[], index: number) =>
+  columns[index]?.ytd === true && columns[index - 1]?.ytd === false;
 
 /**
  * One figure's cell: right-aligned, on one line, naming its two headings. `Cell` takes no `headers`,

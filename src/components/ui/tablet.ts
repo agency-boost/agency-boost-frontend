@@ -1,6 +1,6 @@
 /**
  * **What changes below 1024px** — Tailwind's `lg` — on a tablet and, with it, a phone (ADR-0178; the client's KPM Owner
- * review of 2026-10-27, UI-038; P18.97-T6 AC-4). `phone.ts` is the phone's alone, below 768px; this is the finding
+ * review of 2026-10-27, UI-038; P18.9-T6 AC-4). `phone.ts` is the phone's alone, below 768px; this is the finding
  * the client scoped *Mobile + Tablet*.
  *
  * **Strings only, and nothing else in this file**, as `phone.ts`, for the same reason: what holds a class is reached
@@ -34,7 +34,7 @@ export const TAB_BELOW_DESKTOP = 'max-lg:mb-0 max-lg:shrink-0 max-lg:whitespace-
 export const BELOW_DESKTOP_ROW = { 'data-tab-row': 'below-desktop' } as const;
 
 /**
- * **The client's per-size verdicts on a grey sentence, from 1024px *Show* and below it *ⓘ*** (P18.97-T4 AC-6, ADR-0176
+ * **The client's per-size verdicts on a grey sentence, from 1024px *Show* and below it *ⓘ*** (P18.9-T4 AC-6, ADR-0176
  * §6; the grey-text table of 2026-10-27, UI-027): the sentence stands from 1024px, and below 1024px it is not drawn —
  * its words are behind an ⓘ beside its subject (`BelowDesktopTip`, `below-desktop-tip.tsx`), on a tablet and, where the
  * row says *ⓘ* on a phone too, on a phone. Put it on the sentence's own element, never on a box holding anything else.

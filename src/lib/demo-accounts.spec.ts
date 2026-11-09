@@ -75,7 +75,8 @@ describe('demo accounts', () => {
     // Each of these exists because some behaviour is only visible through it. A cast
     // that is only one account per role cannot demonstrate any of them.
     const roles = DEMO_ACCOUNTS.map((a) => a.role);
-    expect(roles).toContain('AAB · leads nobody'); // OD-23; the badge's name since P18.95-T9 AC-1
+    expect(roles).toContain('AAB · leads nobody'); // OD-23; the badge's name since P18.7-T9 AC-1
+    expect(roles).toContain('Agent · leads one'); // P19.9-T6 (ADR-0234): an Agent-rung upline coaches
     expect(roles).toContain('Waiting on a leader'); // the join gate
     expect(roles).toContain('Registered, asked nobody'); // the untagged pool
     expect(roles).toContain('Removed'); // what survives leaving

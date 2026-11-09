@@ -31,7 +31,7 @@ export function StagedChangesBar({
   if (count === 0) return null;
 
   return (
-    <Card className="mb-4 border-amber">
+    <Card className="mb-4 border-primary">
       <p className="text-md text-navy">
         <strong>{t.staged.notSaved({ count })}</strong>{' '}
         <span className="text-muted">{t.staged.nothingReached}</span>

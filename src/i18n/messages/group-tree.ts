@@ -2,13 +2,13 @@ import { defineMessages, type MessagesOf } from '@/i18n/catalogue';
 import { kept } from '@/i18n/kept';
 
 /**
- * **Group tree** — `/group-tree`, a leader's own downline (P18.98-T4, coaching and unit; `functional/org-hierarchy.md`,
+ * **Group tree** — `/group-tree`, a leader's own downline (P18.10-T4, coaching and unit; `functional/org-hierarchy.md`,
  * *Group tree*): the page's title and line, its wait and its empty state. The tree itself, its cards, its layers and its
  * phone's list are the office's *Org Tree*'s (`org-tree.ts`), drawn by the same component.
  *
- * **English is the source**: the nav item's words as the title (P18.95-T9 AC-2) and the module's own line. The
+ * **English is the source**: the nav item's words as the title (P18.7-T9 AC-2) and the module's own line. The
  * Indonesian is the approved glossary's: §B.5's *Belum ada yang melapor kepada Anda.*, *Ketuk*, never *klik*
- * (P18.95-T9 AC-5), *agent* as §B.1's *+ Tambah agent* writes it, *lapisan* as the org tree's *Lapisan {n}*. **Kept**
+ * (P18.7-T9 AC-5), *agent* as §B.1's *+ Tambah agent* writes it, *lapisan* as the org tree's *Lapisan {n}*. **Kept**
  * (§A): the title, *Leader*, *downline*, *unit*, *Unit Dashboard*.
  *
  * @moved app/(agent)/group-tree/
@@ -41,6 +41,19 @@ const en = {
   team: ({ name }: { name: string }) => `${name}’s team`,
   /** A desktop's *Langsung* when there are none: a dot, read as this. */
   noneDirect: 'None',
+  /**
+   * **A leader's Group Tree, read-only** (P19.3-T3; UI-152: *"as that leader sees them"*), `/group-tree/[membershipId]`:
+   * the title names whose; the summary counts below them; the not-found state when the leader is outside the reader's
+   * reach, gone, or another office's.
+   */
+  titleOf: ({ name }: { name: string }) => `${kept('Group Tree')} · ${name}`,
+  belowThem: ({ total, parts }: { total: number; parts: string }) => (parts ? `${total} below them · ${parts}` : `${total} below them`),
+  emptyOf: 'Nobody reports to this leader yet.',
+  /** The upline card on a leader's tree: *Leader Sari*, where the reader's own reads *Your leader*. */
+  leaderOf: ({ name }: { name: string }) => `${name}’s ${kept('leader')}`,
+  notFoundTitle: 'This Group Tree is not one you can open.',
+  notFoundLine: 'The leader may have left, or be outside the people you can see.',
+  back: 'Back to KPM Analytics',
 };
 
 const id: MessagesOf<typeof en> = {
@@ -56,6 +69,13 @@ const id: MessagesOf<typeof en> = {
   columns: { name: 'Nama', role: 'Peran', direct: 'Langsung', today: 'Hari ini' },
   team: ({ name }) => `Tim ${name}`,
   noneDirect: 'Tidak ada',
+  titleOf: ({ name }) => `${kept('Group Tree')} · ${name}`,
+  belowThem: ({ total, parts }) => (parts ? `${total} di bawahnya · ${parts}` : `${total} di bawahnya`),
+  emptyOf: 'Belum ada yang melapor kepada leader ini.',
+  leaderOf: ({ name }) => `${kept('Leader')} ${name}`,
+  notFoundTitle: `${kept('Group Tree')} ini tidak dapat Anda buka.`,
+  notFoundLine: 'Leader-nya mungkin sudah keluar, atau di luar orang yang dapat Anda lihat.',
+  back: `Kembali ke ${kept('KPM Analytics')}`,
 };
 
 export const groupTreeMessages = defineMessages({ en, id });

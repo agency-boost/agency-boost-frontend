@@ -25,17 +25,14 @@ afterEach(() => {
   resetLanguage();
 });
 
-/** The last six months, one of them never uploaded: the hatched bar (`kpm-mobile` 2). */
+/**
+ * The last six months, one of them never uploaded. *UI-109's Overview on a phone* is `page.spec.tsx`'s since P19.3-T3,
+ * which draws the Leader list at every size; this file keeps UI-109's Compliance and the tabs.
+ */
 const MONTHLY = [
   { month: '2026-04', apeMinor: 174 * 1e8 }, { month: '2026-05', apeMinor: 174 * 1e8 }, { month: '2026-06', apeMinor: 174 * 1e8 },
   { month: '2026-07', apeMinor: 271 * 1e8 }, { month: '2026-08', apeMinor: null }, { month: '2026-09', apeMinor: 462 * 1e8 },
 ];
-
-function overview(me = CORE_LEADER_ME) {
-  const stub = stubFetch({ ...SHELL_STUBS, 'GET /kpm/analytics': { body: analyticsView('this_month', { monthly: MONTHLY }) } });
-  renderInLayout(KpmAnalyticsLayout, <KpmAnalyticsPage />, { me });
-  return stub;
-}
 
 function compliance(me = CORE_LEADER_ME) {
   nav.pathname = '/kpm/analytics/compliance';
@@ -45,76 +42,6 @@ function compliance(me = CORE_LEADER_ME) {
 }
 
 describe('UI-109 KPM Analytics on a phone in the field shell', () => {
-  it('UI-109 the tabs are one segmented control, Overview | Compliance, and the sub-line is gone', async () => {
-    overview();
-    const segments = await screen.findByRole('navigation', { name: 'KPM Analytics' });
-    expect(segments).toHaveAttribute('data-route-segments');
-    expect(within(segments).getByRole('link', { name: 'Overview' })).toHaveAttribute('aria-current', 'page');
-    expect(within(segments).getByRole('link', { name: 'Compliance' })).toHaveAttribute('href', '/kpm/analytics/compliance');
-    // Not drawn below 768px (the class that removes it there); the console's readers keep theirs.
-    expect(screen.getByText('Unit comparisons, club qualification, and trends')).toHaveClass('max-md:hidden');
-  });
-
-  it('UI-109 Overview: Unit comparison with its period pill, six tiles in two columns, one row per AB, the six-month bars', async () => {
-    overview();
-    const v1 = await waitFor(() => {
-      const el = document.querySelector('[data-v1-overview]');
-      expect(el).not.toBeNull();
-      return el as HTMLElement;
-    });
-    expect(within(v1).getByRole('heading', { name: 'Unit comparison' })).toBeInTheDocument();
-    expect(within(v1).getByRole('combobox', { name: 'Period' })).toHaveValue('this_month');
-    expect(v1.querySelectorAll('[data-stat-tile]')).toHaveLength(6);
-    expect(within(v1).getByText('Manpower')).toBeInTheDocument();
-    expect(within(v1).getByText('ABs meeting MOC')).toBeInTheDocument();
-    const rows = within(within(v1).getByRole('list', { name: 'By AB' })).getAllByRole('listitem');
-    expect(rows).toHaveLength(4);
-    // No table, and no footnote under the chart.
-    expect(screen.queryByRole('table')).not.toBeInTheDocument();
-    expect(screen.queryByText(/combined APE — whole group/)).not.toBeInTheDocument();
-  });
-
-  it('UI-109 an AB row: the APE % in its status colour, the APE, the people, the club pill and a green MOC pill when met', async () => {
-    overview();
-    const list = await screen.findByRole('list', { name: 'By AB' });
-    const hendra = within(list).getAllByRole('listitem')[0];
-    expect(hendra).toHaveTextContent('Hendra Wibowo');
-    expect(hendra).toHaveTextContent('31 people');
-    expect(within(hendra).getByText('Star Club')).toBeInTheDocument();
-    const moc = within(hendra).getByRole('button', { name: /MOC requirements met for Hendra Wibowo/ });
-    expect(moc.querySelector('[data-tone]')).toHaveAttribute('data-tone', 'green');
-  });
-
-  it('UI-109 a Core Leader’s own row opens their unit; another AB’s row leads nowhere rather than to a refusal', async () => {
-    overview();
-    const list = await screen.findByRole('list', { name: 'By AB' });
-    const rows = within(list).getAllByRole('listitem');
-    const linked = rows.filter((row) => within(row).queryByRole('link'));
-    // The fixture's reader's own agency is the one marked *You*: it alone opens, at the reader's own Unit Dashboard.
-    expect(linked).toHaveLength(1);
-    expect(within(linked[0]).getByText('You')).toBeInTheDocument();
-    expect(within(linked[0]).getByRole('link')).toHaveAttribute('href', '/unit/dashboard');
-  });
-
-  it('UI-109 the MOC pill opens the requirements', async () => {
-    overview();
-    await userEvent.click(await screen.findByRole('button', { name: /MOC requirements met for Hendra Wibowo/ }));
-    expect(await screen.findByRole('dialog', { name: /Hendra Wibowo — Maintenance of Contract/ })).toBeInTheDocument();
-  });
-
-  it('UI-109 the six bars: the latest in the accent, a month with no upload hatched and –, no footnote', async () => {
-    overview();
-    const bars = await waitFor(() => {
-      const el = document.querySelector('[data-v1-bars]');
-      expect(el).not.toBeNull();
-      return el as HTMLElement;
-    });
-    const kinds = [...bars.querySelectorAll('[data-bar]')].map((b) => b.getAttribute('data-bar'));
-    expect(kinds).toEqual(['month', 'month', 'month', 'month', 'none', 'latest']);
-    expect(bars).toHaveTextContent('–');
-    expect(within(bars).getByText(/2026: not uploaded$/)).toBeInTheDocument();
-  });
-
   it('UI-109 Compliance: the six tiles three across and the one module picker on the first screen', async () => {
     compliance();
     const v1 = await waitFor(() => {
@@ -180,20 +107,33 @@ describe('UI-109 KPM Analytics on a phone in the field shell', () => {
     expect(order()).not.toEqual(first);
   });
 
-  it('UI-109 the Owner on a phone keeps the office console’s Overview: the cards, not the field’s compact rows', async () => {
-    overview(OWNER_ME);
-    await screen.findAllByText('Hendra Wibowo');
-    expect(document.querySelector('[data-v1-overview]')).toBeNull();
-    expect(document.querySelector('[data-route-segments]')).toBeNull();
-  });
-
-  it('UI-109 the tab reads Compliance in Indonesian too, and the Overview’s own words are Indonesian', async () => {
+  it('UI-109 the tab reads Compliance in Indonesian too', async () => {
     stubFetch({ ...SHELL_STUBS, 'GET /kpm/analytics': { body: analyticsView('this_month', { monthly: MONTHLY }) } });
     renderInIndonesian(<KpmAnalyticsLayout><KpmAnalyticsPage /></KpmAnalyticsLayout>, { me: CORE_LEADER_ME });
     const segments = await screen.findByRole('navigation', { name: 'KPM Analytics' });
     expect(within(segments).getByRole('link', { name: 'Compliance' })).toBeInTheDocument();
-    expect(await screen.findByText('31 orang', { exact: false })).toBeInTheDocument();
-    expect(screen.getByText('Anda')).toBeInTheDocument();
-    expect(screen.getByText('6 bulan')).toBeInTheDocument();
+    expect(await screen.findByText('6 bulan')).toBeInTheDocument();
+  });
+
+  it('P19.3-T3 AC-14 the Owner on a phone and a tablet reads UI-109’s Compliance too, the campaign override kept', async () => {
+    for (const width of [375, 768]) {
+      vi.unstubAllGlobals();
+      document.body.innerHTML = '';
+      atWidth(width);
+      nav.pathname = '/kpm/analytics/compliance';
+      nav.search = 'category=campaigns&item=PERSISTENCY_PUSH';
+      stubFetch({ ...SHELL_STUBS, 'GET /kpm/analytics/compliance': { body: complianceView('campaigns', 'PERSISTENCY_PUSH') } });
+      renderInLayout(KpmAnalyticsLayout, <KpmAnalyticsCompliancePage />, { me: OWNER_ME });
+      const list = await screen.findByRole('list', { name: 'By AB' });
+      expect(document.querySelector('[data-v1-compliance]')).not.toBeNull();
+      expect(screen.queryAllByRole('region')).toHaveLength(0);
+      for (const section of [...list.querySelectorAll('[data-v1-section]')]) {
+        const toggle = within(section as HTMLElement).getAllByRole('button')[0];
+        if (toggle.getAttribute('aria-expanded') === 'false') await userEvent.click(toggle);
+      }
+      // P18.3-T2's override stays the Owner's: the *Achieved* cell's control on Rina's line.
+      const rina = document.querySelector('[data-row="mem-rina"]') as HTMLElement;
+      expect(within(rina).getByRole('button', { name: /Rina Agustina/ })).toBeInTheDocument();
+    }
   });
 });

@@ -7,7 +7,7 @@ import { homeMessages } from '@/i18n/messages/home';
 import { cn } from '@/lib/cn';
 import { formatNumber, formatWeekday } from '@/lib/format';
 import type { HomeActivity } from '@/lib/home';
-import { SectionHeading } from './home-actions';
+import { SectionHead } from '@/components/ui/section-title';
 
 /** The tallest bar, in px: the chart area is ~130px on a phone (~150px on a desktop) with the value above each bar. */
 const TALLEST = 100;
@@ -35,9 +35,9 @@ export function HomeChart({ activity, className }: { activity: HomeActivity; cla
 
   return (
     <section data-home-chart="" aria-labelledby="home-chart" className={className}>
-      <SectionHeading id="home-chart" title={t.heading}>
+      <SectionHead id="home-chart" title={t.heading}>
         {highest > 0 && <span className="text-md font-semibold text-muted">{t.total({ n: activity.total })}</span>}
-      </SectionHeading>
+      </SectionHead>
       <Link href="/activity/log" className="block rounded-lg bg-card px-3 pb-2.5 pt-3 lg:px-3.5 lg:hover:bg-hover-row">
         {highest === 0 ? (
           <span className="flex flex-col items-center py-2 text-center">
@@ -56,12 +56,12 @@ export function HomeChart({ activity, className }: { activity: HomeActivity; cla
                   data-today={at === last ? 'true' : undefined}
                   className={cn(
                     'flex h-full flex-col items-center justify-end text-xs font-semibold',
-                    at === last ? 'text-amber-ink' : 'text-pill-grey-ink',
+                    at === last ? 'text-primary-ink' : 'text-pill-grey-ink',
                   )}
                 >
                   {formatNumber(day.count, {}, figures)}
                   <span
-                    className={cn('mt-1 block w-[1.625rem] rounded-t-[6px] rounded-b-[3px] lg:w-[1.875rem]', at === last ? 'bg-amber' : 'bg-line')}
+                    className={cn('mt-1 block w-[1.625rem] rounded-t-[6px] rounded-b-[3px] lg:w-[1.875rem]', at === last ? 'bg-primary' : 'bg-line')}
                     style={{ height: Math.max(FLOOR, Math.round((day.count / highest) * TALLEST)) }}
                   />
                 </span>
@@ -69,7 +69,7 @@ export function HomeChart({ activity, className }: { activity: HomeActivity; cla
             </span>
             <span aria-hidden="true" className="mt-1.5 grid grid-cols-7 border-t border-divider pt-1.5 text-center text-xs text-muted">
               {activity.days.map((day, at) => (
-                <span key={day.date} className={cn(at === last && 'font-bold text-amber-ink')}>{dayName(day.date, at)}</span>
+                <span key={day.date} className={cn(at === last && 'font-bold text-primary-ink')}>{dayName(day.date, at)}</span>
               ))}
             </span>
           </>

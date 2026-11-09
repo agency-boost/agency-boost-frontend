@@ -24,7 +24,7 @@ import { formatShortDay } from '@/lib/format';
 const RECORD_TEXT_MAX = 500;
 
 /**
- * **A data-backed item's row** (P18.96-T4 AC-2 to AC-4; ADR-0171 §3; the client's report, UI-004): *Close first case
+ * **A data-backed item's row** (P18.8-T4 AC-2 to AC-4; ADR-0171 §3; the client's report, UI-004): *Close first case
  * independently*, *Reach Independent Agent milestone* and *Weekly 1-on-1 check-in*, on the hire's `/activation` and the
  * leader's `/new-hires/[membershipId]` alike — one component, so the two cannot draw it two ways (AC-5).
  *
@@ -37,13 +37,13 @@ const RECORD_TEXT_MAX = 500;
  *   sent: the tick and the record go in one request (`onSave`), and the box stays unticked if it fails. An untick of a
  *   tick saved by hand is saved at once; one the data completed is nobody's, and its box is inert.
  *
- * *Saving… → Saved ✓* beside the box, as on every row (P18.95-T1 AC-5; the client asked to keep it).
+ * *Saving… → Saved ✓* beside the box, as on every row (P18.7-T1 AC-5; the client asked to keep it).
  *
- * **Closing the form leaves the reader where they were** (P18.96-T7 AC-2; UI-008): its *Save* or *Cancel* goes with
+ * **Closing the form leaves the reader where they were** (P18.8-T7 AC-2; UI-008): its *Save* or *Cancel* goes with
  * it, and the focus goes back to the box it opened from — or to the row, when the answer leaves the box inert — without
  * scrolling. Otherwise it fell to the page itself, and the next Tab started again from the top.
  *
- * **Its words are the catalogue's** (`i18n/messages/activation.ts`; P18.98-T4), its days written in the figures'
+ * **Its words are the catalogue's** (`i18n/messages/activation.ts`; P18.10-T4), its days written in the figures'
  * language.
  */
 export function DataItemRow({
@@ -266,7 +266,7 @@ function ClosingForm({
             value={closing.leadId}
             checked={choice === closing.leadId}
             onChange={() => setChoice(closing.leadId)}
-            className="h-4 w-4 accent-navy"
+            className="h-4 w-4 accent-secondary"
           />
           {closing.name} · {formatShortDay(closing.date, { year: true }, figures)}
         </label>
@@ -280,7 +280,7 @@ function ClosingForm({
             value="new"
             checked={choice === 'new'}
             onChange={() => setChoice('new')}
-            className="h-4 w-4 accent-navy"
+            className="h-4 w-4 accent-secondary"
           />
           {t.newClosing}
         </label>

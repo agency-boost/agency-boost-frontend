@@ -47,11 +47,13 @@ describe('/leader-meetings/shared/[token] — a meeting by its link (P18.1-T3)',
     expect(screen.queryByText('KPM OWNER')).not.toBeInTheDocument();
   });
 
-  it('P18.1-T3 AC-2: the Owner reads a link in the console, read-only all the same', async () => {
+  it('P18.1-T3 AC-2, P19.2-T1 AC-2: the Owner reads a link in the one shell, read-only all the same', async () => {
     stubFetch({ ...SHELL_STUBS, 'GET /leader-meetings/shared/tok_abc-123': { body: shared } });
     renderWithSession(page(), { me: OWNER_ME });
     await screen.findByRole('heading', { level: 2, name: 'Strategic Check-in — #14' });
-    expect(screen.getByText('KPM OWNER')).toBeInTheDocument();
+    // The office console is gone (ADR-0197): no tag, and the shell's own frame.
+    expect(screen.queryByText('KPM OWNER')).not.toBeInTheDocument();
+    expect(document.querySelector('[data-surface="v1"]')).not.toBeNull();
     expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
   });
 
@@ -71,7 +73,7 @@ describe('/leader-meetings/shared/[token] — a meeting by its link (P18.1-T3)',
   });
 
   it('P18.1-T3 AC-2: a reader not signed in signs in first, and comes back to the link', async () => {
-    // Sent by the shell since P18.8-T15 AC-2, from the address the browser is on.
+    // Sent by the shell since P18.5-T15 AC-2, from the address the browser is on.
     window.history.replaceState(null, '', '/leader-meetings/shared/tok_abc-123');
     onTestFinished(() => window.history.replaceState(null, '', '/'));
     stubFetch({});

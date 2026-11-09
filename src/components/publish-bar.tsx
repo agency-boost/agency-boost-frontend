@@ -74,7 +74,7 @@ export function PublishBar({ refreshKey }: { refreshKey?: number }) {
   return (
     <div
       role="status"
-      className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-amber bg-amber/10 p-3"
+      className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-primary bg-primary/10 p-3"
     >
       <p className="text-md text-navy">
         <strong>{t.notSeeing}</strong>{' '}

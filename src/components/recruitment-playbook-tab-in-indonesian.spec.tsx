@@ -2,23 +2,25 @@ import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { englishOnly, englishShown } from '@test/english-left';
-import { makeMe, renderInIndonesian, stubFetch, type StubReply } from '@test/harness';
+import { useState } from 'react';
+import { makeMe, renderInIndonesian } from '@test/harness';
+import type { ApiError } from '@/lib/api-client';
 import { adminTemplatePlaybookMessages } from '@/i18n/messages/admin-template-playbook';
 import { planMessages } from '@/i18n/messages/plan';
-import type { PlaybookBody, PlaybookDto } from '@/lib/recruitment-playbook';
-import { placeViolations, RecruitmentPlaybookTab } from './recruitment-playbook-tab';
+import type { PlaybookBody } from '@/lib/recruitment-playbook';
+import { placeViolations, RecruitmentPlaybookEditor } from './recruitment-playbook-tab';
 
 /**
- * **P18.98-T6, the Company template's *Recruitment* tab in ID mode** (AC-1 as T4's AC-1 to AC-3; area
- * "admin-template"): the playbook's frame in the approved glossary's Indonesian (`admin-template-playbook.tsx`, with the
- * attack plans' *Cocok untuk* and *Kalimat pembuka*), *Playbook* and *recruitment* kept English (§A.6), every word of
- * the playbook and the brief's vocabulary as the company and the API wrote them (ADR-0179 §5), and when it was saved in
- * Indonesian figures. The same tab in English is `recruitment-playbook-tab.spec.tsx`.
+ * **P18.10-T6, a template's *Rekrutmen* section in ID mode** (AC-1 as T4's AC-1 to AC-3; area "admin-template"; a section
+ * since P19.4-T5, ADR-0210): the playbook's frame in the approved glossary's Indonesian (`admin-template-playbook.tsx`,
+ * with the attack plans' *Cocok untuk* and *Kalimat pembuka*), *Playbook* and *recruitment* kept English (§A.6), every
+ * word of the playbook and the brief's vocabulary as the template and the API wrote them (ADR-0179 §5). The same section
+ * in English is `recruitment-playbook-tab.spec.tsx`.
  */
 const ENGLISH = englishOnly(adminTemplatePlaybookMessages, planMessages);
 const noEnglishLeft = () => expect(englishShown(document.body, ENGLISH)).toEqual([]);
 
-/** The brief's vocabulary as the API serves it — in the reader's language, the API's (P18.98-T5). */
+/** The brief's vocabulary as the API serves it — in the reader's language, the API's (P18.10-T5). */
 const VOCABULARY = {
   types: [{ code: 'fresh-grad', label: 'Lulusan baru' }],
   motivations: [{ code: 'side-income', label: 'Penghasilan tambahan' }],
@@ -41,36 +43,31 @@ const BODY: PlaybookBody = {
   profileObjections: { 'fresh-grad': { time: { theySay: 'Saya masih kuliah.', youSay: 'Bisa disesuaikan.' } } },
   nextAction: 'Kirimkan Opportunity Overview.',
 };
-const STORED: PlaybookDto = {
-  companyId: 'c1', version: 3, body: BODY, updatedAt: '2026-10-09T07:05:00.000Z', updatedBy: { name: 'Root' },
-};
-const PATH = '/admin/companies/c1/recruitment-playbook';
-const read = (playbook: PlaybookDto | null) =>
-  ({ body: { playbook, defaults: BODY, vocabulary: VOCABULARY, limits: { textMax: 600, benefitsMax: 1 } } });
-const WRITER = makeMe({ permissions: ['company_template:read', 'recruitment_playbook:write'] });
+const PLAYBOOK = { defaults: BODY, vocabulary: VOCABULARY, limits: { textMax: 600, benefitsMax: 1 } };
+const SUPER_ADMIN = makeMe({ permissions: ['company_template:read', 'company_template:write'] });
 
-function mount({ get = [read(STORED)], put = [] }: { get?: StubReply[]; put?: StubReply[] } = {}) {
-  stubFetch({ [`GET ${PATH}`]: get, ...(put.length > 0 ? { [`PUT ${PATH}`]: put } : {}) });
-  renderInIndonesian(<RecruitmentPlaybookTab companyId="c1" />, { me: WRITER });
+/** The section's editor over a draft held as the section page holds it, in Indonesian. */
+function mount({ payload = BODY as unknown as Record<string, unknown>, refusal = null }: {
+  payload?: Record<string, unknown>; refusal?: ApiError | null;
+} = {}) {
+  function Section() {
+    const [draft, setDraft] = useState(payload);
+    return <RecruitmentPlaybookEditor payload={draft} playbook={PLAYBOOK} refusal={refusal} onChange={setDraft} />;
+  }
+  renderInIndonesian(<Section />, { me: SUPER_ADMIN });
 }
 
 const card = (name: string) => within(screen.getByRole('group', { name }));
 
-describe('P18.98-T6 the Recruitment tab in Indonesian', () => {
+describe('P18.10-T6, P19.4-T5 AC-6 the Rekrutmen section in Indonesian', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it('reads the English it is looking for, so a silent zero cannot pass', () => {
-    expect(ENGLISH).toEqual(expect.arrayContaining(['This playbook is live.', 'Save playbook', 'Objections']));
+    expect(ENGLISH).toEqual(expect.arrayContaining(['Objections', 'Not published. Each field marked below needs a fix.']));
   });
 
-  it('AC-1, AC-4 the playbook live: the frame in Indonesian, when it was saved in Indonesian figures, its words as typed', async () => {
+  it('AC-1, AC-4 the playbook: its cards in Indonesian, its words as typed', () => {
     mount();
-    expect(await screen.findByText('Playbook ini langsung berlaku.')).toBeInTheDocument();
-    expect(screen.getByText('Setiap penyimpanan sampai ke setiap agent perusahaan ini pada rencana berikutnya.'))
-      .toBeInTheDocument();
-    expect(screen.getByRole('status')).toHaveTextContent('Versi 3 · disimpan oleh Root pada 9 Okt 2026, 14.05');
-    expect(screen.getByRole('button', { name: 'Simpan playbook' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Buang perubahan' })).toBeDisabled();
     expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent))
       .toEqual(['Lulusan baru', 'Keberatan', 'Tindakan berikutnya']);
     expect(card('Lulusan baru').getByText('Baru masuk dunia kerja.')).toBeInTheDocument();
@@ -82,7 +79,6 @@ describe('P18.98-T6 the Recruitment tab in Indonesian', () => {
 
   it('AC-1, AC-3 a candidate type opened: its fields in Indonesian, a hidden word in its order', async () => {
     mount();
-    await screen.findByText('Playbook ini langsung berlaku.');
     await userEvent.click(card('Lulusan baru').getByRole('button', { name: 'Ubah' }));
     const fresh = card('Lulusan baru');
 
@@ -109,47 +105,26 @@ describe('P18.98-T6 the Recruitment tab in Indonesian', () => {
     noEnglishLeft();
   });
 
-  it('AC-1 a field left empty, refused before anything is sent, in Indonesian', async () => {
-    mount();
-    await screen.findByText('Playbook ini langsung berlaku.');
-    await userEvent.click(card('Tindakan berikutnya').getByRole('button', { name: 'Ubah' }));
-    await userEvent.clear(card('Tindakan berikutnya').getByRole('textbox'));
-    await userEvent.click(screen.getByRole('button', { name: 'Simpan playbook' }));
-    expect(screen.getByText('Tidak tersimpan. Setiap kolom yang ditandai di bawah perlu diperbaiki.')).toBeInTheDocument();
-    expect(card('Tindakan berikutnya').getByRole('textbox')).toHaveAccessibleDescription('Isi ini sebelum menyimpan.');
-    noEnglishLeft();
-  });
-
-  it('AC-1 somebody saved first: which version is stored now, in Indonesian and Indonesian figures', async () => {
-    const fresh: PlaybookDto = { ...STORED, version: 4, updatedAt: '2026-10-09T07:10:00.000Z', updatedBy: { name: 'Asih' } };
+  it('P19.4-T5 AC-6 a Terbitkan refused field by field, in Indonesian', () => {
     mount({
-      get: [read(STORED), read(fresh)],
-      put: [{ status: 409, body: { error: { code: 'VERSION_CONFLICT', message: 'Data ini berubah.', requestId: 'r-1' } } }],
+      refusal: {
+        code: 'VALIDATION_FAILED', message: 'Playbook ini tidak dapat diterbitkan: body.nextAction — Tidak boleh kosong.',
+        requestId: 'r-1', details: { violations: [{ field: 'body.nextAction', message: 'Tidak boleh kosong.' }] },
+      },
     });
-    await screen.findByText('Playbook ini langsung berlaku.');
-    await userEvent.click(card('Tindakan berikutnya').getByRole('button', { name: 'Ubah' }));
-    await userEvent.type(card('Tindakan berikutnya').getByRole('textbox'), ' Hari ini.');
-    await userEvent.click(screen.getByRole('button', { name: 'Simpan playbook' }));
-
-    const notice = (await screen.findByText('Playbook ini diubah di tempat lain.')).closest('[role="alert"]') as HTMLElement;
-    expect(notice).toHaveTextContent(
-      'Sekarang versi 4, disimpan oleh Asih pada 9 Okt 2026, 14.10. Perubahan Anda masih ada di sini, dan menyimpannya '
-      + 'akan menggantikan versi itu.',
-    );
-    expect(within(notice).getByRole('button', { name: 'Muat versi 4' })).toBeInTheDocument();
-    expect(within(notice).getByRole('button', { name: 'Pertahankan perubahan saya' })).toBeInTheDocument();
+    expect(screen.getByText('Belum terbit. Setiap kolom yang ditandai di bawah perlu diperbaiki.')).toBeInTheDocument();
+    expect(card('Tindakan berikutnya').getByRole('textbox')).toHaveAccessibleDescription('Tidak boleh kosong.');
     noEnglishLeft();
   });
 
-  it('AC-1 a company with none: its two starts in Indonesian', async () => {
-    mount({ get: [read(null)] });
-    expect(await screen.findByText(
-      'Perusahaan ini belum punya playbook recruitment, jadi Attack Plan agent-nya belum punya bahan untuk disusun.',
+  it('P19.4-T5 AC-6 a template with none: its two starts in Indonesian', async () => {
+    mount({ payload: {} });
+    expect(screen.getByText(
+      'Template ini belum punya playbook recruitment, jadi Attack Plan setiap KPM yang dibuat darinya belum punya bahan '
+      + 'untuk disusun.',
     )).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Mulai dari kata-kata AgencyBoost' })).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Mulai dari kosong' }));
-    expect(screen.getByText('Belum disimpan.')).toBeInTheDocument();
-    expect(screen.getByText('Belum ada yang sampai ke agent perusahaan ini sampai Anda menyimpannya.')).toBeInTheDocument();
     expect(screen.getAllByText('Belum ditulis.').length).toBeGreaterThan(0);
     noEnglishLeft();
   });

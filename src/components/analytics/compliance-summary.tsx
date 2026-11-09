@@ -37,7 +37,7 @@ export function ComplianceSummary({
             title={chip.category === 'activity' ? t.activityTooltip : undefined}
             className={cn(
               'min-w-[128px] rounded-[10px] border bg-card px-3.5 py-2.5 text-left transition-colors',
-              on ? 'border-navy ring-1 ring-navy' : 'border-hairline hover:border-navy/30',
+              on ? 'border-secondary ring-1 ring-secondary' : 'border-hairline hover:border-secondary/30',
             )}
             data-category={chip.category}
           >

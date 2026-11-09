@@ -3,58 +3,51 @@ import { defineMessages, type MessagesOf } from '@/i18n/catalogue';
 import { kept } from '@/i18n/kept';
 
 /**
- * **Filling an office from a spreadsheet** (P18.98-T4, people and forum; `functional/tenant-provisioning.md`, *Filling an
- * office from a spreadsheet*): `components/roster-import.tsx`, drawn by the office's *Import people* (`/people/import`)
- * and the Super Admin's *Import a roster* (`/admin/tenants/[kpmId]/roster`) — the template (Excel or CSV, ADR-0184), the
- * fill-in guide (*Panduan pengisian*: the file's columns and three rules), the two ways in, the check, the problems, and
- * the people made with the password each starts on.
+ * **Filling and updating an office from a spreadsheet** (P18.10-T4; the setup spec's §A3 since P19.3-T4, ADR-0205;
+ * `functional/tenant-provisioning.md`, *Filling an office from a spreadsheet*): `components/roster-import.tsx`, drawn by
+ * the office's *Import people* (`/people/import`) and the Super Admin's *Import a roster* (`/admin/tenants/[kpmId]/roster`)
+ * — the template (Excel or CSV, ADR-0184), the fill-in guide (*Panduan pengisian*: the file's columns and its rules), the
+ * two ways in, the check with a result per row, the skipped rows' file, the invitation, and what was imported.
  *
- * **English is the source.** The Indonesian is the approved glossary's: *Unduh template*, *Unggah*, *Mengimpor…* (§B.1,
- * §B.2), *Kode agen* and *Tanggal lahir* (§B.4), *Lupa kata sandi?* (§B.1), *office* as *KPM* (§B.9). **Files are not
- * words** (P18.98-T3 AC-4): what is typed in a cell — `AB`, `YYYY-MM-DD`, `full-time`, `male` — is the import's contract,
- * passed in as written, never translated; so are the template, its examples, and the server's own sentences about a
- * row (`issue.column`, `issue.message`) and the template's refusal. **Typed content stays as typed**: names, emails,
- * codes, the passwords.
+ * **English is the source.** The Indonesian is A3's where A3 gives a line — *"N orang baru siap diimpor, M diperbarui, K
+ * baris dilewati"*, *"⬇ Unduh baris yang dilewati"*, *Masuk*, *Diperbarui*, *Dilewati*, *"N anggota diimpor."* — and the
+ * approved glossary's otherwise: *Unduh template*, *Unggah*, *Mengimpor…* (§B.1, §B.2), *office* as *KPM* (§B.9). **Two
+ * of A3's lines name email instead of WhatsApp** (ADR-0205 §7; invitations go by email, ADR-0010): the checkbox *"Kirim
+ * undangan lewat email ke N orang baru"* and the toast *"Undangan dikirim lewat email."* (glossary, *Member import
+ * invitation*). **Files are not words** (P18.10-T3 AC-4): the header names (*Kode agen*, *Kode upline*) and what is typed
+ * in a cell — `AB`, `DD/MM/YYYY`, `Full-time`, `male` — are the import's contract, the same in both languages; so are the
+ * server's own sentences about a row. **Typed content stays as typed**: names, emails, codes.
  *
  * @moved components/roster-import.tsx
  * @moved app/(tenant)/people/import/page.tsx
  */
 
-/** A run of words drawn bold, or in italics. */
-type Wrap = (words: string) => ReactNode;
+/** What each guide row's "holds" draws a typed code with. */
+type Code = (typed: string) => ReactNode;
 
 const en = {
   /** `/people/import`'s line, and its state for a reader in no office (the approved §B.6 sentence). */
-  importSubtitle: 'Create several people at once from a spreadsheet.',
+  importSubtitle: 'Add or update several people at once from a spreadsheet.',
   notInOffice: 'You are not in an office.',
-  /** The file's nine columns, in its order (P18.97-T4 AC-4): each name, and what each holds. */
+  /** The file's columns, in its order (P18.9-T4 AC-4; A3): each header name, and what each holds. */
   guideCaption: 'The file’s columns, in order: one row per person',
   guideColumns: { column: 'Column', holds: 'What it holds' },
-  columns: {
-    name: 'Name',
-    email: 'Email',
-    agentCode: 'Agent code',
-    role: 'Role',
-    leader: 'Leader’s agent code (optional)',
-    dateOfBirth: 'Date of birth',
-    joinMonth: 'Join month',
-    workStatus: 'Full/part-time',
-    gender: 'Gender',
-  },
   holds: {
-    name: 'Their full name',
-    email: 'An address nobody has registered yet',
-    agentCode: 'The code their insurer issued, digits only',
-    /** `ab`, `aab`, `agent`: each code as typed in the file. */
-    role: ({ ab, aab, agent }: { ab: ReactNode; aab: ReactNode; agent: ReactNode }) => <>{ab}, {aab} or {agent}</>,
-    leader: 'Empty for somebody who reports to nobody',
-    dateOfBirth: ({ shape }: { shape: ReactNode }) => <>{shape}, at least 18 years ago</>,
-    joinMonth: ({ shape }: { shape: ReactNode }) => <>{shape}, the month they joined the insurer</>,
-    either: ({ a, b }: { a: ReactNode; b: ReactNode }) => <>{a} or {b}</>,
+    agentCode: 'The code their insurer issued, digits only. A code already in this KPM updates that person.',
+    fullName: 'Their full name',
+    role: ({ code }: { code: Code }) => <>{code('Agent')}, {code('AAB')} or {code('AB')}. {code('Agen')} is read as Agent.</>,
+    upline: 'The agent code of their upline: a leader at least their rank, in the file or already in the KPM. Empty only for the top rung',
+    phone: 'Optional. Without one they are added, and cannot be reminded on WhatsApp yet',
+    email: 'What they sign in with. Needed for somebody new: the invitation goes there',
+    joinDate: ({ code }: { code: Code }) => <>{code('DD/MM/YYYY')}, the day they joined this KPM. Empty is today</>,
+    workStatus: ({ code }: { code: Code }) => <>{code('Full-time')} or {code('Part-time')}</>,
+    dateOfBirth: ({ code }: { code: Code }) => <>{code('DD/MM/YYYY')}, at least 18 years ago</>,
+    gender: ({ code }: { code: Code }) => <>{code('male')} or {code('female')}</>,
+    companyJoinMonth: ({ code }: { code: Code }) => <>{code('YYYY-MM')}, the month they joined the insurer</>,
   },
   /**
-   * **Card 1, the template** (ADR-0184; the developer for the product owner, 2026-11-01): Excel recommended, CSV beside
-   * it. *Excel (.xlsx)* and *CSV* are the files' own names, kept as they are inside each language's verb.
+   * **Card 1, the template** (ADR-0184): Excel recommended, CSV beside it. *Excel (.xlsx)* and *CSV* are the files' own
+   * names, kept as they are inside each language's verb.
    */
   downloadHeading: 'Download the template',
   downloadExcel: 'Download Excel (.xlsx)',
@@ -64,12 +57,12 @@ const en = {
   /** `message` the server's own sentence. */
   templateFailed: ({ message }: { message: string }) => `The template could not be prepared. ${message}`,
   tryAgain: 'Try again',
-  /** **The fill-in guide**, apart from the data: the columns, then three rules (ADR-0184). */
+  /** **The fill-in guide**, apart from the data: the columns, then the rules (ADR-0184; A3). */
   guideHeading: 'How to fill it in',
+  ruleRequired: 'Kode agen, Nama and Peran are required. Leave any other cell empty when you do not know it.',
   ruleOnePerRow: 'One person per row.',
-  ruleLeaders: 'Rows can come in any order, and the leader’s code is empty for somebody who reports to nobody.',
-  /** `day`, `month`: each shape as typed in the file. */
-  ruleDates: ({ day, month }: { day: ReactNode; month: ReactNode }) => <>Dates are written {day}, and months {month}.</>,
+  ruleUplines: 'Rows can come in any order: an upline is matched in the file and among the people already in the KPM.',
+  ruleSkipped: 'A row with a problem is skipped with its reason, and the rest are imported together.',
   /** **Card 2, the upload**: the filled file first, the paste second (ADR-0184). */
   uploadHeading: 'Upload',
   how: 'How are you adding them?',
@@ -78,57 +71,63 @@ const en = {
   rows: 'Rows from your spreadsheet',
   rowsHint: 'Select the rows in Excel, Google Sheets or Numbers, copy them, and paste here. The header row is optional.',
   rosterFile: 'Roster file',
-  /** The check, and the import — all or nothing. */
   check: 'Check the file',
   checking: 'Checking…',
-  importing: 'Importing…',
-  importN: ({ n }: { n: number }) => `Import ${n}`,
-  ready: ({ n }: { n: number }) => `${n} ${n === 1 ? 'person' : 'people'} ready to import. Nothing has been created yet.`,
-  problems: ({ n }: { n: number }) => `${n} ${n === 1 ? 'problem' : 'problems'} — nothing will be created`,
-  allOrNothing:
-    'The import is all or nothing, so every one of these has to be fixed before any of the file lands. Line numbers count the header, the way a spreadsheet does.',
+  /** **The file cannot be read at all** — no Kode agen column, an unknown one: said whole, nothing imported. */
+  unreadable: ({ n }: { n: number }) => `The file could not be read: ${n} ${n === 1 ? 'problem' : 'problems'}`,
+  unreadableLine: 'Nothing in it can be imported until this is fixed. Line numbers count the header, the way a spreadsheet does.',
   problemsCaption: 'What is wrong with the file',
   problemColumns: { line: 'Line', column: 'Column', problem: 'Problem' },
-  /** The people made, and the password each starts on: shown once. */
-  created: ({ n }: { n: number }) => `${n} ${n === 1 ? 'person' : 'people'} created`,
-  sendPasswords: ({ strong, em }: { strong: Wrap; em: Wrap }) => (
-    <>
-      Send each person their password — {strong('AgencyBoost does not email it for you')}. This is the only time it is
-      shown: it is not stored anywhere and cannot be looked up. If you lose one, that person can
-      use {em('Forgot your password')} on the sign-in page instead.
-    </>
-  ),
-  firstSignIn: 'Everybody here is asked to choose their own password the first time they sign in, and can do nothing else until they have.',
-  createdCaption: 'The people created, and the password each one starts on',
-  createdColumns: { name: 'Name', email: 'Email', agentCode: 'Agent code', password: 'Temporary password' },
+  /**
+   * **The preview** (A3): *"N new people ready to import, M updated, K rows skipped."* A part that is zero is left out,
+   * as A3's own mockup leaves it.
+   */
+  ready: ({ imported, updated, skipped }: { imported: number; updated: number; skipped: number }) =>
+    `${imported} new ${imported === 1 ? 'person' : 'people'} ready to import`
+    + `${updated ? `, ${updated} updated` : ''}${skipped ? `, ${skipped} ${skipped === 1 ? 'row' : 'rows'} skipped` : ''}.`,
+  resultsCaption: 'Each row of the file, and what it comes to',
+  resultColumns: { agentCode: 'Agent code', name: 'Name', role: 'Role', upline: 'Upline code', result: 'Result' },
+  outcome: { imported: 'Imported', updated: 'Updated', skipped: 'Skipped' },
+  /** No upline on a row. */
+  none: 'None',
+  /** A3's checkbox, naming email (ADR-0205 §7): `n` the new people. */
+  invite: ({ n }: { n: number }) => `Send an email invitation to ${n} new ${n === 1 ? 'person' : 'people'}`,
+  inviteHint: 'Each gets a one-time link to choose their password. Nothing is sent by WhatsApp.',
+  /** `n` the rows that would be written: the new and the updated. */
+  importN: ({ n }: { n: number }) => `Import ${n} ${n === 1 ? 'person' : 'people'}`,
+  importing: 'Importing…',
+  cancel: 'Cancel',
+  downloadSkipped: '⬇ Download the skipped rows',
+  /** **Done** (A3's toast, naming email): who was imported, who updated, and whether they were invited. */
+  done: ({ imported, updated }: { imported: number; updated: number }) =>
+    `${imported} ${imported === 1 ? 'member' : 'members'} imported${updated ? `, ${updated} updated` : ''}`,
+  toast: ({ imported, updated, invited }: { imported: number; updated: number; invited: boolean }) =>
+    `${imported} ${imported === 1 ? 'member' : 'members'} imported${updated ? `, ${updated} updated` : ''}.`
+    + `${invited ? ' Invitations sent by email.' : ''}`,
+  invitedLine: ({ n }: { n: number }) =>
+    `An invitation went by email to ${n} new ${n === 1 ? 'person' : 'people'}, with a link to choose their password.`,
+  notInvitedLine: 'Nobody was emailed. Each new person can sign in with Forgot your password? and their email.',
+  skippedLine: ({ n }: { n: number }) => `${n} ${n === 1 ? 'row was' : 'rows were'} skipped. Download them, fix them and upload them again.`,
   back: 'Back',
 };
 
 const id: MessagesOf<typeof en> = {
-  importSubtitle: 'Buat beberapa orang sekaligus dari spreadsheet.',
+  importSubtitle: 'Tambah atau perbarui beberapa orang sekaligus dari spreadsheet.',
   notInOffice: `Anda belum tergabung di ${kept('KPM')} mana pun.`,
   guideCaption: 'Kolom file, berurutan: satu baris per orang',
   guideColumns: { column: 'Kolom', holds: 'Isinya' },
-  columns: {
-    name: 'Nama',
-    email: 'Email',
-    agentCode: 'Kode agen',
-    role: 'Peran',
-    leader: `Kode agen ${kept('leader')} (opsional)`,
-    dateOfBirth: 'Tanggal lahir',
-    joinMonth: 'Bulan bergabung',
-    workStatus: 'Penuh/paruh waktu',
-    gender: 'Jenis kelamin',
-  },
   holds: {
-    name: 'Nama lengkapnya',
-    email: 'Alamat yang belum didaftarkan siapa pun',
-    agentCode: 'Kode dari perusahaan asuransinya, hanya angka',
-    role: ({ ab, aab, agent }) => <>{ab}, {aab}, atau {agent}</>,
-    leader: 'Kosongkan untuk orang yang tidak melapor kepada siapa pun',
-    dateOfBirth: ({ shape }) => <>{shape}, minimal 18 tahun yang lalu</>,
-    joinMonth: ({ shape }) => <>{shape}, bulan dia bergabung dengan perusahaan asuransi</>,
-    either: ({ a, b }) => <>{a} atau {b}</>,
+    agentCode: `Kode dari perusahaan asuransinya, hanya angka. Kode yang sudah ada di ${kept('KPM')} ini memperbarui data orang itu.`,
+    fullName: 'Nama lengkapnya',
+    role: ({ code }) => <>{code('Agent')}, {code('AAB')}, atau {code('AB')}. {code('Agen')} dibaca sebagai Agent.</>,
+    upline: `Kode agen upline-nya: ${kept('leader')} yang jenjangnya paling tidak sama, di file atau sudah ada di ${kept('KPM')}. Kosongkan hanya untuk jenjang teratas`,
+    phone: 'Opsional. Tanpa nomor, mereka tetap masuk, tetapi belum bisa diingatkan lewat WhatsApp',
+    email: 'Untuk masuk. Wajib untuk orang baru: undangan dikirim ke sana',
+    joinDate: ({ code }) => <>{code('DD/MM/YYYY')}, tanggal bergabung di {kept('KPM')} ini. Kosong berarti hari ini</>,
+    workStatus: ({ code }) => <>{code('Full-time')} atau {code('Part-time')}</>,
+    dateOfBirth: ({ code }) => <>{code('DD/MM/YYYY')}, minimal 18 tahun yang lalu</>,
+    gender: ({ code }) => <>{code('male')} atau {code('female')}</>,
+    companyJoinMonth: ({ code }) => <>{code('YYYY-MM')}, bulan dia bergabung dengan perusahaan asuransi</>,
   },
   downloadHeading: 'Unduh template',
   downloadExcel: 'Unduh Excel (.xlsx)',
@@ -138,9 +137,10 @@ const id: MessagesOf<typeof en> = {
   templateFailed: ({ message }) => `Template tidak dapat disiapkan. ${message}`,
   tryAgain: 'Coba lagi',
   guideHeading: 'Panduan pengisian',
+  ruleRequired: 'Kode agen, Nama, dan Peran wajib diisi. Kosongkan sel lain bila tidak tahu isinya.',
   ruleOnePerRow: 'Satu orang per baris.',
-  ruleLeaders: `Urutan baris bebas, dan kode agen ${kept('leader')} dikosongkan untuk orang yang tidak melapor kepada siapa pun.`,
-  ruleDates: ({ day, month }) => <>Tanggal ditulis {day}, dan bulan {month}.</>,
+  ruleUplines: `Urutan baris bebas: upline dicocokkan dari file dan dari anggota yang sudah ada di ${kept('KPM')}.`,
+  ruleSkipped: 'Baris yang bermasalah dilewati dengan alasannya. Sisanya masuk sekaligus.',
   uploadHeading: 'Unggah',
   how: 'Bagaimana Anda menambahkan mereka?',
   upload: 'Unggah file yang sudah diisi (.xlsx atau .csv)',
@@ -150,25 +150,28 @@ const id: MessagesOf<typeof en> = {
   rosterFile: 'File roster',
   check: 'Periksa file',
   checking: 'Memeriksa…',
-  importing: 'Mengimpor…',
-  importN: ({ n }) => `Impor ${n}`,
-  ready: ({ n }) => `${n} orang siap diimpor. Belum ada yang dibuat.`,
-  problems: ({ n }) => `${n} masalah — tidak ada yang akan dibuat`,
-  allOrNothing:
-    'Impor ini semua atau tidak sama sekali, jadi setiap masalah ini harus diperbaiki sebelum isi file mana pun masuk. Nomor baris menghitung baris judul kolom, seperti di spreadsheet.',
+  unreadable: ({ n }) => `File tidak dapat dibaca: ${n} masalah`,
+  unreadableLine: 'Tidak ada isinya yang bisa diimpor sebelum ini diperbaiki. Nomor baris menghitung baris judul kolom, seperti di spreadsheet.',
   problemsCaption: 'Yang salah dengan file ini',
   problemColumns: { line: 'Baris', column: 'Kolom', problem: 'Masalah' },
-  created: ({ n }) => `${n} orang dibuat`,
-  sendPasswords: ({ strong, em }) => (
-    <>
-      Kirimkan kata sandi kepada setiap orang — {strong(`${kept('AgencyBoost')} tidak mengirimkannya lewat email untuk Anda`)}.
-      Ini satu-satunya saat kata sandi ditampilkan: tidak disimpan di mana pun dan tidak dapat dicari. Jika ada yang hilang,
-      orang tersebut dapat memakai {em('Lupa kata sandi?')} di halaman masuk.
-    </>
-  ),
-  firstSignIn: 'Setiap orang di sini diminta membuat kata sandinya sendiri saat pertama kali masuk, dan tidak dapat melakukan hal lain sebelum itu.',
-  createdCaption: 'Orang yang dibuat, dan kata sandi awal masing-masing',
-  createdColumns: { name: 'Nama', email: 'Email', agentCode: 'Kode agen', password: 'Kata sandi sementara' },
+  ready: ({ imported, updated, skipped }) =>
+    `${imported} orang baru siap diimpor${updated ? `, ${updated} diperbarui` : ''}${skipped ? `, ${skipped} baris dilewati` : ''}.`,
+  resultsCaption: 'Setiap baris file, dan hasilnya',
+  resultColumns: { agentCode: 'Kode agen', name: 'Nama', role: 'Peran', upline: 'Kode upline', result: 'Hasil' },
+  outcome: { imported: 'Masuk', updated: 'Diperbarui', skipped: 'Dilewati' },
+  none: 'Tidak ada',
+  invite: ({ n }) => `Kirim undangan lewat email ke ${n} orang baru`,
+  inviteHint: 'Masing-masing mendapat tautan sekali pakai untuk membuat kata sandi. Tidak ada yang dikirim lewat WhatsApp.',
+  importN: ({ n }) => `Impor ${n} orang`,
+  importing: 'Mengimpor…',
+  cancel: 'Batal',
+  downloadSkipped: '⬇ Unduh baris yang dilewati',
+  done: ({ imported, updated }) => `${imported} anggota diimpor${updated ? `, ${updated} diperbarui` : ''}`,
+  toast: ({ imported, updated, invited }) =>
+    `${imported} anggota diimpor${updated ? `, ${updated} diperbarui` : ''}.${invited ? ' Undangan dikirim lewat email.' : ''}`,
+  invitedLine: ({ n }) => `Undangan dikirim lewat email ke ${n} orang baru, dengan tautan untuk membuat kata sandi.`,
+  notInvitedLine: 'Tidak ada email yang dikirim. Setiap orang baru dapat masuk lewat Lupa kata sandi? dengan email-nya.',
+  skippedLine: ({ n }) => `${n} baris dilewati. Unduh, perbaiki, lalu unggah lagi.`,
   back: 'Kembali',
 };
 

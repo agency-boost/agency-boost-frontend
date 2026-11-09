@@ -2,12 +2,14 @@
 
 import { useId, useState } from 'react';
 import { PlanIcon } from '@/components/plan/plan-icons';
+import { useSandboxedDocument } from '@/components/sandboxed-document';
 import { ErrorBanner } from '@/components/ui/field';
 import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
 import { recruitmentPitchMessages } from '@/i18n/messages/recruitment-pitch';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import { formatShortDay } from '@/lib/format';
+import { isHtmlDocument } from '@/lib/html-document';
 import { pitchDocumentUrl, pitchRing, type PitchMaterialsView, type PitchSlot } from '@/lib/recruitment-pitch';
 
 /**
@@ -36,7 +38,7 @@ export function PhonePitch({ view }: { view: PitchMaterialsView }) {
           role="img"
           aria-label={t.uploadedRing({ done: uploaded, total: required.length })}
           // The ring's share as a conic fill: the accent over the grey pill ground, never a colour alone (the figure says it).
-          style={{ background: `conic-gradient(var(--color-amber) ${share * 360}deg, var(--color-pill-grey) 0)` }}
+          style={{ background: `conic-gradient(var(--color-primary) ${share * 360}deg, var(--color-pill-grey) 0)` }}
           className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full"
         >
           <span aria-hidden="true" className="flex h-[2.125rem] w-[2.125rem] items-center justify-center rounded-full bg-card text-sm font-bold text-navy">
@@ -74,11 +76,20 @@ function Row({ slot }: { slot: PitchSlot }) {
   const figures = useFigureLanguage();
   const [opening, setOpening] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
+  const page = useSandboxedDocument();
+  // An HTML page opens in the window, never a tab (P19.6-T2, ADR-0217 §4).
+  const html = isHtmlDocument(slot.file?.mimeType);
 
   const open = async () => {
     if (opening) return;
     setOpening(true);
     setError(null);
+    if (html) {
+      await page.open(slot.title, async () => (await pitchDocumentUrl(slot.slot)).url)
+        .catch((err: unknown) => setError(toDisplayError(err)))
+        .finally(() => setOpening(false));
+      return;
+    }
     const tab = window.open('', '_blank');
     if (tab) tab.opener = null;
     try {
@@ -117,7 +128,7 @@ function Row({ slot }: { slot: PitchSlot }) {
           <button
             type="button"
             onClick={() => void open()}
-            aria-label={t.viewName({ title: slot.title })}
+            aria-label={html ? t.viewPageName({ title: slot.title }) : t.viewName({ title: slot.title })}
             aria-disabled={opening || undefined}
             className="relative flex h-[2.125rem] shrink-0 items-center rounded-pill border-[1.5px] border-hairline px-3 text-base font-bold text-navy after:absolute after:-inset-y-[5px] after:inset-x-0 after:content-['']"
           >
@@ -126,6 +137,7 @@ function Row({ slot }: { slot: PitchSlot }) {
         )}
       </div>
       {error && <div className="mt-2"><ErrorBanner {...error} /></div>}
+      {html && page.dialog}
     </li>
   );
 }

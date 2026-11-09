@@ -23,7 +23,7 @@ describe('ContactButtons (UI V1, UI-081; D-22)', () => {
     expect(wa.querySelector('.bg-whatsapp')).not.toBeNull();
     const call = screen.getByRole('link', { name: 'Call Ibu Melati' });
     expect(call).toHaveAttribute('href', 'tel:+6281211002200');
-    expect(call.querySelector('.bg-navy')).not.toBeNull();
+    expect(call.querySelector('.bg-secondary.text-secondary-contrast')).not.toBeNull();
     expect(document.querySelector('[disabled]')).toBeNull();
     expect(document.body.textContent).not.toMatch(/📞/);
   });
@@ -49,7 +49,7 @@ describe('ContactButtons (UI V1, UI-081; D-22)', () => {
   it('UI-081 without a number: the button stays live and opens "Isi nomor WhatsApp" with the name under it', async () => {
     renderInIndonesian(<ContactButtons name="Ibu Shinta" phone={null} onSave={vi.fn()} />);
     await userEvent.click(screen.getByRole('button', { name: 'Kirim pesan WhatsApp ke Ibu Shinta' }));
-    // The sheet's module is fetched on the first tap that needs it (P18.99-T16).
+    // The sheet's module is fetched on the first tap that needs it (P18.11-T16).
     const sheet = await screen.findByRole('dialog', { name: 'Isi nomor WhatsApp' });
     expect(sheet).toHaveAccessibleDescription('Ibu Shinta');
     const field = within(sheet).getByLabelText('Nomor WhatsApp');
@@ -64,7 +64,7 @@ describe('ContactButtons (UI V1, UI-081; D-22)', () => {
     const onSave = vi.fn();
     renderInIndonesian(<ContactButtons name="Ibu Shinta" phone={null} onSave={onSave} />);
     await userEvent.click(screen.getByRole('button', { name: /WhatsApp/ }));
-    // The sheet's module is fetched on the first tap that needs it (P18.99-T16).
+    // The sheet's module is fetched on the first tap that needs it (P18.11-T16).
     await userEvent.type(await screen.findByLabelText('Nomor WhatsApp'), '0812-345');
     await userEvent.click(screen.getByRole('button', { name: 'Simpan' }));
     expect(screen.getByText('Isi 9 sampai 13 digit setelah +62.')).toBeInTheDocument();

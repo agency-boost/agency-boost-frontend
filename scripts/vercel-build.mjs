@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * **Vercel's build command** (`vercel.json`, P18.7-T5, ADR-0152, ADR-0154). Three steps, each of which
+ * **Vercel's build command** (`vercel.json`, P18.4-T5, ADR-0152, ADR-0154). Three steps, each of which
  * fails the deployment:
  *
  * 1. the environment must name one of the two deployments exactly (`lib/deploy-env.mjs`, which has the

@@ -469,9 +469,10 @@ describe('SessionProvider', () => {
       expect(screen.getByTestId('flags')).toHaveTextContent('out, not signed out, not expired');
     });
 
+    // A 503 is tried again since P19-T5 (UI-125); a 500 is an answer, and still ends nothing.
     it('a refresh answered with something that is not about the session ends nothing: the screen shows its error', async () => {
       stubFetch({
-        '/auth/refresh': [{ body: { accessToken: 'fresh' } }, { status: 503, body: {} }],
+        '/auth/refresh': [{ body: { accessToken: 'fresh' } }, { status: 500, body: {} }],
         '/auth/me': { body: ME },
         '/widgets': { status: 401, body: { error: { code: 'AUTH_TOKEN_EXPIRED', message: 'Expired.', requestId: 'r' } } },
       });
@@ -528,6 +529,96 @@ describe('SessionProvider', () => {
       await userEvent.click(screen.getByRole('button', { name: 'sign out' }));
       await waitFor(() => expect(replace).toHaveBeenCalled());
       expect(replace.mock.calls).toEqual([['/login']]);
+    });
+  });
+
+  /*
+   * **P19-T5 — a busy minute is not a signed-out one** (UI-125): on production a Super Admin moving quickly through the
+   * console met the API's refresh limit, every `429` read as *no session*, and they landed on sign-in with no word why —
+   * a reload too. A `429` (or a server briefly unavailable, or a read that never arrived) is tried again with backoff,
+   * on the refresh and on `/auth/me`, and never ends the session; a session that really ended still says so.
+   */
+  describe('P19-T5 sessions through a busy minute (UI-125)', () => {
+    const PAGE = '/kpm/analytics/compliance';
+    const LIMITED = {
+      status: 429,
+      body: { error: { code: 'AUTH_RATE_LIMITED', message: 'Too many attempts.', requestId: 'r', details: { retryAfterSeconds: 0 } } },
+    };
+
+    function Flags() {
+      const { me, loading, expired, reload } = useSession();
+      return (
+        <div>
+          <p data-testid="flags">{loading ? 'loading' : `${me ? 'in' : 'out'}, ${expired ? 'expired' : 'not expired'}`}</p>
+          <button onClick={() => void reload()}>reload</button>
+        </div>
+      );
+    }
+
+    beforeEach(() => {
+      window.history.pushState({}, '', PAGE);
+      replace.mockClear();
+    });
+    afterEach(() => window.history.pushState({}, '', '/'));
+
+    it('P19-T5 AC-1 a reload whose refresh is answered 429 waits it out and comes back signed in, never sent to sign in', async () => {
+      const { calls } = stubFetch({
+        '/auth/refresh': [LIMITED, LIMITED, { body: { accessToken: 'fresh' } }],
+        '/auth/me': { body: ME },
+      });
+      render(<SessionProvider><Flags /><RequireSession>secret</RequireSession></SessionProvider>);
+
+      await waitFor(() => expect(screen.getByTestId('flags')).toHaveTextContent('in, not expired'));
+      expect(calls.filter((c) => c.url.includes('/auth/refresh'))).toHaveLength(3);
+      expect(screen.getByText('secret')).toBeInTheDocument();
+      expect(replace).not.toHaveBeenCalled();
+    });
+
+    it('P19-T5 AC-1 a /auth/me answered 429 is read again, and the session stands', async () => {
+      const { calls } = stubFetch({
+        '/auth/refresh': { body: { accessToken: 'fresh' } },
+        '/auth/me': [LIMITED, { body: ME }],
+      });
+      render(<SessionProvider><Flags /><RequireSession>secret</RequireSession></SessionProvider>);
+
+      await waitFor(() => expect(screen.getByTestId('flags')).toHaveTextContent('in, not expired'));
+      expect(calls.filter((c) => c.url.includes('/auth/me'))).toHaveLength(2);
+      expect(replace).not.toHaveBeenCalled();
+    });
+
+    it('P19-T5 AC-1 signed in, a reload of the session that stays busy through every try keeps the person signed in', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      try {
+        stubFetch({
+          '/auth/refresh': { body: { accessToken: 'fresh' } },
+          '/auth/me': [{ body: ME }, { status: 429, body: {} }],
+        });
+        render(<SessionProvider><Flags /><RequireSession>secret</RequireSession></SessionProvider>);
+        await waitFor(() => expect(screen.getByTestId('flags')).toHaveTextContent('in, not expired'));
+
+        screen.getByRole('button', { name: 'reload' }).click();
+        await vi.runAllTimersAsync();
+
+        expect(screen.getByTestId('flags')).toHaveTextContent('in, not expired');
+        expect(screen.getByText('secret')).toBeInTheDocument();
+        expect(replace).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('P19-T5 AC-2 a session that really ended still sends the reader to sign in, marked expired', async () => {
+      stubFetch({
+        '/auth/refresh': {
+          status: 401,
+          body: { error: { code: 'AUTH_SESSION_ENDED', message: 'Your session ended. Sign in again.', requestId: 'r' } },
+        },
+      });
+      render(<SessionProvider><Flags /><RequireSession>secret</RequireSession></SessionProvider>);
+
+      await waitFor(() => expect(replace).toHaveBeenCalled());
+      expect(replace.mock.calls).toEqual([[`/login?next=${encodeURIComponent(PAGE)}&reason=expired`]]);
+      expect(screen.getByTestId('flags')).toHaveTextContent('out, expired');
     });
   });
 

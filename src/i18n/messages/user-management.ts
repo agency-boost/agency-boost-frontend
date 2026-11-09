@@ -2,14 +2,14 @@ import { defineMessages, type MessagesOf } from '@/i18n/catalogue';
 import { kept } from '@/i18n/kept';
 
 /**
- * **User Management** (P18.98-T4, new hires and activation; `functional/org-hierarchy.md`, *Joining an office*,
+ * **User Management** (P18.10-T4, new hires and activation; `functional/org-hierarchy.md`, *Joining an office*,
  * *Invites*, *Deciding, and pulling somebody in*, *Changing what somebody is*, *Removing somebody*): the four screens of
  * one journey and the tab row over them — *Register KPM* (`/user-management/kpm`), *Find Your Leader* (`…/leader`), *Add
  * New Agents* (`…/add`) and *Pending Requests* (`…/pending`). The request inbox the last draws is `requests.ts`'; a role
  * change's sentence `org.ts`'; the leader limit's refusal and its ask `leader-limit.tsx`'.
  *
  * **English is the source**: the prototype's words where it draws them (`Overall.html:3480-3631`,
- * `User_Management_Section.html`), the client's grey text (P18.95-T7 AC-1, rows 1–7), and ours. The Indonesian is the
+ * `User_Management_Section.html`), the client's grey text (P18.7-T7 AC-1, rows 1–7), and ours. The Indonesian is the
  * approved glossary's — *Batal · Konfirmasi · Kirim permintaan · Salin tautan* (§B.1), *Menambahkan… · Mengirim…*,
  * *Permintaan terkirim* (§B.2), *Nama · Peran · Alasan* (§B.4), *Belum ada yang melapor kepada Anda.* (§B.5); *office* is
  * *KPM*, *reports to* *melapor ke* and *tagged to* *di-tag ke* (§B.9); *Keluarkan* for removing a member (§B.10) — with
@@ -27,7 +27,7 @@ import { kept } from '@/i18n/kept';
  * @moved app/(agent)/user-management/
  */
 const en = {
-  /** The heading over the four tabs, the nav item's words (P18.95-T9 AC-2), and the tabs. */
+  /** The heading over the four tabs, the nav item's words (P18.7-T9 AC-2), and the tabs. */
   title: kept('User Management'),
   tabs: {
     kpm: kept('Register KPM'),
@@ -44,6 +44,8 @@ const en = {
     loading: 'Loading your office…',
     registered: 'Registered office',
     pendingLine: 'You are in the office and waiting for a leader to take you on.',
+    /** Registered, and no leader asked yet (P19-T2 AC-4, UI-166 item 4): the next step, not a wait. */
+    registeredLine: 'You are registered to this office. Next, ask a leader to take you on.',
     activeLine: 'You are an active member of this office.',
     moving: 'Moving to a different office is not something you can do yourself — ask whoever administers your office.',
     noneTitle: 'No office registered yet',
@@ -70,6 +72,11 @@ const en = {
     cannotFindLine: `If your branch is not on ${kept('AgencyBoost')} yet, ask for it. Somebody at ${kept('AgencyBoost')} `
       + 'decides, and if they agree the office is created and you become its Owner.',
     ask: 'Ask for an office',
+    /** The company a request is for: the one the reader signed up with (ADR-0191 §1, P19-T2 AC-2). */
+    companyFor: ({ company }: { company: string }) => `For ${company}, the company you signed up with.`,
+    company: 'Your company',
+    noCompanyLine: 'Your account has no company yet. Choose the one you work for.',
+    chooseCompany: 'Choose a company',
     branch: 'What is your branch called?',
     branchExample: 'Surabaya Branch',
     note: 'Anything they should know?',
@@ -168,7 +175,7 @@ const en = {
     removing: 'Removing…',
     removeFromTeam: 'Remove from team',
     /*
-     * UI V1 (2026-10-30, Phase 18.99 T9; UI-082, UI-083): the rows. The role pill opens the role sheet; on a desktop
+     * UI V1 (2026-10-30, Phase 18.11 T9; UI-082, UI-083): the rows. The role pill opens the role sheet; on a desktop
      * *Keluarkan* sits in a row's ⋮ menu; the table's columns.
      */
     /** The role pill's name: what it does, the role it shows. */
@@ -202,6 +209,7 @@ const id: MessagesOf<typeof en> = {
     loading: `Memuat ${kept('KPM')} Anda…`,
     registered: `${kept('KPM')} terdaftar`,
     pendingLine: `Anda sudah masuk ${kept('KPM')} dan sedang menunggu ${kept('leader')} menerima Anda.`,
+    registeredLine: `Anda sudah terdaftar di ${kept('KPM')} ini. Berikutnya, minta ${kept('leader')} menerima Anda.`,
     activeLine: `Anda anggota aktif ${kept('KPM')} ini.`,
     moving: `Pindah ke ${kept('KPM')} lain tidak dapat Anda lakukan sendiri — minta kepada pengelola ${kept('KPM')} Anda.`,
     noneTitle: `Belum ada ${kept('KPM')} yang terdaftar`,
@@ -227,6 +235,10 @@ const id: MessagesOf<typeof en> = {
     cannotFindLine: `Jika cabang Anda belum ada di ${kept('AgencyBoost')}, ajukan. Tim ${kept('AgencyBoost')} yang `
       + `memutuskan, dan jika disetujui, ${kept('KPM')} itu dibuat dan Anda menjadi ${kept('Owner')}-nya.`,
     ask: `Ajukan ${kept('KPM')}`,
+    companyFor: ({ company }) => `Untuk ${company}, perusahaan tempat Anda mendaftar.`,
+    company: 'Perusahaan Anda',
+    noCompanyLine: 'Akun Anda belum memiliki perusahaan. Pilih perusahaan tempat Anda bekerja.',
+    chooseCompany: 'Pilih perusahaan',
     branch: 'Apa nama cabang Anda?',
     branchExample: 'Cabang Surabaya',
     note: 'Ada yang perlu mereka ketahui?',

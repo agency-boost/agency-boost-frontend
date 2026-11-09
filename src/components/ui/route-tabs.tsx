@@ -4,8 +4,8 @@ import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/cn';
+import { HEADER_CONTROL } from '@/components/ui/header-control';
 import { TAB_PHONE, TAB_ROW_PHONE, UNDERLINED_ROW_PHONE } from '@/components/ui/phone';
-import { TAB_TOUCH } from '@/components/ui/touch';
 import { useTabRow } from '@/components/ui/use-tab-row';
 
 export interface RouteTab {
@@ -18,7 +18,7 @@ export interface RouteTab {
   readonly badge?: ReactNode;
   /**
    * Current on every address beneath its own as well — the catalog's tab over a product's drawer,
-   * `/product-catalog/{code}` (P18.8-T12). A prefix is not a parent: `/product-catalogs` is not beneath it.
+   * `/product-catalog/{code}` (P18.5-T12). A prefix is not a parent: `/product-catalogs` is not beneath it.
    */
   readonly nested?: boolean;
 }
@@ -38,6 +38,8 @@ export interface RouteTab {
  * screens are one journey, and a rung vanishing from a chain reads as a step you already missed
  * (`Overall.html:8824`).
  *
+ * **Each tab is a header control** (P19.8-T1 AC-1; R6, D-38): 13px, 600, 44px tall, at every size — `HEADER_CONTROL`.
+ *
  * **On a phone it is one row that scrolls sideways** (ADR-0167; UI-013: User Management's four rungs on
  * two lines), fading on the side that has more, with the current tab brought into view. Below 768px
  * only; wider, it wraps exactly as it did (`phone.ts`, `use-tab-row.ts`).
@@ -46,17 +48,28 @@ export function RouteTabs({
   label,
   tabs,
   className,
+  activeHref,
 }: {
   /** Names the group for a screen reader — *"User Management"*, *"Activity management"*. */
   label: string;
   tabs: readonly RouteTab[];
   className?: string;
+  /**
+   * **Tabs in the query, on one page** (`/admin/tenants/[kpmId]?tab=…`, P19.4-T3; the route registry fixes them so): the
+   * href of the tab the page is on. Absent, the current tab is the address's path, as every other strip reads it.
+   */
+  activeHref?: string;
 }) {
   const pathname = usePathname();
-  const row = useTabRow<HTMLElement>(pathname);
-  // 44px tall below 1024px, its words at the foot as before (UI V1, UI-010).
-  const TAB = cn('-mb-px border-b-2 px-0.5 pb-3 text-md font-semibold', TAB_TOUCH, TAB_PHONE);
-  const current = (tab: RouteTab) => pathname === tab.href || (tab.nested === true && pathname.startsWith(`${tab.href}/`));
+  const row = useTabRow<HTMLElement>(activeHref ?? pathname);
+  /*
+   * A header control: 13px, 600, 44px tall at every size, its words at the foot over the rule (P19.8-T1 AC-1; R6, MOB
+   * UI-171). It was 14px, and 44px below 1024px alone (UI V1, UI-010: `TAB_TOUCH`'s 12px above), some 32px wider.
+   */
+  const TAB = cn('-mb-px inline-flex items-end border-b-2 px-0.5 pb-3', HEADER_CONTROL, TAB_PHONE);
+  const current = (tab: RouteTab) => (activeHref !== undefined
+    ? tab.href === activeHref
+    : pathname === tab.href || (tab.nested === true && pathname.startsWith(`${tab.href}/`)));
 
   return (
     <nav
@@ -82,7 +95,7 @@ export function RouteTabs({
             aria-current={current(tab) ? 'page' : undefined}
             className={cn(
               TAB,
-              current(tab) ? 'border-amber text-navy' : 'border-transparent text-muted',
+              current(tab) ? 'border-primary text-navy' : 'border-transparent text-muted',
             )}
           >
             <span className="flex items-center gap-1.5">

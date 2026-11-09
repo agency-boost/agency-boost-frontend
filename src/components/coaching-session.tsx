@@ -47,11 +47,11 @@ import { useOpenedOnce } from '@/lib/use-opened-once';
 import { readSummary, type PeriodFigures, type Summary } from '@/lib/summary';
 
 /**
- * **The lead sheet, downloaded when a lead is first opened** (P18.99-T16, the bundle), and mounted from then on
+ * **The lead sheet, downloaded when a lead is first opened** (P18.11-T16, the bundle), and mounted from then on
  * (`useOpenedOnce`): it was the largest thing on this route that the first paint does not draw.
  */
 const LeadSheet = dynamic(() => import('@/components/lead-sheet').then((m) => m.LeadSheet), { ssr: false });
-/** *Edit again*'s dialog, downloaded when it is first opened and mounted from then on (`useOpenedOnce`; P18.99-T16). */
+/** *Edit again*'s dialog, downloaded when it is first opened and mounted from then on (`useOpenedOnce`; P18.11-T16). */
 const ReopenDialog = dynamic(() => import('@/components/coaching-reopen-dialog').then((m) => m.ReopenDialog), { ssr: false });
 
 /**
@@ -95,7 +95,7 @@ const ReopenDialog = dynamic(() => import('@/components/coaching-reopen-dialog')
  * the correction the archive's *Edit again* started (`functional/coaching.md`, *Reopen*; parity L-64).
  *
  * Coaching's own strings use none of ADR-0084's six words, and none names a phase, an id or a code. They are the
- * catalogue's (`messages/coaching-session.tsx`, P18.98-T4), in the reader's language; every figure is written in
+ * catalogue's (`messages/coaching-session.tsx`, P18.10-T4), in the reader's language; every figure is written in
  * `useFigureLanguage()`'s.
  */
 export function SessionWorkspace({ coachee, opening }: { coachee: Coachee; opening?: string }) {
@@ -190,7 +190,7 @@ export function SessionWorkspace({ coachee, opening }: { coachee: Coachee; openi
       setOpeningId(started.sessionId);
       open(started);
       /*
-       * *Session started ✓* (P18.95-T1 AC-6, ADR-0167 §5; UI-008), and the prototype's own sentence after it
+       * *Session started ✓* (P18.7-T1 AC-6, ADR-0167 §5; UI-008), and the prototype's own sentence after it
        * for what was carried; with no session before this one, nothing was.
        */
       show(withDetail(confirmed.sessionStarted, started.lastWeek ? t.carried : null));
@@ -443,7 +443,7 @@ export interface SessionDraft {
   change: (fn: (draft: Draft) => Draft) => void;
   /**
    * Change it and save: a tick, a date, a row removed. With `field`, that field's row says *Saving… →
-   * Saved ✓* (P18.95-T1 AC-5); a row removed has no field left to say it beside.
+   * Saved ✓* (P18.7-T1 AC-5); a row removed has no field left to say it beside.
    */
   commit: (fn: (draft: Draft) => Draft, field?: string) => void;
   /**
@@ -454,7 +454,7 @@ export interface SessionDraft {
   save: () => Promise<boolean | null>;
   /** A text field left: saved, with its confirmation, **when anything is unsaved** — an untouched box says nothing. */
   saveField: (field: string) => void;
-  /** A field's *Saving…*, *Saved ✓* or *Couldn't save — retry* (P18.95-T1 AC-5). */
+  /** A field's *Saving…*, *Saved ✓* or *Couldn't save — retry* (P18.7-T1 AC-5). */
   status: (field: string) => InlineSaveStatusProps;
   version: () => number;
   onConflict: (handler: () => void) => void;
@@ -473,7 +473,7 @@ function useSessionDraft(): SessionDraft {
   const again = useRef(false);
   const conflict = useRef<() => void>(() => undefined);
   /**
-   * **Each field says its save** (P18.95-T1 AC-5, ADR-0167 §5; UI-007). The draft is saved whole, so a save
+   * **Each field says its save** (P18.7-T1 AC-5, ADR-0167 §5; UI-007). The draft is saved whole, so a save
    * that lands has saved every field: one that failed before it has nothing unsaved left, and its
    * *Couldn't save — retry* goes. Its retry is a save of the draft as it is now, which still holds the
    * value that failed.
@@ -689,9 +689,9 @@ function SessionCard({
 }
 
 /**
- * **The session's tag**: *Not started* before *Start coaching session* has opened one (P18.95-T7 AC-2; the client's
+ * **The session's tag**: *Not started* before *Start coaching session* has opened one (P18.7-T7 AC-2; the client's
  * UI review, UI-021), *Draft* while it is open, *Finalized* once it is. In the reader's `language`, English when passed
- * none (P18.98-T4).
+ * none (P18.10-T4).
  */
 export function sessionTag(session: Pick<CoachingSession, 'status'> | null, language: Language = SOURCE_LANGUAGE): string {
   const t = messagesIn(coachingSessionMessages, language).tag;
@@ -728,7 +728,7 @@ function AgreementSkeleton({ className }: { className?: string }) {
  * *Tindakan minggu lalu* (`Overall.html:4186-4189`, `:10717-10734`; UI-061): the items of the coachee's latest finalized
  * session, whoever led it, each **the compact action row with a checkbox** — the date (changeable while the session is
  * open), the words, the lead after a person icon. **Ticking one writes the tick on this session** — the session it came
- * from is frozen (P11-T5 AC-2). Each row says its save under it (P18.95-T1 AC-5). Not drawn for a coachee with no
+ * from is frozen (P11-T5 AC-2). Each row says its save under it (P18.7-T1 AC-5). Not drawn for a coachee with no
  * earlier session.
  */
 function LastWeekCard({
@@ -931,7 +931,7 @@ function GoalCard({
                   ref={trigger}
                   type="button"
                   onClick={edit}
-                  className="rounded-[3px] border-b-[1.5px] border-dashed border-line px-px hover:border-amber focus:border-amber"
+                  className="rounded-[3px] border-b-[1.5px] border-dashed border-line px-px hover:border-primary focus:border-primary"
                 >
                   {money(summary.yearly.targetMinor!)}
                   <span className="sr-only">{t.editTarget}</span>
@@ -981,7 +981,7 @@ function GoalTile({
           aria-valuetext={formatPercent(pct, {}, figureLanguage)}
           className="mt-2 h-1.5 overflow-hidden rounded-pill bg-hairline"
         >
-          <div className="h-full rounded-pill bg-amber" style={{ width: `${Math.min(100, pct)}%` }} />
+          <div className="h-full rounded-pill bg-primary" style={{ width: `${Math.min(100, pct)}%` }} />
         </div>
       )}
     </div>
@@ -1105,7 +1105,7 @@ function TipsCard({ draft, locked, className }: { draft: SessionDraft; locked: b
                 <span className="min-w-0 flex-1 text-md text-ink">{tip.text}</span>
               ) : (
                 <>
-                  {/* The tip says its save under its words, and a retry puts the focus back in it (P18.95-T1 AC-5). */}
+                  {/* The tip says its save under its words, and a retry puts the focus back in it (P18.7-T1 AC-5). */}
                   <InlineSaveField status={draft.status(`tip:${tip.key}`)} label={t.tip({ n: i + 1 })} className="min-w-0 flex-1">
                     <AutoGrowTextarea
                       id={idOf(tip.key)}

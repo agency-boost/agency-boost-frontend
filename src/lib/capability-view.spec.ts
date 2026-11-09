@@ -23,7 +23,7 @@ const CATALOG: CapabilityProfileCatalog = {
 };
 const added = (rungs: ReturnType<typeof ladderRungs>) => rungs.map((r) => r.added.map((m) => m.code));
 
-describe('the capability ladder as UI V1 draws it (Phase 18.99 T10)', () => {
+describe('the capability ladder as UI V1 draws it (Phase 18.11 T10)', () => {
   it('UI-035 lists each criterion once, under the most junior stage that requires it', () => {
     const rungs = ladderRungs(CATALOG, 'S2', new Set(['M1', 'M2']));
     expect(added(rungs)).toEqual([['M1'], ['M2'], ['M3', 'M4'], ['M5']]);

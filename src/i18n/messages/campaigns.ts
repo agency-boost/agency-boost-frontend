@@ -2,7 +2,7 @@ import { defineMessages, type MessagesOf } from '@/i18n/catalogue';
 import { kept } from '@/i18n/kept';
 
 /**
- * **The agents' *Campaign List*, in words** (P18.98-T4, events, campaigns and the calendar; `functional/campaigns.md`,
+ * **The agents' *Campaign List*, in words** (P18.10-T4, events, campaigns and the calendar; `functional/campaigns.md`,
  * *The module's own strings*): the page's title and line, *Seasonal · Structural*, the status filter, the five sections
  * and their empty lines, a card — its tags, *Promotion path*, the prize, *Needs:* and each requirement in words, the
  * chase — the campaign's dialog with its requirements and progress, and the toasts (`lib/campaigns.ts`). What a person
@@ -15,7 +15,7 @@ import { kept } from '@/i18n/kept';
  * for approval's §B.10 (*Kejar*, *Hadiah*, *Syarat:*, *Jalur promosi*, *Kriteria promosi*, *Klub produksi* …). **Kept**
  * (§A): the title, *KPM*, *campaign* (§A.6), *APE*, *new hire*, a metric's name as the server serves it (§A.4).
  * **Typed content stays as typed**: a campaign's title, blurb, description, prize and emoji; the server's window and
- * duration words (P18.98-T5). **A figure is never a message's**: a target and a reading are written by the caller in the
+ * duration words (P18.10-T5). **A figure is never a message's**: a target and a reading are written by the caller in the
  * figures' language and passed in.
  *
  * @moved lib/campaigns.ts
@@ -29,7 +29,7 @@ import { kept } from '@/i18n/kept';
 type Comparator = 'gte' | 'gt' | 'lte' | 'lt' | 'eq';
 
 const en = {
-  /** The page (`:10411`): the nav item's words (§A.2), and its line — *Tap*, never *click* (P18.95-T9 AC-5). */
+  /** The page (`:10411`): the nav item's words (§A.2), and its line — *Tap*, never *click* (P18.7-T9 AC-5). */
   title: kept('Campaign List'),
   subtitle: "Company and KPM campaigns — mark the ones you're chasing, tap any card for full requirements.",
   /** The two tabs (`:3667-3670`), named for a screen reader, and the status filter (`:3674-3679`). */
@@ -83,10 +83,10 @@ const en = {
   met: 'Met',
   /** After a met row's ✓, for a screen reader. */
   metAfter: ', met',
-  /** The card's requirements, ***Needs:*** — the client's word (P18.95-T10 AC-3), where the prototype wrote *Requirements:*. */
+  /** The card's requirements, ***Needs:*** — the client's word (P18.7-T10 AC-3), where the prototype wrote *Requirements:*. */
   needs: 'Needs:',
   /**
-   * **One requirement in words** (P18.95-T10 AC-3): *Rp 16 jt APE*, *3 new hires*, *more than 2 new active agents* — the
+   * **One requirement in words** (P18.7-T10 AC-3): *Rp 16 jt APE*, *3 new hires*, *more than 2 new active agents* — the
    * comparison said (*at least* is the plain figure), the target written by the caller, then what it counts, one and
    * many as the figure is. `noun` is the metric's code where it has one; without, the prototype's `{name} {target}`.
    */

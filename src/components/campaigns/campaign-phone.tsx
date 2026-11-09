@@ -3,11 +3,13 @@
 import { useId } from 'react';
 import { PlanIcon, type PlanIconName } from '@/components/plan/plan-icons';
 import { ErrorBanner } from '@/components/ui/field';
+import { TermText, TermTip } from '@/components/ui/term-tip';
 import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
 import { campaignsMessages } from '@/i18n/messages/campaigns';
 import type { ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import { requirementsLine, type CampaignCard, type PosterColor, type RatioUnits } from '@/lib/campaigns';
+import type { TermKey } from '@/lib/terms';
 
 /**
  * **A campaign's line icon, where the prototype drew its poster's emoji** (UI V1, UI-108: *emoji art* gone; UI-102: no
@@ -54,8 +56,13 @@ function Meta({ card }: { card: CampaignCard }) {
  *
  * The star is drawn only where the wider card draws *Kejar* (`showsChase`); a campaign closed to the reader's rung that
  * they are not chasing is drawn, held, with the reason as its title. A refused chase is said under the card.
+ *
+ * *Changed 2026-11-05 (P19.1-T5 AC-4; UI-123: "Card content as UI-108"):* **the card of a tablet and a laptop too**, in
+ * their grid. There it carries what the wider card carried and the client asked for earlier: an ⓘ after a term where
+ * the list first names it (`terms`, P18.7-T9 AC-3) — each its own target, above the card's. A phone passes none, and
+ * draws what it drew.
  */
-export function PhoneCampaignCard({ card, canChase, busy, error, onChase, onOpen, ratioUnits }: {
+export function PhoneCampaignCard({ card, canChase, busy, error, onChase, onOpen, ratioUnits, terms }: {
   card: CampaignCard;
   canChase: boolean;
   busy: boolean;
@@ -63,12 +70,17 @@ export function PhoneCampaignCard({ card, canChase, busy, error, onChase, onOpen
   onChase: () => void;
   onOpen: () => void;
   ratioUnits?: RatioUnits;
+  /** The terms this card first names — its title's, *Hadiah*'s and *Syarat*'s — on a tablet and a laptop alone. */
+  terms?: TermKey[][];
 }) {
   const t = useMessages(campaignsMessages);
   const language = useLanguage();
   const figures = useFigureLanguage();
   const titleId = useId();
   const held = card.chaseBlocked === 'ended' || (card.chaseBlocked === 'not_eligible' && !card.chasing);
+  const [titleTerms = [], rewardTerms = [], needsTerms = []] = terms ?? [];
+  const title = <h3 id={titleId} className="m-0 truncate text-lg font-bold leading-snug text-ink">{card.title}</h3>;
+  const requirements = card.requirements.length > 0 ? requirementsLine(card.requirements, ratioUnits, language, figures) : '';
   return (
     <article aria-labelledby={titleId} data-campaign-card={card.code} className="relative rounded-lg bg-card p-3">
       <button
@@ -83,7 +95,13 @@ export function PhoneCampaignCard({ card, canChase, busy, error, onChase, onOpen
           <PlanIcon name={campaignIcon(card.poster.emoji)} className="h-[1.375rem] w-[1.375rem]" />
         </span>
         <div className="min-w-0 flex-1">
-          <h3 id={titleId} className="m-0 truncate text-lg font-bold leading-snug text-ink">{card.title}</h3>
+          {titleTerms.length === 0 ? title : (
+            // Beside the heading, not in it, so the card is still named by its title alone.
+            <span className="flex min-w-0 items-center gap-1">
+              {title}
+              {titleTerms.map((term) => <TermTip key={term} term={term} className="shrink-0" />)}
+            </span>
+          )}
           <Meta card={card} />
         </div>
         {canChase && (
@@ -98,7 +116,7 @@ export function PhoneCampaignCard({ card, canChase, busy, error, onChase, onOpen
             className={cn(
               'relative z-[1] flex h-[2.375rem] w-[2.375rem] shrink-0 items-center justify-center rounded-full border-[1.5px]',
               "after:absolute after:-inset-[3px] after:content-[''] disabled:opacity-40",
-              card.chasing ? 'border-amber bg-amber text-navy' : 'border-hairline bg-card text-navy',
+              card.chasing ? 'border-primary bg-primary text-primary-contrast' : 'border-hairline bg-card text-navy',
             )}
           >
             <PlanIcon name="star" className={cn('h-[1.125rem] w-[1.125rem]', card.chasing && '[&>path]:fill-current')} />
@@ -110,13 +128,13 @@ export function PhoneCampaignCard({ card, canChase, busy, error, onChase, onOpen
           {card.reward && (
             <>
               <dt className="pt-px text-sm font-semibold text-muted">{t.prize}</dt>
-              <dd className="m-0 text-ink">{card.reward}</dd>
+              <dd className="m-0 text-ink">{rewardTerms.length === 0 ? card.reward : <TermText text={card.reward} terms={rewardTerms} />}</dd>
             </>
           )}
           {card.requirements.length > 0 && (
             <>
               <dt className="pt-px text-sm font-semibold text-muted">{t.requirementsTitle}</dt>
-              <dd className="m-0 text-ink">{requirementsLine(card.requirements, ratioUnits, language, figures)}</dd>
+              <dd className="m-0 text-ink">{needsTerms.length === 0 ? requirements : <TermText text={requirements} terms={needsTerms} />}</dd>
             </>
           )}
         </dl>

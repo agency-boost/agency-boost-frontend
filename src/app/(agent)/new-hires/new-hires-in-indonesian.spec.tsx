@@ -13,7 +13,7 @@ import NewHireDetailPage from './[membershipId]/page';
 import NewHiresPage from './page';
 
 /**
- * **New Hires in Indonesian** (P18.98-T4; **UI V1, UI-023 to UI-027**): `/new-hires` — *Aktivasi 3M*, *Menunggu
+ * **New Hires in Indonesian** (P18.10-T4; **UI V1, UI-023 to UI-027**): `/new-hires` — *Aktivasi 3M*, *Menunggu
  * bergabung*, *Semua · Teraktivasi · Belum*, the leader tree, *Pecah telor di hari ke-X* / *Hari ke-X*, the invitations'
  * sheet, *+ Tambah agent*'s modal — and one hire's `/new-hires/[membershipId]` — the strip, *Hari*, *3M selesai*, *Koreksi
  * tanggal bergabung*, *Kapan pecah telor?*. The report's words where it gives them, each kept term English, and no
@@ -22,6 +22,8 @@ import NewHiresPage from './page';
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
   usePathname: () => '/new-hires',
+  // The page reads its year from the address (P19.9-T3 AC-2): none here, so *Tahun berjalan*.
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 const ENGLISH = englishOnly(newHiresMessages, activationMessages, addAgentMessages);

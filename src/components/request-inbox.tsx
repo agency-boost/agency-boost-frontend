@@ -33,7 +33,7 @@ function unitsUnder(choices: RoutingChoice[], request: PendingRequest): RoutingC
 /**
  * **The request inbox** (`Overall.html:3625-3631`): each request to join, approved — into the reader's unit or one of
  * their AABs' — or declined with a reason sent to them. One component for *Pending Requests*
- * (`/user-management/pending`) and *Review requests* on `/new-hires` (P18.96-T3 AC-5, ADR-0170 §5).
+ * (`/user-management/pending`) and *Review requests* on `/new-hires` (P18.8-T3 AC-5, ADR-0170 §5).
  *
  * **Approving asks for the join date** (ADR-0169): *Approve* opens the row's *Join date*, today by default, and the
  * second *Approve* sends it. The prototype approves in one tap; the date is the client's rule R2, the smallest
@@ -45,7 +45,7 @@ function unitsUnder(choices: RoutingChoice[], request: PendingRequest): RoutingC
 export function RequestInbox({ today, onCount, empty }: {
   today?: string;
   onCount?: (n: number) => void;
-  /** What an empty inbox shows in place of the shared line — User Management's Boost (UI-089, Phase 18.99 T9). */
+  /** What an empty inbox shows in place of the shared line — User Management's Boost (UI-089, Phase 18.11 T9). */
   empty?: React.ReactNode;
 }) {
   // The inbox's words (`i18n/messages/requests.ts`): the prototype's list, and the join date approving asks for.
@@ -167,7 +167,7 @@ export function RequestInbox({ today, onCount, empty }: {
         {requests?.map((request) => (
           <li key={request.requestId} className="rounded-md border border-hairline p-3">
             <div className="flex flex-wrap items-start gap-3">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-dark text-md font-bold text-card">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-hover text-md font-bold text-card">
                 {request.initials}
               </span>
               <span className="min-w-0 flex-1">

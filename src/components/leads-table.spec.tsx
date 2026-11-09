@@ -249,7 +249,7 @@ describe('LeadsTable, for a coachee (P11-T8 AC-7)', () => {
 
 /**
  * The lock, on what P13.1-T4 changed (AC-9): the ⋮ still opens the lead's details, and the details only
- * read. The WhatsApp link stays, beside the ⋮ since P18.8-T7 — opening a chat writes nothing.
+ * read. The WhatsApp link stays, beside the ⋮ since P18.5-T7 — opening a chat writes nothing.
  */
 describe('LeadsTable, read-only, as P13.1-T4 left it', () => {
   afterEach(() => {
@@ -263,7 +263,7 @@ describe('LeadsTable, read-only, as P13.1-T4 left it', () => {
     expect(await menuOf('Pak Budi')).toEqual(['Lead details']);
   });
 
-  it('P13.1-T4 AC-9, P18.8-T7 AC-5 shows the details read-only, saves nothing, and still opens WhatsApp from the row', async () => {
+  it('P13.1-T4 AC-9, P18.5-T7 AC-5 shows the details read-only, saves nothing, and still opens WhatsApp from the row', async () => {
     const { calls } = renderFor(
       { 'outcome=open': { body: page([lead({ contact: { phone: '0812-1100-2200', email: null }, source: 'Referral' })]) } },
       { readOnly: true },
@@ -310,7 +310,7 @@ describe('LeadsTable, read-only, as P13.1-T4 left it', () => {
 
     expect(await screen.findByRole('list', { name: 'Her leads' })).toBeInTheDocument();
     expect(screen.getByRole('searchbox', { name: 'Search leads' })).toBeInTheDocument();
-    // P18.95-T4 AC-4: the order in words — *Status, ascending* until 2026-10-26.
+    // P18.7-T4 AC-4: the order in words — *Status, ascending* until 2026-10-26.
     await userEvent.selectOptions(screen.getByLabelText('Sort leads'), 'Earliest stage first');
     await waitFor(() => expect(lastRead(calls).get('sort')).toBe('status'));
     expect(lastRead(calls).get('owner')).toBe('mem-rina');
@@ -318,13 +318,13 @@ describe('LeadsTable, read-only, as P13.1-T4 left it', () => {
 });
 
 /**
- * P18.8-T7 on the coaching session's card: the coachee's own order, and no handle to change it — the order
+ * P18.5-T7 on the coaching session's card: the coachee's own order, and no handle to change it — the order
  * of a list is its owner's (ADR-0161 §1). WhatsApp beside the ⋮, and *Recruit* in the type filter.
  */
-describe('LeadsTable, on a coaching session’s card (P18.8-T7)', () => {
+describe('LeadsTable, on a coaching session’s card (P18.5-T7)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('P18.8-T7 AC-4 reads the coachee’s saved order, and offers no drag handle on any of her rows', async () => {
+  it('P18.5-T7 AC-4 reads the coachee’s saved order, and offers no drag handle on any of her rows', async () => {
     const { calls } = renderFor({
       'outcome=open': { body: page([lead(), lead({ id: 'l2', name: 'Ibu Wati' })]) },
     });
@@ -339,7 +339,7 @@ describe('LeadsTable, on a coaching session’s card (P18.8-T7)', () => {
     expect(calls.some((c) => c.url.includes('/leads/order'))).toBe(false);
   });
 
-  it('P18.8-T7 AC-5 puts WhatsApp beside the ⋮ in the coachee’s rows', async () => {
+  it('P18.5-T7 AC-5 puts WhatsApp beside the ⋮ in the coachee’s rows', async () => {
     renderFor({
       'outcome=open': { body: page([lead({ contact: { phone: '0812-1100-2200', email: null } })]) },
     });
@@ -349,7 +349,7 @@ describe('LeadsTable, on a coaching session’s card (P18.8-T7)', () => {
     expect(chat.closest('td')).toBe(screen.getByRole('button', { name: 'Actions for Pak Budi' }).closest('td'));
   });
 
-  it('P18.8-T7 AC-6 filters by *Sales* and *Recruit*, the type’s words everywhere', async () => {
+  it('P18.5-T7 AC-6 filters by *Sales* and *Recruit*, the type’s words everywhere', async () => {
     renderFor({ 'outcome=open': { body: page([lead({ type: 'recruitment', statusCode: null })]) } });
     await screen.findByDisplayValue('Pak Budi');
 
@@ -362,13 +362,13 @@ describe('LeadsTable, on a coaching session’s card (P18.8-T7)', () => {
 });
 
 /**
- * P18.95-T4 on the coaching session's card (ADR-0167 §4): 📞 beside WhatsApp, as on `/leads`, and its own
+ * P18.7-T4 on the coaching session's card (ADR-0167 §4): 📞 beside WhatsApp, as on `/leads`, and its own
  * toolbar — the prototype card's search and type filter — with no *Status* filter and no `/leads` filter bar.
  */
-describe('LeadsTable, on a coaching session’s card (P18.95-T4)', () => {
+describe('LeadsTable, on a coaching session’s card (P18.7-T4)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('P18.95-T4 AC-3 rings the coachee’s lead from 📞 beside WhatsApp, and holds it with its reason where there is no number', async () => {
+  it('P18.7-T4 AC-3 rings the coachee’s lead from 📞 beside WhatsApp, and holds it with its reason where there is no number', async () => {
     renderFor({
       'outcome=open': { body: page([lead({ contact: { phone: '0812-1100-2200', email: null } }), lead({ id: 'l2', name: 'Ibu Wati' })]) },
     });
@@ -380,7 +380,7 @@ describe('LeadsTable, on a coaching session’s card (P18.95-T4)', () => {
     expect(screen.getByRole('button', { name: 'Call Ibu Wati' })).toHaveAccessibleDescription('No phone number yet — add one in Lead details.');
   });
 
-  it('P18.95-T4 AC-2 keeps the card’s own toolbar: its search and type filter, no Status filter, and no /leads filter bar', async () => {
+  it('P18.7-T4 AC-2 keeps the card’s own toolbar: its search and type filter, no Status filter, and no /leads filter bar', async () => {
     renderFor({ 'outcome=open': { body: page([lead()]) } });
     await screen.findByDisplayValue('Pak Budi');
 
@@ -391,7 +391,7 @@ describe('LeadsTable, on a coaching session’s card (P18.95-T4)', () => {
     expect(screen.getAllByRole('searchbox')).toHaveLength(1);
   });
 
-  it('P18.95-T4 AC-3 keeps 📞 under a finalized session’s lock, since ringing writes nothing', async () => {
+  it('P18.7-T4 AC-3 keeps 📞 under a finalized session’s lock, since ringing writes nothing', async () => {
     renderFor({ 'outcome=open': { body: page([lead({ contact: { phone: '0812-1100-2200', email: null } })]) } }, { readOnly: true });
     await screen.findByDisplayValue('Pak Budi');
     expect(screen.getByRole('link', { name: 'Call Pak Budi' })).toHaveAttribute('href', 'tel:+6281211002200');

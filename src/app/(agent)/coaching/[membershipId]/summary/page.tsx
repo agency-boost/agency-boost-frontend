@@ -29,14 +29,14 @@ import { useQuery } from '@/lib/use-query';
  * - **The insight rules under the prototype's *AI-powered* badge** (ADR-0069), as `/summary` has them.
  * - **The *Activity pulse* is the coachee's ratios**, from `GET /activity/ratios?for=` on their rung
  *   (ADR-0020), read beside the Summary and failing on its own card, as `/summary`'s does.
- * - ***Campaigns she's chasing*** (`:4121-4130`, P18.5-T9): the coachee's chases of campaigns not ended, 🚀
+ * - ***Campaigns she's chasing*** (`:4121-4130`, P18.2-T9): the coachee's chases of campaigns not ended, 🚀
  *   chips by title, from `GET /campaigns/chasing?for=` — the read `/summary`'s card makes for the member, so
  *   the two cannot disagree. Its own read, failing in its own card.
  *
  * No *Download* and no page title of its own: the prototype's person view has neither, and the shell
  * above names the person.
  *
- * **An earlier month or year** (P18.8-T11 AC-2; UI-051's pill and sheet since UI V1): the same month and year choice as `/summary`, the choice in this
+ * **An earlier month or year** (P18.5-T11 AC-2; UI-051's pill and sheet since UI V1): the same month and year choice as `/summary`, the choice in this
  * tab's own address — `/coaching/{id}/summary?month=2026-08` — read with `?for=` and the period together, and
  * audited as every read of the coachee's Summary is.
  */
@@ -61,7 +61,7 @@ function SummaryTab() {
 
 function CoacheeSummary({ coachee, address }: { coachee: Coachee; address: SummaryPeriodQuery }) {
   const t = useMessages(coachingMessages).pages;
-  // *Bulanan* · *Tahunan* in ID mode, as `/summary` draws them (found English by P18.98-T7 AC-1).
+  // *Bulanan* · *Tahunan* in ID mode, as `/summary` draws them (found English by P18.10-T7 AC-1).
   const views = useSummaryViews();
   const { asked, view, chooseView, choose, key } = useSummaryPeriod(address);
   /** The last Summary read: whose, for which period, and what it said. */

@@ -24,19 +24,19 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), selec
  * backdrop close it; a click inside does not, so selecting text in it never dismisses it. Named by
  * its title, and by its description when it has one.
  *
- * **`placement="sheet"` is the same dialog anchored to the foot of the screen** (P18.95-T4, ADR-0167 §4):
+ * **`placement="sheet"` is the same dialog anchored to the foot of the screen** (P18.7-T4, ADR-0167 §4):
  * the full width, its top corners rounded, at most 90% of the screen tall and scrolling inside, and clear
  * of the home indicator. A lead's edit sheet on a phone is the first; its manners are this one's.
  *
- * **Never taller than the screen, and its actions always in reach** (P18.96-T1 AC-2): at most the dynamic
+ * **Never taller than the screen, and its actions always in reach** (P18.8-T1 AC-2): at most the dynamic
  * viewport's height less its margin, the content scrolling inside it under a title that stays at the top and a
  * `footer` that stays at the foot; the page behind does not scroll while it is open (`useScrollLock`).
  *
- * **Drawn at the end of the page, not where it is opened** (P18.98-T4, 2026-10-29): through a portal into `<body>`, so its
+ * **Drawn at the end of the page, not where it is opened** (P18.10-T4, 2026-10-29): through a portal into `<body>`, so its
  * `h2` never lands inside the page's outline — between a compliance tree's `h4`s it broke axe's *heading-order* in both
  * languages. React's tree is unchanged: its context, its events and a footer's `form={id}` reach it as before.
  *
- * **Two more placements for UI V1** (Phase 18.99 T2; the report's *Bottom sheet / centred modal*, UI-011, UI-035, and
+ * **Two more placements for UI V1** (Phase 18.11 T2; the report's *Bottom sheet / centred modal*, UI-011, UI-035, and
  * UI-104's Tugas popup), the same dialog with the same manners, drawn by `ResponsiveSheet` and `CenterPopup`
  * (`responsive-sheet.tsx`):
  *
@@ -45,6 +45,9 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), selec
  *   nothing flashes the other shape before a script has measured the screen.
  * - **`popup`** is small and centred at every width: 16px from the screen's edges, at most 60% of its height and
  *   scrolling inside after that.
+ * - **`drawer`** is the sheet below 1024px and **a side panel from 1024px** (P19.3-T3; UI-152, the `kpm-leaders` mockups:
+ *   *"same sheet as mobile screen 3, as a side panel on laptop"*): the screen's full height at its right edge, 400px
+ *   wide, its left corners rounded. The phase's shared *sheets below 1024 px, side panels at 1024 px and wider*.
  *
  * `closeLabel` draws a ✕ in the head, a 44px target, named by it; `handle` draws the drag handle on a sheet, and a
  * swipe down from the head closes it, as the backdrop and Escape do.
@@ -92,7 +95,7 @@ export function Modal({
    * `center`, the default, over the middle of the page; `sheet`, rising from its foot; `responsive`, a sheet below
    * 1024px and a centred modal from it; `popup`, a small box in the middle at every width (UI V1).
    */
-  placement?: 'center' | 'sheet' | 'responsive' | 'popup';
+  placement?: 'center' | 'sheet' | 'responsive' | 'popup' | 'drawer';
   /** A ✕ in the head, 44 × 44px, named by this — *Tutup*. Absent, there is none: Escape and the backdrop still close. */
   closeLabel?: string;
   /** A sheet's drag handle above the title, and a swipe down from the head closes it (`sheet`, and `responsive` below 1024px). */
@@ -154,7 +157,9 @@ export function Modal({
   };
 
   const sheet = placement === 'sheet';
-  const responsive = placement === 'responsive';
+  // A drawer is a responsive sheet below 1024px, and a side panel from it.
+  const drawer = placement === 'drawer';
+  const responsive = placement === 'responsive' || drawer;
   const popup = placement === 'popup';
   // The foot clears the home indicator on a phone that has one, and 1.5rem on one that does not.
   // Each written whole, so the stylesheet's scan finds it (a class built from pieces is never generated).
@@ -201,6 +206,7 @@ export function Modal({
       className={cn(
         'fixed inset-0 z-50 flex justify-center bg-navy/35',
         sheet ? 'items-end'
+          : drawer ? 'max-lg:items-end lg:items-stretch lg:justify-end'
           : responsive ? 'max-lg:items-end lg:items-center lg:p-5 lg:pt-[max(1.25rem,env(safe-area-inset-top))]'
             : popup ? 'items-center p-4' : 'items-center p-5 pt-[max(1.25rem,env(safe-area-inset-top))]',
       )}
@@ -216,7 +222,7 @@ export function Modal({
         onClick={(e) => e.stopPropagation()}
         onKeyDown={trap}
         /*
-          * **The box scrolls, and its title and its foot do not** (P18.96-T1 AC-2): no padding above or below the
+          * **The box scrolls, and its title and its foot do not** (P18.8-T1 AC-2): no padding above or below the
           * box itself, so the sticky head and foot sit where they would sit anyway and only the content between
           * them moves. The dynamic viewport (`dvh`), so a phone's browser bar coming and going never puts the
           * foot under it; `overscroll-contain`, so reaching the end hands nothing on to the page.
@@ -224,6 +230,8 @@ export function Modal({
         className={cn(
           'w-full overflow-y-auto overscroll-contain bg-card px-6 shadow-modal',
           sheet ? 'max-h-[90dvh] rounded-t-lg'
+            : drawer ? 'max-lg:max-h-[90dvh] max-lg:rounded-t-lg lg:h-full lg:max-w-[25rem] lg:rounded-l-lg '
+              + 'lg:pt-[env(safe-area-inset-top)]'
             : responsive ? 'max-lg:max-h-[90dvh] max-lg:rounded-t-lg '
               + 'lg:max-h-[calc(100dvh-1.25rem-max(1.25rem,env(safe-area-inset-top)))] lg:max-w-[35rem] lg:rounded-lg'
               : popup ? 'max-h-[60dvh] max-w-[26rem] rounded-lg px-4'

@@ -47,20 +47,20 @@ const show = (routes: Record<string, StubReply | StubReply[]> = {}) => {
 
 const sales = () => screen.findByRole('heading', { level: 2, name: 'Sales (4/10)' });
 
-describe('/coaching/[membershipId]/training, a coachee’s Training tab (P18.5-T4)', () => {
+describe('/coaching/[membershipId]/training, a coachee’s Training tab (P18.2-T4)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('P18.5-T4 AC-1 reads this person through the coach’s read, once, with `for`', async () => {
+  it('P18.2-T4 AC-1 reads this person through the coach’s read, once, with `for`', async () => {
     const { calls } = show();
     await sales();
     expect(calls.filter((c) => c.url.includes('/training/progress')).map((c) => c.url))
       .toEqual(['http://api.test/api/v1/training/progress?for=mem-rina']);
   });
 
-  it('P18.5-T4 AC-2 heads every category “{Label} ({done}/{total})”, the counts the server’s, an empty one at (0/0)', async () => {
+  it('P18.2-T4 AC-2 heads every category “{Label} ({done}/{total})”, the counts the server’s, an empty one at (0/0)', async () => {
     show();
     await sales();
-    // P18.95-T7 AC-2: the coachee's name is the page's title, so it is no longer a heading of its own below it.
+    // P18.7-T7 AC-2: the coachee's name is the page's title, so it is no longer a heading of its own below it.
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Rina Wijaya$/);
     expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
       'Sales (4/10)', 'Product (0/0)',
@@ -69,7 +69,7 @@ describe('/coaching/[membershipId]/training, a coachee’s Training tab (P18.5-T
     expect(screen.getByText('(4/10)').className).toContain('text-muted');
   });
 
-  it('P18.5-T4 AC-2, UI-066 draws the skills numbered from 1 again in each category, with done/total and Module · Format · Status', async () => {
+  it('P18.2-T4 AC-2, UI-066 draws the skills numbered from 1 again in each category, with done/total and Module · Format · Status', async () => {
     const product = category('PRODUCT', 'Product', [skill('PRODUCT_KNOWLEDGE', 'Product Knowledge', [row('WHOLE_LIFE', 'Whole Life vs Term Life')])]);
     show({ 'GET /training/progress': { body: progressView([SALES, product]) } });
     await sales();
@@ -81,7 +81,7 @@ describe('/coaching/[membershipId]/training, a coachee’s Training tab (P18.5-T
     expect(card.querySelector('div[aria-hidden="true"]')!.textContent).toBe('ModuleFormatStatus');
   });
 
-  it('P18.5-T4 AC-2 is read-only: no link in any row and no status control (contradiction 13)', async () => {
+  it('P18.2-T4 AC-2 is read-only: no link in any row and no status control (contradiction 13)', async () => {
     show();
     await sales();
     for (const list of screen.getAllByRole('list', { name: / modules$/ })) expect(within(list).queryAllByRole('link')).toEqual([]);
@@ -89,7 +89,7 @@ describe('/coaching/[membershipId]/training, a coachee’s Training tab (P18.5-T
     expect(screen.getByText('Asking the Right Discovery Questions')).toBeInTheDocument();
   });
 
-  it('P18.5-T4 AC-2, D-history keeps a module done and since withdrawn under its skill: Done, then Archived, outside the count', async () => {
+  it('P18.2-T4 AC-2, D-history keeps a module done and since withdrawn under its skill: Done, then Archived, outside the count', async () => {
     const retention = skill('RETENTION', 'Retention', [], {
       offered: false,
       archived: [{ code: 'CLIENT_RETENTION', title: 'Client Retention Best Practices', status: 'done', completedAt: '2026-08-01T03:00:00.000Z', formats: ['file'] }],
@@ -105,12 +105,12 @@ describe('/coaching/[membershipId]/training, a coachee’s Training tab (P18.5-T
     expect(within(archived).queryByRole('link')).not.toBeInTheDocument();
   });
 
-  it('P18.5-T4 AC-2 draws the empty state for an office with no category', async () => {
+  it('P18.2-T4 AC-2 draws the empty state for an office with no category', async () => {
     show({ 'GET /training/progress': { body: progressView([]) } });
     expect(await screen.findByText('No training to show yet.')).toBeInTheDocument();
   });
 
-  it('P18.5-T4 AC-5 is a live tab, current on its own address, no longer a sign', async () => {
+  it('P18.2-T4 AC-5 is a live tab, current on its own address, no longer a sign', async () => {
     show();
     await sales();
     const tab = within(screen.getByRole('navigation', { name: 'Coaching' })).getByRole('link', { name: 'Training' });
@@ -120,12 +120,12 @@ describe('/coaching/[membershipId]/training, a coachee’s Training tab (P18.5-T
     expect(screen.queryByText(/^Upcoming/)).not.toBeInTheDocument();
   });
 
-  it('P18.5-T4 AC-1 sends a person out of reach to the shell’s not-found, not a refusal of its own', async () => {
+  it('P18.2-T4 AC-1 sends a person out of reach to the shell’s not-found, not a refusal of its own', async () => {
     show({ 'GET /training/progress': NOT_FOUND });
     expect(await screen.findByRole('heading', { name: 'This person isn’t someone you coach.' })).toBeInTheDocument();
   });
 
-  it('P18.5-T4 AC-2 shows why the read failed, and asks again', async () => {
+  it('P18.2-T4 AC-2 shows why the read failed, and asks again', async () => {
     const failed = { status: 500, body: { error: { code: 'INTERNAL_ERROR', message: 'Something went wrong.', requestId: 'r-9' } } };
     const { calls } = show({ 'GET /training/progress': [failed, { body: progressView() }] });
     expect(await screen.findByRole('alert')).toHaveTextContent('Something went wrong.');
@@ -134,14 +134,14 @@ describe('/coaching/[membershipId]/training, a coachee’s Training tab (P18.5-T
     await waitFor(() => expect(calls.filter((c) => c.url.includes('/training/progress'))).toHaveLength(2));
   });
 
-  it('P18.5-T4 AC-2 writes none of OD-39’s six words, and no phase', async () => {
+  it('P18.2-T4 AC-2 writes none of OD-39’s six words, and no phase', async () => {
     show();
     await sales();
     expect(screen.getByRole('main').textContent).not.toMatch(SIX_WORDS);
     expect(screen.getByRole('main').textContent).not.toMatch(/phase\s*\d/i);
   });
 
-  it('P18.5-T4 AC-2 keeps the product’s empty Product category in its place, with its heading only', async () => {
+  it('P18.2-T4 AC-2 keeps the product’s empty Product category in its place, with its heading only', async () => {
     show({ 'GET /training/progress': { body: progressView([PRODUCT, SALES]) } });
     expect(await screen.findByRole('heading', { level: 2, name: 'Product (0/0)' })).toBeInTheDocument();
     expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['Product (0/0)', 'Sales (4/10)']);
@@ -149,14 +149,14 @@ describe('/coaching/[membershipId]/training, a coachee’s Training tab (P18.5-T
 });
 
 /*
- * **The same rows on a phone** (P18.95-T3 AC-5): the learner's list and a person's tab draw a module one way (P18.5-T4
+ * **The same rows on a phone** (P18.7-T3 AC-5): the learner's list and a person's tab draw a module one way (P18.2-T4
  * AC-4), so the tab's cards are a row per module below 768px too — its name and its status, the history's *Archived*
  * after it — read-only, as the table's rows are.
  */
-describe('P18.95-T3 — a coachee’s Training tab on a phone', () => {
+describe('P18.7-T3 — a coachee’s Training tab on a phone', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('P18.95-T3 AC-5 draws a row per module, its name and its status, Archived after a withdrawn one, and no link', async () => {
+  it('P18.7-T3 AC-5 draws a row per module, its name and its status, Archived after a withdrawn one, and no link', async () => {
     vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
       media: query, matches: query === PHONE_QUERY, addEventListener: () => {}, removeEventListener: () => {},
     })));

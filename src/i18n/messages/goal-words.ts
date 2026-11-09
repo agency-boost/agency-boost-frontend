@@ -2,10 +2,10 @@ import { defineMessages, type MessagesOf } from '@/i18n/catalogue';
 import { kept } from '@/i18n/kept';
 
 /**
- * **A goal's words as `lib/goals.ts` writes them** (P18.98-T4, field selling; `functional/goals.md`,
+ * **A goal's words as `lib/goals.ts` writes them** (P18.10-T4, field selling; `functional/goals.md`,
  * `functional/summary.md`): the marker beside the APE produced — whose figure it is, and for which month
  * (`producedFrom`, ADR-0063 §5), on Goal Settings, the Summary, a coachee's two tabs and the Unit Dashboard alike — and
- * the months left in words (`monthsLeftInWords`, P18.95-T5 AC-5). **Its own area, apart from the calculator's**
+ * the months left in words (`monthsLeftInWords`, P18.7-T5 AC-5). **Its own area, apart from the calculator's**
  * (`goals.tsx`), because a dozen screens import `lib/goals.ts` for its money helpers: they carry these few words, not
  * the calculator's.
  *
@@ -59,8 +59,13 @@ const cap = (word: string) => word.charAt(0).toUpperCase() + word.slice(1);
 const en = {
   /** Where the APE produced came from, and for which month (`producedFrom`). */
   produced: {
-    /** The member's own figure, which has no month: *Your own figure*, *Her own figure*. */
-    own: ({ who }: { who: Voice }) => `${cap(who.possessive)} own figure, entered in Goal Settings`,
+    /**
+     * The member's own figure, which has no month — **their estimate** since P19.1-T4 (UI-157, ADR-0195), entered on Goal
+     * Settings or the Summary and replaced once the office uploads production: *Your own estimate, not uploaded*.
+     */
+    own: ({ who }: { who: Voice }) => `${cap(who.possessive)} own estimate, not uploaded`,
+    /** The visible label beside an estimate (UI-157 item 4): *your estimate*, *her estimate*. */
+    estimate: ({ who }: { who: Voice }) => `${who.possessive} estimate`,
     /**
      * A figure typed in the app by somebody other than the member — a coach (S2): never *their own*. `name` as stored,
      * or `null` when they can no longer be named, and then *a leader*.
@@ -73,7 +78,7 @@ const en = {
     /** A coachee's: the upload, and a correction of it, without *office* (ADR-0084). */
     theirUpload: 'From the production upload',
     theirCorrection: 'Corrected after the production upload',
-    /** The reader's year to date from the upload, in the client's words (P18.95-T7 AC-1): *As of Oct 2026*. */
+    /** The reader's year to date from the upload, in the client's words (P18.7-T7 AC-1): *As of Oct 2026*. */
     asOf: ({ month }: { month: string }) => `As of ${month}`,
     /** The words, then the month: the year to date as of it, or the month's own figure. */
     yearToDate: ({ words, month }: { words: string; month: string }) => `${words}, year to date as of ${month}`,
@@ -91,7 +96,9 @@ const en = {
 
 const id: MessagesOf<typeof en> = {
   produced: {
-    own: ({ who }) => `${who.self ? 'Angka Anda sendiri' : 'Angkanya sendiri'}, diisi di ${kept('Goal Settings')}`,
+    // UI-157's own words (*perkiraan Anda*); the coachee's *perkiraannya* follows the catalogue's *-nya* (§B.0).
+    own: ({ who }) => `${who.self ? 'Perkiraan Anda' : 'Perkiraannya'}, bukan dari unggahan`,
+    estimate: ({ who }) => (who.self ? 'perkiraan Anda' : 'perkiraannya'),
     typedBy: ({ name }) => `Diisi oleh ${name ?? kept('leader')}, bukan dari unggahan`,
     upload: `Dari unggahan ${kept('KPM')} Anda`,
     corrected: ({ by }) => (by === null ? 'Dikoreksi manual' : `Dikoreksi oleh ${by}`),

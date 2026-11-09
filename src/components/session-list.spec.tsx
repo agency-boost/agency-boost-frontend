@@ -57,7 +57,7 @@ describe('where you are signed in (P4-T13)', () => {
     expect(await screen.findByText('This device')).toBeInTheDocument();
   });
 
-  it('P18.95-T7 AC-5 says what Sign out everywhere is for in the client’s words: Use this if you lose your phone.', async () => {
+  it('P18.7-T7 AC-5 says what Sign out everywhere is for in the client’s words: Use this if you lose your phone.', async () => {
     render();
     await screen.findByText('This device');
     const line = screen.getByText(/^Ends every session including this one\./);

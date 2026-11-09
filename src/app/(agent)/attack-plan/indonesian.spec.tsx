@@ -52,12 +52,12 @@ const group = (name: string) => screen.getByRole('group', { name });
 const chips = (name: string) => within(group(name)).getAllByRole('button').map((b) => b.textContent);
 
 /**
- * **P18.98-T4, the Sales Attack Plan in ID mode** (field selling; ADR-0179 §3–§6): the brief's questions, chips and
+ * **P18.10-T4, the Sales Attack Plan in ID mode** (field selling; ADR-0179 §3–§6): the brief's questions, chips and
  * notes in the approved glossary's Indonesian, *Sales Attack Plan*, *Attack Plan* and *Product Catalog* English (§A), the
  * product, its script and its alternatives as typed, and a budget band's sums in the reader's figures. In English:
  * `page.spec.tsx`.
  */
-describe('P18.98-T4 the Sales Attack Plan in Indonesian', () => {
+describe('P18.10-T4 the Sales Attack Plan in Indonesian', () => {
   beforeEach(() => {
     nav.push.mockReset();
     nav.replace.mockReset();
@@ -75,7 +75,7 @@ describe('P18.98-T4 the Sales Attack Plan in Indonesian', () => {
       await briefHeading();
       expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Sales Attack Plan$/);
       expect(within(screen.getByRole('navigation', { name: 'Sales tools' })).getAllByRole('link').map((l) => l.textContent))
-        .toEqual(['Sales Attack Plan', 'Product Catalog']);
+        .toEqual(['Sales Attack Plan', 'Product Catalog', 'Proposal']);
       expect(within(screen.getByRole('list', { name: 'Langkah' })).getAllByRole('listitem').map((s) => s.textContent))
         .toEqual(['11 Gambaran nasabah', '22 Attack Plan']);
       expect(screen.getByText('Jawab 3 pertanyaan untuk mendapatkan pitch Anda.')).toBeInTheDocument();
@@ -113,7 +113,7 @@ describe('P18.98-T4 the Sales Attack Plan in Indonesian', () => {
     });
   });
 
-  describe('P18.98-T3 figures: a budget band’s sums are the reader’s figures, its words the reader’s words', () => {
+  describe('P18.10-T3 figures: a budget band’s sums are the reader’s figures, its words the reader’s words', () => {
     const monthly = () => chips('Monthly premium budget');
 
     it('a reader who chose nothing, not live: English words and Indonesian sums — the page as before the phase', async () => {
@@ -158,7 +158,7 @@ describe('P18.98-T4 the Sales Attack Plan in Indonesian', () => {
         '44 Jika ada keberatan', '55 Tindakan berikutnya',
       ]);
       expect(screen.getByText(SCRIPT.fullScript)).toBeInTheDocument();
-      expect(screen.getByText(`“${SCRIPT.objectionTheySay}”`)).toBeInTheDocument();
+      expect(screen.getByText(`“${SCRIPT.objections[0].objection}”`)).toBeInTheDocument();
       expect(screen.getByText('Juga sesuai dengan kebutuhan ini — ketuk untuk mengganti rencana di atas:')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'PRUAnugerah' })).toBeInTheDocument();
       // *Back* and the first step's pill, in Indonesian.

@@ -47,11 +47,11 @@ async function openDialog(name: string | RegExp = new RegExp(BUTTON)) {
 }
 
 /**
- * The campaigns' *Achieved* cell and the override's dialog (P18.6-T2 AC-8; ADR-0144 §4; D-override): the pill
+ * The campaigns' *Achieved* cell and the override's dialog (P18.3-T2 AC-8; ADR-0144 §4; D-override): the pill
  * as the tree draws it, the button a stored final standing's pill becomes, the dialog it opens, the marker an
  * overridden result carries, and the two writes with their bodies and refusals.
  */
-describe('AchievedCell (P18.6-T2 AC-8)', () => {
+describe('AchievedCell (P18.3-T2 AC-8)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   describe('the pill', () => {
@@ -62,39 +62,39 @@ describe('AchievedCell (P18.6-T2 AC-8)', () => {
       ['unknown', '—'],
       ['in_progress', '—'],
       [null, '—'],
-    ])('P18.6-T2 AC-8 draws %s as the registry’s %s, and no control without the override', (second, label) => {
+    ])('P18.3-T2 AC-8 draws %s as the registry’s %s, and no control without the override', (second, label) => {
       renderCell({ second, overridable: true }, { canOverride: false });
       expect(screen.getByText(label)).toBeInTheDocument();
       expect(screen.queryByRole('button')).not.toBeInTheDocument();
     });
 
-    it('P18.6-T2 AC-8 no control for a member with no stored standing (a non-chaser), whoever reads', () => {
+    it('P18.3-T2 AC-8 no control for a member with no stored standing (a non-chaser), whoever reads', () => {
       renderCell({ second: 'not_joined', overridable: false });
       expect(screen.getByText('Not achieved')).toBeInTheDocument();
       expect(screen.queryByRole('button')).not.toBeInTheDocument();
     });
 
-    it('P18.6-T2 AC-8 no control in a read-only session: the read answers canOverride false', () => {
+    it('P18.3-T2 AC-8 no control in a read-only session: the read answers canOverride false', () => {
       renderCell({ second: 'qualified', overridable: true }, { canOverride: false });
       expect(screen.queryByRole('button', { name: new RegExp(BUTTON) })).not.toBeInTheDocument();
     });
   });
 
   describe('the button', () => {
-    it('P18.6-T2 AC-8 is named by the words on it, then what it opens (WCAG 2.5.3)', () => {
+    it('P18.3-T2 AC-8 is named by the words on it, then what it opens (WCAG 2.5.3)', () => {
       renderCell({ second: 'not_met', overridable: true });
       const button = screen.getByRole('button', { name: `Not achieved — ${BUTTON}` });
       expect(button).toHaveAttribute('aria-haspopup', 'dialog');
     });
 
-    it('P18.6-T2 AC-8 a final unknown draws — and is overridable, named by what it opens alone', () => {
+    it('P18.3-T2 AC-8 a final unknown draws — and is overridable, named by what it opens alone', () => {
       renderCell({ second: 'unknown', overridable: true });
       expect(screen.getByRole('button', { name: BUTTON })).toHaveTextContent('—');
     });
   });
 
   describe('the dialog', () => {
-    it('P18.6-T2 AC-8 shows the result now, the choice without the result it already reads, a required reason, Save and Close', async () => {
+    it('P18.3-T2 AC-8 shows the result now, the choice without the result it already reads, a required reason, Save and Close', async () => {
       renderCell({ second: 'qualified', overridable: true });
       const dialog = await openDialog();
 
@@ -117,13 +117,13 @@ describe('AchievedCell (P18.6-T2 AC-8)', () => {
       expect(results.violations).toEqual([]);
     });
 
-    it('P18.6-T2 AC-8 the radios are a selection, so navy (ADR-0137 §2), never the browser’s blue', async () => {
+    it('P18.3-T2 AC-8 the radios are a selection, so navy (ADR-0137 §2), never the browser’s blue', async () => {
       renderCell({ second: 'unknown', overridable: true });
       const dialog = await openDialog(BUTTON);
-      for (const radio of within(dialog).getAllByRole('radio')) expect(radio).toHaveClass('accent-navy');
+      for (const radio of within(dialog).getAllByRole('radio')) expect(radio).toHaveClass('accent-secondary');
     });
 
-    it('P18.6-T2 AC-8 Close and Save are one group at the end, at every width; Clear override leads outside it', async () => {
+    it('P18.3-T2 AC-8 Close and Save are one group at the end, at every width; Clear override leads outside it', async () => {
       renderCell({ second: 'qualified', overridable: true, override: OVERRIDE });
       const dialog = await openDialog();
       const close = within(dialog).getByRole('button', { name: 'Close' });
@@ -140,7 +140,7 @@ describe('AchievedCell (P18.6-T2 AC-8)', () => {
       expect(footer.firstElementChild).toBe(clear);
     });
 
-    it('P18.6-T2 AC-8 a final unknown offers both results and asks for one', async () => {
+    it('P18.3-T2 AC-8 a final unknown offers both results and asks for one', async () => {
       renderCell({ second: 'unknown', overridable: true });
       const dialog = await openDialog(BUTTON);
       const achieved = within(dialog).getByRole('radio', { name: 'Achieved' });
@@ -156,7 +156,7 @@ describe('AchievedCell (P18.6-T2 AC-8)', () => {
       expect(within(dialog).getByRole('button', { name: 'Save' })).toBeEnabled();
     });
 
-    it('P18.6-T2 AC-8 the choice is re-checked when the result changes underneath: Save never sends the result it reads', async () => {
+    it('P18.3-T2 AC-8 the choice is re-checked when the result changes underneath: Save never sends the result it reads', async () => {
       const row = (cell: AchievedCellData) => ({ membershipId: 'mem-budi', name: 'Budi Santoso', cell });
       const { rerender } = render(
         <AchievedCell row={row({ second: 'unknown', overridable: true })} campaign={CAMPAIGN} canOverride onChanged={vi.fn()} />,
@@ -178,7 +178,7 @@ describe('AchievedCell (P18.6-T2 AC-8)', () => {
       expect(within(dialog).getByRole('radio', { name: 'Achieved' })).toBeEnabled();
     });
 
-    it('P18.6-T2 AC-8 Escape puts it away and the focus goes back to the cell', async () => {
+    it('P18.3-T2 AC-8 Escape puts it away and the focus goes back to the cell', async () => {
       renderCell({ second: 'qualified', overridable: true });
       await openDialog();
       await userEvent.keyboard('{Escape}');
@@ -186,7 +186,7 @@ describe('AchievedCell (P18.6-T2 AC-8)', () => {
       expect(screen.getByRole('button', { name: new RegExp(BUTTON) })).toHaveFocus();
     });
 
-    it('P18.6-T2 AC-8 Close puts it away, writing nothing', async () => {
+    it('P18.3-T2 AC-8 Close puts it away, writing nothing', async () => {
       const { calls } = stubFetch({});
       const { onChanged } = renderCell({ second: 'qualified', overridable: true });
       const dialog = await openDialog();
@@ -198,7 +198,7 @@ describe('AchievedCell (P18.6-T2 AC-8)', () => {
       expect(onChanged).not.toHaveBeenCalled();
     });
 
-    it('P18.6-T2 AC-8 the reason is required: blank or only spaces, nothing can be sent', async () => {
+    it('P18.3-T2 AC-8 the reason is required: blank or only spaces, nothing can be sent', async () => {
       const { calls } = stubFetch({});
       renderCell({ second: 'not_met', overridable: true });
       const dialog = await openDialog();
@@ -214,7 +214,7 @@ describe('AchievedCell (P18.6-T2 AC-8)', () => {
   });
 
   describe('the writes', () => {
-    it('P18.6-T2 AC-5, AC-8 Save sends PUT with the result and the reason trimmed, closes, toasts and asks for the tree again', async () => {
+    it('P18.3-T2 AC-5, AC-8 Save sends PUT with the result and the reason trimmed, closes, toasts and asks for the tree again', async () => {
       const { calls } = stubFetch({
         [`PUT ${PATH}`]: { body: { campaignCode: 'PERSISTENCY_PUSH', membershipId: 'mem-budi', status: 'not_met', override: { ...OVERRIDE, status: 'not_met' } } },
       });
@@ -233,7 +233,7 @@ describe('AchievedCell (P18.6-T2 AC-8)', () => {
       expect(await screen.findByRole('status')).toHaveTextContent('Result overridden');
     });
 
-    it('P18.6-T2 AC-5, AC-8 Clear override sends DELETE with the reason in its body, and needs one too', async () => {
+    it('P18.3-T2 AC-5, AC-8 Clear override sends DELETE with the reason in its body, and needs one too', async () => {
       const { calls } = stubFetch({
         [`DELETE ${PATH}`]: { body: { campaignCode: 'PERSISTENCY_PUSH', membershipId: 'mem-budi', status: 'not_met', override: null } },
       });
@@ -264,7 +264,7 @@ describe('AchievedCell (P18.6-T2 AC-8)', () => {
       [400, 'CAMPAIGN_OVERRIDE_SELF', 'You can’t override your own result.', false, { membershipId: 'mem-budi' }],
       [404, 'NOT_FOUND', 'Not found.', true, undefined],
       [409, 'VERSION_CONFLICT', 'Somebody changed this result a moment ago.', true, undefined],
-    ] as const)('P18.6-T2 AC-8 a %i %s stays in the dialog with what was typed (“%s”; the tree read again behind it: %s)', async (status, code, message, reread, details) => {
+    ] as const)('P18.3-T2 AC-8 a %i %s stays in the dialog with what was typed (“%s”; the tree read again behind it: %s)', async (status, code, message, reread, details) => {
       stubFetch({ [`PUT ${PATH}`]: refusal(status, code, message, details) });
       const { onChanged } = renderCell({ second: 'qualified', overridable: true });
       const dialog = await openDialog();
@@ -281,7 +281,7 @@ describe('AchievedCell (P18.6-T2 AC-8)', () => {
       expect(screen.queryByRole('status')).not.toBeInTheDocument();
     });
 
-    it('P18.6-T2 AC-8 already reads: the tree is read again, the dialog stays open, and its choice follows the result it now reads', async () => {
+    it('P18.3-T2 AC-8 already reads: the tree is read again, the dialog stays open, and its choice follows the result it now reads', async () => {
       stubFetch({
         [`PUT ${PATH}`]: refusal(400, 'VALIDATION_FAILED', 'The result already reads not_met.', { violations: ['status already reads not_met.'], status: 'not_met' }),
       });
@@ -314,7 +314,7 @@ describe('AchievedCell (P18.6-T2 AC-8)', () => {
       expect(within(dialog).getByRole('button', { name: 'Save' })).toBeEnabled();
     });
 
-    it('P18.6-T2 AC-8 a clear refused (404: nothing to clear any more) is shown in the dialog, the tree read again', async () => {
+    it('P18.3-T2 AC-8 a clear refused (404: nothing to clear any more) is shown in the dialog, the tree read again', async () => {
       stubFetch({ [`DELETE ${PATH}`]: refusal(404, 'NOT_FOUND', 'Nothing to clear.') });
       const { onChanged } = renderCell({ second: 'qualified', overridable: true, override: OVERRIDE });
       const dialog = await openDialog();
@@ -324,7 +324,7 @@ describe('AchievedCell (P18.6-T2 AC-8)', () => {
       expect(onChanged).toHaveBeenCalledTimes(1);
     });
 
-    it('P18.6-T2 AC-8 a request that never arrived says so, through toDisplayError', async () => {
+    it('P18.3-T2 AC-8 a request that never arrived says so, through toDisplayError', async () => {
       vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('fetch failed'); }));
       renderCell({ second: 'qualified', overridable: true });
       const dialog = await openDialog();
@@ -335,7 +335,7 @@ describe('AchievedCell (P18.6-T2 AC-8)', () => {
   });
 
   describe('the overridden result’s marker', () => {
-    it('P18.6-T2 AC-8 an icon beside the pill names who, on the office’s day, and why — name and tooltip', async () => {
+    it('P18.3-T2 AC-8 an icon beside the pill names who, on the office’s day, and why — name and tooltip', async () => {
       renderCell({ second: 'qualified', overridable: true, override: OVERRIDE });
       const marker = screen.getByRole('button', { name: MARKER });
       const tip = screen.getByText(MARKER, { selector: '[role="tooltip"]' });
@@ -344,13 +344,13 @@ describe('AchievedCell (P18.6-T2 AC-8)', () => {
       expect(tip).toBeVisible();
     });
 
-    it('P18.6-T2 AC-8 shows to a reader who cannot override too, with no control beside it', () => {
+    it('P18.3-T2 AC-8 shows to a reader who cannot override too, with no control beside it', () => {
       renderCell({ second: 'qualified', overridable: true, override: OVERRIDE }, { canOverride: false });
       expect(screen.getByRole('button', { name: MARKER })).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: new RegExp(BUTTON) })).not.toBeInTheDocument();
     });
 
-    it('P18.6-T2 AC-8 the dialog of an overridden result says who set it, and offers Clear override', async () => {
+    it('P18.3-T2 AC-8 the dialog of an overridden result says who set it, and offers Clear override', async () => {
       renderCell({ second: 'qualified', overridable: true, override: OVERRIDE });
       const dialog = await openDialog();
       expect(within(dialog).getByText(MARKER)).toBeInTheDocument();
@@ -359,7 +359,7 @@ describe('AchievedCell (P18.6-T2 AC-8)', () => {
       expect(results.violations).toEqual([]);
     });
 
-    it('P18.6-T2 AC-8 an authored reason is drawn as text, never as markup', () => {
+    it('P18.3-T2 AC-8 an authored reason is drawn as text, never as markup', () => {
       const reason = '<b>bold</b> <img src=x onerror=alert(1)>';
       renderCell({ second: 'qualified', overridable: true, override: { ...OVERRIDE, reason } });
       expect(screen.getByRole('button', { name: `Overridden by Wilson Tanoto on 10 Oct 2026: ${reason}` })).toBeInTheDocument();
@@ -367,7 +367,7 @@ describe('AchievedCell (P18.6-T2 AC-8)', () => {
       expect(document.querySelector('img')).toBeNull();
     });
 
-    it('P18.6-T2 AC-8 no marker on a result nobody overrode', () => {
+    it('P18.3-T2 AC-8 no marker on a result nobody overrode', () => {
       renderCell({ second: 'qualified', overridable: true, override: null });
       expect(screen.queryByRole('button', { name: /^Overridden by/ })).not.toBeInTheDocument();
     });
@@ -380,7 +380,7 @@ describe('AchievedCell (P18.6-T2 AC-8)', () => {
  * *unassigned*) and no phase. Read off the syntax tree, so a comment never counts. Permission codes are the
  * whole tree's scan's (`app/no-permission-code-in-copy.spec.ts`).
  */
-describe('the override’s own copy (P18.6-T2)', () => {
+describe('the override’s own copy (P18.3-T2)', () => {
   const FORBIDDEN = /\boffice\b|\bKPM\b|reports? to|tagged to|untagged|unassigned|\bphase\s*(\d|\{)/i;
   const FILES = ['components/analytics/standing-override.tsx', 'lib/standing-override.ts'];
 
@@ -411,11 +411,11 @@ describe('the override’s own copy (P18.6-T2)', () => {
 });
 
 /**
- * **P18.98-T4 the override in Indonesian** (`kpmComplianceMessages.override`): the pill, the control's name, the dialog,
+ * **P18.10-T4 the override in Indonesian** (`kpmComplianceMessages.override`): the pill, the control's name, the dialog,
  * the marker and the toast in the approved glossary's words, the day Indonesian, and the campaign's title, the member's
  * name and the reason as typed.
  */
-describe('P18.98-T4 AchievedCell in Indonesian', () => {
+describe('P18.10-T4 AchievedCell in Indonesian', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   const renderInIndonesian = (cell: AchievedCellData) => render(
@@ -424,13 +424,13 @@ describe('P18.98-T4 AchievedCell in Indonesian', () => {
     </InLanguage>,
   );
 
-  it('P18.98-T4 names the control and the marker in Indonesian, the reason as typed', () => {
+  it('P18.10-T4 names the control and the marker in Indonesian, the reason as typed', () => {
     renderInIndonesian({ second: 'qualified', overridable: true, override: OVERRIDE });
     expect(screen.getByRole('button', { name: 'Tercapai — Ubah hasil Budi Santoso untuk Persistency Push' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: `Diubah oleh Wilson Tanoto pada 10 Okt 2026: ${OVERRIDE.reason}` })).toBeInTheDocument();
   });
 
-  it('P18.98-T4 opens the dialog in Indonesian and says so when the result is set', async () => {
+  it('P18.10-T4 opens the dialog in Indonesian and says so when the result is set', async () => {
     stubFetch({
       [`PUT ${PATH}`]: { body: { campaignCode: CAMPAIGN.code, membershipId: 'mem-budi', status: 'not_met', override: null } },
     });

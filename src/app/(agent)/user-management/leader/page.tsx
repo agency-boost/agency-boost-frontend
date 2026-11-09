@@ -36,11 +36,11 @@ import {
  * its tile is not drawn yet, because a tile that does nothing is worse than one that is
  * absent.
  *
- * Its words are the catalogue's (`user-management.ts`; P18.98-T4) — *Changing leader goes through your office admin.*,
+ * Its words are the catalogue's (`user-management.ts`; P18.10-T4) — *Changing leader goes through your office admin.*,
  * the line a reader who has a leader sees in place of the search (ADR-0170 §6), verbatim among them. A leader's name,
  * their rung's badge and the office's label are shown as stored.
  *
- * **UI V1 (2026-10-30, Phase 18.99 T9).** **No invite card for somebody already in an office** (UI-086):
+ * **UI V1 (2026-10-30, Phase 18.11 T9).** **No invite card for somebody already in an office** (UI-086):
  * *Gunakan undangan saja* led to `/join`, which refuses anybody with a membership, with a leader or without one
  * (`GET /join/me`'s `kpmId` is the flag; widened from *with a leader* in T16). **One card for one fact** (UI-088): *Saat ini melapor ke* in sentence case over the
  * leader's name, and *Penggantian leader…* as 12px meta inside it — behind ⓘ on a phone; no orange left border. The
@@ -72,7 +72,7 @@ export default function FindLeaderPage() {
   const registered = Boolean(state?.kpmId);
   /** An office with no leader to find: the company's rungs by their short names (OD-50), as the badges write them. */
   const noLeaders = t.noLeaders({ ab: rungShort('AB', ladder), aab: rungShort('AAB', ladder) });
-  /** Somebody who already reports to a leader is not offered the search (P18.96-T3 AC-6, ADR-0170 §6). */
+  /** Somebody who already reports to a leader is not offered the search (P18.8-T3 AC-6, ADR-0170 §6). */
   const hasLeader = Boolean(state?.leaderMembershipId);
 
   useEffect(() => {
@@ -86,7 +86,7 @@ export default function FindLeaderPage() {
   }, [q, registered, hasLeader]);
 
   /**
-   * *Send request*, and *Request sent ✓* once the request is in (P18.95-T1 AC-6, ADR-0167 §5; UI-008), whether
+   * *Send request*, and *Request sent ✓* once the request is in (P18.7-T1 AC-6, ADR-0167 §5; UI-008), whether
    * or not the list read after it answers; the row's own *Request sent* pill follows with the list. A
    * refusal toasts nothing and stays in the banner.
    */
@@ -149,7 +149,7 @@ export default function FindLeaderPage() {
         <Card className="mb-4">
           <h2 className="flex items-center gap-1.5 font-display text-lg font-bold text-navy">
             {t.haveCode}
-            {/* Appendix A (UI-086): behind ⓘ from 768px; a phone has never shown it (P18.95-T7 AC-1, grey text row 1). */}
+            {/* Appendix A (UI-086): behind ⓘ from 768px; a phone has never shown it (P18.7-T7 AC-1, grey text row 1). */}
             <TippedGlyph glyph="ⓘ" name={t.haveCodeLine} tip={t.haveCodeLine} align="fit" className={cn('font-normal', REMOVED_ON_PHONE)} />
           </h2>
           <ButtonLink href="/join" variant="secondary" className="mt-3">
@@ -162,7 +162,7 @@ export default function FindLeaderPage() {
         <>
           {hasLeader ? (
             /*
-             * **Changing leader is the office's** (P18.96-T3 AC-6, ADR-0170 §6): the search stood here for a reader who
+             * **Changing leader is the office's** (P18.8-T3 AC-6, ADR-0170 §6): the search stood here for a reader who
              * already has a leader, and every request they sent was refused. **One card for the one fact** (UI-088): whom
              * they report to as its title, the client's line as 12px meta inside it — behind ⓘ on a phone.
              */
@@ -177,7 +177,7 @@ export default function FindLeaderPage() {
           ) : (
           <Card>
             {/*
-              * The client's words at every size (P18.95-T7 AC-1, grey text rows 3 and 2): *Find a leader*, where it
+              * The client's words at every size (P18.7-T7 AC-1, grey text rows 3 and 2): *Find a leader*, where it
               * named the office the tabs above already sit in, and the approval in four words.
               */}
             <h2 className="font-display text-lg font-bold text-navy">{t.findALeader}</h2>
@@ -198,7 +198,7 @@ export default function FindLeaderPage() {
                   key={l.membershipId}
                   className="flex flex-wrap items-center gap-3 rounded-md border border-hairline p-3"
                 >
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-navy-soft text-md font-bold text-card">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-secondary-hover text-md font-bold text-secondary-contrast">
                     {l.fullName
                       .split(/\s+/)
                       .map((part) => part[0])

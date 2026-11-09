@@ -2,6 +2,7 @@
 
 import { useId, useRef, type ReactNode } from 'react';
 import { cn } from '@/lib/cn';
+import { HEADER_CONTROL } from '@/components/ui/header-control';
 import { SEGMENT_PHONE, SEGMENT_WRAP_PHONE, SEGMENTS_PHONE } from '@/components/ui/phone';
 import { SEGMENT_TOUCH } from '@/components/ui/touch';
 import { useTabRow } from '@/components/ui/use-tab-row';
@@ -39,7 +40,10 @@ export interface SegmentedTab {
  * the track while their words fit, and when they do not the track scrolls sideways, fading on the side
  * that has more, with the selected one in view. Below 768px only (`phone.ts`, `use-tab-row.ts`).
  *
- * **Two options are the exception** (`phoneLayout="wrap"`, P18.95-T5 AC-7): a choice between two must show
+ * **A header control at every size** (P19.8-T1 AC-1; R6, D-38, MOB UI-171): each segment 13px, 600 and 44px tall at least —
+ * `HEADER_CONTROL` — on a laptop as on a phone. It was 44px below 1024px alone, and some 35px wider.
+ *
+ * **Two options are the exception** (`phoneLayout="wrap"`, P18.7-T5 AC-7): a choice between two must show
  * both, so the halves stay equal and a label wraps inside its own (`SEGMENT_WRAP_PHONE`) rather than the track
  * scrolling one of them out of sight — *Calculate from savings target* on `/goals` at 375px.
  */
@@ -62,7 +66,7 @@ export function Segmented({
   className?: string;
   /**
    * Below 768px: `scroll`, a row that scrolls when its words do not fit (the default), or `wrap`, equal halves whose
-   * words wrap inside them — for two options, which must both be seen (P18.95-T5 AC-7).
+   * words wrap inside them — for two options, which must both be seen (P18.7-T5 AC-7).
    */
   phoneLayout?: 'scroll' | 'wrap';
 }) {
@@ -111,11 +115,13 @@ export function Segmented({
                 e.preventDefault();
               }}
               className={cn(
-                'flex-1 rounded-md px-2.5 py-2 text-base font-semibold transition-colors',
-                // 44px tall below 1024px (UI V1, UI-010).
+                'flex-1 rounded-md px-2.5 py-2 transition-colors',
+                // A header control: 13px, 600, 44px at every size (P19.8-T1 AC-1; R6, MOB UI-171). It was 44px below
+                // 1024px alone (UI V1, UI-010), whose class stays for the field shell's touch rule.
+                HEADER_CONTROL,
                 SEGMENT_TOUCH,
                 phoneLayout === 'scroll' ? SEGMENT_PHONE : SEGMENT_WRAP_PHONE,
-                on ? 'bg-navy text-card' : 'text-muted hover:text-navy',
+                on ? 'bg-secondary text-secondary-contrast' : 'text-muted hover:text-navy',
               )}
             >
               {tab.label}

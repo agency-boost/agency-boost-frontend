@@ -5,7 +5,7 @@ import { cn } from '@/lib/cn';
 
 /**
  * **The client's *ⓘ* verdict on a grey sentence: on a phone, the sentence moves into an ⓘ beside its subject**
- * (P18.95-T7 AC-1; ADR-0167 §7, OD-202 — the review's *Grey text* table). Below 768px the glyph is drawn and a tap,
+ * (P18.7-T7 AC-1; ADR-0167 §7, OD-202 — the review's *Grey text* table). Below 768px the glyph is drawn and a tap,
  * a focus or a hover shows the words (`TippedGlyph`, ADR-0062 §2's second form); at 768px and wider it is not drawn,
  * and the sentence stands where it always stood (§12, OD-207). The sentence beside it takes `REMOVED_ON_PHONE`, so the
  * two never show together.

@@ -13,7 +13,7 @@ import { watchKeptTerms } from './kept-lang';
 import { readLanguageCookie, writeLanguageCookie } from './language-cookie';
 
 /**
- * **The reader's language** (ADR-0179 §2, §8; P18.98-T1 AC-3, AC-4, AC-5).
+ * **The reader's language** (ADR-0179 §2, §8; P18.10-T1 AC-3, AC-4, AC-5).
  *
  * Outside a provider it is **English**, the catalogue's source: every spec that renders a screen without asking for
  * a language reads it as it always has (AC-5). `test/harness.tsx`'s `renderInIndonesian` and `InLanguage` ask for
@@ -37,7 +37,7 @@ export const FigureLanguageContext = createContext<Language | null>(null);
 
 /**
  * **The language a figure is written in** — what a screen hands every formatter (`lib/format.ts`):
- * `formatCalendarDay(day, language)`, `formatRupiahCompact(minor, {}, language)`, `moneyPrefix(language)` (P18.98-T3;
+ * `formatCalendarDay(day, language)`, `formatRupiahCompact(minor, {}, language)`, `moneyPrefix(language)` (P18.10-T3;
  * ADR-0174, ADR-0179 §6). **The reader's chosen language, and with no choice `DEFAULT_LANGUAGE`, Bahasa Indonesia, in
  * every state of `LANGUAGE_LIVE`** (`figureLanguage`). Live, as it is since 2026-10-29, the two always agree: a reader
  * with no choice reads Indonesian words (`useLanguage`) and figures, and a reader who chose a language, by the cookie or
@@ -46,7 +46,7 @@ export const FigureLanguageContext = createContext<Language | null>(null);
  *
  * **Outside a provider it is the words' language**: English in every spec that does not ask, Indonesian under
  * `InLanguage`. A spec's language counts as a language the reader chose, so a spec reads its figures as it reads its
- * words (ADR-0179 §9), and every suite written since P18.98-T3 keeps its assertions.
+ * words (ADR-0179 §9), and every suite written since P18.10-T3 keeps its assertions.
  */
 export function useFigureLanguage(): Language {
   const words = useLanguage();
@@ -62,10 +62,10 @@ export function useMessages<E extends MessageTree>(area: MessageArea<E>): Messag
 }
 
 /**
- * **Choosing the language, and following an account's** (ADR-0179 §2; P18.98-T2 AC-3, AC-5).
+ * **Choosing the language, and following an account's** (ADR-0179 §2; P18.10-T2 AC-3, AC-5).
  *
  * - **`live`** — whether the product offers the choice: the switch and *Language* on *Your account* are drawn only
- *   while it is true (`LANGUAGE_LIVE`, `true` since P18.98-T4's exit, 2026-10-29).
+ *   while it is true (`LANGUAGE_LIVE`, `true` since P18.10-T4's exit, 2026-10-29).
  * - **`choose(language)`** — the reader chose, on the switch or on *Your account*: the screen is written in it at once,
  *   with no reload and no remount, so an open form keeps what was typed; the cookie keeps it for the browser, and the
  *   API is told it from the next request. Saving it on the account is the caller's (`useChooseLanguage`), which knows
@@ -110,10 +110,10 @@ function sessionKey(me: Me): string {
  *   (`pre-paint.ts`) is taken up: React re-renders in it before the browser paints, and a page the script held back
  *   for it (`LANGUAGE_PENDING`) is shown.
  * - **Every change after that** is written to `<html lang>`, so a screen reader pronounces the screen in its language
- *   (WCAG 3.1.1; parity F-258), and handed to the API client, which tells the API (`Accept-Language`, P18.98-T2 AC-6).
+ *   (WCAG 3.1.1; parity F-258), and handed to the API client, which tells the API (`Accept-Language`, P18.10-T2 AC-6).
  * - **The account's language**, from `GET /auth/me`, arrives through `follow` (above), in the same render as the
  *   session itself, so the first frame of a signed-in screen is already in it.
- * - **What the reader chose** is held, not only the language in force (P18.98-T3): the words are the choice, or
+ * - **What the reader chose** is held, not only the language in force (P18.10-T3): the words are the choice, or
  *   `unchosenLanguage(live)` with none, and **the figures are the choice, or `DEFAULT_LANGUAGE` with none**
  *   (`figureLanguage`, `useFigureLanguage`). A choice is the browser's — the cookie, read on the first commit as the
  *   pre-paint script read it — or one made since (`choose`), or the account's (`follow`). The prerender knows none, so
@@ -122,7 +122,7 @@ function sessionKey(me: Me): string {
  *   this first commit, so a field that keeps the text of its first frame (`DecimalInput`, a money field's draft) starts
  *   in the figures' language the reader reads.
  *
- * - **The kept-English terms**, in ID mode, carry `lang="en"` (`watchKeptTerms`, P18.98-T7 AC-2).
+ * - **The kept-English terms**, in ID mode, carry `lang="en"` (`watchKeptTerms`, P18.10-T7 AC-2).
  *
  * `live` is `LANGUAGE_LIVE`; a spec passes `live` to exercise the switch as it will be once released.
  */
@@ -155,7 +155,7 @@ export function LanguageProvider({ live = LANGUAGE_LIVE, children }: { live?: bo
     setRequestLanguage(language);
   }, [language, unchosen]);
 
-  // In ID mode every kept-English term the screen shows says it is English (WCAG 3.1.2; P18.98-T7 AC-2): one pass over
+  // In ID mode every kept-English term the screen shows says it is English (WCAG 3.1.2; P18.10-T7 AC-2): one pass over
   // the document, kept up as React writes it, undone the moment the words are English (`kept-lang.ts` says why).
   useEffect(() => (language === 'id' ? watchKeptTerms(document.body) : undefined), [language]);
 

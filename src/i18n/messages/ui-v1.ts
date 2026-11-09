@@ -2,7 +2,7 @@ import { defineMessages, type MessagesOf } from '@/i18n/catalogue';
 import { kept } from '@/i18n/kept';
 
 /**
- * **The shared components' own words** (UI V1, Phase 18.99 T2 — the report's *Shared components*; `components-and-
+ * **The shared components' own words** (UI V1, Phase 18.11 T2 — the report's *Shared components*; `components-and-
  * patterns.md`, *UI V1*). Built once and imported by every page that draws one: a sheet's ✕, a tree's ⌄, the daily
  * activity pill, the ratio card's header, the save state, the ⚡ marker, WhatsApp and Call and the number sheet behind
  * them, the agent search, the mascot. Words a caller owns — a pill's verdict, a tile's label, a confirmation — are the

@@ -1,9 +1,10 @@
 'use client';
 
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type FocusEvent, type ReactNode } from 'react';
-import { AutoMarker } from '@/components/ui/auto-marker';
-import { Button, Card, ErrorBanner } from '@/components/ui/field';
+import {
+  useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type FocusEvent, type ReactNode,
+} from 'react';
 import { LineIcon } from '@/components/ui/line-icon';
+import { Button, Card, ErrorBanner } from '@/components/ui/field';
 import { NumberBadge } from '@/components/ui/number-badge';
 import { PhoneTip } from '@/components/ui/phone-tip';
 import {
@@ -23,12 +24,16 @@ import type { TermKey } from '@/lib/terms';
 import { PRONOUN_FORMS, type CoacheeSubject } from '@/lib/coaching';
 import { kept } from '@/i18n/kept';
 import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
-import { voiceOf } from '@/i18n/messages/goal-words';
+import { goalWordMessages, voiceOf } from '@/i18n/messages/goal-words';
 import { goalsMessages } from '@/i18n/messages/goals';
-import { formatDay, formatDayLong, formatDecimalInput, formatNumber, formatRupiahCompact, moneyPrefix, parseDecimal } from '@/lib/format';
+import { uiV1Messages } from '@/i18n/messages/ui-v1';
 import {
-  goalBodyOf, goalInputsOf, groupDigits, parseDigits, previewGoal, producedFrom, readGoal, saveGoal, toMajor, toMinor,
-  type Goal, type GoalInputs, type GoalMode, type GoalPreview,
+  formatDay, formatDayLong, formatDecimalInput, formatMonth, formatNumber, formatRupiah, formatRupiahCompact, moneyPrefix,
+  parseDecimal,
+} from '@/lib/format';
+import {
+  automaticOf, caretAfterDigits, goalBodyOf, goalInputsOf, groupDigits, parseDigits, previewGoal, producedFrom, readGoal,
+  saveGoal, toMajor, toMinor, type Goal, type GoalInputs, type GoalMode, type GoalPreview,
 } from '@/lib/goals';
 import { useMediaQuery } from '@/lib/use-media-query';
 import { useSession } from '@/lib/session';
@@ -37,7 +42,7 @@ import { useTenantConfig, type TenantConfig } from '@/lib/tenant-config-cache';
 /**
  * The goal calculator (P8-T3) — `/goals`, and the same tool inside a coachee's *Goal Setting* tab (P11-T7 AC-5).
  *
- * **Since UI V1 (P18.99-T5, 2026-10-30) the revision is its design** (ADR-0180 §1; the report's UI-014 to UI-022 and
+ * **Since UI V1 (P18.11-T5, 2026-10-30) the revision is its design** (ADR-0180 §1; the report's UI-014 to UI-022 and
  * the `goals-mobile` and `goals-desktop` mockups):
  *
  * - **The answer first** (UI-014): an orange *Monthly activity target* card with this month's APE in a navy pill and
@@ -51,8 +56,14 @@ import { useTenantConfig, type TenantConfig } from '@/lib/tenant-config-cache';
  *   foot of the sticky right column from 1024px (UI-022).
  * - **The save state compares, it does not remember** (UI-019): `useSaveState` against the plan as saved, so a mode
  *   switched and back, or a value changed and changed back, reads *Tersimpan* again.
- * - **Step 2's two prefilled figures look alike and look editable** (UI-020): a white pill in normal ink with ✎, the
- *   ⚡ where the figure fills itself in.
+ * - **Step 2's two prefilled figures are one field, drawn alike** (UI-020 + UI-122, *Conflicts* row 146): a white 48px
+ *   pill in normal ink, the same width, **no ✎** — the whole pill is the input — each with its line under its name.
+ *   The months read *2,1 bulan*; **the APE produced the full rupiah figure, *Rp 67.000.000*, grouped as it is typed**
+ *   (P19.8-T5; MOB UI-190, ADR-0230 §2). On a laptop the two side by side, then the two tiles (UI-114).
+ * - **The member types over the automatic APE** (P19.8-T5; D-36, MOB UI-190, ADR-0230): prefilled with the office's
+ *   figure, *⚡ Otomatis · per Okt 2026* — also when the office uploaded it — and, typed over, *Diubah oleh Anda* with
+ *   *↶ Pakai otomatis (Rp 67 jt)*, which puts the office's figure back. On a phone the label takes the free width and
+ *   the pill is 150px (MOB UI-191).
  * - **No description pill under *Sales meeting*** (UI-021): on a tablet and a desktop an ⓘ beside a result tile says
  *   which of the office's activities it counts, where that differs from its name; on a phone nothing.
  * - **Two columns on a desktop** (UI-022): the four steps on the left; the result, the commitment and the save in a
@@ -72,14 +83,16 @@ import { useTenantConfig, type TenantConfig } from '@/lib/tenant-config-cache';
  *
  * What stays beyond the revision is what a requirement needs: *Set by your leader* (ADR-0046), the provenance marker
  * on the APE already produced (ADR-0063 §5), the disclaimer (L-29), the target-passed state (ADR-0047) — and **a figure
- * the office uploaded is not typed over** (P9-T6): since the staging review of 2026-10-31 it is plain figures, no pill
- * frame and no ✎, so it no longer looks like a field; its ⚡ and ⓘ say whose it is.
+ * the office uploaded is not a coach's to type over** (ADR-0183, kept by ADR-0230 §7): on a coachee's tab it is plain
+ * figures, no pill frame and no ✎, so it does not look like a field; its line says whose it is.
  *
  * **Step 2's two pills, since the staging review of 2026-10-31** (the product owner tapped *2 bulan ✎* on a phone and
- * typed *3*, and got *23*): the whole pill — the figure, the unit and the ✎ — is the field's target, and a tap selects
- * the whole figure, so what is typed replaces it. **The APE produced is typed by whoever saves the plan** while the
- * office holds no figure — the member on `/goals`, and since ADR-0183 a leader on the coachee's tab (the server stores
- * it on the same rule, `typedApeOf`).
+ * typed *3*, and got *23*): the whole pill — the figure and the unit; the ✎ went with UI-122 (P19.1-T4) — is the field's
+ * target, and a tap selects the whole figure, so what is typed replaces it. **The APE produced is the member's to type,
+ * always** (ADR-0230), and a leader's on the coachee's tab while the office holds no figure (ADR-0183; the server stores
+ * it on the same rule, `typedApeOf`). **It is the member's estimate** (UI-157, ADR-0195): one value with the Summary's
+ * *Isi produksi sementara* — *Diubah oleh Anda* here, *perkiraan Anda* there — and **the newer of it and the office's
+ * figure is the one in force** (ADR-0230 §6): an upload written after it replaces it.
  *
  * **Its words are the catalogue's** (`i18n/messages/goals.tsx`; the marker's `goal-words.ts`; the save state's and the
  * ⚡'s `ui-v1.ts`), every figure in the reader's figures (`useFigureLanguage()`). The activities a tile's ⓘ names are
@@ -119,7 +132,9 @@ export function GoalCalculator({
 }) {
   const { me } = useSession();
   const t = useMessages(goalsMessages);
+  const words = useMessages(goalWordMessages);
   const confirmed = useMessages(confirmationMessages);
+  const autoWords = useMessages(uiV1Messages);
   const language = useLanguage();
   const figures = useFigureLanguage();
   const { config } = useTenantConfig();
@@ -135,7 +150,7 @@ export function GoalCalculator({
   const [error, setError] = useState<ApiError | null>(null);
   const [previewError, setPreviewError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
-  /** *Goal saved ✓* once *Save goal* lands (P18.95-T1 AC-6; the shared toast, UI-070). */
+  /** *Goal saved ✓* once *Save goal* lands (P18.7-T1 AC-6; the shared toast, UI-070). */
   const { toast, show } = useToast();
 
   const load = useCallback(async () => {
@@ -247,20 +262,58 @@ export function GoalCalculator({
   const money = (minor: number) => formatRupiahCompact(minor, {}, figures);
 
   /*
-   * **A figure the office uploaded is nobody's to type** (P9-T6; ADR-0063 §5): plain figures, no pill frame, no ✎ — and
-   * its ⚡ and ⓘ say whose it is. **Otherwise it is typed by whoever saves the plan** (ADR-0183, partly reversing
-   * ADR-0075): the member on `/goals`, a leader on the coachee's tab — the save stores it on the same rule.
+   * **Step ②'s APE produced** (P19.8-T5; D-36, MOB UI-190, ADR-0230). The pill holds **the typed figure in force**, or
+   * **the automatic one** — the office's year to date, `null` while it holds none — and is prefilled with it, marked
+   * *⚡ Otomatis · per {month}*, also when the office uploaded it. **The member types over it, always**; a leader on the
+   * coachee's tab only while the office holds none (ADR-0183, kept by §7), and otherwise reads plain figures.
    */
-  const ownFigure = shown.achieved.provenance === 'self_reported';
-  const producedTypable = ownFigure;
-  const produced = producedFrom(shown.achieved, 'year', subject?.pronoun, figures, language);
+  const automatic = automaticOf(goal);
+  const producedTypable = mine || automatic === null;
+  const typedShown = draft.apeAchievedMinor !== null;
+  const producedValue = draft.apeAchievedMinor ?? automatic?.minor ?? 0;
+  /** Whether this edit changed the figure — the reader's own typing, whoever they are. */
+  const producedChanged = saved !== null && draft.apeAchievedMinor !== saved.apeAchievedMinor;
+  const typedBy = goal.achieved.provenance === 'self_reported' ? goal.achieved.typedBy : undefined;
+  /*
+   * **The line under its name** (ADR-0230 §1, §4; MOB UI-191): *Diubah oleh Anda* with a person for a figure the reader
+   * typed — on Goal Settings it replaces *perkiraan Anda* — ADR-0183's *Diisi oleh {name}* for a coach's, the member's
+   * own estimate on a coachee's tab (*the coach's view labels it as the member's*), and *⚡ Otomatis · per {month}* for
+   * the office's, whose ⓘ says who corrected it where somebody did. Nothing with neither: no figure is claimed.
+   */
+  const producedLine = typedShown ? (
+    producedChanged || (mine && !typedBy) ? <FigureLine kind="edited">{t.edited}</FigureLine>
+      : typedBy ? <FigureLine kind="typed-by">{words.produced.typedBy({ name: typedBy.name })}</FigureLine>
+        : <FigureLine kind="estimate">{words.produced.own({ who: voice })}</FigureLine>
+  ) : automatic ? (
+    <FigureLine
+      kind="auto"
+      info={automatic.provenance === 'corrected' ? {
+        name: autoWords.auto.why({ name: t.produced }),
+        tip: producedFrom(automatic, 'year', subject?.pronoun, figures, language),
+      } : undefined}
+    >
+      {t.automatic({ month: formatMonth(automatic.month, figures) })}
+    </FigureLine>
+  ) : null;
+  /** *↶ Pakai otomatis (Rp 67 jt)* (ADR-0230 §4): back to the office's figure; none without one. */
+  const useAutomatic = producedTypable && typedShown && automatic ? (
+    <button
+      type="button"
+      data-use-automatic=""
+      onClick={() => set({ apeAchievedMinor: null })}
+      className="inline-flex min-h-8 items-center gap-1 rounded-row px-1 text-base font-semibold text-secondary-ink hover:underline"
+    >
+      <LineIcon name="undo" className="h-4 w-4" />
+      {t.useAutomatic({ amount: money(automatic.minor) })}
+    </button>
+  ) : null;
 
   const monthsField = (
     <PillDecimal
       id="goal-months"
       label={t.monthsLeftThisYear}
       // The ⚡ while the figure is the office's calendar (UI-020, D-25); gone once it is typed over.
-      marker={draft.monthsLeft === null ? <AutoMarker name={t.monthsLeftThisYear} /> : null}
+      line={draft.monthsLeft === null ? <FigureLine kind="auto">{t.automatic({ month: null })}</FigureLine> : null}
       value={draft.monthsLeft ?? shown.monthsLeft}
       unit={t.months}
       onValueChange={(monthsLeft) => set({ monthsLeft })}
@@ -271,18 +324,18 @@ export function GoalCalculator({
     <PillMoney
       id="goal-achieved"
       label={t.produced}
-      marker={null}
-      value={draft.apeAchievedMinor}
+      line={producedLine}
+      after={useAutomatic}
+      edited={typedShown}
+      value={producedValue}
       onChange={(apeAchievedMinor) => set({ apeAchievedMinor })}
       layout={below ? 'row' : 'stacked'}
     />
   ) : (
     <PillReadOnly
       label={t.produced}
-      marker={ownFigure
-        ? <TippedGlyph glyph="ⓘ" name={produced} tip={produced} align="fit" className="-my-2 align-middle" />
-        : <AutoMarker name={t.produced} explanation={produced} />}
-      value={money(shown.achieved.minor)}
+      line={producedLine}
+      value={formatRupiah(producedValue, figures)}
       layout={below ? 'row' : 'stacked'}
     />
   );
@@ -290,7 +343,7 @@ export function GoalCalculator({
   const stepOne = (
     <Step n={1} title={mine ? t.target.mine : t.target.theirs} term="APE">
       {/*
-        * **Two segments, both visible** (`:2865-2868`), sharing the track on a phone (P18.95-T5 AC-7). Switching and
+        * **Two segments, both visible** (`:2865-2868`), sharing the track on a phone (P18.7-T5 AC-7). Switching and
         * switching back leaves the plan as saved (UI-019): both targets are kept in either mode.
         */}
       <Segmented
@@ -356,12 +409,22 @@ export function GoalCalculator({
           )}
         </>
       ) : (
-        <div className="grid grid-cols-4 items-end gap-2.5">
-          {monthsField}
-          {producedField}
-          {projected && <GoalTile label={t.remaining} value={money(projected.remainingApeMinor)} />}
-          {projected && <GoalTile variant="insight" label={t.monthlyTarget} value={money(projected.monthlyApeTargetMinor)} />}
-        </div>
+        /*
+         * **A laptop** (`goals-desktop-2026-11-02`; UI-114, *Conflicts* row 152): the two fields side by side, then the two
+         * result tiles side by side — not four across, which wrapped every label at 1024.
+         */
+        <>
+          <div data-step-two="fields" className="grid grid-cols-2 items-start gap-2.5">
+            {monthsField}
+            {producedField}
+          </div>
+          {projected && (
+            <div data-step-two="tiles" className="mt-2.5 grid grid-cols-2 gap-2.5">
+              <GoalTile label={t.remaining} value={money(projected.remainingApeMinor)} />
+              <GoalTile variant="insight" label={t.monthlyTarget} value={money(projected.monthlyApeTargetMinor)} />
+            </div>
+          )}
+        </>
       )}
     </Step>
   );
@@ -391,22 +454,24 @@ export function GoalCalculator({
           {policyTiles && <div className="mt-3 grid grid-cols-2 gap-2">{policyTiles}</div>}
         </>
       ) : (
-        <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)] items-center gap-3">
+        // A laptop (UI-114): the slider across, then its two tiles side by side, so no label wraps more than once.
+        <>
           {caseSizeSlider}
-          {policyTiles}
-        </div>
+          {policyTiles && <div data-step-three="tiles" className="mt-3 grid grid-cols-2 gap-2.5">{policyTiles}</div>}
+        </>
       )}
     </Step>
   );
 
   /*
    * **The two rates, 5 points a press** (UI-016): *Appointment to meeting* (the owner's name, as the ratio *Set
-   * appointment to meeting*) and *Closing rate*. Unsaved, each opens on the office's benchmark (ADR-0160 §3). Side by side
-   * on a desktop, one under the other below it.
+   * appointment to meeting*) and *Closing rate*. Unsaved, each opens on the office's benchmark (ADR-0160 §3). **One under
+   * the other at every size** since `goals-desktop-2026-11-02` (UI-114: side by side, *Appointment to meeting* was cut at
+   * 1280).
    */
   const stepFour = (
     <Step n={4} title={t.assumptions}>
-      <div className={cn('grid gap-2', !below && 'grid-cols-2')}>
+      <div data-step-four="" className="grid gap-2">
         <StepperRow
           label={t.appointmentToMeeting}
           value={draft.leadsToApptPct}
@@ -486,9 +551,9 @@ export function GoalCalculator({
    * tablet, nothing on a phone (the report's Appendix A).
    */
   const commitment = (
-    <div className="rounded-lg bg-navy px-4 py-3.5 text-sidebar-text">
+    <div className="rounded-lg bg-secondary px-4 py-3.5 text-sidebar-text">
       <div className="flex items-center gap-1">
-        <h2 className="text-xs font-bold uppercase tracking-[0.06em] text-amber">
+        <h2 className="text-xs font-bold uppercase tracking-[0.06em] text-primary-on-secondary">
           {t.commitment({ mine, date: goal.savedAt ? formatDay(goal.savedAt, figures) : null })}
         </h2>
         {below && (
@@ -498,12 +563,12 @@ export function GoalCalculator({
             tip={t.disclaimer}
             align="fit"
             className="-my-2 max-md:hidden"
-            face="text-on-navy-muted"
+            face="text-secondary-muted"
           />
         )}
       </div>
       {projected && !projected.targetMet && (
-        <p className="mt-1.5 text-[0.9375rem] font-medium leading-relaxed text-white">
+        <p className="mt-1.5 text-[0.9375rem] font-medium leading-relaxed text-secondary-contrast">
           {t.pledge({
             strong: (words) => <Figure>{words}</Figure>,
             monthly: money(projected.monthlyApeTargetMinor),
@@ -532,7 +597,7 @@ export function GoalCalculator({
         * is owed is knowing. On a coachee's tab it would describe the reader to themselves.
         */}
       {byLeader && (
-        <Card density="compact" className="border-amber/40 bg-amber/5">
+        <Card density="compact" className="border-primary/40 bg-primary/5">
           <p className="text-md text-navy">
             {t.setByLeader({
               strong: (words) => <strong>{words}</strong>,
@@ -619,7 +684,7 @@ function previewOf(goal: Goal): GoalPreview {
  * emphasis is semantic, and a reader who cannot see the colour still hears it.
  */
 function Figure({ children }: { children: ReactNode }) {
-  return <strong className="font-extrabold text-amber">{children}</strong>;
+  return <strong className="font-extrabold text-primary-on-secondary">{children}</strong>;
 }
 
 /**
@@ -628,10 +693,10 @@ function Figure({ children }: { children: ReactNode }) {
  */
 function ResultCard({ title, pill, children }: { title: string; pill: string | null; children: ReactNode }) {
   return (
-    <section aria-labelledby="goal-result-title" data-goal-result="" className="rounded-lg bg-amber p-3">
+    <section aria-labelledby="goal-result-title" data-goal-result="" className="rounded-lg bg-primary p-3">
       <div className="mb-2 flex items-center justify-between gap-2">
-        <h2 id="goal-result-title" className="text-[0.9375rem] font-bold text-navy">{title}</h2>
-        {pill && <span className="whitespace-nowrap rounded-pill bg-navy px-2.5 py-0.5 text-xs font-bold text-card">{pill}</span>}
+        <h2 id="goal-result-title" className="text-[0.9375rem] font-bold text-primary-contrast">{title}</h2>
+        {pill && <span className="whitespace-nowrap rounded-pill bg-secondary px-2.5 py-0.5 text-xs font-bold text-secondary-contrast">{pill}</span>}
       </div>
       {children}
     </section>
@@ -650,9 +715,9 @@ function ResultTile({ label, n, week, counts, hero = false }: {
     <div
       data-result-tile=""
       data-hero={hero ? 'true' : undefined}
-      className={cn('flex min-w-0 flex-col rounded-row px-2.5 py-2', hero ? 'bg-navy text-card' : 'bg-card text-ink')}
+      className={cn('flex min-w-0 flex-col rounded-row px-2.5 py-2', hero ? 'bg-secondary text-secondary-contrast' : 'bg-card text-ink')}
     >
-      <span className={cn('text-[1.875rem] font-extrabold leading-tight tabular-nums', hero && 'text-amber')}>{n}</span>
+      <span className={cn('text-[1.875rem] font-extrabold leading-tight tabular-nums', hero && 'text-primary-on-secondary')}>{n}</span>
       <span className="flex items-start gap-0.5 text-xs font-bold leading-snug">
         <span className="min-w-0">{label}</span>
         {counts && (
@@ -662,11 +727,11 @@ function ResultTile({ label, n, week, counts, hero = false }: {
             tip={counts}
             align="fit"
             className="-my-1.5 max-md:hidden"
-            face={hero ? 'text-on-navy-muted' : undefined}
+            face={hero ? 'text-secondary-muted' : undefined}
           />
         )}
       </span>
-      <span className={cn('mt-auto pt-0.5 text-xs font-medium', hero ? 'text-on-navy-muted' : 'text-muted')}>{week}</span>
+      <span className={cn('mt-auto pt-0.5 text-xs font-medium', hero ? 'text-secondary-muted' : 'text-muted')}>{week}</span>
     </div>
   );
 }
@@ -681,10 +746,10 @@ function GoalTile({ label, value, unit, variant = 'plain', className }: {
   return (
     <div
       data-variant={variant}
-      className={cn('min-w-0 rounded-row px-3 py-2.5', variant === 'plain' ? 'bg-base' : 'bg-amber/[0.14]', className)}
+      className={cn('min-w-0 rounded-row px-3 py-2.5', variant === 'plain' ? 'bg-base' : 'bg-primary/[0.14]', className)}
     >
       <span className="block text-base font-medium text-muted">{label}</span>
-      <span className={cn('text-[1.375rem] font-extrabold leading-tight', variant === 'plain' ? 'text-ink' : 'text-amber-deep')}>
+      <span className={cn('text-[1.375rem] font-extrabold leading-tight', variant === 'plain' ? 'text-ink' : 'text-primary-deep')}>
         {value}
         {unit ? <span className="ml-1 text-base font-semibold">{unit}</span> : null}
       </span>
@@ -721,23 +786,74 @@ function RupiahSlider({ label, track, value, onChange, info }: {
   );
 }
 
-/** The pill a prefilled figure stands in (UI-020): white, 48px, a 1.5px line, the figure 16px/700 in normal ink. */
+/**
+ * The pill a prefilled figure stands in (UI-020): white, 48px, a 1.5px line, the figure 16px/700 in normal ink — 16px
+ * so a phone does not zoom on it. A phone's is 12px in from each end (the draft mockup, P19.8-T5).
+ */
 const PILL = cn(
-  'inline-flex h-12 items-center gap-1.5 rounded-pill border-[1.5px] border-line bg-card px-3.5 text-lg font-bold text-ink',
-  'focus-within:border-amber focus-within:ring-2 focus-within:ring-amber focus-within:ring-offset-1',
+  'inline-flex h-12 items-center gap-1.5 rounded-pill border-[1.5px] border-line bg-card px-3.5 text-lg font-bold text-ink max-md:px-3',
+  'focus-within:border-primary focus-within:ring-2 focus-within:ring-focus-ring focus-within:ring-offset-1',
 );
 
-/** Where a pill's label goes: on its left in a 56px row below 1024px, above it from 1024px (UI-020). */
-function PillLine({ layout, label, children }: { layout: 'row' | 'stacked'; label: ReactNode; children: ReactNode }) {
+/**
+ * **The line under a figure's name** (P19.8-T5; MOB UI-190, MOB UI-191; ADR-0230 §1, §4): 12px/600, an icon and its
+ * words — ⚡ *Otomatis · per Okt 2026* in the accent's ink for the office's figure, a person and *Diubah oleh Anda* in
+ * the second colour's for a figure somebody typed. `info` is an ⓘ after the words where they leave something out: who
+ * corrected the office's figure.
+ */
+function FigureLine({ kind, info, children }: {
+  kind: 'auto' | 'edited' | 'typed-by' | 'estimate';
+  info?: { name: string; tip: string };
+  children: ReactNode;
+}) {
+  const auto = kind === 'auto';
+  return (
+    <span
+      data-figure-line={kind}
+      className={cn(
+        'mt-0.5 flex min-w-0 items-center gap-1 text-xs font-semibold leading-snug',
+        auto ? 'text-primary-ink' : 'text-secondary-ink',
+      )}
+    >
+      <LineIcon name={auto ? 'bolt' : 'user'} className="h-3.5 w-3.5 shrink-0" />
+      <span className="min-w-0">{children}</span>
+      {info && <TippedGlyph glyph="ⓘ" name={info.name} tip={info.tip} align="fit" className="-my-2" face="text-signal-grey" />}
+    </span>
+  );
+}
+
+/**
+ * Where a pill's label goes: on its left in a 56px row below 1024px, above it from 1024px (UI-020). `line` is the line
+ * under the label (`FigureLine`), `after` what follows the pill — *↶ Pakai otomatis*, under it on the right.
+ *
+ * **On a phone the label takes the free width, 15px** (P19.8-T5 AC-6; MOB UI-191: *"label column takes the free width
+ * (pill 150px on the right), 15px, max 2 lines + the small ⚡ line"*), so *APE yang sudah dicapai tahun ini* reads in two
+ * lines where it was squeezed into four. A tablet's row keeps its size.
+ */
+function PillLine({ layout, label, line, after, children }: {
+  layout: 'row' | 'stacked'; label: ReactNode; line?: ReactNode; after?: ReactNode; children: ReactNode;
+}) {
   return layout === 'row' ? (
-    <div className="flex min-h-14 items-center justify-between gap-2">
-      <span className="flex min-w-0 items-center gap-1 text-md font-medium leading-snug text-ink">{label}</span>
-      <span className="shrink-0">{children}</span>
+    <div data-pill-line="">
+      <div className="flex min-h-14 items-center justify-between gap-2.5">
+        <span className="flex min-w-0 flex-col max-md:flex-1">
+          <span className="flex min-w-0 items-center gap-1 text-md font-medium leading-snug text-ink max-md:text-[0.9375rem] max-md:font-normal">
+            {label}
+          </span>
+          {line}
+        </span>
+        <span className="shrink-0">{children}</span>
+      </div>
+      {after && <div className="-mt-1 flex justify-end">{after}</div>}
     </div>
   ) : (
-    <div className="flex min-w-0 flex-col gap-1.5">
-      <span className="flex items-center gap-1 text-base font-medium text-muted">{label}</span>
+    <div data-pill-line="" className="flex min-w-0 flex-col gap-1.5">
+      <span className="flex flex-col">
+        <span className="flex items-center gap-1 text-base font-medium text-muted">{label}</span>
+        {line}
+      </span>
       {children}
+      {after && <div className="flex justify-end">{after}</div>}
     </div>
   );
 }
@@ -769,15 +885,25 @@ function useSelectAll() {
 }
 
 /**
- * **The whole pill is the field's target** (the staging review of 2026-10-31): a `<label>` around the figure, the unit
- * and the ✎, 48px high, so a tap on any of them focuses the field — not only on the figure's own ~48px. The field is
- * named by the line's label alone (`aria-labelledby`), never by the unit or the figure the pill also holds.
+ * **The whole pill is the field's target** (the staging review of 2026-10-31; UI-122): a `<label>` around the figure and
+ * the unit, 48px high, so a tap anywhere on it focuses the field — not only on the figure's own ~48px. **No ✎** (UI-122,
+ * *Conflicts* row 146), and **one width for both** (`PILL_WIDTH` in a row — 150px on a phone, MOB UI-191; the column's
+ * from 1024px). The field is named by the line's label alone (`aria-labelledby`), never by the unit or the figure the
+ * pill also holds. `edited`: a figure the reader typed over the automatic one, its edge in the second colour (the draft
+ * mockup's).
  */
-function PillField({ id, layout, width, children }: {
-  id: string; layout: 'row' | 'stacked'; width: string; children: ReactNode;
+const PILL_WIDTH = 'w-40 max-md:w-[9.375rem]';
+
+function PillField({ id, layout, edited = false, children }: {
+  id: string; layout: 'row' | 'stacked'; edited?: boolean; children: ReactNode;
 }) {
   return (
-    <label htmlFor={id} className={cn(PILL, 'cursor-text', layout === 'row' ? width : 'w-full')}>
+    <label
+      htmlFor={id}
+      data-pill=""
+      data-edited={edited ? 'true' : undefined}
+      className={cn(PILL, 'cursor-text', edited && 'border-secondary', layout === 'row' ? PILL_WIDTH : 'w-full')}
+    >
       {children}
     </label>
   );
@@ -788,23 +914,25 @@ function PillField({ id, layout, width, children }: {
  * tapped — a comma or a point (ADR-0167 §1), a numeric keyboard, 16px. Emptied, it goes back to the office's calendar
  * (`null`).
  */
-function PillDecimal({ id, label, marker, value, unit, onValueChange, layout }: {
-  id: string; label: string; marker: ReactNode; value: number; unit: string;
+function PillDecimal({ id, label, line, value, unit, onValueChange, layout }: {
+  id: string; label: string; line: ReactNode; value: number; unit: string;
   onValueChange: (value: number | null) => void; layout: 'row' | 'stacked';
 }) {
   const figures = useFigureLanguage();
   const [typing, setTyping] = useState<string | null>(null);
   const selectAll = useSelectAll();
   const nameId = useId();
+  const lineId = useId();
   return (
-    <PillLine layout={layout} label={<><label id={nameId} htmlFor={id}>{label}</label>{marker}</>}>
-      <PillField id={id} layout={layout} width="w-36">
+    <PillLine layout={layout} label={<label id={nameId} htmlFor={id}>{label}</label>} line={line && <span id={lineId}>{line}</span>}>
+      <PillField id={id} layout={layout}>
         <input
           id={id}
           type="text"
           inputMode="decimal"
           autoComplete="off"
           aria-labelledby={nameId}
+          aria-describedby={line ? lineId : undefined}
           value={typing ?? formatNumber(value, { maxDecimals: 1 }, figures)}
           {...selectAll}
           onFocus={(e) => {
@@ -825,38 +953,60 @@ function PillDecimal({ id, label, marker, value, unit, onValueChange, layout }: 
           className="w-full min-w-0 bg-transparent text-right font-bold text-ink outline-none [font-size:16px]"
         />
         <span className="shrink-0 font-bold">{unit}</span>
-        <LineIcon name="pencil" className="h-4 w-4 shrink-0 text-signal-grey" />
       </PillField>
     </PillLine>
   );
 }
 
 /**
- * **The APE already produced, typed** (UI-020; ADR-0183): short — *Rp 290 jt* — until tapped, then every digit,
- * grouped as it is typed (*290.000.000*), the currency mark beside it. Digits only, in either language's grouping.
+ * **The APE produced, typed** (UI-020; P19.8-T5 AC-2, MOB UI-190, ADR-0230 §2): **the full rupiah figure, never
+ * *jt*** — *Rp 67.000.000*, the currency mark beside the digits — and **grouped while it is typed**, the caret kept
+ * after the digit it followed (`caretAfterDigits`). Digits only, in either language's grouping; the number keypad.
+ * Emptied, or 0, it is no typed figure (`null`): the automatic one again once the field is left.
  */
-function PillMoney({ id, label, marker, value, onChange, layout }: {
-  id: string; label: string; marker: ReactNode; value: number; onChange: (minor: number) => void;
-  layout: 'row' | 'stacked';
+function PillMoney({ id, label, line, after, edited, value, onChange, layout }: {
+  id: string; label: string; line: ReactNode; after?: ReactNode; edited: boolean; value: number;
+  onChange: (minor: number | null) => void; layout: 'row' | 'stacked';
 }) {
   const figures = useFigureLanguage();
   const [typing, setTyping] = useState<string | null>(null);
+  const input = useRef<HTMLInputElement>(null);
+  /** Where the caret goes once the grouped figure is drawn. */
+  const caret = useRef<number | null>(null);
   const selectAll = useSelectAll();
   const nameId = useId();
+  const lineId = useId();
+  const grouped = (minor: number) => groupDigits(toMajor(minor), figures);
+
+  useLayoutEffect(() => {
+    const at = caret.current;
+    const field = input.current;
+    if (at === null || !field || document.activeElement !== field) return;
+    caret.current = null;
+    field.setSelectionRange(at, at);
+  });
+
   return (
-    <PillLine layout={layout} label={<><label id={nameId} htmlFor={id}>{label}</label>{marker}</>}>
-      <PillField id={id} layout={layout} width="w-40">
-        {typing !== null && <span aria-hidden="true" className="shrink-0 font-bold text-muted">{moneyPrefix(figures)}</span>}
+    <PillLine
+      layout={layout}
+      label={<label id={nameId} htmlFor={id}>{label}</label>}
+      line={line && <span id={lineId}>{line}</span>}
+      after={after}
+    >
+      <PillField id={id} layout={layout} edited={edited}>
+        <span aria-hidden="true" className="shrink-0 font-bold text-ink">{moneyPrefix(figures)}</span>
         <input
+          ref={input}
           id={id}
           type="text"
           inputMode="numeric"
           autoComplete="off"
           aria-labelledby={nameId}
-          value={typing ?? formatRupiahCompact(value, {}, figures)}
+          aria-describedby={line ? lineId : undefined}
+          value={typing ?? grouped(value)}
           {...selectAll}
           onFocus={(e) => {
-            setTyping(groupDigits(toMajor(value), figures));
+            setTyping(grouped(value));
             selectAll.onFocus(e);
           }}
           onBlur={() => {
@@ -864,43 +1014,60 @@ function PillMoney({ id, label, marker, value, onChange, layout }: {
             selectAll.onBlur();
           }}
           onChange={(e) => {
-            const digits = e.target.value.replace(/\D/g, '');
+            const typed = e.target.value;
+            const digits = typed.replace(/\D/g, '');
             const major = parseDigits(digits);
-            setTyping(digits === '' ? '' : groupDigits(major, figures));
+            if (major === 0) {
+              // Nothing, or only zeros: no typed figure; what is in the box stays as typed, the caret at its end.
+              const kept = digits === '' ? '' : '0';
+              caret.current = kept.length;
+              setTyping(kept);
+              onChange(null);
+              return;
+            }
+            // The digits left of the caret, less the leading zeros the grouping drops, say where it goes back.
+            const at = e.target.selectionStart ?? typed.length;
+            const leading = digits.length - digits.replace(/^0+/, '').length;
+            const before = Math.max(0, typed.slice(0, at).replace(/\D/g, '').length - leading);
+            const next = groupDigits(major, figures);
+            caret.current = caretAfterDigits(next, before);
+            setTyping(next);
             onChange(toMinor(major));
           }}
           className="w-full min-w-0 bg-transparent text-right font-bold text-ink outline-none [font-size:16px]"
         />
-        <LineIcon name="pencil" className="h-4 w-4 shrink-0 text-signal-grey" />
       </PillField>
     </PillLine>
   );
 }
 
 /**
- * **The office's figure** (P9-T6): nothing typed here would be read, so since the staging review of 2026-10-31 it is
- * **plain figures, not a pill** — no frame, no fill, no ✎ — and no longer looks tappable; the ⚡ and the ⓘ beside the
- * label say whose it is. A `<dl>`, so the label names the figure.
+ * **The office's figure, on a coachee's tab** (P9-T6; ADR-0183, kept by ADR-0230 §7): nothing a coach types over it would
+ * be read, so it is **plain figures, not a pill** — no frame, no fill, no ✎ — and does not look tappable; the line under
+ * its name says whose it is. The full rupiah figure, as the member's own pill shows it (ADR-0230 §2). A `<dl>`, so the
+ * label names the figure.
  */
-function PillReadOnly({ label, marker, value, layout }: {
-  label: string; marker: ReactNode; value: string; layout: 'row' | 'stacked';
+function PillReadOnly({ label, line, value, layout }: {
+  label: string; line: ReactNode; value: string; layout: 'row' | 'stacked';
 }) {
   return (
-    <dl className={layout === 'row' ? 'flex min-h-14 items-center justify-between gap-2' : 'flex min-w-0 flex-col gap-1.5'}>
-      <dt
-        className={cn(
-          'flex min-w-0 items-center gap-1 font-medium leading-snug',
-          layout === 'row' ? 'text-md text-ink' : 'text-base text-muted',
-        )}
-      >
-        {label}
-        {marker}
+    <dl className={layout === 'row' ? 'flex min-h-14 items-center justify-between gap-2.5' : 'flex min-w-0 flex-col gap-1.5'}>
+      <dt className={cn('flex min-w-0 flex-col', layout === 'row' && 'max-md:flex-1')}>
+        <span
+          className={cn(
+            'flex min-w-0 items-center gap-1 font-medium leading-snug',
+            layout === 'row' ? 'text-md text-ink max-md:text-[0.9375rem] max-md:font-normal' : 'text-base text-muted',
+          )}
+        >
+          {label}
+        </span>
+        {line}
       </dt>
       <dd
         data-read-only=""
         className={cn(
-          'inline-flex h-12 shrink-0 items-center justify-end px-3.5 text-lg font-bold text-ink',
-          layout === 'row' ? 'w-40' : 'w-full',
+          'inline-flex h-12 shrink-0 items-center justify-end px-3.5 text-lg font-bold text-ink max-md:px-3',
+          layout === 'row' ? PILL_WIDTH : 'w-full',
         )}
       >
         {value}
@@ -945,7 +1112,7 @@ const LABEL = {
 } as const;
 
 /**
- * **The names of the activities each stage counts** (P18.95-T5 AC-5): the office's own label for every code its
+ * **The names of the activities each stage counts** (P18.7-T5 AC-5): the office's own label for every code its
  * activity binding names for the stage, as Log Activity prints it — read from the published configuration by code
  * (invariant §4), so a renamed activity renames its ⓘ. A code with no active type behind it is not named; `null`
  * until the configuration arrives.
@@ -983,12 +1150,12 @@ function countsOf(names: readonly string[] | null, label: string): string | unde
 /**
  * One of the four steps: a filled navy ordinal (the mockups' `.num`), a question 16px/700, and what answers it. The
  * badge is `aria-hidden` (`NumberBadge`): the heading beside it is the name. `term` is a term the title uses, whose ⓘ
- * follows it (P18.95-T9 AC-3) — beside the heading, so its name stays the title.
+ * follows it (P18.7-T9 AC-3) — beside the heading, so its name stays the title.
  */
 function Step({ n, title, term, children }: { n: number; title: string; term?: TermKey; children: ReactNode }) {
   const heading = (
     <h2 className="flex items-center gap-2 text-lg font-bold text-ink">
-      <NumberBadge n={n} size="md" className="border-navy bg-navy text-card" />
+      <NumberBadge n={n} size="md" className="border-secondary bg-secondary text-secondary-contrast" />
       {title}
     </h2>
   );

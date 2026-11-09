@@ -16,7 +16,8 @@ import { formatBenchmark, formatRatioForStatus } from '@/lib/ratio-format';
  * Unit Activities*). Personal Summary, the Coaching Session, Activity › Ratio and the Unit Dashboard's Activities tab.
  *
  * - **A navy card** (the app's navy, O-1), 16px corners, 12px 14px of room. Its header is inside it — *Ratio · 30 hari
- *   terakhir* 14px/600 — with `headerRight` beside it for the Unit Dashboard's *Unit | Group*.
+ *   terakhir* 14px/700, the section titles' size since the owner's review of 7 November (MOB UI-185) — with `headerRight`
+ *   beside it for the Unit Dashboard's *Unit ⌄* picker (MOB UI-184).
  * - **The split bar**: the balance ratio (`comparison: 'band'`) as each side's share — *Selling 58%* on the accent,
  *   *Recruitment 42%* on lavender — the words inside the bar, 12px/600. **Navy words on the accent** (5.9:1) and white on
  *   lavender (4.77:1), not the mockups' white on the accent (2.38:1, under AA): a word sitting on whichever side is under
@@ -70,7 +71,8 @@ export function RatioCard({
       className={cn('rounded-lg bg-navy px-3.5 py-3 text-white', className)}
     >
       <div className="mb-1 flex min-h-8 items-center gap-2">
-        <Heading id={titleId} className="min-w-0 flex-1 font-body text-md font-semibold text-white">{t.ratio.title({ days })}</Heading>
+        {/* The section titles' one size, 14px / 700 (P19.8-T4 AC-8, MOB UI-185; ADR-0227 §4), white on the navy. */}
+        <Heading id={titleId} data-section-title="" className="min-w-0 flex-1 font-body text-md font-bold text-white">{t.ratio.title({ days })}</Heading>
         {headerRight}
       </div>
       {error ? (

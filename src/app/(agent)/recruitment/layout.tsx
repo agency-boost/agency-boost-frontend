@@ -21,7 +21,7 @@ import { ATTACK_PLAN_HREF, PITCH_MATERIALS_HREF } from '@/lib/recruitment';
 export default function RecruitmentLayout({ children }: { children: ReactNode }) {
   const t = useMessages(recruitmentPlanMessages);
   return (
-    // The sub-line is not drawn on a phone: the client's *Remove* (P18.95-T7 AC-1, grey text row 8).
+    // The sub-line is not drawn on a phone: the client's *Remove* (P18.7-T7 AC-1, grey text row 8).
     <Page title={t.title} subtitle={t.subtitle} subtitleOnPhone={false} permission="recruitment:read">
       {/* One segmented control on a phone (UI V1, UI-107), the underlined strip from 768px. */}
       <PlanTabs

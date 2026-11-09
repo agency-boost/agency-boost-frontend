@@ -5,7 +5,7 @@ import { renderWithSession, stubFetch } from '@test/harness';
 import { AUTH_PAGE } from '@/components/auth-page';
 import RegisterPage from './page';
 
-/** The page's query string: `?invite=…` for a leader's invite (P18.96-T3), nothing otherwise. */
+/** The page's query string: `?invite=…` for a leader's invite (P18.8-T3), nothing otherwise. */
 const query = { current: '' };
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
@@ -32,7 +32,7 @@ async function fill(password = 'a long enough password') {
 }
 
 /**
- * What a person records (ADR-0158, P18.8-T4). A `type="date"` or `type="month"` input takes a value,
+ * What a person records (ADR-0158, P18.5-T4). A `type="date"` or `type="month"` input takes a value,
  * not keystrokes: jsdom has no picker to type into.
  */
 async function personal() {
@@ -45,7 +45,7 @@ async function personal() {
 describe('register', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('says plainly that an account is not an office, from 768px — on a phone it is not drawn (P18.95-T7 AC-1)', () => {
+  it('says plainly that an account is not an office, from 768px — on a phone it is not drawn (P18.7-T7 AC-1)', () => {
     // Creating an account and joining an office are separate steps; a reader who
     // expects one to imply the other will wait for something that is not coming.
     renderWithSession(<RegisterPage />, { me: null });
@@ -56,13 +56,13 @@ describe('register', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'Create your account' })).toHaveClass('max-md:mb-6');
   });
 
-  it('P18.95-T7 AC-1 says where the agent code is, in the client’s words at every size (grey text row 26)', () => {
+  it('P18.7-T7 AC-1 says where the agent code is, in the client’s words at every size (grey text row 26)', () => {
     renderWithSession(<RegisterPage />, { me: null });
     expect(screen.getByLabelText('Agent code')).toHaveAccessibleDescription('Found on your contract');
     expect(screen.queryByText(/producer id/)).not.toBeInTheDocument();
   });
 
-  it('P18.95-T7 AC-3 places its title as sign-in places its own: one column, its top 16% of a phone down, centred from 768px', () => {
+  it('P18.7-T7 AC-3 places its title as sign-in places its own: one column, its top 16% of a phone down, centred from 768px', () => {
     renderWithSession(<RegisterPage />, { me: null });
     const main = screen.getByRole('main');
     expect(main.className).toBe(AUTH_PAGE);
@@ -70,7 +70,7 @@ describe('register', () => {
     expect(main.firstElementChild).toBe(screen.getByRole('heading', { level: 1 }));
   });
 
-  it('P18.95-T7 AC-3 says under Create account what it waits for — the fields still empty, by their labels', async () => {
+  it('P18.7-T7 AC-3 says under Create account what it waits for — the fields still empty, by their labels', async () => {
     stubFetch({ '/companies': { body: INSURERS } });
     renderWithSession(<RegisterPage />, { me: null });
     const submit = screen.getByRole('button', { name: 'Create account' });
@@ -128,7 +128,7 @@ describe('register', () => {
     });
   });
 
-  it('P18.8-T4 AC-3: asks the four a person records, the join month named after the insurer chosen', async () => {
+  it('P18.5-T4 AC-3: asks the four a person records, the join month named after the insurer chosen', async () => {
     stubFetch({ '/companies': { body: INSURERS } });
     renderWithSession(<RegisterPage />, { me: null });
 
@@ -145,7 +145,7 @@ describe('register', () => {
     expect([...gender.options].map((o) => o.text)).toEqual(['Choose', 'Male', 'Female']);
   });
 
-  it('P18.8-T4 AC-3: holds the button until all four are given', async () => {
+  it('P18.5-T4 AC-3: holds the button until all four are given', async () => {
     stubFetch({ '/companies': { body: INSURERS } });
     renderWithSession(<RegisterPage />, { me: null });
     const submit = screen.getByRole('button', { name: 'Create account' });
@@ -167,7 +167,7 @@ describe('register', () => {
     expect(submit).toBeEnabled();
   });
 
-  it('P18.8-T4 AC-4: says a refusal that names one of the four under that field', async () => {
+  it('P18.5-T4 AC-4: says a refusal that names one of the four under that field', async () => {
     stubFetch({
       '/companies': { body: INSURERS },
       '/auth/register': {
@@ -306,7 +306,7 @@ describe('register', () => {
     );
   });
 
-  describe('on a leader’s invite (P18.96-T3 AC-4, ADR-0170 §3)', () => {
+  describe('on a leader’s invite (P18.8-T3 AC-4, ADR-0170 §3)', () => {
     const TOKEN = 'kpm-1.secret';
     const BANNER = {
       leaderName: 'Agus Prasetyo', kpm: { code: '0417', branchName: 'BSD City Branch' }, companyId: 'co-2', companyName: 'Prudential',
@@ -314,7 +314,7 @@ describe('register', () => {
     };
     afterEach(() => { query.current = ''; });
 
-    it('P18.96-T3 AC-4 shows the banner, the name filled in, and the insurer, the agent code and the join date read-only', async () => {
+    it('P18.8-T3 AC-4 shows the banner, the name filled in, and the insurer, the agent code and the join date read-only', async () => {
       query.current = `invite=${TOKEN}`;
       const { calls } = stubFetch({ '/companies': { body: INSURERS }, '/invites/': { body: BANNER } });
       renderWithSession(<RegisterPage />, { me: null });
@@ -333,7 +333,7 @@ describe('register', () => {
         .toHaveAttribute('href', `/login?next=${encodeURIComponent(`/join?invite=${encodeURIComponent(TOKEN)}`)}`);
     });
 
-    it('P18.96-T3 AC-4 says nothing of the office being added separately: accepting the invite places them in it', async () => {
+    it('P18.8-T3 AC-4 says nothing of the office being added separately: accepting the invite places them in it', async () => {
       // Found walking a production build at 768px (2026-10-27): the line stood beside the banner and contradicted it.
       query.current = `invite=${TOKEN}`;
       stubFetch({ '/companies': { body: INSURERS }, '/invites/': { body: BANNER } });
@@ -346,7 +346,7 @@ describe('register', () => {
       expect(title).not.toHaveClass('max-md:mb-6');
     });
 
-    it('P18.96-T3 AC-4 registers with the invite’s token, insurer and code, and says they join the leader’s team', async () => {
+    it('P18.8-T3 AC-4 registers with the invite’s token, insurer and code, and says they join the leader’s team', async () => {
       query.current = `invite=${TOKEN}`;
       const { calls } = stubFetch({
         '/companies': { body: INSURERS }, '/invites/': { body: BANNER },
@@ -366,7 +366,7 @@ describe('register', () => {
       expect(await screen.findByText("Once you have verified it and signed in, you are in Agus Prasetyo's team.")).toBeInTheDocument();
     });
 
-    it('P18.96-T3 AC-4 a link that opens nothing says so plainly, and offers signing in or registering without it', async () => {
+    it('P18.8-T3 AC-4 a link that opens nothing says so plainly, and offers signing in or registering without it', async () => {
       query.current = `invite=${TOKEN}`;
       stubFetch({
         '/companies': { body: INSURERS },
@@ -378,7 +378,7 @@ describe('register', () => {
       expect(screen.queryByRole('button', { name: 'Create account' })).not.toBeInTheDocument();
     });
 
-    it('P18.96-T3 AC-4 an invite for an account that exists sends them to sign in and accept', async () => {
+    it('P18.8-T3 AC-4 an invite for an account that exists sends them to sign in and accept', async () => {
       query.current = `invite=${TOKEN}`;
       stubFetch({ '/companies': { body: INSURERS }, '/invites/': { body: { ...BANNER, existingAccount: true } } });
       renderWithSession(<RegisterPage />, { me: null });

@@ -34,7 +34,7 @@ const LadderSheet = dynamic(() => import('@/components/capability/ladder-sheet')
 const CARD = 'rounded-lg border border-card-edge bg-card px-4 py-3.5 lg:px-[18px] lg:py-4';
 
 /**
- * A coachee's ***Capability mapping*** tab (`/coaching/[membershipId]/leader-notes`; P11-T9, redrawn by Phase 18.99 T10
+ * A coachee's ***Capability mapping*** tab (`/coaching/[membershipId]/leader-notes`; P11-T9, redrawn by Phase 18.11 T10
  * after the UI V1 report, UI-035 to UI-040): where they stand on the capability ladder, the skills their coaches track,
  * and the reader's own note about them, which they never see.
  *
@@ -117,7 +117,7 @@ interface Held {
  * A save another coach has moved past is `VERSION_CONFLICT`: the profile is read again and one line says so. An item
  * archived since it was read is `CONFIG_ARCHIVED`: read again, with the server's words.
  *
- * **Each tick says its save beside it** (P18.95-T1 AC-5): *Saving… → Saved ✓*, or *Couldn't save — retry*. A refused save
+ * **Each tick says its save beside it** (P18.7-T1 AC-5): *Saving… → Saved ✓*, or *Couldn't save — retry*. A refused save
  * puts the boxes back, so the retry ticks the box again and saves; a re-read leaves nothing to retry. The milestone's
  * toast stays.
  */
@@ -374,7 +374,7 @@ function ProgressLine({ rungs }: { rungs: readonly LadderRung[] }) {
     <div aria-hidden="true" className="my-2 flex items-center lg:my-0 lg:w-[150px] lg:shrink-0" data-progress-line="">
       {rungs.map((rung, i) => (
         <Fragment key={rung.stage.code}>
-          {i > 0 && <span className={cn('h-[3px] flex-1', rung.state === 'next' ? 'bg-line' : 'bg-amber')} />}
+          {i > 0 && <span className={cn('h-[3px] flex-1', rung.state === 'next' ? 'bg-line' : 'bg-primary')} />}
           <StepMarker state={rung.state} n={rung.n} />
         </Fragment>
       ))}

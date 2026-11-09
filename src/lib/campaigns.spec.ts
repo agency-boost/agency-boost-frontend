@@ -9,15 +9,15 @@ import {
   seasonalSections, showsChase, statusWords, structuralSections, unchasedToast,
 } from './campaigns';
 
-describe('a campaign in words (P18.5-T7 AC-3, P18.5-T8 AC-6)', () => {
-  it('P18.5-T7 AC-3 money is rupiah from sen, never raw sen (invariant §9, X-68’s rule)', () => {
+describe('a campaign in words (P18.2-T7 AC-3, P18.2-T8 AC-6)', () => {
+  it('P18.2-T7 AC-3 money is rupiah from sen, never raw sen (invariant §9, X-68’s rule)', () => {
     expect(figureWords(50_000_000_000, 'idr_minor')).toBe('Rp 500 jt');
     expect(figureWords(90, 'percentage')).toBe('90%');
     expect(figureWords(3, 'count')).toBe('3');
     expect(figureWords(0.15, 'ratio')).toBe('0,15');
   });
 
-  it('P18.95-T1 AC-2, AC-3 a requirement is compact, never rounded into another rule, and in id-ID', () => {
+  it('P18.7-T1 AC-2, AC-3 a requirement is compact, never rounded into another rule, and in id-ID', () => {
     // Rp 2,45 M would round to Rp 2,5 M: a different requirement. It is written in full instead.
     expect(figureWords(245_000_000_000, 'idr_minor')).toBe('Rp 2.450.000.000');
     expect(figureWords(240_000_000_000, 'idr_minor')).toBe('Rp 2,4 M');
@@ -25,7 +25,7 @@ describe('a campaign in words (P18.5-T7 AC-3, P18.5-T8 AC-6)', () => {
     expect(figureWords(1_250, 'count')).toBe('1.250');
   });
 
-  it('P18.97-T3 AC-2 a threshold keeps the places it was set with, and no ,0: 90%, 92,5%, 75,55%', () => {
+  it('P18.9-T3 AC-2 a threshold keeps the places it was set with, and no ,0: 90%, 92,5%, 75,55%', () => {
     expect(figureWords(90, 'percentage')).toBe('90%');
     expect(figureWords(92.5, 'percentage')).toBe('92,5%');
     expect(figureWords(75.55, 'percentage')).toBe('75,55%');
@@ -34,12 +34,12 @@ describe('a campaign in words (P18.5-T7 AC-3, P18.5-T8 AC-6)', () => {
     expect(figureWords(30, 'percentage_points')).toBe('±30 points');
   });
 
-  it('P18.95-T10 AC-3 the client’s line: Needs: Rp 16 jt APE + 3 new hires', () => {
+  it('P18.7-T10 AC-3 the client’s line: Needs: Rp 16 jt APE + 3 new hires', () => {
     expect(OWN_COPY.needs).toBe('Needs:');
     expect(`${OWN_COPY.needs} ${requirementsLine([APE(16), NEW_HIRE(3)])}`).toBe('Needs: Rp 16 jt APE + 3 new hires');
   });
 
-  it('P18.95-T10 AC-3 APE only, new hires only, both: each its own words, the figure first, joined by " + "', () => {
+  it('P18.7-T10 AC-3 APE only, new hires only, both: each its own words, the figure first, joined by " + "', () => {
     expect(requirementsLine([APE(500)])).toBe('Rp 500 jt APE');
     expect(requirementsLine([NEW_HIRE(3)])).toBe('3 new hires');
     expect(requirementsLine([NEW_HIRE(1)])).toBe('1 new hire');
@@ -47,13 +47,13 @@ describe('a campaign in words (P18.5-T7 AC-3, P18.5-T8 AC-6)', () => {
     expect(requirementsLine([])).toBe('');
   });
 
-  it('P18.95-T10 AC-3 a threshold compact writing would round is written in full, never as another rule', () => {
+  it('P18.7-T10 AC-3 a threshold compact writing would round is written in full, never as another rule', () => {
     // Rp 16,25 jt would read Rp 16,3 jt — a different requirement.
     expect(requirementsLine([APE(16.25), NEW_HIRE(3)])).toBe('Rp 16.250.000 APE + 3 new hires');
     expect(requirementWords(APE(2450))).toBe('Rp 2.450.000.000 APE');
   });
 
-  it('P18.95-T10 AC-3 every campaign-evaluable count has its noun; a comparison other than at least is said', () => {
+  it('P18.7-T10 AC-3 every campaign-evaluable count has its noun; a comparison other than at least is said', () => {
     const count = (metricKey: string, value: number) => ({ ...NEW_HIRE(value), metricKey, metricName: metricKey });
     expect(requirementWords(count('NEW_ACTIVE_AGENTS', 2))).toBe('2 new active agents');
     expect(requirementWords(count('MAA_COUNT_IN_UNIT', 5))).toBe('5 active agents in unit');
@@ -66,7 +66,7 @@ describe('a campaign in words (P18.5-T7 AC-3, P18.5-T8 AC-6)', () => {
     expect(requirementWords({ ...NEW_HIRE(3), comparator: 'eq' })).toBe('exactly 3 new hires');
   });
 
-  it('P18.95-T10 AC-3 a ratio, the balance and a metric with no noun keep "{name} {target}"', () => {
+  it('P18.7-T10 AC-3 a ratio, the balance and a metric with no noun keep "{name} {target}"', () => {
     const ratio = { ...PERSISTENCY, metricKey: 'SELLING_SUCCESS_RATE', metricName: 'Selling success rate', value: 0.15, unit: 'ratio' };
     const balance = {
       ...PERSISTENCY, metricKey: 'SELLING_RECRUITMENT_BALANCE', metricName: 'Selling vs Recruitment balance', comparator: 'lte' as const,
@@ -78,7 +78,7 @@ describe('a campaign in words (P18.5-T7 AC-3, P18.5-T8 AC-6)', () => {
     expect(requirementsLine([APE(16), ratio])).toBe('Rp 16 jt APE + Selling success rate 0,15');
   });
 
-  it('P18.95-T10 AC-2 the chase is drawn only while the campaign has not ended, and only where the reader may chase', () => {
+  it('P18.7-T10 AC-2 the chase is drawn only while the campaign has not ended, and only where the reader may chase', () => {
     expect(showsChase(SPRINT, { chase: true })).toBe(true);
     expect(showsChase(CHALLENGE, { chase: true })).toBe(true);
     expect(showsChase(PUSH, { chase: true })).toBe(false);
@@ -86,33 +86,33 @@ describe('a campaign in words (P18.5-T7 AC-3, P18.5-T8 AC-6)', () => {
     expect(showsChase(SPRINT, { chase: false })).toBe(false);
   });
 
-  it('P18.5-T7 AC-3 the status tag: the phase for a seasonal campaign, Ongoing for a structural one', () => {
+  it('P18.2-T7 AC-3 the status tag: the phase for a seasonal campaign, Ongoing for a structural one', () => {
     expect(statusWords(SPRINT)).toBe('Running');
     expect(statusWords(CHALLENGE)).toBe('Upcoming');
     expect(statusWords(PUSH)).toBe('Ended');
     expect(statusWords(MDRT)).toBe('Ongoing');
   });
 
-  it('P18.5-T7 AC-6 the Summary row’s kindLabel (`:6233-6235`)', () => {
+  it('P18.2-T7 AC-6 the Summary row’s kindLabel (`:6233-6235`)', () => {
     expect(kindLabel(SPRINT)).toBe('Running');
     expect(kindLabel(CHALLENGE)).toBe('Upcoming');
     expect(kindLabel(PROMO_AGENT)).toBe('Promotion path');
     expect(kindLabel(MDRT)).toBe('Ongoing incentive');
   });
 
-  it('P18.95-T7 AC-1 the Summary row’s sub-line is the months it runs, as the server composes them (grey text row 23)', () => {
+  it('P18.7-T7 AC-1 the Summary row’s sub-line is the months it runs, as the server composes them (grey text row 23)', () => {
     expect(rowSubline(chased(SPRINT))).toBe('Runs Okt – Des 2026');
     expect(rowSubline(chased(MDRT))).toBe('Runs Jan – Des');
     expect(rowSubline(chased(PROMO_AGENT))).toBe('Runs over the last 12 months');
     expect(rowSubline({ ...chased(MDRT), runs: 'Runs Feb – Mar 2027' })).toBe('Runs Feb – Mar 2027');
   });
 
-  it('P18.5-T7 AC-5 the two toasts, verbatim (`:8144`)', () => {
+  it('P18.2-T7 AC-5 the two toasts, verbatim (`:8144`)', () => {
     expect(chasedToast('Q4 APE Sprint')).toBe('Now chasing "Q4 APE Sprint"');
     expect(unchasedToast('Q4 APE Sprint')).toBe('Removed "Q4 APE Sprint" from your chase list');
   });
 
-  it('P18.5-T8 AC-6 progress: "{current} of {target}", met only when met, and never ✕ for a month not held', () => {
+  it('P18.2-T8 AC-6 progress: "{current} of {target}", met only when met, and never ✕ for a month not held', () => {
     const row = { metricKey: 'APE_ACHIEVED', current: 62_000_000_000, target: 50_000_000_000, unit: 'idr_minor' };
     expect(progressWords({ ...row, state: 'met' })).toEqual({ text: 'Rp 620 jt of Rp 500 jt', met: true, figure: true });
     expect(progressWords({ ...row, state: 'in_progress' })).toEqual({ text: 'Rp 620 jt of Rp 500 jt', met: false, figure: true });
@@ -129,8 +129,8 @@ describe('a campaign in words (P18.5-T7 AC-3, P18.5-T8 AC-6)', () => {
   });
 });
 
-describe('the list’s sections (P18.5-T7 AC-2, D-lists)', () => {
-  it('P18.5-T7 AC-2 Running, Upcoming, Ended for the seasonal view, the filter keeping one', () => {
+describe('the list’s sections (P18.2-T7 AC-2, D-lists)', () => {
+  it('P18.2-T7 AC-2 Running, Upcoming, Ended for the seasonal view, the filter keeping one', () => {
     const all = seasonalSections(LIST.campaigns, 'all');
     expect(all.map((s) => [s.heading, s.items.map((c) => c.code)])).toEqual([
       ['Running', ['APE_SPRINT', 'NEW_HIRE_BLITZ']],
@@ -141,7 +141,7 @@ describe('the list’s sections (P18.5-T7 AC-2, D-lists)', () => {
     expect(all.map((s) => s.empty)).toEqual(['No running campaigns right now.', 'No upcoming campaigns.', 'No ended campaigns to show.']);
   });
 
-  it('P18.5-T7 AC-2 Promotion Criteria and Production Clubs for the structural view, a running structural one never seasonal', () => {
+  it('P18.2-T7 AC-2 Promotion Criteria and Production Clubs for the structural view, a running structural one never seasonal', () => {
     const sections = structuralSections(LIST.campaigns);
     expect(sections.map((s) => [s.heading, s.items.map((c) => c.code)])).toEqual([
       ['Promotion Criteria', ['PROMOTION_AGENT_AAB', 'PROMOTION_AAB_AB']],
@@ -170,7 +170,7 @@ describe('the list’s sections (P18.5-T7 AC-2, D-lists)', () => {
  */
 const SIX_WORDS = /\boffice\b|\bKPM\b|reports to|tagged to|untagged|unassigned/i;
 const VERBATIM = new Set([
-  // The prototype's sub-line, saying *tap any card* where it said *click into any card* (P18.95-T9 AC-5).
+  // The prototype's sub-line, saying *tap any card* where it said *click into any card* (P18.7-T9 AC-5).
   JSON.stringify("Company and KPM campaigns — mark the ones you're chasing, tap any card for full requirements."),
 ]);
 const MINE = ['components/campaigns/', 'lib/campaigns.ts', 'app/(agent)/campaigns/'];
@@ -215,9 +215,9 @@ describe('the campaigns module’s own copy', () => {
   });
 });
 
-/** P18.97-T4 AC-8 (ADR-0176 §8; UI-030): a requirement on a ratio in the unit the office writes that ratio in. */
-describe('P18.97-T4 AC-8 figureWords writes a ratio in its own unit', () => {
-  it('P18.97-T4 AC-8 a success rate as a percentage, as typed; a count of a count as the number; unknown as before', () => {
+/** P18.9-T4 AC-8 (ADR-0176 §8; UI-030): a requirement on a ratio in the unit the office writes that ratio in. */
+describe('P18.9-T4 AC-8 figureWords writes a ratio in its own unit', () => {
+  it('P18.9-T4 AC-8 a success rate as a percentage, as typed; a count of a count as the number; unknown as before', () => {
     expect(figureWords(0.3, 'ratio', 'percent')).toBe('30%');
     expect(figureWords(0.155, 'ratio', 'percent')).toBe('15,5%');
     expect(figureWords(1.5, 'ratio', 'decimal')).toBe('1,50');
@@ -228,11 +228,11 @@ describe('P18.97-T4 AC-8 figureWords writes a ratio in its own unit', () => {
 });
 
 /**
- * **A ratio requirement in the office's unit for it, on the agents' cards and dialog** (P18.97-T7; ADR-0174 §2, *one way
- * of writing a percentage*): the settings read *Recruitment success rate at least 30%* since P18.97-T4 AC-8, and the
+ * **A ratio requirement in the office's unit for it, on the agents' cards and dialog** (P18.9-T7; ADR-0174 §2, *one way
+ * of writing a percentage*): the settings read *Recruitment success rate at least 30%* since P18.9-T4 AC-8, and the
  * card read *0,30*.
  */
-describe('P18.97-T7 a ratio requirement in the office’s unit', () => {
+describe('P18.9-T7 a ratio requirement in the office’s unit', () => {
   const ratio = { code: 'RECRUIT_SUCCESS_RATE', comparison: 'gte' as const, displayUnit: 'percent' as const };
   const units = ratioUnitsOf([ratio, { code: 'LEADS_PER_ACTIVITY', comparison: 'gte', displayUnit: 'decimal' }, { code: 'BALANCE', comparison: 'band' }]);
   const requirement = {
@@ -240,14 +240,14 @@ describe('P18.97-T7 a ratio requirement in the office’s unit', () => {
     measured: true,
   };
 
-  it('P18.97-T7 reads each ratio’s unit from the office’s configuration, by its code', () => {
+  it('P18.9-T7 reads each ratio’s unit from the office’s configuration, by its code', () => {
     expect([...units]).toEqual([['RECRUIT_SUCCESS_RATE', 'percent'], ['LEADS_PER_ACTIVITY', 'decimal'], ['BALANCE', 'decimal']]);
     expect([...ratioUnitsOf(undefined)]).toEqual([]);
     // A snapshot published before units existed carries none: a number, as the ratio card falls back.
     expect(ratioUnitsOf([{ code: 'OLD', comparison: 'gte' }]).get('OLD')).toBe('decimal');
   });
 
-  it('P18.97-T7 writes the card’s requirement as the settings do: 30%, and a number where the office writes one', () => {
+  it('P18.9-T7 writes the card’s requirement as the settings do: 30%, and a number where the office writes one', () => {
     expect(requirementWords(requirement, units)).toBe('Recruitment success rate 30%');
     expect(requirementsLine([requirement, { ...requirement, metricKey: 'LEADS_PER_ACTIVITY', metricName: 'Leads per activity', value: 1.5 }], units))
       .toBe('Recruitment success rate 30% + Leads per activity 1,50');
@@ -255,7 +255,7 @@ describe('P18.97-T7 a ratio requirement in the office’s unit', () => {
     expect(requirementWords(requirement)).toBe('Recruitment success rate 0,30');
   });
 
-  it('P18.97-T7 writes a ratio’s progress in its unit: the target as typed, the figure whole (UI-080), the state the server’s', () => {
+  it('P18.9-T7 writes a ratio’s progress in its unit: the target as typed, the figure whole (UI-080), the state the server’s', () => {
     const row = (current: number | null, state: 'met' | 'not_met' | 'in_progress') => ({
       metricKey: 'RECRUIT_SUCCESS_RATE', current, target: 0.3, unit: 'ratio', state,
     });

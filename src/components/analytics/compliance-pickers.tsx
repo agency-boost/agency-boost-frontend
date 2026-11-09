@@ -53,7 +53,7 @@ export function TrainingTabs({
               data-empty={empty || undefined}
               className={cn(
                 'rounded-pill border px-[13px] py-[7px] text-sm font-semibold',
-                on ? 'border-navy bg-navy text-card' : 'border-hairline bg-card hover:text-navy',
+                on ? 'border-secondary bg-secondary text-secondary-contrast' : 'border-hairline bg-card hover:text-navy',
                 // `.disabled-tab`: lighter than its neighbours, and still at 4.5:1 on the card (pinned in the spec).
                 !on && (empty ? 'text-muted/[0.86]' : 'text-muted'),
               )}
@@ -76,7 +76,7 @@ export function TrainingTabs({
                 onClick={() => onSkill(s)}
                 className={cn(
                   'rounded-[7px] border px-[11px] py-[5px] text-sm font-semibold',
-                  on ? 'border-navy bg-navy text-card' : 'border-hairline bg-transparent text-muted hover:text-navy',
+                  on ? 'border-secondary bg-secondary text-secondary-contrast' : 'border-hairline bg-transparent text-muted hover:text-navy',
                 )}
               >
                 {s.label}
@@ -96,7 +96,7 @@ export function TrainingTabs({
                 type="button"
                 aria-pressed={on}
                 onClick={() => onModule(m)}
-                className={cn(ITEM_TAB, on ? 'border-amber text-navy' : 'border-transparent text-muted hover:text-navy')}
+                className={cn(ITEM_TAB, on ? 'border-primary text-navy' : 'border-transparent text-muted hover:text-navy')}
               >
                 {m.title}
               </button>
@@ -123,10 +123,10 @@ export function TooltipNote({ children }: { children: ReactNode }) {
 }
 
 /** `.event-select` (`:134-135`): a native select, labelled, its options grouped. */
-const SELECT = 'min-w-0 max-w-full cursor-pointer rounded-md border border-hairline bg-card px-3 py-[9px] text-md font-semibold text-navy sm:min-w-[260px] focus:border-amber';
+const SELECT = 'min-w-0 max-w-full cursor-pointer rounded-md border border-hairline bg-card px-3 py-[9px] text-md font-semibold text-navy sm:min-w-[260px] focus:border-primary';
 
 /**
- * **The event picker** (`:3569-3590`; P18.6-T2 AC-1): *Upcoming*, soonest first — a running event among them
+ * **The event picker** (`:3569-3590`; P18.3-T2 AC-1): *Upcoming*, soonest first — a running event among them
  * (contradiction 8) — and *Past*, the latest first, each option *"{title} — {date}"*; beside it the phase tag
  * and the event's office day. A labelled select (contradiction 16).
  */
@@ -165,7 +165,7 @@ export function EventPicker({
 }
 
 /**
- * **The campaign picker** (`:3591-3608`; P18.6-T2 AC-4): *Structural*, *Seasonal — Ongoing* — an upcoming one
+ * **The campaign picker** (`:3591-3608`; P18.3-T2 AC-4): *Structural*, *Seasonal — Ongoing* — an upcoming one
  * among them, tagged *Upcoming* (contradiction 8) — and *Seasonal — Past*; each option *"{title} — {date}"*,
  * the date *Always on*, *"Since {date}"* or *"Ended {date}"*; beside it the tag and the date.
  */

@@ -17,23 +17,25 @@ import { formatOfficeDay, formatShortDay } from '@/lib/format';
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
   usePathname: () => '/new-hires',
+  // The page reads its year from the address (P19.9-T3 AC-2): none here, so *Tahun berjalan*.
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 /**
- * **P18.96-T7 AC-3 (UI-009): every date on `/new-hires`, a hire's detail and `/activation` is the shared formatter's**
+ * **P18.8-T7 AC-3 (UI-009): every date on `/new-hires`, a hire's detail and `/activation` is the shared formatter's**
  * (`lib/format.ts`; ADR-0167 §1, OD-196): *22 Jul 2026*, its months the formatter's own Indonesian abbreviations —
- * the one language OD-196 allows beside English words until Phase 18.98 — and never the browser's *07/22/2026*, nor an
+ * the one language OD-196 allows beside English words until Phase 18.10 — and never the browser's *07/22/2026*, nor an
  * English month beside an Indonesian one.
  *
- * **Read in Indonesian since P18.98-T3** (AC-1), where every date on the three screens is written in one vocabulary:
+ * **Read in Indonesian since P18.10-T3** (AC-1), where every date on the three screens is written in one vocabulary:
  * the shared date field already follows the reader's language, and these screens' own dates follow theirs with their
- * module (P18.98-T4), which then reads this check in English too.
+ * module (P18.10-T4), which then reads this check in English too.
  *
- * *Since P18.98-T4 (new hires and activation):* **in both languages** — the screens' own dates are written in the
+ * *Since P18.10-T4 (new hires and activation):* **in both languages** — the screens' own dates are written in the
  * figures' language (`useFigureLanguage()`), so each language's page carries that language's months and no other, its
  * field's face among them.
  */
-/** A screen in the field shell, in a language (P18.98-T3, T4). */
+/** A screen in the field shell, in a language (P18.10-T3, T4). */
 const inLanguage = (language: Language, ui: React.ReactNode, session: Parameters<typeof renderWithSession>[1]) =>
   renderWithSession(<InLanguage language={language}><AgentLayout>{ui}</AgentLayout></InLanguage>, session);
 
@@ -100,10 +102,10 @@ function datesOnPage(language: Language): { dates: string[]; wrong: string[] } {
   return { dates, wrong };
 }
 
-describe('P18.96-T7 AC-3 (UI-009): one date formatter on the three screens', () => {
+describe('P18.8-T7 AC-3 (UI-009): one date formatter on the three screens', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('P18.96-T7 AC-3 no module drawing them writes a date by hand', () => {
+  it('P18.8-T7 AC-3 no module drawing them writes a date by hand', () => {
     const offenders = SCREENS.flatMap((file) => {
       const source = readFileSync(join(SRC, file), 'utf8');
       return BY_HAND.filter((pattern) => pattern.test(source)).map((pattern) => `${file}: ${pattern}`);
@@ -125,8 +127,8 @@ describe('P18.96-T7 AC-3 (UI-009): one date formatter on the three screens', () 
     },
   };
 
-  describe.each(['id', 'en'] as const)('in %s (P18.98-T4)', (language) => {
-    it('P18.96-T7 AC-3, UI-024 /new-hires: no date on a roster row any more; Waiting to join’s, the formatter’s', async () => {
+  describe.each(['id', 'en'] as const)('in %s (P18.10-T4)', (language) => {
+    it('P18.8-T7 AC-3, UI-024 /new-hires: no date on a roster row any more; Waiting to join’s, the formatter’s', async () => {
       stubFetch({
         ...SHELL_STUBS,
         '/new-hires': { body: ROSTER },
@@ -143,7 +145,7 @@ describe('P18.96-T7 AC-3 (UI-009): one date formatter on the three screens', () 
       expect(dates).toEqual(expect.arrayContaining(SHOWN[language].roster));
     });
 
-    it('P18.96-T7 AC-3 a hire’s detail: the join date, who ticked what and when, and the coaching note, all the formatter’s', async () => {
+    it('P18.8-T7 AC-3 a hire’s detail: the join date, who ticked what and when, and the coaching note, all the formatter’s', async () => {
       stubFetch({
         ...SHELL_STUBS,
         'GET /new-hires/mem-rina': {
@@ -158,7 +160,7 @@ describe('P18.96-T7 AC-3 (UI-009): one date formatter on the three screens', () 
       expect(dates).toEqual(expect.arrayContaining(SHOWN[language].detail));
     });
 
-    it('P18.96-T7 AC-3 /activation: the join date, the ticks and the leader’s note, all the formatter’s', async () => {
+    it('P18.8-T7 AC-3 /activation: the join date, the ticks and the leader’s note, all the formatter’s', async () => {
       stubFetch({ ...SHELL_STUBS, 'GET /activation/me': { body: activationView() } });
       inLanguage(language, <ActivationPage />, { me: RINA_ME });
       await screen.findByRole('heading', { level: 2, name: NAMES[language].mine });

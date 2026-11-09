@@ -76,9 +76,24 @@ const BASE = {
   '/kpm/org-levels': { body: [] },
   'outcome=won': { body: page([]) },
   'outcome=lost': { body: page([]) },
+  // From 1024px the first lead opens in the pane, which reads it whole (`readLead`); without this the list's own
+  // `/leads` stub answered, a page where a lead belongs. A spec that stubs `/leads/l1` itself still wins.
+  '/leads/l1': { body: lead() },
 };
 
+/*
+ * *Changed 2026-11-05 (P19.1-T2, UI-116):* **these render the table itself.** `/leads` draws the list beside the lead's
+ * pane from 1024px (`leads-list.tsx`, pinned in `leads-tablet-laptop.spec.tsx`), as it already drew the list below it; the
+ * table no screen draws any more is pinned here until it is retired. The page's own gate and title row render the page.
+ */
 const render = (routes: Record<string, unknown>, me = AGENT) => {
+  const stub = stubFetch({ ...BASE, ...routes } as Parameters<typeof stubFetch>[0]);
+  renderInLayout(AgentLayout, <LeadsTable />, { me });
+  return stub;
+};
+
+/** The page, for what is the page's: its gate and its title row. */
+const renderPage = (routes: Record<string, unknown>, me = AGENT) => {
   const stub = stubFetch({ ...BASE, ...routes } as Parameters<typeof stubFetch>[0]);
   renderInLayout(AgentLayout, <LeadsPage />, { me });
   return stub;
@@ -147,7 +162,7 @@ function stubPaged(open: (q: URLSearchParams) => unknown | Promise<unknown>, rou
     }
     return mock(url, init);
   }));
-  renderInLayout(AgentLayout, <LeadsPage />, { me: AGENT });
+  renderInLayout(AgentLayout, <LeadsTable />, { me: AGENT });
   return reads;
 }
 
@@ -173,9 +188,9 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
     expect(screen.queryByText('4 Sep 2026')).not.toBeInTheDocument();
   });
 
-  it('P18.95-T7 AC-1 keeps the sub-line from 768px and draws it nowhere on a phone (grey text row 25)', async () => {
-    render({ '/leads': { body: page([lead()]) } });
-    await screen.findByDisplayValue('Pak Budi');
+  it('P18.7-T7 AC-1 keeps the sub-line from 768px and draws it nowhere on a phone (grey text row 25)', async () => {
+    renderPage({ '/leads': { body: page([lead()]) } });
+    await screen.findByRole('list', { name: 'Your leads' });
     expect(screen.getByText('Track and follow up on your sales and recruitment leads.')).toHaveClass('max-md:hidden');
   });
 
@@ -190,7 +205,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       expect(calls.some((c) => c.url.includes('/leads/summary'))).toBe(false);
     });
 
-    // *Amended 2026-10-26 (P18.95-T4 AC-2, ADR-0167 §4):* the client asked for a search and two filters back —
+    // *Amended 2026-10-26 (P18.7-T4 AC-2, ADR-0167 §4):* the client asked for a search and two filters back —
     // `Search leads`, *Type* and *Status* — so this pins what has **not** come back with them.
     it('AC-1: has none of the old filter card’s Stage, Show, Needs attention or Clear', async () => {
       render({ '/leads': { body: page([lead()]) } });
@@ -254,7 +269,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       expect(screen.queryByText(/shown/)).not.toBeInTheDocument();
     });
 
-    it('P13.1-T4 AC-4, P18.8-T7 AC-3: sorts on three headings, with no Registered column, and opens in the saved order', async () => {
+    it('P13.1-T4 AC-4, P18.5-T7 AC-3: sorts on three headings, with no Registered column, and opens in the saved order', async () => {
       const { calls } = render({ '/leads': { body: page([lead()]) } });
       await screen.findByDisplayValue('Pak Budi');
 
@@ -268,12 +283,12 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       const sorted = screen.getAllByRole('columnheader')
         .filter((th) => ['ascending', 'descending'].includes(th.getAttribute('aria-sort') ?? ''));
       expect(sorted).toHaveLength(0);
-      // P18.8-T7 AC-3: no sort at all, which the server answers in the owner's own order.
+      // P18.5-T7 AC-3: no sort at all, which the server answers in the owner's own order.
       expect(lastRead(calls).get('sort')).toBeNull();
       expect(lastRead(calls).get('dir')).toBeNull();
     });
 
-    it('P13.1-T4 AC-4, P18.8-T7 AC-4: comes back to the saved order on a heading’s third press', async () => {
+    it('P13.1-T4 AC-4, P18.5-T7 AC-4: comes back to the saved order on a heading’s third press', async () => {
       const { calls } = render({ '/leads': { body: page([lead()]) } });
       await screen.findByDisplayValue('Pak Budi');
 
@@ -354,7 +369,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       expect(screen.getByRole('heading', { name: '✓ Successful' })).toBeInTheDocument();
       expect(screen.getByRole('heading', { name: '✕ Not successful' })).toBeInTheDocument();
       expect(screen.getByText('Sales · Paid and issued')).toBeInTheDocument();
-      // P18.8-T7 AC-6: *Recruit*, wherever the type is named.
+      // P18.5-T7 AC-6: *Recruit*, wherever the type is named.
       expect(screen.getByText('Recruit · Not approached')).toBeInTheDocument();
     });
 
@@ -398,7 +413,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
   describe('AC-4 — every lead loads, with no pager', () => {
     /*
      * Drawing 450 rows of controls at once is the heaviest thing jsdom does in this suite: about 11 s on a laptop under
-     * coverage, and 31 s on GitHub's 2-vCPU runner on 2026-10-28, past the 30 s it had — the same before Phase 18.97 and
+     * coverage, and 31 s on GitHub's 2-vCPU runner on 2026-10-28, past the 30 s it had — the same before Phase 18.9 and
      * after it. A CI runner gets three times the room, as `vitest.config.mts` gives every test (`testing-strategy.md`,
      * *Timeouts on a CI runner*); a laptop keeps 30 s, so a draw that has really slowed down still fails where it is written.
      */
@@ -612,7 +627,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       }
       await waitFor(() => expect(screen.getAllByText(refused)).toHaveLength(2));
 
-      // The heading, not a refused name's *Couldn't save — retry: Lead name, row 1* (P18.95-T1 AC-5).
+      // The heading, not a refused name's *Couldn't save — retry: Lead name, row 1* (P18.7-T1 AC-5).
       await userEvent.click(screen.getByRole('button', { name: /^Lead name/ }));
 
       expect(await screen.findByDisplayValue('Bu Rina Sari')).toBeInTheDocument();
@@ -693,7 +708,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
         const body = lead({ id: 'l9', name: 'Pak Andi', type: null, statusCode: null, version: 1 });
         return { ok: true, status: 201, json: async () => body } as Response;
       }));
-      renderInLayout(AgentLayout, <LeadsPage />, { me: AGENT });
+      renderInLayout(AgentLayout, <LeadsTable />, { me: AGENT });
       await screen.findByDisplayValue('Pak Budi');
 
       await userEvent.click(screen.getByRole('button', { name: '+ Add lead' }));
@@ -892,12 +907,26 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
 
       const won = await menuItem('Mark successful');
       expect(won).toHaveAttribute('aria-disabled', 'true');
-      expect(won).toHaveAccessibleDescription('Available once status reaches the final stage');
+      // P19.1-T2 AC-9 (UI-160 item 3): the office's own name for its final stage.
+      expect(won).toHaveAccessibleDescription('Active after status Paid and issued');
       // On the screen too, beneath it — a tap has no hover to bring up a tooltip.
-      expect(within(screen.getByRole('menu')).getByText('Available once status reaches the final stage')).toBeVisible();
+      expect(within(screen.getByRole('menu')).getByText('Active after status Paid and issued')).toBeVisible();
       expect(screen.getByRole('menuitem', { name: 'Mark not successful' })).not.toHaveAttribute('aria-disabled');
 
       await userEvent.click(won);
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(writes(calls)).toHaveLength(0);
+    });
+
+    it('P19.1-T2 AC-9 at the final stage ✕ is held, saying why — the API refuses it too (UI-160 item 2)', async () => {
+      const { calls } = render({ '/leads': { body: page([lead({ statusCode: 'PAID_AND_ISSUED' })]) } });
+      await screen.findByDisplayValue('Pak Budi');
+
+      const lost = await menuItem('Mark not successful');
+      expect(lost).toHaveAttribute('aria-disabled', 'true');
+      expect(lost).toHaveAccessibleDescription('Policy already paid and issued');
+      expect(screen.getByRole('menuitem', { name: 'Mark successful' })).not.toHaveAttribute('aria-disabled');
+      await userEvent.click(lost);
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
       expect(writes(calls)).toHaveLength(0);
     });
@@ -915,11 +944,12 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       });
       await screen.findByDisplayValue('Calon');
 
-      const rows = screen.getAllByRole('checkbox');
-      expect(rows[0]).toBeDisabled();
-      expect(rows[1]).toBeEnabled();
-      // *Recruit*, not *Close*: they are different promises, and the box says which one it is.
-      expect(screen.getByLabelText('Recruit this month')).toBe(rows[1]);
+      // P19.1-T2 AC-8: the Potensi switch, small — none until the lead has a type, its words faded.
+      const rows = screen.getAllByRole('switch');
+      expect(rows).toHaveLength(1);
+      expect(screen.getByText('Potential closing this month')).toHaveClass('text-muted/40');
+      // *Recruit*, not *Close*: they are different promises, and the switch says which one it is.
+      expect(screen.getByLabelText('Potential recruit this month')).toBe(rows[0]);
     });
 
     it('AC-7: ticks the month’s commitment as its own one-field write', async () => {
@@ -928,7 +958,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
         '/leads/l1': { body: lead({ thisMonth: true }) },
       });
 
-      await userEvent.click(await screen.findByLabelText('Close this month'));
+      await userEvent.click(await screen.findByLabelText('Potential closing this month'));
 
       await waitFor(() => expect(lastBody(calls)).toEqual({ thisMonth: true, version: 2 }));
     });
@@ -951,7 +981,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       expect(screen.queryByRole('dialog', { name: /Contact details/ })).not.toBeInTheDocument();
     });
 
-    it('P18.96-T1 AC-2: the table behind holds still while the details are open, and scrolls again once they close', async () => {
+    it('P18.8-T1 AC-2: the table behind holds still while the details are open, and scrolls again once they close', async () => {
       render({ '/leads': { body: page([lead()]) } });
       const dialog = await openDetails();
       expect(dialog).toHaveClass('overflow-y-auto', 'overscroll-contain');
@@ -996,7 +1026,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       expect(screen.queryByRole('button', { name: /Last changed by/ })).not.toBeInTheDocument();
     });
 
-    it('P18.8-T7 AC-5: offers no WhatsApp in the dialog any more — it is beside the row’s ⋮', async () => {
+    it('P18.5-T7 AC-5: offers no WhatsApp in the dialog any more — it is beside the row’s ⋮', async () => {
       render({ '/leads': { body: page([lead({ contact: { phone: '0812-1100-2200', email: null } })]) } });
       const dialog = await openDetails();
 
@@ -1005,7 +1035,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       expect(within(dialog).getByLabelText('Phone')).toHaveValue('0812-1100-2200');
     });
 
-    it('P18.8-T7 AC-5: links the row to the number the dialog saves, once it is saved', async () => {
+    it('P18.5-T7 AC-5: links the row to the number the dialog saves, once it is saved', async () => {
       render({
         '/leads': { body: page([lead({ contact: { phone: '123', email: null } })]) },
         '/leads/l1': { body: lead({ contact: { phone: '+62 812 1100 2200', email: null }, version: 3 }) },
@@ -1081,7 +1111,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       await userEvent.tab();
       expect(within(dialog).getByLabelText('Phone')).toHaveFocus();
       await userEvent.tab();
-      // The Email box is next: the WhatsApp link left the dialog for the row (P18.8-T7 AC-5).
+      // The Email box is next: the WhatsApp link left the dialog for the row (P18.5-T7 AC-5).
       expect(within(dialog).getByLabelText('Email')).toHaveFocus();
       await userEvent.tab({ shift: true });
       await userEvent.tab({ shift: true });
@@ -1195,9 +1225,9 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       await userEvent.tab();
       await screen.findByText('A lead needs a name of at least 2 characters.');
 
-      await userEvent.click(screen.getByLabelText('Close this month'));
+      await userEvent.click(screen.getByLabelText('Potential closing this month'));
 
-      await waitFor(() => expect(screen.getByLabelText('Close this month')).toBeChecked());
+      await waitFor(() => expect(screen.getByLabelText('Potential closing this month')).toBeChecked());
       // *B* is still in the box and still not the lead's name, so the reason stays with it.
       expect(screen.getByText('A lead needs a name of at least 2 characters.')).toBeInTheDocument();
       expect(name).toHaveValue('B');
@@ -1253,7 +1283,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
         await new Promise<void>((resolve) => { release = resolve; });
         return { ok: true, status: 200, json: async () => lead({ name: 'Budi Santoso', version: 3 }) } as Response;
       }));
-      renderInLayout(AgentLayout, <LeadsPage />, { me: AGENT });
+      renderInLayout(AgentLayout, <LeadsTable />, { me: AGENT });
       const name = await screen.findByLabelText('Lead name, row 1');
 
       await userEvent.clear(name);
@@ -1273,7 +1303,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       // And held means held: what is chosen in the meantime writes nothing and asks nothing.
       await userEvent.selectOptions(type, 'recruitment');
       await userEvent.selectOptions(screen.getByLabelText('Status, row 1'), 'PAID_AND_ISSUED');
-      await userEvent.click(screen.getByLabelText('Close this month'));
+      await userEvent.click(screen.getByLabelText('Potential closing this month'));
       fireEvent.change(screen.getByLabelText('Next action date, row 1'), { target: { value: '2026-11-01' } });
       // The menu's writes are held too; its details are not, since they write nothing by opening.
       await userEvent.click(actionsOf());
@@ -1285,7 +1315,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       await userEvent.keyboard('{Escape}');
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
       expect(patches).toHaveLength(1);
-      expect(screen.getByLabelText('Close this month')).not.toBeChecked();
+      expect(screen.getByLabelText('Potential closing this month')).not.toBeChecked();
 
       await act(async () => { release(); });
       await waitFor(() => expect(type).not.toHaveAttribute('aria-disabled'));
@@ -1318,7 +1348,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
         await new Promise<void>((resolve) => { release = resolve; });
         return { ok: true, status: 200, json: async () => ({ id: 'l1', deletedAt: '2026-09-25T02:00:00.000Z' }) } as Response;
       }));
-      renderInLayout(AgentLayout, <LeadsPage />, { me: AGENT });
+      renderInLayout(AgentLayout, <LeadsTable />, { me: AGENT });
       await screen.findByDisplayValue('Bu Rina');
 
       await choose('Delete');
@@ -1437,8 +1467,8 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
 
       const table = screen.getByRole('table');
       expect(table.className).not.toMatch(/min-w-/);
-      // P18.8-T7: the first column holds a drag handle beside the number on `/leads` — 0.75rem more.
-      // P18.95-T4 AC-3: *Actions* holds 📞 beside WhatsApp and the ⋮ — 0.75rem more.
+      // P18.5-T7: the first column holds a drag handle beside the number on `/leads` — 0.75rem more.
+      // P18.7-T4 AC-3: *Actions* holds 📞 beside WhatsApp and the ⋮ — 0.75rem more.
       expect([...table.querySelectorAll('colgroup col')].map((c) => (c as HTMLElement).style.width))
         .toEqual(['2.75rem', '11rem', '7.5rem', '11rem', '6.5rem', 'auto', 'auto', '5.25rem']);
     });
@@ -1474,9 +1504,9 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       for (const label of ['Lead name', 'Type', 'Status', 'Remarks', 'Next action date', 'Next action note']) {
         expect(card.getByLabelText(`${label}, row 1`)).toBeInTheDocument();
       }
-      expect(card.getByLabelText('Close this month')).toBeInTheDocument();
+      expect(card.getByLabelText('Potential closing this month')).toBeInTheDocument();
       expect(card.getByLabelText('Lead name, row 1').className).toContain('font-semibold');
-      // The name sits in its save confirmation's box (P18.95-T1 AC-5), and that box in the line.
+      // The name sits in its save confirmation's box (P18.7-T1 AC-5), and that box in the line.
       expect(card.getByRole('button', { name: 'Actions for Pak Budi' }).parentElement)
         .toBe(card.getByLabelText('Lead name, row 1').parentElement!.parentElement!.parentElement);
 
@@ -1519,9 +1549,9 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       await screen.findByRole('list', { name: 'Your leads' });
 
       const order = screen.getByLabelText('Sort leads');
-      // P18.8-T7 AC-4: the cards open in the saved order too, and a sort comes back to it by name.
+      // P18.5-T7 AC-4: the cards open in the saved order too, and a sort comes back to it by name.
       expect(order).toHaveDisplayValue('Saved order');
-      // P18.95-T4 AC-4: in words, what each order does (UI-027).
+      // P18.7-T4 AC-4: in words, what each order does (UI-027).
       expect(within(order).getAllByRole('option').map((o) => o.textContent)).toEqual([
         'Saved order', 'Name A–Z', 'Name Z–A', 'Sales first', 'Recruit first',
         'Earliest stage first', 'Furthest stage first',
@@ -1577,7 +1607,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       expect(screen.getByLabelText('Lead name, row 1').className).toContain('border-transparent');
     });
 
-    it('P13.1-T4 AC-5, P18.96-T2 AC-4: the shared date field, the calendar on the date’s left, and a click opens the picker', async () => {
+    it('P13.1-T4 AC-5, P18.8-T2 AC-4: the shared date field, the calendar on the date’s left, and a click opens the picker', async () => {
       const showPicker = vi.fn();
       HTMLInputElement.prototype.showPicker = showPicker;
       render({ '/leads': { body: page([lead()]) } });
@@ -1689,7 +1719,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       });
 
       const table = within(await screen.findByRole('table'));
-      expect(table.getByLabelText('Close this month')).toBeChecked();
+      expect(table.getByLabelText('Potential closing this month')).toBeChecked();
       for (const flag of ['Overdue 14 days', 'Overdue', 'No remarks', 'No next action']) {
         expect(table.queryByText(flag)).not.toBeInTheDocument();
       }
@@ -1697,7 +1727,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
   });
 
   /*
-   * *Amended 2026-10-26 (P18.95-T4 AC-2, ADR-0167 §4):* AC-12 pinned the coaching card's toolbar off here, because
+   * *Amended 2026-10-26 (P18.7-T4 AC-2, ADR-0167 §4):* AC-12 pinned the coaching card's toolbar off here, because
    * the client had chosen a leads screen that could not be searched. Their UI review of 2026-10-26 asked for a
    * search and two filters (UI-016), so `/leads` has its own filter bar **above** the prototype's toolbar, and
    * what stays pinned is that toolbar: the count and *+ Add lead*, never replaced by the coaching card's.
@@ -1944,7 +1974,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
     });
 
     it('refuses the screen to somebody without lead:read', async () => {
-      render({ '/leads': { body: page([]) } }, makeMe({ permissions: [] }));
+      renderPage({ '/leads': { body: page([]) } }, makeMe({ permissions: [] }));
 
       expect(await screen.findByRole('alert')).toHaveTextContent('Not available to you');
       // The gate's code is on the refusal as data, and never in its words (P11-T6).
@@ -2008,7 +2038,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       await screen.findByDisplayValue('Pak Budi');
 
       const sales = screen.getByLabelText('Type, row 1').className;
-      expect(sales).toContain('text-amber-ink');
+      expect(sales).toContain('text-primary-ink');
       expect(sales).toContain('font-semibold');
       expect(sales).not.toMatch(/(^|\s)bg-amber/);
 
@@ -2021,7 +2051,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       expect(none).toContain('text-muted');
       expect(none).not.toContain('font-semibold');
 
-      // The cell's own ground, transparent — and, since P18.8-T7 AC-6, a hairline at rest, not only on hover.
+      // The cell's own ground, transparent — and, since P18.5-T7 AC-6, a hairline at rest, not only on hover.
       for (const cls of [sales, recruitment, none]) {
         expect(cls).toContain('bg-transparent');
         expect(cls).toContain('border-hairline');
@@ -2037,7 +2067,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       expect(more.className).toContain('h-7');
       expect(more).toHaveAttribute('aria-haspopup', 'menu');
       const cell = more.closest('td')!;
-      // P18.95-T4 AC-3: beside it, WhatsApp and 📞 held with their reason — no number yet — and nothing else.
+      // P18.7-T4 AC-3: beside it, WhatsApp and 📞 held with their reason — no number yet — and nothing else.
       expect(within(cell).getAllByRole('button').map((b) => b.textContent === '⋮' ? b.getAttribute('aria-label') : b.querySelector('.sr-only')?.textContent))
         .toEqual(['Chat with Pak Budi on WhatsApp', 'Call Pak Budi', 'Actions for Pak Budi']);
       for (const glyph of ['Mark successful', 'Mark not successful', 'Delete lead', 'Contact details', 'Last changed by Ibu Sari']) {
@@ -2057,22 +2087,27 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       const won = await menuItem('Mark successful');
       expect(won.querySelector('[aria-hidden="true"]')).toHaveTextContent('✓');
       expect(won.querySelector('[aria-hidden="true"]')!.className).toContain('text-success');
-      expect(screen.getByRole('menuitem', { name: 'Mark not successful' }).querySelector('[aria-hidden="true"]')!.className)
-        .toContain('text-alert');
+    });
+
+    it('P13.1-T4 AC-3: ✕ keeps the prototype’s colour wherever it is offered — below the final stage (UI-160)', async () => {
+      render({ '/leads': { body: page([lead({ statusCode: 'FOLLOW_UP' })]) } });
+      await screen.findByDisplayValue('Pak Budi');
+      const lost = await menuItem('Mark not successful');
+      expect(lost.querySelector('[aria-hidden="true"]')!.className).toContain('text-alert');
     });
   });
   /**
-   * P18.8-T7 (ADR-0161 §1–2): the reader's own order, kept; WhatsApp beside the ⋮; *Type* bordered and
+   * P18.5-T7 (ADR-0161 §1–2): the reader's own order, kept; WhatsApp beside the ⋮; *Type* bordered and
    * *Recruit*; no placeholder in the two note boxes.
    */
-  describe('P18.8-T7 — the client’s revisions to /leads, 2026-10-26', () => {
+  describe('P18.5-T7 — the client’s revisions to /leads, 2026-10-26', () => {
     const handle = (name = 'Pak Budi') =>
       screen.getByRole('button', { name: `Reorder ${name}. Press the up or down arrow to move it.` });
     const names = () => [...document.querySelectorAll<HTMLInputElement>('input[aria-label^="Lead name, row"]')].map((i) => i.value);
     const orders = (calls: Call[]) => calls.filter((c) => c.url.includes('/leads/order'));
     const two = () => page([lead(), lead({ id: 'l2', name: 'Ibu Wati' })]);
 
-    it('P18.8-T7 AC-4 puts a drag handle beside the number of each of the reader’s own leads', async () => {
+    it('P18.5-T7 AC-4 puts a drag handle beside the number of each of the reader’s own leads', async () => {
       render({ '/leads': { body: two() } });
       await screen.findByDisplayValue('Ibu Wati');
 
@@ -2084,7 +2119,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       expect(handle('Ibu Wati')).toBeInTheDocument();
     });
 
-    it('P18.8-T7 AC-4 offers none on an agent’s row on a leader’s list, nor on the inline row', async () => {
+    it('P18.5-T7 AC-4 offers none on an agent’s row on a leader’s list, nor on the inline row', async () => {
       render({ '/leads': { body: page([lead(), lead({ id: 'l2', name: 'Bu Rina', ownerMembershipId: 'mem-7' })]) } });
       await screen.findByDisplayValue('Bu Rina');
 
@@ -2093,7 +2128,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       expect(screen.getAllByRole('button', { name: /^Reorder / })).toHaveLength(1);
     });
 
-    it('P18.8-T7 AC-4 hides the handles while a column sort is on, and brings them back with the saved order', async () => {
+    it('P18.5-T7 AC-4 hides the handles while a column sort is on, and brings them back with the saved order', async () => {
       const { calls } = render({ '/leads': { body: two() } });
       await screen.findByDisplayValue('Ibu Wati');
 
@@ -2111,7 +2146,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       expect(orders(calls)).toHaveLength(0);
     });
 
-    it('P18.8-T7 AC-4 saves a drop as the whole order, and shows it at once', async () => {
+    it('P18.5-T7 AC-4 saves a drop as the whole order, and shows it at once', async () => {
       const { calls } = render({ '/leads': { body: two() }, 'PATCH /leads/order': { body: { ids: ['l2', 'l1'] } } });
       await screen.findByDisplayValue('Ibu Wati');
 
@@ -2127,7 +2162,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     });
 
-    it('P18.8-T7 AC-4 moves a lead with ↓ and ↑, keeps the focus on its handle, and saves each move', async () => {
+    it('P18.5-T7 AC-4 moves a lead with ↓ and ↑, keeps the focus on its handle, and saves each move', async () => {
       const { calls } = render({
         '/leads': { body: page([lead(), lead({ id: 'l2', name: 'Ibu Wati' }), lead({ id: 'l3', name: 'Sdri. Maya' })]) },
         'PATCH /leads/order': { body: { ids: [] } },
@@ -2149,7 +2184,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       ]);
     });
 
-    it('P18.8-T7 AC-4 goes nowhere above the first row, and sends nothing', async () => {
+    it('P18.5-T7 AC-4 goes nowhere above the first row, and sends nothing', async () => {
       const { calls } = render({ '/leads': { body: two() } });
       await screen.findByDisplayValue('Ibu Wati');
 
@@ -2159,7 +2194,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       expect(orders(calls)).toHaveLength(0);
     });
 
-    it('P18.8-T7 AC-4 steps a leader’s lead past an agent’s row, and sends their own leads alone', async () => {
+    it('P18.5-T7 AC-4 steps a leader’s lead past an agent’s row, and sends their own leads alone', async () => {
       const { calls } = render({
         '/leads': { body: page([lead(), lead({ id: 'l2', name: 'Bu Rina', ownerMembershipId: 'mem-7' }), lead({ id: 'l3', name: 'Ibu Wati' })]) },
         'PATCH /leads/order': { body: { ids: ['l3', 'l1'] } },
@@ -2174,7 +2209,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       expect(JSON.parse(String(orders(calls)[0].init.body))).toEqual({ ids: ['l3', 'l1'] });
     });
 
-    it('P18.8-T7 AC-4 puts the rows back when the save is refused, says why, and reads the list again', async () => {
+    it('P18.5-T7 AC-4 puts the rows back when the save is refused, says why, and reads the list again', async () => {
       const { calls } = render({
         '/leads': { body: two() },
         'PATCH /leads/order': error(400, 'VALIDATION_FAILED', 'Send every one of your open leads, once each, in the order you want them.'),
@@ -2190,7 +2225,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       await waitFor(() => expect(tableReads(calls).length).toBeGreaterThan(before));
     });
 
-    it('P18.8-T7 AC-4 holds the handles still until every page has arrived', async () => {
+    it('P18.5-T7 AC-4 holds the handles still until every page has arrived', async () => {
       stubPaged((q) => (q.get('page') === '1'
         ? page(many(1, 3), { total: 5, pageSize: 3 })
         : new Promise(() => {})));
@@ -2199,13 +2234,13 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       expect(handle('Lead 1')).toBeDisabled();
     });
 
-    it('P18.8-T7 AC-4 puts the handle in a card’s first line, and saves a drop there the same way', async () => {
+    it('P18.5-T7 AC-4 puts the handle in a card’s first line, and saves a drop there the same way', async () => {
       boxWidth(360);
       const { calls } = render({ '/leads': { body: two() }, 'PATCH /leads/order': { body: { ids: ['l2', 'l1'] } } });
       const list = await screen.findByRole('list', { name: 'Your leads' });
 
       const card = within(list).getAllByRole('listitem')[1];
-      // The name sits in its save confirmation's box (P18.95-T1 AC-5), and that box in the line.
+      // The name sits in its save confirmation's box (P18.7-T1 AC-5), and that box in the line.
       expect(within(card).getByRole('button', { name: /^Reorder Ibu Wati/ }).parentElement)
         .toBe(within(card).getByLabelText('Lead name, row 2').parentElement!.parentElement!.parentElement);
       fireEvent.dragStart(handle('Ibu Wati'), { dataTransfer: { setDragImage: vi.fn(), effectAllowed: '' } });
@@ -2216,7 +2251,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       expect(JSON.parse(String(orders(calls)[0].init.body))).toEqual({ ids: ['l2', 'l1'] });
     });
 
-    it('P18.8-T7 AC-5 links to WhatsApp beside the ⋮, in a new tab, with the number as wa.me takes it', async () => {
+    it('P18.5-T7 AC-5 links to WhatsApp beside the ⋮, in a new tab, with the number as wa.me takes it', async () => {
       render({ '/leads': { body: page([lead({ contact: { phone: '0812-1100-2200', email: null } }), lead({ id: 'l2', name: 'Ibu Wati' })]) } });
       await screen.findByDisplayValue('Ibu Wati');
 
@@ -2225,28 +2260,28 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       expect(chat).toHaveAttribute('target', '_blank');
       expect(chat).toHaveAttribute('rel', 'noopener noreferrer');
       expect(chat).toHaveAttribute('title', 'WhatsApp');
-      // P18.95-T4 AC-3: 24px beside the 28px ⋮, so 📞 fits beside it; 44px on a phone.
+      // P18.7-T4 AC-3: 24px beside the 28px ⋮, so 📞 fits beside it; 44px on a phone.
       expect(chat.className).toContain('h-6');
       expect(chat.className).toContain('max-md:min-h-11');
       expect(chat.closest('td')).toBe(actionsOf().closest('td'));
-      // No number WhatsApp could open, no link — held with its reason since P18.95-T4 — and no column was added.
+      // No number WhatsApp could open, no link — held with its reason since P18.7-T4 — and no column was added.
       expect(screen.getAllByRole('link', { name: /WhatsApp/ })).toHaveLength(1);
       expect(screen.getAllByRole('columnheader')).toHaveLength(8);
     });
 
-    it('P18.8-T7 AC-5 puts the WhatsApp link beside the ⋮ in a card too', async () => {
+    it('P18.5-T7 AC-5 puts the WhatsApp link beside the ⋮ in a card too', async () => {
       boxWidth(360);
       render({ '/leads': { body: page([lead({ contact: { phone: '0812-1100-2200', email: null } })]) } });
       const card = within(within(await screen.findByRole('list', { name: 'Your leads' })).getByRole('listitem'));
 
-      // P18.95-T4 AC-3: 📞 between them.
+      // P18.7-T4 AC-3: 📞 between them.
       expect(card.getByRole('link', { name: /WhatsApp/ }).nextElementSibling)
         .toBe(card.getByRole('link', { name: 'Call Pak Budi' }));
       expect(card.getByRole('link', { name: 'Call Pak Budi' }).nextElementSibling)
         .toBe(card.getByRole('button', { name: 'Actions for Pak Budi' }));
     });
 
-    it('P18.8-T7 AC-6 borders Type at rest on a transparent ground, and offers Sales and Recruit', async () => {
+    it('P18.5-T7 AC-6 borders Type at rest on a transparent ground, and offers Sales and Recruit', async () => {
       const { calls } = render({ '/leads': { body: page([lead({ type: null, statusCode: null })]) } });
       const type = await screen.findByLabelText('Type, row 1');
 
@@ -2258,7 +2293,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       await waitFor(() => expect(lastBody(calls)).toEqual({ type: 'recruitment', version: 2 }));
     });
 
-    it('P18.8-T7 AC-6 leaves Remarks and the next-action note without a placeholder', async () => {
+    it('P18.5-T7 AC-6 leaves Remarks and the next-action note without a placeholder', async () => {
       render({ '/leads': { body: page([lead({ remarks: null })]) } });
       await screen.findByDisplayValue('Pak Budi');
 
@@ -2268,7 +2303,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       expect(screen.getByLabelText('Lead name, row 1')).toHaveAttribute('placeholder', 'First Last');
     });
 
-    it('P18.8-T7 has no axe violations with handles, a WhatsApp link and an agent’s row', async () => {
+    it('P18.5-T7 has no axe violations with handles, a WhatsApp link and an agent’s row', async () => {
       render({ '/leads': { body: page([lead({ contact: { phone: '0812-1100-2200', email: null } }), lead({ id: 'l2', name: 'Bu Rina', ownerMembershipId: 'mem-7' })]) } });
       await screen.findByDisplayValue('Bu Rina');
 
@@ -2277,11 +2312,11 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
     });
   });
   /**
-   * **A field that saves itself says so** (P18.95-T1 AC-5, AC-12; ADR-0167 §5; the client's UI review of 2026-10-26,
+   * **A field that saves itself says so** (P18.7-T1 AC-5, AC-12; ADR-0167 §5; the client's UI review of 2026-10-26,
    * UI-007: *"inline lead edits save silently"*). Beside the field, in its own box: *Saving…*, *Saved ✓*, or
    * *Couldn't save — retry*, which sends the same value again.
    */
-  describe('P18.95-T1 AC-5 — each field that saves itself says so beside it', () => {
+  describe('P18.7-T1 AC-5 — each field that saves itself says so beside it', () => {
     /** The save confirmation in the field's own box: the nearest ancestor with a status for a child. */
     const besides = (el: HTMLElement) => {
       for (let box = el.parentElement; box; box = box.parentElement) {
@@ -2329,14 +2364,14 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
         return box;
       }],
       ['the month’s commitment', lead({ statusCode: null, thisMonth: true }), async () => {
-        const box = screen.getByLabelText('Close this month');
+        const box = screen.getByLabelText('Potential closing this month');
         await userEvent.click(box);
         return box;
       }],
     ];
 
     for (const [what, answer, edit] of fields) {
-      it(`P18.95-T1 AC-5: ${what} says Saved ✓ beside it once its write lands`, async () => {
+      it(`P18.7-T1 AC-5: ${what} says Saved ✓ beside it once its write lands`, async () => {
         render({
           '/leads': { body: page([bare]) },
           '/leads/l1': { body: { ...answer, version: 3 } },
@@ -2354,7 +2389,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       });
     }
 
-    it('P18.95-T1 AC-5: says Saving… while the write is out', async () => {
+    it('P18.7-T1 AC-5: says Saving… while the write is out', async () => {
       const { mock } = stubFetch({ ...BASE, '/leads': { body: page([lead()]) } } as Parameters<typeof stubFetch>[0]);
       let release: () => void = () => {};
       vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit = {}) => {
@@ -2362,7 +2397,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
         await new Promise<void>((resolve) => { release = resolve; });
         return { ok: true, status: 200, json: async () => lead({ remarks: 'Hobi tenis', version: 3 }) } as Response;
       }));
-      renderInLayout(AgentLayout, <LeadsPage />, { me: AGENT });
+      renderInLayout(AgentLayout, <LeadsTable />, { me: AGENT });
       const box = await screen.findByLabelText('Remarks, row 1');
 
       await userEvent.clear(box);
@@ -2374,7 +2409,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       await waitFor(() => expect(besides(box)).toHaveTextContent('Saved ✓'));
     });
 
-    it('P18.95-T1 AC-5: a failure says Couldn’t save — retry, and the retry sends the same value at the row’s version now', async () => {
+    it('P18.7-T1 AC-5: a failure says Couldn’t save — retry, and the retry sends the same value at the row’s version now', async () => {
       const { calls } = render({
         '/leads': { body: page([lead()]) },
         'PATCH /leads/l1': [
@@ -2393,7 +2428,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       // The reason still stands beneath the lead, where it always has.
       expect(screen.getByText('Something went wrong.')).toBeInTheDocument();
       // Another field saved meanwhile moves the row on to version 3.
-      await userEvent.click(screen.getByLabelText('Close this month'));
+      await userEvent.click(screen.getByLabelText('Potential closing this month'));
       await waitFor(() => expect(lastBody(calls)).toEqual({ thisMonth: true, version: 2 }));
 
       await userEvent.click(screen.getByRole('button', { name: "Couldn't save — retry: Remarks, row 1" }));
@@ -2404,7 +2439,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       expect(screen.queryByRole('button', { name: /^Couldn't save/ })).not.toBeInTheDocument();
     });
 
-    it('P18.95-T1 AC-5: a conflict that re-reads the row leaves nothing to retry, and its reason says what happened', async () => {
+    it('P18.7-T1 AC-5: a conflict that re-reads the row leaves nothing to retry, and its reason says what happened', async () => {
       render({
         '/leads': { body: page([lead()]) },
         'PATCH /leads/l1': error(409, 'VERSION_CONFLICT', 'This record changed since you loaded it. Reload and try again.'),
@@ -2421,7 +2456,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       expect(besides(screen.getByLabelText('Remarks, row 1'))).toBeNull();
     });
 
-    it('P18.95-T1 AC-5: back to what is stored, a failed field has nothing unsaved and its retry goes', async () => {
+    it('P18.7-T1 AC-5: back to what is stored, a failed field has nothing unsaved and its retry goes', async () => {
       render({
         '/leads': { body: page([lead()]) },
         'PATCH /leads/l1': error(500, 'INTERNAL_ERROR', 'Something went wrong.'),
@@ -2437,7 +2472,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       expect(screen.queryByRole('button', { name: /^Couldn't save/ })).not.toBeInTheDocument();
     });
 
-    it('P18.95-T1 AC-5: the inline row’s name says Saved ✓ once it is a lead, on the same row', async () => {
+    it('P18.7-T1 AC-5: the inline row’s name says Saved ✓ once it is a lead, on the same row', async () => {
       render({
         '/leads': [{ body: page([]) }, { status: 201, body: lead({ id: 'l9', name: 'Pak Andi', type: null, statusCode: null }) }],
       });
@@ -2449,7 +2484,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       expect(screen.getByLabelText('Lead name, row 1')).toHaveValue('Pak Andi');
     });
 
-    it('P18.95-T1 AC-5: each of the lead’s details says Saved ✓ under its box, inside the dialog', async () => {
+    it('P18.7-T1 AC-5: each of the lead’s details says Saved ✓ under its box, inside the dialog', async () => {
       render({
         '/leads': { body: page([lead()]) },
         '/leads/l1': { body: lead({ contact: { phone: '0811', email: null }, version: 3 }) },
@@ -2465,7 +2500,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       expect(besides(dialog.getByLabelText('Email'))).toBeNull();
     });
 
-    it('P18.95-T1 AC-5: a card says it too, below 768px of table, beside the same field', async () => {
+    it('P18.7-T1 AC-5: a card says it too, below 768px of table, beside the same field', async () => {
       boxWidth(360);
       render({
         '/leads': { body: page([lead()]) },
@@ -2482,11 +2517,11 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
   });
 
   /*
-   * **Leads on a phone, and a search at every size** (P18.95-T4, ADR-0167 §4, OD-199; the client's UI review of
+   * **Leads on a phone, and a search at every size** (P18.7-T4, ADR-0167 §4, OD-199; the client's UI review of
    * 2026-10-26, UI-016 and UI-027). Every field of every card was editable inline on a phone, the name included,
    * at 26–28px; 71 leads made an 8,444px page with a sort and nothing to find one by.
    */
-  describe('P18.95-T4 — leads on a phone, a search and two filters, and 📞', () => {
+  describe('P18.7-T4 — leads on a phone, a search and two filters, and 📞', () => {
     /** A phone, as far as the screen can ask: `matchMedia`, which jsdom does not have. */
     const onPhone = () => vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
       media: query,
@@ -2498,7 +2533,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
     const optionsOf = (select: HTMLElement) => within(select).getAllByRole('option').map((o) => o.textContent);
 
     describe('AC-2, AC-5 — a search, Type and Status above the list, at every size', () => {
-      it('P18.95-T4 AC-2 AC-5 draws the search and both filters above the count, and the table still stands', async () => {
+      it('P18.7-T4 AC-2 AC-5 draws the search and both filters above the count, and the table still stands', async () => {
         render({ '/leads': { body: page([lead()]) } });
         await screen.findByDisplayValue('Pak Budi');
 
@@ -2518,7 +2553,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
         expect(screen.getByRole('table', { name: 'Your leads' })).toBeInTheDocument();
       });
 
-      it('P18.95-T4 AC-2 sends the search once the typing settles, and each filter as it is chosen, from page 1', async () => {
+      it('P18.7-T4 AC-2 sends the search once the typing settles, and each filter as it is chosen, from page 1', async () => {
         const { calls } = render({ '/leads': { body: page([lead()]) } });
         await screen.findByDisplayValue('Pak Budi');
 
@@ -2536,7 +2571,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
         expect(lastRead(calls).get('outcome')).toBe('open');
       });
 
-      it('P18.95-T4 AC-2 offers the chosen type’s ladder alone, and lets go of a stage the new type does not have', async () => {
+      it('P18.7-T4 AC-2 offers the chosen type’s ladder alone, and lets go of a stage the new type does not have', async () => {
         const { calls } = render({ '/leads': { body: page([lead()]) } });
         await screen.findByDisplayValue('Pak Budi');
         const [type, status] = [filterBar().getByLabelText('Filter by type'), filterBar().getByLabelText('Filter by status')];
@@ -2555,7 +2590,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
         expect(lastRead(calls).get('statusCode')).toBeNull();
       });
 
-      it('P18.95-T4 AC-2 draws what the server answers, and counts what matched', async () => {
+      it('P18.7-T4 AC-2 draws what the server answers, and counts what matched', async () => {
         render({
           '/leads': { body: page([lead(), lead({ id: 'l2', name: 'Ibu Wati' })]) },
           'search=wati': { body: page([lead({ id: 'l2', name: 'Ibu Wati' })]) },
@@ -2570,7 +2605,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
         expect(screen.getByDisplayValue('Ibu Wati')).toBeInTheDocument();
       });
 
-      it('P18.95-T4 AC-2 says No leads match. when nothing does, in the table and in the cards', async () => {
+      it('P18.7-T4 AC-2 says No leads match. when nothing does, in the table and in the cards', async () => {
         render({
           '/leads': { body: page([lead()]) },
           'search=nobody': { body: page([]) },
@@ -2584,7 +2619,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
         expect(screen.queryByText('No leads yet — add your first one above.')).not.toBeInTheDocument();
       });
 
-      it('P18.95-T4 AC-2 hides the drag handles while the list is searched or filtered, and keeps the first column’s room', async () => {
+      it('P18.7-T4 AC-2 hides the drag handles while the list is searched or filtered, and keeps the first column’s room', async () => {
         render({ '/leads': { body: page([lead(), lead({ id: 'l2', name: 'Ibu Wati' })]) } });
         await screen.findByDisplayValue('Ibu Wati');
         expect(screen.getAllByRole('button', { name: /^Reorder / })).toHaveLength(2);
@@ -2602,7 +2637,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
         await waitFor(() => expect(screen.getAllByRole('button', { name: /^Reorder / })).toHaveLength(2));
       });
 
-      it('P18.95-T4 AC-2 keeps the search when its answer fails, so it can be changed', async () => {
+      it('P18.7-T4 AC-2 keeps the search when its answer fails, so it can be changed', async () => {
         render({
           '/leads': { body: page([lead()]) },
           'search=boom': error(500, 'INTERNAL_ERROR', 'Something went wrong.'),
@@ -2615,7 +2650,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
         expect(filterBar().getByRole('searchbox')).toHaveValue('boom');
       });
 
-      it('P18.95-T4 AC-2 has no axe violations with the filter bar', async () => {
+      it('P18.7-T4 AC-2 has no axe violations with the filter bar', async () => {
         render({ '/leads': { body: page([lead()]) } });
         await screen.findByDisplayValue('Pak Budi');
         const { violations } = await axe(document.body, { rules: { 'color-contrast': { enabled: false } } });
@@ -2624,7 +2659,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
     });
 
     describe('AC-3 — 📞 beside WhatsApp', () => {
-      it('P18.95-T4 AC-3 rings the lead from 📞, between WhatsApp and the ⋮, with the number as WhatsApp reads it', async () => {
+      it('P18.7-T4 AC-3 rings the lead from 📞, between WhatsApp and the ⋮, with the number as WhatsApp reads it', async () => {
         render({ '/leads': { body: page([lead({ contact: { phone: '0812-1100-2200', email: null } })]) } });
         await screen.findByDisplayValue('Pak Budi');
 
@@ -2643,7 +2678,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       it.each([
         ['no phone at all', null, 'No phone number yet — add one in Lead details.'],
         ['a number nobody could dial', '123', 'This number can’t be dialled — check it in Lead details.'],
-      ])('P18.95-T4 AC-3 holds 📞 and WhatsApp, saying why, for %s', async (_case, phone, reason) => {
+      ])('P18.7-T4 AC-3 holds 📞 and WhatsApp, saying why, for %s', async (_case, phone, reason) => {
         render({ '/leads': { body: page([lead({ contact: { phone, email: null } })]) } });
         await screen.findByDisplayValue('Pak Budi');
 
@@ -2659,7 +2694,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
         expect(screen.getAllByRole('tooltip', { hidden: false }).some((t) => !t.hidden && t.textContent === reason)).toBe(true);
       });
 
-      it('P18.95-T4 AC-3 has no 📞 on the inline row, which is not a lead yet', async () => {
+      it('P18.7-T4 AC-3 has no 📞 on the inline row, which is not a lead yet', async () => {
         render({ '/leads': { body: page([]) } });
         await screen.findByText('0 active leads');
         await userEvent.click(screen.getByRole('button', { name: '+ Add lead' }));
@@ -2676,7 +2711,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
         ['Recruit first', 'type', 'desc'],
         ['Earliest stage first', 'status', 'asc'],
         ['Furthest stage first', 'status', 'desc'],
-      ])('P18.95-T4 AC-4 sends %s as the heading always did: sort=%s, dir=%s', async (label, key, dir) => {
+      ])('P18.7-T4 AC-4 sends %s as the heading always did: sort=%s, dir=%s', async (label, key, dir) => {
         boxWidth(360);
         const { calls } = render({ '/leads': { body: page([lead()]) } });
         await screen.findByRole('list', { name: 'Your leads' });
@@ -2702,7 +2737,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       const LONG = 'Hobi golf setiap Minggu pagi di Pondok Indah, anak sulungnya masuk kuliah tahun depan '
         + 'dan dia sedang membandingkan dua polis pendidikan dari agen lain.';
 
-      it('P18.95-T4 AC-1 draws each lead in words: name, type, stage, next action and its date, the remarks in full', async () => {
+      it('P18.7-T4 AC-1 draws each lead in words: name, type, stage, next action and its date, the remarks in full', async () => {
         onPhone();
         render({
           '/leads': { body: page([lead({ remarks: LONG, nextActionNote: 'Kopi jam 10' }), lead({ id: 'l2', name: 'Ibu Wati', type: null, statusCode: null, remarks: null, nextActionDate: null })]) },
@@ -2729,7 +2764,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
         expect(screen.queryByRole('table')).not.toBeInTheDocument();
       });
 
-      it('P18.95-T4 AC-1 keeps WhatsApp, 📞, ⋮ and the handle on the card, each a 44px target, and opening none of them opens the sheet', async () => {
+      it('P18.7-T4 AC-1 keeps WhatsApp, 📞, ⋮ and the handle on the card, each a 44px target, and opening none of them opens the sheet', async () => {
         onPhone();
         render({ '/leads': { body: page([lead({ contact: { phone: '0812-1100-2200', email: null } })]) } });
         const card = within(within(await screen.findByRole('list', { name: 'Your leads' })).getByRole('listitem'));
@@ -2746,7 +2781,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
         expect(screen.queryByRole('dialog', { name: 'Edit Pak Budi' })).not.toBeInTheDocument();
       });
 
-      it('P18.95-T4 AC-1 opens the edit sheet from the card, with today’s fields at 44px under their own labels', async () => {
+      it('P18.7-T4 AC-1 opens the edit sheet from the card, with today’s fields at 44px under their own labels', async () => {
         onPhone();
         render({ '/leads': { body: page([lead({ remarks: LONG })]) } });
         await screen.findByRole('list', { name: 'Your leads' });
@@ -2761,7 +2796,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
         expect(inSheet.getByLabelText('Lead name')).toHaveValue('Pak Budi');
         expect(inSheet.getByLabelText('Type')).toHaveValue('sales');
         expect(inSheet.getByLabelText('Status')).toHaveValue('FOLLOW_UP');
-        expect(inSheet.getByLabelText('Close this month')).not.toBeChecked();
+        expect(inSheet.getByLabelText('Potential closing this month')).not.toBeChecked();
         expect(inSheet.getByLabelText('Next action date')).toHaveValue('2026-10-02');
         expect(inSheet.getByLabelText('Next action note')).toHaveValue('');
         // The remark grows rather than clipping: a one-line box that measures itself (`AutoGrowTextarea`).
@@ -2772,13 +2807,13 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
         for (const label of ['Lead name', 'Type', 'Status']) {
           expect(inSheet.getByLabelText(label).className).toContain('max-md:min-h-11');
         }
-        // The date's 44px is its box's, which the field and its face fill (P18.96-T2's shared DateField).
+        // The date's 44px is its box's, which the field and its face fill (P18.8-T2's shared DateField).
         expect(inSheet.getByLabelText('Next action date').parentElement!.className).toContain('max-md:min-h-11');
         expect(remarks.className).toContain('min-h-11');
         expect(inSheet.getByRole('button', { name: 'Close' }).className).toContain('max-md:min-h-11');
       });
 
-      it('P18.95-T4 AC-1 saves from the sheet one field at a time, saying Saving… then Saved ✓ beside it', async () => {
+      it('P18.7-T4 AC-1 saves from the sheet one field at a time, saying Saving… then Saved ✓ beside it', async () => {
         onPhone();
         const { calls } = render({
           '/leads': { body: page([lead()]) },
@@ -2797,7 +2832,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
         await waitFor(() => expect(sheet.getAllByRole('status').map((s) => s.textContent)).toContain('Saved ✓'));
       });
 
-      it('P18.95-T4 AC-1 moves a stage from the sheet, through the stage’s own route', async () => {
+      it('P18.7-T4 AC-1 moves a stage from the sheet, through the stage’s own route', async () => {
         onPhone();
         const { calls } = render({
           '/leads': { body: page([lead()]) },
@@ -2815,7 +2850,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
         expect(await within(screen.getByRole('listitem')).findByText('Paid and issued')).toBeInTheDocument();
       });
 
-      it('P18.95-T4 AC-1 closing the sheet saves the field being typed in, and the card says the save', async () => {
+      it('P18.7-T4 AC-1 closing the sheet saves the field being typed in, and the card says the save', async () => {
         onPhone();
         const { calls } = render({
           '/leads': { body: page([lead()]) },
@@ -2836,7 +2871,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
         expect(opener).toHaveFocus();
       });
 
-      it('P18.95-T4 AC-1 says a refusal in the sheet and on the card, and keeps what was typed', async () => {
+      it('P18.7-T4 AC-1 says a refusal in the sheet and on the card, and keeps what was typed', async () => {
         onPhone();
         render({
           '/leads': { body: page([lead()]) },
@@ -2860,7 +2895,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
         expect(card.getByRole('button', { name: "Couldn't save — retry: Bu" })).toBeInTheDocument();
       });
 
-      it('P18.95-T4 AC-1 + Add lead opens the sheet on a new lead, its name box focused, and keeps it open once saved', async () => {
+      it('P18.7-T4 AC-1 + Add lead opens the sheet on a new lead, its name box focused, and keeps it open once saved', async () => {
         onPhone();
         const { calls } = render({
           '/leads': [{ body: page([]) }, { status: 201, body: lead({ id: 'l9', name: 'Ibu Sari', type: null, statusCode: null, remarks: null, nextActionDate: null }) }],
@@ -2886,7 +2921,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
         expect(within(sheet).getByLabelText('Type')).not.toHaveAttribute('aria-disabled');
       });
 
-      it('P18.95-T4 AC-1 takes a new lead left empty away, and the sheet with it', async () => {
+      it('P18.7-T4 AC-1 takes a new lead left empty away, and the sheet with it', async () => {
         onPhone();
         const { calls } = render({ '/leads': { body: page([]) } });
         await screen.findByText('0 active leads');
@@ -2899,7 +2934,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
         expect(writes(calls, 'POST')).toHaveLength(0);
       });
 
-      it('P18.95-T4 AC-1 has no axe violations with the cards drawn and the sheet open', async () => {
+      it('P18.7-T4 AC-1 has no axe violations with the cards drawn and the sheet open', async () => {
         onPhone();
         render({ '/leads': { body: page([lead({ contact: { phone: '0812-1100-2200', email: null } }), lead({ id: 'l2', name: 'Bu Rina', ownerMembershipId: 'mem-7', contact: { phone: null, email: null } })]) } });
         await screen.findByRole('list', { name: 'Your leads' });
@@ -2911,7 +2946,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
         expect(violations.map((v) => v.id)).toEqual([]);
       });
 
-      it('P18.95-T4 AC-5 leaves a tablet’s cards editable where they stand', async () => {
+      it('P18.7-T4 AC-5 leaves a tablet’s cards editable where they stand', async () => {
         boxWidth(700);
         render({ '/leads': { body: page([lead()]) } });
         const card = within(within(await screen.findByRole('list', { name: 'Your leads' })).getByRole('listitem'));

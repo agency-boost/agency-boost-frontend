@@ -49,6 +49,12 @@ const SEEDED: readonly DemoGroup[] = [
         password: FIELD,
         lands: 'The same, and the one you impersonate to see that refusal',
       },
+      {
+        role: 'Super Admin · linked to the Owner',
+        email: 'wilson@agencyboost.test',
+        password: FIELD,
+        lands: 'The console, with KPM 0417 Owner\'s views in the avatar menu — the two logins are linked',
+      },
     ],
   },
   {
@@ -126,10 +132,10 @@ const SEEDED: readonly DemoGroup[] = [
         lands: 'A second office — sign in here to see that neither can reach the other',
       },
       {
-        role: 'Agent',
+        role: 'Agent · leads one',
         email: 'agent@kpm0555.test',
         password: FIELD,
-        lands: 'The same office, from the field',
+        lands: 'The same office, from the field. Lina recruited Fajar, so she coaches him: Tim saya › Coaching',
       },
     ],
   },
@@ -141,6 +147,13 @@ const SEEDED: readonly DemoGroup[] = [
         email: 'newcomer@agencyboost.test',
         password: FIELD,
         lands: 'Register KPM — the only thing there is to do',
+      },
+      {
+        // P19-T1 AC-4 (ADR-0190 §4): signed in before verifying.
+        role: 'Email not verified yet',
+        email: 'unverified@agencyboost.test',
+        password: FIELD,
+        lands: 'Every page says Verifikasi email Anda · Kirim ulang until the link is pressed',
       },
       {
         role: 'Office suspended',

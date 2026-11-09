@@ -2,7 +2,7 @@ import { defineMessages, type MessagesOf } from '@/i18n/catalogue';
 import { kept } from '@/i18n/kept';
 
 /**
- * **The two attack plans' shared words** (P18.98-T4, field selling; `functional/sales-tools.md`, `functional/recruitment.md`,
+ * **The two attack plans' shared words** (P18.10-T4, field selling; `functional/sales-tools.md`, `functional/recruitment.md`,
  * *The module's own strings*): what the Sales Attack Plan (`/attack-plan`, and the catalog's drawer) and the Recruitment
  * Attack Plan (`/recruitment/attack-plan`) both say, in the prototypes' words (`Overall.html:3786-3866`, `:9726-9790`;
  * `Recruitment_Section.html:288-353`, `:586-619`) — the step list's name, *Back*, the brief card's title and its line, and
@@ -26,7 +26,7 @@ const en = {
   back: 'Back',
   /** The brief card (`Overall.html:3796`, `Recruitment_Section.html:300`). */
   briefTitle: 'Who are we talking to?',
-  /** The client's one line at every size, beside the questions it counts (P18.95-T7 AC-1, grey text rows 9 and 10). */
+  /** The client's one line at every size, beside the questions it counts (P18.7-T7 AC-1, grey text rows 9 and 10). */
   briefHint: 'Answer 3 questions to get your pitch.',
   /** The numbered blocks' labels (`.d-label`, `.block-label`). */
   goodFitFor: 'Good fit for',

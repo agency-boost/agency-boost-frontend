@@ -26,6 +26,7 @@ import {
   setCapabilityStatus,
   type CapabilityCatalog, type CapabilityEntry,
 } from '@/lib/tenant-config';
+import { ARCHIVED_SWITCH_ROW, HANDLE_TOUCH } from '../settings-touch';
 
 const move = <T,>(rows: T[], from: number, to: number): T[] => {
   if (to < 0 || to >= rows.length) return rows;
@@ -66,7 +67,7 @@ const TABS = [
 const TITLE = kept('Capability Mapping');
 
 /*
- * **The ladder's grey sentence, in the client's words** (P18.97-T4 AC-6, ADR-0176 §6; the grey-text table of 2026-10-27,
+ * **The ladder's grey sentence, in the client's words** (P18.9-T4 AC-6, ADR-0176 §6; the grey-text table of 2026-10-27,
  * UI-027 — 27 words on how a stage is decided, *ⓘ · ⓘ · Show*): shown from 1024px, behind an ⓘ beside *The ladder*
  * below it, in both languages (`ladderNote`, `messages/settings-capability.ts`).
  */
@@ -142,6 +143,8 @@ export default function CapabilityMappingPage() {
           <DragHandle
             label={item.label}
             disabled={busy}
+            // 44 × 44px below 1024px (P19.2-T3 AC-4; UI-142: *⠿ 20px*).
+            className={HANDLE_TOUCH}
             onPick={() => undefined}
             onDrop={() => undefined}
             onMove={onMove}
@@ -289,12 +292,12 @@ export default function CapabilityMappingPage() {
     >
       <div className="flex flex-col gap-4">
         {error && (
-          <div role="alert" className="rounded-md border border-amber bg-card p-4">
+          <div role="alert" className="rounded-md border border-primary bg-card p-4">
             <p className="text-md text-navy">{error.message}</p>
           </div>
         )}
 
-        <label className="flex items-center gap-2 text-md text-navy">
+        <label className={cn('flex items-center gap-2 text-md text-navy', ARCHIVED_SWITCH_ROW)}>
           <input
             type="checkbox"
             checked={showArchived}

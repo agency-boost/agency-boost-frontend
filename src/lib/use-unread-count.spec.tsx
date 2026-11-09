@@ -40,7 +40,7 @@ describe('useUnreadCount', () => {
     expect(mock).toHaveBeenCalledTimes(1);
   });
 
-  it('P18.95-T1 AC-7 moves by a change’s delta at once, never below zero, without asking again', async () => {
+  it('P18.7-T1 AC-7 moves by a change’s delta at once, never below zero, without asking again', async () => {
     const { mock } = stubFetch({ '/notifications': { body: { items: [], unread: 2, total: 2, page: 1, pageSize: 1 } } });
     const { result } = renderHook(() => useUnreadCount(), { wrapper });
     await waitFor(() => expect(result.current).toBe(2));

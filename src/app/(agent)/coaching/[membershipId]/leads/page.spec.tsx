@@ -78,7 +78,7 @@ const show = (language?: Language, over: Record<string, unknown> = {}, me = LEAD
 
 const rows = () => [...document.querySelectorAll('[data-coachee-lead]')].map((li) => li.getAttribute('data-coachee-lead'));
 
-describe('UI-029 — the coachee’s Leads tab (P18.99-T8), writable since the staging review of 2026-10-31', () => {
+describe('UI-029 — the coachee’s Leads tab (P18.11-T8), writable since the staging review of 2026-10-31', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it('UI-029 lists only that agent’s open leads, read once by owner, in the card’s order; the closed in one line', async () => {
@@ -110,7 +110,7 @@ describe('UI-029 — the coachee’s Leads tab (P18.99-T8), writable since the s
     await screen.findByRole('button', { name: 'Desi Pratama' });
     const add = screen.getByRole('button', { name: 'Add lead' });
     // `/leads`' own floating +, and at every width: the tab has no table button to stand in for it on a desktop.
-    expect(add).toHaveClass('fixed', 'bottom-[calc(var(--tab-bar-space)+1rem)]', 'bg-amber');
+    expect(add).toHaveClass('fixed', 'bottom-[calc(var(--tab-bar-space)+1rem)]', 'bg-primary');
     expect(add.className).not.toMatch(/\blg:hidden\b/);
     await userEvent.click(add);
     const sheet = within(await screen.findByRole('dialog', { name: 'New lead' }));

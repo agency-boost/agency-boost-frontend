@@ -1,187 +1,151 @@
 'use client';
 
+import Link from 'next/link';
 import { useId, useState } from 'react';
+import { PersonRow } from '@/components/ui/person-row';
 import { RoleBadge } from '@/components/ui/role-badge';
 import { TippedGlyph } from '@/components/ui/tipped-glyph';
 import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
 import { kpmOverviewMessages } from '@/i18n/messages/kpm-overview';
 import { cn } from '@/lib/cn';
-import { formatRupiahCompact } from '@/lib/format';
+import { formatMonth, formatRupiahCompact } from '@/lib/format';
+import { StatTile } from '@/components/ui/stat-tile';
 import {
-  leftOutWords, markerAt, ofTarget, projectedWords, RANKING_SHOWN, showingWords,
-  targetLegend, unitNums, type OverviewAabUnit, type OverviewAgency, type OverviewProduction,
+  leftOutWords, ofTarget, projectedWords, RANKING_SHOWN, unitNums, uploadHref,
+  type OverviewAgency, type OverviewProduction,
 } from '@/lib/kpm-overview';
-import { Bar, FILL_TONE, OverviewCard, Pct, PctPill, TEXT_TONE, useTone } from './parts';
+import { useCan } from '@/lib/session';
+import { Bar, FILL_TONE, OverviewPanel, Pct, PctPill, ShowAll, TEXT_TONE, useTone } from './parts';
 
 /**
- * *Production — this year* (`KPM_Owner.html:1075-1220`, CSS `:533-563`): the office's APE so far against
- * the sum of its members' goals (OD-143), *"Rp {achieved} of Rp {target} target"* in the product's compact money
- * formatter (*Rp 8,4 M*, ADR-0167 §1) — never the prototype's *8.4B* — the bar, the projection marker, and *Units furthest behind
- * target*.
+ * *Production — this year* (`KPM_Owner.html:1075-1220`): the office's APE so far against the sum of its members' goals
+ * (OD-143), *"Rp {achieved} of Rp {target} target"* in the product's compact money formatter (*Rp 8,4 M*, ADR-0167 §1) —
+ * never the prototype's *8.4B* — its share, the projection, and *Units furthest behind target*.
  *
- * **The projection is a run-rate** (D-figures): the year to date as of the latest month held ÷ that month's
- * number × 12, the server's — a missing month before it is already in the carrier's year to date. It is not drawn until a month of the year is held, and the marker sits where it falls against
- * the target, its label above it.
+ * **The projection is a run-rate** (D-figures): the year to date as of the latest month held ÷ that month's number × 12,
+ * the server's — a missing month before it is already in the carrier's year to date. It is not drawn until a month of
+ * the year is held.
  *
- * **No figure is 0 for want of data.** A year with no file says *Not uploaded yet*, a target nobody set says
- * so, and the total names in its tooltip the months and the members it leaves out (Phase 15's rule).
+ * **No figure is 0 for want of data.** A year with no file says *Not uploaded yet*, a target nobody set says so, and the
+ * total names in its tooltip the months and the members it leaves out (Phase 15's rule).
+ *
+ * *Changed 2026-11-05 (P19.2-T3 AC-5; the client's UI-143):* the card becomes **the first row's fourth stat tile** — the
+ * figure, the bar, *of Rp … target*, its share and the projection under it, as `kpm-owner-mobile-2026-11-03` 1 draws
+ * *"Production this year with bar"* — **and a list in the second row**, *Units furthest behind target*, three shown and
+ * *Semua n ›*. The projection's marker on a bar of its own gave way to the tile's bar; its figure stays, in words.
  */
-export function Production({ production }: { production: OverviewProduction }) {
+export function ProductionTile({ production }: { production: OverviewProduction }) {
   const t = useMessages(kpmOverviewMessages);
   const language = useLanguage();
   const figures = useFigureLanguage();
-  const tone = useTone();
-  const { ytd, projectionMinor, agencies } = production;
+  const { ytd, projectionMinor } = production;
   const left = leftOutWords(ytd, language, figures);
-  const marker = markerAt(projectionMinor, ytd.targetMinor);
   const showBar = ytd.pct !== null && ytd.targetMinor !== null && ytd.targetMinor > 0;
-
   return (
-    <OverviewCard className="p-5">
-      {/* Each piece wraps on its own: on a phone the line breaks rather than pushing the card past the screen. */}
-      <div className="mb-2.5 flex flex-wrap items-baseline gap-x-2 gap-y-1">
-        <span className={cn('font-body text-2xl font-bold sm:text-3xl', ytd.achievedMinor === null ? 'text-muted' : 'text-navy')}>
-          {ytd.achievedMinor === null ? t.notUploaded : formatRupiahCompact(ytd.achievedMinor, {}, figures)}
-        </span>
-        {left && <TippedGlyph glyph="ⓘ" name={left} tip={left} align="fit" className="-my-1 self-center" />}
-        <span className="text-md text-muted">
-          {ytd.targetMinor === null ? t.noGoal : ofTarget(ytd.targetMinor, language, figures)}
-        </span>
-        {ytd.pct !== null && <PctPill pct={ytd.pct} className="ml-auto" />}
-      </div>
-
-      {showBar && ytd.targetMinor !== null && (
-        <div className="mt-1">
-          {marker !== null && projectionMinor !== null && (
-            // The label above the marker (`:1087`), on the side of it with room: in flow, so on a phone it
-            // wraps inside the card rather than running off it.
-            <p
-              className={cn('mb-1 text-2xs font-bold text-navy', marker > 50 ? 'text-right' : 'text-left')}
-              style={marker > 50 ? { paddingRight: `${100 - marker}%` } : { paddingLeft: `${marker}%` }}
-            >
-              {projectedWords(projectionMinor, language, figures)}
-            </p>
+    <StatTile
+      label={t.production}
+      value={ytd.achievedMinor === null
+        ? <span className="text-md font-semibold text-muted">{t.notUploaded}</span>
+        : formatRupiahCompact(ytd.achievedMinor, {}, figures)}
+      unit={left ? <TippedGlyph glyph="ⓘ" name={left} tip={left} align="fit" /> : undefined}
+      bar={showBar ? ytd.pct : undefined}
+      sub={(
+        <span className="flex flex-col gap-0.5">
+          <span className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+            <span>{ytd.targetMinor === null ? t.noGoal : ofTarget(ytd.targetMinor, language, figures)}</span>
+            {ytd.pct !== null && <PctPill pct={ytd.pct} size="sm" />}
+          </span>
+          {projectionMinor !== null && (
+            <span className="text-xs font-bold text-navy">{projectedWords(projectionMinor, language, figures)}</span>
           )}
-          <div className="relative">
-            <Bar pct={ytd.pct ?? 0} fill={tone(ytd.pct) === 'alert' ? 'bg-alert' : 'bg-amber'} height="wide" />
-            {marker !== null && (
-              <span aria-hidden="true" className="absolute top-0 h-full w-0.5 -translate-x-1/2 bg-navy" style={{ left: `${marker}%` }} />
-            )}
-          </div>
-          <div className="mt-1.5 flex justify-between gap-3 text-xs text-muted">
-            <span>0</span>
-            <span>{targetLegend(ytd.targetMinor, language, figures)}</span>
-          </div>
-        </div>
+          <MissingPills production={production} />
+        </span>
       )}
-      {/* Without a target there is no bar to place it on; the projection is still a figure. */}
-      {!showBar && projectionMinor !== null && (
-        <p className="text-xs font-bold text-navy">{projectedWords(projectionMinor, language, figures)}</p>
-      )}
-
-      <div className="mt-[18px] border-t border-hairline pt-3.5">
-        <h3 className="mb-0.5 text-base font-bold text-navy">{t.unitsTitle}</h3>
-        <p className="mb-3 text-xs text-muted">{t.unitsSub}</p>
-        <Units agencies={agencies} />
-      </div>
-    </OverviewCard>
+    />
   );
 }
 
 /**
- * The agencies lowest by attainment, as the server orders them (D-units; a figure not held sorts last),
- * four shown and the rest in place behind *view full ranking →* (D-coverage).
+ * **"Belum diunggah" always carries its next step** (P19.3-T2 AC-7, AC-8; UI-150, UI-157, Overview R3): one pill per
+ * month still open for upload, each opening Data upload on itself (`?month=`) — *"Okt belum diunggah ›"*, or, while
+ * nothing was ever uploaded, the orange *"Unggah Nov 2026 ›"*. A month before the KPM, or one already locked, is never
+ * named (the server's `missingMonths`). Drawn for whoever may open Data upload (`data_upload:read`).
  */
-function Units({ agencies }: { agencies: OverviewAgency[] }) {
+function MissingPills({ production }: { production: OverviewProduction }) {
   const t = useMessages(kpmOverviewMessages);
-  const language = useLanguage();
+  const figures = useFigureLanguage();
+  const opens = useCan('data_upload:read');
+  const { ytd } = production;
+  if (!opens || ytd.missingMonths.length === 0) return null;
+  const never = ytd.achievedMinor === null;
+  return (
+    <span className="mt-0.5 flex flex-wrap gap-1.5">
+      {ytd.missingMonths.map((month) => (
+        <Link
+          key={month}
+          href={uploadHref(month)}
+          data-missing-month={month}
+          className="inline-flex items-center rounded-pill bg-pill-amber px-2.5 text-xs font-semibold text-pill-amber-ink max-lg:min-h-11 lg:min-h-7 lg:hover:underline"
+        >
+          {never ? t.uploadPill({ month: formatMonth(month, figures) }) : t.missingPill({ month: formatMonth(month, figures) })}
+        </Link>
+      ))}
+    </span>
+  );
+}
+
+/**
+ * *Units furthest behind target*: the agencies lowest by attainment, as the server orders them (D-units; a figure not
+ * held sorts last), three shown and the rest in place behind *Semua n ›* (D-coverage). *Since P19.3-T2 (AC-1, AC-6;
+ * UI-148, Overview case 6):* **each row opens that AB's Unit Dashboard**, where it opened to the AABs inside it — which
+ * the Unit Dashboard shows — and **the list is hidden while no unit has a target** (the page leaves it out, D-08).
+ */
+export function UnitsList({ production }: { production: OverviewProduction }) {
+  const t = useMessages(kpmOverviewMessages);
+  const { agencies } = production;
   const [all, setAll] = useState(false);
-  const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set());
   const listId = useId();
-  if (agencies.length === 0) return <p className="text-base text-muted">{t.noUnits}</p>;
   const shown = all ? agencies : agencies.slice(0, RANKING_SHOWN);
-  const toggle = (id: string) => setOpen((was) => {
-    const next = new Set(was);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    return next;
-  });
 
   return (
-    <>
-      <ul id={listId}>
-        {shown.map((agency) => (
-          <AgencyRow key={agency.membershipId} agency={agency} open={open.has(agency.membershipId)} onToggle={() => toggle(agency.membershipId)} />
-        ))}
-      </ul>
-      {agencies.length > RANKING_SHOWN && (
-        <p className="mt-2.5 text-sm text-muted">
-          {showingWords(shown.length, agencies.length, language)}
-          <button
-            type="button"
-            aria-expanded={all}
-            aria-controls={listId}
-            onClick={() => setAll((was) => !was)}
-            className="font-semibold text-amber-ink underline-offset-2 hover:underline"
-          >
-            {all ? t.showFewer : t.viewFullRanking}
-          </button>
-        </p>
+    <OverviewPanel
+      title={t.unitsTitle}
+      tip={t.unitsSub}
+      action={agencies.length > RANKING_SHOWN && (
+        <ShowAll open={all} total={agencies.length} controls={listId} onToggle={() => setAll((was) => !was)} />
       )}
-    </>
+    >
+      {agencies.length === 0 ? <p className="text-base text-muted">{t.noUnits}</p> : (
+        <ul id={listId}>
+          {shown.map((agency) => <AgencyRow key={agency.membershipId} agency={agency} />)}
+        </ul>
+      )}
+    </OverviewPanel>
   );
 }
 
 /**
- * `.unit-row` (`:544-561`): the whole row is the prototype's click target, so it is one button saying
- * whether it is open, its name, its percentage and *"Rp {a} / Rp {t} unit target"* its accessible name.
+ * `.unit-row` (`:544-561`) as a person row (UI-148, `kpm-overview-*` 2): the AB's NAME and badge, *"Rp {a} / Rp {t}
+ * unit target"* with its bar, the percentage on the right, and a › — **the whole row opens their Unit Dashboard**
+ * (`/unit/dashboard/[membershipId]`), drawn for whoever may open one (`unit_dashboard:read`).
  */
-function AgencyRow({ agency, open, onToggle }: { agency: OverviewAgency; open: boolean; onToggle: () => void }) {
-  const t = useMessages(kpmOverviewMessages);
+function AgencyRow({ agency }: { agency: OverviewAgency }) {
   const toneFor = useTone();
-  const childId = useId();
+  const opens = useCan('unit_dashboard:read');
   const tone = toneFor(agency.pct);
   return (
-    <li className="border-b border-hairline py-[9px] last:border-b-0">
-      <button type="button" aria-expanded={open} aria-controls={childId} onClick={onToggle} className="block w-full text-left">
-        <span className="flex items-center gap-2">
-          <span aria-hidden="true" className="w-3 flex-none text-2xs text-muted">{open ? '▾' : '▸'}</span>
-          <span className="min-w-0 flex-1 text-md font-semibold text-navy">
-            {agency.name} <RoleBadge role="AB" className="ml-[3px] align-middle" />
-          </span>
-          <span className={cn('flex-none text-base font-bold', TEXT_TONE[tone])}><Pct pct={agency.pct} /></span>
-        </span>
-        <UnitFigures money={agency} agency className="pl-5" />
-      </button>
-      <div id={childId} hidden={!open} className="ml-5 mt-[9px] border-l-[1.5px] border-hairline pl-5">
-        {agency.aabUnits.length === 0 ? (
-          <p className="py-[7px] pl-2 text-base font-medium text-navy">
-            {t.noAab}{' '}
-            <span aria-hidden="true" className="ml-[3px] inline-flex rounded-pill bg-role-aab/15 px-2 py-0.5 text-2xs font-bold text-navy-soft">—</span>
-          </p>
-        ) : (
-          <ul>
-            {agency.aabUnits.map((unit) => <AabRow key={unit.membershipId} unit={unit} />)}
-          </ul>
-        )}
-      </div>
-    </li>
-  );
-}
-
-/** `.unit-row-sub` (`:559-561`): an AAB's unit inside the agency. */
-function AabRow({ unit }: { unit: OverviewAabUnit }) {
-  const toneFor = useTone();
-  const tone = toneFor(unit.pct);
-  return (
-    <li className="py-[7px] pl-2">
-      <span className="flex items-center gap-2">
-        <span className="min-w-0 flex-1 text-base font-medium text-navy">
-          {unit.name} <RoleBadge role="AAB" className="ml-[3px] align-middle" />
-        </span>
-        <span className={cn('flex-none text-base font-bold', TEXT_TONE[tone])}><Pct pct={unit.pct} /></span>
-      </span>
-      <UnitFigures money={unit} agency={false} />
+    <li className="border-b border-hairline last:border-b-0">
+      <PersonRow
+        name={agency.name}
+        seed={agency.membershipId}
+        href={opens ? `/unit/dashboard/${encodeURIComponent(agency.membershipId)}` : undefined}
+        chevron
+        height={56}
+        className="gap-2 rounded-none bg-transparent px-0"
+        badge={<RoleBadge role="AB" className="align-middle" />}
+        meta={<UnitFigures money={agency} agency className="mt-0 w-full" />}
+        trailing={<span className={cn('text-base font-bold', TEXT_TONE[tone])}><Pct pct={agency.pct} /></span>}
+      />
     </li>
   );
 }

@@ -12,10 +12,10 @@ vi.mock('next/navigation', () => ({
 }));
 
 /**
- * **The old address, redirected** (ADR-0185 §2; P18.99-T20 AC-6): one template behind a select and nine tabs, now a
+ * **The old address, redirected** (ADR-0185 §2; P18.11-T20 AC-6): one template behind a select and nine tabs, now a
  * company page, a checklist per template, a page per section and the company's own settings.
  */
-describe('P18.99-T20 AC-6 /admin/companies/[companyId]/template', () => {
+describe('P18.11-T20 AC-6 /admin/companies/[companyId]/template', () => {
   afterEach(() => {
     replace.mockReset();
     window.history.replaceState(null, '', '/');
@@ -35,7 +35,9 @@ describe('P18.99-T20 AC-6 /admin/companies/[companyId]/template', () => {
     ['?templateId=t-9', '#nonsense', '/admin/companies/c1/templates/t-9'],
     // The company's own tabs, whichever template was shown.
     ['', '#products', '/admin/companies/c1/settings#products'],
-    ['?templateId=t-9', '#recruitment', '/admin/companies/c1/settings#recruitment'],
+    // P19.4-T5 (ADR-0210): the playbook left Pengaturan perusahaan for the template's Rekrutmen section.
+    ['?templateId=t-9', '#recruitment', '/admin/companies/c1/templates/t-9/recruitment'],
+    ['', '#recruitment', '/admin/companies/c1'],
     ['', '#campaign-moc', '/admin/companies/c1/settings#campaigns'],
     // A hash that names a key of every object, not a tab: own keys only, so the prototype chain is no section (N4).
     ['', '#constructor', '/admin/companies/c1'],

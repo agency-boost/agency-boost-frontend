@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useSandboxedDocument } from '@/components/sandboxed-document';
 import { ConfigBadge } from '@/components/ui/config-badge';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button, Card, Field, TextInput } from '@/components/ui/field';
@@ -9,6 +10,7 @@ import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
 import { settingsMessages } from '@/i18n/messages/settings';
 import { trainingSettingsMessages } from '@/i18n/messages/training-settings';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
+import { HTML_ACCEPT, HTML_MIME_TYPE, isHtmlDocument, isHtmlFile } from '@/lib/html-document';
 import { formatFileSize } from '@/lib/recruitment-pitch';
 import {
   confirmTrainingUpload, moduleContentUrl, readModuleContent, requestTrainingUpload,
@@ -16,14 +18,28 @@ import {
   type ContentFile, type ContentLink, type ModuleContent, type ModuleContentView,
 } from '@/lib/tenant-config';
 
-/** What the API accepts, mirrored so a file is refused here before it costs anybody's data. */
-const ALLOWED = [
+/**
+ * What the API accepts, mirrored so a file is refused here before it costs anybody's data. Shared with the template's
+ * material (ADR-0208 §1), which takes the same files. **An HTML lesson among them** since P19.6-T2 (ADR-0217 §1,
+ * `TRAINING_FILE_MIME_TYPES`): pinned to the API's list by `lib/contract.spec.ts`.
+ */
+export const ALLOWED = [
   'image/jpeg', 'image/png', 'image/webp',
   'application/pdf',
   'video/mp4',
   'text/csv', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  HTML_MIME_TYPE,
 ];
-const MAX_BYTES = 25 * 1024 * 1024;
+
+/** The *File* picker's offer: today's files, and an HTML lesson (`.html`, `.htm`). */
+export const FILE_ACCEPT = `.pdf,.png,.jpg,.jpeg,.webp,.csv,.xlsx,${HTML_ACCEPT}`;
+
+/**
+ * The type a chosen file is sent as: its own, or `text/html` for a lesson a desktop reports with no type
+ * (`isHtmlFile`). Storage still confirms its first bytes before anything is attachable (ADR-0040, ADR-0217 §2).
+ */
+export const sentTypeOf = (file: File): string => (isHtmlFile(file) ? HTML_MIME_TYPE : file.type);
+export const MAX_BYTES = 25 * 1024 * 1024;
 
 /** An address's start, shown as the field's example: the same in both languages, never words. */
 const ADDRESS_EXAMPLE = 'https://';
@@ -72,7 +88,7 @@ export function ModuleContentEditor({
   const words = useMessages(trainingSettingsMessages);
   const t = words.content;
   const s = useMessages(settingsMessages);
-  // A file's size is a figure, in the reader's figures (P18.98-T3).
+  // A file's size is a figure, in the reader's figures (P18.10-T3).
   const figures = useFigureLanguage();
   const sizeOf = (bytes: number) => formatFileSize(bytes, figures);
   const [server, setServer] = useState<ModuleContentView | null>(null);
@@ -84,6 +100,7 @@ export function ModuleContentEditor({
   const [link, setLink] = useState({ label: '', url: '' });
   const fileInput = useRef<HTMLInputElement>(null);
   const videoInput = useRef<HTMLInputElement>(null);
+  const lesson = useSandboxedDocument();
 
   const load = useCallback(async () => {
     try {
@@ -144,7 +161,9 @@ export function ModuleContentEditor({
       setError(refusal('ASSET_TOO_LARGE', t.tooLarge({ name: file.name, size: sizeOf(file.size) })));
       return;
     }
-    if (!ALLOWED.includes(file.type)) {
+    const mimeType = sentTypeOf(file);
+    // A lesson is a *File*, never a *Video* (ADR-0217 §1).
+    if (!ALLOWED.includes(mimeType) || (section === 'videos' && mimeType === HTML_MIME_TYPE)) {
       setError(refusal('ASSET_TYPE_NOT_ALLOWED', t.notAccepted({ name: file.name })));
       return;
     }
@@ -152,7 +171,7 @@ export function ModuleContentEditor({
     setUploading(file.name);
     try {
       const signed = await requestTrainingUpload({
-        filename: file.name, mimeType: file.type, bytes: file.size,
+        filename: file.name, mimeType, bytes: file.size,
       });
       const sent = await fetch(signed.uploadUrl, { method: 'POST', body: signedUploadForm(signed, file) });
       if (!sent.ok) throw new Error('upload failed');
@@ -175,9 +194,14 @@ export function ModuleContentEditor({
     }
   };
 
-  const open = async (storageKey: string) => {
+  const open = async (item: ContentFile) => {
     try {
-      const { url } = await moduleContentUrl(moduleCode, storageKey);
+      // An HTML lesson: the sandboxed window, as an agent will see it — never a tab (P19.6-T2, ADR-0217 §4).
+      if (isHtmlDocument(item.mimeType)) {
+        await lesson.open(item.label, async () => (await moduleContentUrl(moduleCode, item.storageKey)).url);
+        return;
+      }
+      const { url } = await moduleContentUrl(moduleCode, item.storageKey);
       window.open(url, '_blank', 'noopener,noreferrer');
     } catch (err) {
       setError(toDisplayError(err));
@@ -234,7 +258,7 @@ export function ModuleContentEditor({
                 />
               </Field>
               <p className="text-sm text-muted">{sizeOf(item.bytes)}</p>
-              <Button variant="inline" onClick={() => void open(item.storageKey)}>{t.open}</Button>
+              <Button variant="inline" onClick={() => void open(item)}>{t.open}</Button>
               {canWrite && (
                 <Button variant="inlineDanger" disabled={busy} onClick={() => remove(section, index)}>
                   {s.remove}
@@ -252,6 +276,8 @@ export function ModuleContentEditor({
             type="file"
             accept={accept}
             aria-label={t.addTo({ heading })}
+            // 44px tall below 1024px (P19.2-T3 AC-4; UI-142): the module's one picker, on the Owner's page alone.
+            className="max-lg:min-h-11"
             disabled={busy || uploading !== null}
             onChange={(e) => void choose(section, e.target.files?.[0])}
           />
@@ -297,7 +323,7 @@ export function ModuleContentEditor({
       </Card>
 
       {error && (
-        <div role="alert" className="rounded-md border border-amber bg-card p-4">
+        <div role="alert" className="rounded-md border border-primary bg-card p-4">
           <p className="text-md text-navy">{error.message}</p>
         </div>
       )}
@@ -309,7 +335,7 @@ export function ModuleContentEditor({
         'files', t.files,
         t.filesHint,
         fileInput,
-        '.pdf,.png,.jpg,.jpeg,.webp,.csv,.xlsx',
+        FILE_ACCEPT,
       )}
       {fileSection(
         'videos', t.videos,
@@ -427,6 +453,7 @@ export function ModuleContentEditor({
           )}
         </div>
       )}
+      {lesson.dialog}
     </div>
   );
 }

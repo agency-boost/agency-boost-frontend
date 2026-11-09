@@ -42,7 +42,7 @@ function list(code = 'SALES', routes: Routes = {}, me = LEARNER) {
 
 const title = (name: string) => screen.findByRole('heading', { level: 1, name });
 
-describe('/training, the learner’s list (P18.5-T1)', () => {
+describe('/training, the learner’s list (P18.2-T1)', () => {
   beforeEach(() => {
     nav.replace.mockReset();
     nav.push.mockReset();
@@ -50,18 +50,18 @@ describe('/training, the learner’s list (P18.5-T1)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   describe('/training itself', () => {
-    it('P18.5-T1 AC-4 replaces itself with the office’s first offered category', async () => {
+    it('P18.2-T1 AC-4 replaces itself with the office’s first offered category', async () => {
       landing();
       await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('/training/SALES'));
     });
 
-    it('P18.5-T1 AC-4 skips a category no longer offered, kept only for a person’s history', async () => {
+    it('P18.2-T1 AC-4 skips a category no longer offered, kept only for a person’s history', async () => {
       const gone = category('LEGACY', 'Legacy', [], { offered: false });
       landing({ 'GET /training/progress': { body: progressView([gone, PRODUCT, SALES]) } });
       await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('/training/PRODUCT'));
     });
 
-    it('P18.5-T1 AC-4 shows the empty state for an office with no category at all', async () => {
+    it('P18.2-T1 AC-4 shows the empty state for an office with no category at all', async () => {
       landing({ 'GET /training/progress': { body: progressView([]) } });
       expect(await screen.findByText('No training to show yet.')).toBeInTheDocument();
       expect(screen.getByText('Modules appear here once they are published for you.')).toBeInTheDocument();
@@ -70,7 +70,7 @@ describe('/training, the learner’s list (P18.5-T1)', () => {
       expect(nav.replace).not.toHaveBeenCalled();
     });
 
-    it('P18.5-T1 AC-4 shows why the read failed, and asks again', async () => {
+    it('P18.2-T1 AC-4 shows why the read failed, and asks again', async () => {
       const failed = { status: 500, body: { error: { code: 'INTERNAL_ERROR', message: 'Something went wrong.', requestId: 'r-9' } } };
       const { calls } = landing({ 'GET /training/progress': [failed, { body: progressView() }] });
       expect(await screen.findByRole('alert')).toHaveTextContent('Something went wrong.');
@@ -79,7 +79,7 @@ describe('/training, the learner’s list (P18.5-T1)', () => {
       expect(calls.filter((c) => c.url.includes('/training/progress'))).toHaveLength(2);
     });
 
-    it('P18.5-T1 AC-4 waits under a skeleton shaped like the list', () => {
+    it('P18.2-T1 AC-4 waits under a skeleton shaped like the list', () => {
       stubFetch({ ...SHELL_STUBS, 'GET /training/progress': { body: progressView() } });
       nav.pathname = '/training';
       renderInLayout(AgentLayout, <TrainingLayout><TrainingPage /></TrainingLayout>, { me: LEARNER });
@@ -88,7 +88,7 @@ describe('/training, the learner’s list (P18.5-T1)', () => {
   });
 
   describe('/training/[categoryCode]', () => {
-    it('P18.5-T1 AC-4, P18.95-T9 AC-2 titles every category Training Modules, the nav item’s words, over its own description', async () => {
+    it('P18.2-T1 AC-4, P18.7-T9 AC-2 titles every category Training Modules, the nav item’s words, over its own description', async () => {
       list();
       await title('Training Modules');
       // The prototype's *"{label} Training"* is gone from the heading: the menu said *Training modules* (UI-027).
@@ -96,16 +96,23 @@ describe('/training, the learner’s list (P18.5-T1)', () => {
       expect(screen.getByText('Structured modules — tracked here.')).toBeInTheDocument();
     });
 
-    it('UI-063 the description shows on a desktop only; a phone and a tablet go from the title to the list', async () => {
+    /*
+     * *Changed 2026-11-04 (P19.1-T1 AC-1; UI-112, which names Training's English sub-line):* the description is drawn at
+     * no size — it showed on a desktop (UI-063). The field shell draws no grey sub-line from 768px.
+     */
+    it('UI-063, P19.1-T1 AC-1 goes from the title to the list at every size: no description under the title', async () => {
       list();
       await title('Training Modules');
       const sub = screen.getByText('Structured modules — tracked here.');
-      expect(wears(sub, 375).split(' ')).toContain('hidden');
-      expect(wears(sub, 768).split(' ')).toContain('hidden');
-      expect(wears(sub, 1280).split(' ')).not.toContain('hidden');
+      for (const px of [375, 768, 1024, 1280]) expect(wears(sub, px).split(' ')).toContain('hidden');
     });
 
-    it('UI-063 keeps ID | EN on the title row below 1024px (ADR-0180 §3: Training keeps its pill), once the switch is live', async () => {
+    /*
+     * *Changed 2026-11-04 (P19.1-T1 AC-1; UI-112: ID | EN on Training's title row is the finding; Conflicts row 145):* no
+     * *ID | EN* on the title row at any size — ADR-0180 §3 had kept Training's pill. It is in the *Lainnya* sheet below
+     * 1024px and the account menu from 1024px.
+     */
+    it('UI-063, P19.1-T1 AC-1 draws no ID | EN on the title row or the page, at any size, once the switch is live', async () => {
       nav.pathname = '/training/SALES';
       stubFetch({ ...SHELL_STUBS, 'GET /training/progress': { body: progressView() } });
       renderLive(
@@ -114,13 +121,22 @@ describe('/training, the learner’s list (P18.5-T1)', () => {
       );
       await title('Training Modules');
       const row = document.querySelector('[data-title-row]') as HTMLElement;
-      const shown = within(row).getAllByRole('group', { name: /^(Language|Bahasa)$/ })
-        .filter((g) => !wears(g, 375).split(' ').includes('hidden') && !wears(g.parentElement!, 375).split(' ').includes('hidden'));
-      expect(shown).toHaveLength(1);
+      expect(within(row).queryByRole('group', { name: /^(Language|Bahasa)$/ })).toBeNull();
+      expect(screen.getByRole('main').querySelector('[data-language-switch]')).toBeNull();
       resetLanguage();
     });
 
-    it('P18.5-T1 AC-4, UI-063 draws the category row in the office’s words and order, directly under the title, the current one marked', async () => {
+    it('P19.1-T1 AC-6 at 1279px and below one full-width card per skill; two to a row from 1280px', async () => {
+      list();
+      await title('Training Modules');
+      const wide = document.querySelector('[data-skill-list="wide"]')!;
+      for (const px of [1024, 1152, 1279]) expect(wears(wide, px).split(' ')).not.toContain('grid-cols-2');
+      expect(wears(wide, 1280).split(' ')).toContain('grid-cols-2');
+      // Each card is the `training-desktop` card: its number, its name, and Module · Format · Status · ›.
+      expect(screen.getByRole('list', { name: 'Prospecting modules' }).closest('[data-skill]')!.textContent).toMatch(/ModuleFormatStatus/);
+    });
+
+    it('P18.2-T1 AC-4, UI-063 draws the category row in the office’s words and order, directly under the title, the current one marked', async () => {
       list();
       await title('Training Modules');
       const tabs = screen.getByRole('navigation', { name: 'Training' });
@@ -151,10 +167,10 @@ describe('/training, the learner’s list (P18.5-T1)', () => {
       const pill = sales.firstElementChild!;
       // A phone: a 36px navy pill in a 44px target; the others white.
       expect(wears(sales, 375)).toContain('min-h-11');
-      expect(wears(pill, 375).split(' ')).toEqual(expect.arrayContaining(['h-9', 'rounded-pill', 'bg-navy', 'text-white']));
+      expect(wears(pill, 375).split(' ')).toEqual(expect.arrayContaining(['h-9', 'rounded-pill', 'bg-secondary', 'text-secondary-contrast']));
       expect(wears(within(tabs).getByRole('link', { name: 'Product' }).firstElementChild!, 375)).toContain('bg-card');
       // A tablet and a desktop: the accent's underline under the current one, no pill.
-      expect(wears(sales, 768).split(' ')).toEqual(expect.arrayContaining(['border-b-2', 'border-amber', 'text-navy']));
+      expect(wears(sales, 768).split(' ')).toEqual(expect.arrayContaining(['border-b-2', 'border-primary', 'text-navy']));
       expect(wears(pill, 768)).not.toContain('rounded-pill');
     });
 
@@ -197,7 +213,7 @@ describe('/training, the learner’s list (P18.5-T1)', () => {
       const needs = screen.getByRole('list', { name: 'Needs Analysis modules' });
       expect(within(needs).getByText('Done')).toHaveAttribute('data-tone', 'green');
       const going = within(needs).getByText('In progress');
-      expect(going.className).toContain('bg-amber/15');
+      expect(going.className).toContain('bg-primary/15');
       expect(going.className).toContain('text-navy');
       expect(within(screen.getByRole('list', { name: 'Closing modules' })).getByText('Not started')).toHaveAttribute('data-tone', 'grey');
     });
@@ -212,22 +228,22 @@ describe('/training, the learner’s list (P18.5-T1)', () => {
       expect(within(retention).getByText('No material yet').className).toContain('sr-only');
     });
 
-    it('P18.5-T1 AC-4, OD-150 draws no footer: nothing promises a Skill Tracker', async () => {
+    it('P18.2-T1 AC-4, OD-150 draws no footer: nothing promises a Skill Tracker', async () => {
       list();
       await title('Training Modules');
       expect(document.body.textContent).not.toMatch(/Skill Tracker|Onboarding checklist once/i);
     });
 
-    it('P18.5-T1 AC-4 gives a category with nothing offered the prototype’s empty card and sub-line, and no list', async () => {
+    it('P18.2-T1 AC-4 gives a category with nothing offered the prototype’s empty card and sub-line, and no list', async () => {
       list('PRODUCT');
       await title('Training Modules');
       expect(screen.getAllByText('Modules for this category are coming soon.')).toHaveLength(2);
-      // The empty card keeps the category's own title; the heading is the nav item's (P18.95-T9 AC-2).
+      // The empty card keeps the category's own title; the heading is the nav item's (P18.7-T9 AC-2).
       expect(screen.getAllByText('Product Training')).toHaveLength(1);
       expect(screen.queryByRole('list', { name: / modules$/ })).not.toBeInTheDocument();
     });
 
-    it('P18.5-T1 AC-4 leaves out a skill with nothing offered, and numbers the cards that remain', async () => {
+    it('P18.2-T1 AC-4 leaves out a skill with nothing offered, and numbers the cards that remain', async () => {
       const sales = category('SALES', 'Sales', [
         skill('EMPTY', 'Empty skill', []),
         skill('CLOSING', 'Closing', [row('CLOSING_TECHNIQUES', 'Closing Techniques That Work')]),
@@ -237,32 +253,32 @@ describe('/training, the learner’s list (P18.5-T1)', () => {
       expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['1Closing0/1']);
     });
 
-    it('P18.5-T1 AC-4 reads a lower-case address as the stored code', async () => {
+    it('P18.2-T1 AC-4 reads a lower-case address as the stored code', async () => {
       list('sales');
       await title('Training Modules');
     });
 
-    it('P18.5-T1 AC-3 says a category the office does not offer cannot be found, and links back', async () => {
+    it('P18.2-T1 AC-3 says a category the office does not offer cannot be found, and links back', async () => {
       list('NOPE');
       expect(await screen.findByRole('heading', { name: 'This category can’t be found.' })).toBeInTheDocument();
       expect(screen.getByText('It may have been withdrawn, or the address may be mistyped.')).toBeInTheDocument();
       expect(within(screen.getByRole('main')).getByRole('link', { name: 'Training modules' })).toHaveAttribute('href', '/training');
     });
 
-    it('P18.5-T1 AC-3 never offers a withdrawn category as a tab or a list', async () => {
+    it('P18.2-T1 AC-3 never offers a withdrawn category as a tab or a list', async () => {
       const gone = category('LEGACY', 'Legacy', [skill('OLD', 'Old', [], { offered: false })], { offered: false });
       list('LEGACY', { 'GET /training/progress': { body: progressView([SALES, gone]) } });
       expect(await screen.findByRole('heading', { name: 'This category can’t be found.' })).toBeInTheDocument();
     });
 
-    it('P18.5-T1 AC-8 calls the learner’s read and never the settings reads', async () => {
+    it('P18.2-T1 AC-8 calls the learner’s read and never the settings reads', async () => {
       const { calls } = list();
       await title('Training Modules');
       expect(calls.some((c) => c.url.includes('/training/progress'))).toBe(true);
       expect(calls.some((c) => c.url.includes('/kpm/settings/training'))).toBe(false);
     });
 
-    it('P18.5-T1 AC-4 writes none of OD-39’s six words, and no phase', async () => {
+    it('P18.2-T1 AC-4 writes none of OD-39’s six words, and no phase', async () => {
       list();
       await title('Training Modules');
       const main = screen.getByRole('main');
@@ -270,7 +286,7 @@ describe('/training, the learner’s list (P18.5-T1)', () => {
       expect(main.textContent).not.toMatch(/phase\s*\d/i);
     });
 
-    it('P18.5-T1 AC-9 marks Training current in the nav (UI-004: *Training*, under *Saya*), a live link with no pill', async () => {
+    it('P18.2-T1 AC-9 marks Training current in the nav (UI-004: *Training*, under *Saya*), a live link with no pill', async () => {
       list();
       await title('Training Modules');
       const item = within(screen.getByRole('navigation', { name: 'Main' })).getByRole('link', { name: 'Training' });
@@ -280,7 +296,7 @@ describe('/training, the learner’s list (P18.5-T1)', () => {
       expect(within(item).queryByText('Upcoming')).not.toBeInTheDocument();
     });
 
-    it('P18.5-T1 AC-1 refuses a reader without the read, with nothing fetched for them', async () => {
+    it('P18.2-T1 AC-1 refuses a reader without the read, with nothing fetched for them', async () => {
       const { calls } = list('SALES', {}, makeMe({ ...LEARNER, permissions: [] }));
       await screen.findByRole('heading', { level: 1 });
       expect(calls.some((c) => c.url.includes('/training/progress'))).toBe(false);
@@ -294,7 +310,9 @@ describe('/training, the learner’s list (P18.5-T1)', () => {
       const skeleton = screen.getByText('Loading training…').closest('[aria-busy], [role="status"]') ?? document.body;
       const shapes = Array.from(skeleton.querySelectorAll('div')).map((d) => d.getAttribute('class') ?? '');
       expect(shapes.some((c) => c.includes('lg:hidden') && c.includes('rounded-lg'))).toBe(true);
-      expect(shapes.some((c) => c.includes('grid-cols-2') && c.includes('max-lg:hidden'))).toBe(true);
+      // Cards one to a row up to 1279px, two from 1280px (P19.1-T1 AC-6).
+      expect(shapes.some((c) => c.includes('xl:grid-cols-2') && c.includes('max-lg:hidden'))).toBe(true);
+      expect(shapes.some((c) => c.split(' ').includes('grid-cols-2'))).toBe(false);
       expect(shapes.some((c) => c.includes('border-b border-hairline'))).toBe(false);
     });
   });
@@ -334,7 +352,7 @@ describe('UI-065 — /training/* below 1024px', () => {
     await title('Training Modules');
     const rows = within(screen.getByRole('list', { name: 'Needs Analysis modules' })).getAllByRole('link');
     expect(rows.map((r) => r.textContent)).toEqual(['Conducting a Financial Needs AnalysisDone', 'Asking the Right Discovery QuestionsIn progress']);
-    expect(within(rows[1]).getByText('In progress').className).toContain('bg-amber/15');
+    expect(within(rows[1]).getByText('In progress').className).toContain('bg-primary/15');
     expect(rows[1]).toHaveAttribute('href', '/training/SALES/DISCOVERY_QUESTIONS');
   });
 
@@ -347,12 +365,12 @@ describe('UI-065 — /training/* below 1024px', () => {
 });
 
 /**
- * **A category with no published module is not offered to a field member** (P18.97-T4 AC-9, ADR-0176 §9), and **with
+ * **A category with no published module is not offered to a field member** (P18.9-T4 AC-9, ADR-0176 §9), and **with
  * one category there is no category row at all** (UI-063): `GET /training/progress` leaves such a category out — or,
  * where the member has history under it, reads it as not offered — so the row is the categories the read offers, drawn
  * only when there are two or more.
  */
-describe('P18.97-T4 AC-9, UI-063 an empty training category draws no tab', () => {
+describe('P18.9-T4 AC-9, UI-063 an empty training category draws no tab', () => {
   beforeEach(() => { nav.replace.mockReset(); nav.push.mockReset(); });
   afterEach(() => vi.unstubAllGlobals());
 
@@ -368,14 +386,14 @@ describe('P18.97-T4 AC-9, UI-063 an empty training category draws no tab', () =>
     expect(screen.queryByRole('navigation', { name: 'Training' })).not.toBeInTheDocument();
   });
 
-  it('P18.97-T4 AC-9 a category read as not offered draws no tab, though it holds the member’s history', async () => {
+  it('P18.9-T4 AC-9 a category read as not offered draws no tab, though it holds the member’s history', async () => {
     list('SALES', { 'GET /training/progress': { body: progressView([SALES, PRODUCT_HISTORY]) } });
     await title('Training Modules');
     expect(screen.queryByRole('navigation', { name: 'Training' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Product' })).toBeNull();
   });
 
-  it('P18.97-T4 AC-9 answers its address as not found rather than opening it onto nothing', async () => {
+  it('P18.9-T4 AC-9 answers its address as not found rather than opening it onto nothing', async () => {
     list('PRODUCT', { 'GET /training/progress': { body: progressView([SALES, PRODUCT_HISTORY]) } });
     expect(await screen.findByRole('heading', { level: 2, name: 'This category can’t be found.' })).toBeInTheDocument();
     expect(screen.queryByText('Modules for this category are coming soon.')).toBeNull();

@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { atWidth, makeMe, renderWithSession, stubFetch, wears, type StubReply } from '@test/harness';
@@ -113,6 +113,13 @@ const AGENT_RATIOS = ratios([
   ratio({ code: 'MEETING_PER_APPROACH', label: 'Meeting per approach', displayUnit: 'decimal', benchmark: 1.5, value: null, status: 'neutral' }),
 ]);
 
+/** An action card and an improve card, so both insight sections are drawn (P19.1-T4's layouts). */
+const NEXT = { rule: 'LEAD_NEGLECTED', kind: 'action', facts: { leadId: 'l-2', name: 'Pak Alvin', others: 0 } };
+const IMPROVE = {
+  rule: 'RATIO_STRENGTH', kind: 'improve',
+  facts: { code: 'LEADS_PER_ACTIVITY', label: 'Leads per activity', value: 0.375, benchmark: 0.3, displayUnit: 'decimal' },
+};
+
 const show = (body: unknown, pulse: { status?: number; body: unknown } = { body: AGENT_RATIOS }, chasing: unknown = NONE_CHASED) => {
   const stub = stubFetch({ '/summary': { body }, '/activity/ratios': pulse, 'GET /campaigns/chasing': { body: chasing } });
   renderWithSession(<PersonalSummaryPage />, { me: AGENT });
@@ -199,21 +206,24 @@ describe('the Personal Summary — the date header and the goal card (P10-T4; UI
     expect(goal).toHaveTextContent('Not uploaded yet of IDR 75M target');
     expect(goal).not.toHaveTextContent('%');
     // Nothing produced, so nothing to mark: *Not uploaded yet* says it (P10.1-T6 AC-1). The one button is the
-    // heading's *What is APE?* (P18.95-T9 AC-3).
+    // heading's *What is APE?* (P18.7-T9 AC-3).
     expect(within(goal).queryAllByRole('button').map((b) => b.textContent)).toEqual(['ⓘWhat is APE?']);
     expect(goal).toHaveTextContent('Remaining this month—');
     expect(goal).not.toHaveTextContent('IDR 0');
   });
 
-  it('AC-2: edits nothing — the figure is shown, and its marker says it is your own, from Goal Settings', async () => {
-    show(summary({ yearly: { ...figures({ actualMinor: 120 * M }), source: { provenance: 'self_reported', month: null } } }));
+  it('P19.1-T4 AC-10: the agent’s own figure is their estimate — lighter, labelled your estimate, no field until asked', async () => {
+    // *Changed 2026-11-05 (UI-157 item 4, ADR-0195, amending ADR-0058):* the Summary holds the member's estimate.
+    show(summary({ yearly: { ...figures({ actualMinor: 120 * M }), production: 'estimate', source: { provenance: 'self_reported', month: null } } }));
     await card('Goal vs. actual (APE)');
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
     expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument();
 
     await yearly();
     const goal = await card('Goal vs. actual (APE)');
-    expect(within(goal).getByRole('button', { name: 'Your own figure, entered in Goal Settings' })).toBeInTheDocument();
+    const shown = goal.querySelector('[data-estimate]')!;
+    expect(shown).toHaveTextContent('IDR 120M · your estimate');
+    expect(shown.firstElementChild).toHaveClass('text-navy/75', 'font-semibold');
   });
 
   it('S2: a figure their coach typed is not called their own — the marker names who entered it', async () => {
@@ -299,7 +309,7 @@ describe('the Personal Summary — the date header and the goal card (P10-T4; UI
     show(summary({ goal: { set: false, savedAt: null }, pace: null }));
     expect(await screen.findByText(/You haven’t set a goal for 2026 yet/)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Set your goal' })).toHaveAttribute('href', '/goals');
-    // P18.95-T1 AC-10: a link on its own line is 44px tall on a phone (UI-029); wider, the inline block it was.
+    // P18.7-T1 AC-10: a link on its own line is 44px tall on a phone (UI-029); wider, the inline block it was.
     expect(screen.getByRole('link', { name: 'Set your goal' })).toHaveClass('inline-block', 'max-md:inline-flex', 'max-md:min-h-11', 'max-md:items-center');
     expect(screen.queryByRole('region', { name: 'Goal vs. actual (APE)' })).not.toBeInTheDocument();
   });
@@ -327,10 +337,9 @@ describe('the Personal Summary — Target aktivitas, one card (P10-T5; UI-050, U
     ]);
     expect(within(targets).getByRole('progressbar', { name: 'Submission polis against target' })).toHaveAttribute('aria-valuenow', '40');
     expect(within(targets).getByRole('progressbar', { name: 'Set appointment against target' })).toHaveAttribute('aria-valuetext', '20 of 57');
-    // Appendix A: *From Goal Settings — …* shows on a desktop only (a tablet's is behind the ⓘ).
-    const from = within(targets).getByRole('link', { name: 'Goal Settings' });
-    expect(from).toHaveAttribute('href', '/goals');
-    expect(from.closest('p')).toHaveClass('max-lg:hidden');
+    // P19.1-T4 AC-6 (UI-121): no grey helper line — *From Goal Settings — …* is gone at every size.
+    expect(within(targets).queryByRole('link', { name: 'Goal Settings' })).not.toBeInTheDocument();
+    expect(targets).not.toHaveTextContent('From Goal Settings');
     // One white card under a heading outside it (UI-050).
     expect(within(targets).getByRole('heading', { level: 2 }).closest('.rounded-lg')).toBeNull();
   });
@@ -342,26 +351,30 @@ describe('the Personal Summary — Target aktivitas, one card (P10-T5; UI-050, U
 
     expect(total).toHaveTextContent('41 activities this month');
     const shown = [...targets.querySelectorAll('[data-target]')].map((c) => Number(c.querySelector('p')!.firstChild!.textContent))
-      .concat([...targets.querySelectorAll('[data-breakdown="wide"] h3')].map((h) => Number(h.lastElementChild!.textContent)));
+      .concat([...targets.querySelectorAll('[data-breakdown="collapsed"] button')].map((b) => Number(b.lastElementChild!.textContent)));
     expect(shown.reduce((a, b) => a + b, 0)).toBe(41);
   });
 
-  it('UI-052 (a): the heading’s ⓘ says where the policies come from — the log, and APE from the upload', async () => {
+  it('UI-052 (a), P19.1-T4 AC-7: the heading’s ⓘ says where the policies come from; where APE comes from moved to the goal card’s', async () => {
     show(summary());
     const targets = await card('Your sales activity targets');
-    const source = 'Submission polis counts the policies you log in Log Activity; APE comes from the production upload.';
+    const source = 'Submission polis counts the policies you log in Log Activity.';
     expect(within(targets).getByRole('button', { name: source })).toBeInTheDocument();
+    // UI-157 item 1: *APE berasal dari unggahan produksi* is the goal card's ⓘ now, beside what APE is.
+    const goal = await card('Goal vs. actual (APE)');
+    const info = within(goal).getByRole('button', { name: 'What is APE?' });
+    await userEvent.click(info);
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(/APE comes from the production upload\.$/);
     // Beside the heading, not inside it: the region's name stays its words.
     expect(within(targets).getByRole('heading', { level: 2 })).toHaveTextContent(/^Your sales activity targets$/);
   });
 
-  it('UI-052 (a), Appendix A: on a tablet the ⓘ also says where the targets come from', async () => {
+  it('P19.1-T4 AC-6: on a tablet the ⓘ is the same — no helper line behind it either (UI-121)', async () => {
     atWidth(800);
     show(summary());
     const targets = await card('Your sales activity targets');
-    expect(await within(targets).findByRole('button', {
-      name: /^From Goal Settings — appointments and closings are your Sales pipeline targets\. Submission polis counts/,
-    })).toBeInTheDocument();
+    expect(await within(targets).findByRole('button', { name: 'Submission polis counts the policies you log in Log Activity.' })).toBeInTheDocument();
+    expect(within(targets).queryByRole('button', { name: /From Goal Settings/ })).not.toBeInTheDocument();
   });
 
   it('AC-1: the year to date against the year’s targets', async () => {
@@ -399,12 +412,14 @@ describe('the Personal Summary — Target aktivitas, one card (P10-T5; UI-050, U
     expect(within(targets).queryByRole('progressbar')).not.toBeInTheDocument();
   });
 
-  it('UI-050 on a phone the tiles are one split row, each opening its activities in a sheet', async () => {
+  it('UI-050, P19.1-T4 AC-5 the tiles are collapsed at every size: one split row on a phone, 44px rows from 768, each opening a sheet', async () => {
     show(summary());
     const targets = await card('Your sales activity targets');
-    const row = targets.querySelector('[data-breakdown="phone"]')!;
+    const row = targets.querySelector('[data-breakdown="collapsed"]')!;
 
-    expect(row).toHaveClass('md:hidden');
+    // A phone: one split row; from 768px one under the other (UI-121, Conflicts row 147). Shown at every size.
+    for (const px of [375, 768, 1024, 1280]) expect(wears(row as HTMLElement, px)).not.toContain('hidden');
+    expect(row).toHaveClass('grid-cols-2', 'md:grid-cols-1');
     const buttons = within(row as HTMLElement).getAllByRole('button');
     expect(buttons.map((b) => b.textContent)).toEqual(['Recruitment activities6', 'Development activities7']);
     expect(buttons[0].querySelector('svg')).toBeInTheDocument();
@@ -415,14 +430,13 @@ describe('the Personal Summary — Target aktivitas, one card (P10-T5; UI-050, U
       .toEqual(['Proses pendaftaran kode agen3', 'Follow up NBO2', 'NPA1']);
   });
 
-  it('UI-056, Appendix A: from 768px the lists side by side, every row shown', async () => {
+  it('P19.1-T4 AC-6 (UI-121, Conflicts row 147): no full list beside the rows at any size — the rows open them', async () => {
     show(summary());
     const targets = await card('Your sales activity targets');
-    const wide = targets.querySelector('[data-breakdown="wide"]')!;
-
-    expect(wide).toHaveClass('max-md:hidden', 'md:grid-cols-2');
-    expect([...wide.querySelectorAll('h3')].map((h) => h.textContent)).toEqual(['Recruitment activities6', 'Development activities7']);
-    expect(within(wide as HTMLElement).getAllByRole('listitem')).toHaveLength(6);
+    expect(targets.querySelector('[data-breakdown="wide"]')).toBeNull();
+    expect(within(targets).queryAllByRole('listitem')).toHaveLength(0);
+    const rows = within(targets.querySelector('[data-breakdown="collapsed"]') as HTMLElement).getAllByRole('button');
+    for (const r of rows) expect(r).toHaveClass('md:min-h-11');
   });
 
   it('AC-5: draws the tiles as the server sends them, and regroups nothing itself (ADR-0064)', async () => {
@@ -435,7 +449,7 @@ describe('the Personal Summary — Target aktivitas, one card (P10-T5; UI-050, U
     show(summary({ activity: { monthly: ungrouped, yearly: activity(YEAR) } }));
     const targets = await card('Your sales activity targets');
 
-    expect([...targets.querySelectorAll('[data-breakdown="wide"] h3')].map((h) => h.textContent))
+    expect([...targets.querySelectorAll('[data-breakdown="collapsed"] button')].map((b) => b.textContent))
       .toEqual(['Personal Development activities3', 'Team Development activities4']);
     expect(targets).not.toHaveTextContent(/^Development activities/);
   });
@@ -546,10 +560,10 @@ describe('the Personal Summary — leads that need you (P10-T6; UI-055)', () => 
   });
 
   /*
-   * P18.8-T15 AC-4 (UI-002): the card counts the reader's own leads, and Leads Management shows a leader their unit's
+   * P18.5-T15 AC-4 (UI-002): the card counts the reader's own leads, and Leads Management shows a leader their unit's
    * too — so an AB with 71 there read *No active leads yet* here.
    */
-  it('P18.8-T15 AC-4: a leader with no open leads of their own is told their unit’s are in Leads Management', async () => {
+  it('P18.5-T15 AC-4: a leader with no open leads of their own is told their unit’s are in Leads Management', async () => {
     show(summary({ leads: { rows: [], total: 0, unitOpen: 71 } }));
     const leads = await card('Leads that need you');
 
@@ -558,7 +572,7 @@ describe('the Personal Summary — leads that need you (P10-T6; UI-055)', () => 
     expect(within(leads).getByRole('link', { name: 'Leads Management' })).toHaveAttribute('href', '/leads');
   });
 
-  it('P18.8-T15 AC-4: a reader with no open leads anywhere keeps the prototype’s sentence', async () => {
+  it('P18.5-T15 AC-4: a reader with no open leads anywhere keeps the prototype’s sentence', async () => {
     show(summary({ leads: { rows: [], total: 0, unitOpen: 0 } }));
     const leads = await card('Leads that need you');
 
@@ -604,7 +618,7 @@ describe('the Personal Summary — insight cards, named rules over your own numb
     expect(next).toHaveTextContent('What to do nextAI-poweredYou’re behind pace');
   });
 
-  it('AC-1, P18.97-T3 AC-2: a ratio below its benchmark goes on the improvement card, written as the ratio screen writes it', async () => {
+  it('AC-1, P18.9-T3 AC-2: a ratio below its benchmark goes on the improvement card, written as the ratio screen writes it', async () => {
     show(summary({ insights: INSIGHTS }));
     const improve = await card('How you can improve your performance');
 
@@ -709,8 +723,8 @@ describe('the Personal Summary — Download (P10-T8, ADR-0068; UI-051)', () => {
     const [wide, compact] = downloads();
     expect(wide).toHaveTextContent(/^Download$/);
     expect(wide.querySelector('svg')).toBeInTheDocument();
-    expect(wide).toHaveClass('border-navy');
-    expect(wide).not.toHaveClass('bg-amber');
+    expect(wide).toHaveClass('border-secondary');
+    expect(wide).not.toHaveClass('bg-primary');
     expect(compact).toHaveAttribute('data-download', 'compact');
     expect(compact).toHaveClass('h-11', 'w-11', 'lg:hidden');
     expect(compact.textContent).toBe('');
@@ -838,21 +852,77 @@ describe('the Personal Summary — one control row, two columns, line icons (UI-
     expect(screen.queryByText(/on one page/)).not.toBeInTheDocument();
   });
 
-  it('UI-056: two columns from 1024px — goal and targets left, the rest right — and the cards’ edge is the title’s', async () => {
-    show(summary(), undefined, RINA_CHASING);
+  /*
+   * *Changed 2026-11-05 (P19.1-T4; UI-121, Conflicts rows 147, 151 and 153; the 2 Nov `summary-tablet` and
+   * `summary-desktop`):* the ratio card moved to the left column on a laptop, the leads last on the right; a tablet has
+   * two columns of its own. A phone keeps one column, and SR-02's order.
+   */
+  const columns = async () => {
     const goal = await card('Goal vs. actual (APE)');
-    const grid = goal.parentElement!.parentElement!;
+    const layout = goal.closest('[data-summary-layout]') as HTMLElement;
+    return {
+      layout,
+      left: layout.querySelector('[data-summary-column="left"]') as HTMLElement,
+      right: layout.querySelector('[data-summary-column="right"]') as HTMLElement,
+    };
+  };
 
-    expect(wears(grid, 1280)).toContain('grid-cols-[minmax(0,3fr)_minmax(0,2fr)]');
-    expect(wears(grid, 768)).not.toContain('grid-cols-');
-    const [left, right] = [...grid.children].filter((c) => c.tagName === 'DIV');
-    expect(left).toContainElement(goal);
-    expect(left).toContainElement(await card('Your sales activity targets'));
-    for (const name of ['Ratio · last 30 days', "Campaigns you're chasing", 'What to do next', 'Leads that need you']) {
-      expect(right).toContainElement(await card(name));
+  it('P19.1-T4 AC-6 a laptop (1024, 1280): goal, targets and the ratio card left; next steps, improve, campaigns and leads right', async () => {
+    for (const px of [1024, 1280]) {
+      atWidth(px);
+      show(summary({ insights: [NEXT, IMPROVE] }), undefined, RINA_CHASING);
+      const { layout, left, right } = await columns();
+      expect(layout).toHaveAttribute('data-summary-layout', 'desktop');
+      expect(layout).toHaveClass('grid-cols-[minmax(0,1.4fr)_minmax(300px,1fr)]');
+      const names = async (column: HTMLElement) => [...column.children].map((c) => c.querySelector('h2, [role="heading"]')?.textContent ?? c.textContent?.slice(0, 20));
+      expect(left).toContainElement(await card('Goal vs. actual (APE)'));
+      expect(left).toContainElement(await card('Your sales activity targets'));
+      expect(left).toContainElement(await card('Ratio · last 30 days'));
+      const order = [...right.querySelectorAll(':scope > section')].map((sec) => sec.querySelector('h2')?.textContent);
+      expect(order).toEqual(['What to do next', 'How you can improve your performance', "Campaigns you're chasing", 'Leads that need you']);
+      expect(await names(left)).toHaveLength(3);
+      // Not centred (UI-056: the title at x292, the cards at x329).
+      expect(layout.parentElement!.className).not.toContain('mx-auto');
+      cleanup();
+      vi.unstubAllGlobals();
     }
-    // Not centred (UI-056: the title at x292, the cards at x329).
-    expect(grid.parentElement!.className).not.toContain('mx-auto');
+  });
+
+  it('P19.1-T4 AC-5 a tablet (768): goal and targets left, the ratio card right; next | improve side by side; then the campaigns', async () => {
+    atWidth(768);
+    show(summary({ insights: [NEXT, IMPROVE], leads: { rows: [], total: 0 } }), undefined, RINA_CHASING);
+    const { layout, left, right } = await columns();
+    expect(layout).toHaveAttribute('data-summary-layout', 'tablet');
+    expect(left).toContainElement(await card('Your sales activity targets'));
+    expect(right).toContainElement(await card('Ratio · last 30 days'));
+    const insights = layout.querySelector('[data-summary-row="insights"]')!;
+    expect(insights).toHaveClass('grid-cols-2');
+    expect([...insights.querySelectorAll(':scope > section h2')].map((h) => h.textContent))
+      .toEqual(['What to do next', 'How you can improve your performance']);
+    // The campaigns full width, last.
+    expect(layout.lastElementChild).toBe(await card("Campaigns you're chasing"));
+    // No open lead: the card is left out, as on a phone (UI-121: the same blocks as the phone).
+    expect(screen.getByRole('region', { name: 'Leads that need you', hidden: true })).toHaveClass('hidden');
+  });
+
+  it('P19.1-T4 AC-5 a tablet with open leads: they follow the ratio card in its column (SR-02)', async () => {
+    atWidth(800);
+    show(summary());
+    const { right } = await columns();
+    const ratiosCard = await card('Ratio · last 30 days');
+    expect(right).toContainElement(ratiosCard);
+    expect(ratiosCard.nextElementSibling).toBe(await card('Leads that need you'));
+  });
+
+  it('P19.1-T4 AC-14 a phone keeps one column in SR-02’s order', async () => {
+    atWidth(375);
+    show(summary({ insights: [NEXT, IMPROVE] }), undefined, RINA_CHASING);
+    const { layout } = await columns();
+    expect(layout).toHaveAttribute('data-summary-layout', 'phone');
+    expect(layout.querySelector('[data-summary-column]')).toBeNull();
+    const order = [...layout.querySelectorAll('section h2, [role="heading"]')].map((h) => h.textContent);
+    expect(order.indexOf('Leads that need you')).toBeLessThan(order.indexOf("Campaigns you're chasing"));
+    expect(order.indexOf("Campaigns you're chasing")).toBeLessThan(order.indexOf('What to do next'));
   });
 
   it('UI-050: every section has its heading outside its card', async () => {
@@ -925,7 +995,7 @@ describe('the Personal Summary — provenance is a marker, not a sentence (P10.1
       .toBeInTheDocument();
   });
 
-  it('AC-2: the footnotes stay gone — the one link left is From Goal Settings', async () => {
+  it('AC-2, P19.1-T4 AC-6: the footnotes stay gone — and the helper line’s Goal Settings link with them (UI-121)', async () => {
     show(summary({
       monthly: { ...figures({ actualMinor: null, attainmentPct: null, gapMinor: null, policiesNeeded: null }), source: null },
       leads: { rows: LEADS, total: 14 },
@@ -935,14 +1005,14 @@ describe('the Personal Summary — provenance is a marker, not a sentence (P10.1
     expect(screen.queryByText(/worked out once this month’s APE is uploaded/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Day by day/)).not.toBeInTheDocument();
     expect(screen.queryByText(/nearest of your/)).not.toBeInTheDocument();
-    expect(screen.getAllByRole('link').map((a) => a.getAttribute('href'))).toEqual(['/goals']);
+    expect(screen.queryAllByRole('link').map((a) => a.getAttribute('href'))).toEqual([]);
   });
 });
 
 /*
- * *Campaign yang Anda kejar* (`Overall.html:3225-3232`, `:6221-6253`; P18.5-T7 AC-6; UI-006, UI-050, UI-057).
+ * *Campaign yang Anda kejar* (`Overall.html:3225-3232`, `:6221-6253`; P18.2-T7 AC-6; UI-006, UI-050, UI-057).
  */
-describe('Campaigns you’re chasing (P18.5-T7 AC-6; UI-050)', () => {
+describe('Campaigns you’re chasing (P18.2-T7 AC-6; UI-050)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   const campaigns = () => card("Campaigns you're chasing");
@@ -952,7 +1022,9 @@ describe('Campaigns you’re chasing (P18.5-T7 AC-6; UI-050)', () => {
     return stub;
   };
 
-  it('P18.5-T7 AC-6, UI-050: its heading outside the card, From the Campaign list on a desktop, after the leads and before the next steps', async () => {
+  it('P18.2-T7 AC-6, UI-050: its heading outside the card, From the Campaign list on a desktop, on a phone after the leads and before the next steps', async () => {
+    // A phone keeps SR-02's order; a laptop puts the leads after the campaigns (UI-121, P19.1-T4).
+    atWidth(375);
     showWith({ 'GET /campaigns/chasing': { body: RINA_CHASING } });
     const section = await campaigns();
     expect(within(section).getByRole('heading', { level: 2 })).toHaveTextContent(/^Campaigns you're chasing$/);
@@ -969,7 +1041,8 @@ describe('Campaigns you’re chasing (P18.5-T7 AC-6; UI-050)', () => {
    * The staging review of 2026-10-31 (the product owner: *Ini leads nya kegeser ke bawah, Mestinya setelah ratio*):
    * the right column reads Ratio → Leads → Campaign → next steps, replacing UI-056's *leads last*.
    */
-  it('staging review 2026-10-31: Leads directly after the ratio card, then the campaigns, then the next steps', async () => {
+  it('staging review 2026-10-31: Leads directly after the ratio card, then the campaigns, then the next steps — on a phone', async () => {
+    atWidth(375);
     showWith({ 'GET /campaigns/chasing': { body: RINA_CHASING } });
     const ratiosCard = await card('Ratio · last 30 days');
     const leads = await card('Leads that need you');
@@ -981,7 +1054,7 @@ describe('Campaigns you’re chasing (P18.5-T7 AC-6; UI-050)', () => {
     expect(order.slice(1, 4)).toEqual(['Leads that need you', "Campaigns you're chasing", 'What to do next']);
   });
 
-  it('P18.5-T7 AC-6, UI-057 a row per chase: a trophy line icon, its title, the months it runs and View →, read with no for', async () => {
+  it('P18.2-T7 AC-6, UI-057 a row per chase: a trophy line icon, its title, the months it runs and View →, read with no for', async () => {
     const { calls } = showWith({ 'GET /campaigns/chasing': { body: RINA_CHASING } });
     const section = await campaigns();
     const rows = await within(section).findAllByRole('listitem');
@@ -994,13 +1067,13 @@ describe('Campaigns you’re chasing (P18.5-T7 AC-6; UI-050)', () => {
       .toEqual(['http://api.test/api/v1/campaigns/chasing']);
   });
 
-  it('P18.5-T7 AC-6 says the prototype’s sentence when nothing is chased', async () => {
+  it('P18.2-T7 AC-6 says the prototype’s sentence when nothing is chased', async () => {
     showWith({ 'GET /campaigns/chasing': { body: NONE_CHASED } });
     const section = await campaigns();
     expect(await within(section).findByText("You're not chasing any campaigns yet — check the Campaign list to opt in.")).toBeInTheDocument();
   });
 
-  it('P18.5-T7 AC-6 its own read fails on its own card, with a retry, and the Summary stands', async () => {
+  it('P18.2-T7 AC-6 its own read fails on its own card, with a retry, and the Summary stands', async () => {
     showWith({ 'GET /campaigns/chasing': [serverError, { body: RINA_CHASING }] });
     const section = await campaigns();
     expect(await within(section).findByRole('alert')).toHaveTextContent('Something went wrong.');
@@ -1009,7 +1082,7 @@ describe('Campaigns you’re chasing (P18.5-T7 AC-6; UI-050)', () => {
     expect(await within(section).findByText('Q4 APE Sprint')).toBeInTheDocument();
   });
 
-  it('P18.5-T7 AC-6 View → opens the campaign’s dialog in place, and a chase there updates the card', async () => {
+  it('P18.2-T7 AC-6 View → opens the campaign’s dialog in place, and a chase there updates the card', async () => {
     const { calls } = showWith({
       'GET /campaigns/chasing': [{ body: RINA_CHASING }, { body: { membershipId: 'mem-rina', campaigns: [RINA_CHASING.campaigns[1]] } }],
       'GET /campaigns/APE_SPRINT': { body: detail() },
@@ -1025,7 +1098,7 @@ describe('Campaigns you’re chasing (P18.5-T7 AC-6; UI-050)', () => {
     expect(calls.filter((c) => c.init.method === 'DELETE')).toHaveLength(1);
   });
 
-  it('P18.5-T7 AC-6 is there whatever the period, read once', async () => {
+  it('P18.2-T7 AC-6 is there whatever the period, read once', async () => {
     const { calls } = showWith({ 'GET /campaigns/chasing': { body: RINA_CHASING } });
     await within(await campaigns()).findByText('Q4 APE Sprint');
     await yearly();
@@ -1035,11 +1108,11 @@ describe('Campaigns you’re chasing (P18.5-T7 AC-6; UI-050)', () => {
 });
 
 /**
- * **An earlier month or year** (P18.8-T11, ADR-0161 §4; UI-051's pill and sheet): the office's months under
+ * **An earlier month or year** (P18.5-T11, ADR-0161 §4; UI-051's pill and sheet): the office's months under
  * *Monthly* and its years under *Yearly*, the choice in the address; a closed period shows its final figures, and the
  * gap and the days left only for the current one.
  */
-describe('the Personal Summary — an earlier month or year (P18.8-T11; UI-051)', () => {
+describe('the Personal Summary — an earlier month or year (P18.5-T11; UI-051)', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     nav.replace.mockClear();
@@ -1073,7 +1146,7 @@ describe('the Personal Summary — an earlier month or year (P18.8-T11; UI-051)'
     return { sheet, list, options: within(list).getAllByRole('button').map((b) => b.textContent) };
   };
 
-  it('P18.8-T11 AC-2, UI-051 the month pill opens a sheet of the office’s months, newest first, this one ticked', async () => {
+  it('P18.5-T11 AC-2, UI-051 the month pill opens a sheet of the office’s months, newest first, this one ticked', async () => {
     open(summaries());
     const { sheet, list, options } = await openSheet(/^Month: Sep 2026$/);
 
@@ -1086,7 +1159,7 @@ describe('the Personal Summary — an earlier month or year (P18.8-T11; UI-051)'
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
   });
 
-  it('P18.8-T11 AC-2 a year pill under Yearly, the office’s years newest first', async () => {
+  it('P18.5-T11 AC-2 a year pill under Yearly, the office’s years newest first', async () => {
     open(summaries());
     await screen.findByRole('button', { name: 'Month: Sep 2026' });
     await yearly();
@@ -1096,7 +1169,7 @@ describe('the Personal Summary — an earlier month or year (P18.8-T11; UI-051)'
     expect(screen.queryByRole('button', { name: /^Month:/ })).not.toBeInTheDocument();
   });
 
-  it('P18.8-T11 AC-2 choosing a month reads it and puts it in the address, the pill holding it meanwhile', async () => {
+  it('P18.5-T11 AC-2 choosing a month reads it and puts it in the address, the pill holding it meanwhile', async () => {
     const { calls } = open(summaries({ '/summary?month=2026-08': { body: AUGUST } }));
     const { sheet } = await openSheet(/^Month: Sep 2026$/);
 
@@ -1109,7 +1182,7 @@ describe('the Personal Summary — an earlier month or year (P18.8-T11; UI-051)'
     expect(summaryReads(calls)).toEqual(['', '?month=2026-08']);
   });
 
-  it('P18.8-T11 AC-2 the address’s month opens the page on it, and the current month clears the address', async () => {
+  it('P18.5-T11 AC-2 the address’s month opens the page on it, and the current month clears the address', async () => {
     const { calls } = open(summaries({ '/summary?month=2026-08': { body: AUGUST } }), { month: '2026-08' });
     await screen.findByText('Aug 2026', { selector: 'p' });
     const { sheet } = await openSheet(/^Month: Aug 2026$/);
@@ -1120,7 +1193,7 @@ describe('the Personal Summary — an earlier month or year (P18.8-T11; UI-051)'
     await waitFor(() => expect(summaryReads(calls)).toEqual(['?month=2026-08', '']));
   });
 
-  it('P18.8-T11 AC-2 ?year= opens on Yearly with that year chosen, and reads it', async () => {
+  it('P18.5-T11 AC-2 ?year= opens on Yearly with that year chosen, and reads it', async () => {
     const LAST_YEAR = summary({
       year: '2025', month: '2025-12', pace: null, period: { ...OPENED, currentMonth: false, currentYear: false },
     });
@@ -1131,7 +1204,7 @@ describe('the Personal Summary — an earlier month or year (P18.8-T11; UI-051)'
     expect(summaryReads(calls)).toEqual(['?year=2025']);
   });
 
-  it('P18.8-T11 AC-2 switching views returns to now: Yearly from August reads this year, the address cleared', async () => {
+  it('P18.5-T11 AC-2 switching views returns to now: Yearly from August reads this year, the address cleared', async () => {
     const { calls } = open(summaries({ '/summary?month=2026-08': { body: AUGUST } }), { month: '2026-08' });
     await screen.findByText('Aug 2026', { selector: 'p' });
 
@@ -1142,13 +1215,13 @@ describe('the Personal Summary — an earlier month or year (P18.8-T11; UI-051)'
     await waitFor(() => expect(summaryReads(calls)).toEqual(['?month=2026-08', '']));
   });
 
-  it('P18.8-T11 AC-2 a malformed month in the address is not sent: the page is this month’s', async () => {
+  it('P18.5-T11 AC-2 a malformed month in the address is not sent: the page is this month’s', async () => {
     const { calls } = open(summaries(), { month: '2026-13' });
     expect(await screen.findByRole('button', { name: 'Month: Sep 2026' })).toBeInTheDocument();
     expect(summaryReads(calls)).toEqual(['']);
   });
 
-  it('P18.8-T11 AC-3, UI-054 a month that has ended: its final figures, the date only, no gap', async () => {
+  it('P18.5-T11 AC-3, UI-054 a month that has ended: its final figures, the date only, no gap', async () => {
     open(summaries({ '/summary?month=2026-08': { body: AUGUST } }), { month: '2026-08' });
     const goal = await card('Goal vs. actual (APE)');
 
@@ -1159,7 +1232,7 @@ describe('the Personal Summary — an earlier month or year (P18.8-T11; UI-051)'
     expect(targets).toHaveTextContent('37 activities in Aug 2026');
   });
 
-  it('P18.8-T11 AC-3 a year that has ended with no goal says so, and offers no goal to set', async () => {
+  it('P18.5-T11 AC-3 a year that has ended with no goal says so, and offers no goal to set', async () => {
     const NO_GOAL = summary({
       year: '2025', month: '2025-12', pace: null, goal: { set: false, savedAt: null },
       period: { ...OPENED, currentMonth: false, currentYear: false },
@@ -1170,7 +1243,7 @@ describe('the Personal Summary — an earlier month or year (P18.8-T11; UI-051)'
     expect(screen.queryByRole('link', { name: 'Set your goal' })).not.toBeInTheDocument();
   });
 
-  it('P18.8-T11 AC-3 a month that has ended prints and downloads under its own name', async () => {
+  it('P18.5-T11 AC-3 a month that has ended prints and downloads under its own name', async () => {
     const print = vi.spyOn(window, 'print').mockImplementation(() => undefined);
     const titles: string[] = [];
     print.mockImplementation(() => { titles.push(document.title); });
@@ -1181,5 +1254,196 @@ describe('the Personal Summary — an earlier month or year (P18.8-T11; UI-051)'
 
     expect(titles).toEqual(['Personal Summary – Aug 2026']);
     print.mockRestore();
+  });
+});
+
+/*
+ * **P19.1-T4 — UI-157: *Belum diunggah* is no dead end** (the 6 November handover, improvement 5; the cloud findings'
+ * rule R2; ADR-0195). Who uploads production and what to do meanwhile; the helpers counted with 0 achieved; the Owner's
+ * and an Admin's way to the upload; the reader's own estimate, entered, changed and deleted here, and replaced by the
+ * office's figure.
+ */
+describe('P19.1-T4 the goal card when production is not uploaded (UI-157)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const NOTHING = { ...figures({ actualMinor: null, attainmentPct: null, gapMinor: null, overMinor: null, policiesNeeded: null }) };
+  /** This month not uploaded, and nothing for the year: the office's YTD is none, nothing typed. */
+  const notUploaded = (over: Record<string, unknown> = {}) => summary({
+    monthly: { ...NOTHING, source: null, production: 'none', withoutProduction: { gapMinor: 75 * M, policiesNeeded: 5 } },
+    yearly: {
+      ...figures({ targetMinor: 500 * M, actualMinor: 0, attainmentPct: 0, gapMinor: 500 * M, policiesNeeded: 28 }),
+      source: { provenance: 'self_reported', month: null }, production: 'none',
+      withoutProduction: { gapMinor: 500 * M, policiesNeeded: 28 },
+    },
+    uploadedOn: { month: null, year: null },
+    ...over,
+  });
+  /** The same, with the reader's estimate of Rp 120 jt for the year. */
+  const withEstimate = () => notUploaded({
+    yearly: {
+      ...figures({ targetMinor: 500 * M, actualMinor: 120 * M, attainmentPct: 24, gapMinor: 380 * M, policiesNeeded: 22 }),
+      source: { provenance: 'self_reported', month: null }, production: 'estimate', withoutProduction: null,
+    },
+  });
+  const showAs = (me: ReturnType<typeof makeMe>, routes: Record<string, StubReply | StubReply[]>) => {
+    const stub = stubFetch({ '/activity/ratios': { body: AGENT_RATIOS }, 'GET /campaigns/chasing': { body: NONE_CHASED }, ...routes });
+    renderWithSession(<PersonalSummaryPage />, { me });
+    return stub;
+  };
+  const goalCard = () => card('Goal vs. actual (APE)');
+
+  it('P19.1-T4 AC-7 under Not uploaded yet the card says who uploads production and what to do', async () => {
+    showAs(AGENT, { '/summary': { body: notUploaded() } });
+    const goal = await goalCard();
+    expect(goal).toHaveTextContent('Not uploaded yet');
+    expect(goal.querySelector('[data-who-uploads]')).toHaveTextContent(
+      'Production is uploaded by your KPM admin, usually every month. Not there yet? Contact your KPM admin.',
+    );
+  });
+
+  it('P19.1-T4 AC-7 an uploaded month says nothing of the kind', async () => {
+    showAs(AGENT, { '/summary': { body: summary() } });
+    const goal = await goalCard();
+    expect(goal.querySelector('[data-who-uploads]')).toBeNull();
+    expect(goal.querySelector('[data-goal-note]')).toBeNull();
+  });
+
+  it('P19.1-T4 AC-8 the helpers count 0 achieved — the whole target and its policies — each marked, and no dash', async () => {
+    showAs(AGENT, { '/summary': { body: notUploaded() } });
+    const goal = await goalCard();
+    const foot = goal.querySelector('dl')!;
+    expect(foot).toHaveTextContent('Remaining this monthIDR 75M(no production data yet)');
+    expect(foot).toHaveTextContent('Policies needed± 5 policies(no production data yet)');
+    expect(foot.querySelectorAll('[data-no-production]')).toHaveLength(2);
+    expect(foot).not.toHaveTextContent('—');
+
+    await yearly();
+    expect((await goalCard()).querySelector('dl')).toHaveTextContent('Remaining this yearIDR 500M(no production data yet)');
+  });
+
+  it('P19.1-T4 AC-9 the Owner or an Admin in their field view sees Upload production →, to Data upload', async () => {
+    const owner = makeMe({ permissions: ['personal_summary:read', 'data_upload:upload_and_preview'] });
+    showAs(owner, { '/summary': { body: notUploaded() } });
+    const link = within(await goalCard()).getByRole('link', { name: 'Upload production →' });
+    expect(link).toHaveAttribute('href', '/kpm/data-upload');
+  });
+
+  it('P19.1-T4 AC-9 nobody else sees it: an agent, an AB or an AAB holds no data_upload grant', async () => {
+    showAs(AGENT, { '/summary': { body: notUploaded() } });
+    expect(within(await goalCard()).queryByRole('link', { name: 'Upload production →' })).not.toBeInTheDocument();
+  });
+
+  it('P19.1-T4 AC-10 Enter interim production: the estimate is typed, saved through its route, and read back as yours', async () => {
+    const { calls } = showAs(AGENT, {
+      '/summary': [{ body: notUploaded() }, { body: withEstimate() }],
+      'PUT /goals/2026/ape-estimate': { body: {} },
+    });
+    const goal = await goalCard();
+    await userEvent.click(within(goal).getByRole('button', { name: 'Enter interim production' }));
+    const field = within(goal).getByRole('textbox', { name: 'APE already produced this year' });
+    expect(field).toHaveAttribute('inputmode', 'numeric');
+    await userEvent.type(field, '120000000');
+    expect(field).toHaveValue('120,000,000');
+    await userEvent.click(within(goal).getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(calls.filter((c) => c.init.method === 'PUT')).toHaveLength(1));
+    const put = calls.find((c) => c.init.method === 'PUT')!;
+    expect(put.url).toBe('http://api.test/api/v1/goals/2026/ape-estimate');
+    expect(JSON.parse(String(put.init.body))).toEqual({ apeAchievedMinor: 120_000_000_00 });
+    // Read back: on *Monthly* the estimate is the year's, said as such, with Edit and Delete.
+    const row = await waitFor(() => {
+      const found = document.querySelector('[data-estimate-row]');
+      expect(found).not.toBeNull();
+      return found as HTMLElement;
+    });
+    expect(row).toHaveTextContent('APE already produced this year: IDR 120M · your estimate');
+    expect(within(row).getByRole('button', { name: 'Edit' })).toBeInTheDocument();
+    expect(within(row).getByRole('button', { name: 'Delete' })).toBeInTheDocument();
+  });
+
+  it('P19.1-T4 AC-10 on Yearly the estimate is the figure — lighter, your estimate — and Delete sends null', async () => {
+    const { calls } = showAs(AGENT, {
+      '/summary': [{ body: withEstimate() }, { body: notUploaded() }],
+      'PUT /goals/2026/ape-estimate': { body: {} },
+    });
+    await goalCard();
+    await yearly();
+    const goal = await goalCard();
+    expect(goal.querySelector('[data-estimate]')).toHaveTextContent('IDR 120M · your estimate');
+    expect(goal.querySelector('[data-estimate] > span')).toHaveClass('text-navy/75');
+    await userEvent.click(within(goal).getByRole('button', { name: 'Delete' }));
+    await waitFor(() => expect(calls.filter((c) => c.init.method === 'PUT')).toHaveLength(1));
+    expect(JSON.parse(String(calls.find((c) => c.init.method === 'PUT')!.init.body))).toEqual({ apeAchievedMinor: null });
+  });
+
+  it('P19.1-T4 AC-10 Edit opens the field on the figure held; Cancel puts the row back unchanged', async () => {
+    showAs(AGENT, { '/summary': { body: withEstimate() } });
+    const goal = await goalCard();
+    await userEvent.click(within(goal).getByRole('button', { name: 'Edit' }));
+    expect(within(goal).getByRole('textbox', { name: 'APE already produced this year' })).toHaveValue('120,000,000');
+    await userEvent.click(within(goal).getByRole('button', { name: 'Cancel' }));
+    expect(within(goal).queryByRole('textbox')).not.toBeInTheDocument();
+    expect(goal.querySelector('[data-estimate-row]')).toHaveTextContent('IDR 120M · your estimate');
+  });
+
+  it('P19.1-T4 AC-10 a refused save says why in the card and keeps the field', async () => {
+    showAs(AGENT, {
+      '/summary': { body: notUploaded() },
+      'PUT /goals/2026/ape-estimate': { status: 404, body: { error: { code: 'NOT_FOUND', message: 'Goal not found.', requestId: 'r' } } },
+    });
+    const goal = await goalCard();
+    await userEvent.click(within(goal).getByRole('button', { name: 'Enter interim production' }));
+    await userEvent.type(within(goal).getByRole('textbox', { name: 'APE already produced this year' }), '5');
+    await userEvent.click(within(goal).getByRole('button', { name: 'Save' }));
+    expect(await within(goal).findByText('Goal not found.')).toBeInTheDocument();
+    expect(within(goal).getByRole('textbox', { name: 'APE already produced this year' })).toBeInTheDocument();
+  });
+
+  it('P19.1-T4 AC-10 once the office holds the year, nothing offers an estimate', async () => {
+    showAs(AGENT, {
+      '/summary': {
+        body: summary({ monthly: { ...NOTHING, source: null, production: 'none', withoutProduction: { gapMinor: 75 * M, policiesNeeded: 5 } } }),
+      },
+    });
+    const goal = await goalCard();
+    expect(goal.querySelector('[data-who-uploads]')).not.toBeNull();
+    expect(within(goal).queryByRole('button', { name: 'Enter interim production' })).not.toBeInTheDocument();
+  });
+
+  /*
+   * **P19.8-T5 AC-5 (ADR-0230 §6; OD-279's default): typed after the upload, the estimate is the year's figure** — the
+   * month's own APE still the office's — labelled *your estimate* here as on any estimate (the Summary keeps *perkiraan
+   * Anda*, §4), with Edit and Delete; no *Replaced by* note.
+   */
+  it('P19.8-T5 AC-5 a figure typed over the upload: the year reads it, your estimate, Edit and Delete; the month the office’s', async () => {
+    showAs(AGENT, {
+      '/summary': {
+        body: summary({
+          yearly: {
+            ...figures({ targetMinor: 500 * M, actualMinor: 120 * M, attainmentPct: 24, gapMinor: 380 * M, policiesNeeded: 22 }),
+            source: { provenance: 'self_reported', month: null }, production: 'estimate', withoutProduction: null,
+          },
+          estimateReplaced: null,
+        }),
+      },
+    });
+    const goal = await goalCard();
+    // *Monthly*: the office's own month, and the year's estimate named as such under it.
+    expect(within(goal).getByText('IDR 30M')).toBeInTheDocument();
+    expect(goal.querySelector('[data-estimate-row]')).toHaveTextContent('APE already produced this year: IDR 120M · your estimate');
+    expect(within(goal).getByRole('button', { name: 'Delete' })).toBeInTheDocument();
+    expect(goal.querySelector('[data-estimate-replaced]')).toBeNull();
+    await yearly();
+    expect((await goalCard()).querySelector('[data-estimate]')).toHaveTextContent('IDR 120M · your estimate');
+  });
+
+  it('P19.1-T4 AC-11 the office’s figure replaced the estimate: the figure is the office’s, and the card says when', async () => {
+    showAs(AGENT, {
+      '/summary': { body: summary({ estimateReplaced: { uploadedOn: '2026-09-12' } }) },
+    });
+    const goal = await goalCard();
+    expect(goal.querySelector('[data-estimate]')).toBeNull();
+    expect(goal).not.toHaveTextContent('your estimate');
+    expect(goal.querySelector('[data-estimate-replaced]')).toHaveTextContent(/^Replaced by official production data \(uploaded 12 Sep\)$/);
   });
 });

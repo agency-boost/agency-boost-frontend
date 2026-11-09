@@ -35,9 +35,9 @@ function Screen() {
 const root = document.documentElement;
 
 /**
- * **P18.98-T1: the reader's language, and the words of a screen in it** (AC-3, AC-4, AC-5).
+ * **P18.10-T1: the reader's language, and the words of a screen in it** (AC-3, AC-4, AC-5).
  */
-describe('P18.98-T1 a screen’s words', () => {
+describe('P18.10-T1 a screen’s words', () => {
   it('AC-5 reads English outside a provider: what every spec renders unless it asks', () => {
     render(<Screen />);
 
@@ -54,7 +54,7 @@ describe('P18.98-T1 a screen’s words', () => {
 /** *Saved ✓* in the language a reader who has chosen nothing reads: Indonesian since T4's exit, when it went live. */
 const SAVED_UNCHOSEN = ({ en: 'Saved ✓', id: 'Tersimpan ✓' } as const)[LANGUAGE_UNCHOSEN];
 
-describe('P18.98-T1 LanguageProvider', () => {
+describe('P18.10-T1 LanguageProvider', () => {
   afterEach(() => {
     root.lang = '';
     root.removeAttribute(LANGUAGE_PENDING);
@@ -74,7 +74,7 @@ describe('P18.98-T1 LanguageProvider', () => {
 
     render(<LanguageProvider><Screen /></LanguageProvider>);
 
-    // The sentence's text, read whole: in ID mode its kept terms are their own `<span lang="en">` (P18.98-T7 AC-2).
+    // The sentence's text, read whole: in ID mode its kept terms are their own `<span lang="en">` (P18.10-T7 AC-2).
     expect(document.querySelector('p')).toHaveTextContent('Leads management: Tersimpan ✓ 3 leads perlu di-follow up');
     expect(root.lang).toBe('id');
     expect(root.hasAttribute(LANGUAGE_PENDING)).toBe(false);
@@ -119,9 +119,9 @@ const account = (locale: Language, localeChosen: boolean, over: Partial<Me> = {}
   makeMe({ ...over, user: { ...makeMe().user, locale, localeChosen, ...over.user } });
 
 /**
- * **P18.98-T2: choosing the language, and following an account's** (ADR-0179 §2; AC-3, AC-5, AC-6).
+ * **P18.10-T2: choosing the language, and following an account's** (ADR-0179 §2; AC-3, AC-5, AC-6).
  */
-describe('P18.98-T2 LanguageProvider: choosing, and following the account', () => {
+describe('P18.10-T2 LanguageProvider: choosing, and following the account', () => {
   afterEach(() => {
     resetLanguage();
   });
@@ -301,12 +301,12 @@ const ENGLISH = 'Saved ✓ IDR 5.8B · 26 Oct 2026';
 const INDONESIAN = 'Tersimpan ✓ Rp 5,8 M · 26 Okt 2026';
 
 /**
- * **P18.98-T3 figures: `useFigureLanguage`** (ADR-0174, ADR-0179 §1, §6). The language a figure is written in is the
+ * **P18.10-T3 figures: `useFigureLanguage`** (ADR-0174, ADR-0179 §1, §6). The language a figure is written in is the
  * reader's chosen language, and with no choice `DEFAULT_LANGUAGE`, whether or not the switch is live. So until it is, a
  * reader with no choice reads English words and Indonesian figures on every screen, wired or not — the product as it was
  * before T3 — and a reader who chose a language, by the cookie or on their account, reads both in it.
  */
-describe('P18.98-T3 figures useFigureLanguage', () => {
+describe('P18.10-T3 figures useFigureLanguage', () => {
   afterEach(() => {
     resetLanguage();
   });
@@ -314,20 +314,20 @@ describe('P18.98-T3 figures useFigureLanguage', () => {
   const line = () => screen.getByTestId('line').textContent;
   const said = () => [screen.getByTestId('words').textContent, screen.getByTestId('figures').textContent];
 
-  it('P18.98-T3 figures outside a provider are the words’ language, English: a spec’s English counts as a chosen English', () => {
+  it('P18.10-T3 figures outside a provider are the words’ language, English: a spec’s English counts as a chosen English', () => {
     render(<Figures />);
 
     expect(line()).toBe(ENGLISH);
     expect(said()).toEqual(['en', 'en']);
   });
 
-  it('P18.98-T3 figures under InLanguage are the language the spec asks for, words and figures alike', () => {
+  it('P18.10-T3 figures under InLanguage are the language the spec asks for, words and figures alike', () => {
     render(<InLanguage language="id"><Figures /></InLanguage>);
 
     expect(line()).toBe(INDONESIAN);
   });
 
-  it('P18.98-T3 figures, unchosen and not live: English words and Indonesian figures, the screen as it was before T3', () => {
+  it('P18.10-T3 figures, unchosen and not live: English words and Indonesian figures, the screen as it was before T3', () => {
     // As the prerender left the page before it went live: `<html lang>` English, and no cookie.
     root.lang = 'en';
     render(<LanguageProvider live={false}><Figures /></LanguageProvider>);
@@ -338,13 +338,13 @@ describe('P18.98-T3 figures useFigureLanguage', () => {
     expect(languageCookie()).toBeNull();
   });
 
-  it('P18.98-T3 figures, the app’s provider as shipped: LANGUAGE_LIVE’s words, and Indonesian figures for a reader with no choice', () => {
+  it('P18.10-T3 figures, the app’s provider as shipped: LANGUAGE_LIVE’s words, and Indonesian figures for a reader with no choice', () => {
     render(<LanguageProvider><Figures /></LanguageProvider>);
 
     expect(said()).toEqual([LANGUAGE_UNCHOSEN, 'id']);
   });
 
-  it('P18.98-T3 figures, chosen English by the cookie, not live: English figures, though the script moved nothing', () => {
+  it('P18.10-T3 figures, chosen English by the cookie, not live: English figures, though the script moved nothing', () => {
     // The page is prerendered in English, so the script leaves it alone: the cookie itself says it was chosen.
     browserChose('en');
     render(<LanguageProvider live={false}><Figures /></LanguageProvider>);
@@ -353,7 +353,7 @@ describe('P18.98-T3 figures useFigureLanguage', () => {
     expect(said()).toEqual(['en', 'en']);
   });
 
-  it('P18.98-T3 figures, chosen Indonesian by the cookie, not live: Indonesian words and figures', () => {
+  it('P18.10-T3 figures, chosen Indonesian by the cookie, not live: Indonesian words and figures', () => {
     browserChose('id');
     render(<LanguageProvider live={false}><Figures /></LanguageProvider>);
 
@@ -361,7 +361,7 @@ describe('P18.98-T3 figures useFigureLanguage', () => {
     expect(root.lang).toBe('id');
   });
 
-  it('P18.98-T3 figures follow the account’s choice, not live: English, or Indonesian, words and figures alike', () => {
+  it('P18.10-T3 figures follow the account’s choice, not live: English, or Indonesian, words and figures alike', () => {
     const { unmount } = render(<LanguageProvider live={false}><Figures me={account('en', true)} /></LanguageProvider>);
     expect(line()).toBe(ENGLISH_WORDS_INDONESIAN_FIGURES);
     fireEvent.click(screen.getByText('follow'));
@@ -374,7 +374,7 @@ describe('P18.98-T3 figures useFigureLanguage', () => {
     expect(line()).toBe(INDONESIAN);
   });
 
-  it('P18.98-T3 figures, an account with no choice and a browser with none, not live: still Indonesian figures, nothing written', () => {
+  it('P18.10-T3 figures, an account with no choice and a browser with none, not live: still Indonesian figures, nothing written', () => {
     render(<LanguageProvider live={false}><Figures me={account('id', false)} /></LanguageProvider>);
 
     fireEvent.click(screen.getByText('follow'));
@@ -383,14 +383,14 @@ describe('P18.98-T3 figures useFigureLanguage', () => {
     expect(languageCookie()).toBeNull();
   });
 
-  it('P18.98-T3 figures, live and unchosen: Indonesian words and figures, as DEFAULT_LANGUAGE says', () => {
+  it('P18.10-T3 figures, live and unchosen: Indonesian words and figures, as DEFAULT_LANGUAGE says', () => {
     render(<LanguageProvider live><Figures /></LanguageProvider>);
 
     expect(line()).toBe(INDONESIAN);
     expect(said()).toEqual(['id', 'id']);
   });
 
-  it('P18.98-T3 figures, live: a choice on the switch, or one the browser made, writes both in it', () => {
+  it('P18.10-T3 figures, live: a choice on the switch, or one the browser made, writes both in it', () => {
     const { unmount } = render(<LanguageProvider live><Figures /></LanguageProvider>);
     fireEvent.click(screen.getByText('choose en'));
     expect(line()).toBe(ENGLISH);
@@ -402,7 +402,7 @@ describe('P18.98-T3 figures useFigureLanguage', () => {
     expect(line()).toBe(ENGLISH);
   });
 
-  it('P18.98-T3 figures in a support session stay the browser’s: the person’s choice is not read', () => {
+  it('P18.10-T3 figures in a support session stay the browser’s: the person’s choice is not read', () => {
     browserChose('en');
     render(
       <LanguageProvider live={false}>
@@ -415,7 +415,7 @@ describe('P18.98-T3 figures useFigureLanguage', () => {
     expect(line()).toBe(ENGLISH);
   });
 
-  it('P18.98-T3 figures on the server: DEFAULT_LANGUAGE whatever the cookie says, so the first client frame agrees', async () => {
+  it('P18.10-T3 figures on the server: DEFAULT_LANGUAGE whatever the cookie says, so the first client frame agrees', async () => {
     const { renderToString } = await import('react-dom/server');
     browserChose('en');
 
@@ -424,7 +424,7 @@ describe('P18.98-T3 figures useFigureLanguage', () => {
     expect(html).toContain(ENGLISH_WORDS_INDONESIAN_FIGURES);
   });
 
-  it('P18.98-T3 figures under InLanguage inside the app’s provider are the spec’s language: a spec’s language is a choice', () => {
+  it('P18.10-T3 figures under InLanguage inside the app’s provider are the spec’s language: a spec’s language is a choice', () => {
     render(<LanguageProvider live={false}><InLanguage language="en"><Figures /></InLanguage></LanguageProvider>);
 
     expect(line()).toBe(ENGLISH);

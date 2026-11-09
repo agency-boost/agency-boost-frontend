@@ -3,7 +3,7 @@ import { dirname, join, relative, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 /**
- * **P18.98-T7 AC-1: every page is rendered in ID mode somewhere, and read for English left.** Two kinds of case count:
+ * **P18.10-T7 AC-1: every page is rendered in ID mode somewhere, and read for English left.** Two kinds of case count:
  *
  * - **`screens.a11y.spec.tsx`'s cases in Indonesian** — a case named `(id)`, `(…, id)` or *in Indonesian* — whose
  *   `expectClean` reads the screen for a message missing and for any area's English the glossary does not keep, then
@@ -49,7 +49,7 @@ for (const file of files.filter((f) => /\.spec\.tsx?$/.test(f))) {
   }
 }
 
-describe('P18.98-T7 AC-1 every page is read in ID mode', () => {
+describe('P18.10-T7 AC-1 every page is read in ID mode', () => {
   it('finds the pages and the cases at all, so a silent zero cannot pass', () => {
     expect(PAGES.size).toBeGreaterThan(90);
     expect(A11Y_ROUTES.size).toBeGreaterThan(80);

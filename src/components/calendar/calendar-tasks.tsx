@@ -79,7 +79,8 @@ export function TypeChips({ hidden, onToggle }: { hidden: ReadonlySet<FilterKind
             aria-pressed={on}
             onClick={() => onToggle(kind)}
             className={cn(
-              'inline-flex min-h-11 items-center gap-1.5 rounded-pill border border-hairline px-2.5 text-xs font-semibold md:min-h-8',
+              // 44px on a phone and a tablet (UI-118: *every control at 768 is at least 44px tall*), 32px on a laptop.
+              'inline-flex min-h-11 items-center gap-1.5 rounded-pill border border-hairline px-2.5 text-xs font-semibold lg:min-h-8',
               on ? 'bg-card text-navy' : 'bg-hover-row text-signal-grey',
             )}
           >
@@ -100,8 +101,8 @@ export function TypeChips({ hidden, onToggle }: { hidden: ReadonlySet<FilterKind
 /** A source's line icon, the nav's own: *Leads*' funnel, *Coaching*'s chat, *Event*'s calendar. */
 const SOURCE_ICON: Record<TaskSource | 'event', LineIconName> = { lead: 'funnel', coaching: 'chat', event: 'calendar' };
 const SOURCE_TONE: Record<TaskSource | 'event', string> = {
-  lead: 'bg-pill-amber text-amber-ink',
-  coaching: 'bg-navy/[0.08] text-navy',
+  lead: 'bg-pill-amber text-primary-ink',
+  coaching: 'bg-secondary/[0.08] text-navy',
   event: 'bg-lavender/[0.14] text-navy',
 };
 
@@ -222,8 +223,10 @@ export function TaskRow({ task, mine, owner }: {
           <span
             aria-hidden="true"
             className={cn(
-              'flex h-[22px] w-[22px] items-center justify-center rounded-[6px] border-2 text-white peer-focus-visible:ring-2 peer-focus-visible:ring-amber',
-              done ? 'border-success bg-success' : 'border-line bg-card',
+              'flex h-[22px] w-[22px] items-center justify-center rounded-[6px] border-2 text-white peer-focus-visible:ring-2 peer-focus-visible:ring-focus-ring',
+              // *Tugas* blue (UI-154), never green: a ticked box filled, an unticked one's edge — 7.99:1 on the card, where
+              // the grey `line` was 1.5:1, short of the 3:1 a control's edge needs (1.4.11; `tokens.md`).
+              done ? 'border-tugas-ink bg-tugas-ink' : 'border-tugas-ink bg-card',
             )}
           >
             {done && <LineIcon name="check" className="h-3.5 w-3.5" />}
@@ -278,7 +281,7 @@ export function PersonTaskGroup({ person, tasks }: { person: TaskPerson; tasks: 
   const hidden = tasks.some(isHiddenTask);
   const shown = tasks.filter((task): task is CalendarTask => !isHiddenTask(task));
   return (
-    <div data-person-tasks={person.membershipId} className={cn('rounded-[6px] border border-dashed bg-card', hidden ? 'border-line' : 'border-success/40')}>
+    <div data-person-tasks={person.membershipId} className={cn('rounded-[6px] border border-dashed bg-card', hidden ? 'border-line' : 'border-tugas-edge')}>
       <div className={cn('flex min-h-11 items-center gap-2 px-2.5 text-xs font-bold text-navy', !hidden && 'border-b border-divider')}>
         <Avatar initials={person.initials} />
         <span className="min-w-0 flex-1 truncate">
@@ -308,7 +311,8 @@ export function PersonTaskGroup({ person, tasks }: { person: TaskPerson; tasks: 
 
 /**
  * **The Agenda's checklist** (UI-104 point 2): *Tugas · n* under the day's header, above its timed things, the reader's
- * rows with their checkboxes. Nothing when the day has none.
+ * rows with their checkboxes. Nothing when the day has none. **Blue** (P19.1-T3 AC-6, UI-154): a dashed `tugas-edge`
+ * border and a `tugas-ink` heading, at every size (*Decisions* 6).
  */
 export function TaskChecklist({ tasks }: { tasks: readonly CalendarTask[] }) {
   const t = useMessages(calendarMessages);
@@ -316,8 +320,8 @@ export function TaskChecklist({ tasks }: { tasks: readonly CalendarTask[] }) {
   const { struck } = useCalendarTasks();
   if (tasks.length === 0) return null;
   return (
-    <section aria-label={t.tasks} data-checklist="" className="rounded-[6px] border border-dashed border-success/40 bg-card">
-      <p className="flex min-h-8 items-center gap-1.5 border-b border-divider px-2.5 text-xs font-bold text-success">
+    <section aria-label={t.tasks} data-checklist="" className="rounded-[6px] border border-dashed border-tugas-edge bg-card">
+      <p className="flex min-h-8 items-center gap-1.5 border-b border-divider px-2.5 text-xs font-bold text-tugas-ink">
         <LineIcon name="checklist" className="h-4 w-4" />
         {t.tasksCount({ count: formatNumber(openCount(tasks, struck), {}, figures) })}
       </p>
@@ -329,8 +333,10 @@ export function TaskChecklist({ tasks }: { tasks: readonly CalendarTask[] }) {
 }
 
 /**
- * **A day's count pill** (UI-104 point 2): the orange count, a grey *·* when there is none. A button that opens the
- * day's popup when `onOpen` is given; a plain mark otherwise — a hidden person's count, which opens nothing.
+ * **A day's count pill** (UI-104 point 2): the count, a grey *·* when there is none. A button that opens the day's popup
+ * when `onOpen` is given; a plain mark otherwise — a hidden person's count, which opens nothing. **A soft blue pill**
+ * (P19.1-T3 AC-6, UI-154), where it was a solid orange one that shouted as loudly as today; 44px a target on a phone and
+ * a tablet, 32px on a laptop.
  */
 export function CountPill({ day, count, onOpen }: { day: string; count: number; onOpen?: () => void }) {
   const t = useMessages(calendarMessages);
@@ -339,7 +345,7 @@ export function CountPill({ day, count, onOpen }: { day: string; count: number; 
     return <span aria-hidden="true" className="justify-self-center text-md font-bold text-line">·</span>;
   }
   const pill = (
-    <span className="inline-flex h-5 min-w-[22px] items-center justify-center rounded-pill bg-amber px-[7px] text-xs font-bold text-navy">
+    <span className="inline-flex h-5 min-w-[22px] items-center justify-center rounded-pill bg-tugas px-[7px] text-xs font-bold text-tugas-ink">
       {formatNumber(count, {}, figures)}
     </span>
   );
@@ -351,7 +357,7 @@ export function CountPill({ day, count, onOpen }: { day: string; count: number; 
       data-count-pill={day}
       aria-label={name}
       onClick={onOpen}
-      className="flex h-11 min-w-11 items-center justify-center justify-self-center md:h-8"
+      className="flex h-11 min-w-11 items-center justify-center justify-self-center lg:h-8"
     >
       {pill}
     </button>

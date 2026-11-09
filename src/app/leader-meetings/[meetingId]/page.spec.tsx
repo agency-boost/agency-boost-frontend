@@ -46,9 +46,9 @@ describe('/leader-meetings/[meetingId] — a meeting (P18.1-T2, P18.1-T3)', () =
       expect(head().getByText('Recommended: every 2 weeks · 60–90 mins')).toBeInTheDocument();
       const buttons = ['Share', 'Save as PDF', 'Save'].map((name) => head().getByRole('button', { name }));
       // *Save* is an action, so amber with navy words; *Share* and *Save as PDF* keep their navy outline (ADR-0137).
-      expect(buttons[2]).toHaveClass('bg-amber', 'text-navy');
-      expect(buttons[2]).not.toHaveClass('bg-navy');
-      for (const outlined of buttons.slice(0, 2)) expect(outlined).toHaveClass('border-navy', 'text-navy');
+      expect(buttons[2]).toHaveClass('bg-primary', 'text-primary-contrast');
+      expect(buttons[2]).not.toHaveClass('bg-secondary');
+      for (const outlined of buttons.slice(0, 2)) expect(outlined).toHaveClass('border-secondary', 'text-navy');
     });
 
     it('P18.1-T2 AC-3: the date is a button for whoever may move the meeting, named for what it does (ADR-0130 §4)', async () => {
@@ -57,7 +57,7 @@ describe('/leader-meetings/[meetingId] — a meeting (P18.1-T2, P18.1-T3)', () =
       expect(date).toHaveTextContent('13 Oct 2026');
     });
 
-    it('P18.1-T2 AC-3, P18.97-T2 AC-3: Can edit these minutes — the Owner first, then the Admins, then the Core Leaders, "(You)" after the reader', async () => {
+    it('P18.1-T2 AC-3, P18.9-T2 AC-3: Can edit these minutes — the Owner first, then the Admins, then the Core Leaders, "(You)" after the reader', async () => {
       open();
       const label = await screen.findByText('Can edit these minutes');
       expect(screen.queryByText(/\bMOM\b/)).toBeNull();
@@ -67,8 +67,8 @@ describe('/leader-meetings/[meetingId] — a meeting (P18.1-T2, P18.1-T3)', () =
         'WTWilson Tanoto (You) · AB', 'MHMaya Halim · AAB', 'ASAgus Santoso · AB', 'SDSari Dewanti · AAB', 'YPYosef Pratama · AB',
       ]);
       // The Owner's avatar is amber (`:659`).
-      expect(chips[0].querySelector('[aria-hidden="true"]')).toHaveClass('bg-amber');
-      expect(chips[1].querySelector('[aria-hidden="true"]')).toHaveClass('bg-navy-soft');
+      expect(chips[0].querySelector('[aria-hidden="true"]')).toHaveClass('bg-primary');
+      expect(chips[1].querySelector('[aria-hidden="true"]')).toHaveClass('bg-secondary-hover');
       expect(screen.getByRole('link', { name: 'Manage tags →' })).toHaveAttribute('href', '/people/members');
     });
 
@@ -252,7 +252,7 @@ describe('/leader-meetings/[meetingId] — a meeting (P18.1-T2, P18.1-T3)', () =
     });
   });
 
-  describe('Share these minutes (P18.1-T3, I-256; P18.97-T2 AC-3)', () => {
+  describe('Share these minutes (P18.1-T3, I-256; P18.9-T2 AC-3)', () => {
     const link = { token: 'tok_abc-123', expiresAt: '2026-10-23T18:00:00.000Z' };
 
     it('P18.1-T3 AC-1: each opening makes a fresh link, shows its address read-only and the hint, dated in Jakarta', async () => {
@@ -276,7 +276,7 @@ describe('/leader-meetings/[meetingId] — a meeting (P18.1-T2, P18.1-T3)', () =
       expect(writes(calls).filter((c) => c.init.method === 'POST')).toHaveLength(2);
     });
 
-    it('P18.1-T3 AC-1, P18.95-T1 AC-6: Copy link says "Link copied ✓"', async () => {
+    it('P18.1-T3 AC-1, P18.7-T1 AC-6: Copy link says "Link copied ✓"', async () => {
       const writeText = vi.fn(async () => undefined);
       Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
       open(meetingView(), { 'POST /leader-meetings/m-14/share-links': { status: 201, body: link } });
@@ -366,7 +366,7 @@ describe('/leader-meetings/[meetingId] — a meeting (P18.1-T2, P18.1-T3)', () =
     });
 
     it('a reader not signed in is sent to sign in, and back to this meeting after', async () => {
-      // Sent by the shell since P18.8-T15 AC-2, from the address the browser is on.
+      // Sent by the shell since P18.5-T15 AC-2, from the address the browser is on.
       window.history.replaceState(null, '', '/leader-meetings/m-14');
       onTestFinished(() => window.history.replaceState(null, '', '/'));
       stubFetch({});

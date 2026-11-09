@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Page } from '@/components/page';
 import { USER_MANAGEMENT_TITLE, UserManagementTabs } from '@/components/user-management-tabs';
 import { EmptyState } from '@/components/ui/empty-state';
-import { Button, ButtonLink, Card, ErrorBanner, Field, TextInput } from '@/components/ui/field';
+import { Button, ButtonLink, Card, ErrorBanner, Field, Select, TextInput } from '@/components/ui/field';
 import { REMOVED_ON_PHONE } from '@/components/ui/phone';
 import { PhoneTip } from '@/components/ui/phone-tip';
 import { SkeletonCards } from '@/components/ui/skeleton';
@@ -12,10 +12,11 @@ import { useMessages } from '@/i18n/language-provider';
 import { userManagementMessages } from '@/i18n/messages/user-management';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
+import { listInsurers, type Insurer } from '@/lib/companies';
 import {
   askForKpm,
   readJoinState,
-  readMyKpmRequest,
+  readMyKpmRequestState,
   registerKpm,
   searchKpms,
   type JoinState,
@@ -32,12 +33,18 @@ import {
  * show/hide with no un-register step — the real thing refuses a second registration
  * rather than appearing to move you.
  *
- * Its words are the catalogue's (`user-management.ts`; P18.98-T4): *office* is *KPM* in Indonesian (§B.9). An office's
+ * Its words are the catalogue's (`user-management.ts`; P18.10-T4): *office* is *KPM* in Indonesian (§B.9). An office's
  * company, code and branch are shown as stored.
  *
- * **UI V1 (2026-10-30, Phase 18.99 T9; UI-088, UI-087).** One card for the one fact: *KPM terdaftar* in sentence case,
+ * **UI V1 (2026-10-30, Phase 18.11 T9; UI-088, UI-087).** One card for the one fact: *KPM terdaftar* in sentence case,
  * the office as its title, *Pindah ke KPM lain…* as 12px meta inside it — behind ⓘ on a phone (Appendix A); no
  * uppercase eyebrow and no orange left border, here or on *Anda mengajukan KPM*. No sub-line below 1024px.
+ *
+ * **P19-T2 (ADR-0191 §1; UI-164, UI-165, UI-166 item 4).** The directory lists only the reader's own company's offices
+ * (the API scopes it), and a request is for that company — never the first search result's, which filed a Manulife
+ * applicant as Prudential and left the button dead when the search was empty. *Kirim permintaan* needs only the branch
+ * name; an account with no company is asked for one in the same card. Registered with nobody asked, the card says the
+ * next step, not *"menunggu leader"*.
  */
 export default function RegisterKpmPage() {
   const words = useMessages(userManagementMessages);
@@ -46,6 +53,8 @@ export default function RegisterKpmPage() {
   const [q, setQ] = useState('');
   const [results, setResults] = useState<KpmDirectoryEntry[] | null>(null);
   const [mine, setMine] = useState<MyKpmRequest | null>(null);
+  /** The company the reader signed up with: a request is for it. `null` until read, or for an account with none. */
+  const [ownCompany, setOwnCompany] = useState<{ companyId: string; name: string } | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -54,7 +63,9 @@ export default function RegisterKpmPage() {
   }, []);
 
   useEffect(() => {
-    void readMyKpmRequest().then(setMine).catch(() => setMine(null));
+    void readMyKpmRequestState()
+      .then(({ request, company }) => { setMine(request); setOwnCompany(company); })
+      .catch(() => setMine(null));
   }, []);
 
   const search = useCallback(async (term: string) => {
@@ -107,7 +118,8 @@ export default function RegisterKpmPage() {
             <PhoneTip text={t.moving} className="font-normal" />
           </p>
           <p className="mt-1 text-md text-muted">
-            {state.status === 'pending' ? t.pendingLine : t.activeLine}
+            {/* UI-166 item 4: "waiting for a leader" only once a leader has been asked. */}
+            {state.status !== 'pending' ? t.activeLine : state.pendingRequestTo ? t.pendingLine : t.registeredLine}
           </p>
           {/* No "Switch KPM". The prototype's button only hides a card; moving between
               offices is a real operation with real consequences for your history, and it
@@ -150,7 +162,7 @@ export default function RegisterKpmPage() {
                   key={k.kpmId}
                   className="flex flex-wrap items-center gap-3 rounded-md border border-hairline p-3"
                 >
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-navy text-md font-bold text-card">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-secondary text-md font-bold text-secondary-contrast">
                     {k.code.slice(0, 2)}
                   </span>
                   <span className="min-w-0 flex-1">
@@ -180,7 +192,7 @@ export default function RegisterKpmPage() {
           {/* Where the search ends for somebody whose branch has never been provisioned.
               Until 2026-09-06 it ended nowhere: they searched, found nothing, and the
               product had no answer for them (ADR-0011). */}
-          <AskForKpm mine={mine} companies={results} onAsked={setMine} />
+          <AskForKpm mine={mine} ownCompany={ownCompany} onAsked={setMine} />
         </>
       )}
     </Page>
@@ -201,23 +213,32 @@ export default function RegisterKpmPage() {
  */
 function AskForKpm({
   mine,
-  companies,
+  ownCompany,
   onAsked,
 }: {
   mine: MyKpmRequest | null;
-  companies: KpmDirectoryEntry[] | null;
+  ownCompany: { companyId: string; name: string } | null;
   onAsked: (r: MyKpmRequest) => void;
 }) {
   const t = useMessages(userManagementMessages).kpm;
   const [open, setOpen] = useState(false);
   const [branchName, setBranchName] = useState('');
   const [note, setNote] = useState('');
+  const [chosen, setChosen] = useState('');
+  const [insurers, setInsurers] = useState<Insurer[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
 
-  // Every office belongs to a company, and the directory is the only place a newcomer can
-  // learn which companies exist.
-  const companyId = companies?.[0]?.companyId ?? null;
+  /*
+   * **The applicant's own company** (ADR-0191 §1, P19-T2 AC-2, AC-3): the API files the request for it, so nothing is
+   * sent. It was the directory's first result — another company's, or nothing, which left the button dead (UI-164).
+   * Only an account that signed up with no company chooses one, here, from the insurers registration offers.
+   */
+  const needsCompany = ownCompany === null;
+  useEffect(() => {
+    if (!open || !needsCompany || insurers) return;
+    void listInsurers().then(setInsurers).catch(() => setInsurers([]));
+  }, [open, needsCompany, insurers]);
 
   if (mine && mine.status === 'pending') {
     return (
@@ -240,11 +261,13 @@ function AskForKpm({
   }
 
   async function ask() {
-    if (!companyId) return;
+    if (needsCompany && !chosen) return;
     setBusy(true);
     setError(null);
     try {
-      onAsked(await askForKpm({ companyId, branchName, note: note || undefined }));
+      onAsked(await askForKpm({
+        ...(needsCompany ? { companyId: chosen } : {}), branchName: branchName.trim(), note: note.trim() || undefined,
+      }));
     } catch (err) {
       setError(toDisplayError(err));
     } finally {
@@ -266,6 +289,17 @@ function AskForKpm({
       {open && (
         <>
           {error && <ErrorBanner {...error} />}
+          {needsCompany ? (
+            // AC-2: the one thing missing, asked for in this card, saying what it is.
+            <Field label={t.company} htmlFor="company" hint={t.noCompanyLine} className="mt-3">
+              <Select id="company" value={chosen} onChange={(e) => setChosen(e.target.value)}>
+                <option value="">{t.chooseCompany}</option>
+                {insurers?.map((c) => <option key={c._id} value={c._id}>{c.name}</option>)}
+              </Select>
+            </Field>
+          ) : (
+            <p className="mt-3 text-md text-navy">{t.companyFor({ company: ownCompany.name })}</p>
+          )}
           <Field label={t.branch} htmlFor="branch" className="mt-3">
             <TextInput
               id="branch"
@@ -284,7 +318,8 @@ function AskForKpm({
           </Field>
           <Button
             className="mt-3"
-            disabled={busy || !branchName.trim() || !companyId}
+            // UI-164: enabled once the branch is named — the note is optional, and the company is the account's.
+            disabled={busy || !branchName.trim() || (needsCompany && !chosen)}
             onClick={() => void ask()}
           >
             {busy ? t.sending : t.send}

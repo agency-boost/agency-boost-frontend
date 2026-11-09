@@ -5,7 +5,7 @@ import { homeMessages } from '@/i18n/messages/home';
 import { languageOf } from '@/components/home/home-quote';
 import type { HomeView } from '@/lib/home';
 import { englishOnly, englishShown } from '@test/english-left';
-import { renderInIndonesian, renderWithSession, stubFetch } from '@test/harness';
+import { renderInIndonesian, renderWithSession, stubFetch, wears } from '@test/harness';
 import { AGENT_VIEW, AGUS, LEADER } from '@test/home-fixtures';
 import HomePage from './page';
 
@@ -58,7 +58,8 @@ describe('UI-100 Home', () => {
     const mine = tile(/^My activity$/);
     expect(mine).toHaveAttribute('href', '/activity/log');
     expect(within(mine).getByText('Log').closest('[data-log-pill]')).not.toBeNull();
-    expect(mine).toHaveTextContent('Yesterday 5');
+    // *Changed 2026-11-07 (P19.8-T2 AC-4; MOB UI-164):* *+ Log* alone across the tile — no *Kemarin* chip beside it.
+    expect(mine).not.toHaveTextContent('Yesterday');
   });
 
   it('UI-100 Aktivitas saya shows today’s count otherwise, with its chip hidden at 0; both open /activity/log', async () => {
@@ -99,9 +100,12 @@ describe('UI-100 Home', () => {
     expect(within(section).getByRole('link', { name: 'All of today in Calendar' })).toHaveAttribute('href', '/calendar?view=agenda&date=2026-10-30');
     const rows = section.querySelectorAll('[data-action-row]');
     expect(rows).toHaveLength(3);
-    for (const row of rows) {
+    // The two *Tugas* keep their target. *Changed 2026-11-07 (P19.8-T2 AC-7; MOB UI-169):* an entry's row opens the
+    // Calendar's detail over Home (`home-review.spec.tsx`), a button rather than a link to the Agenda.
+    for (const row of [...rows].slice(0, 2)) {
       expect(row.querySelector('a[data-row-main]')).toHaveAttribute('href', '/calendar?view=agenda&date=2026-10-30');
     }
+    expect(rows[2].querySelector('button[data-row-main]')).toHaveAttribute('aria-haspopup', 'dialog');
     expect(rows[0]).toHaveTextContent('From: WILSON TANOTO');
     expect(rows[0]).toHaveTextContent('Siapkan daftar 20 prospek baru');
     expect(within(rows[0] as HTMLElement).getByRole('link', { name: /WhatsApp/ })).toHaveAttribute('href', 'https://wa.me/6281299990000');
@@ -121,7 +125,7 @@ describe('UI-100 Home', () => {
     const bars = chart.querySelectorAll('.grid-cols-7')[0].children;
     expect([...bars].map((b) => b.textContent)).toEqual(['0', '0', '3', '6', '4', '5', '0']);
     expect(bars[6]).toHaveAttribute('data-today', 'true');
-    expect(bars[6].className).toContain('text-amber-ink');
+    expect(bars[6].className).toContain('text-primary-ink');
     const days = chart.querySelectorAll('.grid-cols-7')[1].children;
     expect([...days].map((d) => d.textContent)).toEqual(['Sat', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Today']);
     // A screen reader hears each day and its count.
@@ -138,7 +142,9 @@ describe('UI-100 Home', () => {
 
   it('UI-100 agents see no leader tiles and no Laporan tim; empty sections are hidden', async () => {
     await open(AGENT_VIEW);
-    expect(document.querySelectorAll('[data-stat-tile]')).toHaveLength(2);
+    // *Changed 2026-11-07 (P19.8-T2 AC-4; OD-284):* the Agent's *Leads* joins their two.
+    expect(document.querySelectorAll('[data-stat-tile]')).toHaveLength(3);
+    expect(tile(/^Leads$/)).toHaveAttribute('href', '/leads');
     expect(screen.queryByText(/Active Agent/)).toBeNull();
     expect(screen.queryByText(/^Coaching 7 days$/)).toBeNull();
     expect(document.querySelector('[data-home-team]')).toBeNull();
@@ -155,7 +161,12 @@ describe('UI-100 Home', () => {
 
 describe('UI-101 Laporan tim', () => {
   const rowsOf = () => [...document.querySelectorAll('[data-home-team] [data-person-row]')] as HTMLElement[];
-  const namesOf = () => rowsOf().map((r) => r.querySelector('[class*="uppercase"]')!.textContent);
+  // The name alone: the *Group* tab draws the level tag before it (P19.9-T2 AC-2).
+  const namesOf = () => rowsOf().map((r) => {
+    const line = r.querySelector('[class*="uppercase"]')!.cloneNode(true) as HTMLElement;
+    line.querySelector('[data-rung-tag]')?.remove();
+    return line.textContent;
+  });
 
   it('UI-101 starts on Unit, the server’s order kept, the leader never on it', async () => {
     await open(LEADER);
@@ -169,9 +180,14 @@ describe('UI-101 Laporan tim', () => {
     await user.click(screen.getByRole('button', { name: 'Group' }));
     expect(screen.getByRole('button', { name: 'Group' })).toHaveAttribute('aria-pressed', 'true');
     expect(namesOf()).toEqual(['Lukman Hakim', 'Herman Widjaja', 'Siti Rahmawati', 'Dewi Lestari', 'Rina Wijaya']);
-    await user.click(screen.getByRole('button', { name: 'Show all 7' }));
+    // *Changed 2026-11-08 (P19.9-T2 AC-1; ADR-0235, OD-278 option 3):* *Semua ›* opens the rest in place again, where
+    // from P19.8-T2 it opened the Unit Dashboard's *Aktivitas* tab.
+    const all = screen.getByRole('button', { name: 'All 7 people' });
+    expect(all).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('link', { name: /on the Unit Dashboard/ })).toBeNull();
+    await user.click(all);
     expect(namesOf()).toHaveLength(7);
-    expect(screen.queryByRole('button', { name: /Show all/ })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Show fewer' })).toHaveAttribute('aria-expanded', 'true');
   });
 
   it('UI-101 a day reads an orange count when they logged and Belum lapor when not — a saved 0 is Belum lapor too', async () => {
@@ -180,7 +196,9 @@ describe('UI-101 Laporan tim', () => {
     await user.click(screen.getByRole('button', { name: 'Group' }));
     const rina = rowsOf().find((r) => r.textContent!.includes('Rina Wijaya'))!;
     const pills = rina.querySelectorAll('[data-logged]');
-    expect([...pills].map((p) => [p.getAttribute('data-logged'), p.textContent])).toEqual([['true', '1'], ['false', 'Not reported']]);
+    // *Changed 2026-11-07 (P19.8-T2 AC-8; MOB UI-165, D-22):* *Belum lapor* is a grey ✕ of that name, not a pill.
+    expect([...pills].map((p) => [p.getAttribute('data-logged'), p.textContent || p.getAttribute('aria-label')]))
+      .toEqual([['true', '1'], ['false', 'Not reported']]);
   });
 
   it('UI-101 the reminder opens WhatsApp with the prefilled text — kemarin & hari ini when both days are empty', async () => {
@@ -224,10 +242,12 @@ describe('UI-101 Laporan tim', () => {
     expect(within(siti).getByRole('link', { name: /WhatsApp/ })).toBeInTheDocument();
   });
 
-  it('UI-101 nothing scrolls sideways at 360: one-line names that give way with …, fixed 52px day cells', async () => {
+  it('UI-101 nothing scrolls sideways at 360: names that wrap rather than cut on a phone, fixed 52px day cells', async () => {
     await open(LEADER);
     const row = rowsOf()[0];
-    expect(row.querySelector('[class*="uppercase"]')!.className).toContain('truncate');
+    // *Changed 2026-11-07 (P19.8-T2 AC-8; MOB UI-165):* never cut on a phone, two lines; one line with … from 768px.
+    expect(wears(row.querySelector('[class*="uppercase"]')!, 360).split(' ')).toContain('whitespace-normal');
+    expect(wears(row.querySelector('[class*="uppercase"]')!, 1280).split(' ')).toContain('truncate');
     expect(row.querySelectorAll('.w-\\[3\\.25rem\\]')).toHaveLength(2);
   });
 });
@@ -236,12 +256,14 @@ describe('UI-100 Home in ID mode', () => {
   it('UI-100 writes the report’s words, Indonesian figures, and no English message of its own', async () => {
     await open(LEADER, 'id');
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Pagi, AGUS');
-    for (const words of ['Aktivitas saya', 'Jadwal hari ini', 'Aksi hari ini', 'Laporan tim', 'Aktivitas 7 hari terakhir', 'Coaching 7 hari', 'Active Agent Oktober']) {
+    // *Changed 2026-11-07 (P19.8-T2 AC-8; MOB UI-165):* *Laporan aktivitas tim*, the owner's copy change.
+    for (const words of ['Aktivitas saya', 'Jadwal hari ini', 'Aksi hari ini', 'Laporan aktivitas tim', 'Aktivitas 7 hari terakhir', 'Coaching 7 hari', 'Active Agent Oktober']) {
       expect(screen.getByText(words)).toBeInTheDocument();
     }
     expect(tile(/^Jadwal hari ini$/)).toHaveTextContent('2meeting');
     expect(tile(/^Jadwal hari ini$/)).toHaveTextContent('Tugas 3');
-    expect(tile(/^Aktivitas saya$/)).toHaveTextContent('Kemarin 5');
+    // *Changed 2026-11-07 (P19.8-T2 AC-4):* *+ Log* alone when today is 0; *Kemarin 5* beside a count (`home-review.spec.tsx`).
+    expect(tile(/^Aktivitas saya$/)).toHaveTextContent('Log');
     expect(screen.getByText('Dari: WILSON TANOTO')).toBeInTheDocument();
     expect(screen.getByText('18 aktivitas')).toBeInTheDocument();
     expect(screen.getByText('Kmrn')).toBeInTheDocument();

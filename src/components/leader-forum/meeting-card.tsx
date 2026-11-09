@@ -15,7 +15,7 @@ import {
  * title; *"{date} · Upcoming · {n} core leaders tagged"*, singular for one (F-186); the initials of those same
  * people — every editor tagged but the Owner — overlapping, each named; the open items or *All clear*; and ***Open***.
  *
- * **The whole card is one link to the meeting** (P18.97-T2 AC-2, I-497; the client's UI-015, who found only *Open*
+ * **The whole card is one link to the meeting** (P18.9-T2 AC-2, I-497; the client's UI-015, who found only *Open*
  * would open it): one keyboard stop, named by the title and described by its line, *Open* kept as the visible cue —
  * a word now, not a link inside the link. The prototype's card opens on a click anywhere (`:2631-2635`). On a phone
  * the right-hand side wraps under the title instead of pushing the card wider (flow doc §2.10).
@@ -45,12 +45,13 @@ export function MeetingCardRow({ meeting }: { meeting: MeetingCard }) {
         <div
           aria-hidden="true"
           className={cn(
-            'flex h-[54px] w-[54px] shrink-0 flex-col items-center justify-center rounded-[10px] text-white',
-            past ? 'bg-muted' : 'bg-navy',
+            'flex h-[54px] w-[54px] shrink-0 flex-col items-center justify-center rounded-[10px]',
+            past ? 'text-white' : 'text-secondary-contrast',
+            past ? 'bg-muted' : 'bg-secondary',
           )}
         >
           {/* The month at 65% white on navy (`:629`); full white on the grey, where 65% would not read. */}
-          <span className={cn('text-2xs font-bold uppercase tracking-wide', past ? 'text-white' : 'text-white/[0.65]')}>
+          <span className={cn('text-2xs font-bold uppercase tracking-wide', past ? 'text-white' : 'text-secondary-contrast/[0.65]')}>
             {block.month}
           </span>
           <span className="text-xl font-extrabold leading-tight">{block.day}</span>
@@ -73,7 +74,7 @@ export function MeetingCardRow({ meeting }: { meeting: MeetingCard }) {
             aria-hidden="true"
             className={buttonClass(
               'secondary',
-              'h-auto rounded-[7px] border-[1.5px] border-navy bg-transparent px-[13px] py-[7px] text-sm group-hover:bg-navy/5',
+              'h-auto rounded-[7px] border-[1.5px] border-secondary bg-transparent px-[13px] py-[7px] text-sm group-hover:bg-secondary/5',
             )}
           >
             {t.open}
@@ -97,7 +98,7 @@ function AvatarStack({ people }: { people: ForumPerson[] }) {
             role="img"
             aria-label={name}
             title={name}
-            className="-ml-2 flex h-[26px] w-[26px] items-center justify-center rounded-full border-2 border-card bg-navy-soft text-2xs font-bold text-white first:ml-0"
+            className="-ml-2 flex h-[26px] w-[26px] items-center justify-center rounded-full border-2 border-card bg-secondary-hover text-2xs font-bold text-secondary-contrast first:ml-0"
           >
             {initialsOf(person.name)}
           </span>

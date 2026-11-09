@@ -3,13 +3,17 @@
 import { useEffect, useMemo, useState } from 'react';
 import { GroupTree, TreeSearch, useTreeSummary } from '@/components/org-tree/group-tree';
 import { Page } from '@/components/page';
+import { NoDataLine, SamplePreview, useSampleName } from '@/components/sample-preview';
 import { EmptyState } from '@/components/ui/empty-state';
-import { Card, ErrorBanner } from '@/components/ui/field';
+import { ButtonLink, Card, ErrorBanner } from '@/components/ui/field';
 import { SkeletonTree } from '@/components/ui/skeleton';
 import { useMessages } from '@/i18n/language-provider';
 import { groupTreeMessages } from '@/i18n/messages/group-tree';
+import { samplePreviewMessages } from '@/i18n/messages/sample-preview';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { readOrgTree, type OrgTree as OrgTreeData } from '@/lib/org';
+import { leadsByRole } from '@/lib/field-nav';
+import { sampleOrgTree } from '@/lib/sample-data';
 import { useSession } from '@/lib/session';
 
 /**
@@ -33,7 +37,7 @@ import { useSession } from '@/lib/session';
  * tree (the server's answer to a tenant admin): their own leader is then an ordinary node, and still
  * inert. Each target keeps its own guard; a link decides what is offered, never what is allowed.
  *
- * **UI V1 (2026-10-30, Phase 18.99 T9; UI-058, UI-059, UI-072 to UI-075): rows at every size, no canvas** —
+ * **UI V1 (2026-10-30, Phase 18.11 T9; UI-058, UI-059, UI-072 to UI-075): rows at every size, no canvas** —
  * `GroupTree`: the indented list of the shared person rows below 1024px, one card with columns from 1024px; today's
  * activity pill on every row but the upline's; the whole row opens the person, with no ›; *Cari agen* on the title row
  * below 1024px and over the card from 1024px, filtering this tree. **The reader's own row opens their Unit Dashboard**
@@ -46,11 +50,9 @@ export default function GroupTreePage() {
   const t = useMessages(groupTreeMessages);
   const [query, setQuery] = useState('');
   const membership = me?.membership ?? null;
-  // A member on the agent rung who leads somebody reads their unit (ADR-0087) but coaches nobody: their
-  // coaching tabs and subject reads are `own` only, so a summary link would answer *not found*. The
-  // Owner and the Admin keep theirs, whatever rung they stand on.
-  const opensCoaching = !membership || membership.hierarchyRole !== 'agent' || membership.isKpmOwner || membership.isKpmAdmin;
-  const personHref = useMemo(() => (tree ? drillFor(tree, opensCoaching) : undefined), [tree, opensCoaching]);
+  // Every upline coaches since P19.9-T6 (ADR-0234): a member on the agent rung who leads somebody opens their people's
+  // coaching pages as an AB does. The rule is the tree's alone, never the reader's rung.
+  const personHref = useMemo(() => (tree ? drillFor(tree) : undefined), [tree]);
 
   useEffect(() => {
     void readOrgTree()
@@ -58,7 +60,7 @@ export default function GroupTreePage() {
       .catch((err) => setError(toDisplayError(err)));
   }, []);
 
-  // The title is the nav item's words (P18.95-T9 AC-2, UI-027): the prototype's *Group Overview* sat under a nav item
+  // The title is the nav item's words (P18.7-T9 AC-2, UI-027): the prototype's *Group Overview* sat under a nav item
   // reading *Group tree*. *Tap*, not *Click* (AC-5).
   const populated = tree !== null && tree.nodes.length > 1;
   // UI-087's rule for this page too (UI-004): the sub-line from 1024px only, unchanged there (O-9).
@@ -79,11 +81,12 @@ export default function GroupTreePage() {
         </Card>
       )}
 
-      {tree && tree.nodes.length <= 1 && (
+      {/* A leader by role sees the sample (ADR-0189 §3); an Agent, the plain line. */}
+      {tree && tree.nodes.length <= 1 && (leadsByRole(membership) ? <EmptyTree /> : (
         <Card>
           <EmptyState title={t.empty} />
         </Card>
-      )}
+      ))}
 
       {populated && (
         <>
@@ -92,6 +95,25 @@ export default function GroupTreePage() {
         </>
       )}
     </Page>
+  );
+}
+
+/**
+ * **Nobody under the reader yet** (P19-T4 AC-3; D-37 — *"Undang agen" on an empty Group Tree*; UI-159 item 3): *Belum ada
+ * data*, then the tree as it will look — `GroupTree`'s own rows over a sample leader and three sample agents — greyed and
+ * labelled *Contoh*, and *Undang agen*, which opens New Hires' *+ Tambah agent*.
+ */
+function EmptyTree() {
+  const next = useMessages(samplePreviewMessages).next;
+  const { person, leader } = useSampleName();
+  return (
+    <>
+      <NoDataLine className="mt-0" />
+      <SamplePreview
+        sample={<GroupTree tree={sampleOrgTree(person, leader)} />}
+        action={<ButtonLink href="/new-hires">{next.inviteAgent}</ButtonLink>}
+      />
+    </>
   );
 }
 
@@ -119,10 +141,10 @@ function Summary({ tree, search }: { tree: OrgTreeData; search: React.ReactNode 
  * **A Personal Summary only for somebody the reader coaches**, which is somebody below them in this tree
  * (ADR-0074). An Admin's field view holds the whole office, and a card outside the Admin's own downline
  * would open coaching's *not someone you coach*: it stays inert. A leader's card still opens their Unit
- * Dashboard, which the Admin reads office-wide, and whose own drills follow the same rule. A leader on the
- * agent rung opens no Personal Summary at all (`opensCoaching`): their coaching reads are their own.
+ * Dashboard, which the Admin reads office-wide, and whose own drills follow the same rule. **A leader on the agent rung
+ * opens them too** since P19.9-T6 (ADR-0234): every upline coaches, and their coaching reads reach their downline.
  */
-function drillFor(tree: OrgTreeData, opensCoaching: boolean): (membershipId: string) => string | undefined {
+function drillFor(tree: OrgTreeData): (membershipId: string) => string | undefined {
   const byId = new Map(tree.nodes.map((node) => [node.membershipId, node]));
   const self = tree.nodes.find((node) => node.isSelf) ?? (tree.selfId ? byId.get(tree.selfId) : undefined);
   const selfId = self?.membershipId ?? tree.selfId;
@@ -149,6 +171,6 @@ function drillFor(tree: OrgTreeData, opensCoaching: boolean): (membershipId: str
     if (!node || inert.has(membershipId)) return undefined;
     const id = encodeURIComponent(membershipId);
     if (node.isLeader) return `/unit/dashboard/${id}`;
-    return opensCoaching && coached.has(membershipId) ? `/coaching/${id}/summary` : undefined;
+    return coached.has(membershipId) ? `/coaching/${id}/summary` : undefined;
   };
 }

@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 
 /**
- * **A failure's code, said to the console instead of the page** (P18.97-T4 AC-10, ADR-0176 §10; UI-032): what
+ * **A failure's code, said to the console instead of the page** (P18.9-T4 AC-10, ADR-0176 §10; UI-032): what
  * `ErrorBanner` draws for a failure the browser detected (`lib/browser-errors.ts`), whose code is internal and carries
  * no request id. Once per failure shown, after it is drawn — never on a re-render — so whoever is debugging has it and
  * the reader is given the sentence alone. Draws nothing.

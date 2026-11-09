@@ -2,13 +2,13 @@ import { defineMessages, type MessagesOf } from '@/i18n/catalogue';
 import { kept } from '@/i18n/kept';
 
 /**
- * **Data upload's own words** (P18.98-T4, the office reporting; `functional/data-upload.md`): the month's table and its
+ * **Data upload's own words** (P18.10-T4, the office reporting; `functional/data-upload.md`): the month's table and its
  * phone cards (`app/(tenant)/kpm/data-upload/page.tsx`, `figure-table.tsx`), the template and the upload, the preview of
  * a filled file and *Confirm import*, the correction of one figure (`correction-panel.tsx`) and of an agent's twelve on a
  * phone (`figures-sheet.tsx`), the month's lock (`month-lock.tsx`) and the imports' history (`import-history.tsx`), with
  * the words `lib/production.ts` gives a figure.
  *
- * **English is the source** of the keys, as built (P9-T1 to P9-T6, P18.97-T4, P18.97-T7); the Indonesian is the approved
+ * **English is the source** of the keys, as built (P9-T1 to P9-T6, P18.9-T4, P18.9-T7); the Indonesian is the approved
  * glossary's (OD-237; §B.1 *Download template*, *Upload*, *Cancel*; §B.2 *Saving…*, *Importing…*), with the words it
  * lacked added to the glossary for approval's §B.10. **Kept in both languages** (§A): the page's name, the table's
  * metric headings — the carrier's file's own (*APE*, *Rolling Persistency (%)*, *New Active Agents*, *FYP*, *# of
@@ -16,6 +16,11 @@ import { kept } from '@/i18n/kept';
  * agent code, a file's name, a correction's reason, and the server's own sentences (a refusal, a line not taken). **A
  * figure is never a message's**: a sum, a persistency, a count and a month are written by the caller in the figures'
  * language and passed in.
+ *
+ * *Since P19.5-T2* (ADR-0214 §5): **the table's headings are the KPM's template's columns**, each named by the template in
+ * the reader's language (`columnHeading`, `lib/production.ts`) — no longer the carrier's six kept English — and the
+ * words for the year to date *Belum lengkap*, *Belum terdaftar*, *Di luar batas sejak v<n>*, the month grid and *as of*
+ * are here, the mockup's own where it has them (*Lihat sisi KPM → Data upload*).
  *
  * @moved app/(tenant)/kpm/data-upload/page.tsx
  * @moved app/(tenant)/kpm/data-upload/correction-panel.tsx
@@ -33,7 +38,7 @@ type Writer = 'imported' | 'corrected' | 'self_reported';
 const en = {
   /** The page (`KPM_Owner.html:1289-1324`): its name is the nav item's (§A.1). */
   title: kept('Data upload'),
-  subtitle: 'APE, rolling persistency, recruitment, new active agents, FYP and # of policy — one file per month, matched by agent code.',
+  subtitle: 'Each agent’s figures for the month, in the columns of the KPM’s template — one file per month, matched by agent code.',
   month: 'Month',
   /** **⬇ Download template** (`:1301`) and what it says when the file could not be made. */
   downloadTemplate: 'Download template',
@@ -58,9 +63,54 @@ const en = {
   nothingUploaded: ({ month }: { month: string }) =>
     `Nothing has been uploaded for ${month} yet. Every member is listed so you can see who the file will need to cover.`,
   withFigures: ({ n, of }: { n: number; of: number }) => `${n} of ${of} members have figures for this month.`,
-  tapAgent: 'Tap an agent to correct their figures — no need to re-upload for a single fix.',
   tapNumber: 'Tap any number to correct it manually — no need to re-upload for a single fix.',
-  /** The table's legend, in the client's words (P18.97-T4 AC-2; UI-023). */
+  /**
+   * **P19.2-T3 (the client's UI-139, `kpm-owner-mobile-2026-11-03` screens 2–3, `kpm-owner-desktop` screen 2)**: the
+   * intro behind one ⓘ, the month's lock as a strip, the *Bulan ini | YTD* switch, the chips, the rows and the sheet.
+   */
+  aboutPage: 'About Data upload',
+  /** P19.5-T1 AC-17 (AA UI-019): the template the columns follow, and its version, read live. */
+  columnsFollow: ({ name, version }: { name: string; version: number }) => `Columns follow ${name} v${version}.`,
+  /** The platform's own configuration, where the KPM's company has no template that publishes one. */
+  platformTemplate: 'the AgencyBoost template',
+  /**
+   * P19.5-T2 (the template mockup's KPM side, *Lihat sisi KPM → Data upload*): the banner's count, and what the greyed
+   * YTD means.
+   */
+  columnsPerAgent: ({ n }: { n: number }) => `${n} column${n === 1 ? '' : 's'} per agent.`,
+  ytdGreyed: 'Greyed YTD columns are calculated from the earlier months, so they are not uploaded.',
+  /** P19.5-T2 AC-7 (R4; AA UI-012): a year to date missing a month, the page's banner and the shared cell. */
+  ytdBanner: ({ months }: { months: string }) => `YTD incomplete: ${months} not uploaded.`,
+  ytdIncomplete: ({ months }: { months: string }) => `Incomplete · ${months} not uploaded`,
+  ytdCalculated: 'calculated from the months',
+  /** P19.5-T2 AC-4 (R2; AA UI-010): a column before its start month. */
+  startsIn: ({ month }: { month: string }) => `Counts from ${month}`,
+  /** P19.5-T2 AC-11 (AA UI-025): a stored value outside its column's current limits. */
+  outOfBounds: ({ version }: { version: number }) => `Outside the limits since v${version}`,
+  /** P19.5-T2 AC-5 (ADR-0214 §8): codes no member holds yet, kept apart. */
+  unregistered: 'Not registered',
+  unregisteredCount: ({ n }: { n: number }) =>
+    `${n} code${n === 1 ? '' : 's'} not registered yet: kept apart and counted in nothing until a member of this KPM takes the code.`,
+  /** P19.5-T2 AC-8 (R5; AA UI-010, UI-016): the months from the required history on, each as complete or not. */
+  monthsHeading: ({ from }: { from: string }) => `Required months from ${from}`,
+  monthsOpen: ({ n }: { n: number }) => `${n} not complete`,
+  monthStatus: { missing: 'Not uploaded', incomplete: 'Incomplete', complete: 'Complete' },
+  /** P19.5-T2 AC-9 (D8): the current month's upload and its *as of* day. */
+  asOfLabel: 'Figures as of',
+  asOfHint: 'A day of this month, no later than today. A later upload of the month replaces it.',
+  perDay: ({ day }: { day: string }) => `as of ${day}`,
+  openUntilShort: ({ day }: { day: string }) => `Open until ${day}`,
+  switchLabel: 'Figures for',
+  switchMonth: 'This month',
+  switchYtd: kept('YTD'),
+  chipsLabel: 'Show members',
+  chipAll: 'All',
+  chipCorrected: 'Corrected',
+  noneHere: 'Nobody here this month.',
+  figuresOf: ({ name }: { name: string }) => `Figures for ${name}`,
+  correctedRow: 'corrected by hand',
+  close: 'Close',
+  /** The table's legend, in the client's words (P18.9-T4 AC-2; UI-023). */
   legend: {
     corrected: 'corrected by hand',
     dash: 'a dash',
@@ -125,6 +175,10 @@ const en = {
   wouldChange: ({ filename }: { filename: string }) => `What “${filename}” would change`,
   fileSays: ({ name }: { name: string }) => `the file says “${name}”`,
   readFrom: ({ code }: { code: string }) => `read from “${code}”`,
+  /** P19.5-T2 AC-3 (AA UI-013): what the header says about the file's columns. */
+  columnNotes: 'The file’s columns',
+  /** P19.5-T2 AC-5: rows of a code no member holds, held as *Not registered*. */
+  heldRows: ({ n }: { n: number }) => `${n} row${n === 1 ? '' : 's'} of a code not registered yet, kept as Not registered.`,
   importing: 'Importing…',
   confirmImport: 'Confirm import',
   cancel: 'Cancel',
@@ -148,7 +202,7 @@ const en = {
   choiceFor: ({ label, name }: { label: string; name: string }) => `${label} for ${name}: `,
   replaceWithFile: 'Replace with the file’s figure',
 
-  /** Correct one figure (P9-T5), and an agent's twelve on a phone (P18.97-T7 AC-2). */
+  /** Correct one figure (P9-T5), and an agent's twelve on a phone (P18.9-T7 AC-2). */
   correctHeading: ({ label, name }: { label: string; name: string }) => `Correct ${label} for ${name}`,
   now: ({ figure }: { figure: string }) => `Now: ${figure}`,
   source: { imported: 'from the carrier’s file', corrected: 'corrected by hand', self_reported: 'reported by the agent' } satisfies Record<Writer, string>,
@@ -193,6 +247,9 @@ const en = {
     `Locked by ${who ?? 'somebody'}${when ? ` on ${when}` : ''}. Reopen it to change its figures.`,
   reopenedBy: ({ who, when }: { who: string | null; when: string | null }) =>
     `Reopened by ${who ?? 'somebody'}${when ? ` on ${when}` : ''}. It stays open until somebody locks it again.`,
+  /** P19.5-T2 AC-8 (ADR-0214 §11): a month of the required history never written. */
+  historyOpen: ({ day }: { day: string }) =>
+    `A required month that was never uploaded: open until its first upload — uploaded today, it stays open until ${day}.`,
   askLock: ({ month }: { month: string }) =>
     `Lock ${month}? Imports, reverts and corrections to it will be refused until somebody reopens it.`,
   askReopen: ({ month }: { month: string }) =>
@@ -208,6 +265,9 @@ const en = {
   revertedBy: ({ by, day, restored, kept: held }: { by: string | null; day: string | null; restored: number; kept: number }) =>
     `Reverted by ${by ?? 'somebody'}${day ? ` on ${day}` : ''} — ${restored} figure${restored === 1 ? '' : 's'} put back`
     + `${held ? `, ${held} kept because something changed them since` : ''}.`,
+  /** P19.5-T2 AC-12 (R6): the template version the file was read against, its *as of* day and its held rows. */
+  templateVersion: ({ version }: { version: number }) => `template v${version}`,
+  importedHeld: ({ n }: { n: number }) => `${n} not registered`,
   standing: 'Standing',
   revertedTag: 'Reverted',
   revert: 'Revert',
@@ -222,7 +282,7 @@ const en = {
 
 const id: MessagesOf<typeof en> = {
   title: kept('Data upload'),
-  subtitle: `${kept('APE')}, ${kept('Rolling persistency')}, ${kept('Recruitment')}, ${kept('New active agents')}, ${kept('FYP')} dan ${kept('# of policy')} — satu file per bulan, dicocokkan dengan kode agen.`,
+  subtitle: 'Angka bulanan setiap agen, dalam kolom template KPM — satu file per bulan, dicocokkan dengan kode agen.',
   month: 'Bulan',
   downloadTemplate: 'Unduh template',
   downloadCsv: 'Unduh CSV',
@@ -243,8 +303,37 @@ const id: MessagesOf<typeof en> = {
   nothingUploaded: ({ month }) =>
     `Belum ada yang diunggah untuk ${month}. Setiap anggota ditampilkan agar Anda bisa melihat siapa saja yang perlu ada di file.`,
   withFigures: ({ n, of }) => `${n} dari ${of} anggota memiliki angka untuk bulan ini.`,
-  tapAgent: 'Ketuk agent untuk mengoreksi angkanya — tidak perlu mengunggah ulang untuk satu perbaikan.',
   tapNumber: 'Ketuk angka mana pun untuk mengoreksinya secara manual — tidak perlu mengunggah ulang untuk satu perbaikan.',
+  aboutPage: `Tentang ${kept('Data upload')}`,
+  columnsFollow: ({ name, version }) => `Kolom mengikuti ${name} v${version}.`,
+  platformTemplate: `template bawaan ${kept('AgencyBoost')}`,
+  columnsPerAgent: ({ n }) => `${n} kolom per agen.`,
+  ytdGreyed: 'Kolom YTD yang abu-abu dihitung otomatis dari bulan-bulan sebelumnya, jadi tidak perlu diunggah.',
+  ytdBanner: ({ months }) => `YTD belum lengkap: ${months} belum diunggah.`,
+  ytdIncomplete: ({ months }) => `Belum lengkap · ${months} belum diunggah`,
+  ytdCalculated: 'dihitung dari bulan-bulannya',
+  startsIn: ({ month }) => `Berlaku mulai ${month}`,
+  outOfBounds: ({ version }) => `Di luar batas sejak v${version}`,
+  unregistered: 'Belum terdaftar',
+  unregisteredCount: ({ n }) =>
+    `${n} kode belum terdaftar: disimpan terpisah dan tidak dihitung sampai kode itu dipakai anggota KPM ini.`,
+  monthsHeading: ({ from }) => `Data wajib mulai ${from}`,
+  monthsOpen: ({ n }) => `${n} belum lengkap`,
+  monthStatus: { missing: 'Belum diunggah', incomplete: 'Belum lengkap', complete: 'Lengkap' },
+  asOfLabel: 'Data per tanggal',
+  asOfHint: 'Hari di bulan ini, paling lambat hari ini. Unggahan berikutnya untuk bulan ini menggantikannya.',
+  perDay: ({ day }) => `per ${day}`,
+  openUntilShort: ({ day }) => `Terbuka sampai ${day}`,
+  switchLabel: 'Angka untuk',
+  switchMonth: 'Bulan ini',
+  switchYtd: kept('YTD'),
+  chipsLabel: 'Tampilkan anggota',
+  chipAll: 'Semua',
+  chipCorrected: 'Dikoreksi',
+  noneHere: 'Tidak ada anggota di sini bulan ini.',
+  figuresOf: ({ name }) => `Angka ${name}`,
+  correctedRow: 'dikoreksi manual',
+  close: 'Tutup',
   legend: {
     corrected: 'dikoreksi manual',
     dash: 'tanda pisah',
@@ -298,6 +387,8 @@ const id: MessagesOf<typeof en> = {
   wouldChange: ({ filename }) => `Yang akan diubah oleh “${filename}”`,
   fileSays: ({ name }) => `di file tertulis “${name}”`,
   readFrom: ({ code }) => `dibaca dari “${code}”`,
+  columnNotes: 'Kolom di file',
+  heldRows: ({ n }) => `${n} baris dengan kode yang belum terdaftar, disimpan sebagai Belum terdaftar.`,
   importing: 'Mengimpor…',
   confirmImport: 'Konfirmasi impor',
   cancel: 'Batal',
@@ -354,6 +445,8 @@ const id: MessagesOf<typeof en> = {
   lockedBy: ({ who, when }) => `Dikunci oleh ${who ?? 'seseorang'}${when ? ` pada ${when}` : ''}. Buka kembali untuk mengubah angkanya.`,
   reopenedBy: ({ who, when }) =>
     `Dibuka kembali oleh ${who ?? 'seseorang'}${when ? ` pada ${when}` : ''}. Tetap terbuka sampai seseorang menguncinya lagi.`,
+  historyOpen: ({ day }) =>
+    `Bulan data wajib yang belum pernah diunggah: terbuka sampai unggahan pertamanya — jika diunggah hari ini, tetap terbuka sampai ${day}.`,
   askLock: ({ month }) => `Kunci ${month}? Impor, pengembalian, dan koreksi untuk bulan ini akan ditolak sampai seseorang membukanya kembali.`,
   askReopen: ({ month }) => `Buka kembali ${month}? Angkanya bisa diimpor, dikembalikan, dan dikoreksi lagi sampai seseorang menguncinya.`,
 
@@ -364,6 +457,8 @@ const id: MessagesOf<typeof en> = {
   revertedBy: ({ by, day, restored, kept: held }) =>
     `Dikembalikan oleh ${by ?? 'seseorang'}${day ? ` pada ${day}` : ''} — ${restored} angka dipulihkan`
     + `${held ? `, ${held} dipertahankan karena sudah diubah sejak itu` : ''}.`,
+  templateVersion: ({ version }) => `template v${version}`,
+  importedHeld: ({ n }) => `${n} belum terdaftar`,
   standing: 'Berlaku',
   revertedTag: 'Dikembalikan',
   revert: 'Kembalikan',

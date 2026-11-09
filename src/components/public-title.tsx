@@ -5,7 +5,7 @@ import { LanguageSwitch } from '@/components/language-switch';
 import { useLanguageChoice } from '@/i18n/language-provider';
 
 /**
- * **A public page's title, with the *ID | EN* switch at its right** (P18.98-T2 AC-3): the six pages somebody meets
+ * **A public page's title, with the *ID | EN* switch at its right** (P18.10-T2 AC-3): the six pages somebody meets
  * before they are anybody — sign-in, registration, the two password pages and email verification here, `/join`'s card
  * in `RoleShell` — where there is no shell and no bar, so the switch sits on the page's own column, on the title's
  * line. Its 44px targets are centred on that line (`-my-[5px]`), so the title stays where it stood (`AUTH_PAGE`) and

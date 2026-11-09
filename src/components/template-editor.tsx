@@ -9,8 +9,19 @@ import {
   type RatioDisplayUnit,
 } from '@/lib/ratio-format';
 import { ConfigBadge } from '@/components/ui/config-badge';
-import { DragHandle } from '@/components/ui/drag-handle';
-import { suggestCode } from '@/lib/config-code';
+import { DRAG_HANDLE_CLASS, DragHandle } from '@/components/ui/drag-handle';
+
+/**
+ * **The ⠿ handle with a 44px tap area at every size** (P19.2-T2 AC-5; UI-135: *⠿ 11×20 … gets a 44px hit area at every
+ * size*): the glyph as it was, an invisible square centred on it taking the tap, as an ⓘ's does (`TAP_AREA`). Nothing a
+ * reader sees moves, at any width; `nudge` is the handle's own top margin, where it had one.
+ */
+const handleArea = (nudge = '') => `${nudge ? `${nudge} ` : ''}${DRAG_HANDLE_CLASS} relative after:absolute after:left-1/2 `
+  + 'after:top-1/2 after:h-[max(100%,2.75rem)] after:w-[max(100%,2.75rem)] after:-translate-x-1/2 after:-translate-y-1/2 '
+  + "after:content-['']";
+import { ReorderArrows } from '@/components/ui/reorder-arrows';
+import { usePhone } from '@/lib/use-phone';
+import { CONFIG_CODE_MAX_LENGTH, suggestCode } from '@/lib/config-code';
 import { formatNumber, formatPercent, formatRupiah, formatRupiahCompact, parseDecimal } from '@/lib/format';
 import { planSummaryTile, summaryGroups, summaryTileName } from '@/lib/summary-tiles';
 import { TippedGlyph } from '@/components/ui/tipped-glyph';
@@ -27,6 +38,8 @@ import { checklistMessages } from '@/i18n/messages/settings-checklist';
 import { leadStatusesMessages } from '@/i18n/messages/settings-lead-statuses';
 import { ratioBenchmarksMessages } from '@/i18n/messages/settings-ratio-benchmarks';
 import { settingsMessages } from '@/i18n/messages/settings';
+import { ACTIVITY_SHORT_LABEL_MAX } from '@/lib/activity-text';
+import { TRAINING_DESCRIPTION_MAX } from '@/lib/training-text';
 
 export interface TaxonomyPayload {
   categories: {
@@ -41,6 +54,11 @@ export interface TaxonomyPayload {
   }[];
   types: {
     code: string; categoryCode: string; label: string;
+    /**
+     * *Nama singkat* (P19.8-T4, ADR-0229 §5; MOB UI-180): the one line the Unit Dashboard's activity table shows. Absent
+     * on a type authored before the field: an office made from it is given the platform's words by code; `null` for none.
+     */
+    shortLabel?: string | null;
     description: string | null; displayOrder: number;
   }[];
   /**
@@ -485,6 +503,7 @@ export function TaxonomyEditor({
                 sitting hard left the way the prototype's `.acttype-card-head` does. */}
             <div className="flex flex-wrap items-baseline gap-2">
               <DragHandle
+                className={handleArea()}
                 label={category.label}
                 disabled={disabled}
                 {...sectionDrag.handleProps(category.code)}
@@ -552,11 +571,11 @@ export function TaxonomyEditor({
                   <DragHandle
                     label={type.label}
                     disabled={disabled}
-                    className="cursor-grab select-none text-md text-muted disabled:cursor-not-allowed"
+                    className={handleArea()}
                     {...drag.handleProps(type.code)}
                   />
                   <span
-                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 border-navy text-sm font-bold text-navy"
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 border-secondary text-sm font-bold text-navy"
                     aria-hidden
                   >
                     {index + 1}
@@ -568,15 +587,23 @@ export function TaxonomyEditor({
                       code={type.code}
                       fields={[
                         { key: 'label', label: settings.name },
+                        // *Nama singkat* beside the name (P19.8-T4 AC-5, ADR-0229 §5; MOB UI-180), as the office edits it.
+                        {
+                          key: 'shortLabel',
+                          label: office.shortLabel,
+                          hint: office.shortLabelHint({ max: ACTIVITY_SHORT_LABEL_MAX }),
+                          maxLength: ACTIVITY_SHORT_LABEL_MAX,
+                        },
                         {
                           key: 'description',
                           label: settings.description,
                           hint: office.descriptionHint,
                         },
                       ]}
-                      values={{ label: type.label, description: type.description ?? '' }}
+                      values={{ label: type.label, shortLabel: type.shortLabel ?? '', description: type.description ?? '' }}
                       onSave={(next) => patchType(type.code, {
                         label: next.label.trim(),
+                        shortLabel: next.shortLabel.trim() || null,
                         description: next.description.trim() || null,
                       })}
                       actions={(
@@ -611,12 +638,20 @@ export function TaxonomyEditor({
             <AddRow
               disabled={disabled}
               noun="activityType"
-              fields={[{
-                key: 'description',
-                label: settings.description,
-                hint: office.descriptionHint,
-                wide: true,
-              }]}
+              fields={[
+                {
+                  key: 'shortLabel',
+                  label: office.shortLabel,
+                  hint: office.shortLabelHint({ max: ACTIVITY_SHORT_LABEL_MAX }),
+                  maxLength: ACTIVITY_SHORT_LABEL_MAX,
+                },
+                {
+                  key: 'description',
+                  label: settings.description,
+                  hint: office.descriptionHint,
+                  wide: true,
+                },
+              ]}
               onAdd={(code, label, extra) => onChange({
                 ...payload,
                 // Renumbered rather than counted: `types.length + 1` counts across
@@ -626,6 +661,7 @@ export function TaxonomyEditor({
                     code,
                     categoryCode: category.code,
                     label,
+                    shortLabel: extra.shortLabel?.trim() || null,
                     description: extra.description?.trim() || null,
                     displayOrder: 0,
                   }],
@@ -645,7 +681,7 @@ export function TaxonomyEditor({
 }
 
 /**
- * **The template's activity binding** (ADR-0163 §3, P18.9-T2 AC-3): which of its types the summary, the goal plan and
+ * **The template's activity binding** (ADR-0163 §3, P18.6-T2 AC-3): which of its types the summary, the goal plan and
  * coaching count at each cascade stage, in every office made from it. The explicit request of the product owner,
  * 2026-10-26: one card under the sections, read as one line per stage, edited behind *Edit binding*.
  */
@@ -744,7 +780,7 @@ const RULE_NOUN: Record<string, AddNoun> = {
  * office records the codes it was seeded with, and every activity logged against them
  * holds one.
  *
- * **What it adds is a `noun`, not a phrase** (P18.98-T6): the button and the refusal of a taken code are whole messages
+ * **What it adds is a `noun`, not a phrase** (P18.10-T6): the button and the refusal of a taken code are whole messages
  * per kind of row (`add`), so each language names the row in its own words — the article *a* or *an* was chosen here,
  * from the English noun.
  */
@@ -786,6 +822,8 @@ function AddRow({
   fields?: {
     key: string; label: string; hint?: string; wide?: true;
     options?: { value: string; label: string }[];
+    /** The longest text the field takes, the server's bound mirrored (an activity type's *Nama singkat*). */
+    maxLength?: number;
   }[];
 }) {
   const settings = useMessages(settingsMessages);
@@ -836,13 +874,15 @@ function AddRow({
       <Field
         label={settings.code}
         htmlFor={`add-code-${slug}`}
-        hint={suggest ? t.codeHintSuggested : t.codeHint}
+        // The limit as it is typed, and no more taken (P19.4-T4 AC-14, B1-9): a module's code was refused at publish.
+        hint={`${suggest ? t.codeHintSuggested : t.codeHint} ${t.codeCount({ n: code.length, max: CONFIG_CODE_MAX_LENGTH })}`}
         error={clash ? named.clash : undefined}
         className="min-w-48"
       >
         <TextInput
           id={`add-code-${slug}`}
           value={code}
+          maxLength={CONFIG_CODE_MAX_LENGTH}
           disabled={disabled}
           invalid={clash}
           onChange={(e) => {
@@ -878,6 +918,7 @@ function AddRow({
               id={`add-${field.key}-${slug}`}
               value={extra[field.key] ?? ''}
               disabled={disabled}
+              maxLength={field.maxLength}
               onChange={(e) => setExtra((now) => ({ ...now, [field.key]: e.target.value }))}
             />
           )}
@@ -970,11 +1011,11 @@ export function PipelineEditor({
               <DragHandle
                 label={stage.label}
                 disabled={disabled}
-                className="cursor-grab select-none text-md text-muted disabled:cursor-not-allowed"
+                className={handleArea()}
                 {...drag.handleProps(stage.code)}
               />
               <span
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 border-navy text-sm font-bold text-navy"
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 border-secondary text-sm font-bold text-navy"
                 aria-hidden
               >
                 {index + 1}
@@ -1010,6 +1051,9 @@ export function PipelineEditor({
                 {!stage.isTerminal && (
                   <Switch
                     id={`tpl-late-${stage.code}`}
+                    // 44 × 44px below 1024px (P19.2-T2 AC-5; UI-135), the opt-in the Owner's own screen takes.
+                    phoneTarget
+                    tabletTarget
                     label={kept('Expected to close')}
                     checked={stage.isLateStage ?? false}
                     disabled={disabled}
@@ -1203,7 +1247,7 @@ export function RatioSetEditor({
           <DragHandle
             label={ratio.label}
             disabled={disabled}
-            className="cursor-grab select-none text-md text-muted disabled:cursor-not-allowed"
+            className={handleArea()}
             {...drag.handleProps(ratio.code)}
           />
           <EditableRow
@@ -1217,7 +1261,7 @@ export function RatioSetEditor({
                 label: ratio.comparison === 'band' ? office.withinEitherSide : office.atOrAbove,
                 hint: ratio.comparison === 'band'
                   ? office.bandHintEmpty
-                  // The units' examples are figures, in the reader's (P18.98-T3): *0,30*, *0.30* in English.
+                  // The units' examples are figures, in the reader's (P18.10-T3): *0,30*, *0.30* in English.
                   : t.typedAsShown({
                     percent: formatPercent(15, {}, figures),
                     decimal: formatNumber(0.3, { decimals: 2 }, figures),
@@ -1341,11 +1385,23 @@ export function RatioSetEditor({
 
 export interface TrainingTaxonomyPayload {
   categories: { code: string; label: string; description?: string | null }[];
-  skills: { code: string; categoryCode: string; label: string }[];
+  /** `description`: *Deskripsi singkat* (UI-161, ADR-0220 §1); absent reads as none. */
+  skills: { code: string; categoryCode: string; label: string; description?: string | null }[];
   modules: {
     code: string; skillCode: string; title: string;
+    /** *Deskripsi singkat* (UI-161, ADR-0220 §1); absent reads as none. */
+    description?: string | null;
     /** Absent reads as a draft, which is what an office would make of it. */
     publishState?: 'draft' | 'published';
+    /**
+     * **The module's material** (ADR-0208 §1): written by its own route and dialog, never here — every edit below keeps
+     * it, because each spreads the module it changes.
+     */
+    content?: {
+      files?: { id: string; label: string; storageKey: string; mimeType: string; bytes: number }[];
+      videos?: { id: string; label: string; storageKey: string; mimeType: string; bytes: number }[];
+      links?: { id: string; label: string; url: string }[];
+    };
   }[];
 }
 
@@ -1363,20 +1419,32 @@ type TrainingTab = 'categories' | 'skills' | 'modules';
  * from it, so a row here is removed outright. A category or skill with rows under it is not: the
  * payload would then name a parent it does not define, which publishing refuses anyway.
  *
- * **No order to set.** The prototype draws no handle on any of the three lists, and an office
- * cannot reorder its copy either (ADR-0029), so a row's place is the order it was added in.
+ * **Modules are put in order; categories and skills keep the order they were added in.** A module's place within its
+ * skill is its place in the payload's list — provisioning numbers an office's modules from it — so the Super Admin moves
+ * one by its handle (drag, or ↑/↓ on the focused handle) and, on a phone, where a drag never starts, by its ↑ and ↓
+ * (P19.4-T5; the 11-03 handover's B1-9, *"There is no module reorder in Training"*). A module moves only among its own
+ * skill's: across skills is the *Skill* field's, which says so. Saved with the draft, as every edit here is.
  */
 export function TrainingEditor({
   payload,
   section,
   onChange,
   disabled,
+  material,
 }: {
   payload: TrainingTaxonomyPayload;
   /** Which of the three lists to draw. The screen's subtab row chooses it. */
   section: TrainingTab;
   onChange: (next: TrainingTaxonomyPayload) => void;
   disabled?: boolean;
+  /**
+   * **A module's material** (ADR-0208 §1): each row's *Materi (n)*, which opens the section's material dialog. Absent
+   * where the screen offers none.
+   */
+  material?: {
+    label: (module: TrainingTaxonomyPayload['modules'][number]) => { text: string; name: string };
+    onOpen: (code: string) => void;
+  };
 }) {
   const tab = section;
   const all = useMessages(adminTemplateEditorMessages);
@@ -1394,6 +1462,15 @@ export function TrainingEditor({
   const skills = payload.skills ?? [];
   const modules = payload.modules ?? [];
   const put = (next: Partial<TrainingTaxonomyPayload>) => onChange({ categories, skills, modules, ...next });
+  // B1-9: a module's order is its place in the list, within its own skill.
+  const phone = usePhone();
+  const moduleDrag = useRowDrag(
+    modules,
+    (m) => m.code,
+    (next) => put({ modules: next }),
+    'position',
+    (from, to) => from.skillCode === to.skillCode,
+  );
 
   const categoryLabel = (code: string) => categories.find((c) => c.code === code)?.label ?? code;
   const skillLabel = (code: string) => skills.find((s) => s.code === code)?.label ?? code;
@@ -1402,6 +1479,16 @@ export function TrainingEditor({
   const modulesTabCategory = categories.find((c) => c.code === modulesCategory) ?? categories[0];
   const modulesTabSkills = skills.filter((s) => s.categoryCode === modulesTabCategory?.code);
   const modulesTabSkill = modulesTabSkills.some((s) => s.code === modulesSkill) ? modulesSkill : 'all';
+
+  /** A skill's and a module's *Deskripsi singkat* (UI-161, ADR-0220 §1): in the add row, and in the edit panel. */
+  const shortDescriptionAdd = {
+    key: 'description', label: t.shortDescription, hint: t.shortDescriptionHint({ max: TRAINING_DESCRIPTION_MAX }),
+    wide: true as const,
+  };
+  const shortDescriptionEdit = {
+    key: 'description', label: t.shortDescription, hint: t.shortDescriptionHint({ max: TRAINING_DESCRIPTION_MAX }),
+    maxLength: TRAINING_DESCRIPTION_MAX,
+  };
 
   const filter = 'flex flex-wrap items-center gap-x-4 gap-y-2';
   // A label held to its select, so a narrow screen wraps the pair rather than the label alone.
@@ -1514,9 +1601,13 @@ export function TrainingEditor({
               suggest
               disabled={disabled}
               noun="skill"
+              fields={[shortDescriptionAdd]}
               taken={(code) => skills.some((s) => s.code === code)}
-              onAdd={(code, label) => put({
-                skills: [...skills, { code, categoryCode: skillsTabCategory.code, label }],
+              onAdd={(code, label, extra) => put({
+                skills: [
+                  ...skills,
+                  { code, categoryCode: skillsTabCategory.code, label, description: extra.description?.trim() || null },
+                ],
               })}
             />
           )}
@@ -1535,6 +1626,7 @@ export function TrainingEditor({
                         code={skill.code}
                         fields={[
                           { key: 'label', label: settings.name },
+                          shortDescriptionEdit,
                           {
                             key: 'categoryCode',
                             label: t.category,
@@ -1542,10 +1634,13 @@ export function TrainingEditor({
                             options: categories.map((c) => ({ value: c.code, label: c.label })),
                           },
                         ]}
-                        values={{ label: skill.label, categoryCode: skill.categoryCode }}
+                        values={{ label: skill.label, description: skill.description ?? '', categoryCode: skill.categoryCode }}
                         onSave={(next) => put({
                           skills: skills.map((s) => (s.code === skill.code
-                            ? { ...s, label: next.label.trim(), categoryCode: next.categoryCode }
+                            ? {
+                              ...s, label: next.label.trim(), description: next.description.trim() || null,
+                              categoryCode: next.categoryCode,
+                            }
                             : s)),
                         })}
                         actions={(
@@ -1565,6 +1660,7 @@ export function TrainingEditor({
                         )}
                       >
                         <p className="text-md font-semibold text-navy">{skill.label}</p>
+                        {skill.description && <p className="text-sm text-muted">{skill.description}</p>}
                       </EditableRow>
                     </li>
                   );
@@ -1616,11 +1712,14 @@ export function TrainingEditor({
               disabled={disabled}
               noun="module"
               nameLabel={all.title}
+              fields={[shortDescriptionAdd]}
               taken={(code) => modules.some((m) => m.code === code)}
-              onAdd={(code, title) => put({
+              onAdd={(code, title, extra) => put({
                 // A draft, as an office's new module is: publishing is a decision about content,
                 // and the template has none yet.
-                modules: [...modules, { code, skillCode: modulesTabSkill, title, publishState: 'draft' }],
+                modules: [...modules, {
+                  code, skillCode: modulesTabSkill, title, description: extra.description?.trim() || null, publishState: 'draft',
+                }],
               })}
             />
           )}
@@ -1630,14 +1729,24 @@ export function TrainingEditor({
             <ul className="flex flex-col divide-y divide-hairline">
               {rows.map((module) => {
                 const isPublished = module.publishState === 'published';
+                const { className: dragState, ...rowProps } = moduleDrag.rowProps(module.code);
+                const siblings = modules.filter((m) => m.skillCode === module.skillCode);
                 return (
-                  <li key={module.code} className="px-4 py-3 sm:px-5">
+                  <li key={module.code} className={`flex items-start gap-2 px-4 py-3 sm:px-5 ${dragState}`} {...rowProps}>
+                    <DragHandle
+                      label={module.title}
+                      disabled={disabled}
+                      className={handleArea('mt-1')}
+                      {...moduleDrag.handleProps(module.code)}
+                    />
+                    <div className="min-w-0 flex-1">
                     <EditableRow
                       rowKey={module.code}
                       disabled={disabled}
                       code={module.code}
                       fields={[
                         { key: 'title', label: all.title },
+                        shortDescriptionEdit,
                         {
                           key: 'skillCode',
                           label: t.skill,
@@ -1657,6 +1766,7 @@ export function TrainingEditor({
                       ]}
                       values={{
                         title: module.title,
+                        description: module.description ?? '',
                         skillCode: module.skillCode,
                         publishState: isPublished ? 'published' : 'draft',
                       }}
@@ -1665,6 +1775,7 @@ export function TrainingEditor({
                           ? {
                             ...m,
                             title: next.title.trim(),
+                            description: next.description.trim() || null,
                             skillCode: next.skillCode,
                             publishState: next.publishState as 'draft' | 'published',
                           }
@@ -1676,18 +1787,43 @@ export function TrainingEditor({
                         </ConfigBadge>
                       )}
                       actions={(
-                        <Button
-                          variant="inlineDanger"
-                          disabled={disabled}
-                          onClick={() => put({ modules: modules.filter((m) => m.code !== module.code) })}
-                        >
-                          {settings.remove}
-                        </Button>
+                        <>
+                          {material && (
+                            <Button
+                              variant="inline"
+                              disabled={disabled}
+                              aria-label={material.label(module).name}
+                              onClick={() => material.onOpen(module.code)}
+                            >
+                              {material.label(module).text}
+                            </Button>
+                          )}
+                          <Button
+                            variant="inlineDanger"
+                            disabled={disabled}
+                            onClick={() => put({ modules: modules.filter((m) => m.code !== module.code) })}
+                          >
+                            {settings.remove}
+                          </Button>
+                        </>
                       )}
                     >
                       <p className="text-md font-semibold text-navy">{module.title}</p>
+                      {module.description && <p className="text-sm text-muted">{module.description}</p>}
                       <p className="text-sm text-muted">{skillLabel(module.skillCode)}</p>
                     </EditableRow>
+                    {phone && (
+                      <div className="mt-2">
+                        <ReorderArrows
+                          label={module.title}
+                          index={siblings.indexOf(module)}
+                          count={siblings.length}
+                          disabled={disabled}
+                          onMove={moduleDrag.handleProps(module.code).onMove}
+                        />
+                      </div>
+                    )}
+                    </div>
                   </li>
                 );
               })}
@@ -1729,7 +1865,7 @@ const ACTIVATION_FEATURES = [
 const LINK_BADGE_FACE = 'h-auto w-auto whitespace-nowrap rounded-pill px-2 py-0.5 text-2xs font-bold uppercase tracking-wide';
 
 /**
- * A link's badge, from **what the server resolves it to** (P18.5-T3 AC-6, I-80; the carry at
+ * A link's badge, from **what the server resolves it to** (P18.2-T3 AC-6, I-80; the carry at
  * `functional/activation.md:1404-1407`): *Auto*, with the registry's sentence as its tooltip and its name,
  * only for a link that completes the item on its own (`live`), and *Ticked by hand* for one that does
  * not — the office's own screen's badge (`LinkBadge`). It said *Auto* for any link, and *Ticked by the
@@ -1737,7 +1873,7 @@ const LINK_BADGE_FACE = 'h-auto w-auto whitespace-nowrap rounded-pill px-2 py-0.
  * chosen and not saved — claims neither.
  */
 function TemplateLinkBadge({ link }: { link: TemplateLinkKind }) {
-  // The activation's own words, in the reader's language (`activation.ts`; P18.98-T6): `completesWhen` is the
+  // The activation's own words, in the reader's language (`activation.ts`; P18.10-T6): `completesWhen` is the
   // registry's sentence, as the server sends it.
   const language = useLanguage();
   const badge = link.live ? autoBadge(link.completesWhen, language) : byHandBadge(language);
@@ -1777,7 +1913,7 @@ export function ActivationChecklistEditor({
   payload: ActivationChecklistPayload;
   /** The company's own training modules, for the link picker. */
   modules: { code: string; title: string }[];
-  /** Each link kind as the template read resolves it (P18.5-T3 AC-6): what the badge reads `live` from. */
+  /** Each link kind as the template read resolves it (P18.2-T3 AC-6): what the badge reads `live` from. */
   linkKinds?: TemplateLinkKinds | null;
   onChange: (next: ActivationChecklistPayload) => void;
   disabled?: boolean;
@@ -1867,7 +2003,7 @@ export function ActivationChecklistEditor({
             <DragHandle
               label={aspect.label}
               disabled={disabled}
-              className="cursor-grab select-none text-md text-muted disabled:cursor-not-allowed"
+              className={handleArea()}
               {...aspectDrag.handleProps(aspect.code)}
             />
             <div className="min-w-0 flex-1">
@@ -1887,7 +2023,7 @@ export function ActivationChecklistEditor({
                 )}
               >
                 {/* An `h2`, as the office's own checklist and this screen's other editors head theirs: an `h3` under the
-                    page's `h1` skipped a level (axe's heading-order, found walking it in P18.98-T6). */}
+                    page's `h1` skipped a level (axe's heading-order, found walking it in P18.10-T6). */}
                 <h2 className="font-display text-lg font-bold text-navy">{aspect.label}</h2>
               </EditableRow>
             </div>
@@ -1914,7 +2050,7 @@ export function ActivationChecklistEditor({
                 <DragHandle
                   label={item.label}
                   disabled={disabled}
-                  className="mt-0.5 cursor-grab select-none text-md text-muted disabled:cursor-not-allowed"
+                  className={handleArea('mt-0.5')}
                   {...itemDrag(aspect.code).handleProps(item.code)}
                 />
                 <div className="min-w-0 flex-1">
@@ -2078,7 +2214,7 @@ export function EventTypesEditor({
                   <DragHandle
                     label={type.label}
                     disabled={disabled}
-                    className="cursor-grab select-none text-md text-muted disabled:cursor-not-allowed"
+                    className={handleArea()}
                     {...drag.handleProps(type.code)}
                   />
                   <div className="min-w-0 flex-1">
@@ -2232,7 +2368,7 @@ export function CampaignKindsEditor({
      * what it is waiting on, and a screen that dropped it would show a rule that never passes.
      *
      * Its key, then the console's own word for what is not built: **Soon**, the admin nav's pill
-     * (`AgencyBoost_Superadmin.html:177`, `admin-shell.tsx`), in the light-ground shape the
+     * (`AgencyBoost_Superadmin.html:177`, the console the one shell replaced, ADR-0197), in the light-ground shape the
      * placeholders' *Upcoming* pill takes. The words behind it are the Owner's for the same rules,
      * *Not measured yet* (`/kpm/settings/campaigns`): a tooltip for a pointer and `sr-only` for a
      * screen reader, the smallest footprint that says it (ADR-0062 §2, forms 2 and 4). It read
@@ -2373,7 +2509,7 @@ export function CampaignKindsEditor({
                                     metric: metricLabel(criterion.metricKey),
                                     comparator: comparatorLabel(criterion.comparator),
                                     // A rule in words: compact where that loses nothing (ADR-0167 §1), in the
-                                    // reader's figures (P18.98-T3).
+                                    // reader's figures (P18.10-T3).
                                     value: metrics.find((m) => m.key === criterion.metricKey)?.unit === 'idr_minor'
                                       ? formatRupiahCompact(criterion.value, { lossless: true }, figures)
                                       : formatNumber(criterion.value, { maxDecimals: 2 }, figures),
@@ -2542,7 +2678,7 @@ export function CapabilityLadderEditor({
                 <DragHandle
                   label={milestone.label}
                   disabled={disabled}
-                  className="mt-0.5 cursor-grab select-none text-md text-muted disabled:cursor-not-allowed"
+                  className={handleArea('mt-0.5')}
                   {...milestoneDrag.handleProps(milestone.code)}
                 />
                 <div className="min-w-0 flex-1">
@@ -2618,7 +2754,7 @@ export function CapabilityLadderEditor({
                 <DragHandle
                   label={stage.label}
                   disabled={disabled}
-                  className="mt-0.5 cursor-grab select-none text-md text-muted disabled:cursor-not-allowed"
+                  className={handleArea('mt-0.5')}
                   {...stageDrag.handleProps(stage.code)}
                 />
                 <div className="min-w-0 flex-1">
@@ -2665,7 +2801,8 @@ export function CapabilityLadderEditor({
                   ) : milestones.map((milestone) => (
                     <label
                       key={milestone.code}
-                      className="flex items-center gap-2 py-1 text-md text-navy"
+                      // 44px below 1024px (P19.2-T2 AC-5; UI-135), the box and its words one target.
+                      className="flex items-center gap-2 py-1 text-md text-navy max-lg:min-h-11"
                     >
                       <input
                         type="checkbox"
@@ -2725,7 +2862,7 @@ export function CapabilityLadderEditor({
                 <DragHandle
                   label={item.label}
                   disabled={disabled}
-                  className="mt-0.5 cursor-grab select-none text-md text-muted disabled:cursor-not-allowed"
+                  className={handleArea('mt-0.5')}
                   {...gridDrag.handleProps(`${grid.code}:${item.code}`)}
                 />
                 <div className="min-w-0 flex-1">

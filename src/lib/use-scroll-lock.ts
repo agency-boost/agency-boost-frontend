@@ -7,7 +7,7 @@ let holders = 0;
 let before = '';
 
 /**
- * **The page behind an open layer holds still** (P18.96-T1 AC-2): every dialog, sheet and drawer calls this
+ * **The page behind an open layer holds still** (P18.8-T1 AC-2): every dialog, sheet and drawer calls this
  * while it is open, so a wheel or a swipe that reaches past its edge moves nothing behind it.
  *
  * On `body`, which the viewport takes its overflow from (the root's is `visible`). **Counted, not toggled**:

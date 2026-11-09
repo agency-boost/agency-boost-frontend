@@ -25,13 +25,13 @@ function prerendered(page: React.ReactElement): string {
 }
 
 /**
- * **T1's risk, limited (P18.98-T2):** a page prerendered in one language is held back (`data-lang-pending`) for a reader
+ * **T1's risk, limited (P18.10-T2):** a page prerendered in one language is held back (`data-lang-pending`) for a reader
  * whose cookie says the other, until the app has written it in theirs. Once the switch is live the pages are prerendered
  * in Indonesian, and an English reader's every hard load would wait for the app to start. **Only a page that paints
  * words before then needs holding**: every signed-in route is prerendered as the session's wait, a skeleton with no
  * word in it, and its shell arrives with the session — so a page that is only that wait is shown at once.
  */
-describe('P18.98-T2 holding a page back only where a word would paint', () => {
+describe('P18.10-T2 holding a page back only where a word would paint', () => {
   it('AC-3 still hides a page prerendered in another language, and shows it after 3 s should the app never start', () => {
     expect(CSS).toMatch(/html\[data-lang-pending\] body \{\s*visibility: hidden;\s*animation: ab-language-reveal 0s linear 3s forwards;\s*\}/);
     expect(LANGUAGE_PENDING).toBe('data-lang-pending');

@@ -18,7 +18,7 @@ import CampaignsPage from './page';
 import CampaignDialogPage from './[campaignCode]/page';
 
 /**
- * **The agents' *Campaign List* in Indonesian** (P18.98-T4 AC-1 to AC-4, events, campaigns and the calendar): the tabs
+ * **The agents' *Campaign List* in Indonesian** (P18.10-T4 AC-1 to AC-4, events, campaigns and the calendar): the tabs
  * and the filter, the five sections, a card — its tags, *Promotion path*, the prize, *Syarat:* and each requirement in
  * words — the dialog with its progress, the chase and its toast, and what a person is chasing. The approved glossary's
  * words, each kept term English (§A: the title, *KPM*, *campaign*, *APE*, *new hire*, a metric's name), what the office
@@ -52,17 +52,18 @@ const cardOf = (title: string) => screen.getByRole('article', { name: title });
 
 afterEach(() => vi.unstubAllGlobals());
 
-describe('P18.98-T4 the Campaign List in Indonesian', () => {
+describe('P18.10-T4 the Campaign List in Indonesian', () => {
   it('reads the English it is looking for, so a silent zero cannot pass: the same list in English shows it', async () => {
     expect(ENGLISH.length).toBeGreaterThan(40);
     nav.pathname = '/campaigns';
     stubFetch({ ...SHELL_STUBS, 'GET /campaigns': { body: LIST } });
     renderWithSession(<CampaignsLayout><CampaignsPage /></CampaignsLayout>, { me: RINA_ME });
     await screen.findByRole('region', { name: 'Running' });
-    expect(englishShown(document.body, ENGLISH)).toEqual(expect.arrayContaining(['Seasonal', 'View details', 'Needs:']));
+    // The compact card's words since P19.1-T5 (UI-123: UI-108's card at every size), where *View details* and *Needs:* were.
+    expect(englishShown(document.body, ENGLISH)).toEqual(expect.arrayContaining(['Seasonal', 'Prize', 'Requirements']));
   });
 
-  it('P18.98-T4 AC-1 to AC-4 the seasonal view: tabs, filter, sections, a card’s tags, prize and Syarat:', async () => {
+  it('P18.10-T4 AC-1 to AC-4 the seasonal view: tabs, sections, a card’s tag, Hadiah and Syarat (no filter since P19.1-T5)', async () => {
     list();
     await screen.findByRole('region', { name: 'Berjalan' });
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Campaign List$/);
@@ -70,53 +71,52 @@ describe('P18.98-T4 the Campaign List in Indonesian', () => {
       .toBeInTheDocument();
     const tabs = screen.getByRole('tablist', { name: 'Jenis campaign' });
     expect(within(tabs).getAllByRole('tab').map((t) => t.textContent)).toEqual(['Musiman', 'Struktural']);
-    const filter = screen.getByRole('group', { name: 'Tampilkan campaign' });
-    expect(within(filter).getAllByRole('button').map((b) => b.textContent)).toEqual(['Semua', 'Berjalan', 'Akan datang', 'Berakhir']);
+    // P19.1-T5 AC-4 (UI-108 at every size): no *Semua · Berjalan · Akan datang · Berakhir* row.
+    expect(screen.queryByRole('group', { name: 'Tampilkan campaign' })).not.toBeInTheDocument();
     for (const name of ['Berjalan', 'Akan datang', 'Berakhir']) expect(screen.getByRole('region', { name })).toBeInTheDocument();
     const sprint = cardOf('Q4 APE Sprint');
     expect(within(sprint).getByText('KPM')).toBeInTheDocument();
     // The server's window and the office's prize as they came; the requirement in Indonesian, its figure Indonesian.
     expect(within(sprint).getByText('1 Okt – 31 Des 2026')).toBeInTheDocument();
     expect(sprint).toHaveTextContent('Top 10 unit-wide: 3D2N Bali trip · All qualifiers: Rp 5.000.000 cash bonus');
-    expect(sprint).toHaveTextContent(/Syarat: Rp 500 jt APE.* \+ 1 new hire/);
-    expect(within(sprint).getByRole('button', { name: /Mengejar/ })).toHaveAttribute('aria-pressed', 'true');
-    expect(within(sprint).getByRole('button', { name: 'Lihat detail' })).toBeInTheDocument();
+    expect(sprint).toHaveTextContent(/HadiahTop 10 unit-wide/);
+    expect(sprint).toHaveTextContent(/SyaratRp 500 jt APE.* \+ 1 new hire/);
+    expect(within(sprint).getByRole('button', { name: 'Kejar Q4 APE Sprint' })).toHaveAttribute('aria-pressed', 'true');
     expect(within(cardOf('October New Hire Blitz')).getByRole('button', { name: /Kejar/ })).toBeInTheDocument();
     noEnglishLeft();
   });
 
-  it('P18.98-T4 AC-1 the structural view: Kriteria promosi, Klub produksi, Jalur promosi, a held chase’s reason', async () => {
+  it('P18.10-T4 AC-1 the structural view: Kriteria promosi, Klub produksi, a held chase’s reason', async () => {
     list();
     await screen.findByRole('region', { name: 'Berjalan' });
     await userEvent.click(screen.getByRole('tab', { name: 'Struktural' }));
     for (const name of ['Kriteria promosi', 'Klub produksi']) expect(screen.getByRole('region', { name })).toBeInTheDocument();
     const promo = cardOf('Promotion: Agent → AAB');
-    expect(within(promo).getByText('Jalur promosi')).toBeInTheDocument();
-    expect(within(promo).getByText('Berjalan')).toBeInTheDocument();
+    // *Jalur promosi* and the status tag are the detail's since P19.1-T5 (UI-108's compact card).
     expect(promo).toHaveTextContent(/Rp 1,2 M APE.* \+ 3 agen aktif baru/);
-    expect(within(cardOf('Promotion: AAB → AB')).getByRole('button', { name: 'Campaign ini tidak terbuka untuk peran Anda.' }))
-      .toBeInTheDocument();
+    expect(within(cardOf('Promotion: AAB → AB')).getByRole('button', { name: 'Kejar Promotion: AAB → AB' }))
+      .toHaveAttribute('title', 'Campaign ini tidak terbuka untuk peran Anda.');
     noEnglishLeft();
   });
 
-  it('P18.98-T4 AC-1 a chase: its toast in Indonesian, the title as typed', async () => {
+  it('P18.10-T4 AC-1 a chase: its toast in Indonesian, the title as typed', async () => {
     list({ 'PUT /campaigns/NEW_HIRE_BLITZ/chase': { body: { ...LIST.campaigns[1], chasing: true } } });
     await screen.findByRole('region', { name: 'Berjalan' });
     await userEvent.click(within(cardOf('October New Hire Blitz')).getByRole('button', { name: /Kejar/ }));
     expect(await screen.findByText('Sekarang mengejar "October New Hire Blitz"')).toBeInTheDocument();
   });
 
-  it('P18.98-T4 AC-1 the empty sections, in Indonesian', async () => {
+  it('P18.10-T4 AC-1 the empty list, in Indonesian: one line, the empty groups hidden (P19.1-T5 AC-5)', async () => {
     list({ 'GET /campaigns': { body: { campaigns: [], can: { chase: true } } } });
     expect(await screen.findByText('Belum ada campaign yang berjalan saat ini.')).toBeInTheDocument();
-    expect(screen.getByText('Belum ada campaign yang akan datang.')).toBeInTheDocument();
-    expect(screen.getByText('Belum ada campaign yang sudah berakhir.')).toBeInTheDocument();
+    expect(screen.queryByText('Belum ada campaign yang akan datang.')).not.toBeInTheDocument();
+    expect(screen.queryByText('Belum ada campaign yang sudah berakhir.')).not.toBeInTheDocument();
     noEnglishLeft();
   });
 });
 
-describe('P18.98-T4 a campaign’s dialog in Indonesian', () => {
-  it('P18.98-T4 AC-1 to AC-4 the dialog: Hadiah, Syarat with the months read, progress and why a row has no figure', async () => {
+describe('P18.10-T4 a campaign’s dialog in Indonesian', () => {
+  it('P18.10-T4 AC-1 to AC-4 the dialog: Hadiah, Syarat with the months read, progress and why a row has no figure', async () => {
     dialogAt('APE_SPRINT');
     const box = await screen.findByRole('dialog', { name: 'Q4 APE Sprint' });
     expect(within(box).getByText('Hadiah')).toBeInTheDocument();
@@ -129,7 +129,7 @@ describe('P18.98-T4 a campaign’s dialog in Indonesian', () => {
     noEnglishLeft();
   });
 
-  it('P18.98-T4 AC-1 the not-found state, in Indonesian', async () => {
+  it('P18.10-T4 AC-1 the not-found state, in Indonesian', async () => {
     dialogAt('NOPE', { 'GET /campaigns/NOPE': { status: 404, body: { error: { code: 'NOT_FOUND', message: 'x', requestId: 'r' } } } });
     expect(await screen.findByText('Campaign ini tidak ada di daftar Anda.')).toBeInTheDocument();
     expect(screen.getByText('Mungkin sudah ditarik, atau alamatnya salah ketik.')).toBeInTheDocument();
@@ -137,8 +137,8 @@ describe('P18.98-T4 a campaign’s dialog in Indonesian', () => {
   });
 });
 
-describe('P18.98-T4 what a person is chasing, in Indonesian', () => {
-  it('P18.98-T4 AC-1 the reader’s own rows, the server’s months as they came, and Lihat →', async () => {
+describe('P18.10-T4 what a person is chasing, in Indonesian', () => {
+  it('P18.10-T4 AC-1 the reader’s own rows, the server’s months as they came, and Lihat →', async () => {
     stubFetch({ '/campaigns/chasing': { body: RINA_CHASING } });
     renderInIndonesian(<ChasingCampaigns />, { me: RINA_ME });
     expect(await screen.findByText('Q4 APE Sprint')).toBeInTheDocument();
@@ -147,7 +147,7 @@ describe('P18.98-T4 what a person is chasing, in Indonesian', () => {
     noEnglishLeft();
   });
 
-  it('P18.98-T4 AC-1 none chased: the reader’s line, and a coachee’s', async () => {
+  it('P18.10-T4 AC-1 none chased: the reader’s line, and a coachee’s', async () => {
     stubFetch({ '/campaigns/chasing': { body: NONE_CHASED } });
     renderInIndonesian(<><ChasingCampaigns /><ChasingCampaigns forMembershipId="mem-budi" /></>, { me: RINA_ME });
     expect(await screen.findByText('Anda belum mengejar campaign apa pun — buka Campaign list untuk ikut.')).toBeInTheDocument();
@@ -155,13 +155,13 @@ describe('P18.98-T4 what a person is chasing, in Indonesian', () => {
     noEnglishLeft();
   });
 
-  it('P18.98-T4 AC-4 the chips are the titles, as typed', () => {
+  it('P18.10-T4 AC-4 the chips are the titles, as typed', () => {
     renderInIndonesian(<ChaseChips campaigns={[{ code: 'A', title: 'Q4 APE Sprint' }]} />);
     expect(screen.getByText('Q4 APE Sprint')).toBeInTheDocument();
   });
 });
 
-describe('P18.98-T4 lib/campaigns.ts in each language', () => {
+describe('P18.10-T4 lib/campaigns.ts in each language', () => {
   it('writes its words in the language passed and its figures in the figures’, English and Indonesian when none is', () => {
     expect(requirementsLine([APE(16), NEW_HIRE(3)], undefined, 'id')).toBe('Rp 16 jt APE + 3 new hires');
     expect(requirementsLine([APE(16), NEW_HIRE(3)], undefined, 'en', 'en')).toBe('IDR 16M APE + 3 new hires');

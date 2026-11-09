@@ -15,8 +15,14 @@ export interface Me {
     pronoun: 'she' | 'he' | 'they';
     initials: string;
     platformRole: 'super_admin' | 'none';
+    /**
+     * **Whether their address is verified** (P19-T1 AC-4; UI-163, ADR-0190 §4): an account signs in before it is, and
+     * every shell shows *"Verifikasi email Anda · Kirim ulang"* while this is `false` (`VerifyEmailBanner`). The API
+     * always sends it; optional so a fixture that is about something else need not — absent reads as verified.
+     */
+    emailVerified?: boolean;
     /*
-     * What a person records (ADR-0158, P18.8-T4): `null` is *Not recorded*. The API always sends them;
+     * What a person records (ADR-0158, P18.5-T4): `null` is *Not recorded*. The API always sends them;
      * optional here so a fixture that is about something else need not. `workStatus` is the reader's
      * membership's, or what they registered with until an office has them.
      */
@@ -25,7 +31,7 @@ export interface Me {
     companyJoinMonth?: string | null;
     workStatus?: WorkStatus | null;
     /*
-     * **The account's language** (ADR-0179 §2, P18.98-T2): `locale` is the one in force — the account's choice, or
+     * **The account's language** (ADR-0179 §2, P18.10-T2): `locale` is the one in force — the account's choice, or
      * `id` for one that has made none — and `localeChosen` says which. At sign-in a chosen one wins over the browser's
      * cookie and rewrites it; an account with none keeps the browser's language and saves nothing (`LanguageProvider`,
      * `follow`). The API always sends both; optional so a fixture that is about something else need not.
@@ -69,19 +75,14 @@ export interface Me {
     office?: { code: string; branch: string } | null;
   } | null;
   isImpersonating: boolean;
-  /** A support session that may look and not touch (§3.13). True in a setup session too. */
-  impersonationReadOnly: boolean;
   /**
-   * Why the session was started (ADR-0162): `support` to look, `setup` to configure the office as its Owner
-   * or Admin would; `null` outside one. The API always sends both; optional so a fixture about something else
-   * need not.
+   * A support session, which looks and does not touch (§3.13): `true` in every session since P19.4-T2 (ADR-0206 §4),
+   * `false` outside one. The setup session's purpose and write scope are gone from `/auth/me` with it.
    */
-  impersonationPurpose?: 'support' | 'setup' | null;
-  /** What a setup session may write besides reading — already reflected in `permissions`. */
-  impersonationWriteScope?: string[];
+  impersonationReadOnly: boolean;
   impersonatedBy: string | null;
   /**
-   * They are on a password somebody else generated (P3.6-T4).
+   * They are on a password somebody else generated (P3.2-T4).
    *
    * `RequireSession` sends them to `/choose-a-password`, because every other route on the
    * API answers `403` until it is replaced — a screen that rendered anyway would be a
@@ -98,6 +99,71 @@ export interface Me {
   activation: MeActivation | null;
   /** Whether the reader reaches at least one open activation: *New hires* in the nav (OD-122). */
   newHires: boolean;
+  /**
+   * **The reader's other login, linked with *Tambah akun*** (P19.2-T1 AC-8; UI-169 item 5; ADR-0199 §3): its address, its
+   * name and its views, which the avatar menu lists beside the reader's own — `null` with no link, and always in a
+   * support session. The API always sends it; optional so a fixture that is about something else need not.
+   */
+  linkedLogin?: LinkedLogin | null;
+  /**
+   * **What the session's KPM shows** (P19.6-T1 AC-12; ADR-0218 §8): its palette (`null`: AgencyBoost's colours), the
+   * logo's size, which images and mascot poses it has, and a lesson's colours (ADR-0217 §5). `null` with no KPM. The API
+   * always sends it; optional so a fixture that is about something else need not — absent reads as AgencyBoost's.
+   */
+  branding?: SessionBranding | null;
+}
+
+/** `GET /auth/me`'s `branding` (ADR-0218 §8); every colour `#rrggbb`, derived by the API (`lib/branding.ts`). */
+export interface SessionBranding {
+  kpmId: string;
+  version: string;
+  palette: BrandingPalette | null;
+  logo: { width: number; height: number } | null;
+  logoSquare: boolean;
+  icons: boolean;
+  mascotPoses: string[];
+  /** A lesson's colours (ADR-0217 §5): six hex digits, no `#`; `ink` only where white reads 4.5:1 on the secondary. */
+  lesson: { accent: string; accentSoft: string; ink?: string } | null;
+}
+
+/** A KPM's palette, as the API derives it (`backend/src/domain/branding/palette.ts`). */
+export interface BrandingPalette {
+  primary: string;
+  primaryHover: string;
+  primaryContrast: string;
+  primaryInk: string;
+  primaryDeep: string;
+  primaryOnSecondary: string;
+  primary50: string;
+  primary100: string;
+  focusRing: string;
+  secondary: string;
+  secondaryHover: string;
+  secondaryContrast: string;
+  secondaryInk: string;
+  secondaryMuted: string;
+  secondary50: string;
+  secondary100: string;
+  today: string;
+  todayInk: string;
+  sidebarText: string;
+}
+
+/** One view of a linked login, named as the reader's own are (`ViewKind`, ADR-0198 §1). */
+export interface LinkedView {
+  kind: 'self' | 'kpm_owner' | 'kpm_admin' | 'super_admin';
+  /** The office as it typed its name, on the office entry; `null` on the others. */
+  officeName: string | null;
+}
+
+export interface LinkedLogin {
+  /** For `DELETE /auth/links/:linkId` — *Hapus tautan*. */
+  linkId: string;
+  /** For `POST /auth/links/switch`. */
+  userId: string;
+  email: string;
+  fullName: string;
+  views: LinkedView[];
 }
 
 export interface MeActivation {

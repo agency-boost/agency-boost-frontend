@@ -13,7 +13,7 @@ export interface StagedRow<T> {
 /**
  * The sentence each mark puts on the row, **in English**: the catalogue's (`messages/settings.ts`, `staged.mark`), for
  * a screen whose words have not moved yet. A screen that has reads the mark in the reader's language,
- * `useMessages(settingsMessages).staged.mark[mark]` (P18.98-T4).
+ * `useMessages(settingsMessages).staged.mark[mark]` (P18.10-T4).
  */
 export const STAGED_LABEL: Record<StagedMark, string> = settingsMessages.en.staged.mark;
 

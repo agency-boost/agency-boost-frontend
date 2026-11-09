@@ -11,7 +11,7 @@ import { Page } from '@/components/page';
  * keeps the header, the person already read, and *Leader view* / *Agent view* where the reader left
  * it (AC-3). The tab pages beneath are only their panels.
  *
- * **The page's title is the person's name** (P18.95-T7 AC-2; the client's UI review, UI-021), drawn by the shell once
+ * **The page's title is the person's name** (P18.7-T7 AC-2; the client's UI review, UI-021), drawn by the shell once
  * it has read who this is: *Coaching Session* was the title, a tab and the way back at once, and said nothing of whom
  * the page is about. Where there is nobody to name — the address names nobody the reader coaches, the read failed, a
  * former coach on a past session — the shell titles the page *Coaching Session*, the prototype's for every coaching

@@ -1,4 +1,12 @@
-import { defineConfig } from 'vitest/config';
+import { configDefaults, defineConfig } from 'vitest/config';
+
+/**
+ * **The specs that drive a real Chrome run on their own** (`pnpm test:browser`, one file at a time; 2026-11-06). Beside
+ * four hundred jsdom files on CI's two vCPUs, two Chromes starting at once missed the 30 s hook: each passed alone.
+ * `pnpm test` and `pnpm test:coverage` leave them out; they measure a browser, not the source's coverage.
+ */
+const BROWSER_SPECS = '**/*.browser.spec.{ts,mjs}';
+const browserRun = process.env.BROWSER_SPECS === '1';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig({
@@ -14,6 +22,8 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
+    include: browserRun ? [BROWSER_SPECS] : configDefaults.include,
+    exclude: browserRun ? configDefaults.exclude : [...configDefaults.exclude, BROWSER_SPECS],
     setupFiles: ['./test/setup.ts'],
     /*
      * **Room on a CI runner, not on a laptop.** GitHub's runner took 366s for the suite that takes about a minute

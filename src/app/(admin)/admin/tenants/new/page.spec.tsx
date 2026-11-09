@@ -1,8 +1,10 @@
-import { screen } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { axe } from 'vitest-axe';
 import AdminLayout from '@/app/(admin)/layout';
-import { makeMe, renderInLayout, stubFetch as stubRoutes } from '@test/harness';
+import { atWidth, makeMe, renderInLayout, renderWithSession, stubFetch as stubRoutes, wears } from '@test/harness';
+import { smallTargets } from '@test/touch-audit';
 import NewTenantPage from './page';
 
 const push = vi.fn();
@@ -61,13 +63,18 @@ describe('new tenant', () => {
     expect(screen.queryByLabelText('Office code')).not.toBeInTheDocument();
   });
 
+  // The main button is enabled since P19.2-T2 AC-3 (UI-133): a code the API would refuse is said as it is typed, and
+  // pressing sends nothing — where it was a disabled button.
   it('rejects a code the API would reject, before the round trip', async () => {
-    stubFetch({ '/admin/companies': { body: COMPANIES } });
+    const { calls } = stubFetch({ '/admin/companies': { body: COMPANIES } });
     renderInLayout(AdminLayout, <NewTenantPage />, { me: SUPER_ADMIN });
 
     await userEvent.type(await screen.findByLabelText('Office code'), 'has space');
+    await userEvent.type(screen.getByLabelText('Branch name'), 'BSD City Branch');
+    await userEvent.click(screen.getByRole('button', { name: 'Skip, do it later' }));
     expect(screen.getByText('2–16 characters: letters, digits and hyphens.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Create office' })).toBeDisabled();
+    await userEvent.click(screen.getByRole('button', { name: 'Create office' }));
+    expect(calls.some((c) => c.init.method === 'POST')).toBe(false);
   });
 
   it('omits blank optional fields instead of sending empty strings', async () => {
@@ -79,6 +86,8 @@ describe('new tenant', () => {
 
     await userEvent.type(await screen.findByLabelText('Office code'), '0417');
     await userEvent.type(screen.getByLabelText('Branch name'), 'BSD City Branch');
+    // *"Lewati, nanti saja"* (P19.4-T3 AC-6): no Owner now.
+    await userEvent.click(screen.getByRole('button', { name: 'Skip, do it later' }));
     await userEvent.click(screen.getByRole('button', { name: 'Create office' }));
 
     const post = calls.find((c) => c.init.method === 'POST')!;
@@ -110,13 +119,15 @@ describe('new tenant', () => {
 
     await userEvent.type(await screen.findByLabelText('Office code'), '0417');
     await userEvent.type(screen.getByLabelText('Branch name'), 'BSD City Branch');
+    // *"Lewati, nanti saja"* (P19.4-T3 AC-6): no Owner now.
+    await userEvent.click(screen.getByRole('button', { name: 'Skip, do it later' }));
     await userEvent.click(screen.getByRole('button', { name: 'Create office' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('already used by Prudential');
     expect(push).not.toHaveBeenCalledWith('/admin/tenants/kpm-9');
   });
 
-  it('P3.5-T14 AC-7: shows the time zone and refuses to let anybody type one', async () => {
+  it('P3.1-T14 AC-7: shows the time zone and refuses to let anybody type one', async () => {
     // This asserted "Blank inherits the insurer's" — a hint on a free-text box that
     // accepted `Asia/Jakata` in both halves and broke every day boundary in that office
     // for ever, silently. The requirement it protected survives: the value is explained
@@ -190,7 +201,10 @@ describe('new tenant', () => {
       expect([...(select as HTMLSelectElement).options].map((o) => o.textContent)).toEqual(['Not loaded']);
       await userEvent.type(screen.getByLabelText('Office code'), '0701');
       await userEvent.type(screen.getByLabelText('Branch name'), 'Cempaka Putih Branch');
-      expect(screen.getByRole('button', { name: 'Create office' })).toBeDisabled();
+      await userEvent.click(screen.getByRole('button', { name: 'Skip, do it later' }));
+      // Pressed with nothing to start from, it sends nothing (P19.2-T2 AC-3: the main button enabled, where it was not).
+      await userEvent.click(screen.getByRole('button', { name: 'Create office' }));
+      expect(calls.some((c) => c.init.method === 'POST')).toBe(false);
 
       await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
       await vi.waitFor(() => expect(select).toHaveDisplayValue('Prudential template · Default'));
@@ -218,6 +232,8 @@ describe('new tenant', () => {
       expect(screen.getByText(hint)).toBeInTheDocument();
       await userEvent.type(screen.getByLabelText('Office code'), '0701');
       await userEvent.type(screen.getByLabelText('Branch name'), 'Cempaka Putih Branch');
+      // *"Lewati, nanti saja"* (P19.4-T3 AC-6): no Owner now.
+      await userEvent.click(screen.getByRole('button', { name: 'Skip, do it later' }));
       await userEvent.click(screen.getByRole('button', { name: 'Create office' }));
 
       const post = calls.find((c) => c.init.method === 'POST')!;
@@ -226,11 +242,11 @@ describe('new tenant', () => {
   });
 
   /*
-   * **P18.9-T3 AC-3, AC-5 — the Template library** (ADR-0164 §3, §5): not a company an office is made in, and its
+   * **P18.6-T3 AC-3, AC-5 — the Template library** (ADR-0164 §3, §5): not a company an office is made in, and its
    * templates offered after the company's own, the company's default still chosen. *Changed 2026-11-01 (ADR-0185 §5):*
    * under *AgencyBoost built-in templates*, the one picker *New template* uses — every active one of them.
    */
-  describe('the Template library (P18.9-T3)', () => {
+  describe('the Template library (P18.6-T3)', () => {
     const LIBRARY = { _id: 'co-lib', name: 'Template', slug: 'template', kind: 'template' };
     const LIBRARY_TEMPLATES = [
       template('t-lib', 'Default template', { companyId: 'co-lib', isDefault: true, origin: { kind: 'defaults' } }),
@@ -282,6 +298,8 @@ describe('new tenant', () => {
         .toBeInTheDocument();
       await userEvent.type(screen.getByLabelText('Office code'), '0701');
       await userEvent.type(screen.getByLabelText('Branch name'), 'Cempaka Putih Branch');
+      // *"Lewati, nanti saja"* (P19.4-T3 AC-6): no Owner now.
+      await userEvent.click(screen.getByRole('button', { name: 'Skip, do it later' }));
       await userEvent.click(screen.getByRole('button', { name: 'Create office' }));
 
       const post = calls.find((c) => c.init.method === 'POST')!;
@@ -306,6 +324,8 @@ describe('new tenant', () => {
       await userEvent.selectOptions(select, await screen.findByRole('option', { name: 'Default template' }));
       await userEvent.type(screen.getByLabelText('Office code'), '0701');
       await userEvent.type(screen.getByLabelText('Branch name'), 'Cempaka Putih Branch');
+      // *"Lewati, nanti saja"* (P19.4-T3 AC-6): no Owner now.
+      await userEvent.click(screen.getByRole('button', { name: 'Skip, do it later' }));
       await userEvent.click(screen.getByRole('button', { name: 'Create office' }));
 
       expect(await screen.findByText(/This company’s role ladder has no SM/)).toBeInTheDocument();
@@ -342,6 +362,8 @@ describe('new tenant', () => {
       expect(screen.getByText('Copied across companies: every role they show must be on this company’s ladder.')).toBeInTheDocument();
       await userEvent.type(screen.getByLabelText('Office code'), '0701');
       await userEvent.type(screen.getByLabelText('Branch name'), 'Cempaka Putih Branch');
+      // *"Lewati, nanti saja"* (P19.4-T3 AC-6): no Owner now.
+      await userEvent.click(screen.getByRole('button', { name: 'Skip, do it later' }));
       await userEvent.click(screen.getByRole('button', { name: 'Create office' }));
 
       const post = calls.find((c) => c.init.method === 'POST')!;
@@ -361,10 +383,156 @@ describe('new tenant', () => {
       expect([...(select as HTMLSelectElement).options].map((o) => o.textContent)).toEqual(['Empty']);
       await userEvent.type(screen.getByLabelText('Office code'), '0701');
       await userEvent.type(screen.getByLabelText('Branch name'), 'Cempaka Putih Branch');
+      // *"Lewati, nanti saja"* (P19.4-T3 AC-6): no Owner now.
+      await userEvent.click(screen.getByRole('button', { name: 'Skip, do it later' }));
       await userEvent.click(screen.getByRole('button', { name: 'Create office' }));
 
       const post = calls.find((c) => c.init.method === 'POST')!;
       expect(JSON.parse(post.init.body as string).startFrom).toEqual({ kind: 'empty' });
     });
+  });
+});
+
+describe('P19.2-T2 AC-7 KPM baru’s two explanations (UI-136, Appendix A: ⓘ · Show · Show)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('P19.2-T2 AC-7 writes them out from 768px and puts each behind an ⓘ on a phone, its words unchanged', async () => {
+    stubFetch({ '/admin/companies': { body: COMPANIES } });
+    renderWithSession(<NewTenantPage />, { me: SUPER_ADMIN });
+    await screen.findByLabelText('Office code');
+
+    const startFrom = document.querySelector('[data-explains="start-from"]')!;
+    expect(startFrom.textContent).toBe('Its settings are copied from what it starts from; the office owns them afterwards.');
+    expect(wears(startFrom, 375)).toContain('hidden');
+    expect(wears(startFrom, 768)).not.toContain('hidden');
+    expect(wears(startFrom, 1280)).not.toContain('hidden');
+
+    const glyphs = screen.getAllByRole('button', { name: /^About / });
+    expect(glyphs).toHaveLength(2);
+    for (const glyph of glyphs) {
+      const wrapper = glyph.closest('span')!;
+      expect(wears(wrapper, 375)).not.toContain('hidden');
+      expect(wears(wrapper, 768)).toContain('hidden');
+    }
+    // The code's rule: the field's hint from 768px, the ⓘ's words on a phone.
+    const hint = screen.getAllByText(/^Unique within the company/)[0];
+    expect(wears(hint, 375)).toContain('hidden');
+  });
+});
+
+/**
+ * **P19.2-T2 — *KPM baru* in the add sheet** (AC-3, AC-4, AC-5; UI-133, UI-134, UI-135; `admin-desktop` screen 4's
+ * caption: *the same modal pattern for "Tambah jenjang" and "KPM baru"*): a bottom sheet on a phone, a centred modal from
+ * 768px, *Batal / Buat KPM* pinned; the main button enabled, a field left empty saying so when it is pressed; Esc, ✕ and
+ * *Batal* back to the KPMs list without saving; the company and *Mulai dari* pills below 1024px.
+ */
+describe('P19.2-T2 KPM baru as a sheet (UI-133, UI-134)', () => {
+  afterEach(() => { vi.unstubAllGlobals(); push.mockReset(); });
+
+  const open = async () => screen.findByRole('dialog', { name: 'New office' });
+
+  it.each([375, 768, 1024, 1280])('P19.2-T2 AC-3 at %ipx opens as a sheet with Cancel / Create office pinned; pressed empty, each field says what it needs', async (px) => {
+    atWidth(px);
+    const { calls } = stubFetch({ '/admin/companies': { body: COMPANIES } });
+    renderInLayout(AdminLayout, <NewTenantPage />, { me: SUPER_ADMIN });
+    const sheet = await open();
+    expect(sheet.closest('[data-placement]')).toHaveAttribute('data-placement', px < 768 ? 'sheet' : 'center');
+    await within(sheet).findByText(/Prudential template · Default/);
+    const main = within(sheet).getByRole('button', { name: 'Create office' });
+    expect(main).toBeEnabled();
+    expect(within(sheet).getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
+    await userEvent.click(main);
+    expect(within(sheet).getByLabelText('Office code')).toHaveAccessibleDescription(expect.stringContaining('Required.'));
+    expect(within(sheet).getByLabelText('Branch name')).toHaveAccessibleDescription(expect.stringContaining('Required.'));
+    expect(within(sheet).getByText('Type the owner’s name.')).toBeInTheDocument();
+    expect(calls.some((c) => c.init.method === 'POST')).toBe(false);
+  });
+
+  it.each(['Escape', 'close', 'cancel'] as const)('P19.2-T2 AC-3 %s closes it without saving, back to the KPMs list', async (how) => {
+    const { calls } = stubFetch({ '/admin/companies': { body: COMPANIES } });
+    renderInLayout(AdminLayout, <NewTenantPage />, { me: SUPER_ADMIN });
+    const sheet = await open();
+    await userEvent.type(within(sheet).getByLabelText('Office code'), '0701');
+    if (how === 'Escape') await userEvent.keyboard('{Escape}');
+    else if (how === 'close') await userEvent.click(within(sheet).getByRole('button', { name: 'Close' }));
+    else await userEvent.click(within(sheet).getByRole('button', { name: 'Cancel' }));
+    expect(push).toHaveBeenCalledWith('/admin/tenants');
+    expect(calls.some((c) => c.init.method === 'POST')).toBe(false);
+  });
+
+  it.each([375, 768])('P19.2-T2 AC-4 at %ipx draws no native select: the company and Start from are pills opening their choices', async (px) => {
+    atWidth(px);
+    const { calls } = stubFetch({
+      '/admin/companies': { body: COMPANIES },
+      '/admin/tenants': { status: 201, body: { _id: 'kpm-9' } },
+    });
+    renderInLayout(AdminLayout, <NewTenantPage />, { me: SUPER_ADMIN });
+    const sheet = await open();
+    const start = await within(sheet).findByRole('button', { name: 'Start from: Prudential template · Default' });
+    expect(document.querySelector('select')).toBeNull();
+    expect(start).toHaveAccessibleDescription('Its published sections are copied; one it has not published starts empty.');
+
+    await userEvent.click(start);
+    const choices = await screen.findByRole('dialog', { name: 'Choose start from' });
+    expect(within(choices).getAllByRole('radio').map((r) => r.getAttribute('aria-labelledby') && document.getElementById(r.getAttribute('aria-labelledby')!)?.textContent))
+      .toEqual(['Prudential template · Default', 'Jakarta branches', 'Empty']);
+    await userEvent.click(within(choices).getByRole('radio', { name: 'Empty' }));
+    // The choice closes its sheet and leaves KPM baru's open.
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Choose start from' })).toBeNull());
+    expect(within(await open()).getByRole('button', { name: 'Start from: Empty' })).toBeInTheDocument();
+
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Company: Prudential' }));
+    const companies = await screen.findByRole('dialog', { name: 'Choose company' });
+    expect(within(companies).getAllByRole('radio').map((r) => r.textContent)).toEqual(['Prudential', 'Sejahtera Baru Life']);
+    await userEvent.click(within(companies).getByRole('radio', { name: 'Prudential' }));
+
+    await userEvent.type(within(sheet).getByLabelText('Office code'), '0701');
+    await userEvent.type(within(sheet).getByLabelText('Branch name'), 'Cempaka Putih Branch');
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Skip, do it later' }));
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Create office' }));
+    await waitFor(() => expect(calls.some((c) => c.init.method === 'POST')).toBe(true));
+    expect(JSON.parse(calls.find((c) => c.init.method === 'POST')!.init.body as string))
+      .toMatchObject({ companyId: 'co-1', startFrom: { kind: 'empty' } });
+  });
+
+  it('P19.2-T2 AC-4 at 375px choosing another company reads its templates, and Start from offers them', async () => {
+    atWidth(375);
+    stubFetch({ '/admin/companies': { body: COMPANIES } });
+    renderInLayout(AdminLayout, <NewTenantPage />, { me: SUPER_ADMIN });
+    const sheet = await open();
+    await within(sheet).findByRole('button', { name: 'Start from: Prudential template · Default' });
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Company: Prudential' }));
+    await userEvent.click(within(await screen.findByRole('dialog', { name: 'Choose company' })).getByRole('radio', { name: 'Sejahtera Baru Life' }));
+    expect(await within(sheet).findByRole('button', { name: 'Start from: Sejahtera Baru Life template · Default' })).toBeInTheDocument();
+  });
+
+  it.each([1024, 1280])('P19.2-T2 AC-4 at %ipx a laptop keeps its two selects', async (px) => {
+    atWidth(px);
+    stubFetch({ '/admin/companies': { body: COMPANIES } });
+    renderInLayout(AdminLayout, <NewTenantPage />, { me: SUPER_ADMIN });
+    const sheet = await open();
+    expect(within(sheet).getByRole('combobox', { name: 'Company' })).toBeInTheDocument();
+    expect(within(sheet).getByRole('combobox', { name: 'Start from' })).toBeInTheDocument();
+  });
+
+  it.each([375, 768])('P19.2-T2 AC-5 at %ipx finds no target under 44px in the sheet, its owner step and its skipped step', async (px) => {
+    atWidth(px);
+    stubFetch({ '/admin/companies': { body: COMPANIES } });
+    renderInLayout(AdminLayout, <NewTenantPage />, { me: SUPER_ADMIN });
+    const sheet = await open();
+    await within(sheet).findByRole('button', { name: 'Start from: Prudential template · Default' });
+    expect(smallTargets(sheet, px)).toEqual([]);
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Skip, do it later' }));
+    expect(smallTargets(sheet, px)).toEqual([]);
+  });
+
+  it.each([375, 1280])('P19.2-T2 AC-3 at %ipx has no axe violations with the sheet open', async (px) => {
+    atWidth(px);
+    stubFetch({ '/admin/companies': { body: COMPANIES } });
+    renderInLayout(AdminLayout, <NewTenantPage />, { me: SUPER_ADMIN });
+    const sheet = await open();
+    await within(sheet).findByText(/Prudential template · Default/);
+    expect((await axe(document.body, { rules: { 'color-contrast': { enabled: false }, region: { enabled: false } } })).violations)
+      .toEqual([]);
   });
 });

@@ -53,7 +53,7 @@ describe('RouteTabs', () => {
     // jumps as you move along it (`Overall.html:81-89`).
     render(<RouteTabs label="Activity management" tabs={TABS} />);
     const [on, off] = screen.getAllByRole('link');
-    expect(on.className).toContain('border-amber');
+    expect(on.className).toContain('border-primary');
     expect(off.className).toContain('border-transparent');
     expect(on.className).toContain('font-semibold');
     expect(off.className).toContain('font-semibold');
@@ -80,7 +80,7 @@ describe('RouteTabs', () => {
     expect(screen.getByRole('link', { name: 'Pending Requests 3' })).toBeInTheDocument();
   });
 
-  it('P18.8-T12 a nested tab is current beneath its own address too, and a prefix is not a parent', () => {
+  it('P18.5-T12 a nested tab is current beneath its own address too, and a prefix is not a parent', () => {
     // The mocked address is `/activity/log`: beneath `/activity`, not beneath `/activity/lo`.
     render(
       <RouteTabs
@@ -126,7 +126,7 @@ describe('SectionCard', () => {
     expect(container.firstElementChild!.className).toContain('overflow-hidden');
   });
 
-  it('P18.8-T8 AC-1 centres the row, with a sub-note and without, at the client’s request', () => {
+  it('P18.5-T8 AC-1 centres the row, with a sub-note and without, at the client’s request', () => {
     // ADR-0161 §3: a registered divergence from the prototype's `flex-start` (`Overall.html:118`).
     const { container } = render(
       <SectionCard title="Leads">
@@ -277,7 +277,7 @@ describe('Stepper', () => {
     render(<Stepper value={7} onChange={() => {}} label="Leads" />);
     expect(screen.getByLabelText('Count for Leads').className).toContain('text-navy');
     expect(screen.getByLabelText('Decrease Leads').className).toContain('text-navy');
-    expect(screen.getByLabelText('Increase Leads').className).toContain('text-amber-deep');
+    expect(screen.getByLabelText('Increase Leads').className).toContain('text-primary-deep');
   });
 });
 
@@ -285,9 +285,9 @@ describe('NumberBadge', () => {
   it('is outlined rather than filled — a quiet ordinal, not a badge announcing something', () => {
     const { container } = render(<NumberBadge n={3} />);
     const el = container.firstElementChild!;
-    expect(el.className).toContain('border-navy');
+    expect(el.className).toContain('border-secondary');
     expect(el.className).toContain('text-navy');
-    expect(el.className).not.toContain('bg-navy');
+    expect(el.className).not.toContain('bg-secondary');
   });
 
   it('hides the number from screen readers, because the label beside it is the name', () => {
@@ -338,15 +338,15 @@ describe('KpiTile', () => {
     // amber-dark on this very tint is 2.82:1 and clears no floor — see a11y.spec.tsx.
     render(<KpiTile label="This month" value="Rp 42.000.000" variant="insight" />);
     const value = screen.getByText('Rp 42.000.000');
-    expect(value.className).toContain('text-amber-deep');
-    expect(value.className).not.toContain('text-amber-dark');
+    expect(value.className).toContain('text-primary-deep');
+    expect(value.className).not.toContain('text-primary-hover');
   });
 
   it('distinguishes the three variants by fill as well as by text colour', () => {
     const { container, rerender } = render(<KpiTile label="a" value="1" />);
     expect(container.firstElementChild!.className).toContain('bg-base');
     rerender(<KpiTile label="a" value="1" variant="insight" />);
-    expect(container.firstElementChild!.className).toContain('bg-amber/[0.08]');
+    expect(container.firstElementChild!.className).toContain('bg-primary/[0.08]');
     rerender(<KpiTile label="a" value="1" variant="complete" />);
     expect(container.firstElementChild!.className).toContain('bg-success/[0.08]');
   });
@@ -379,7 +379,7 @@ describe('ConfigBadge', () => {
     rerender(<ConfigBadge tone="open">Empty</ConfigBadge>);
     expect(container.firstElementChild!.className).toContain('bg-base');
     rerender(<ConfigBadge tone="navy">Activity #3</ConfigBadge>);
-    expect(container.firstElementChild!.className).toContain('bg-navy/[0.06]');
+    expect(container.firstElementChild!.className).toContain('bg-secondary/[0.06]');
   });
 
   it('lets a chip carrying a phrase drop the uppercase, without a second prop', () => {
@@ -476,13 +476,13 @@ describe('Segmented', () => {
   it('paints the selected option navy, never the action amber — navy is what is chosen (ADR-0137)', async () => {
     render(<Host />);
     const [first, second] = screen.getAllByRole('tab');
-    expect(first).toHaveClass('bg-navy');
-    expect(first).not.toHaveClass('bg-amber');
-    expect(second).not.toHaveClass('bg-navy');
+    expect(first).toHaveClass('bg-secondary');
+    expect(first).not.toHaveClass('bg-primary');
+    expect(second).not.toHaveClass('bg-secondary');
 
     await userEvent.click(second);
-    expect(second).toHaveClass('bg-navy');
-    expect(first).not.toHaveClass('bg-navy');
+    expect(second).toHaveClass('bg-secondary');
+    expect(first).not.toHaveClass('bg-secondary');
   });
 });
 
@@ -507,12 +507,12 @@ describe('CascadeRow', () => {
     const { container } = render(<CascadeRow columns={COLUMNS} links={['30%', '30%']} />);
     const hero = container.querySelector('[data-hero="true"]')!;
     expect(hero).toHaveTextContent('Submission polis');
-    expect(hero.className).toContain('bg-amber/[0.14]');
+    expect(hero.className).toContain('bg-primary/[0.14]');
   });
 
   it('uses amber-deep for the figures, because amber-dark on this tint clears no floor', () => {
     render(<CascadeRow columns={COLUMNS} links={['30%', '30%']} />);
-    expect(screen.getByText('40/month').className).toContain('text-amber-deep');
+    expect(screen.getByText('40/month').className).toContain('text-primary-deep');
   });
 
   it('P13.1-T5 AC-5 draws the weekly line larger and blue, in a blue that passes AA at its size', () => {
@@ -610,7 +610,7 @@ describe('TextInput affixes', () => {
     const input = container.querySelector('input')!;
 
     expect(group.className).toContain('focus-within:ring-2');
-    expect(group.className).toContain('focus-within:ring-amber');
+    expect(group.className).toContain('focus-within:ring-focus-ring');
     expect(input.className).toContain('focus-visible:outline-none');
     expect(input.className).toContain('focus:ring-0');
   });
@@ -643,7 +643,7 @@ describe('cell density', () => {
     expect(cls).toContain('border-transparent');
     expect(cls).toContain('bg-transparent');
     expect(cls).toContain('hover:border-hairline');
-    expect(cls).toContain('focus:border-amber');
+    expect(cls).toContain('focus:border-primary');
   });
 
   it('keeps the border present and only recolours it, so nothing reflows on hover', () => {
@@ -844,7 +844,7 @@ describe('Dialog', () => {
     expect(onConfirm).not.toHaveBeenCalled();
   });
 
-  it('P18.96-T1 AC-2 is never taller than the screen: a long question scrolls, the two buttons stay, the page holds still', () => {
+  it('P18.8-T1 AC-2 is never taller than the screen: a long question scrolls, the two buttons stay, the page holds still', () => {
     document.body.style.overflow = 'auto';
     const { unmount } = render(<Host />);
     const box = screen.getByRole('dialog');
@@ -919,13 +919,13 @@ describe('DataTable density and widths', () => {
 });
 
 describe('ProgressBar', () => {
-  it('caps the bar at 100% while the label may exceed it — P18.97-T3 AC-1, whole', () => {
+  it('caps the bar at 100% while the label may exceed it — P18.9-T3 AC-1, whole', () => {
     render(<ProgressBar value={200} target={100} />);
     expect(screen.getByText('200%')).toBeInTheDocument();
     expect(screen.getByRole('progressbar').firstElementChild).toHaveStyle({ width: '100%' });
   });
 
-  it('P18.97-T3 F-254 rounds an exact half up in integers: 23 of 40 is 58%, which Math.round(23 / 40 * 100) reads 57%', () => {
+  it('P18.9-T3 F-254 rounds an exact half up in integers: 23 of 40 is 58%, which Math.round(23 / 40 * 100) reads 57%', () => {
     render(<ProgressBar value={23} target={40} />);
     expect(screen.getByText('58%')).toBeInTheDocument();
     expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '58');
@@ -947,7 +947,7 @@ describe('ProgressBar', () => {
     expect(screen.queryByText('50%')).not.toBeInTheDocument();
   });
 
-  it('P18.98-T3 AC-2 writes the one share it rounds in the reader’s marks: 1,250% in English, 1.250% in Indonesian', () => {
+  it('P18.10-T3 AC-2 writes the one share it rounds in the reader’s marks: 1,250% in English, 1.250% in Indonesian', () => {
     render(<ProgressBar value={2_500} target={200} />);
     render(<InLanguage language="id"><ProgressBar value={2_500} target={200} /></InLanguage>);
     expect(screen.getByText('1,250%')).toBeInTheDocument();
@@ -982,7 +982,7 @@ describe('RoleBadge', () => {
      *
      * Outside a provider the badge falls back to the seeded ladder — which is what v1
      * ships, and what keeps every existing screen looking exactly as it did. **Its labels are the
-     * seed's** (P18.95-T9 AC-1): the backend's `DEFAULT_ORG_LADDER` labels the rungs *AB* and *AAB*,
+     * seed's** (P18.7-T9 AC-1): the backend's `DEFAULT_ORG_LADDER` labels the rungs *AB* and *AAB*,
      * and this copy said *Agency Builder* and *Associate Agency Builder*.
      */
     expect(SEEDED_LADDER.map((l) => [l.code, l.label])).toEqual([
@@ -1018,14 +1018,14 @@ describe('RoleBadge', () => {
     expect(screen.getByText('AB')).toBeInTheDocument();
   });
 
-  it('P18.95-T9 AC-1 the short-code limit is the backend’s, read from its constants (invariant §7)', () => {
+  it('P18.7-T9 AC-1 the short-code limit is the backend’s, read from its constants (invariant §7)', () => {
     const backend = readFileSync(join(__dirname, '..', '..', '..', '..', 'backend', 'src', 'domain', 'constants', 'leader-tier.ts'), 'utf8');
     expect(Number(/export const RUNG_SHORT_CODE_MAX_LENGTH = (\d+);/.exec(backend)?.[1])).toBe(RUNG_SHORT_CODE_MAX_LENGTH);
     expect(shortOfRung({ code: 'ABCD', label: 'Four' })).toBe('ABCD');
     expect(shortOfRung({ code: 'ABCDE', label: 'Five' })).toBe('Five');
   });
 
-  it('P18.95-T8 AC-3 rungShort says, without a hook, what the badge prints — AB, AAB, Agent — from the ladder it is given', () => {
+  it('P18.7-T8 AC-3 rungShort says, without a hook, what the badge prints — AB, AAB, Agent — from the ladder it is given', () => {
     expect(['ab', 'AAB', 'agent'].map((code) => rungShort(code))).toEqual(['AB', 'AAB', 'Agent']);
     const another = [...SEEDED_LADDER, { ...SEEDED_LADDER[0], orgLevelId: 'x', code: 'SENIOR', label: 'Senior Partner', displayOrder: 4 }];
     expect(rungShort('senior', another)).toBe('Senior Partner');
@@ -1035,7 +1035,7 @@ describe('RoleBadge', () => {
     expect(screen.getByText(rungShort('aab'))).toHaveAttribute('title', 'AAB');
   });
 
-  it('P18.95-T9 AC-1 names a rung the caller holds as the badge does, whatever the ladder’s label says', () => {
+  it('P18.7-T9 AC-1 names a rung the caller holds as the badge does, whatever the ladder’s label says', () => {
     // The one rule, for a `{ code, label }` the API sends as for a code found in the ladder.
     expect(shortOfRung({ code: 'AAB', label: 'Associate Agency Builder' })).toBe('AAB');
     expect(shortOfRung({ code: 'AGENT', label: 'Agent' })).toBe('Agent');
@@ -1096,25 +1096,25 @@ describe('Button', () => {
     render(<Button>Publish</Button>);
 
     const className = screen.getByRole('button').className.split(/\s+/);
-    expect(className).toEqual(expect.arrayContaining(['bg-amber', 'text-navy', 'hover:bg-amber-dark']));
-    expect(className).not.toContain('bg-navy');
+    expect(className).toEqual(expect.arrayContaining(['bg-primary', 'text-primary-contrast', 'hover:bg-primary-hover']));
+    expect(className).not.toContain('bg-secondary');
     expect(className).not.toContain('text-white');
     // Disabled is as it was: dimmed, not recoloured.
     expect(className).toContain('disabled:opacity-40');
   });
 
   it('gives every surface of the primary the same amber — buttonClass, ButtonLink and the confirm dialog', () => {
-    expect(buttonClass('primary').split(/\s+/)).toEqual(expect.arrayContaining(['bg-amber', 'text-navy', 'hover:bg-amber-dark']));
+    expect(buttonClass('primary').split(/\s+/)).toEqual(expect.arrayContaining(['bg-primary', 'text-primary-contrast', 'hover:bg-primary-hover']));
     render(
       <>
         <ButtonLink href="/coaching/me">My Coaching Notes</ButtonLink>
         <Dialog open message="Publish to agents?" confirmLabel="Publish" onConfirm={() => {}} onCancel={() => {}} />
       </>,
     );
-    expect(screen.getByRole('link', { name: 'My Coaching Notes' })).toHaveClass('bg-amber', 'text-navy');
-    expect(screen.getByRole('button', { name: 'Publish' })).toHaveClass('bg-amber', 'text-navy');
+    expect(screen.getByRole('link', { name: 'My Coaching Notes' })).toHaveClass('bg-primary', 'text-primary-contrast');
+    expect(screen.getByRole('button', { name: 'Publish' })).toHaveClass('bg-primary', 'text-primary-contrast');
     // Its Cancel is the secondary: backing out is not the action the dialog is asking about.
-    expect(screen.getByRole('button', { name: 'Cancel' })).not.toHaveClass('bg-amber');
+    expect(screen.getByRole('button', { name: 'Cancel' })).not.toHaveClass('bg-primary');
   });
 
   it('leaves secondary and danger as they were — only the primary moved to amber', () => {
@@ -1122,7 +1122,7 @@ describe('Button', () => {
     const [cancel, remove] = screen.getAllByRole('button');
     expect(cancel).toHaveClass('bg-card', 'text-navy');
     expect(remove).toHaveClass('border-alert', 'text-alert');
-    for (const button of [cancel, remove]) expect(button).not.toHaveClass('bg-amber');
+    for (const button of [cancel, remove]) expect(button).not.toHaveClass('bg-primary');
   });
 
   it('gives a row action text rather than a box', () => {

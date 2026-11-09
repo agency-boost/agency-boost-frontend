@@ -18,7 +18,7 @@ import { api } from './api-client';
  * Each interface is spelled out with named nested types, so `contract.spec.ts` can read its fields against
  * `backend/openapi.json`: it reads an interface's body up to the first `}`.
  *
- * **The words are the catalogue's** (P18.98-T4; ADR-0179 §4): `messages/recruitment-plan.ts` and the two plans'
+ * **The words are the catalogue's** (P18.10-T4; ADR-0179 §4): `messages/recruitment-plan.ts` and the two plans'
  * `messages/plan.ts`. **The chips' labels and the plan's words are the company's playbook**, shown as typed in both
  * languages (ADR-0179 §5): the server answers them, and nothing here translates them.
  */
@@ -174,7 +174,7 @@ export const readRecruitmentPlan = (brief: BriefCodes | null) =>
 
 /**
  * **The words, in English** — the catalogue's source (`messages/recruitment-plan.ts`, and the two plans' shared
- * `messages/plan.ts`), for code with no reader to ask, in the shapes they had before P18.98-T4 moved every word of the
+ * `messages/plan.ts`), for code with no reader to ask, in the shapes they had before P18.10-T4 moved every word of the
  * section into the catalogue, where they are written once. The screens read them with `useMessages`, in the reader's
  * language.
  */
@@ -190,7 +190,7 @@ export const PROTOTYPE_COPY = {
   stepBrief: EN.stepBrief,
   stepPlan: EN.stepPlan,
   briefTitle: PLAN.briefTitle,
-  /** The client's words at every size (P18.95-T7 AC-1, grey text row 9; ADR-0167 §7), as `/attack-plan`'s hint. */
+  /** The client's words at every size (P18.7-T7 AC-1, grey text row 9; ADR-0167 §7), as `/attack-plan`'s hint. */
   briefHint: PLAN.briefHint,
   candidateType: EN.candidateType,
   motivation: EN.motivation,

@@ -24,11 +24,20 @@ const member = (over: Record<string, unknown> = {}) => ({
   leaderId: 'mem-ab', leaderName: 'Wilson Tanoto', depth: 1, directCount: 0, subtreeCount: 0,
   isLeader: false, isKpmOwner: false, isKpmAdmin: false, joinedAt: '2026-03-01T00:00:00.000Z',
   removedAt: null,
-  // P3.5-T13. The server decides what this viewer may do; the default here is an Owner
+  // P3.1-T13. The server decides what this viewer may do; the default here is an Owner
   // looking at an ordinary member, which is the case the screen is built around.
   canChangeRole: true, canPromoteToAb: true, canRemove: true,
   ...over,
 });
+
+/** The four tiles' read (ADR-0205 §1): Rina's figures, as `GET /members/:membershipId/performance` answers them. */
+const PERFORMANCE = {
+  membershipId: 'mem-1', today: '2026-11-05',
+  activity: { from: '2026-10-30', to: '2026-11-05', count: 14 },
+  production: { year: '2026', actualMinor: 310_000_000_000, targetMinor: 500_000_000_000, attainmentPct: 62, goalSet: true },
+  lastOneOnOne: null,
+  leads: { month: '2026-11', open: 9, closing: 2 },
+};
 
 const params = routeParams({ membershipId: 'mem-1' });
 
@@ -38,6 +47,7 @@ describe('one member', () => {
   it('shows who they are and who they report to', async () => {
     stubFetch({
       '/members/mem-1/reports': { body: [] },
+      '/members/mem-1/performance': { body: PERFORMANCE },
       '/members/mem-1/tags': { body: { membershipId: 'mem-1', fullName: 'Rina Wijaya', groupIds: [], isCoreLeader: false } },
       '/members/groups': { body: [] },
       '/members/mem-1': { body: member() },
@@ -50,13 +60,14 @@ describe('one member', () => {
   });
 
   /*
-   * P18.8-T4 AC-6 (ADR-0158 §6): the *Personal* card shows what the person records, read-only, to the
+   * P18.5-T4 AC-6 (ADR-0158 §6): the *Personal* card shows what the person records, read-only, to the
    * Owner and the Admins — the API serves it to them on this read — and *Not recorded* for each one
    * somebody who arrived before it was asked has not given.
    */
-  it('P18.8-T4 AC-6: shows what they record in the Personal card, Not recorded where they have not', async () => {
+  it('P18.5-T4 AC-6: shows what they record in the Personal card, Not recorded where they have not', async () => {
     stubFetch({
       '/members/mem-1/reports': { body: [] },
+      '/members/mem-1/performance': { body: PERFORMANCE },
       '/members/mem-1/tags': { body: { membershipId: 'mem-1', fullName: 'Rina Wijaya', groupIds: [], isCoreLeader: false } },
       '/members/groups': { body: [] },
       '/members/mem-1': {
@@ -69,16 +80,117 @@ describe('one member', () => {
     const row = (term: string) => within(card).getByText(term).nextElementSibling?.textContent;
     expect(row('Date of birth')).toBe('15 Mar 1990');
     expect(row('Gender')).toBe('Female');
-    expect(row('Company join month')).toBe('Not recorded');
+    // A read with no company named (OWN UI-025): the label says the company without a name.
+    expect(row('Joined the company')).toBe('Not recorded');
     expect(row('Work status')).toBe('Part-time');
     // Read-only: nothing on the card edits them.
     expect(within(card).queryByRole('textbox')).not.toBeInTheDocument();
     expect(within(card).queryByRole('combobox')).not.toBeInTheDocument();
   });
 
-  it('P18.8-T4 AC-6: draws none of the four when the read carries none', async () => {
+  /*
+   * P19.3-T4 AC-5 (OWN UI-025, OWN R5; ADR-0205 §4): the two join dates, each said whose — the office's day *Joined
+   * AgencyBoost* (*Bergabung di AgencyBoost*), the insurer's month *Joined Prudential*, the company named from the office.
+   */
+  it('P19.3-T4 AC-5 labels the two join dates: Joined AgencyBoost, and Joined <the office’s company>', async () => {
     stubFetch({
       '/members/mem-1/reports': { body: [] },
+      '/members/mem-1/performance': { body: PERFORMANCE },
+      '/members/mem-1/tags': { body: { membershipId: 'mem-1', fullName: 'Rina Wijaya', groupIds: [], isCoreLeader: false } },
+      '/members/groups': { body: [] },
+      '/members/mem-1': {
+        body: member({
+          joinDate: '2026-07-14',
+          personal: { dateOfBirth: null, gender: null, companyJoinMonth: '2020-09', workStatus: null, companyName: 'Prudential' },
+        }),
+      },
+    });
+    renderInLayout(TenantLayout, <MemberPage params={params} />, { me: OWNER });
+
+    const card = (await screen.findByRole('heading', { name: 'Personal' })).closest('div')!;
+    const row = (term: string) => within(card).getByText(term).nextElementSibling?.textContent;
+    expect(row('Joined AgencyBoost')).toBe('14 Jul 2026');
+    expect(row('Joined Prudential')).toBe('Sep 2020');
+    expect(within(card).queryByText('Join date')).not.toBeInTheDocument();
+  });
+
+  /*
+   * P19.3-T4 AC-1, AC-4 (OWN UI-020, OWN R4): the four tiles under the name, *See dashboard ›* after them, and the admin
+   * sections still below — *Personal*, *Unit*, *Tags*, *Change their role*, *Remove*, *Who reports to them*.
+   */
+  it('P19.3-T4 AC-1 the four tiles sit under the name, and every admin section stays below them', async () => {
+    stubFetch({
+      '/members/mem-1/reports': { body: [] },
+      '/members/mem-1/performance': { body: PERFORMANCE },
+      '/members/mem-1/tags': { body: { membershipId: 'mem-1', fullName: 'Rina Wijaya', groupIds: [], isCoreLeader: false } },
+      '/members/groups': { body: [] },
+      '/members/leader-limit-requests': { body: [] },
+      '/members/mem-1': { body: member() },
+    });
+    renderInLayout(TenantLayout, <MemberPage params={params} />, { me: OWNER });
+
+    const tiles = await screen.findByRole('region', { name: 'How they are doing' });
+    expect(await within(tiles).findByText('Activity, last 7 days')).toBeInTheDocument();
+    expect(within(tiles).getByText('62% of goal')).toBeInTheDocument();
+    for (const section of ['Personal', 'Unit', 'Tags', 'Change their role', 'Remove from the office', 'Who reports to them']) {
+      const heading = screen.getByRole('heading', { name: section });
+      // Each section after the tiles in the page's order.
+      expect(tiles.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
+  });
+
+  it('P19.3-T4 AC-4 See dashboard opens a leader’s Unit Dashboard, and anybody else’s Personal Summary', async () => {
+    stubFetch({
+      '/members/mem-1/reports': { body: [] },
+      '/members/mem-1/performance': { body: PERFORMANCE },
+      '/members/mem-1/tags': { body: { membershipId: 'mem-1', fullName: 'Rina Wijaya', groupIds: [], isCoreLeader: false } },
+      '/members/groups': { body: [] },
+      '/members/leader-limit-requests': { body: [] },
+      '/members/mem-1': { body: member({ isLeader: false }) },
+    });
+    const { unmount } = renderInLayout(TenantLayout, <MemberPage params={params} />, { me: OWNER });
+    await screen.findByRole('region', { name: 'How they are doing' });
+    // Two links, one per range: the title row's from 1024px, the pill after the tiles below it.
+    const links = screen.getAllByRole('link', { name: 'See dashboard' });
+    expect(links).toHaveLength(2);
+    expect(links.map((l) => l.getAttribute('href'))).toEqual(['/coaching/mem-1/summary', '/coaching/mem-1/summary']);
+    expect(links[0].className).toContain('max-lg:hidden');
+    expect(links[1].className).toContain('lg:hidden');
+    unmount();
+    vi.unstubAllGlobals();
+
+    stubFetch({
+      '/members/mem-1/reports': { body: [] },
+      '/members/mem-1/performance': { body: PERFORMANCE },
+      '/members/mem-1/tags': { body: { membershipId: 'mem-1', fullName: 'Rina Wijaya', groupIds: [], isCoreLeader: false } },
+      '/members/groups': { body: [] },
+      '/members/leader-limit-requests': { body: [] },
+      '/members/mem-1': { body: member({ isLeader: true, directCount: 3 }) },
+    });
+    renderInLayout(TenantLayout, <MemberPage params={params} />, { me: OWNER });
+    await screen.findByRole('region', { name: 'How they are doing' });
+    expect(screen.getAllByRole('link', { name: 'See dashboard' }).map((l) => l.getAttribute('href')))
+      .toEqual(['/unit/dashboard/mem-1', '/unit/dashboard/mem-1']);
+  });
+
+  it('P19.3-T4 AC-1 a refused tiles read says so in their place, and the page below still renders', async () => {
+    stubFetch({
+      '/members/mem-1/reports': { body: [] },
+      '/members/mem-1/performance': { status: 404, body: { error: { code: 'NOT_FOUND', message: 'Not found', requestId: 'r' } } },
+      '/members/mem-1/tags': { body: { membershipId: 'mem-1', fullName: 'Rina Wijaya', groupIds: [], isCoreLeader: false } },
+      '/members/groups': { body: [] },
+      '/members/leader-limit-requests': { body: [] },
+      '/members/mem-1': { body: member() },
+    });
+    renderInLayout(TenantLayout, <MemberPage params={params} />, { me: OWNER });
+    expect(await screen.findByText('How they are doing cannot be shown right now. The sections below are unaffected.')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Personal' })).toBeInTheDocument();
+  });
+
+  it('P18.5-T4 AC-6: draws none of the four when the read carries none', async () => {
+    stubFetch({
+      '/members/mem-1/reports': { body: [] },
+      '/members/mem-1/performance': { body: PERFORMANCE },
       '/members/mem-1/tags': { body: { membershipId: 'mem-1', fullName: 'Rina Wijaya', groupIds: [], isCoreLeader: false } },
       '/members/groups': { body: [] },
       '/members/mem-1': { body: member() },
@@ -93,6 +205,7 @@ describe('one member', () => {
   it('explains an AAB who leads nobody rather than showing an empty unit (OD-23)', async () => {
     stubFetch({
       '/members/mem-1/reports': { body: [] },
+      '/members/mem-1/performance': { body: PERFORMANCE },
       '/members/mem-1/tags': { body: { membershipId: 'mem-1', fullName: 'Rina Wijaya', groupIds: [], isCoreLeader: false } },
       '/members/groups': { body: [] },
       '/members/mem-1': { body: member() },
@@ -108,6 +221,7 @@ describe('one member', () => {
       '/members/mem-1/reports': {
         body: [member({ membershipId: 'mem-2', agentCode: 'KPM0417-002', role: 'agent', fullName: 'Budi', preferredName: null })],
       },
+      '/members/mem-1/performance': { body: PERFORMANCE },
       '/members/mem-1/tags': { body: { membershipId: 'mem-1', fullName: 'Rina Wijaya', groupIds: [], isCoreLeader: false } },
       '/members/groups': { body: [] },
       '/members/mem-1': { body: member({ isLeader: true, directCount: 1, subtreeCount: 3 }) },
@@ -128,6 +242,7 @@ describe('one member', () => {
     // the same, and the screen says why rather than leaving it looking like a bug.
     stubFetch({
       '/members/mem-1/reports': { status: 404, body: {} },
+      '/members/mem-1/performance': { body: PERFORMANCE },
       '/members/mem-1/tags': { status: 404, body: {} },
       '/members/groups': { body: [] },
       '/members/mem-1': {
@@ -154,6 +269,7 @@ describe('one member', () => {
     function open(t = tags(), groups: Record<string, unknown>[] = [group()], extra = {}) {
       const stubbed = stubFetch({
         '/members/mem-1/reports': { body: [] },
+        '/members/mem-1/performance': { body: PERFORMANCE },
         '/members/mem-1/tags': { body: t },
         '/members/groups': { body: groups },
         '/members/mem-1': { body: member() },
@@ -168,7 +284,7 @@ describe('one member', () => {
       expect(await screen.findByText(/changes nothing about who reports to whom/)).toBeInTheDocument();
     });
 
-    it('AC-2, P18.8-T5: says what Core Leader opens, that it is a leader’s, and what it does not grant', async () => {
+    it('AC-2, P18.5-T5: says what Core Leader opens, that it is a leader’s, and what it does not grant', async () => {
       open(tags({ canBeCoreLeader: true }));
       await userEvent.click(await screen.findByRole('button', { name: 'Edit tags' }));
       const hint = screen.getByText(/opens the Strategic Leader Forum's meetings and reads the office's KPM analytics, besides the Owner and the Admins/);
@@ -176,14 +292,14 @@ describe('one member', () => {
       expect(screen.getByLabelText('Core Leader')).toBeEnabled();
     });
 
-    it('P18.8-T5 AC-2 a member who is not a leader cannot be ticked Core Leader, and is told why', async () => {
+    it('P18.5-T5 AC-2 a member who is not a leader cannot be ticked Core Leader, and is told why', async () => {
       open(tags({ canBeCoreLeader: false }));
       await userEvent.click(await screen.findByRole('button', { name: 'Edit tags' }));
       expect(screen.getByLabelText('Core Leader')).toBeDisabled();
       expect(screen.getByText(/Only a leader can be one: move them to a leader rung first/)).toBeInTheDocument();
     });
 
-    it('P18.8-T5 AC-2 a tag kept from before ADR-0159 on a non-leader can still be cleared', async () => {
+    it('P18.5-T5 AC-2 a tag kept from before ADR-0159 on a non-leader can still be cleared', async () => {
       const { calls } = open(tags({ isCoreLeader: true, canBeCoreLeader: false }));
       await userEvent.click(await screen.findByRole('button', { name: 'Edit tags' }));
       const box = screen.getByLabelText('Core Leader');
@@ -248,10 +364,11 @@ describe('one member', () => {
     });
   });
 
-  describe('changing a role and removing somebody (P3.5-T13)', () => {
+  describe('changing a role and removing somebody (P3.1-T13)', () => {
     const stub = (over: Record<string, unknown> = {}, extra: Record<string, unknown> = {}) =>
       stubFetch({
         '/members/mem-1/reports': { body: [] },
+        '/members/mem-1/performance': { body: PERFORMANCE },
         '/members/mem-1/tags': { body: { groupIds: [], isCoreLeader: false } },
         '/members/groups': { body: [] },
         '/members/mem-1': { body: member(over) },
@@ -435,12 +552,12 @@ describe('one member', () => {
   });
 
   /*
-   * P18.8-T2 (ADR-0157): past the office's leader limit the role change may wait for AgencyBoost instead — the
+   * P18.5-T2 (ADR-0157): past the office's leader limit the role change may wait for AgencyBoost instead — the
    * refusal offers *Ask AgencyBoost to approve* where the API says it may be asked (`canRequest`), the same rung and
    * reason are asked, and the card says the change is waiting, with *Cancel request*. And OD-50: the select lists
    * the company's own ladder, a rung it added included.
    */
-  describe('P18.8-T2 — a leader past the limit waits for AgencyBoost', () => {
+  describe('P18.5-T2 — a leader past the limit waits for AgencyBoost', () => {
     const LIMIT = {
       status: 409,
       body: {
@@ -460,6 +577,7 @@ describe('one member', () => {
     const stub = (extra: Record<string, unknown> = {}) =>
       stubFetch({
         '/members/mem-1/reports': { body: [] },
+        '/members/mem-1/performance': { body: PERFORMANCE },
         '/members/mem-1/tags': { body: { groupIds: [], isCoreLeader: false } },
         '/members/groups': { body: [] },
         '/members/mem-1': { body: member({ role: 'agent', orgLevelCode: 'AGENT' }) },
@@ -558,6 +676,7 @@ describe('one member', () => {
       ];
       stubFetch({
         '/members/mem-1/reports': { body: [] },
+        '/members/mem-1/performance': { body: PERFORMANCE },
         '/members/mem-1/tags': { body: { groupIds: [], isCoreLeader: false } },
         '/members/groups': { body: [] },
         '/members/mem-1': { body: member({ role: 'agent', orgLevelCode: 'AGENT', canPromoteToAb: false }) },

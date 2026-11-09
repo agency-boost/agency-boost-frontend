@@ -20,7 +20,7 @@ export interface ActionMenuItem {
   /**
    * What it does, where its label does not say all of it: its tooltip, and its accessible description while it is
    * live. The tooltip the inline button it stands in for carried — *Archive the section*'s *"Archives the section and
-   * everything in it."*, behind a section's ⋮ below 1024px (P18.97-T6 AC-3).
+   * everything in it."*, behind a section's ⋮ below 1024px (P18.9-T6 AC-3).
    */
   hint?: string;
   onSelect: () => void;
@@ -56,12 +56,18 @@ export function ActionMenu({
   label,
   items,
   inert = false,
+  glyph = '⋮',
+  triggerClassName,
 }: {
   /** The ⋮ button's accessible name: *Actions for Pak Budi*. */
   label: string;
   items: readonly ActionMenuItem[];
   /** A row that is not yet anything to act on: ⋮ is there and plainly not live, and opens nothing. */
   inert?: boolean;
+  /** The button's glyph: ⋮ by default; ⋯ where the design draws it (`/admin`'s rows, UI-126). */
+  glyph?: '⋮' | '⋯';
+  /** The button's own size where a page needs more than the primitive's (UI-135: 44px on a tablet too). */
+  triggerClassName?: string;
 }) {
   const [open, setOpen] = useState<null | 'first' | 'last'>(null);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -178,7 +184,7 @@ export function ActionMenu({
         aria-expanded={open !== null}
         aria-controls={open ? menuId : undefined}
         aria-disabled={inert || undefined}
-        className={cn('text-md font-bold', inert && INERT_GLYPH)}
+        className={cn('text-md font-bold', inert && INERT_GLYPH, triggerClassName)}
         onKeyDown={onTriggerKey}
         onClick={() => {
           if (inert) return;
@@ -186,7 +192,7 @@ export function ActionMenu({
           else setOpen('first');
         }}
       >
-        <span aria-hidden="true">⋮</span>
+        <span aria-hidden="true">{glyph}</span>
       </Button>
 
       {open && (
@@ -214,7 +220,7 @@ export function ActionMenu({
                 onClick={() => choose(item)}
                 className={cn(
                   'flex w-full items-start gap-2.5 px-3 py-2 text-left text-md',
-                  'hover:bg-navy/[0.04] focus:bg-navy/[0.06]',
+                  'hover:bg-secondary/[0.04] focus:bg-secondary/[0.06]',
                   item.disabled ? 'cursor-not-allowed text-muted' : 'text-navy',
                 )}
               >

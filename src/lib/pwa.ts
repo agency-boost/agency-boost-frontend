@@ -1,5 +1,5 @@
 /**
- * **The installed app** (UI V1, UI-103; D-02, D-15): what the web app manifest (`app/manifest.ts`) and the root
+ * **The installed app** (UI V1, UI-103; D-02, D-15): what the web app manifest (`lib/manifest.ts`, served by `app/manifest.webmanifest/route.ts`) and the root
  * layout's `<head>` (`app/layout.tsx`) both say, said once.
  *
  * - **Standalone, from `/`**: added to a phone's Home Screen, AgencyBoost opens with no browser bars — the field

@@ -89,7 +89,7 @@ describe('the read', () => {
 });
 
 describe('the words (D-copy)', () => {
-  it('P18.95-T7 AC-1 the prototype’s, verbatim (`:278-350`, `:586-619`), but for the client’s brief hint (grey text row 9)', () => {
+  it('P18.7-T7 AC-1 the prototype’s, verbatim (`:278-350`, `:586-619`), but for the client’s brief hint (grey text row 9)', () => {
     expect(PROTOTYPE_COPY.subtitle).toBe('Build the pitch on the fly, or pull the ready-made materials to show a candidate.');
     expect(PROTOTYPE_COPY.briefHint).toBe('Answer 3 questions to get your pitch.');
     expect([PROTOTYPE_COPY.candidateType, PROTOTYPE_COPY.motivation, PROTOTYPE_COPY.hesitation])

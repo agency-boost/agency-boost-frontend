@@ -1,7 +1,7 @@
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
-import { makeMe, renderWithSession, stubFetch } from '@test/harness';
+import { makeMe, renderWithSession } from '@test/harness';
 import { ApiConfigError } from '@/lib/api';
 import { ApiRequestError } from '@/lib/api-client';
 import type { Me } from '@/lib/session';
@@ -53,7 +53,7 @@ describe('login', () => {
     renderWithSession(<LoginPage />);
     const main = screen.getByRole('main');
     // Centred from 768px as registration's column is; on a phone it starts near the top, the welcome filling the space
-    // P18.95-T7 AC-3's 16% left above the title (reverses that row, UI-102).
+    // P18.7-T7 AC-3's 16% left above the title (reverses that row, UI-102).
     expect(main.className).toBe(SIGN_IN_PAGE);
     expect(main.className).not.toBe(AUTH_PAGE);
     const welcome = main.querySelector('[data-sign-in-welcome]')!;
@@ -125,7 +125,7 @@ describe('login', () => {
     });
 
     it('an address that is no page of the app lands on their own page rather than a 404', async () => {
-      expect(await signInFrom('?next=%2Fkpm%2Fadvanced-analytics', OWNER)).toBe('/kpm/overview');
+      expect(await signInFrom('?next=%2Fkpm%2Fadvanced-analytics', OWNER)).toBe('/home');
     });
 
     it('an unsafe next still lands on their own page: a host written as a path', async () => {
@@ -133,11 +133,11 @@ describe('login', () => {
     });
 
     it('an unsafe next still lands on their own page: another origin, whatever path it ends in', async () => {
-      expect(await signInFrom('?next=https%3A%2F%2Fevil.test%2Fkpm%2Foverview', OWNER)).toBe('/kpm/overview');
+      expect(await signInFrom('?next=https%3A%2F%2Fevil.test%2Fkpm%2Foverview', OWNER)).toBe('/home');
     });
 
     it('no next lands on their own page', async () => {
-      expect(await signInFrom('', OWNER)).toBe('/kpm/overview');
+      expect(await signInFrom('', OWNER)).toBe('/home');
     });
   });
 
@@ -182,8 +182,8 @@ describe('login', () => {
       expect(await signInFrom('?next=%2Fleader-meetings%2Fshared%2Fabc&reason=expired', AGENT)).toBe('/home');
     });
 
-    it('lands an Owner on the office overview, not on the analytics page the session ended on', async () => {
-      expect(await signInFrom('?next=%2Fkpm%2Fanalytics%2Fcompliance&reason=expired', OWNER)).toBe('/kpm/overview');
+    it('P19.2-T1 AC-4 lands an Owner on their own Home, not on the analytics page the session ended on', async () => {
+      expect(await signInFrom('?next=%2Fkpm%2Fanalytics%2Fcompliance&reason=expired', OWNER)).toBe('/home');
     });
   });
 
@@ -224,11 +224,11 @@ describe('login', () => {
   });
 
   /*
-   * P18.97-T4 AC-10 (ADR-0176 §10; the client's UI-032): the sign-in error read *"Could not reach the server. Check
+   * P18.9-T4 AC-10 (ADR-0176 §10; the client's UI-032): the sign-in error read *"Could not reach the server. Check
    * your connection and try again."* and under it a raw *NETWORK*. A failure the browser detected carries no request
    * id and its code is internal — the sentence alone, and the code to the console; a server's answer keeps both.
    */
-  describe('P18.97-T4 AC-10 a code the browser made is not shown', () => {
+  describe('P18.9-T4 AC-10 a code the browser made is not shown', () => {
     async function signInFailing(error: unknown) {
       const signIn = vi.fn(async () => { throw error; });
       renderWithSession(<LoginPage />, { signIn });
@@ -238,7 +238,7 @@ describe('login', () => {
       return screen.findByRole('alert');
     }
 
-    it('P18.97-T4 AC-10 says a network failure as its sentence alone, and logs NETWORK to the console', async () => {
+    it('P18.9-T4 AC-10 says a network failure as its sentence alone, and logs NETWORK to the console', async () => {
       const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
       onTestFinished(() => warn.mockRestore());
       const alert = await signInFailing(new TypeError('Failed to fetch'));
@@ -247,7 +247,7 @@ describe('login', () => {
       expect(warn).toHaveBeenCalledWith('[NETWORK] Could not reach the server. Check your connection and try again.');
     });
 
-    it('P18.97-T4 AC-10 says a misconfiguration by its sentence, and keeps CONFIG off the page', async () => {
+    it('P18.9-T4 AC-10 says a misconfiguration by its sentence, and keeps CONFIG off the page', async () => {
       const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
       onTestFinished(() => warn.mockRestore());
       const alert = await signInFailing(new ApiConfigError('NEXT_PUBLIC_API_ORIGIN is not set.', 'NEXT_PUBLIC_API_ORIGIN'));
@@ -255,7 +255,7 @@ describe('login', () => {
       expect(warn).toHaveBeenCalledWith(expect.stringMatching(/^\[CONFIG\] /));
     });
 
-    it('P18.97-T4 AC-10 keeps a server’s code and request id under its sentence, which support asks for', async () => {
+    it('P18.9-T4 AC-10 keeps a server’s code and request id under its sentence, which support asks for', async () => {
       const alert = await signInFailing(new ApiRequestError(401, {
         code: 'AUTH_INVALID_CREDENTIALS', message: 'Email or password is incorrect.', requestId: 'req-9',
       }));
@@ -343,38 +343,12 @@ describe('login', () => {
       expect(screen.getByLabelText('Email')).toHaveValue('owner@kpm0417.test');
     });
   });
-  it('offers to send the verification email again, when that is the refusal (P4-T13)', async () => {
-    /*
-     * Login refuses an unverified account, and until `resend-verification` existed the
-     * only advice was "check your inbox" — for an email that, before `P4-T14`, had never
-     * been sent. Both halves are real now, so the screen offers the action.
-     */
-    const signIn = vi.fn(async () => {
-      throw new ApiRequestError(403, {
-        code: 'AUTH_EMAIL_NOT_VERIFIED',
-        message: 'Verify your email address before signing in. Check your inbox.',
-        requestId: 'req-11',
-      });
-    });
-    const { calls } = stubFetch({
-      '/auth/resend-verification': { status: 202, body: { status: 'accepted' } },
-    });
-    renderWithSession(<LoginPage />, { signIn });
-
-    await userEvent.type(screen.getByLabelText('Email'), 'rina@kpm0417.test');
-    await userEvent.type(screen.getByLabelText('Password'), 'a-password');
-    await userEvent.click(screen.getByRole('button', { name: 'Sign in' }));
-
-    await userEvent.click(
-      await screen.findByRole('button', { name: 'Send the verification email again' }),
-    );
-
-    expect(calls.some((c) => c.url.includes('/auth/resend-verification'))).toBe(true);
-    expect(await screen.findByText(/On its way, if that address has an account waiting/))
-      .toBeInTheDocument();
-  });
-
-  it('offers it only for that refusal, not for a wrong password', async () => {
+  /*
+   * P19-T1 AC-4 (UI-163, ADR-0190 §4): sign-in no longer refuses an unverified address, so the page offers no resend
+   * of its own — the shells' banner does, once the person is in (`verify-email-banner.spec.tsx`). Until 2026-11-04 it
+   * offered *Send the verification email again* on `AUTH_EMAIL_NOT_VERIFIED` (P4-T13).
+   */
+  it('P19-T1 AC-4 offers no verification resend of its own: an unverified address signs in, and the shell offers it', async () => {
     const signIn = vi.fn(async () => {
       throw new ApiRequestError(401, {
         code: 'AUTH_INVALID_CREDENTIALS',
@@ -389,8 +363,7 @@ describe('login', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Sign in' }));
 
     await screen.findByRole('alert');
-    expect(screen.queryByRole('button', { name: 'Send the verification email again' }))
-      .toBeNull();
+    expect(screen.queryByRole('button', { name: /verification/i })).toBeNull();
   });
 
 });

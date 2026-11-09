@@ -65,7 +65,7 @@ export function useTemplateSources(
           ...(others ? insurersOf(companies).filter((c) => c._id !== companyId) : []),
           ...(library && library._id !== companyId ? [library] : []),
         ];
-        // This company's templates must be read; another's that cannot be is simply not offered (P18.9-T3 AC-5).
+        // This company's templates must be read; another's that cannot be is simply not offered (P18.6-T3 AC-5).
         const lists = await Promise.all(wanted.map((c) => (c._id === companyId
           ? listTemplates(c._id)
           : listTemplates(c._id).catch(() => [] as NamedTemplate[]))));

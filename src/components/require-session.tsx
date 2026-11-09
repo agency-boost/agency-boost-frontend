@@ -1,15 +1,20 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
+import { usePathname, useRouter } from 'next/navigation';
 import { createContext, useContext, useEffect } from 'react';
 import { useMessages } from '@/i18n/language-provider';
 import { pageFrameMessages } from '@/i18n/messages/page-frame';
 import { shellMessages } from '@/i18n/messages/shell';
 import { landingFor } from '@/lib/landing';
+import { hasNoKpm } from '@/lib/no-kpm';
 import { useSession } from '@/lib/session';
 import { signInPathFrom } from '@/lib/return-path';
 import { familyAllows, type ShellFamily } from '@/lib/route-access';
 import { PageSkeleton } from '@/components/ui/skeleton';
+
+/** The no-office card, loaded only for somebody in no office (it carries Home's tiles for its sample). */
+const NoKpmYet = dynamic(() => import('@/components/no-kpm-yet').then((m) => m.NoKpmYet), { ssr: false });
 
 /**
  * Whether what renders here is already under a page title: a `Page` that draws one says so to what is
@@ -29,9 +34,12 @@ export function RequireSession({
   permission,
   family,
   headingLevel,
+  title,
   children,
 }: {
   permission?: string;
+  /** The page's title, which the no-office card repeats over its sample (`Page` passes it). */
+  title?: string;
   /**
    * **The application whose chrome this wraps** — passed by the three shells, never by a page (the product
    * owner's report, 2026-10-11). A reader who is not of it (`familyAllows`) is sent to their own landing, and
@@ -49,6 +57,7 @@ export function RequireSession({
 }) {
   const { me, loading, signedOut, expired } = useSession();
   const router = useRouter();
+  const pathname = usePathname();
   const titled = useContext(TitledPageContext);
   const { takingYouToYourWork } = useMessages(shellMessages);
   const Heading = (headingLevel ?? (titled ? 2 : 1)) === 1 ? 'h1' : 'h2';
@@ -61,7 +70,7 @@ export function RequireSession({
     // that ended under the reader adds `reason=expired`, and the sign-in page says so (ADR-0168 §1).
     if (!loading && !me) router.replace(signInPathFrom(window.location, { signedOut, expired }));
     // Every route but three answers 403 while this is set, so rendering the screen would
-    // put a shell around a page of failed requests (P3.6-T4). One redirect here covers
+    // put a shell around a page of failed requests (P3.2-T4). One redirect here covers
     // every screen, rather than each one inferring it from a 403 of its own.
     else if (!loading && me?.mustChangePassword) router.replace('/choose-a-password');
     // Before any permission is asked: a refusal inside another family's chrome is still that chrome. The
@@ -72,7 +81,7 @@ export function RequireSession({
 
   if (loading) {
     // Every signed-in route is prerendered as this, and nothing in it is words: a page prerendered in another language
-    // than the reader's need not be held back for it (`sessionWait`, P18.98-T2; `pre-paint.ts`).
+    // than the reader's need not be held back for it (`sessionWait`, P18.10-T2; `pre-paint.ts`).
     return (
       <PageSkeleton sessionWait />
     );
@@ -94,6 +103,14 @@ export function RequireSession({
    * refusal a coaching screen shows to none of them: it ended *"ask whoever administers your
    * office"*. Said without the word, it settles nothing for the rest of the product (OD-39).
    */
+  /*
+   * **Somebody in no office is never told *Tidak tersedia*** (P19-T4 AC-4; UI-166 item 2; ADR-0189 §5): what they lack
+   * is a KPM, not a right, so the page shows its *Contoh* and the way into one — *Cari / Daftar KPM*, *Cari leader*.
+   */
+  if (permission && !me.permissions.includes(permission) && hasNoKpm(me)) {
+    return <NoKpmYet title={titled ? undefined : title} pathname={pathname ?? ''} />;
+  }
+
   if (permission && !me.permissions.includes(permission)) {
     return <NotAvailableToYou permission={permission} headingLevel={Heading === 'h1' ? 1 : 2} />;
   }

@@ -1,296 +1,112 @@
 'use client';
 
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode, type TouchEvent } from 'react';
-import { LineIcon } from '@/components/ui/line-icon';
-import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
-import { calendarMessages } from '@/i18n/messages/calendar';
-import {
-  addDays, hhmm, isBusy, isHiddenTask, type CalendarEntry, type CalendarItem, type CalendarJoinedItem, type CalendarRead,
-} from '@/lib/calendar';
-import { BAR_GAP_PX, layoutDay, segmentOn, showsTime, stackBars, tasksPerDay } from '@/lib/calendar-layout';
+import { useEffect, useRef, useState, type CSSProperties, type TouchEvent } from 'react';
+import { addDays, isHiddenTask, type CalendarEntry, type CalendarRead } from '@/lib/calendar';
+import { tasksPerDay, timedOn } from '@/lib/calendar-layout';
 import type { Slot } from '@/lib/calendar-form';
-import { formatDayHeader, formatWeekdayDay } from '@/lib/format';
 import { cn } from '@/lib/cn';
-import type { AgendaPerson } from './agenda';
-import { Avatar } from './calendar-parts';
-import { CountPill, useCalendarTasks, type TaskPerson } from './calendar-tasks';
-import { EntryBlock } from './week-pane';
+import { PaneHeadBar, type PaneHead } from './calendar-parts';
+import { useCalendarTasks } from './calendar-tasks';
+import { TimeGrid, type GridItem, type ScrollGroup } from './time-grid';
 
-/** **3 Hari's hour**: 52px, the mockup's — shorter than the week's 56px, so a phone shows more of the day. */
-export const THREE_DAY_HOUR_PX = 52;
-/** **The time gutter**: ~36px, the hours drawn short, *09* (UI-104 point 5). */
-const GUTTER = 'w-9';
-/** A trip's bar in the Trip row (UI-104 point 8): ~22px. */
-const TRIP_BAR_PX = 20;
 /** How far a finger must travel, at least, for a swipe to page (a fifth of the width when that is more). */
 const SWIPE_MIN_PX = 50;
 
-const HOURS = Array.from({ length: 24 }, (_, h) => h);
-const HOUR_LINES = `repeating-linear-gradient(to bottom, transparent, transparent ${THREE_DAY_HOUR_PX - 1}px, var(--color-divider) ${THREE_DAY_HOUR_PX - 1}px, var(--color-divider) ${THREE_DAY_HOUR_PX}px)`;
-
-type GridItem = CalendarItem | CalendarJoinedItem;
-interface Placed {
-  start: string | null;
-  end: string | null;
-  item: GridItem;
-  who: TaskPerson | null;
-}
-
 /**
- * **3 Hari** (UI V1, 2026-10-30, UI-104 point 5; mockup 2): three day columns starting with the day asked for — today
- * when it opens — today's date circled in orange.
+ * **3 Hari** (UI V1, 2026-10-30, UI-104 point 5; P19.1-T3, UI-117 and UI-144): three day columns starting with the day
+ * asked for — today when it opens — drawn by **the one time grid Week draws** (`TimeGrid`): the hours *07.00*, the
+ * *Tugas* row's blue counts, today shaded on a phone and circled from 768px.
  *
+ * - **The page's one toolbar** (UI-117, UI-144): no range, arrows or second *3 Hari ⌄* inside the grid any more — the
+ *   toolbar above is the same in every view.
  * - **Paged like Outlook mobile**: a horizontal swipe moves exactly three days and snaps — it never stops between days
  *   (`usePagedSwipe`); ‹ › do the same; *Hari ini* returns to today and the two days after it. The days either side are
- *   drawn as the finger moves, their heads named, their grid empty until the read for them arrives.
- * - **The hour grid opens at the current hour** and scrolls with the page, **one pinned header** above it — the range
- *   arrows and the compact switcher (`controls`), the day names, the Trip row when a trip is in view, and the *Tugas*
- *   count row — while the title and the filters scroll away.
- * - **On a phone it is full-bleed**: no side padding, no card or border, a ~36px gutter of short hours (*09*), three
- *   equal columns, thin dividers, and the grid running to the bottom edge behind the floating tab bar.
- * - **Compared people** (point 9): their timed things in the same columns, each with the person's small avatar, their
- *   tasks in the count and the popup.
+ *   drawn as the finger moves, their heads named, their grid empty until the read for them arrives. **A tap takes a slot**
+ *   on a phone, since a horizontal finger there turns the page.
+ *
+ * *Changed 2026-11-07 (P19.8-T3; MOB UI-172, UI-175; the brief's Calendar 1):*
+ *
+ * - **On a phone it opens at the top of the page and the page never scrolls** — where it scrolled the page to an hour
+ *   before now, 632px down, the title and the toolbar gone. The grid has **its own scroll box, opened with 07.00 at its
+ *   top** (00.00–07.00 above it, a swipe down inside the grid), **running the screen's full width to its foot** behind
+ *   the floating tab bar (`fill`), under the day heads and the *Tugas* row, which stay put. From 768px a card with its
+ *   own box, as before.
+ * - **Compared people are drawn as Week draws them**: no person row on the reader's own calendar; with *Bandingkan
+ *   dengan downline*, a person row above each person's grid (`head`; the compared panes are the page's, as Week's are)
+ *   — where their things joined the reader's columns, each with an avatar (UI-104 point 9; D-36, one grid for both).
  */
 export function ThreeDays({
   read,
-  others = [],
+  head,
   nowMinute,
-  controls,
+  phone,
+  fill = false,
   regionLabel,
+  scroll,
   onStep,
   onOpen,
   onSlot,
   onTasks,
+  className,
 }: {
   read: CalendarRead;
-  others?: readonly AgendaPerson[];
+  /** The person row above the grid: only where somebody is compared (MOB UI-175). */
+  head?: PaneHead;
   nowMinute: number | null;
-  /** The pinned header's first row: the range arrows, the range, *Hari ini* and the switcher. */
-  controls: ReactNode;
+  /** Below 768px: opens at 07.00, a tap takes a slot; wider, a drag. */
+  phone: boolean;
+  /** The reader's own calendar alone on a phone: the grid runs to the foot of the screen, the page still. */
+  fill?: boolean;
   regionLabel: string;
+  scroll: ScrollGroup;
   /** Three days back (`-1`) or on (`1`): a swipe, as ‹ › are. */
   onStep: (direction: -1 | 1) => void;
   onOpen: (entry: CalendarEntry) => void;
   onSlot?: (slot: Slot) => void;
   onTasks: (day: string) => void;
+  className?: string;
 }) {
-  const t = useMessages(calendarMessages);
-  const language = useFigureLanguage();
   const { struck } = useCalendarTasks();
   const days = read.days.map((d) => d.date);
-  const grid = useRef<HTMLDivElement>(null);
-  const header = useRef<HTMLDivElement>(null);
   const swipe = usePagedSwipe(read.from, onStep);
-
-  // Opened at the current hour — or 7 AM on days that are not today's — just under the pinned header.
-  useEffect(() => {
-    const el = grid.current;
-    if (!el) return;
-    const hour = days.includes(read.today) && nowMinute !== null ? Math.floor(nowMinute / 60) : 7;
-    const top = el.getBoundingClientRect().top + (window.scrollY || 0) + hour * THREE_DAY_HOUR_PX - (header.current?.offsetHeight ?? 0);
-    // The page's own scroll, set rather than animated: it opens there.
-    const page = document.scrollingElement ?? document.documentElement;
-    page.scrollTop = Math.max(0, top);
-    // Once, as the view opens: a page turned keeps the hour the reader scrolled to.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const people: { who: TaskPerson | null; read: CalendarRead }[] = [
-    { who: null, read },
-    ...others.filter((o): o is AgendaPerson & { read: CalendarRead } => o.read !== null).map((o) => ({ who: o.person, read: o.read })),
-  ];
-  const trips = people.flatMap(({ read: r }) => r.entries.filter((item) => item.allDay));
-  const { bars, lanes } = stackBars(trips, days);
-  const counts = tasksPerDay(people.flatMap(({ read: r }) => r.tasks.filter((task) => isHiddenTask(task) || !struck.has(task.taskId))));
-  const placedOn = (day: string): Placed[] => people.flatMap(({ who, read: r }) => [...r.entries, ...r.events]
-    .map((item) => segmentOn(item, day))
-    .filter((item): item is GridItem => item !== null)
-    .map((item) => ({ start: item.start, end: item.end, item, who })));
-
-  const before = [3, 2, 1].map((n) => addDays(days[0], -n));
-  const after = [1, 2, 3].map((n) => addDays(days[days.length - 1], n));
-  const strip = (panel: (list: readonly string[], current: boolean) => ReactNode) => (
-    <div className="min-w-0 flex-1 overflow-hidden">
-      <div className="flex w-[300%]" style={swipe.style}>
-        {panel(before, false)}
-        {panel(days, true)}
-        {panel(after, false)}
-      </div>
-    </div>
-  );
-  const columns = (list: readonly string[], cell: (day: string) => ReactNode, className?: string) => (
-    <div className={cn('grid w-1/3 grid-cols-3', className)}>{list.map((day) => <div key={day} className="min-w-0 border-l border-divider">{cell(day)}</div>)}</div>
-  );
+  // *Tugas* by day, a tick in this visit taken off at once (UI-104 point 4); a hidden person's are counts only.
+  const counts = tasksPerDay(read.tasks.filter((task) => isHiddenTask(task) || !struck.has(task.taskId)));
+  const timed: GridItem[] = [...read.entries, ...read.events];
 
   return (
-    <div
+    <section
+      aria-label={head?.name}
       data-three-days=""
       onTouchStart={swipe.start}
       onTouchMove={swipe.move}
       onTouchEnd={swipe.end}
       onTouchCancel={swipe.cancel}
-      className={cn(
-        'touch-pan-y bg-card',
-        'max-md:-mx-4 max-md:-mb-[calc(var(--tab-bar-space)+1.5rem)]',
-        'md:overflow-hidden md:rounded-lg',
-      )}
+      className={cn('flex min-w-0 flex-1 touch-pan-y flex-col bg-card', className)}
     >
-      {/* Sticks below the top inset, never under a Home Screen app's clock (staging review, 2026-10-31). */}
-      <div ref={header} className="sticky top-[env(safe-area-inset-top)] z-20 border-b border-divider bg-card">
-        {controls}
-        <div className="flex h-12 items-center">
-          <div className={cn(GUTTER, 'shrink-0')} />
-          {strip((list, current) => columns(list, (day) => {
-            const { weekday, number } = formatDayHeader(day, language);
-            const today = day === read.today;
-            return (
-              <div aria-hidden={!current || undefined} className="text-center text-xs leading-tight text-muted">
-                {weekday}
-                <span
-                  aria-current={current && today ? 'date' : undefined}
-                  className={cn(
-                    'mx-auto mt-0.5 flex h-7 min-w-7 items-center justify-center rounded-full text-md font-bold',
-                    today ? 'bg-amber text-navy' : 'text-ink',
-                  )}
-                >
-                  {number}
-                </span>
-                {current && <span className="sr-only">{formatWeekdayDay(day, language)}</span>}
-              </div>
-            );
-          }, 'items-center'))}
-        </div>
-        {bars.length > 0 && (
-          <div data-trip-row="" className="flex border-t border-divider">
-            <div className={cn(GUTTER, 'flex shrink-0 items-center justify-center text-signal-grey')}>
-              <LineIcon name="plane" className="h-4 w-4" />
-              <span className="sr-only">{t.types.travel}</span>
-            </div>
-            <div className="relative min-w-0 flex-1" style={{ height: lanes * (TRIP_BAR_PX + BAR_GAP_PX) + BAR_GAP_PX }}>
-              {bars.map(({ item, first, last, lane }, i) => (
-                <TripBar
-                  key={isBusy(item) ? `busy-${item.startsAt}-${i}` : `${item.entryId}-${i}`}
-                  item={item}
-                  onOpen={onOpen}
-                  style={{
-                    left: `calc(${(first / days.length) * 100}% + 2px)`,
-                    width: `calc(${((last - first + 1) / days.length) * 100}% - 4px)`,
-                    top: BAR_GAP_PX + lane * (TRIP_BAR_PX + BAR_GAP_PX),
-                    height: TRIP_BAR_PX,
-                  }}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-        <div data-task-row="" className="flex h-11 items-center border-t border-divider md:h-8">
-          <div className={cn(GUTTER, 'shrink-0 text-center text-xs font-semibold tracking-tight text-signal-grey')}>{t.tasks}</div>
-          {strip((list, current) => columns(list, (day) => (
-            <div className="grid place-items-center">
-              {current ? (
-                <CountPill
-                  day={day}
-                  count={counts.get(day) ?? 0}
-                  onOpen={people.some(({ read: r }) => r.tasks.some((task) => task.date === day && !isHiddenTask(task))) ? () => onTasks(day) : undefined}
-                />
-              ) : <span aria-hidden="true" className="text-md font-bold text-line">·</span>}
-            </div>
-          )))}
-        </div>
-      </div>
-
-      <div ref={grid} role="region" aria-label={regionLabel} tabIndex={-1} className="relative flex pb-[var(--tab-bar-space)] md:pb-0">
-        <div aria-hidden="true" className={cn(GUTTER, 'shrink-0')}>
-          {HOURS.map((h) => (
-            <div key={h} className="-translate-y-[7px] text-center text-xs text-signal-grey" style={{ height: THREE_DAY_HOUR_PX }}>
-              {h === 0 ? '' : String(h).padStart(2, '0')}
-            </div>
-          ))}
-        </div>
-        {strip((list, current) => columns(list, (day) => (current ? (
-          <DayGrid
-            day={day}
-            items={placedOn(day)}
-            nowMinute={day === read.today ? nowMinute : null}
-            onOpen={onOpen}
-            onSlot={onSlot}
-          />
-        ) : <div style={{ height: 24 * THREE_DAY_HOUR_PX, backgroundImage: HOUR_LINES }} />)))}
-      </div>
-    </div>
-  );
-}
-
-/** One day of the grid: its timed things side by side where they overlap, the now-line on today, a tap for a slot. */
-function DayGrid({
-  day, items, nowMinute, onOpen, onSlot,
-}: {
-  day: string;
-  items: Placed[];
-  nowMinute: number | null;
-  onOpen: (entry: CalendarEntry) => void;
-  onSlot?: (slot: Slot) => void;
-}) {
-  const language = useFigureLanguage();
-  const take = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!onSlot || (e.target as HTMLElement).closest('[data-entry], [data-busy], [data-event]')) return;
-    const y = e.clientY - e.currentTarget.getBoundingClientRect().top;
-    const start = Math.min(Math.max(Math.floor((y / THREE_DAY_HOUR_PX) * 2) * 30, 0), 23 * 60 + 30);
-    onSlot({ date: day, start: hhmm(start), end: hhmm(start + 30) });
-  };
-  return (
-    // A tap on an empty slot is the grid's own convenience; *+ New event* is the keyboard's way in, as in Week.
-    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
-    <div
-      role="group"
-      aria-label={formatWeekdayDay(day, language)}
-      data-day={day}
-      onClick={take}
-      className="relative"
-      style={{ height: 24 * THREE_DAY_HOUR_PX, backgroundImage: HOUR_LINES }}
-    >
-      {layoutDay(items, THREE_DAY_HOUR_PX).map(({ item: placed, top, height, lane, lanes }, i) => (
-        <EntryBlock
-          key={`${placed.who?.membershipId ?? 'me'}-${isBusy(placed.item) ? `busy-${placed.item.startsAt}` : 'eventId' in placed.item ? placed.item.eventId : placed.item.entryId}-${i}`}
-          item={placed.item}
-          style={{ top, height, left: `calc(${(lane / lanes) * 100}% + 1px)`, width: `calc(${100 / lanes}% - 2px)` }}
-          withTime={showsTime(height)}
-          onOpen={onOpen}
-          chip={placed.who ? <span className="mt-0.5 block"><Avatar initials={placed.who.initials} /></span> : undefined}
-        />
-      ))}
-      {nowMinute !== null && (
-        <div
-          aria-hidden="true"
-          data-now=""
-          className="pointer-events-none absolute inset-x-0 z-[5] border-t-2 border-amber"
-          style={{ top: (nowMinute / 60) * THREE_DAY_HOUR_PX }}
-        >
-          <span className="absolute -left-1 -top-[5px] h-2 w-2 rounded-full bg-amber" />
-        </div>
-      )}
-    </div>
-  );
-}
-
-/** An all-day trip in the Trip row: the plane line icon and its title, across its days; a tap opens it. */
-function TripBar({ item, style, onOpen }: { item: CalendarItem; style: CSSProperties; onOpen: (entry: CalendarEntry) => void }) {
-  const t = useMessages(calendarMessages);
-  const shape = 'absolute flex items-center gap-1 overflow-hidden whitespace-nowrap rounded-[6px] border-l-[3px] px-1.5 text-xs font-semibold';
-  if (isBusy(item)) {
-    return <div data-busy="" style={style} className={cn(shape, 'border-line bg-pill-grey text-signal-grey')}>{t.busy}</div>;
-  }
-  return (
-    <button
-      type="button"
-      data-entry=""
-      style={style}
-      onClick={() => onOpen(item)}
-      className={cn(shape, 'border-teal bg-teal/[0.14] text-left text-teal-ink')}
-    >
-      <LineIcon name="plane" className="h-3.5 w-3.5" />
-      <span className="truncate">{item.title || t.untitled}</span>
-    </button>
+      {head && <PaneHeadBar head={head} />}
+      <TimeGrid
+        days={days}
+        today={read.today}
+        nowMinute={nowMinute}
+        regionLabel={regionLabel}
+        morning={phone}
+        fill={fill}
+        slotBy={phone ? 'tap' : 'drag'}
+        placedOn={(day) => timedOn(timed, day).map((item) => ({ item, who: null }))}
+        trips={read.entries.filter((item) => item.allDay)}
+        counts={counts}
+        opensTasks={(day) => read.tasks.some((task) => task.date === day && !isHiddenTask(task))}
+        onTasks={onTasks}
+        onOpen={onOpen}
+        onSlot={onSlot}
+        scroll={scroll}
+        pager={{
+          before: [3, 2, 1].map((n) => addDays(days[0], -n)),
+          after: [1, 2, 3].map((n) => addDays(days[days.length - 1], n)),
+          style: swipe.style,
+        }}
+      />
+    </section>
   );
 }
 

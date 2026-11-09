@@ -53,7 +53,7 @@ export const cancelLeaderRequest = () =>
  * Your own code, in the three forms the prototype shows it: the code, the link, and a QR
  * of the link.
  *
- * One per person, generated with your membership and never reissued (P3.6-T1). The
+ * One per person, generated with your membership and never reissued (P3.2-T1). The
  * `Invite` type that stood here carried `inviteId`, `label`, `autoApprove`, `maxUses`,
  * `useCount`, `expiresAt`, `revokedAt` and a derived `state` — every one of them a way to
  * bound a credential somebody could mint again. Nobody can.
@@ -123,7 +123,7 @@ export const readRoutingChoices = () => api<RoutingChoice[]>('/join/requests/rou
 
 /**
  * Approve a request: into the leader's unit or `routeToMembershipId`'s, with the day they joined — `joinDate`, an
- * office date (ADR-0169; P18.96-T3 AC-5). Omitted, the server gives them the office's today.
+ * office date (ADR-0169; P18.8-T3 AC-5). Omitted, the server gives them the office's today.
  */
 export const approveRequest = (requestId: string, routeToMembershipId?: string, joinDate?: string) =>
   api<PendingRequest[]>(`/join/requests/${requestId}/approve`, {
@@ -156,10 +156,23 @@ export interface MyKpmRequest {
   createdKpmId: string | null;
 }
 
-export const readMyKpmRequest = async (): Promise<MyKpmRequest | null> =>
+/**
+ * **The reader's own request, and the company a request is for** (ADR-0191 §1, P19-T2 AC-2): `company` is the one they
+ * signed up with — a request is for it, and *Kirim permintaan* needs only the branch name. `null` for an account that
+ * signed up with none, whose form asks for one.
+ */
+export interface MyKpmRequestState {
+  request: MyKpmRequest | null;
+  company: { companyId: string; name: string } | null;
+}
+
+export const readMyKpmRequestState = async (): Promise<MyKpmRequestState> => {
   // Wrapped on the wire: a bare `null` arrives as an empty body, which is
   // indistinguishable from a response that failed to serialise.
-  (await api<{ request: MyKpmRequest | null }>('/join/kpm-request')).request;
+  const state = await api<Partial<MyKpmRequestState>>('/join/kpm-request');
+  return { request: state.request ?? null, company: state.company ?? null };
+};
 
-export const askForKpm = (body: { companyId: string; branchName: string; note?: string }) =>
+/** `companyId` only for an account with no company of its own; otherwise the API takes theirs (ADR-0191 §1). */
+export const askForKpm = (body: { companyId?: string; branchName: string; note?: string }) =>
   api<MyKpmRequest>('/join/kpm-request', { method: 'POST', body });

@@ -45,8 +45,8 @@ export function StepPills({
               aria-hidden="true"
               className={cn(
                 'flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full border-[1.5px] text-sm font-bold',
-                on && 'border-amber bg-amber text-navy',
-                done && 'border-navy bg-navy text-white max-md:border-signal-green max-md:bg-pill-green max-md:text-signal-green',
+                on && 'border-primary bg-primary text-primary-contrast',
+                done && 'border-secondary bg-secondary text-secondary-contrast max-md:border-signal-green max-md:bg-pill-green max-md:text-signal-green',
                 !on && !done && 'border-hairline text-muted max-md:border-line max-md:bg-card',
               )}
             >

@@ -1,4 +1,9 @@
+'use client';
+
+import { useContext } from 'react';
+import { brandingFileUrl } from '@/lib/branding-files';
 import { cn } from '@/lib/cn';
+import { SessionContext } from '@/lib/session';
 
 /**
  * **Boost, the mascot** (UI V1, UI-102; D-11, D-12): navy body, white face, navy shield-shaped hood, orange scarf,
@@ -103,6 +108,35 @@ export function Boost({
   className?: string;
 }) {
   const art = boostArt(pose);
+  /*
+   * **The KPM's mascot wherever Boost appears** (P19.6-T1 AC-6; ADR-0218 §2): that pose's own picture, else the default
+   * one (Boost's *sleeping* too), at its three WebP widths. Read from the context directly, so Boost still draws where
+   * no session provider is (a sign-in page's welcome): there, and without a mascot, Boost.
+   */
+  const branding = useContext(SessionContext)?.me?.branding ?? null;
+  if (branding?.mascotPoses.includes('default')) {
+    const chosen = branding.mascotPoses.includes(pose) ? pose : 'default';
+    const file = (w: number) => brandingFileUrl(branding.kpmId, `mascot-${chosen}-${w}.webp`, branding.version);
+    return (
+      // A public, versioned API file of known widths, as Boost's own art is served.
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={file(240)}
+        srcSet={BOOST_WIDTHS.map((w) => `${file(w)} ${w}w`).join(', ')}
+        sizes={`${size}px`}
+        width={size}
+        height={size}
+        alt={alt}
+        aria-hidden={alt === '' ? true : undefined}
+        loading={priority ? 'eager' : 'lazy'}
+        decoding="async"
+        data-boost={pose}
+        data-kpm-mascot=""
+        className={cn('shrink-0 select-none object-contain', className)}
+        draggable={false}
+      />
+    );
+  }
   return (
     // Static artwork of known sizes, served as a `srcset` (above): no image component's script for it.
     // eslint-disable-next-line @next/next/no-img-element

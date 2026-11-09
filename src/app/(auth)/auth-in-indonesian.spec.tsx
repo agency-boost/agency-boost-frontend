@@ -14,7 +14,7 @@ import ResetPasswordPage from './reset-password/[token]/page';
 import VerifyEmailPage from './verify-email/[token]/page';
 
 /**
- * **The pages before a session, in Indonesian** (P18.98-T4 AC-1 to AC-4, public and account): sign-in with the
+ * **The pages before a session, in Indonesian** (P18.10-T4 AC-1 to AC-4, public and account): sign-in with the
  * development accounts panel, registration (on a leader's invite too), the two password pages, email verification and
  * *Choose your own password*. The approved glossary's words (`i18n/messages/auth.tsx`; the §A.2 titles, *office* is
  * *KPM*), *AgencyBoost* kept, what a person or the company typed as typed, and none of the area's English left
@@ -45,7 +45,7 @@ afterEach(() => {
   process.env.NEXT_PUBLIC_APP_ENV = ORIGINAL_ENV;
 });
 
-describe('P18.98-T4 the pages before a session in Indonesian', () => {
+describe('P18.10-T4 the pages before a session in Indonesian', () => {
   it('reads the English it is looking for, so a silent zero cannot pass: the same page in English shows it', () => {
     expect(ENGLISH.length).toBeGreaterThan(60);
     renderWithSession(<LoginPage />, { me: null });
@@ -64,28 +64,12 @@ describe('P18.98-T4 the pages before a session in Indonesian', () => {
     noEnglishLeft();
   });
 
-  it('AC-1 sign-in after a session ended says so in Indonesian (ADR-0168 §1)', () => {
+  // P19-T5 AC-2 (UI-125, the report's Appendix A): the owner's words since 2026-11-04, *Sesi Anda telah berakhir. …* before.
+  it('AC-1, P19-T5 AC-2 sign-in after a session ended says so in Indonesian: Sesi berakhir, silakan masuk lagi. (ADR-0168 §1)', () => {
     query.current = 'next=%2Fprofile&reason=expired';
     renderInIndonesian(<LoginPage />, { me: null });
-    expect(screen.getByText('Sesi Anda telah berakhir. Silakan masuk lagi.')).toBeInTheDocument();
+    expect(screen.getByText('Sesi berakhir, silakan masuk lagi.')).toBeInTheDocument();
     expect(screen.queryByText('Masuk untuk melanjutkan.')).not.toBeInTheDocument();
-    noEnglishLeft();
-  });
-
-  it('AC-1 the resend after an unverified sign-in, in Indonesian', async () => {
-    const { ApiRequestError } = await import('@/lib/api-client');
-    const signIn = vi.fn(async () => {
-      throw new ApiRequestError(403, {
-        code: 'AUTH_EMAIL_NOT_VERIFIED', message: 'Verifikasi alamat email Anda sebelum masuk. Periksa kotak masuk email Anda.', requestId: 'r',
-      });
-    });
-    stubFetch({ '/auth/resend-verification': { status: 202, body: { status: 'accepted' } } });
-    renderInIndonesian(<LoginPage />, { me: null, signIn });
-    await userEvent.type(screen.getByLabelText('Email'), 'rina@kpm0417.test');
-    await userEvent.type(screen.getByLabelText('Kata sandi'), 'a password');
-    await userEvent.click(screen.getByRole('button', { name: 'Masuk' }));
-    await userEvent.click(await screen.findByRole('button', { name: 'Kirim ulang email verifikasi' }));
-    expect(await screen.findByText('Email sedang dikirim, jika ada akun yang menunggu di alamat itu.')).toBeInTheDocument();
     noEnglishLeft();
   });
 
@@ -126,7 +110,7 @@ describe('P18.98-T4 the pages before a session in Indonesian', () => {
     await userEvent.type(screen.getByLabelText('Konfirmasi kata sandi'), 'other');
     expect(screen.getByText('Kedua kata sandi tidak sama.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Buat akun' })).toBeDisabled();
-    // What it waits for, in Indonesian: the shared sentence, handed the reader's language (P18.98-T4).
+    // What it waits for, in Indonesian: the shared sentence, handed the reader's language (P18.10-T4).
     expect(screen.getByText(/^Masih diperlukan: /)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Sudah punya akun? Masuk' })).toHaveAttribute('href', '/login');
     noEnglishLeft();
@@ -218,12 +202,14 @@ describe('P18.98-T4 the pages before a session in Indonesian', () => {
     noEnglishLeft();
   });
 
-  it('AC-1 verify your email: the wait, then verified, then a link that failed', async () => {
-    stubFetch({ '/auth/verify-email': { body: { status: 'verified' } } });
+  // P19-T1 AC-1, AC-2 (UI-163, ADR-0190): one button, nothing sent on load; success; and a link that failed.
+  it('AC-1, P19-T1 AC-1 verify your email: one button, then verified, then a link that failed with the way to a new one', async () => {
+    const { calls } = stubFetch({ '/auth/verify-email': { body: { status: 'verified' } } });
     const { unmount } = renderInIndonesian(<VerifyEmailPage params={routeParams({ token: 'tok-1' })} />, { me: null });
     expect(screen.getByRole('heading', { level: 1, name: 'Verifikasi email Anda' })).toBeInTheDocument();
-    expect(screen.getByRole('status')).toHaveTextContent('Memeriksa tautan Anda…');
-    expect(await screen.findByText('Email Anda sudah terverifikasi. Sekarang Anda dapat masuk.')).toBeInTheDocument();
+    expect(calls).toHaveLength(0);
+    await userEvent.click(screen.getByRole('button', { name: 'Verifikasi email saya' }));
+    expect(await screen.findByText('Email Anda sudah terverifikasi.')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Buka halaman masuk' })).toHaveAttribute('href', '/login');
     noEnglishLeft();
     unmount();
@@ -233,7 +219,9 @@ describe('P18.98-T4 the pages before a session in Indonesian', () => {
       '/auth/verify-email': { status: 400, body: { error: { code: 'AUTH_TOKEN_INVALID', message: 'Tautan itu sudah tidak berlaku. Minta tautan baru.', requestId: 'r' } } },
     });
     renderInIndonesian(<VerifyEmailPage params={routeParams({ token: 'tok-2' })} />, { me: null });
-    expect(await screen.findByText(/^Tautan verifikasi hanya bisa dipakai sekali dan kedaluwarsa setelah 24 jam\./)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Verifikasi email saya' }));
+    expect(await screen.findByText('Tautan verifikasi kedaluwarsa setelah 24 jam.')).toBeInTheDocument();
+    expect(screen.getByText(/^Masuk, lalu tekan Kirim ulang untuk mendapat tautan baru\./)).toBeInTheDocument();
     noEnglishLeft();
   });
 
@@ -255,11 +243,11 @@ describe('P18.98-T4 the pages before a session in Indonesian', () => {
 });
 
 /**
- * **Before sign-in the language is the visitor's choice** (P18.98-T2 AC-5; ADR-0179 §2): there is no account to read,
+ * **Before sign-in the language is the visitor's choice** (P18.10-T2 AC-5; ADR-0179 §2): there is no account to read,
  * so a public page reads the `ab_lang` cookie the app's own provider finds on its first commit — and, while the switch
  * is not live, a visitor who chose nothing reads English, as every page did before the phase.
  */
-describe('P18.98-T4 a public page in the visitor’s language, under the app’s provider', () => {
+describe('P18.10-T4 a public page in the visitor’s language, under the app’s provider', () => {
   it('reads Indonesian for a browser that chose it, before anybody signs in', () => {
     browserChose('id');
     renderWithLanguage(<LoginPage />, { me: null }, { live: false });

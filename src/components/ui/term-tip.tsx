@@ -7,7 +7,7 @@ import { useLanguage } from '@/i18n/language-provider';
 import { termAt, termDefinition, termQuestion, type TermKey } from '@/lib/terms';
 
 /**
- * **ⓘ beside a term, holding its one line** (P18.95-T9 AC-3; ADR-0167 §10, OD-205; UI-028).
+ * **ⓘ beside a term, holding its one line** (P18.7-T9 AC-3; ADR-0167 §10, OD-205; UI-028).
  *
  * The ⓘ every other screen draws (`TippedGlyph`, ADR-0062 §2 form 2): its words on hover, on focus and on a tap,
  * named *What is APE?* for a screen reader, its bubble the definition from `lib/terms.ts`. Placed **after** the

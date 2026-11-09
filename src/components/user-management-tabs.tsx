@@ -21,7 +21,7 @@ import { userManagementMessages } from '@/i18n/messages/user-management';
  * each rung needs, and that Find Your Leader is locked until an office exists.
  *
  * The title and the four tabs are kept English in both languages (§A.2, §A.3); the locked tab's reason is the
- * catalogue's (`user-management.ts`; P18.98-T4).
+ * catalogue's (`user-management.ts`; P18.10-T4).
  */
 interface SubTab {
   readonly href: string;
@@ -31,7 +31,7 @@ interface SubTab {
 }
 
 /**
- * **The heading over all four tabs: the nav item's words** (P18.95-T9 AC-2; ADR-0167 §10, OD-205; the client's UI
+ * **The heading over all four tabs: the nav item's words** (P18.7-T9 AC-2; ADR-0167 §10, OD-205; the client's UI
  * review, UI-027: menu *User management* over a page titled *Register KPM*). The prototype's own title for the module
  * (`Overall.html:10414`, *User Management*). Each tab still names its page.
  */
@@ -47,11 +47,11 @@ const SUBTABS: readonly SubTab[] = [
   // an Agent issuing codes that tag joiners to themselves, and pulling untagged members
   // into a unit they do not have — and the API has always refused both. Only the tab
   // strip and the screen did not. Gated on the pool rather than the invite because the
-  // invite permission goes away with P3.6-T1, and this one decides the same thing.
+  // invite permission goes away with P3.2-T1, and this one decides the same thing.
   { href: '/user-management/add', tab: 'add', needs: 'member:search_untagged_pool' },
   // Hidden from anybody who cannot read an inbox — an Agent. The prototype hides it by
   // role (`User_Management_Section.html:996`); we hide it by the permission that decides
-  // the same thing, so it survives P3.5-T8 replacing the role with a ladder reference.
+  // the same thing, so it survives P3.1-T8 replacing the role with a ladder reference.
   { href: '/user-management/pending', tab: 'pending', needs: 'leader_request:read_inbox' },
   { href: '/user-management/leader', tab: 'leader' },
   { href: '/user-management/kpm', tab: 'kpm' },
@@ -96,7 +96,7 @@ export function UserManagementTabs({
     // UI-085: an orange count when something waits, nothing at 0 — navy words on the accent (parity I-542).
     badge:
       tab.href.endsWith('/pending') && waiting > 0 ? (
-        <span data-count="" className="inline-flex h-5 min-w-5 items-center justify-center rounded-pill bg-amber px-1.5 text-xs font-bold text-navy">
+        <span data-count="" className="inline-flex h-5 min-w-5 items-center justify-center rounded-pill bg-primary px-1.5 text-xs font-bold text-primary-contrast">
           {formatNumber(waiting, {}, figures)}
         </span>
       ) : undefined,

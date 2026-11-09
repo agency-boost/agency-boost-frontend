@@ -24,7 +24,7 @@ import { useOpenedOnce } from '@/lib/use-opened-once';
 import { usePhone } from '@/lib/use-phone';
 
 /*
- * **The form and the inbox are fetched on the tap that opens them** (P18.99-T16, the bundle): *+ Tambah agent*'s dialog,
+ * **The form and the inbox are fetched on the tap that opens them** (P18.11-T16, the bundle): *+ Tambah agent*'s dialog,
  * its share step and QR, and the request inbox were a fifth of `/new-hires`' first load, for two things most visits never
  * open. Once loaded they are what they were; the form stays mounted from its first opening (`useOpenedOnce`).
  */
@@ -60,13 +60,13 @@ export interface NewHiresJoiningState {
 }
 
 /**
- * **`/new-hires`'s joining half** (P18.96-T3 AC-1, AC-2, AC-3, AC-5): *+ Add agent* for a reader who may add
+ * **`/new-hires`'s joining half** (P18.8-T3 AC-1, AC-2, AC-3, AC-5): *+ Add agent* for a reader who may add
  * (`member:invite`), *Review requests (n)* while join requests wait on one who decides them (`leader_request:read_inbox`),
  * and *Waiting to join* — the reader's invites and transfer requests. Each read only for a reader its grant names, so a
  * reader without one is asked nothing; each guarded by the API besides.
  *
  * Its words — the header's *Review requests (n)*, what *+ Add agent* did — are the catalogue's (`new-hires.ts`'
- * `joining`, `add-agent.ts`; P18.98-T4); the confirmation before them is `lib/confirmations.ts`'.
+ * `joining`, `add-agent.ts`; P18.10-T4); the confirmation before them is `lib/confirmations.ts`'.
  */
 export function useNewHiresJoining(): NewHiresJoiningState {
   const t = useMessages(newHiresMessages).joining;

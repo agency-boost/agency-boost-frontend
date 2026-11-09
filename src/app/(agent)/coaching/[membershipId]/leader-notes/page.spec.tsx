@@ -155,7 +155,7 @@ const openLadder = async () => {
 const stagesIn = (sheet: HTMLElement) => within(sheet).getAllByRole('listitem');
 const stepsOf = (tile: HTMLElement) => Array.from(tile.querySelectorAll('[data-progress-line] [data-step]')).map((s) => s.getAttribute('data-step'));
 
-describe('the Capability mapping tab (P11-T9; UI V1, Phase 18.99 T10)', () => {
+describe('the Capability mapping tab (P11-T9; UI V1, Phase 18.11 T10)', () => {
   beforeEach(() => {
     nav.pathname = '/coaching/mem-rina/leader-notes';
     nav.replace.mockReset();
@@ -203,7 +203,7 @@ describe('the Capability mapping tab (P11-T9; UI V1, Phase 18.99 T10)', () => {
       ]);
       expect(within(sheet).getAllByText('Current stage')).toHaveLength(1);
       expect(stages[1]).toHaveAttribute('data-current', 'true');
-      expect(stages[1].firstElementChild!.className).toContain('bg-amber/10');
+      expect(stages[1].firstElementChild!.className).toContain('bg-primary/10');
       expect(stages.map((s) => s.querySelector('[data-step]')?.getAttribute('data-step'))).toEqual(['done', 'current', 'next', 'next']);
     });
 
@@ -326,7 +326,7 @@ describe('the Capability mapping tab (P11-T9; UI V1, Phase 18.99 T10)', () => {
       expect(screen.queryByText('Capability mapping updated.')).not.toBeInTheDocument();
     });
 
-    it('P18.95-T1 AC-5: a tick says Saved ✓ beside its own box, and keeps its toast', async () => {
+    it('P18.7-T1 AC-5: a tick says Saved ✓ beside its own box, and keeps its toast', async () => {
       show();
       const sheet = await openLadder();
       const box = within(sheet).getByRole('checkbox', { name: 'Recruits quality agents' });
@@ -341,7 +341,7 @@ describe('the Capability mapping tab (P11-T9; UI V1, Phase 18.99 T10)', () => {
       await toastSays('Capability mapping updated.');
     });
 
-    it('P18.95-T1 AC-5: a refused tick is put back and offers the retry, which ticks it again and saves it', async () => {
+    it('P18.7-T1 AC-5: a refused tick is put back and offers the retry, which ticks it again and saves it', async () => {
       const { calls } = show({
         'PUT /coaching/coachees/mem-rina/profile': [refused(500, 'INTERNAL_ERROR', 'Something went wrong.'), echoProfile()],
       });
@@ -359,7 +359,7 @@ describe('the Capability mapping tab (P11-T9; UI V1, Phase 18.99 T10)', () => {
       expect(await within(tracker).findByText('Saved ✓')).toBeInTheDocument();
     });
 
-    it('P18.95-T1 AC-5: a save another coach moved past is read again, with nothing to retry', async () => {
+    it('P18.7-T1 AC-5: a save another coach moved past is read again, with nothing to retry', async () => {
       show({
         'PUT /coaching/coachees/mem-rina/profile': refused(409, 'VERSION_CONFLICT', 'Somebody saved first.'),
         'GET /coaching/coachees/mem-rina/profile': [{ body: profile() }, { body: profile({ version: 4 }) }],

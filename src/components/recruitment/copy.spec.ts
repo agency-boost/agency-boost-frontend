@@ -69,12 +69,12 @@ describe('the recruitment pitch’s own copy', () => {
 });
 
 /**
- * **P18.98-T4: the pitch's words are the catalogue's now** (`i18n/messages/recruitment-pitch.ts`), so the rule is held
- * there, language by language (P18.98-T1 AC-6, `catalogueTexts`): none of the six words in the English, and none in the
+ * **P18.10-T4: the pitch's words are the catalogue's now** (`i18n/messages/recruitment-pitch.ts`), so the rule is held
+ * there, language by language (P18.10-T1 AC-6, `catalogueTexts`): none of the six words in the English, and none in the
  * Indonesian either — not *KPM*, ID mode's word for *office* (§B.9), since the pitch's own words name no office, and
  * not *kantor*.
  */
-describe('P18.98-T4 the recruitment pitch’s catalogue, language by language', () => {
+describe('P18.10-T4 the recruitment pitch’s catalogue, language by language', () => {
   const AREA = 'i18n/messages/recruitment-pitch.ts';
   const texts = catalogueTexts(AREA, readFileSync(join(SRC, AREA), 'utf8'));
 

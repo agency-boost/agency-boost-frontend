@@ -9,11 +9,14 @@ import {
   Button, ButtonLink, Card, CodeField, Field, Select, Switch, TextInput,
 } from '@/components/ui/field';
 import { SkeletonCards } from '@/components/ui/skeleton';
+import { TemplateSyncControl } from '@/components/training/template-sync-control';
 import { useMessages } from '@/i18n/language-provider';
 import { settingsMessages } from '@/i18n/messages/settings';
 import { trainingSettingsMessages } from '@/i18n/messages/training-settings';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { suggestCode } from '@/lib/config-code';
+import { TRAINING_DESCRIPTION_MAX } from '@/lib/training-text';
+import { cn } from '@/lib/cn';
 import { useCan } from '@/lib/session';
 import {
   applyConfigChanges, listTraining, stageChange,
@@ -23,6 +26,7 @@ import {
   codeTaken, flattenTraining, isUnsaved, projectTraining, stageEdit, stageStatus, unstageTraining,
   type ShownRow, type TrainingEntity,
 } from '@/lib/training-view';
+import { ARCHIVED_SWITCH_ROW } from '../settings-touch';
 
 type Tab = 'categories' | 'skills' | 'modules';
 
@@ -100,6 +104,8 @@ export default function TrainingSettingsPage() {
   const [edit, setEdit] = useState({ label: '', description: '', categoryCode: '' });
   /** A module somebody asked to open while holding unsaved edits, which leaving would lose. */
   const [leaving, setLeaving] = useState<{ id: string; title: string } | null>(null);
+  /** What *Sinkron dari template* last did, said once under the bars (ADR-0220 §4). */
+  const [synced, setSynced] = useState<'published' | 'awaiting_publish' | 'unchanged' | null>(null);
 
   /*
    * Archived rows always, and filtered for display: *Show archived* then costs no round trip,
@@ -223,7 +229,7 @@ export default function TrainingSettingsPage() {
       <>
         {row.staged && (
           <p className="mt-1 text-sm">
-            <span className="rounded-full bg-amber/20 px-2 py-0.5 text-navy">
+            <span className="rounded-full bg-primary/20 px-2 py-0.5 text-navy">
               {s.staged.mark[row.staged]}
             </span>
             <button
@@ -315,6 +321,15 @@ export default function TrainingSettingsPage() {
   const nameChanged = (value: string) => setDraft((d) => ({
     ...d, label: value, code: d.codeTouched ? d.code : suggestCode(value),
   }));
+
+  /** A skill's or a module's *Deskripsi singkat* (UI-161, ADR-0220 §1): one line, at most 160 characters. */
+  function shortDescriptionField(id: string, value: string, onChange: (next: string) => void) {
+    return (
+      <Field label={t.shortDescription} htmlFor={id} hint={t.shortDescriptionHint({ max: TRAINING_DESCRIPTION_MAX })} className="min-w-60 flex-1">
+        <TextInput id={id} value={value} maxLength={TRAINING_DESCRIPTION_MAX} onChange={(e) => onChange(e.target.value)} />
+      </Field>
+    );
+  }
 
   function addPanel() {
     if (!view) return null;
@@ -409,6 +424,7 @@ export default function TrainingSettingsPage() {
                 <TextInput id="training-new-label" value={draft.label} onChange={(e) => nameChanged(e.target.value)} />
               </Field>
               {codeField('skill', view.skills)}
+              {shortDescriptionField('training-new-description', draft.description, (value) => setDraft((d) => ({ ...d, description: value })))}
             </div>
           )}
           <div className="mt-3 flex flex-wrap gap-2">
@@ -417,7 +433,10 @@ export default function TrainingSettingsPage() {
               onClick={() => {
                 setStaged((now) => stageChange(now, {
                   op: 'trainingSkill.create',
-                  body: { code: draft.code.trim(), categoryCode: draft.categoryCode, label: draft.label.trim() },
+                  body: {
+                    code: draft.code.trim(), categoryCode: draft.categoryCode, label: draft.label.trim(),
+                    ...(draft.description.trim() ? { description: draft.description.trim() } : {}),
+                  },
                 }));
                 // Onto the category it went into, so the row just added is the row in view.
                 setSkillsCategory(draft.categoryCode);
@@ -465,6 +484,7 @@ export default function TrainingSettingsPage() {
               <TextInput id="training-new-label" value={draft.label} onChange={(e) => nameChanged(e.target.value)} />
             </Field>
             {codeField('module', view.modules)}
+            {shortDescriptionField('training-new-description', draft.description, (value) => setDraft((d) => ({ ...d, description: value })))}
           </div>
         )}
         <div className="mt-3 flex flex-wrap gap-2">
@@ -473,7 +493,10 @@ export default function TrainingSettingsPage() {
             onClick={() => {
               setStaged((now) => stageChange(now, {
                 op: 'trainingModule.create',
-                body: { code: draft.code.trim(), skillCode: draft.skillCode, title: draft.label.trim() },
+                body: {
+                  code: draft.code.trim(), skillCode: draft.skillCode, title: draft.label.trim(),
+                  ...(draft.description.trim() ? { description: draft.description.trim() } : {}),
+                },
               }));
               setModulesCategory(draft.categoryCode);
               setModulesSkill('all');
@@ -504,11 +527,26 @@ export default function TrainingSettingsPage() {
     );
   }
 
+  /*
+   * **x / y modul punya materi** (UI-162; ADR-0208 §1): the active modules, and how many show a file, a video or a link —
+   * the template's or the office's own. One line where the toolbar already has one: alone on Categories, after the
+   * filters on Modules.
+   */
+  const activeModules = tree ? flattenTraining(tree).modules.filter((m) => m.status === 'active') : [];
+  const materialLine = tree ? (
+    <span className="text-sm text-muted">
+      {t.materialCount({
+        x: activeModules.filter((m) => m.material !== undefined && m.material !== 'none').length,
+        y: activeModules.length,
+      })}
+    </span>
+  ) : null;
+
   const filterClass = 'flex flex-wrap items-center gap-x-4 gap-y-2';
   const filterPair = 'flex items-center gap-2';
   const filterLabel = 'text-sm font-semibold text-muted';
 
-  const hint = !view ? ' ' : tab === 'skills' ? (
+  const hint = !view ? ' ' : tab === 'categories' ? materialLine : tab === 'skills' ? (
     <div className={filterClass}>
       <label htmlFor="training-skills-category" className={filterLabel}>{t.category}</label>
       <Select
@@ -544,6 +582,7 @@ export default function TrainingSettingsPage() {
           {modulesTabSkills.map((s) => <option key={s.row.code} value={s.row.code}>{s.row.label}</option>)}
         </Select>
       </span>
+      {materialLine}
     </div>
   ) : undefined;
 
@@ -670,6 +709,7 @@ export default function TrainingSettingsPage() {
                         onChange={(e) => setEdit((d) => ({ ...d, label: e.target.value }))}
                       />
                     </Field>
+                    {shortDescriptionField(`description-${skill.row.id}`, edit.description, (value) => setEdit((d) => ({ ...d, description: value })))}
                     <Field
                       label={t.category}
                       htmlFor={`category-${skill.row.id}`}
@@ -697,8 +737,11 @@ export default function TrainingSettingsPage() {
                     <Button
                       disabled={!edit.label.trim() || busy}
                       onClick={() => {
+                        const description = edit.description.trim() || null;
                         stageFields('trainingSkill', skill.row.id, {
                           label: edit.label.trim(), categoryCode: edit.categoryCode,
+                          // Only when it changed: a row read before the field existed has none, which is `null`.
+                          ...(description !== (skill.row.description ?? null) ? { description } : {}),
                         });
                         setEditing(null);
                       }}
@@ -712,6 +755,7 @@ export default function TrainingSettingsPage() {
                 <div className="flex flex-wrap items-center gap-3">
                   <div className="min-w-0 flex-1">
                     <p className="text-md font-semibold text-navy">{skill.row.label}</p>
+                    {skill.row.description && <p className="text-sm text-muted">{skill.row.description}</p>}
                     {meta(skill.row.status === 'archived')}
                     {marks('trainingSkill', skill, category?.row.label ?? '')}
                   </div>
@@ -729,7 +773,9 @@ export default function TrainingSettingsPage() {
                         onClick={() => {
                           setAdding(false);
                           setEditing(skill.row.id);
-                          setEdit({ label: skill.row.label, description: '', categoryCode: skill.row.categoryCode });
+                          setEdit({
+                            label: skill.row.label, description: skill.row.description ?? '', categoryCode: skill.row.categoryCode,
+                          });
                         }}
                       >
                         {s.edit}
@@ -768,6 +814,7 @@ export default function TrainingSettingsPage() {
             <li key={module.row.id} className="flex flex-wrap items-center gap-3 px-4 py-3 sm:px-5">
               <div className="min-w-0 flex-1">
                 <p className="text-md font-semibold text-navy">{module.row.title}</p>
+                {module.row.description && <p className="text-sm text-muted">{module.row.description}</p>}
                 <p className="text-sm text-muted">{labelOfSkill(module.row.skillCode)}</p>
                 {meta(module.row.status === 'archived')}
                 {marks('trainingModule', module, skill?.row.label ?? '')}
@@ -846,17 +893,31 @@ export default function TrainingSettingsPage() {
            nothing asks for confirmation — the same call the other settings screens make. */
         actions: (
           <>
-            <label className="flex items-center gap-2 text-md text-navy">
+            <label className={cn('flex items-center gap-2 text-md text-navy', ARCHIVED_SWITCH_ROW)}>
               <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
               {s.showArchived}
             </label>
+            {/* UI-161, ADR-0220 §4: shown only when the KPM's names differ from its template's. */}
+            {staged.length === 0 && (
+              <TemplateSyncControl
+                canWrite={canWrite}
+                refreshKey={published}
+                onApplied={(result) => {
+                  setSynced(result.outcome);
+                  setError(null);
+                  void load();
+                  setPublished((n) => n + 1);
+                }}
+                onError={(err) => { setSynced(null); setError(err); }}
+              />
+            )}
             {canWrite && view && !adding && <Button onClick={openAdd}>{addLabel}</Button>}
           </>
         ),
       }}
     >
       {leaving && (
-        <div role="alert" className="mb-4 rounded-md border border-amber bg-card p-4">
+        <div role="alert" className="mb-4 rounded-md border border-primary bg-card p-4">
           <p className="text-md text-navy">
             <strong>{t.unsaved}</strong>{' '}
             <span className="text-muted">
@@ -878,6 +939,10 @@ export default function TrainingSettingsPage() {
             <Button onClick={() => setLeaving(null)}>{t.stayHere}</Button>
           </div>
         </div>
+      )}
+
+      {synced && (
+        <p role="status" className="mb-4 text-md font-semibold text-success">{t.sync.done[synced]}</p>
       )}
 
       {canWrite && adding && addPanel()}

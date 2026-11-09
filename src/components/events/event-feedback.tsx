@@ -13,7 +13,7 @@ import {
 import { useEventsHost } from './events-screen';
 
 /**
- * **A past event's block** (`:8624-8632`; P18.5-T5 AC-6, P18.5-T6 AC-2 to AC-4): the feedback form for a reader
+ * **A past event's block** (`:8624-8632`; P18.2-T5 AC-6, P18.2-T6 AC-2 to AC-4): the feedback form for a reader
  * who RSVP'd or said they came, the thanks once they answered, and for anybody else the didn't-join block
  * with *I actually attended this event*.
  *
@@ -76,7 +76,7 @@ function Notice({ icon, tone, title, children }: {
     <div
       className={cn(
         'flex items-start gap-3 rounded-[10px] border px-[18px] py-4',
-        tone === 'success' ? 'border-success/25 bg-success/[0.06]' : 'border-hairline bg-navy/[0.04]',
+        tone === 'success' ? 'border-success/25 bg-success/[0.06]' : 'border-hairline bg-secondary/[0.04]',
       )}
     >
       <span aria-hidden="true" className="shrink-0 text-xl">{icon}</span>
@@ -195,8 +195,8 @@ function FeedbackForm({ event, meta, onAnswer, onStale }: {
             <span
               className={cn(
                 'flex h-8 w-8 cursor-pointer items-center justify-center rounded-[7px] border text-base font-bold',
-                'peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-1 peer-focus-visible:outline-amber',
-                score === n ? 'border-navy bg-navy text-white' : 'border-hairline bg-base text-navy hover:border-amber',
+                'peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-1 peer-focus-visible:outline-focus-ring',
+                score === n ? 'border-secondary bg-secondary text-secondary-contrast' : 'border-hairline bg-base text-navy hover:border-primary',
               )}
             >
               {n}
@@ -225,7 +225,7 @@ function FeedbackForm({ event, meta, onAnswer, onStale }: {
         onChange={setImprove}
       />
       {/*
-        * **Held at the foot of the modal** while the form scrolls above it (P18.96-T1 AC-1; UI-043): sticky inside the
+        * **Held at the foot of the modal** while the form scrolls above it (P18.8-T1 AC-1; UI-043): sticky inside the
         * modal's own scroll, across its padding, on the card's colour. Where it all fits it sits where it always did,
         * 14px under the last field, and on a phone it clears the home indicator. A refusal stays beside it.
         */}

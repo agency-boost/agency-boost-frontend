@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { SettingsScreen } from '@/components/settings-screen';
+import { SettingsReviewed } from '@/components/settings-reviewed';
+import { ActionMenu, type ActionMenuItem } from '@/components/ui/action-menu';
+import { AutoMarker } from '@/components/ui/auto-marker';
 import { BelowDesktopTip } from '@/components/ui/below-desktop-tip';
 import { DRAG_HANDLE_CLASS, DragHandle } from '@/components/ui/drag-handle';
 import { ConfigBadge } from '@/components/ui/config-badge';
@@ -9,8 +12,12 @@ import { EmptyState } from '@/components/ui/empty-state';
 import {
   Button, Card, CodeField, Field, FieldRow, Select, TextInput,
 } from '@/components/ui/field';
+import { FLOATING_BAR_BUTTON, FLOATING_BAR_ROOM, FloatingBar } from '@/components/ui/floating-bar';
+import { LineIcon } from '@/components/ui/line-icon';
+import { ListRow } from '@/components/ui/list-rows';
 import { CONTROL_PHONE, TAP_TARGET } from '@/components/ui/phone';
 import { ReorderArrows } from '@/components/ui/reorder-arrows';
+import { ResponsiveSheet } from '@/components/ui/responsive-sheet';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { SHOWN_FROM_DESKTOP } from '@/components/ui/tablet';
 import { TippedGlyph } from '@/components/ui/tipped-glyph';
@@ -18,12 +25,14 @@ import { kept } from '@/i18n/kept';
 import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
 import { settingsMessages } from '@/i18n/messages/settings';
 import { checklistMessages } from '@/i18n/messages/settings-checklist';
+import { uiMessages } from '@/i18n/messages/ui';
 import { autoBadge, byHandBadge, fromDataWords } from '@/lib/activation';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import { suggestCode } from '@/lib/config-code';
 import { formatNumber } from '@/lib/format';
 import { useCan } from '@/lib/session';
+import { useMediaQuery } from '@/lib/use-media-query';
 import { usePhone } from '@/lib/use-phone';
 import {
   listTraining, publishActivationChecklist, readActivationChecklist, saveActivationDraft,
@@ -68,7 +77,7 @@ function resolvedLinks(server: ActivationChecklist | null): Map<string, Activati
 }
 
 /**
- * **The three data-backed items, by code** (P18.96-T7 G2; ADR-0171 §3): *Close first case independently*, *Reach
+ * **The three data-backed items, by code** (P18.8-T7 G2; ADR-0171 §3): *Close first case independently*, *Reach
  * Independent Agent milestone* and *Weekly 1-on-1 check-in* store no link — their kind is bound by their code — and
  * the server serves each its kind as `link`, a data kind's carrying its `form`. Read from every version it answered
  * with, so an item the draft keeps keeps its kind; one that stores a link of its own reads that link, as the field
@@ -92,7 +101,7 @@ const BADGE_FACE = 'h-auto w-auto whitespace-nowrap rounded-pill px-2 py-0.5 tex
  * completes the item and never when (P13-T3 AC-1, ADR-0062 §3; parity I-80). *Auto* only for a link that
  * works, with the registry's sentence as its tooltip and in its name, as on the hire's page; for one that
  * does not, *Ticked by hand*, and its tooltip says who ticks it. A link not yet resolved claims neither. Its words are
- * the hire's activation's (`autoBadge`, `byHandBadge`; P18.98-T4), in the reader's language.
+ * the hire's activation's (`autoBadge`, `byHandBadge`; P18.10-T4), in the reader's language.
  */
 function LinkBadge({ link }: { link: ActivationLink }) {
   const language = useLanguage();
@@ -137,7 +146,7 @@ const move = <T,>(rows: T[], from: number, to: number): T[] => {
  * ninety days keeps the checklist they started on.
  */
 /*
- * **The checklist's two grey sentences, in the client's words, each with its verdict per size** (P18.97-T4 AC-6,
+ * **The checklist's two grey sentences, in the client's words, each with its verdict per size** (P18.9-T4 AC-6,
  * ADR-0176 §6; the grey-text table of 2026-10-27, UI-027). From 1024px both are shown; at 768–1023px both are behind
  * an ⓘ beside their subject; below 768px the first is behind its ⓘ and the second is removed. *New versions* was 32
  * words, *Linked items* the prototype's 27-word toolbar sentence. Their words are the catalogue's (`newVersions`,
@@ -150,7 +159,7 @@ export default function ActivationChecklistPage() {
   const s = useMessages(settingsMessages);
   const figures = useFigureLanguage();
   const canWrite = useCan('tenant_config:write');
-  // The screen's own gate (P18.5-T3): a field member meets the refusal, and nothing is asked for them.
+  // The screen's own gate (P18.2-T3): a field member meets the refusal, and nothing is asked for them.
   const canRead = useCan('activation_settings:read');
   const [server, setServer] = useState<ActivationChecklist | null>(null);
   const [draft, setDraft] = useState<ActivationDraft | null>(null);
@@ -172,11 +181,25 @@ export default function ActivationChecklistPage() {
   const [dragging, setDragging] = useState<{ aspect: string; item?: string } | null>(null);
   const [over, setOver] = useState<string | null>(null);
   /*
-   * **On a phone, ↑ and ↓ beside each handle** (P18.97-T7 AC-6, ADR-0178 §5; UI-040): a drag never starts on a touch
+   * **On a phone, ↑ and ↓ beside each handle** (P18.9-T7 AC-6, ADR-0178 §5; UI-040): a drag never starts on a touch
    * screen and its handle's keys need a keyboard, so the list could not be reordered there at all. They move a row
    * through the same `move` the handle's keys do; and below 768px every control here is a 44 × 44px target.
    */
   const phone = usePhone();
+  /*
+   * **Below 1024px the checklist is an accordion of one-line items, and an item's controls are in its sheet**
+   * (P19.2-T3 AC-3; UI-141: *16 native "Diselesaikan dari" selects open in the checklist with uppercase "OTOMATIS — SELESAI
+   * SAAT …" lines*, 5.1 screens at 375; `kpm-owner-mobile` 6 — the one settings page whose ticket names the tablet too).
+   * From 1024px the cards are as they were.
+   */
+  const compact = useMediaQuery(['phone', 'tablet']);
+  const u = useMessages(uiMessages);
+  /** The one aspect open (D-25: *only one open*); `undefined` until chosen, which opens the first. */
+  const [openAspect, setOpenAspect] = useState<string | null | undefined>(undefined);
+  /** The item, the aspect, or the new item a sheet holds, with what it edits until *Save*. */
+  const [itemSheet, setItemSheet] = useState<{ aspect: string; code: string; label: string; autoLink: string | null } | null>(null);
+  const [aspectSheet, setAspectSheet] = useState<{ code: string; label: string } | null>(null);
+  const [addSheet, setAddSheet] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -275,7 +298,7 @@ export default function ActivationChecklistPage() {
         data-row={aspect.code}
         className={[
           'p-0',
-          over === aspect.code ? 'ring-2 ring-amber' : '',
+          over === aspect.code ? 'ring-2 ring-primary' : '',
           dragging?.aspect === aspect.code && dragging.item === undefined ? 'opacity-40' : '',
         ].filter(Boolean).join(' ')}
         onDragOver={(e) => {
@@ -396,7 +419,7 @@ export default function ActivationChecklistPage() {
 
         <ul className="flex flex-col divide-y divide-hairline">
           {aspect.items.map((item, index) => {
-            // P18.96-T7 G2: completes from the office's data, by its code — drawn so, and not re-linked here.
+            // P18.8-T7 G2: completes from the office's data, by its code — drawn so, and not re-linked here.
             const data = item.autoLink === null ? bound.get(item.code) : undefined;
             return (
               <li
@@ -595,11 +618,289 @@ export default function ActivationChecklistPage() {
     );
   }
 
+  /** Whether an item completes by itself: bound to the office's data, or linked to something that works (D-25's ⚡). */
+  const automatic = (item: DraftItem) => (item.autoLink === null
+    ? bound.has(item.code)
+    : links.get(item.autoLink)?.live === true);
+
+  /**
+   * **The aspects as an accordion** (P19.2-T3 AC-3; UI-141, D-25): each a 48px heading — its number, its name, *n item*,
+   * ⌄ — one open at a time; its items one line each, ⚡ on one that completes by itself, › to its sheet; *+ Add item* the
+   * open aspect's last line. An aspect's own actions — rename, ↑ ↓, remove — are behind its ⋮.
+   */
+  function compactAspects() {
+    const aspects = draft!.aspects;
+    const current = openAspect === undefined ? aspects[0]?.code ?? null : openAspect;
+    return (
+      // The room the pinned bar needs under the last line (`FLOATING_BAR_ROOM`).
+      <div className={canWrite ? FLOATING_BAR_ROOM : undefined}>
+      <ul role="list" aria-label={t.aspects} className="overflow-hidden rounded-lg bg-card">
+        {aspects.map((aspect, at) => {
+          const isOpen = aspect.code === current;
+          const panelId = `aspect-items-${aspect.code}`;
+          const menu: ActionMenuItem[] = [
+            {
+              label: s.rename,
+              onSelect: () => setAspectSheet({ code: aspect.code, label: aspect.label }),
+            },
+            {
+              label: u.moveUp({ label: aspect.label }),
+              disabled: busy || at === 0,
+              onSelect: () => change({ aspects: move(aspects, at, at - 1) }),
+            },
+            {
+              label: u.moveDown({ label: aspect.label }),
+              disabled: busy || at === aspects.length - 1,
+              onSelect: () => change({ aspects: move(aspects, at, at + 1) }),
+            },
+            {
+              label: s.remove,
+              tone: 'alert',
+              disabled: busy || aspects.length === 1,
+              reason: aspects.length === 1 ? t.oneAspect : undefined,
+              hint: aspects.length === 1 ? undefined : t.removesAspect({ name: aspect.label, n: aspect.items.length }),
+              onSelect: () => change({ aspects: aspects.filter((a) => a.code !== aspect.code) }),
+            },
+          ];
+          return (
+            <li key={aspect.code} data-row={aspect.code} className="border-t border-divider first:border-t-0">
+              <div className="flex min-h-12 items-center pr-1">
+                <button
+                  type="button"
+                  aria-expanded={isOpen}
+                  aria-controls={panelId}
+                  onClick={() => setOpenAspect(isOpen ? null : aspect.code)}
+                  className="flex min-h-12 min-w-0 flex-1 items-center gap-2.5 pl-3 text-left"
+                >
+                  <span aria-hidden="true" className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-secondary text-xs font-bold text-secondary-contrast">
+                    {formatNumber(at + 1, {}, figures)}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate font-display text-md font-bold text-navy">{aspect.label}</span>
+                  <span className="shrink-0 text-sm font-semibold text-muted">{s.items({ n: aspect.items.length })}</span>
+                  <LineIcon name={isOpen ? 'chevronUp' : 'chevronDown'} className="mr-1 h-5 w-5 shrink-0 text-signal-grey" />
+                </button>
+                {canWrite && <ActionMenu label={s.actionsFor({ name: aspect.label })} items={menu} />}
+              </div>
+              {isOpen && (
+                <ul id={panelId} role="list" aria-label={aspect.label} className="[&>li]:border-t [&>li]:border-divider [&>li]:pl-11">
+                  {aspect.items.map((item) => (
+                    <ListRow
+                      key={item.code}
+                      data-row={item.code}
+                      title={<span className="font-normal">{item.label}</span>}
+                      ariaLabel={item.label}
+                      trailing={automatic(item) ? <AutoMarker name={item.label} /> : undefined}
+                      haspopup
+                      onSelect={() => setItemSheet({
+                        aspect: aspect.code, code: item.code, label: item.label, autoLink: item.autoLink,
+                      })}
+                    />
+                  ))}
+                  {canWrite && (
+                    <li>
+                      <button
+                        type="button"
+                        aria-haspopup="dialog"
+                        onClick={() => {
+                          setAddSheet(aspect.code);
+                          setEntry({ label: '', code: '', codeTouched: false, first: '' });
+                        }}
+                        className="flex min-h-12 w-full items-center text-left text-md font-semibold text-primary-ink"
+                      >
+                        {t.addItem}
+                      </button>
+                    </li>
+                  )}
+                </ul>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      </div>
+    );
+  }
+
+  /**
+   * **The sheets below 1024px** (P19.2-T3 AC-3): an item's — its code, its name, *Completes from* (the select appears only
+   * here), its badge, ↑ ↓ and *Remove* last, *Save* pinned; an aspect's name; a new item. Each changes the draft, as the
+   * cards' editors do, and *Save draft* below saves it.
+   */
+  function compactSheets() {
+    const aspects = draft!.aspects;
+    const sheetAspect = itemSheet ? aspects.find((a) => a.code === itemSheet.aspect) ?? null : null;
+    const index = sheetAspect && itemSheet ? sheetAspect.items.findIndex((i) => i.code === itemSheet.code) : -1;
+    const sheetItem = sheetAspect && index >= 0 ? sheetAspect.items[index] : null;
+    const data = sheetItem && sheetItem.autoLink === null ? bound.get(sheetItem.code) : undefined;
+    const adding = addSheet === null ? null : aspects.find((a) => a.code === addSheet) ?? null;
+    return (
+      <>
+        <ResponsiveSheet
+          open={itemSheet !== null && sheetItem !== null}
+          title={sheetItem?.label ?? ''}
+          onClose={() => setItemSheet(null)}
+          footer={canWrite && itemSheet && sheetAspect ? (
+            <Button
+              className="w-full"
+              disabled={!itemSheet.label.trim()}
+              onClick={() => {
+                patchItem(sheetAspect.code, itemSheet.code, { label: itemSheet.label.trim(), autoLink: itemSheet.autoLink });
+                setItemSheet(null);
+              }}
+            >
+              {s.save}
+            </Button>
+          ) : undefined}
+        >
+          {itemSheet && sheetAspect && sheetItem && (
+            <div className="flex flex-col gap-3 pb-2">
+              {(data || (sheetItem.autoLink !== null && links.has(sheetItem.autoLink))) && (
+                <p>{data ? <LinkBadge link={data} /> : <LinkBadge link={links.get(sheetItem.autoLink!)!} />}</p>
+              )}
+              <CodeField id={`code-item-code-${sheetItem.code}`} value={sheetItem.code} reason={t.itemReason} />
+              <Field label={s.item} htmlFor={`label-${sheetItem.code}`}>
+                <TextInput
+                  id={`label-${sheetItem.code}`}
+                  value={itemSheet.label}
+                  disabled={!canWrite}
+                  onChange={(e) => setItemSheet({ ...itemSheet, label: e.target.value })}
+                />
+              </Field>
+              <Field label={t.completesFrom} htmlFor={`link-${sheetItem.code}`}>
+                {data ? (
+                  <Select id={`link-${sheetItem.code}`} value={data.kind} disabled onChange={() => undefined}>
+                    <option value={data.kind}>{fromDataWords(data.label, language)}</option>
+                  </Select>
+                ) : (
+                  <Select
+                    id={`link-${sheetItem.code}`}
+                    value={itemSheet.autoLink ?? ''}
+                    disabled={busy || !canWrite}
+                    onChange={(e) => setItemSheet({ ...itemSheet, autoLink: e.target.value === '' ? null : e.target.value })}
+                  >
+                    <option value="">{t.noLink}</option>
+                    <optgroup label={t.feature}>
+                      {FEATURE_LINKS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
+                    </optgroup>
+                    <optgroup label={t.trainingModule}>
+                      {offered.map((m) => <option key={m.code} value={`training:${m.code}`}>{m.title}</option>)}
+                    </optgroup>
+                  </Select>
+                )}
+              </Field>
+              {canWrite && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <ReorderArrows
+                    label={sheetItem.label}
+                    index={index}
+                    count={sheetAspect.items.length}
+                    disabled={busy}
+                    onMove={(by) => patchAspect(sheetAspect.code, { items: move(sheetAspect.items, index, index + by) })}
+                  />
+                  <span className="ml-auto">
+                    <Button
+                      variant="inlineDanger"
+                      disabled={busy || sheetAspect.items.length === 1}
+                      title={sheetAspect.items.length === 1 ? t.oneItem : undefined}
+                      onClick={() => {
+                        patchAspect(sheetAspect.code, { items: sheetAspect.items.filter((i) => i.code !== sheetItem.code) });
+                        setItemSheet(null);
+                      }}
+                    >
+                      {s.remove}
+                    </Button>
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+        </ResponsiveSheet>
+
+        <ResponsiveSheet
+          open={aspectSheet !== null}
+          title={s.rename}
+          onClose={() => setAspectSheet(null)}
+          footer={aspectSheet ? (
+            <Button
+              className="w-full"
+              disabled={!aspectSheet.label.trim()}
+              onClick={() => {
+                patchAspect(aspectSheet.code, { label: aspectSheet.label.trim() });
+                setAspectSheet(null);
+              }}
+            >
+              {s.save}
+            </Button>
+          ) : undefined}
+        >
+          {aspectSheet && (
+            <div className="flex flex-col gap-3 pb-2">
+              <CodeField id={`code-aspect-${aspectSheet.code}`} value={aspectSheet.code} reason={t.aspectReason} />
+              <Field label={s.name} htmlFor={`aspect-name-${aspectSheet.code}`}>
+                <TextInput
+                  id={`aspect-name-${aspectSheet.code}`}
+                  value={aspectSheet.label}
+                  onChange={(e) => setAspectSheet({ ...aspectSheet, label: e.target.value })}
+                />
+              </Field>
+            </div>
+          )}
+        </ResponsiveSheet>
+
+        <ResponsiveSheet
+          open={adding !== null}
+          title={t.addItem.replace(/^\+\s*/, '')}
+          description={adding?.label}
+          onClose={() => setAddSheet(null)}
+          footer={adding ? (
+            <Button
+              className="w-full"
+              disabled={!entry.label.trim() || !entry.code.trim()}
+              onClick={() => {
+                patchAspect(adding.code, {
+                  items: [...adding.items, { code: entry.code.trim(), label: entry.label.trim(), autoLink: null }],
+                });
+                setAddSheet(null);
+              }}
+            >
+              {s.add}
+            </Button>
+          ) : undefined}
+        >
+          {adding && (
+            <div className="flex flex-col gap-3 pb-2">
+              <Field label={s.item} htmlFor="new-item-label">
+                <TextInput
+                  id="new-item-label"
+                  value={entry.label}
+                  onChange={(e) => setEntry((d) => ({
+                    ...d, label: e.target.value, code: d.codeTouched ? d.code : suggestCode(e.target.value),
+                  }))}
+                />
+              </Field>
+              <Field label={s.code} htmlFor="new-item-code" hint={t.itemCodeHint}>
+                <TextInput
+                  id="new-item-code"
+                  value={entry.code}
+                  onChange={(e) => setEntry((d) => ({
+                    ...d, code: e.target.value.toUpperCase(), codeTouched: e.target.value !== '',
+                  }))}
+                />
+              </Field>
+            </div>
+          )}
+        </ResponsiveSheet>
+      </>
+    );
+  }
+
   return (
     <SettingsScreen
       title={kept('Activation checklist')}
       subtitle={t.subtitle}
-      // The office's administration's own read since P18.5-T3 (as `training_settings:read`): a field member typing
+      // P19.3-T2 AC-5 (UI-149, Overview case 0b): *Sudah sesuai*, step 3 of the KPM setup card — the checklist unchanged.
+      actions={<SettingsReviewed page="activation-checklist" />}
+      // The office's administration's own read since P18.2-T3 (as `training_settings:read`): a field member typing
       // the address meets the permission-denied state rather than a page of failed reads.
       permission="activation_settings:read"
       error={error}
@@ -651,7 +952,7 @@ export default function ActivationChecklistPage() {
               ) : (
                 t.fromStandard({ standard: <strong>{t.standardChecklist}</strong> })
               )}
-              {/* Below 1024px the sentence under this one is its ⓘ, beside the version it is about (P18.97-T4 AC-6). */}
+              {/* Below 1024px the sentence under this one is its ⓘ, beside the version it is about (P18.9-T4 AC-6). */}
               <BelowDesktopTip text={t.newVersions} className="ml-1" />
             </p>
             <p className={cn('mt-2 text-md text-muted', SHOWN_FROM_DESKTOP)}>{t.newVersions}</p>
@@ -664,7 +965,27 @@ export default function ActivationChecklistPage() {
               })}
             </p>
 
-            {canWrite && (
+            {canWrite && compact && (dirty || (saved && !dirty)) && (
+              <div className="mt-2 flex flex-wrap items-center gap-3">
+                {dirty && (
+                  <Button
+                    variant="inline"
+                    disabled={busy}
+                    onClick={() => {
+                      const current = server.draft ?? server.published;
+                      setDraft(current ? toDraft(current) : { aspects: [] });
+                      setDirty(false);
+                    }}
+                  >
+                    {t.undoEdits}
+                  </Button>
+                )}
+                {saved && !dirty && (
+                  <p role="status" className="text-md font-semibold text-success">{s.saved}</p>
+                )}
+              </div>
+            )}
+            {canWrite && !compact && (
               <div className="mt-3 flex flex-wrap items-center gap-3">
                 {/* The starting point is savable as it stands: saving it is what makes the office
                     have a checklist at all. */}
@@ -778,8 +1099,31 @@ export default function ActivationChecklistPage() {
               <EmptyState title={t.none} />
             </Card>
           )}
-          {draft.aspects.map((aspect, at) => aspectCard(aspect, at))}
+          {compact ? compactAspects() : draft.aspects.map((aspect, at) => aspectCard(aspect, at))}
         </div>
+      )}
+      {compact && server !== null && draft !== null && compactSheets()}
+      {/* The draft's two actions, pinned at the foot below 1024px (UI-141: *pinned Simpan draf / Terbitkan versi n*). */}
+      {compact && canWrite && server !== null && draft !== null && (
+        <FloatingBar pillClassName="justify-end pl-1.5">
+          <button
+            type="button"
+            className={cn(FLOATING_BAR_BUTTON, 'flex-1 bg-hover-row hover:bg-divider')}
+            disabled={busy || draft.aspects.length === 0 || (!dirty && (hasDraft || server.published !== null))}
+            onClick={() => void run(() => saveActivationDraft(draft))}
+          >
+            {busy ? s.saving : t.saveDraft}
+          </button>
+          <button
+            type="button"
+            className={cn(FLOATING_BAR_BUTTON, 'flex-1')}
+            disabled={busy || dirty || !hasDraft}
+            title={dirty ? t.saveDraftFirst : undefined}
+            onClick={() => void run(publishActivationChecklist)}
+          >
+            {t.publishVersion({ n: version })}
+          </button>
+        </FloatingBar>
       )}
     </SettingsScreen>
   );

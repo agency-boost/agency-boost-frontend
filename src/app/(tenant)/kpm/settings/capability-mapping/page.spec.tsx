@@ -2,6 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { atWidth, makeMe, renderWithSession, stubFetch, wears } from '@test/harness';
+import { smallTargets } from '@test/touch-audit';
 import CapabilityMappingPage from './page';
 
 vi.mock('next/navigation', () => ({
@@ -84,7 +85,7 @@ describe('the capability catalog screen', () => {
     render(empty, OWNER, '#ladder');
     expect(await screen.findByText('No stages yet.')).toBeInTheDocument();
     expect(screen.getByText('No milestones yet.')).toBeInTheDocument();
-    // The ladder's sentence is for a ladder that has stages (the client's words since P18.97-T4 AC-6).
+    // The ladder's sentence is for a ladder that has stages (the client's words since P18.9-T4 AC-6).
     expect(screen.queryByText(/highest stage with all milestones ticked/)).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Add a milestone' })).toBeEnabled();
     vi.unstubAllGlobals();
@@ -168,7 +169,7 @@ describe('the capability catalog screen', () => {
   });
 
   /*
-   * *Amended 2026-10-28 (P18.97-T4 AC-6; UI-027):* in the client's words — how a stage is decided, the milestones ticked
+   * *Amended 2026-10-28 (P18.9-T4 AC-6; UI-027):* in the client's words — how a stage is decided, the milestones ticked
    * and not the order, which is why reordering moves nobody.
    */
   it('says reordering the ladder moves nobody’s stage', async () => {
@@ -261,11 +262,11 @@ describe('the capability catalog screen', () => {
 });
 
 /**
- * **The ladder's grey sentence per size** (P18.97-T4 AC-6, ADR-0176 §6; the client's grey-text table of 2026-10-27,
+ * **The ladder's grey sentence per size** (P18.9-T4 AC-6, ADR-0176 §6; the client's grey-text table of 2026-10-27,
  * UI-027, *ⓘ · ⓘ · Show*): *"A person’s stage = highest stage with all milestones ticked."* under *The ladder* from
  * 1024px, behind an ⓘ beside the heading below it.
  */
-describe('P18.97-T4 AC-6 the ladder’s grey text per size', () => {
+describe('P18.9-T4 AC-6 the ladder’s grey text per size', () => {
   afterEach(() => { vi.unstubAllGlobals(); window.location.hash = ''; });
   const NOTE = 'A person’s stage = highest stage with all milestones ticked.';
 
@@ -279,12 +280,12 @@ describe('P18.97-T4 AC-6 the ladder’s grey text per size', () => {
     return { heading, sentence: shown(sentence), tip: shown(tip.parentElement!), glyph: tip };
   }
 
-  it.each([1024, 1280])('P18.97-T4 AC-6 at %ipx shows the sentence under the heading and no ⓘ', async (px) => {
+  it.each([1024, 1280])('P18.9-T4 AC-6 at %ipx shows the sentence under the heading and no ⓘ', async (px) => {
     const { sentence, tip } = await drawnAt(px);
     expect([sentence, tip]).toEqual([true, false]);
   });
 
-  it.each([767, 768, 1023])('P18.97-T4 AC-6 at %ipx hides it behind the ⓘ beside The ladder', async (px) => {
+  it.each([767, 768, 1023])('P18.9-T4 AC-6 at %ipx hides it behind the ⓘ beside The ladder', async (px) => {
     const { heading, sentence, tip, glyph } = await drawnAt(px);
     expect([sentence, tip]).toEqual([false, true]);
     // Beside its subject, and not inside the heading's name.
@@ -292,9 +293,38 @@ describe('P18.97-T4 AC-6 the ladder’s grey text per size', () => {
     expect(heading).not.toContainElement(glyph);
   });
 
-  it('P18.97-T4 AC-6 says the twenty-seven words no more', async () => {
+  it('P18.9-T4 AC-6 says the twenty-seven words no more', async () => {
     render(catalog(), OWNER, '#ladder');
     await screen.findByRole('heading', { name: 'The ladder' });
     expect(screen.queryByText(/Four stages\. Somebody is at the highest stage/)).toBeNull();
+  });
+});
+
+/**
+ * **No target under 44px on a phone or a tablet** (P19.2-T3 AC-4; UI-142: text links 17px tall, *Tampilkan yang
+ * diarsipkan* 13px, tab rows 38px, ⠿ 20px), inside the field shell's frame the Owner's pages wear (ADR-0197), which
+ * `data-surface` stands for here.
+ */
+describe('P19.2-T3 AC-4 the capability mapping’s targets (UI-142)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it.each([375, 768])('P19.2-T3 AC-4 at %ipx finds no target under 44px', async (px) => {
+    atWidth(px);
+    render();
+    const frame = document.body.firstElementChild!;
+    frame.setAttribute('data-surface', 'v1');
+    await screen.findByRole('heading', { name: 'Capability Mapping', level: 1 });
+    await screen.findByRole('checkbox', { name: 'Show archived' });
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Show archived' }));
+    expect(smallTargets(frame, px)).toEqual([]);
+  });
+
+  it.each([375, 768])('P19.2-T3 AC-4 at %ipx finds no target under 44px on The ladder', async (px) => {
+    atWidth(px);
+    render(catalog(), OWNER, '#ladder');
+    const frame = document.body.firstElementChild!;
+    frame.setAttribute('data-surface', 'v1');
+    await screen.findByRole('heading', { name: 'The ladder' });
+    expect(smallTargets(frame, px)).toEqual([]);
   });
 });

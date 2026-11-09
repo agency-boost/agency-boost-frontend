@@ -5,6 +5,7 @@ import { Page } from '@/components/page';
 import { DataTable, Row, Cell } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Card, ErrorBanner } from '@/components/ui/field';
+import { ListCard, ListRow } from '@/components/ui/list-rows';
 import { SkeletonTable } from '@/components/ui/skeleton';
 import { StatusPill } from '@/components/ui/status-pill';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
@@ -12,6 +13,7 @@ import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
 import { adminOfficesMessages } from '@/i18n/messages/admin-offices';
 import { formatOfficeDay, OFFICE_TIME_ZONE } from '@/lib/format';
 import { readTenantAdmins, type PlatformAdminRow } from '@/lib/admin';
+import { useMediaQuery } from '@/lib/use-media-query';
 
 /**
  * The skeleton and the table read the same array, so a column added to one cannot
@@ -32,11 +34,16 @@ import { readTenantAdmins, type PlatformAdminRow } from '@/lib/admin';
  * that could hand it out would route around a decision the office owns. This answers a
  * different question — *who can act inside our tenants* — which nothing else could give
  * without opening every office in turn.
+ *
+ * **Below 1024px one row per person** (P19.2-T2 AC-1; UI-126: no sideways scroll): the name, *email · office* under it,
+ * when the access was granted — or that it came with the office — and the *Owner* / *Admin* pills on the right. Read
+ * only, as the table is. From 1024px the table.
  */
 export default function TenantAdminsPage() {
   const t = useMessages(adminOfficesMessages).admins;
   const figures = useFigureLanguage();
   const COLUMNS = [t.columns.who, t.columns.office, t.columns.access, t.columns.granted];
+  const belowLaptop = useMediaQuery(['phone', 'tablet']);
   const [rows, setRows] = useState<PlatformAdminRow[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
 
@@ -52,7 +59,6 @@ export default function TenantAdminsPage() {
   return (
     <Page
       title={t.title}
-      subtitle={t.subtitle}
     >
       {error && <ErrorBanner {...error} />}
 
@@ -69,6 +75,31 @@ export default function TenantAdminsPage() {
       {rows && rows.length > 0 && (
         <>
           <p className="mb-3 text-md text-muted">{t.line}</p>
+          {belowLaptop ? (
+            <ListCard label={t.caption}>
+              {rows.map((r) => (
+                <ListRow
+                  key={r.membershipId}
+                  data-row={r.membershipId}
+                  title={r.fullName}
+                  meta={`${r.email} · ${r.kpmLabel}`}
+                  note={(
+                    <span className="text-muted">
+                      {r.grantedAt
+                        ? <>{t.columns.granted} <time dateTime={r.grantedAt}>{formatOfficeDay(r.grantedAt, OFFICE_TIME_ZONE, figures)}</time></>
+                        : t.withOffice}
+                    </span>
+                  )}
+                  trailing={(
+                    <>
+                      {r.isOwner && <StatusPill status="success" label={t.owner} />}
+                      {r.isAdmin && <StatusPill status="neutral" label={t.admin} />}
+                    </>
+                  )}
+                />
+              ))}
+            </ListCard>
+          ) : (
           <DataTable
             caption={t.caption}
             columns={COLUMNS}
@@ -100,6 +131,7 @@ export default function TenantAdminsPage() {
               </Row>
             ))}
           </DataTable>
+          )}
         </>
       )}
     </Page>

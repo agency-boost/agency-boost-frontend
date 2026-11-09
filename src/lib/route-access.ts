@@ -20,7 +20,7 @@ import type { Me } from './session';
  *    their gates alone. The role half of this, `familyAllows`, is also what each shell asks of its reader.
  * 2. **The gates** — every `permission` a page or a layout above it declares, and the one its group's
  *    shell applies when the layout names none; each must be in `me.permissions`.
- * 3. **Owner-only** — what the console's nav hides from an Admin (`ownerOnly` in `tenant-shell.tsx`).
+ * 3. **Owner-only** — what the office view's menu hides from an Admin (`lib/field-nav.ts`).
  * 4. **Core Leader** — KPM analytics, which a field member reads only as a Core Leader (`CORE_LEADER_ROUTES`).
  *
  * The tables are kept honest by `route-access.spec.ts`, which reads `src/app` and fails when a page, a
@@ -41,14 +41,20 @@ const PAGES: Readonly<Record<RouteFamily, readonly string[]>> = {
     '/admin', '/admin/analytics', '/admin/audit', '/admin/billing', '/admin/companies',
     // ADR-0185: a company's page, its settings, a template's checklist and a section; the old address redirects.
     '/admin/companies/[companyId]', '/admin/companies/[companyId]/settings', '/admin/companies/[companyId]/template',
+    // P19.4-T3 (ADR-0207): *KPM & data*, *All members* and *Lihat sebagai KPM*.
+    '/admin/companies/[companyId]/kpms', '/admin/members', '/admin/tenants/[kpmId]/analytics',
     '/admin/companies/[companyId]/templates/[templateId]', '/admin/companies/[companyId]/templates/[templateId]/[section]',
     '/admin/impersonate/[userId]', '/admin/impersonation/[sessionId]',
     '/admin/kpm-requests', '/admin/leader-limit-requests', '/admin/org-levels', '/admin/tenant-admins', '/admin/tenants', '/admin/tenants/new',
+    // P19.6-T5 (ADR-0219 §4): the Super Admin's guide, INTERNAL.
+    '/admin/panduan',
     '/admin/tenants/[kpmId]', '/admin/tenants/[kpmId]/owner', '/admin/tenants/[kpmId]/roster',
   ],
   tenant: [
     '/kpm/data-upload', '/kpm/overview',
     '/kpm/settings/activation-checklist', '/kpm/settings/activity-types', '/kpm/settings/branch-info',
+    // P19.6-T1 (ADR-0218 §1): *Tampilan KPM*.
+    '/kpm/settings/branding',
     '/kpm/settings/campaigns', '/kpm/settings/capability-mapping', '/kpm/settings/events',
     '/kpm/settings/lead-statuses', '/kpm/settings/products', '/kpm/settings/ratio-benchmarks',
     '/kpm/settings/recruitment-pitch', '/kpm/settings/training', '/kpm/settings/training/[moduleId]',
@@ -61,20 +67,31 @@ const PAGES: Readonly<Record<RouteFamily, readonly string[]>> = {
     '/coaching/[membershipId]', '/coaching/[membershipId]/activation', '/coaching/[membershipId]/activity',
     '/coaching/[membershipId]/archive/[sessionId]', '/coaching/[membershipId]/goal-setting',
     '/coaching/[membershipId]/leader-notes', '/coaching/[membershipId]/leads', '/coaching/[membershipId]/session',
-    '/coaching/[membershipId]/summary', '/coaching/[membershipId]/training',
-    '/events', '/events/[eventId]', '/goals', '/group-tree', '/home', '/leads', '/new-hires', '/new-hires/[membershipId]',
-    '/product-catalog', '/product-catalog/[productCode]', '/recruitment', '/recruitment/attack-plan',
-    '/recruitment/pitch-materials', '/summary', '/training', '/training/[categoryCode]',
+    '/coaching/[membershipId]/summary', '/coaching/[membershipId]/survey', '/coaching/[membershipId]/training',
+    // `/group-tree/[membershipId]` since P19.3-T3: a leader's Group Tree, read-only, from KPM Analytics' leader sheet.
+    '/events', '/events/[eventId]', '/goals', '/group-tree', '/group-tree/[membershipId]', '/home', '/leads', '/new-hires',
+    '/new-hires/[membershipId]',
+    '/product-catalog', '/product-catalog/[productCode]',
+    // P19.7-T2 (ADR-0221 §3, §8): *Riwayat*, step 1 with nothing stored, and a stored proposal's three steps.
+    '/proposal', '/proposal/[proposalId]', '/proposal/new',
+    '/recruitment', '/recruitment/attack-plan',
+    // P19.5-T4 (ADR-0216 §5, §6): the *Survei* tile's page and the form, every field role's.
+    '/recruitment/pitch-materials', '/summary', '/surveys', '/surveys/[runId]', '/training', '/training/[categoryCode]',
     '/training/[categoryCode]/[moduleCode]', '/unit/dashboard', '/unit/dashboard/[membershipId]',
     '/user-management/add', '/user-management/kpm', '/user-management/leader', '/user-management/pending',
   ],
   auth: [
-    '/forgot-password', '/login', '/register', '/reset-password/[token]', '/verify-email-change/[token]',
-    '/verify-email/[token]',
+    // `/link-account/[token]` since P19.2-T1 AC-8 (ADR-0199 §2): a linked login's link, opened from the other mailbox.
+    '/forgot-password', '/link-account/[token]', '/login', '/register', '/reset-password/[token]',
+    '/verify-email-change/[token]', '/verify-email/[token]',
   ],
   shared: [
-    // `/kpm/analytics` since P18.8-T5 (ADR-0159 §3): the Owner's, an Admin's and a Core Leader's, each in their own shell.
-    '/', '/choose-a-password', '/join', '/kpm/analytics', '/kpm/analytics/compliance', '/leader-meetings',
+    // `/kpm/analytics` since P18.5-T5 (ADR-0159 §3): the Owner's, an Admin's and a Core Leader's, each in their own shell.
+    // `/kpm/advanced-analytics/*` since P19.5-T4: the KPM's survey tabs, the Owner's, an Admin's and a Core Leader's, as KPM analytics;
+    // the page's index and its other sections since P19.5-T3 (ADR-0215 §1).
+    '/', '/choose-a-password', '/join', '/kpm/advanced-analytics', '/kpm/advanced-analytics/[section]',
+    '/kpm/advanced-analytics/nps', '/kpm/advanced-analytics/qual', '/kpm/analytics',
+    '/kpm/analytics/compliance', '/leader-meetings',
     '/leader-meetings/[meetingId]', '/leader-meetings/shared/[token]', '/notifications', '/profile',
   ],
 };
@@ -102,19 +119,26 @@ export const GATES: readonly RouteGate[] = [
   // ADR-0185: the KPM template's four pages. The old address only redirects, under the console's own gate.
   { route: '/admin/companies/[companyId]', on: 'page', permission: 'company_template:read' },
   { route: '/admin/companies/[companyId]/settings', on: 'page', permission: 'company_template:read' },
+  // P19.4-T3 (ADR-0207 §1): the Super Admin's reads across KPMs.
+  { route: '/admin/companies/[companyId]/kpms', on: 'page', permission: 'platform_kpm_figures:read' },
+  { route: '/admin/members', on: 'page', permission: 'platform_members:read' },
+  { route: '/admin/tenants/[kpmId]/analytics', on: 'page', permission: 'platform_kpm_figures:read' },
   { route: '/admin/companies/[companyId]/templates/[templateId]', on: 'page', permission: 'company_template:read' },
   { route: '/admin/companies/[companyId]/templates/[templateId]/[section]', on: 'page', permission: 'company_template:read' },
-  { route: '/admin/impersonation/[sessionId]', on: 'page', permission: 'impersonation:elevate_to_write' },
   // ADR-0157: deciding a leader past an office's limit is AgencyBoost's alone.
   { route: '/admin/leader-limit-requests', on: 'page', permission: 'leader_limit_request:decide' },
   { route: '/admin/org-levels', on: 'page', permission: 'org_level:crud' },
-  { route: '/admin/tenants/[kpmId]/roster', on: 'page', permission: 'kpm:import_roster' },
+  // P19.6-T5 (ADR-0219 §4): the Super Admin's guide is that role's alone, and the API refuses everybody else.
+  { route: '/admin/panduan', on: 'page', permission: 'platform_guide:read' },
+  // P19.4-T2 (ADR-0206 §3, §6): `/admin/impersonation/[sessionId]` and `/admin/tenants/[kpmId]/roster` only redirect, under
+  // the console's own gate — the approval's and the import's grants are gone from the Super Admin with them.
   // The office console.
   { route: '/kpm/data-upload', on: 'page', permission: 'data_upload:read' },
   { route: '/kpm/overview', on: 'page', permission: 'kpm_overview:read' },
   { route: '/kpm/settings/activation-checklist', on: 'page', permission: 'activation_settings:read' },
   { route: '/kpm/settings/activity-types', on: 'page', permission: 'tenant_config:read' },
   { route: '/kpm/settings/branch-info', on: 'page', permission: 'kpm:read_profile' },
+  { route: '/kpm/settings/branding', on: 'page', permission: 'tenant_config:read' },
   { route: '/kpm/settings/campaigns', on: 'page', permission: 'campaign_settings:read' },
   { route: '/kpm/settings/capability-mapping', on: 'page', permission: 'tenant_config:read' },
   { route: '/kpm/settings/events', on: 'page', permission: 'event_settings:read' },
@@ -140,16 +164,20 @@ export const GATES: readonly RouteGate[] = [
   { route: '/coaching/[membershipId]/activity', on: 'page', permission: 'activity_log:read_raw' },
   { route: '/coaching/[membershipId]/goal-setting', on: 'page', permission: 'goal:read' },
   { route: '/coaching/[membershipId]/leader-notes', on: 'page', permission: 'coaching_profile:read' },
-  // UI V1, UI-029 (Phase 18.99 T8): the coachee's leads, read-only, through `GET /leads?owner=`.
+  // UI V1, UI-029 (Phase 18.11 T8): the coachee's leads, read-only, through `GET /leads?owner=`.
   { route: '/coaching/[membershipId]/leads', on: 'page', permission: 'lead:read' },
   { route: '/coaching/[membershipId]/summary', on: 'page', permission: 'personal_summary:read' },
   { route: '/events', on: 'layout', permission: 'event:read_list' },
   { route: '/goals', on: 'page', permission: 'goal:read' },
   { route: '/group-tree', on: 'page', permission: 'org_tree:read' },
+  { route: '/group-tree/[membershipId]', on: 'page', permission: 'org_tree:read' },
   { route: '/leads', on: 'page', permission: 'lead:read' },
   { route: '/new-hires', on: 'page', permission: 'new_hires:read_roster' },
   { route: '/new-hires/[membershipId]', on: 'page', permission: 'activation:read' },
   { route: '/product-catalog', on: 'layout', permission: 'product_catalog:read' },
+  { route: '/proposal', on: 'page', permission: 'proposal:read' },
+  { route: '/proposal/[proposalId]', on: 'page', permission: 'proposal:read' },
+  { route: '/proposal/new', on: 'page', permission: 'proposal:read' },
   { route: '/recruitment', on: 'layout', permission: 'recruitment:read' },
   { route: '/recruitment/pitch-materials', on: 'page', permission: 'recruitment:read' },
   { route: '/training', on: 'layout', permission: 'training_progress:read' },
@@ -158,6 +186,7 @@ export const GATES: readonly RouteGate[] = [
   { route: '/user-management/add', on: 'page', permission: 'member:search_untagged_pool' },
   { route: '/user-management/pending', on: 'page', permission: 'leader_request:read_inbox' },
   // Outside every group.
+  { route: '/kpm/advanced-analytics', on: 'layout', permission: 'advanced_analytics:read' },
   { route: '/kpm/analytics', on: 'layout', permission: 'kpm_analytics:read' },
   { route: '/leader-meetings', on: 'page', permission: 'leader_meeting:read' },
   { route: '/leader-meetings/[meetingId]', on: 'page', permission: 'leader_meeting:read' },
@@ -167,9 +196,9 @@ export const GATES: readonly RouteGate[] = [
 ];
 
 /**
- * The gate a group's shell applies to every page in it, which its layout does not spell: the layout renders
- * the shell without a `permission`, so the shell's default is the gate — `AdminShell`'s `kpm:list_all` and
- * `TenantShell`'s `member:read_profile`. `AgentShell` has none.
+ * The gate a group's layout applies to every page in it, which it does not spell: the layout renders the one shell
+ * with its `family` and no `permission`, so the family's gate is the default (`Shell`, P19.2-T1) — the platform's
+ * `kpm:list_all` and the office's `member:read_profile`. The field family has none.
  *
  * Written as rows under `permission`, as `GATES` is, so the copy scan reads each code as the gate it is
  * (`no-permission-code-in-copy.spec.ts`).
@@ -184,19 +213,22 @@ export const FAMILY_GATES: Readonly<Partial<Record<RouteFamily, string>>> = Obje
 );
 
 /**
- * The console's pages for the Owner alone (`roles-and-permissions.md` §1.6): hidden from an Admin in the
- * nav, decided by `isKpmOwner` (`ownerOnly` in `tenant-shell.tsx`). Since ADR-0027 that is *Manage KPM
+ * The office's pages for the Owner alone (`roles-and-permissions.md` §1.6): hidden from an Admin in the
+ * office view's menu, decided by `isKpmOwner` (`lib/field-nav.ts`, P19.2-T1). Since ADR-0027 that is *Manage KPM
  * admins* alone.
  */
 export const OWNER_ONLY: readonly string[] = ['/people/admins'];
 
 /**
- * **The pages a field member opens only as a Core Leader** (ADR-0159 §2, P18.8-T5): KPM analytics. The AB and AAB
+ * **The pages a field member opens only as a Core Leader** (ADR-0159 §2, P18.5-T5): KPM analytics. The AB and AAB
  * hold its grant, `kpm_analytics:read`, so that a Core Leader's request passes the guard, and the API answers a leader
  * who is not one 404 — a fact of the membership the session carries (`membership.isCoreLeader`), not a permission. The
  * layout draws *Not available to you* for them, and the login page does not send them here.
  */
-export const CORE_LEADER_ROUTES: readonly string[] = ['/kpm/analytics', '/kpm/analytics/compliance'];
+export const CORE_LEADER_ROUTES: readonly string[] = [
+  '/kpm/advanced-analytics', '/kpm/advanced-analytics/[section]', '/kpm/advanced-analytics/nps', '/kpm/advanced-analytics/qual',
+  '/kpm/analytics', '/kpm/analytics/compliance',
+];
 
 /**
  * **Whether the reader reads the office's analytics**: the Owner, an Admin, or a Core Leader — tagged, on a leader
@@ -262,11 +294,10 @@ export type ShellFamily = Extract<RouteFamily, 'admin' | 'tenant' | 'agent'>;
  *
  * - `admin`: a Super Admin.
  * - `tenant`: the Owner or an Admin of their office, and never a Super Admin.
- * - `agent`: anybody but a Super Admin — a field member, an Owner or an Admin in their field view
- *   (ADR-0114), and a member who is pending or in no office, whose own pages are there.
+ * - `agent`: anybody but a Super Admin — a field member, an Owner or an Admin in either of their views
+ *   (ADR-0198 §7: a view is not a family), and a member who is pending or in no office, whose own pages are there.
  *
- * It is the choice `RoleShell` makes, asked the other way round, so a cross-family page always wears a chrome
- * that admits its reader. Inside a support session `me` is the member's, so this follows the member. Whether a
+ * Until P19.2-T1 it was the choice `RoleShell` made between three shells, asked the other way round. Inside a support session `me` is the member's, so this follows the member. Whether a
  * pending member may open more than their landing is `canOpen`'s question, not this one.
  */
 export function familyAllows(family: RouteFamily, me: Me): boolean {

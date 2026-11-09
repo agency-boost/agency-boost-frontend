@@ -6,11 +6,16 @@ import type { PublishAllOutcome } from '@/lib/admin';
 import { sectionOfKind, type TemplateSection } from '@/lib/template-sections';
 import { useMessages } from '@/i18n/language-provider';
 import { adminTemplateMessages } from '@/i18n/messages/admin-template';
+import { adminTemplateAnalyticsMessages } from '@/i18n/messages/admin-template-analytics';
 
 /**
- * **Terbitkan semua, asked first** (ADR-0185 §3; P18.99-T20 AC-2): the sections that will be published, by name, and
+ * **Terbitkan semua, asked first** (ADR-0185 §3; P18.11-T20 AC-2): the sections that will be published, by name, and
  * the one sentence that matters — *KPM yang sudah ada tidak berubah; hanya KPM baru yang memakai versi ini.* A titled
  * `Modal`, not the product's `Dialog`, because a list is more than its one message.
+ *
+ * ***Advanced analytics* stands apart** (P19.5-T1 AC-16; AA UI-020): it reaches every KPM that already exists, so when it
+ * is in the batch it has its own line — *"Advanced analytics berlaku untuk semua KPM yang sudah ada (N KPM)"* — after
+ * the others, whose note is what publishing does to existing KPMs since ADR-0208 (the push is offered afterwards).
  */
 export function PublishAllDialog({
   open,
@@ -18,15 +23,21 @@ export function PublishAllDialog({
   busy,
   onConfirm,
   onClose,
+  analyticsKpms = 0,
 }: {
   open: boolean;
   sections: TemplateSection[];
   busy: boolean;
   onConfirm: () => void;
   onClose: () => void;
+  /** How many KPMs read the template's *Advanced analytics* now. */
+  analyticsKpms?: number;
 }) {
   const words = useMessages(adminTemplateMessages);
+  const analytics = useMessages(adminTemplateAnalyticsMessages).publishAll;
   const t = words.publishAll;
+  const others = sections.filter((section) => section.slug !== 'analytics');
+  const live = sections.some((section) => section.slug === 'analytics');
   return (
     <Modal
       open={open}
@@ -41,10 +52,17 @@ export function PublishAllDialog({
       )}
     >
       <p className="text-md text-navy">{t.lead}</p>
-      <ul className="mt-2 list-disc pl-5 text-md text-navy">
-        {sections.map((section) => <li key={section.slug}>{words.sections[section.slug]}</li>)}
-      </ul>
-      <p className="mt-3 text-md font-semibold text-navy">{t.note}</p>
+      {others.length > 0 && (
+        <>
+          <ul className="mt-2 list-disc pl-5 text-md text-navy">
+            {others.map((section) => <li key={section.slug}>{words.sections[section.slug]}</li>)}
+          </ul>
+          <p className="mt-3 text-md font-semibold text-navy">{t.note}</p>
+        </>
+      )}
+      {live && (
+        <p className="mt-3 text-md font-semibold text-navy">{analytics.everyKpm({ n: analyticsKpms })}</p>
+      )}
     </Modal>
   );
 }

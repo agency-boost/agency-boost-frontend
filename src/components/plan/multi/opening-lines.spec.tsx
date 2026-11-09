@@ -30,7 +30,7 @@ describe('OpeningLines', () => {
 
   it('the tag is amber-ink, where the prototype’s amber-dark misses 4.5:1 on a card', () => {
     const { container } = render(<OpeningLines lines={[line('a', 'Tag A', 'x'), line('b', 'Tag B', 'y')]} />);
-    expect(screen.getByText('Tag A')).toHaveClass('text-amber-ink', 'uppercase');
+    expect(screen.getByText('Tag A')).toHaveClass('text-primary-ink', 'uppercase');
     expect(container.innerHTML).not.toMatch(/amber-dark/);
   });
 

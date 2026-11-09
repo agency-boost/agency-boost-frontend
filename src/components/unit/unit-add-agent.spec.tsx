@@ -24,15 +24,15 @@ const show = (view = dashboard(), me = ADDER, forId?: string) => {
   return stub;
 };
 
-describe('+ Add agent on the Unit Dashboard (P18.96-T3 AC-1)', () => {
+describe('+ Add agent on the Unit Dashboard (P18.8-T3 AC-1)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('P18.96-T3 AC-1 sits in the roster’s header beside Update production, and adds to the reader’s own unit', async () => {
+  it('P18.8-T3 AC-1 sits in the roster’s header beside Update production, and adds to the reader’s own unit', async () => {
     const { calls } = show();
     const header = (await screen.findByRole('heading', { name: 'Your team’s roster' })).closest('div')!.parentElement!;
     expect(within(header).getByRole('button', { name: 'Update production' })).toBeInTheDocument();
     await userEvent.click(within(header).getByRole('button', { name: '+ Add agent' }));
-    // The form's module is fetched on its first opening (P18.99-T16).
+    // The form's module is fetched on its first opening (P18.11-T16).
     const dialog = await screen.findByRole('dialog', { name: 'Add agent' });
     // The office's today, as the dashboard answered it.
     expect(within(dialog).getByLabelText('Join date')).toHaveValue('2026-10-08');
@@ -45,7 +45,7 @@ describe('+ Add agent on the Unit Dashboard (P18.96-T3 AC-1)', () => {
     expect(await screen.findByRole('dialog', { name: 'Invite Yusuf Hidayat' })).toBeInTheDocument();
   });
 
-  it('P18.96-T3 AC-1 the Owner on somebody’s unit adds to that unit, named', async () => {
+  it('P18.8-T3 AC-1 the Owner on somebody’s unit adds to that unit, named', async () => {
     const { calls } = show(SARIS, OWNER, 'mem-sari');
     await userEvent.click(await screen.findByRole('button', { name: '+ Add agent' }));
     const dialog = await screen.findByRole('dialog', { name: 'Add agent to Sari Puspita’s unit' });
@@ -57,19 +57,19 @@ describe('+ Add agent on the Unit Dashboard (P18.96-T3 AC-1)', () => {
     expect(JSON.parse(post.init.body as string)).toMatchObject({ leaderMembershipId: 'mem-sari' });
   });
 
-  it('P18.96-T3 AC-7 a leader on a unit below their own is not offered it: their grant is their own unit', async () => {
+  it('P18.8-T3 AC-7 a leader on a unit below their own is not offered it: their grant is their own unit', async () => {
     show(SARIS, ADDER, 'mem-sari');
     await screen.findByRole('heading', { name: 'Your team’s roster' });
     expect(screen.queryByRole('button', { name: '+ Add agent' })).not.toBeInTheDocument();
   });
 
-  it('P18.96-T3 AC-7 nor a reader who does not hold member:invite', async () => {
+  it('P18.8-T3 AC-7 nor a reader who does not hold member:invite', async () => {
     show(dashboard(), AGUS_ME);
     await screen.findByRole('heading', { name: 'Your team’s roster' });
     expect(screen.queryByRole('button', { name: '+ Add agent' })).not.toBeInTheDocument();
   });
 
-  it('P18.96-T3 AC-1 a leader who leads nobody yet adds their first agent from the empty state', async () => {
+  it('P18.8-T3 AC-1 a leader who leads nobody yet adds their first agent from the empty state', async () => {
     show(EMPTY, { ...ADDER, membership: { ...ADDER.membership!, membershipId: 'mem-rina', directCount: 0 } });
     expect(await screen.findByRole('button', { name: '+ Add agent' })).toBeInTheDocument();
   });
@@ -91,7 +91,11 @@ describe('+ Add agent on the Unit Dashboard (P18.96-T3 AC-1)', () => {
     vi.unstubAllGlobals();
     atWidth(375);
     show(EMPTY, { ...ADDER, membership: { ...ADDER.membership!, membershipId: 'mem-rina', directCount: 0 } });
-    expect(await screen.findAllByText('Nobody is in your unit yet.')).not.toHaveLength(0);
+    // P19-T4 AC-3: the sample's next step is a link into User Management, never the dialog, on a phone — and, since
+    // P19.8-T4 AC-11 (MOB UI-181, OD-280), no *No data yet* line above it.
+    expect(await screen.findByText('Example')).toBeInTheDocument();
+    expect(screen.queryByText('No data yet')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Add your first agent' })).toHaveAttribute('href', '/user-management/add');
     expect(screen.queryByRole('button', { name: '+ Add agent' })).not.toBeInTheDocument();
   });
 });

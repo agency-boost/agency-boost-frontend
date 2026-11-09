@@ -1,18 +1,17 @@
 'use client';
 
-import { api } from './api-client';
-
 /**
- * **A company's recruitment playbook, as the Super Admin reads and writes it** (P17-T8, OD-88 → 5,
- * ADR-0125): the words every agent of the company builds an Attack Plan from — a profile per candidate
- * type, an opening per motivation, the answer to each hesitation, a candidate type's own answers, and
- * the next action.
+ * **A recruitment playbook's shape, as the Super Admin edits it** (P17-T8, OD-88 → 5, ADR-0125): the words every agent
+ * builds an Attack Plan from — a profile per candidate type, an opening per motivation, the answer to each hesitation, a
+ * candidate type's own answers, and the next action.
  *
- * **The company's, read live.** No template holds it and nobody publishes it, which is why it sits
- * beside *Products* on the Company template rather than behind a draft bar (ADR-0115 §7).
+ * **A template section since P19.4-T5** (ADR-0210): the `recruitment_playbook` kind, drafted as it is typed and
+ * published through the template's kind routes (`readTemplate`, `saveTemplateDraft`, `publishTemplate` in `admin.ts`),
+ * its read carrying the editor's `playbook` — the AgencyBoost words, the vocabulary and the bounds. Each KPM reads its
+ * template's published words live. `GET` and `PUT /admin/companies/:companyId/recruitment-playbook` are retired.
  *
- * The codes are the backend's domain constants (D-vocabulary), served in `vocabulary` with their chip
- * labels and in the chips' order — never declared here.
+ * The codes are the backend's domain constants (D-vocabulary), served in `vocabulary` with their chip labels and in the
+ * chips' order — never declared here.
  */
 
 /** One answer to one of the brief's questions: its stable code, and the chip's label verbatim. */
@@ -55,15 +54,6 @@ export interface PlaybookBody {
   nextAction: string;
 }
 
-/** The playbook as stored. `updatedBy` is `null` for the one a company was given when it was created. */
-export interface PlaybookDto {
-  companyId: string;
-  version: number;
-  body: PlaybookBody;
-  updatedAt: string;
-  updatedBy: { name: string } | null;
-}
-
 /**
  * **The bounds the API refuses past**, served with the read (invariant §7): the longest any one text may
  * be once trimmed, and the most benefits one candidate type lists. Never re-declared here.
@@ -72,28 +62,3 @@ export interface PlaybookLimits {
   textMax: number;
   benefitsMax: number;
 }
-
-/** What the tab reads: the company's playbook or none, the AgencyBoost words, the vocabulary, the bounds. */
-export interface PlaybookRead {
-  playbook: PlaybookDto | null;
-  /** The AgencyBoost words (the prototype's, verbatim), for *Start from the AgencyBoost words*. */
-  defaults: PlaybookBody;
-  vocabulary: RecruitmentVocabulary;
-  limits: PlaybookLimits;
-}
-
-
-/** The company's playbook (`company_template:read`). */
-export const readRecruitmentPlaybook = (companyId: string) =>
-  api<PlaybookRead>(`/admin/companies/${companyId}/recruitment-playbook`);
-
-/**
- * Save the whole playbook (`recruitment_playbook:write`), **pinned to the version it was read at**:
- * `null` only to create one. A version the server has moved past is `409 VERSION_CONFLICT`; a text
- * missing or too long is `400 VALIDATION_FAILED` naming each field.
- */
-export const saveRecruitmentPlaybook = (companyId: string, version: number | null, body: PlaybookBody) =>
-  api<PlaybookDto>(`/admin/companies/${companyId}/recruitment-playbook`, {
-    method: 'PUT',
-    body: { version, body },
-  });

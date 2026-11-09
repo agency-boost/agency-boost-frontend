@@ -11,7 +11,7 @@ import { makeMe, renderInIndonesian, stubFetch, type StubReply } from '@test/har
 import PersonalSummaryPage from './page';
 
 /**
- * **P18.98-T4, Personal Summary in ID mode** (field selling; UI V1 since 2026-10-30, UI-006, UI-050 – UI-057): `/summary`
+ * **P18.10-T4, Personal Summary in ID mode** (field selling; UI V1 since 2026-10-30, UI-006, UI-050 – UI-057): `/summary`
  * — its title, *Unduh* and the control row with its month and year pill — and the cards a coachee's tab draws too: the
  * date header, the goal card with the gap inside it, the sales activity targets and their tiles, the ratio card, the
  * leads that need the reader, and the six insight rules. Read in Bahasa Indonesia: our words the approved glossary's, §A.4's labels and the jargon kept English, what
@@ -110,7 +110,7 @@ const sheetOf = async (pill: string) => {
 };
 const foot = (goal: HTMLElement) => goal.querySelector('dl')?.textContent;
 
-describe('P18.98-T4 Personal Summary in Indonesian', () => {
+describe('P18.10-T4 Personal Summary in Indonesian', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it('AC-2, UI-051 frames the page in Indonesian: Unduh, Bulanan | Tahunan and the month pill, the title kept, no line', async () => {
@@ -161,16 +161,21 @@ describe('P18.98-T4 Personal Summary in Indonesian', () => {
     show(summary());
     const targets = await card('Target aktivitas penjualan Anda');
 
-    expect(targets).toHaveTextContent('Dari Goal Settings — janji temu dan closings adalah target pipeline penjualan Anda.');
-    expect(within(targets).getByRole('link', { name: 'Goal Settings' })).toHaveAttribute('href', '/goals');
+    // P19.1-T4 AC-6 (UI-121): no helper line, and no link in it.
+    expect(targets).not.toHaveTextContent('Dari Goal Settings');
+    expect(within(targets).queryByRole('link', { name: 'Goal Settings' })).not.toBeInTheDocument();
     expect(targets).toHaveTextContent('Set appointment20 / 57');
     expect(within(targets).getByRole('progressbar', { name: 'Submission polis terhadap target' }))
       .toHaveAttribute('aria-valuetext', '2 dari 5');
     expect(targets.querySelector('[data-activity-total]')).toHaveTextContent('1.250 aktivitas bulan ini');
     expect(within(targets).getByRole('button', {
-      name: 'Submission polis adalah polis yang Anda catat di Log Activity; APE berasal dari unggahan produksi.',
+      name: 'Submission polis adalah polis yang Anda catat di Log Activity.',
     })).toBeInTheDocument();
-    const phone = targets.querySelector('[data-breakdown="phone"]') as HTMLElement;
+    // UI-157 item 1: *APE berasal dari unggahan produksi* is the goal card's ⓘ now.
+    const goal = await card('Target vs. realisasi (APE)');
+    await userEvent.click(within(goal).getByRole('button', { name: 'Apa itu APE?' }));
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(/APE berasal dari unggahan produksi\.$/);
+    const phone = targets.querySelector('[data-breakdown="collapsed"]') as HTMLElement;
     expect(within(phone).getAllByRole('button').map((b) => b.textContent)).toEqual(['Aktivitas Recruitment6', 'Aktivitas Development2']);
     await userEvent.click(within(phone).getAllByRole('button')[0]);
     const sheet = await screen.findByRole('dialog', { name: 'Aktivitas Recruitment' });
@@ -386,7 +391,7 @@ describe('P18.98-T4 Personal Summary in Indonesian', () => {
  * their pronoun (T4 AC-3), the prototype's coaching words, nothing linking to the reader's own screens, and no word
  * naming the office (ADR-0084, in Indonesian too).
  */
-describe('P18.98-T4 a coachee’s Personal Summary in Indonesian', () => {
+describe('P18.10-T4 a coachee’s Personal Summary in Indonesian', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   const cards = (body: unknown, pronoun: 'she' | 'he' | 'they', pulse = true) => {
@@ -409,9 +414,9 @@ describe('P18.98-T4 a coachee’s Personal Summary in Indonesian', () => {
     }), pronoun);
 
     const targets = await card('Target aktivitas penjualannya');
-    expect(targets).toHaveTextContent('janji temu dan closings adalah target pipeline penjualannya.');
+    expect(targets).not.toHaveTextContent('janji temu dan closings');
     expect(within(targets).getByRole('button', {
-      name: 'Submission polis adalah polis yang dia catat di Log Activity; APE berasal dari unggahan produksi.',
+      name: 'Submission polis adalah polis yang dia catat di Log Activity.',
     })).toBeInTheDocument();
     const goal = await card('Target vs. realisasi (APE)');
     expect(within(goal).getByRole('button', { name: 'Dari unggahan produksi, Sep 2026' })).toBeInTheDocument();
@@ -429,8 +434,8 @@ describe('P18.98-T4 a coachee’s Personal Summary in Indonesian', () => {
     );
     expect(next).toHaveTextContent('jadwalkan ulang atau atur tanggal baru minggu ini. 2 leads-nya yang lain juga terlambat.');
     expect(await card('Cara meningkatkan performanya')).toHaveTextContent('di tahap itulah aktivitasnya belum menghasilkan konversi.');
-    // Nothing links to the reader's own screens but the coachee's Goal Setting tab.
-    expect(screen.getAllByRole('link').map((a) => a.getAttribute('href'))).toEqual(['/coaching/mem-rina/goal-setting']);
+    // Nothing links to the reader's own screens; the helper line's Goal Setting link went with it (UI-121, P19.1-T4).
+    expect(screen.queryAllByRole('link').map((a) => a.getAttribute('href'))).toEqual([]);
     expect(document.body.textContent).not.toMatch(/\bKPM\b/);
     noEnglishLeft();
   });
@@ -446,5 +451,61 @@ describe('P18.98-T4 a coachee’s Personal Summary in Indonesian', () => {
     expect(await card('Langkah berikutnya')).toHaveTextContent('Belum ada yang perlu ditindaklanjuti dari angkanya saat ini.');
     expect(document.body.textContent).not.toMatch(/\bKPM\b/);
     noEnglishLeft();
+  });
+});
+
+/** P19.1-T4 — UI-157's words, as the 6 November handover gives them (improvement 5). */
+describe('P19.1-T4 the goal card’s UI-157 words in Indonesian', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const NOTHING = figures({ actualMinor: null, attainmentPct: null, gapMinor: null, overMinor: null, policiesNeeded: null });
+  const notUploaded = (yearly: Record<string, unknown>) => summary({
+    monthly: { ...NOTHING, source: null, production: 'none', withoutProduction: { gapMinor: 290 * M, policiesNeeded: 15 } },
+    yearly,
+    uploadedOn: { month: null, year: null },
+    insights: [],
+  });
+  const NONE_YEAR = {
+    ...figures({ targetMinor: 580 * M, actualMinor: 0, attainmentPct: 0, gapMinor: 580 * M, policiesNeeded: 33 }),
+    source: { provenance: 'self_reported', month: null }, production: 'none', withoutProduction: { gapMinor: 580 * M, policiesNeeded: 33 },
+  };
+  const ESTIMATE_YEAR = {
+    ...figures({ targetMinor: 580 * M, actualMinor: 120 * M, attainmentPct: 21, gapMinor: 460 * M, policiesNeeded: 26 }),
+    source: { provenance: 'self_reported', month: null }, production: 'estimate', withoutProduction: null,
+  };
+
+  it('P19.1-T4 AC-7, AC-8, AC-9 Belum diunggah: who uploads, the helpers marked, Unggah produksi → — verbatim', async () => {
+    nav.search = '';
+    stubFetch({ '/summary': { body: notUploaded(NONE_YEAR) }, '/activity/ratios': { body: RATIOS }, 'GET /campaigns/chasing': { body: NONE_CHASED } });
+    renderInIndonesian(<PersonalSummaryPage />, { me: makeMe({ permissions: ['personal_summary:read', 'data_upload:upload_and_preview'] }) });
+    const goal = await card('Target vs. realisasi (APE)');
+    expect(goal).toHaveTextContent('Belum diunggah');
+    expect(goal.querySelector('[data-who-uploads]')).toHaveTextContent(
+      /^Produksi diunggah oleh admin KPM Anda, biasanya setiap bulan\. Belum muncul\? Hubungi admin KPM\.$/,
+    );
+    expect(goal.querySelector('dl')).toHaveTextContent(
+      'Sisa bulan iniRp 290 jt(belum ada data produksi)Polis yang dibutuhkan± 15 polis(belum ada data produksi)',
+    );
+    expect(within(goal).getByRole('link', { name: 'Unggah produksi →' })).toHaveAttribute('href', '/kpm/data-upload');
+    expect(within(goal).getByRole('button', { name: 'Isi produksi sementara' })).toBeInTheDocument();
+    noEnglishLeft();
+  });
+
+  it('P19.1-T4 AC-10 the estimate reads Rp 120 jt · perkiraan Anda, with Ubah and Hapus', async () => {
+    show(notUploaded(ESTIMATE_YEAR));
+    const goal = await card('Target vs. realisasi (APE)');
+    const row = goal.querySelector('[data-estimate-row]') as HTMLElement;
+    expect(row).toHaveTextContent('APE yang sudah dicapai tahun ini: Rp 120 jt · perkiraan Anda');
+    expect(within(row).getByRole('button', { name: 'Ubah' })).toBeInTheDocument();
+    expect(within(row).getByRole('button', { name: 'Hapus' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Tahunan' }));
+    expect((await card('Target vs. realisasi (APE)')).querySelector('[data-estimate]')).toHaveTextContent('Rp 120 jt · perkiraan Anda');
+    noEnglishLeft();
+  });
+
+  it('P19.1-T4 AC-11 Diganti data produksi resmi (diunggah 5 Des)', async () => {
+    show(summary({ today: '2026-12-08', month: '2026-12', estimateReplaced: { uploadedOn: '2026-12-05' } }));
+    const goal = await card('Target vs. realisasi (APE)');
+    expect(goal.querySelector('[data-estimate-replaced]')).toHaveTextContent(/^Diganti data produksi resmi \(diunggah 5 Des\)$/);
   });
 });

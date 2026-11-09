@@ -261,7 +261,7 @@ deleted feature branch breaks every fresh clone.
 
 ## Status
 
-Phases 1 through 18.6 are built: every role's screens, each wired to the API. Phase 18.7, which sets
-up environments and deployment (this Vercel setup among them), is in progress. Phase 19, hardening
-and go-live, comes next. Production is being prepared *dark*, with no tenant on it, until P19-T7.
+Phases 1 through 18.3 are built: every role's screens, each wired to the API. Phase 18.4, which sets
+up environments and deployment (this Vercel setup among them), is in progress. Phase 20, hardening
+and go-live, comes next. Production is being prepared *dark*, with no tenant on it, until P20-T7.
 The roadmap is in `../docs/05-delivery/roadmap-and-phases.md`.

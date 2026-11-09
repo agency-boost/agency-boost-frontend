@@ -17,11 +17,11 @@ const RUNS = [
 ] as const;
 
 /**
- * **P18.98-T1 AC-3, AC-4: the language before the body is parsed.** The page is prerendered in one language; the
+ * **P18.10-T1 AC-3, AC-4: the language before the body is parsed.** The page is prerendered in one language; the
  * script reads the reader's from the cookie, writes it on `<html lang>`, and holds the page back while it is not the
  * page's, for `LanguageProvider` to write the page in it before the first paint.
  */
-describe.each(RUNS)('P18.98-T1 the pre-paint read, by %s', (_, run) => {
+describe.each(RUNS)('P18.10-T1 the pre-paint read, by %s', (_, run) => {
   afterEach(() => {
     document.cookie = `${LANGUAGE_COOKIE}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/`;
     root.lang = '';
@@ -75,7 +75,7 @@ describe.each(RUNS)('P18.98-T1 the pre-paint read, by %s', (_, run) => {
   });
 });
 
-describe('P18.98-T1 the inline script', () => {
+describe('P18.10-T1 the inline script', () => {
   it('AC-3 calls the function with the app’s own cookie, attribute and languages, reading nothing else', () => {
     expect(PRE_PAINT_SCRIPT.startsWith('(')).toBe(true);
     expect(PRE_PAINT_SCRIPT).toContain(JSON.stringify(LANGUAGE_COOKIE));

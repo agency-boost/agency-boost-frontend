@@ -7,7 +7,7 @@ const membership = (over: Partial<NonNullable<Me['membership']>> = {}): NonNulla
   ...makeMe().membership!, ...over,
 });
 
-describe('profileLine (P18.8-T6 AC-2, ADR-0159 §5)', () => {
+describe('profileLine (P18.5-T6 AC-2, ADR-0159 §5)', () => {
   it('the role, Core Leader, the groups comma-joined, and the office as code · branch, in that order', () => {
     expect(profileLine('AB', membership({
       isCoreLeader: true, groups: ['Mentoring Circle', 'Top Producers 2026'], office: { code: '0417', branch: 'Cempaka Putih' },

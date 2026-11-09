@@ -2,7 +2,7 @@ import { defineMessages, type MessagesOf } from '@/i18n/catalogue';
 import { kept } from '@/i18n/kept';
 
 /**
- * **An office's status and subscription, in words** (P18.98-T6, the Super Admin's console; `functional/tenant-provisioning.md`,
+ * **An office's status and subscription, in words** (P18.10-T6, the Super Admin's console; `functional/tenant-provisioning.md`,
  * *The subscription*, *The module's own strings*): what `lib/admin.ts` writes — the *Status* column's word (*Active*,
  * *Ended — kept active* …), the *Lifecycle* card's subscription line, the *Leaders* cell as a screen reader hears it —
  * and the *Edit subscription* dialog's cost lines that cannot be worked out (`lib/billing.ts`' `costMissingWords`).

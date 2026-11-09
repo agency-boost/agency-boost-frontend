@@ -12,7 +12,7 @@ import { groupRepeats, type InboxItem, type NoticeRun } from '@/lib/notification
 
 /**
  * Said when there is nothing to show, in the bell's popover and on `/notifications` alike: the catalogue's English
- * (`notificationMessages.empty`), which both write in the reader's language (P18.98-T4).
+ * (`notificationMessages.empty`), which both write in the reader's language (P18.10-T4).
  */
 export const INBOX_EMPTY = notificationMessages.en.empty;
 
@@ -51,7 +51,7 @@ function ToggleGlyph({ unread }: { unread: boolean }) {
  * One notification, compact, so many fit (P12.1-T3 AC-6): its title on one line with the short date
  * beside it, its detail on one line under it, each cut with an ellipsis, and a dot for unread.
  *
- * **On a phone neither is cut** (P18.95-T7 AC-4; the client's UI review, UI-030): below 768px the title and the
+ * **On a phone neither is cut** (P18.7-T7 AC-4; the client's UI review, UI-030): below 768px the title and the
  * detail wrap onto as many lines as they take — an event's time and place among them — and from 768px each is one
  * line with its ellipsis, as before.
  *
@@ -93,14 +93,14 @@ export function NotificationRow({
     'aria-labelledby': unread ? `${stateId} ${titleId}` : titleId,
     'aria-describedby': item.detail ? `${detailId} ${whenId}` : whenId,
   };
-  const control = 'flex min-w-0 flex-1 items-start gap-2.5 rounded-md px-2.5 py-2 text-left hover:bg-navy/[0.04]';
+  const control = 'flex min-w-0 flex-1 items-start gap-2.5 rounded-md px-2.5 py-2 text-left hover:bg-secondary/[0.04]';
   const toggle = unread ? t.markRead : t.markUnread;
 
   const body = (
     <>
       <span
         aria-hidden="true"
-        className={cn('mt-[7px] h-2 w-2 shrink-0 rounded-pill', unread ? 'bg-amber-deep' : 'bg-transparent')}
+        className={cn('mt-[7px] h-2 w-2 shrink-0 rounded-pill', unread ? 'bg-primary-deep' : 'bg-transparent')}
       />
       <span className="min-w-0 flex-1">
         <span className="flex items-baseline gap-2">
@@ -186,7 +186,7 @@ export function NotificationModal({ item, onClose }: { item: InboxItem | null; o
  * session; the Phase 12.1 exit review, N2): no toggle, and a row opens — its page or its modal, as
  * ever — and stays unread, with no mark sent for the server to refuse.
  *
- * **Repeats in a row are one line** (P18.95-T7 AC-4, `RepeatedNotice`): the same notice said again — one template,
+ * **Repeats in a row are one line** (P18.7-T7 AC-4, `RepeatedNotice`): the same notice said again — one template,
  * the same words, the same address — opens to its items rather than standing as seven rows of one sentence.
  */
 export function NotificationList({
@@ -195,7 +195,7 @@ export function NotificationList({
   onFollow,
 }: {
   items: readonly InboxItem[];
-  /** Absent for a reader who may not mark (`useCanMark`). One item, or a run of repeats at once (P18.95-T7 AC-4). */
+  /** Absent for a reader who may not mark (`useCanMark`). One item, or a run of repeats at once (P18.7-T7 AC-4). */
   setRead?: (items: InboxItem | readonly InboxItem[], read: boolean) => Promise<boolean>;
   /** A row with an address was followed. */
   onFollow?: () => void;
@@ -230,7 +230,7 @@ export function NotificationList({
 }
 
 /**
- * **A notice repeated in a row, as one line with its count** (P18.95-T7 AC-4; the client's UI review of 2026-10-26,
+ * **A notice repeated in a row, as one line with its count** (P18.7-T7 AC-4; the client's UI review of 2026-10-26,
  * UI-030 — *Wilson updated your goal · 7×*; `groupRepeats`). Its title and *· 3×*, its detail, the newest one's date,
  * and a dot while any of them is unread, in a row's own idiom.
  *
@@ -276,11 +276,11 @@ function RepeatedNotice({
           aria-label={t.repeated({ title: newest.title, n: count, unread })}
           aria-describedby={newest.detail ? `${detailId} ${whenId}` : whenId}
           onClick={() => setOpen((was) => !was)}
-          className="flex min-w-0 flex-1 items-start gap-2.5 rounded-md px-2.5 py-2 text-left hover:bg-navy/[0.04]"
+          className="flex min-w-0 flex-1 items-start gap-2.5 rounded-md px-2.5 py-2 text-left hover:bg-secondary/[0.04]"
         >
           <span
             aria-hidden="true"
-            className={cn('mt-[7px] h-2 w-2 shrink-0 rounded-pill', unread ? 'bg-amber-deep' : 'bg-transparent')}
+            className={cn('mt-[7px] h-2 w-2 shrink-0 rounded-pill', unread ? 'bg-primary-deep' : 'bg-transparent')}
           />
           <span className="min-w-0 flex-1">
             <span className="flex items-baseline gap-2">

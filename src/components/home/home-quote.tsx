@@ -3,6 +3,7 @@
 import { Boost } from '@/components/boost';
 import { useMessages } from '@/i18n/language-provider';
 import { homeMessages } from '@/i18n/messages/home';
+import { cn } from '@/lib/cn';
 import type { HomeQuote } from '@/lib/home';
 
 /**
@@ -18,21 +19,21 @@ import type { HomeQuote } from '@/lib/home';
  * voice), English for the rest — so a screen reader reads each in its own voice. The pose is the server's, by the
  * office's day.
  */
-export function HomeQuoteCard({ quote }: { quote: HomeQuote }) {
+export function HomeQuoteCard({ quote, className }: { quote: HomeQuote; className?: string }) {
   const t = useMessages(homeMessages);
   return (
     <figure
       data-home-quote=""
       aria-label={t.quoteLabel({ person: quote.person })}
-      className="m-0 flex items-center gap-2.5 rounded-lg bg-navy py-2.5 pl-2 pr-4"
+      className={cn('m-0 flex items-center gap-2.5 rounded-lg bg-secondary py-2.5 pl-2 pr-4', className)}
     >
       <Boost pose={quote.pose} size={64} className="h-auto lg:w-[72px]" />
       <blockquote className="m-0 min-w-0 flex-1">
-        <p lang={languageOf(quote.text)} className="m-0 text-[0.9375rem] italic leading-normal text-white lg:text-md">
+        <p lang={languageOf(quote.text)} className="m-0 text-[0.9375rem] italic leading-normal text-secondary-contrast lg:text-md">
           <Mark>{'“'}</Mark>
           {quote.text}
           <Mark>{'”'}</Mark>
-          <cite className="float-right ml-3 whitespace-nowrap text-xs not-italic leading-6 text-on-navy-muted">
+          <cite className="float-right ml-3 whitespace-nowrap text-xs not-italic leading-6 text-secondary-muted">
             {quote.person}
           </cite>
         </p>
@@ -44,7 +45,7 @@ export function HomeQuoteCard({ quote }: { quote: HomeQuote }) {
 /** A large orange quotation mark, sitting on the line without opening it. */
 function Mark({ children }: { children: string }) {
   return (
-    <span aria-hidden="true" className="mx-0.5 align-[-0.6875rem] text-[1.875rem] font-extrabold not-italic leading-[0] text-amber">
+    <span aria-hidden="true" className="mx-0.5 align-[-0.6875rem] text-[1.875rem] font-extrabold not-italic leading-[0] text-primary-on-secondary">
       {children}
     </span>
   );

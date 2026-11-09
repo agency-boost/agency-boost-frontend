@@ -90,7 +90,7 @@ const render = () => renderWithSession(
 /** The strip's tiles, label and value each. */
 function strip() {
   const row = screen.getByText('Total activities').closest('[data-total]')!.parentElement!;
-  // A tile's label without the ⓘ the total carries (P18.95-T9 AC-3), which `touchTip` asserts on its own.
+  // A tile's label without the ⓘ the total carries (P18.7-T9 AC-3), which `touchTip` asserts on its own.
   return [...row.children].map((tile) => [tile.children[0].textContent!.replace(/ ⓘ.*$/, ''), tile.children[1].textContent]);
 }
 
@@ -356,12 +356,12 @@ describe('the Activity Dashboard (P10-T1)', () => {
 });
 
 /*
- * **Totals on a phone, and a tap for the days** (P18.95-T3 AC-6, ADR-0167 §6; the client's UI review of 2026-10-26,
+ * **Totals on a phone, and a tap for the days** (P18.7-T3 AC-6, ADR-0167 §6; the client's UI review of 2026-10-26,
  * UI-012: *Total* and every day off the screen to the right). The phone is `matchMedia` answering `usePhone`'s
  * query; every spec above is the table a tablet and a desktop keep.
  */
 /*
- * **Was P18.95-T3 AC-6's phone list** — each item's total, a tap for its days. UI V1 keeps the tap and redraws the rest
+ * **Was P18.7-T3 AC-6's phone list** — each item's total, a tap for its days. UI V1 keeps the tap and redraws the rest
  * (UI-106): chips for the range, the days on one line, the navy total, the group totals as one strip, then the log's
  * group cards with each item's count on the right.
  */
@@ -394,7 +394,7 @@ describe('UI-106 — the Activity Dashboard on a phone', () => {
     render();
     await cards();
     const total = screen.getByText('Total activities').parentElement!;
-    expect(total).toHaveClass('bg-navy');
+    expect(total).toHaveClass('bg-secondary');
     expect(total).toHaveTextContent(/19$/);
     expect(within(total).getByRole('button', { name: 'What is an activity?' })).toBeInTheDocument();
     const groups = screen.getByRole('group', { name: 'Totals by group' });
@@ -424,7 +424,7 @@ describe('UI-106 — the Activity Dashboard on a phone', () => {
     expect(region).not.toHaveTextContent(/total/);
   });
 
-  it('P18.95-T3 AC-6, UI-106 opens an item’s days from a tap or the keyboard, each day above its count, the table’s figures', async () => {
+  it('P18.7-T3 AC-6, UI-106 opens an item’s days from a tap or the keyboard, each day above its count, the table’s figures', async () => {
     // The table's row for an item, as a tablet draws it …
     stubFetch({ ...config(), '/activity/dashboard': { body: WEEK } });
     render();
@@ -478,7 +478,7 @@ describe('UI-106 — the Activity Dashboard on a phone', () => {
     expect(within(weeks).getAllByRole('definition').map((d) => d.textContent)).toEqual(['1', '2', '0', '0', '1']);
   });
 
-  it('P18.95-T3 AC-6 marks history the office has since hidden on its card, as the table does', async () => {
+  it('P18.7-T3 AC-6 marks history the office has since hidden on its card, as the table does', async () => {
     onPhone();
     const archived = {
       ...WEEK,
@@ -498,7 +498,7 @@ describe('UI-106 — the Activity Dashboard on a phone', () => {
     expect(items.getByText('No longer in your sections')).toBeInTheDocument();
   });
 
-  it('P18.95-T3 AC-6 never draws the table first on a phone: the width is asked before the first answer', async () => {
+  it('P18.7-T3 AC-6 never draws the table first on a phone: the width is asked before the first answer', async () => {
     onPhone();
     stubFetch({ ...config(), '/activity/dashboard': { body: WEEK } });
     expect(await drewATable(async () => {
@@ -507,7 +507,7 @@ describe('UI-106 — the Activity Dashboard on a phone', () => {
     })).toBe(false);
   });
 
-  it('P18.95-T3 AC-6 keeps the table at 768px and wider', async () => {
+  it('P18.7-T3 AC-6 keeps the table at 768px and wider', async () => {
     onPhone(false);
     stubFetch({ ...config(), '/activity/dashboard': { body: WEEK } });
     render();

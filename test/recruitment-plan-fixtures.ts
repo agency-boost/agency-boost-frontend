@@ -6,7 +6,7 @@ import type { Me } from '@/lib/session';
  * **Recruitment › Attack Plan, as the plan's read answers it** (Phase 17, P17-T3): the vocabulary and a plan,
  * shaped as the contract documents `GET /recruitment/attack-plan`, with the prototype's own words
  * (`AgencyBoost_Recruitment_Section.html:305-330`, `:394-510`) — the seed's for a company started from the
- * defaults — and the chips in the client's shorter words where it gave them (P18.95-T6 AC-2).
+ * defaults — and the chips in the client's shorter words where it gave them (P18.7-T6 AC-2).
  */
 
 const c = (code: string, label: string): Choice => ({ code, label });
@@ -15,7 +15,7 @@ export const TYPES = [
   c('fresh-grad', 'Fresh grad'), c('career-switch', 'Career switcher'), c('business-owner', 'Business owner'),
   c('retiree', 'Retiree'), c('other-insurer', 'Agent (other insurer)'),
 ];
-/** In the client's shorter words since 2026-10-26 (P18.95-T6 AC-2; UI-015), as the API serves them. */
+/** In the client's shorter words since 2026-10-26 (P18.7-T6 AC-2; UI-015), as the API serves them. */
 export const MOTIVATIONS = [
   c('side-income', 'Side income'), c('full-career', 'Career change'),
   c('flexibility', 'Flexibility'), c('leadership', 'Lead a team'),

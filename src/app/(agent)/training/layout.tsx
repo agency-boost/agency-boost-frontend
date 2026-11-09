@@ -5,7 +5,7 @@ import { Page } from '@/components/page';
 import { TrainingCatalogProvider } from '@/components/training/training-catalog';
 
 /**
- * **Training modules** (`/training/*`; `Overall.html:3708-3778`; P18.5-T1): the learner's list and each
+ * **Training modules** (`/training/*`; `Overall.html:3708-3778`; P18.2-T1): the learner's list and each
  * module's page, over one read of the offered catalog held here, so the subtabs, the list and the module
  * page agree and the list shows a status set on a module's page when the reader goes back.
  *

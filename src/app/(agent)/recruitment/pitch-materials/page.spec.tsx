@@ -97,7 +97,7 @@ describe('Recruitment › Pitch Materials (P17-T6)', () => {
     ['the Owner in the field view', OWNER], ['the Admin in the field view', ADMIN],
     ['a read-only support session', SUPPORT_READ_ONLY],
   ])('read by %s (AC-1, AC-3)', (_who, me) => {
-    it('P18.97-T5 AC-1, AC-2, AC-3 draws the banner over the four and all six cards — the amber badge, the optional two tagged — with nothing to change', async () => {
+    it('P18.9-T5 AC-1, AC-2, AC-3 draws the banner over the four and all six cards — the amber badge, the optional two tagged — with nothing to change', async () => {
       render({ body: PARTLY }, me);
       await screen.findByRole('article', { name: 'Agency Profile' });
 
@@ -126,7 +126,7 @@ describe('Recruitment › Pitch Materials (P17-T6)', () => {
       expect(document.querySelector('input[type=file]')).toBeNull();
     });
 
-    it('P18.97-T5 AC-2 offers View PDF on every uploaded card, whatever its ticks, an optional one included, and nothing on an empty one (OD-141)', async () => {
+    it('P18.9-T5 AC-2 offers View PDF on every uploaded card, whatever its ticks, an optional one included, and nothing on an empty one (OD-141)', async () => {
       render({ body: PARTLY }, me);
       await screen.findByRole('article', { name: 'FAQ' });
       expect(within(card('Opportunity Overview')).getByRole('button', { name: 'View PDF, Opportunity Overview — opens in a new tab' })).toBeInTheDocument();
@@ -144,11 +144,11 @@ describe('Recruitment › Pitch Materials (P17-T6)', () => {
     expect(stub.calls).toEqual([]);
   });
 
-  it('P18.95-T7 AC-1 shows the file’s name, size and day, the missing line in the client’s words (grey text row 12), and the dashed border', async () => {
+  it('P18.7-T7 AC-1 shows the file’s name, size and day, the missing line in the client’s words (grey text row 12), and the dashed border', async () => {
     render();
     await screen.findByRole('article', { name: 'FAQ' });
     expect(within(card('Opportunity Overview')).getByText('Opportunity_Overview_v3.pdf')).toBeInTheDocument();
-    // The size in the spec's language since P18.98-T4 wired the pitch cards (the harness's English is a chosen English).
+    // The size in the spec's language since P18.10-T4 wired the pitch cards (the harness's English is a chosen English).
     expect(within(card('Opportunity Overview')).getByText('2.4 MB · updated 12 Sep 2026')).toBeInTheDocument();
     expect(within(card('FAQ')).getByText('Not uploaded yet')).toBeInTheDocument();
     expect(card('FAQ').className).toContain('border-dashed');
@@ -174,7 +174,7 @@ describe('Recruitment › Pitch Materials (P17-T6)', () => {
     expect(screen.getAllByRole('button', { name: /^View PDF/ })).toHaveLength(6);
   });
 
-  it('P18.97-T5 AC-3 the four done reads complete, 4/4, with neither optional document', async () => {
+  it('P18.9-T5 AC-3 the four done reads complete, 4/4, with neither optional document', async () => {
     render({ body: FOUR_DONE });
     expect(await screen.findByText('Recruitment Pitch is complete')).toBeInTheDocument();
     expect(screen.getByRole('img', { name: '4 of 4 documents complete' })).toHaveTextContent('4/4');
@@ -183,7 +183,7 @@ describe('Recruitment › Pitch Materials (P17-T6)', () => {
     expect(screen.queryByText('Missing')).not.toBeInTheDocument();
   });
 
-  it('P18.97-T5 AC-2 draws an office with nothing uploaded — four Missing, the two optional Not uploaded yet — and never asks for a link (AC-4)', async () => {
+  it('P18.9-T5 AC-2 draws an office with nothing uploaded — four Missing, the two optional Not uploaded yet — and never asks for a link (AC-4)', async () => {
     const stub = render({ body: NONE });
     await screen.findByRole('article', { name: 'FAQ' });
     expect(screen.getAllByText('Missing')).toHaveLength(4);
@@ -196,13 +196,13 @@ describe('Recruitment › Pitch Materials (P17-T6)', () => {
     expect(urlCalls(stub)).toEqual([]);
   });
 
-  it('P18.97-T5 AC-4 a file under 1 KB reads “< 1 KB”, as storage reported its size (UI-029)', async () => {
+  it('P18.9-T5 AC-4 a file under 1 KB reads “< 1 KB”, as storage reported its size (UI-029)', async () => {
     render({ body: PARTLY });
     await screen.findByRole('article', { name: 'Company Profile' });
     expect(within(card('Company Profile')).getByText('< 1 KB · updated 26 Sep 2026')).toBeInTheDocument();
   });
 
-  it('P18.97-T5 AC-2 opens an optional document by its own slot’s link', async () => {
+  it('P18.9-T5 AC-2 opens an optional document by its own slot’s link', async () => {
     const tab = { opener: {} as unknown, location: { href: '' }, close: vi.fn() };
     vi.stubGlobal('open', vi.fn(() => tab));
     const stub = render({ body: PARTLY }, AGENT, {

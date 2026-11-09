@@ -1,20 +1,14 @@
 'use client';
 
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { EmptyState } from '@/components/ui/empty-state';
-import { Button, Card, ErrorBanner, Field, Textarea, TextInput } from '@/components/ui/field';
+import { Button, Card, Field, Textarea, TextInput } from '@/components/ui/field';
 import { SkeletonCards } from '@/components/ui/skeleton';
-import { toDisplayError, type ApiError } from '@/lib/api-client';
-import { formatNoticeFull, OFFICE_TIME_ZONE } from '@/lib/format';
-import {
-  readRecruitmentPlaybook, saveRecruitmentPlaybook,
-  type PlaybookBody, type PlaybookDto, type PlaybookLimits, type PlaybookRead, type RecruitmentVocabulary,
-  type Words,
-} from '@/lib/recruitment-playbook';
-import { useCan } from '@/lib/session';
+import type { ApiError } from '@/lib/api-client';
+import type { PlaybookBody, PlaybookLimits, RecruitmentVocabulary, Words } from '@/lib/recruitment-playbook';
 import { messagesIn } from '@/i18n/catalogue';
 import { SOURCE_LANGUAGE, type Language } from '@/i18n/language';
-import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
+import { useLanguage, useMessages } from '@/i18n/language-provider';
 import { adminTemplatePlaybookMessages } from '@/i18n/messages/admin-template-playbook';
 import { planMessages } from '@/i18n/messages/plan';
 
@@ -84,9 +78,20 @@ export function toForm(body: PlaybookBody | null, vocab: RecruitmentVocabulary):
   return { profiles, objections, profileObjections, nextAction: body?.nextAction ?? '' };
 }
 
+/**
+ * **The form as the draft holds it** (ADR-0210 §1): every text as typed — the server trims at *Terbitkan* — so a space
+ * typed at the end of a word is not taken away before the next one arrives. A type's own objections only where it has
+ * some, as {@link toBody}.
+ */
+export function rawBody(form: PlaybookForm, vocab: RecruitmentVocabulary): Record<string, unknown> {
+  return toBody(form, vocab, (text) => text) as unknown as Record<string, unknown>;
+}
+
 /** The form as one write sends it: every text trimmed, a type's own objections only where it has some. */
-export function toBody(form: PlaybookForm, vocab: RecruitmentVocabulary): PlaybookBody {
-  const trimmed = (words: Words): Words => ({ theySay: words.theySay.trim(), youSay: words.youSay.trim() });
+export function toBody(
+  form: PlaybookForm, vocab: RecruitmentVocabulary, clean: (text: string) => string = (text) => text.trim(),
+): PlaybookBody {
+  const trimmed = (words: Words): Words => ({ theySay: clean(words.theySay), youSay: clean(words.youSay) });
   const profileObjections: PlaybookBody['profileObjections'] = {};
   for (const { code: type } of vocab.types) {
     const own = vocab.hesitations.filter(({ code }) => form.profileObjections[type]?.[code]);
@@ -100,42 +105,17 @@ export function toBody(form: PlaybookForm, vocab: RecruitmentVocabulary): Playbo
     profiles: Object.fromEntries(vocab.types.map(({ code: type }) => {
       const p = form.profiles[type];
       return [type, {
-        label: p.label.trim(),
-        tagline: p.tagline.trim(),
-        goodFitFor: p.goodFitFor.trim(),
-        benefits: p.benefits.map((b) => b.trim()),
-        openings: Object.fromEntries(vocab.motivations.map(({ code }) => [code, p.openings[code].trim()])),
+        label: clean(p.label),
+        tagline: clean(p.tagline),
+        goodFitFor: clean(p.goodFitFor),
+        benefits: p.benefits.map(clean),
+        openings: Object.fromEntries(vocab.motivations.map(({ code }) => [code, clean(p.openings[code])])),
       }];
     })),
     objections: Object.fromEntries(vocab.hesitations.map(({ code }) => [code, trimmed(form.objections[code])])),
     profileObjections,
-    nextAction: form.nextAction.trim(),
+    nextAction: clean(form.nextAction),
   };
-}
-
-/**
- * Every text left empty, by the address the API names it by (`profiles.fresh-grad.tagline`,
- * `profileObjections.retiree.time.youSay`, …). Asked before sending: an empty field is one the server
- * refuses anyway, and saying so beside it costs no round trip.
- */
-export function blankFields(form: PlaybookForm, vocab: RecruitmentVocabulary): string[] {
-  const blank: string[] = [];
-  const check = (path: string, value: string) => { if (value.trim() === '') blank.push(path); };
-  for (const { code: type } of vocab.types) {
-    const p = form.profiles[type];
-    for (const key of PROFILE_TEXTS) check(`profiles.${type}.${key}`, p[key]);
-    p.benefits.forEach((b, i) => check(`profiles.${type}.benefits.${i}`, b));
-    for (const { code } of vocab.motivations) check(`profiles.${type}.openings.${code}`, p.openings[code]);
-    for (const { code } of vocab.hesitations) {
-      const own = form.profileObjections[type]?.[code];
-      if (own) for (const side of SIDES) check(`profileObjections.${type}.${code}.${side}`, own[side]);
-    }
-  }
-  for (const { code } of vocab.hesitations) {
-    for (const side of SIDES) check(`objections.${code}.${side}`, form.objections[code][side]);
-  }
-  check('nextAction', form.nextAction);
-  return blank;
 }
 
 /**
@@ -176,7 +156,7 @@ function errorSlots(form: PlaybookForm, vocab: RecruitmentVocabulary): Set<strin
  * that holds it — the card, at worst. What names nothing on the screen — the version, the body as a
  * whole, a sentence with no path — is handed back for the banner, so nothing the server said is lost.
  *
- * What the server said is shown as it said it, in the reader's language already (P18.98-T5); a violation with no words
+ * What the server said is shown as it said it, in the reader's language already (P18.10-T5); a violation with no words
  * at all says *Refused by the server.* in `language`, the reader's (English when none is passed).
  */
 export function placeViolations(
@@ -245,200 +225,101 @@ function cardOf(slot: string): string {
 const idOf = (slot: string) => `playbook-${slot.replace(/\./g, '-')}`;
 
 /**
- * Who saved a playbook and when, as its sentences take them (`saved`, `conflictDetail`): the name, or `null` for the
- * one a company was given, and the moment in the reader's figures — *9 Okt 2026, 14.05*, *9 Oct 2026, 14:05*.
+ * **A template's *Rekrutmen* section** (P19.4-T5 AC-6; ADR-0210 §1; P17-T8, OD-88 → 5, ADR-0125): the recruitment
+ * playbook every agent of a KPM made from the template builds an Attack Plan from — a card per candidate type,
+ * *Objections* and *Next action*.
+ *
+ * **A section like every other since ADR-0210**, through the section page's `KindEditor`: what is typed goes into the
+ * section's draft as it is made (`onChange`, saved by `useTemplateDrafts`), and *Terbitkan* on the draft bar publishes it
+ * whole — the server checks it then, and its `400 VALIDATION_FAILED` comes back as `refusal`, each violation put beside
+ * the field it names ({@link placeViolations}), its card opened, the first refused field focused. A version conflict, a
+ * save that did not land and leaving with one are the draft bar's, as for every section.
+ *
+ * - **A template with none** (*Kosong*) says so and offers two starts — the AgencyBoost words (the read's
+ *   `playbook.defaults`, the prototype's text verbatim) or nothing. Either becomes the section's draft, which reaches no
+ *   agent until *Terbitkan*.
+ * - **Each card reads as text until *Ubah*** is pressed, as every row of a template does (P4-T24).
+ *
+ * The words are kept as typed in the draft — a trailing space included, so typing is never fought — and trimmed by the
+ * server when published. Every word is drawn as text, never as markup: the playbook is free text the agents' plan prints.
  */
-const savedBy = (dto: PlaybookDto, figures: Language) => ({
-  version: dto.version,
-  name: dto.updatedBy?.name ?? null,
-  when: formatNoticeFull(dto.updatedAt, OFFICE_TIME_ZONE, figures),
-});
-
-/**
- * The Company template's **Recruitment** tab (P17-T8, OD-88 → 5, ADR-0125): the company's recruitment
- * playbook, which every agent of the company builds an Attack Plan from.
- *
- * **Products' idiom, because it is Products' kind of thing**: the company's own, read live, shared by
- * every template, so it carries no draft bar and no *Publish*. Each card reads as text until *Edit* is
- * pressed, as every row on this screen does (P4-T24); what is typed is held until *Save playbook*,
- * which sends **the whole playbook in one write, pinned to the version it was read at**.
- *
- * - **A company with none** says so and offers two starts — the AgencyBoost words (the API's
- *   `defaults`, the prototype's text verbatim) or nothing. Neither saves: nothing reaches an agent
- *   until *Save playbook*.
- * - **`409 VERSION_CONFLICT`** — somebody saved first. The playbook is read again and the reader's
- *   edits stay on the screen; the amber notice this screen already uses for unsaved edits says which
- *   version is stored now and offers to load it instead. Saving pins to the version just read.
- * - **`400 VALIDATION_FAILED`** — each violation beside the field it names ({@link placeViolations}),
- *   its card opened, the first refused field focused.
- *
- * Every word is drawn as text, never as markup: the playbook is free text the agents' plan prints.
- */
-export function RecruitmentPlaybookTab({
-  companyId,
-  onDirtyChange,
+export function RecruitmentPlaybookEditor({
+  payload,
+  onChange,
+  playbook,
+  disabled = false,
+  refusal = null,
 }: {
-  companyId: string;
-  /**
-   * Told whenever edits become unsaved or stop being, so the screen can ask before another tab
-   * discards them. Pass a stable function — a state setter.
-   */
-  onDirtyChange?: (dirty: boolean) => void;
+  /** The section's draft as the editor holds it: a playbook, or `{}` for *Kosong*. */
+  payload: Record<string, unknown>;
+  onChange: (next: Record<string, unknown>) => void;
+  /** What the section's read serves beside it: the AgencyBoost words, the vocabulary and the bounds. */
+  playbook: { defaults: PlaybookBody; vocabulary: RecruitmentVocabulary; limits: PlaybookLimits } | undefined;
+  disabled?: boolean;
+  /** The section's last publish refused, or `null`: a `400` is placed beside the fields it names. */
+  refusal?: ApiError | null;
 }) {
-  // Reading is `company_template:read`; saving is its own grant (ADR-0125), so a reader who may read
-  // the playbook but not write it is offered no *Save* the API would refuse.
-  const canSave = useCan('recruitment_playbook:write');
   const t = useMessages(adminTemplatePlaybookMessages);
   const language = useLanguage();
-  const figures = useFigureLanguage();
-  const [read, setRead] = useState<PlaybookRead | null>(null);
-  const [loadError, setLoadError] = useState<ApiError | null>(null);
-  /** The stored playbook the edits are pinned to: `null` while the company has none. */
-  const [base, setBase] = useState<PlaybookDto | null>(null);
-  /** What is on the screen: `null` while a company with none has not started one. */
-  const [form, setForm] = useState<PlaybookForm | null>(null);
-  const [dirty, setDirty] = useState(false);
-  const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState<Set<string>>(() => new Set());
   const [errors, setErrors] = useState<Record<string, string>>({});
-  /** The line beside *Save playbook* after a save refused field by field. */
-  const [refused, setRefused] = useState(false);
-  const [banner, setBanner] = useState<ApiError | null>(null);
-  /** The version somebody else saved, while the notice about it is up. */
-  const [conflict, setConflict] = useState<PlaybookDto | null>(null);
+  const [rest, setRest] = useState<string | null>(null);
   const root = useRef<HTMLDivElement>(null);
   const focusFirst = useRef(false);
+  const vocab = playbook?.vocabulary;
+  const written = isWritten(payload);
+  const form = vocab && written ? toForm(payload as unknown as PlaybookBody, vocab) : null;
 
-  const load = useCallback(async () => {
-    try {
-      const answer = await readRecruitmentPlaybook(companyId);
-      setRead(answer);
-      setBase(answer.playbook);
-      setForm(answer.playbook ? toForm(answer.playbook.body, answer.vocabulary) : null);
-      setDirty(false);
-      setLoadError(null);
-    } catch (err) {
-      setLoadError(toDisplayError(err));
-    }
-  }, [companyId]);
-
-  useEffect(() => { void load(); }, [load]);
-  useEffect(() => { onDirtyChange?.(dirty); }, [dirty, onDirtyChange]);
-  // Leaving the tab takes the edits with it, so nothing is left unsaved behind it.
-  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
-
-  // After a refusal: the first marked field, now that its card is open.
+  // A publish refused field by field: each said beside its field, its card opened, the first one focused.
   useEffect(() => {
-    if (!focusFirst.current) return;
+    if (!refusal || refusal.code !== 'VALIDATION_FAILED' || !form || !vocab) {
+      setErrors({});
+      setRest(null);
+      return;
+    }
+    const { placed, rest: unplaced } = placeViolations(refusal.details, errorSlots(form, vocab), language);
+    setErrors(placed);
+    setRest(unplaced.length > 0 ? unplaced.join(' ') : null);
+    setOpen((now) => new Set([...now, ...Object.keys(placed).map(cardOf)]));
+    focusFirst.current = Object.keys(placed).length > 0;
+    // The form is read for its slots when the refusal arrives, not on every keystroke after it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refusal, language]);
+
+  // Once the marked fields are drawn: the first of them.
+  useEffect(() => {
+    if (!focusFirst.current || Object.keys(errors).length === 0) return;
     focusFirst.current = false;
     root.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
   }, [errors]);
 
-  if (loadError && read === null) {
+  if (!playbook || !vocab) return <SkeletonCards count={4} />;
+
+  if (!form) {
     return (
       <EmptyState
-        title={t.readFailed({ message: loadError.message })}
-        action={<Button onClick={() => void load()}>{t.tryAgain}</Button>}
+        title={t.none}
+        action={disabled ? undefined : (
+          <div className="flex flex-wrap justify-center gap-2">
+            <Button onClick={() => onChange(rawBody(toForm(playbook.defaults, vocab), vocab))}>{t.startFromDefaults}</Button>
+            <Button variant="secondary" onClick={() => onChange(rawBody(toForm(null, vocab), vocab))}>{t.startFromNothing}</Button>
+          </div>
+        )}
       />
     );
   }
-  if (read === null) return <SkeletonCards count={4} />;
-  const vocab = read.vocabulary;
 
-  const reset = (next: PlaybookForm | null) => {
-    setForm(next);
-    setDirty(false);
-    setErrors({});
-    setRefused(false);
-    setBanner(null);
-    setConflict(null);
-    setOpen(new Set());
-  };
-
-  const start = (from: PlaybookBody | null) => {
-    reset(toForm(from, vocab));
-    setDirty(true);
-  };
-
-  /** One edit: the form changed, and whatever was said about the slots it touched goes. */
+  /** One edit: into the draft, and whatever was said about the slots it touched goes. */
   const edit = (slots: string[], change: (now: PlaybookForm) => PlaybookForm) => {
-    setForm((now) => (now ? change(now) : now));
-    setDirty(true);
+    onChange(rawBody(change(form), vocab));
     setErrors((now) => {
-      const touched = Object.keys(now).filter((k) => slots.some((s) => k === s || k.startsWith(`${s}.`)));
+      const touched = Object.keys(now).filter((k) => slots.some((x) => k === x || k.startsWith(`${x}.`)));
       if (touched.length === 0) return now;
       const next = { ...now };
       for (const k of touched) delete next[k];
       return next;
     });
   };
-
-  const refuse = (found: Record<string, string>) => {
-    setErrors(found);
-    setRefused(true);
-    setOpen((now) => new Set([...now, ...Object.keys(found).map(cardOf)]));
-    focusFirst.current = true;
-  };
-
-  async function save() {
-    if (!form) return;
-    const blank = blankFields(form, vocab);
-    if (blank.length > 0) {
-      setBanner(null);
-      refuse(Object.fromEntries(blank.map((slot) => [slot, t.writeThis])));
-      return;
-    }
-    setBusy(true);
-    setBanner(null);
-    setRefused(false);
-    setErrors({});
-    try {
-      const saved = await saveRecruitmentPlaybook(companyId, base?.version ?? null, toBody(form, vocab));
-      setBase(saved);
-      reset(toForm(saved.body, vocab));
-    } catch (err) {
-      const shown = toDisplayError(err);
-      if (shown.code === 'VERSION_CONFLICT') {
-        await readAgain(shown);
-      } else if (shown.code === 'VALIDATION_FAILED') {
-        const { placed, rest } = placeViolations(shown.details, errorSlots(form, vocab), language);
-        const any = Object.keys(placed).length > 0;
-        if (any) refuse(placed);
-        if (!any) setBanner(shown);
-        else if (rest.length > 0) setBanner({ ...shown, message: rest.join(' ') });
-      } else {
-        setBanner(shown);
-      }
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  /** Somebody saved first: read what is stored now, keep the edits, and say so. */
-  async function readAgain(refusal: ApiError) {
-    try {
-      const answer = await readRecruitmentPlaybook(companyId);
-      setBase(answer.playbook);
-      if (answer.playbook) setConflict(answer.playbook);
-      else setBanner(refusal);
-    } catch (err) {
-      setBanner(toDisplayError(err));
-    }
-  }
-
-  if (form === null) {
-    return (
-      <EmptyState
-        title={t.none}
-        action={canSave ? (
-          <div className="flex flex-wrap justify-center gap-2">
-            <Button onClick={() => start(read.defaults)}>{t.startFromDefaults}</Button>
-            <Button variant="secondary" onClick={() => start(null)}>{t.startFromNothing}</Button>
-          </div>
-        ) : undefined}
-      />
-    );
-  }
 
   const toggle = (card: string) => setOpen((now) => {
     const next = new Set(now);
@@ -456,64 +337,19 @@ export function RecruitmentPlaybookTab({
     }));
 
   return (
-    <LimitsContext.Provider value={read.limits}>
+    <LimitsContext.Provider value={playbook.limits}>
     <div ref={root} className="flex flex-col gap-4">
-      <Card>
-        {base ? (
-          <p className="text-md text-navy">
-            <strong>{t.live}</strong>{' '}
-            <span className="text-muted">{t.liveDetail}</span>
-          </p>
-        ) : (
-          <p className="text-md text-navy">
-            <strong>{t.notSaved}</strong>{' '}
-            <span className="text-muted">{t.notSavedDetail}</span>
-          </p>
-        )}
-        {/* Always in the page, so a save that lands is announced rather than merely redrawn. */}
-        <p role="status" className={base ? 'mt-2 text-sm text-muted' : 'sr-only'}>
-          {base ? t.saved(savedBy(base, figures)) : ''}
-        </p>
-        {canSave && <div className="mt-3 flex flex-wrap items-center gap-3">
-          <Button disabled={busy || !dirty} onClick={() => void save()}>
-            {busy ? t.saving : t.save}
-          </Button>
-          <Button
-            variant="secondary"
-            disabled={busy || !dirty}
-            onClick={() => reset(base ? toForm(base.body, vocab) : null)}
-          >
-            {t.discard}
-          </Button>
-        </div>}
-        {/* Gone once every marked field has been changed, so it never points at nothing. */}
-        {refused && Object.keys(errors).length > 0 && (
-          <p role="alert" className="mt-2 text-sm font-semibold text-alert">{t.refusedFields}</p>
-        )}
-      </Card>
-
-      {conflict && (
-        <div role="alert" className="rounded-md border border-amber bg-card p-4">
-          <p className="text-md text-navy">
-            <strong>{t.conflict}</strong>{' '}
-            <span className="text-muted">{t.conflictDetail(savedBy(conflict, figures))}</span>
-          </p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <Button variant="secondary" disabled={busy} onClick={() => reset(toForm(conflict.body, vocab))}>
-              {t.loadVersion({ version: conflict.version })}
-            </Button>
-            <Button disabled={busy} onClick={() => setConflict(null)}>{t.keepMine}</Button>
-          </div>
-        </div>
+      {/* Gone once every marked field has been changed, so it never points at nothing. */}
+      {Object.keys(errors).length > 0 && (
+        <p role="alert" className="text-sm font-semibold text-alert">{t.refusedFields}</p>
       )}
-
-      {banner && <ErrorBanner {...banner} />}
+      {rest && <p role="alert" className="text-sm font-semibold text-alert">{rest}</p>}
 
       {vocab.types.map(({ code: type, label: typeLabel }) => {
         const p = form.profiles[type];
         const own = form.profileObjections[type] ?? {};
         const card = `profile:${type}`;
-        const written = p.label.trim() !== '' || p.tagline.trim() !== '';
+        const named = p.label.trim() !== '' || p.tagline.trim() !== '';
         return (
           <PlaybookCard
             key={type}
@@ -521,9 +357,8 @@ export function RecruitmentPlaybookTab({
             title={typeLabel}
             open={open.has(card)}
             onToggle={() => toggle(card)}
-            disabled={busy}
             error={errors[`profiles.${type}`]}
-            summary={written ? (
+            summary={named ? (
               <>
                 <p className="mt-0.5 break-words text-md text-navy">{p.label}</p>
                 <p className="break-words text-sm text-muted">{p.tagline}</p>
@@ -536,7 +371,7 @@ export function RecruitmentPlaybookTab({
               own={own}
               vocab={vocab}
               errors={errors}
-              disabled={busy}
+              disabled={disabled}
               onText={(key, value) => setProfile(type, (now) => ({ ...now, [key]: value }), [`profiles.${type}.${key}`])}
               onBenefit={(index, value) => setProfile(
                 type,
@@ -580,7 +415,6 @@ export function RecruitmentPlaybookTab({
         title={t.objections}
         open={open.has('objections')}
         onToggle={() => toggle('objections')}
-        disabled={busy}
         error={errors.objections}
         summary={<p className="mt-0.5 text-sm text-muted">{t.objectionsSummary}</p>}
       >
@@ -591,7 +425,7 @@ export function RecruitmentPlaybookTab({
             legend={label}
             words={form.objections[code]}
             errors={errors}
-            disabled={busy}
+            disabled={disabled}
             className={index === 0 ? undefined : 'mt-4'}
             onChange={(side, value) => edit(
               [`objections.${code}.${side}`],
@@ -606,7 +440,6 @@ export function RecruitmentPlaybookTab({
         title={t.nextAction}
         open={open.has('next')}
         onToggle={() => toggle('next')}
-        disabled={busy}
         summary={form.nextAction.trim()
           ? <p className="mt-0.5 break-words text-md text-navy">{form.nextAction}</p>
           : <p className="mt-0.5 text-sm text-muted">{t.notWritten}</p>}
@@ -617,10 +450,10 @@ export function RecruitmentPlaybookTab({
           aria-describedby={errors.nextAction ? `${idOf('nextAction')}-error` : undefined}
           rows={2}
           className="w-full"
-          maxLength={read.limits.textMax}
+          maxLength={playbook.limits.textMax}
           value={form.nextAction}
           invalid={!!errors.nextAction}
-          disabled={busy}
+          disabled={disabled}
           onChange={(e) => edit(['nextAction'], (now) => ({ ...now, nextAction: e.target.value }))}
         />
         {errors.nextAction && (
@@ -633,6 +466,10 @@ export function RecruitmentPlaybookTab({
     </LimitsContext.Provider>
   );
 }
+
+/** Whether a section's payload holds a playbook at all: *Kosong* is `{}`. */
+const isWritten = (payload: Record<string, unknown> | null | undefined) =>
+  Boolean(payload && typeof payload === 'object' && payload.profiles && typeof payload.profiles === 'object');
 
 /**
  * One card of the playbook, as a product is one card of the catalog: its heading and what it says,

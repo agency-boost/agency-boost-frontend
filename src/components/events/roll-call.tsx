@@ -18,7 +18,7 @@ const TH = 'border-b border-hairline px-2.5 py-2 text-left text-2xs font-bold up
 const TD = 'border-b border-hairline px-2.5 py-2 align-middle text-base';
 
 /**
- * **The roll call** (P18.5-T5 AC-7; OD-31, D-rollcall): who was in the event's audience as at its start —
+ * **The roll call** (P18.2-T5 AC-7; OD-31, D-rollcall): who was in the event's audience as at its start —
  * their name, their role, what they said (*RSVP'd*, *Said they came*, or nothing), and the confirmation the
  * Owner or an Admin gives each of them: *Attended*, *Absent*, or neither yet.
  *
@@ -38,7 +38,7 @@ export function RollCallSection({ eventId, onSaved, tabbed = false }: {
   eventId: string;
   onSaved: () => void;
   /**
-   * Under its own tab (P18.8-T13): the tab names it, so the heading is for assistive technology alone, and nothing
+   * Under its own tab (P18.5-T13): the tab names it, so the heading is for assistive technology alone, and nothing
    * follows it to keep a margin for.
    */
   tabbed?: boolean;
@@ -171,7 +171,7 @@ function AttendanceCell({ row, value, writable, onMark }: {
   if (!writable) return <span className="text-navy">{attendedWords(row.attended, language)}</span>;
   const toggle = (on: boolean) => cn(
     'rounded-[5px] px-2.5 py-1 text-sm font-semibold',
-    on ? 'bg-navy text-white' : 'text-muted hover:text-navy',
+    on ? 'bg-secondary text-secondary-contrast' : 'text-muted hover:text-navy',
   );
   return (
     <span className="inline-flex rounded-[7px] border border-hairline bg-card p-[2px]">

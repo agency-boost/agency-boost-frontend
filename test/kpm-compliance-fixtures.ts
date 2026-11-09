@@ -4,7 +4,7 @@ import type {
 } from '@/lib/kpm-compliance';
 
 /**
- * The compliance tree as the server answers it (P18.6-T1, T2): three AB agencies, A to Z — Hendra Wibowo's with
+ * The compliance tree as the server answers it (P18.3-T1, T2): three AB agencies, A to Z — Hendra Wibowo's with
  * an AAB unit (Ika Wirawan's), Maya Halim's, who leads nobody, and the reader's own, Wilson Tanoto's — eleven
  * people in all. Each person has a status in every category, chosen so every pill, every date and every *—*
  * appears somewhere; the cards' and sections' counts are made from the cells as the server makes them.
@@ -293,6 +293,9 @@ export function complianceView(
     can: { override: true },
     // UI V1 (UI-109): the server's split, as `KPM_REPORTING` serves it.
     thresholds: { lowBelowPct: 50, highFromPct: 80 },
+    // P19.3-T3 AC-15: the office's custom groups, the whole KPM read.
+    groups: [{ groupId: 'grp-core', name: 'Core Leader', memberCount: 3 }],
+    group: null,
     ...over,
   };
 }

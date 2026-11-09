@@ -1,7 +1,7 @@
 'use client';
 
 import { useContext, type ReactNode } from 'react';
-import { PageHeader } from '@/components/app-shell';
+import { PageHeader } from '@/components/page-header';
 import { RequireSession, TitledPageContext } from '@/components/require-session';
 
 /**
@@ -29,9 +29,9 @@ export function Page({
   children,
 }: {
   title?: string;
-  /** A sentence; a node where a term in it carries its ⓘ (P18.95-T9 AC-3). */
+  /** A sentence; a node where a term in it carries its ⓘ (P18.7-T9 AC-3). */
   subtitle?: ReactNode;
-  /** `false`: the sub-line is not drawn below 768px (the client's *Remove*, P18.95-T7 AC-1; `PageHeader`). */
+  /** `false`: the sub-line is not drawn below 768px (the client's *Remove*, P18.7-T7 AC-1; `PageHeader`). */
   subtitleOnPhone?: boolean;
   /** `false`: nor from 768 to 1023px (UI V1, UI-004: *subtitle hidden on Mobile + Tablet*; `PageHeader`). */
   subtitleOnTablet?: boolean;
@@ -67,5 +67,5 @@ export function Page({
 
   // No permission means the layout's gate is the only one, which is the common case: most
   // screens need nothing beyond being in the application they sit in.
-  return permission ? <RequireSession permission={permission}>{body}</RequireSession> : body;
+  return permission ? <RequireSession permission={permission} title={title}>{body}</RequireSession> : body;
 }

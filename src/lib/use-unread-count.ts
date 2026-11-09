@@ -18,7 +18,7 @@ import { useSession } from './session';
  * passes it on; asking the server again for a number it has just given would be a second request for
  * every click. A change without one — the calendar's answer reading its notice — is read afresh.
  *
- * **And moves before the answer** (P18.95-T1 AC-7). A mark announces how far it moves the count (`delta`) as
+ * **And moves before the answer** (P18.7-T1 AC-7). A mark announces how far it moves the count (`delta`) as
  * it is clicked, so the badge changes at once, then the answer's count, which settles it; a refusal moves it
  * back. *Mark all read* says `0` at once. Never below zero.
  *

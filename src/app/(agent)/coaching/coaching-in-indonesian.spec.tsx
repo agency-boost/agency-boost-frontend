@@ -26,7 +26,7 @@ import MyCoachingPage from './me/page';
 import CoachingRosterPage from './page';
 
 /**
- * **Coaching in Indonesian** (P18.98-T4 AC-1 to AC-4, coaching and unit): the roster as a table and as a phone's cards,
+ * **Coaching in Indonesian** (P18.10-T4 AC-1 to AC-4, coaching and unit): the roster as a table and as a phone's cards,
  * the person shell, a session's workspace — before it starts, as a draft, refused, finalized with *Edit again* asked —
  * its print, a past session's archive, the reader's own coaching and the *Leader Notes* tab. Their words the approved
  * glossary's, each kept term English (§A), what an office or a person typed as typed, and no English message of the
@@ -113,7 +113,7 @@ const ROSTER = {
   }],
 };
 
-describe('P18.98-T4 the coaching roster in Indonesian', () => {
+describe('P18.10-T4 the coaching roster in Indonesian', () => {
   it('reads the English it is looking for, so a silent zero cannot pass: the same roster in English shows it', async () => {
     expect(COACHING_ENGLISH.length).toBeGreaterThan(100);
     stubFetch({ ...SHELL, '/coaching/coachees': { body: ROSTER } });
@@ -124,7 +124,7 @@ describe('P18.98-T4 the coaching roster in Indonesian', () => {
     );
   });
 
-  it('P18.98-T4 AC-1, AC-2, UI-033 the rows: the title kept, the columns, groups, pills and lines Indonesian; No 1:1 yet grey', async () => {
+  it('P18.10-T4 AC-1, AC-2, UI-033 the rows: the title kept, the columns, groups, pills and lines Indonesian; No 1:1 yet grey', async () => {
     stubFetch({ ...SHELL, '/coaching/coachees': { body: ROSTER } });
     inIndonesian(<CoachingRosterPage />);
     await screen.findByRole('link', { name: 'Rina Wijaya' });
@@ -150,10 +150,12 @@ describe('P18.98-T4 the coaching roster in Indonesian', () => {
     noEnglishLeft();
   });
 
-  it('P18.98-T4 AC-1 a reader nobody reports to', async () => {
+  it('P18.10-T4 AC-1, P19-T4 AC-3 a leader nobody reports to: Belum ada data, the Contoh, Tambah agent pertama', async () => {
     stubFetch({ ...SHELL, '/coaching/coachees': { body: { ...ROSTER, directAgents: [], units: [] } } });
     inIndonesian(<CoachingRosterPage />);
-    expect(await screen.findByText('Belum ada orang yang Anda coaching.')).toBeInTheDocument();
+    expect(await screen.findByText('Belum ada data')).toBeInTheDocument();
+    expect(screen.getByText('Contoh')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Tambah agent pertama' })).toHaveAttribute('href', '/new-hires');
     noEnglishLeft();
   });
 });
@@ -254,8 +256,8 @@ const openSession = () => {
 };
 const card = (name: string | RegExp) => screen.findByRole('region', { name });
 
-describe('P18.98-T4 a person and their session in Indonesian', () => {
-  it('P18.98-T4 AC-1, AC-2, UI-029, UI-041 the person shell: the line under the name, no view switch, the tabs kept, the way back', async () => {
+describe('P18.10-T4 a person and their session in Indonesian', () => {
+  it('P18.10-T4 AC-1, AC-2, UI-029, UI-041 the person shell: the line under the name, no view switch, the tabs kept, the way back', async () => {
     stubFetch(sessionRoutes(null));
     openSession();
     expect(await screen.findByRole('heading', { level: 1, name: 'Rina Wijaya' })).toBeInTheDocument();
@@ -264,12 +266,12 @@ describe('P18.98-T4 a person and their session in Indonesian', () => {
     expect(screen.queryByText(/Tampilan leader|Tampilan Agent/)).not.toBeInTheDocument();
     const tabs = screen.getByRole('navigation', { name: 'Coaching' });
     expect(within(tabs).getAllByRole('link').map((l) => l.textContent)).toEqual([
-      'Coaching Session', 'Activity', 'Leads', 'Goal Setting', 'Personal Summary', 'Activation', 'Training', 'Capability mapping',
+      'Coaching Session', 'Activity', 'Leads', 'Goal Setting', 'Personal Summary', 'Activation', 'Survei', 'Training', 'Capability mapping',
     ]);
     expect(screen.getByRole('link', { name: '← Kembali ke Coaching Session' })).toHaveAttribute('href', '/coaching');
   });
 
-  it('P18.98-T4 AC-1, UI-032 before it starts: the card, its tag, the past sessions as rows and Mulai sesi coaching', async () => {
+  it('P18.10-T4 AC-1, UI-032 before it starts: the card, its tag, the past sessions as rows and Mulai sesi coaching', async () => {
     stubFetch(sessionRoutes(null));
     openSession();
     const start = await screen.findByRole('button', { name: 'Mulai sesi coaching' });
@@ -282,7 +284,7 @@ describe('P18.98-T4 a person and their session in Indonesian', () => {
     noEnglishLeft();
   });
 
-  it('P18.98-T4 AC-1 to AC-4, UI-061, UI-062 a draft: every card’s words Indonesian, the kept terms English, what was typed as typed', async () => {
+  it('P18.10-T4 AC-1 to AC-4, UI-061, UI-062 a draft: every card’s words Indonesian, the kept terms English, what was typed as typed', async () => {
     stubFetch(sessionRoutes({ sessionId: 's-1', status: 'draft' }));
     openSession();
     const lastWeek = await card('Tindakan minggu lalu');
@@ -331,7 +333,7 @@ describe('P18.98-T4 a person and their session in Indonesian', () => {
     noEnglishLeft();
   });
 
-  it('P18.98-T4 AC-1 the Activity drill: its dialog and its table', async () => {
+  it('P18.10-T4 AC-1 the Activity drill: its dialog and its table', async () => {
     stubFetch(sessionRoutes({ sessionId: 's-1', status: 'draft' }));
     openSession();
     const drill = await screen.findByRole('button', { name: '7 hari terakhir' });
@@ -345,7 +347,7 @@ describe('P18.98-T4 a person and their session in Indonesian', () => {
     noEnglishLeft();
   });
 
-  it('P18.98-T4 AC-1 a refused finalize says the prototype’s sentence in Indonesian', async () => {
+  it('P18.10-T4 AC-1 a refused finalize says the prototype’s sentence in Indonesian', async () => {
     stubFetch(sessionRoutes({ sessionId: 's-1', status: 'draft' }, session(), {
       'POST /coaching/sessions/s-1/finalize': {
         status: 422, body: { error: { code: 'COACHING_SESSION_INCOMPLETE', message: 'Incomplete.', requestId: 'r-1', details: { rule: 'UNDATED_ACTION_ITEM' } } },
@@ -377,7 +379,7 @@ describe('P18.98-T4 a person and their session in Indonesian', () => {
     expect(document.querySelector('[data-action-row][data-invalid]')).toHaveTextContent('Pilih tanggal');
   });
 
-  it('P18.98-T4 AC-1 finalized: the badge, Edit again and its question, Download as PDF', async () => {
+  it('P18.10-T4 AC-1 finalized: the badge, Edit again and its question, Download as PDF', async () => {
     stubFetch(sessionRoutes({ sessionId: 's-1', status: 'finalized' }, finalized()));
     openSession();
     expect(await screen.findByText('Difinalkan 2 Okt')).toBeInTheDocument();
@@ -394,7 +396,7 @@ describe('P18.98-T4 a person and their session in Indonesian', () => {
     noEnglishLeft();
   });
 
-  it('P18.98-T4 AC-1 past the window: Edit again held, saying until when', async () => {
+  it('P18.10-T4 AC-1 past the window: Edit again held, saying until when', async () => {
     stubFetch(sessionRoutes({ sessionId: 's-1', status: 'finalized' }, finalized({ date: '2026-09-24', reopenableUntil: '2026-10-01' })));
     openSession();
     const edit = await screen.findByRole('button', { name: 'Ubah lagi' });
@@ -402,7 +404,7 @@ describe('P18.98-T4 a person and their session in Indonesian', () => {
     expect(edit).toHaveAccessibleDescription('Sesi ini bisa dibuka kembali sampai 1 Okt 2026.');
   });
 
-  it('P18.98-T4 AC-1 a person the reader does not coach', async () => {
+  it('P18.10-T4 AC-1 a person the reader does not coach', async () => {
     stubFetch({
       ...SHELL,
       'GET /coaching/coachees/mem-rina': { status: 404, body: { error: { code: 'NOT_FOUND', message: 'Not found.', requestId: 'r-1' } } },
@@ -421,8 +423,8 @@ describe('P18.98-T4 a person and their session in Indonesian', () => {
  * ── The print, the archive and the reader's own coaching ────────────────────────────────────────
  */
 
-describe('P18.98-T4 the record in Indonesian', () => {
-  it('P18.98-T4 AC-1, AC-4 the print: its headings and lines Indonesian, the title kept, what was typed as typed', () => {
+describe('P18.10-T4 the record in Indonesian', () => {
+  it('P18.10-T4 AC-1, AC-4 the print: its headings and lines Indonesian, the title kept, what was typed as typed', () => {
     render(
       <InLanguage language="id">
         <SessionPrintView
@@ -484,7 +486,7 @@ describe('P18.98-T4 the record in Indonesian', () => {
     );
   };
 
-  it('P18.98-T4 AC-1 to AC-4 a past session’s archive: the record’s header, its earlier version and its reason as typed', async () => {
+  it('P18.10-T4 AC-1 to AC-4 a past session’s archive: the record’s header, its earlier version and its reason as typed', async () => {
     openArchive({ body: recordSession() });
     const earlier = await card('Versi sebelumnya');
     expect(screen.getByText((_, el) => el?.tagName === 'P' && el.textContent === 'Sesi — Kamis, 24 Sep 2026 Final')).toBeInTheDocument();
@@ -500,7 +502,7 @@ describe('P18.98-T4 the record in Indonesian', () => {
     noEnglishLeft();
   });
 
-  it('P18.98-T4 AC-1 a draft’s address, and one the reader cannot open', async () => {
+  it('P18.10-T4 AC-1 a draft’s address, and one the reader cannot open', async () => {
     const { unmount } = openArchive({ body: recordSession({ status: 'draft', earlier: [] }) });
     expect(await screen.findByRole('heading', { level: 2, name: 'Sesi ini belum difinalkan.' })).toBeInTheDocument();
     expect(screen.getByText('Sampai difinalkan, sesi ini terbuka di Coaching Session.')).toBeInTheDocument();
@@ -512,7 +514,7 @@ describe('P18.98-T4 the record in Indonesian', () => {
     expect(screen.getByText('Mungkin alamatnya salah ketik. Semua orang yang Anda coaching ada di Coaching Session.')).toBeInTheDocument();
   });
 
-  it('P18.98-T4 AC-1 the reader’s own coaching: its line, its tabs kept, its history and the sessions they led', async () => {
+  it('P18.10-T4 AC-1 the reader’s own coaching: its line, its tabs kept, its history and the sessions they led', async () => {
     nav.pathname = '/coaching/me';
     stubFetch({
       ...SHELL,
@@ -537,7 +539,7 @@ describe('P18.98-T4 the record in Indonesian', () => {
     noEnglishLeft();
   });
 
-  it('P18.98-T4 AC-1 the reader’s own coaching, with no session yet', async () => {
+  it('P18.10-T4 AC-1 the reader’s own coaching, with no session yet', async () => {
     nav.pathname = '/coaching/me';
     stubFetch({ ...SHELL, '/coaching/me/sessions': { body: { sessions: [], ledFormerly: [] } } });
     inIndonesian(<MyCoachingPage />);
@@ -563,8 +565,8 @@ const CATALOG = {
   ],
 };
 
-describe('P18.98-T4 Leader Notes in Indonesian', () => {
-  it('P18.98-T4 AC-1 to AC-4 the capability mapping, the skill tracker and the personal notes', async () => {
+describe('P18.10-T4 Leader Notes in Indonesian', () => {
+  it('P18.10-T4 AC-1 to AC-4 the capability mapping, the skill tracker and the personal notes', async () => {
     nav.pathname = '/coaching/mem-rina/leader-notes';
     const { calls } = stubFetch({
       ...SHELL,
@@ -622,14 +624,14 @@ describe('P18.98-T4 Leader Notes in Indonesian', () => {
  * ── The Activation tab ──────────────────────────────────────────────────────────────────────────
  */
 
-describe('P18.98-T4 the coaching Activation tab in Indonesian', () => {
+describe('P18.10-T4 the coaching Activation tab in Indonesian', () => {
   // UI V1 (UI-029): the tab is the coachee's own new-hire detail, so its words are the activation's, New Hires' and the
   // shared ⚡'s.
   const ACTIVATION_ENGLISH = englishOnly(activationMessages, newHiresMessages, uiV1Messages);
   const noActivationEnglishLeft = () => expect(englishShown(document.body, ACTIVATION_ENGLISH)).toEqual([]);
   const row = (code: string) => document.querySelector(`[data-code="${code}"]`) as HTMLElement;
 
-  it('P18.98-T4 AC-1 to AC-4, UI-029 a coachee’s: their new-hire detail, *activation* kept, its percentage, each item’s state, the items as typed', async () => {
+  it('P18.10-T4 AC-1 to AC-4, UI-029 a coachee’s: their new-hire detail, *activation* kept, its percentage, each item’s state, the items as typed', async () => {
     nav.pathname = '/coaching/mem-rina/activation';
     stubFetch({ ...SHELL, '/coaching/coachees/': { body: RINA }, 'GET /new-hires/mem-rina': { body: leaderView() } });
     inIndonesian(<CoachingPersonLayout params={routeParams({ membershipId: 'mem-rina' })}><CoacheeActivationTab /></CoachingPersonLayout>);
@@ -652,7 +654,7 @@ describe('P18.98-T4 the coaching Activation tab in Indonesian', () => {
     noEnglishLeft();
   });
 
-  it('P18.98-T4 AC-1 a coachee with no activation, and the reader with none', async () => {
+  it('P18.10-T4 AC-1 a coachee with no activation, and the reader with none', async () => {
     nav.pathname = '/coaching/mem-rina/activation';
     stubFetch({ ...SHELL, '/coaching/coachees/': { body: RINA }, 'GET /new-hires/mem-rina': notFound });
     const { unmount } = inIndonesian(

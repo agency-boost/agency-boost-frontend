@@ -246,7 +246,7 @@ describe('a past session’s archive (P11-T10)', () => {
       show();
       const week = await card(/^Activity/);
       await userEvent.click(within(week).getByRole('button', { name: '→ view full dashboard' }));
-      // The drill's module is fetched on its first opening (P18.99-T16).
+      // The drill's module is fetched on its first opening (P18.11-T16).
       const dialog = await screen.findByRole('dialog', { name: 'Rina Wijaya — Activity Dashboard' });
       expect(within(dialog).getAllByRole('row').map((r) => [...r.children].map((c) => c.textContent))).toEqual([
         ['Category', 'Logged', 'Target (pro-rated)'],
@@ -326,7 +326,7 @@ describe('a past session’s archive (P11-T10)', () => {
       });
       await userEvent.click(await screen.findByRole('button', { name: 'Edit again' }));
 
-      // The dialog's module is fetched on its first opening (P18.99-T16).
+      // The dialog's module is fetched on its first opening (P18.11-T16).
       const dialog = await screen.findByRole('dialog', { name: 'Edit this session again?' });
       expect(dialog).toHaveAccessibleDescription(
         'Say why it needs changing. The reason stays with the session, and everyone who reads the session reads it — Rina Wijaya included.',
@@ -393,7 +393,7 @@ describe('a past session’s archive (P11-T10)', () => {
   });
 
   describe('⬇ Download as PDF', () => {
-    it('P11-T10 AC-3, P18.97-T3 AC-3 prints the session from its own read, its money compact, under a title naming her and the day, and takes the paper away after', async () => {
+    it('P11-T10 AC-3, P18.9-T3 AC-3 prints the session from its own read, its money compact, under a title naming her and the day, and takes the paper away after', async () => {
       const { seen, print } = stubPrint();
       const { calls } = show();
       const download = await screen.findByRole('button', { name: 'Download as PDF' });
@@ -417,7 +417,7 @@ describe('a past session’s archive (P11-T10)', () => {
         '[x] Confirm submission paperwork with Bp. Andi',
         '[ ] Follow up with Alvin Sanjaya',
         'Goal',
-        // Compact, as every figure is but a price and the file's own (P18.97-T3 AC-3, ADR-0174 §4).
+        // Compact, as every figure is but a price and the file's own (P18.9-T3 AC-3, ADR-0174 §4).
         'This month: IDR 65.6M / IDR 80M',
         'This year: Not uploaded yet / IDR 960M',
         'Coaching tips',

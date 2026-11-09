@@ -16,8 +16,9 @@ import { useMessages } from '@/i18n/language-provider';
 import { adminTemplateMessages } from '@/i18n/messages/admin-template';
 
 /**
- * **A company's page, tab *Template KPM*** (ADR-0185 §2; P18.99-T20 AC-1): a card per template — the default first,
- * then the others, then the archived — and *Template baru*. Opening a card opens its checklist.
+ * **A company's page, tab *Template KPM*** (ADR-0185 §2; P18.11-T20 AC-1): a card per template — the default first,
+ * then the others, then the archived — and *Template baru*. Opening a card opens its checklist. **A new company has
+ * none** (ADR-0213 §3, B1-8): the page says so and opens on *+ Template baru*, whose first template is the default.
  *
  * Super Admin only: `company_template:read` to see it, and the API refuses every tenant role whatever this renders.
  */
@@ -41,6 +42,13 @@ export default function CompanyPage({ params }: { params: Promise<{ companyId: s
     return () => { live = false; };
   }, [companyId, attempt]);
 
+  const newTemplate = (
+    <Button className="gap-1" onClick={() => setCreating(true)}>
+      <LineIcon name="plus" className="h-4 w-4" />
+      {t.newTemplate}
+    </Button>
+  );
+
   // The default first, then the active by name, then the archived — the API's order, kept.
   const ordered = templates
     ? [...templates.filter((x) => x.status === 'active'), ...templates.filter((x) => x.status === 'archived')]
@@ -57,9 +65,10 @@ export default function CompanyPage({ params }: { params: Promise<{ companyId: s
 
       {!error && ordered === null && <CardsSkeleton label={t.loading} />}
 
+      {/* A new company has none (ADR-0213 §3, B1-8): the page opens on *+ Template baru*, its one way on. */}
       {ordered?.length === 0 && (
         <div className="rounded-lg border border-card-edge bg-card">
-          <EmptyState boost="thinking" title={t.none} />
+          <EmptyState boost="thinking" title={t.none} action={newTemplate} />
         </div>
       )}
 
@@ -71,12 +80,7 @@ export default function CompanyPage({ params }: { params: Promise<{ companyId: s
         </ul>
       )}
 
-      {ordered && (
-        <Button className="mt-4 gap-1" onClick={() => setCreating(true)}>
-          <LineIcon name="plus" className="h-4 w-4" />
-          {t.newTemplate}
-        </Button>
-      )}
+      {ordered && ordered.length > 0 && <div className="mt-4">{newTemplate}</div>}
 
       <NewTemplateDialog
         open={creating}

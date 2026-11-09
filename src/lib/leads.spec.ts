@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { stubFetch } from '@test/harness';
 import {
   callLink, createLead, LEAD_PAGE_CAP, LEAD_ROWS_FIRST_SHOWN, listEveryLead, listLeads, PHONE_HELD, phoneHeld,
-  whatsAppLink, whatsAppNumber, WHATSAPP_DIGITS, type Lead,
+  readsTeamLeads, whatsAppLink, whatsAppNumber, WHATSAPP_DIGITS, type Lead,
 } from './leads';
 
 const rows = (n: number, from = 0) =>
@@ -164,29 +164,51 @@ describe('LEAD_ROWS_FIRST_SHOWN (P13.1-T4 AC-8)', () => {
   });
 });
 
-describe('callLink and phoneHeld (P18.95-T4 AC-3)', () => {
+describe('callLink and phoneHeld (P18.7-T4 AC-3)', () => {
   it.each([
     ['0812-1100-2200', 'tel:+6281211002200'],
     ['+62 812 1100 2200', 'tel:+6281211002200'],
     ['812 1100 2200', 'tel:+6281211002200'],
     ['0062 812 1100 2200', 'tel:+6281211002200'],
-  ])('P18.95-T4 AC-3 rings %s as %s — the number WhatsApp is given, with its +', (phone, link) => {
+  ])('P18.7-T4 AC-3 rings %s as %s — the number WhatsApp is given, with its +', (phone, link) => {
     expect(callLink(phone)).toBe(link);
     expect(whatsAppLink(phone)).toBe(`https://wa.me/${link.slice('tel:+'.length)}`);
     expect(phoneHeld(phone)).toBeNull();
   });
 
-  it.each([null, undefined, '', '   '])('P18.95-T4 AC-3 holds both for no phone at all (%j), and says to add one', (phone) => {
+  it.each([null, undefined, '', '   '])('P18.7-T4 AC-3 holds both for no phone at all (%j), and says to add one', (phone) => {
     expect(callLink(phone)).toBeNull();
     expect(whatsAppLink(phone)).toBeNull();
     expect(phoneHeld(phone)).toBe(PHONE_HELD.missing);
     expect(PHONE_HELD.missing).toBe('No phone number yet — add one in Lead details.');
   });
 
-  it.each(['123', 'Pak Budi', '0812-1100-2200-3344-55'])('P18.95-T4 AC-3 holds both for a number nobody could dial (%s), and says to check it', (phone) => {
+  it.each(['123', 'Pak Budi', '0812-1100-2200-3344-55'])('P18.7-T4 AC-3 holds both for a number nobody could dial (%s), and says to check it', (phone) => {
     expect(callLink(phone)).toBeNull();
     expect(whatsAppLink(phone)).toBeNull();
     expect(phoneHeld(phone)).toBe(PHONE_HELD.unusable);
     expect(PHONE_HELD.unusable).toBe('This number can’t be dialled — check it in Lead details.');
+  });
+});
+
+/**
+ * **P19.9-T1 AC-3 — who is offered *Leads milik: Tim*** (ADR-0232 §3; ADR-0234): a reader whose `lead:read` reaches
+ * beyond their own — the AB, the AAB, an Agent who leads somebody — and nobody who is not in the office yet.
+ */
+describe('P19.9-T1 readsTeamLeads', () => {
+  const member = (hierarchyRole: string, directCount: number, status = 'active') => ({ hierarchyRole, directCount, status });
+
+  it('P19.9-T1 AC-3 an AB and an AAB by role, with nobody yet too; an Agent only once they lead somebody', () => {
+    expect(readsTeamLeads(member('ab', 0))).toBe(true);
+    expect(readsTeamLeads(member('aab', 0))).toBe(true);
+    expect(readsTeamLeads(member('agent', 0))).toBe(false);
+    expect(readsTeamLeads(member('agent', 1))).toBe(true);
+  });
+
+  it('P19.9-T1 AC-3 nobody pending, removed or outside an office', () => {
+    expect(readsTeamLeads(member('ab', 3, 'pending'))).toBe(false);
+    expect(readsTeamLeads(member('aab', 3, 'removed'))).toBe(false);
+    expect(readsTeamLeads(null)).toBe(false);
+    expect(readsTeamLeads(undefined)).toBe(false);
   });
 });

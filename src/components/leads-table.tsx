@@ -26,17 +26,18 @@ import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import { formatCalendarDay } from '@/lib/format';
 import {
-  callLink, createLead, deleteLead, listEveryLead, phoneHeld, readLead, reorderLeads, setLeadOutcome, setLeadStatus,
+  callLink, createLead, deleteLead, finalStageOf, listEveryLead, phoneHeld, readLead, reorderLeads, setLeadOutcome, setLeadStatus,
   updateLead, whatsAppLink, LEAD_NAME_MIN, LEAD_ROWS_FIRST_SHOWN, type Lead, type LeadOutcome, type LeadQuery,
-  type LeadType,
+  type LeadScope, type LeadType,
 } from '@/lib/leads';
 import { useSession } from '@/lib/session';
+import { PotensiSwitch } from '@/components/potensi-switch';
 import type { LeadStatusRow } from '@/lib/tenant-config';
 import { useTenantConfig } from '@/lib/tenant-config-cache';
 import { useDebounced } from '@/lib/use-debounced';
 import { usePhone } from '@/lib/use-phone';
 
-/** The module's words, in the reader's language (`messages/leads.tsx`; P18.98-T4). */
+/** The module's words, in the reader's language (`messages/leads.tsx`; P18.10-T4). */
 type LeadsWords = MessagesOf<typeof leadsMessages.en>;
 
 /**
@@ -46,7 +47,7 @@ type LeadsWords = MessagesOf<typeof leadsMessages.en>;
 export type SortKey = Extract<NonNullable<LeadQuery['sort']>, 'name' | 'type' | 'status' | 'dateRegistered'>;
 
 /**
- * A column sort, **or `null`: the owner's own order** (P18.8-T7, ADR-0161 §1), which the table opens on.
+ * A column sort, **or `null`: the owner's own order** (P18.5-T7, ADR-0161 §1), which the table opens on.
  *
  * `null` asks `GET /leads` for no sort, and the server answers in the order the owner dragged their
  * leads into, a new one on top. It was the newest registration until then, which is where the prototype
@@ -59,9 +60,9 @@ export type Sort = { key: SortKey; dir: 'asc' | 'desc' } | null;
 /**
  * The narrowest the table is drawn, in rem: below it, each lead is a card (P13.1-T4 AC-7, ADR-0108 §6).
  *
- * The six fixed columns (`WIDTHS`, 43.25rem since P18.95-T4 put 📞 in *Actions*) and the two that share
+ * The six fixed columns (`WIDTHS`, 43.25rem since P18.7-T4 put 📞 in *Actions*) and the two that share
  * what is left, at no less than 7.375rem each — the date box with its icon, and a remark of two or three
- * words a line; 44rem and 7rem on `/leads`, whose first column holds a drag handle (P18.8-T7). **Measured
+ * words a line; 44rem and 7rem on `/leads`, whose first column holds a drag handle (P18.5-T7). **Measured
  * against the table's own box, not the window**, so the sidebar counts: at 1280px with the sidebar
  * open the box is 59rem and the table stands; at 1024px it is 43rem, or 55.5rem with the sidebar
  * folded, and the leads are cards. In rem, so a reader who has turned their browser's text up gets the
@@ -78,8 +79,8 @@ const TABLE_MIN_REM = 58;
 // *Widened 2026-10-07, after the walk:* at 9rem and 7rem a name such as *Ibu Wiwik Setyaningsih* and the
 // word *Recruitment* were cut off, and the *Actions* heading overflowed its 3rem by 8px — a sideways scroll
 // of its own. 11rem holds a three-word name, 7.5rem *Select type* with its chevron, 4.5rem the heading —
-// and, since P18.8-T7, the WhatsApp link and the ⋮ side by side, 28px each.
-// *Widened 2026-10-26 (P18.95-T4 AC-3):* 5.25rem holds WhatsApp and 📞 at 24px each beside the 28px ⋮, in a
+// and, since P18.5-T7, the WhatsApp link and the ⋮ side by side, 28px each.
+// *Widened 2026-10-26 (P18.7-T4 AC-3):* 5.25rem holds WhatsApp and 📞 at 24px each beside the 28px ⋮, in a
 // cell padded 4px a side (`ACTIONS_CELL`) — 0.75rem more, so the two text columns keep 7.625rem each at 1280px
 // with the sidebar open, room for the date with its icon; at 28px and the cells' own 8px they would have had 6.5rem.
 const WIDTHS = ['2rem', '11rem', '7.5rem', '11rem', '6.5rem', 'auto', 'auto', '5.25rem'] as const;
@@ -94,7 +95,7 @@ const ACTIONS_CELL = '!px-1';
 const CONTACT_GLYPH = cn('inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-sm', TAP_TARGET);
 
 /**
- * **The same, with room for a drag handle beside the row's number** (P18.8-T7): `/leads`, where the reader
+ * **The same, with room for a drag handle beside the row's number** (P18.5-T7): `/leads`, where the reader
  * orders their own list. 0.75rem more, taken from the two columns that share what is left — at
  * `TABLE_MIN_REM` they still have 7.375rem each. Kept while a column sort hides the handles, so pressing a
  * heading does not move every column.
@@ -104,7 +105,7 @@ const WIDTHS_WITH_HANDLES = ['2.75rem', ...WIDTHS.slice(1)] as const;
 /**
  * The card layout's sort: each order the headings give, said in words, since a card has no heading.
  *
- * **What the order does, not which way a key runs** (P18.95-T4 AC-4, ADR-0167; UI-027: *"Type, ascending"*
+ * **What the order does, not which way a key runs** (P18.7-T4 AC-4, ADR-0167; UI-027: *"Type, ascending"*
  * says nothing about where the Sales leads go). The values sent are the headings' own, unchanged: `type`
  * ascending is no type, then Sales, then Recruit, and descending the reverse; `status` ascending is the
  * first stage of a ladder first, a lead with no stage before it.
@@ -181,7 +182,7 @@ const blankLead = (id: string, name: string): Lead => ({
 });
 
 /**
- * Every field of a lead that saves itself, each with its own *Saving… → Saved ✓* (P18.95-T1 AC-5): the
+ * Every field of a lead that saves itself, each with its own *Saving… → Saved ✓* (P18.7-T1 AC-5): the
  * row's cells, the card's lines and the details dialog's three boxes.
  */
 const SAVING_FIELDS = [
@@ -228,7 +229,7 @@ const byRegisteredDesc = (a: Lead, b: Lead) =>
  * registered and who last changed it (ADR-0044) — are a dialog. **WhatsApp sits beside the ⋮** since
  * 2026-10-26 (ADR-0161 §2), on any lead whose phone number WhatsApp could open.
  *
- * **The reader's own order, kept** (P18.8-T7, ADR-0161 §1). On `/leads` each of the reader's own open
+ * **The reader's own order, kept** (P18.5-T7, ADR-0161 §1). On `/leads` each of the reader's own open
  * leads has a drag handle beside its number — dragged, or moved with ↑ and ↓ — while no column sort is
  * on; a drop saves the whole order at once and the screen shows it at once, putting it back with the
  * server's reason if the save is refused. A column sort is a look, never saved. A coaching session's card
@@ -243,13 +244,13 @@ const byRegisteredDesc = (a: Lead, b: Lead) =>
  * the whole list; only what is drawn first stops at 30, and *Show more* draws the rest at once.
  *
  * **One table, two toolbars** (P10.1-T4 AC-12). `/leads` has the prototype's count and *+ Add lead*
- * (`:2791-2794`), and **since P18.95-T4 a search, a *Type* and a *Status* filter above them** (AC-2,
+ * (`:2791-2794`), and **since P18.7-T4 a search, a *Type* and a *Status* filter above them** (AC-2,
  * ADR-0167 §4; the client's UI review of 2026-10-26, UI-016: 71 leads and no way to find one). The coaching
  * card has a search box and a type filter instead of the count (`:4258-4266`), which is `filters`. A list
  * narrowed by any of them offers no drag handle, as a column sort does not: the saved order is the whole
  * list's, and a drop among some of it would save an order the reader never saw.
  *
- * **On a phone, a read-only card per lead, and a sheet to edit it** (P18.95-T4 AC-1; UI-016: every field
+ * **On a phone, a read-only card per lead, and a sheet to edit it** (P18.7-T4 AC-1; UI-016: every field
  * of every card editable, the name included, at 26–28px). Below 768px each card is the lead in words —
  * name, type, stage, next action, the remarks in full — with WhatsApp, 📞 and ⋮ beside the name; a tap on
  * it opens the edit sheet, which holds the same controls at 44px under their own labels, each saving
@@ -257,7 +258,7 @@ const byRegisteredDesc = (a: Lead, b: Lead) =>
  *
  * **Every write is one field, and the server is its only judge.** Which ladder a stage belongs to,
  * whether a lead may be won here — the row shows exactly what the server said, beneath the lead, for
- * as long as it stands (F-65). **And each field says its save beside it** (P18.95-T1 AC-5, `saveField`):
+ * as long as it stands (F-65). **And each field says its save beside it** (P18.7-T1 AC-5, `saveField`):
  * *Saving…*, *Saved ✓*, or *Couldn't save — retry*.
  */
 export function LeadsTable({
@@ -271,7 +272,7 @@ export function LeadsTable({
 }: {
   /**
    * The coaching card's search box and type filter in place of the count (`Overall.html:4258-4266`).
-   * `/leads` keeps its count and has its own filter bar above it since P18.95-T4 — search, *Type* and
+   * `/leads` keeps its count and has its own filter bar above it since P18.7-T4 — search, *Type* and
    * *Status* (AC-2) — so this is the coaching card's toolbar, and nothing more.
    */
   filters?: boolean;
@@ -313,7 +314,7 @@ export function LeadsTable({
   const uid = useId();
   const [frame, boxCards] = useCardLayout();
   /**
-   * **Below 768px, the read-only cards and their edit sheet** (P18.95-T4 AC-1). Asked of the window, not the
+   * **Below 768px, the read-only cards and their edit sheet** (P18.7-T4 AC-1). Asked of the window, not the
    * box, because it is the phone's layout the client reviewed (ADR-0167 §4, §12): a tablet whose box is under
    * `TABLE_MIN_REM` keeps the editable cards it has had since P13.1-T4.
    */
@@ -324,7 +325,7 @@ export function LeadsTable({
   const [term, setTerm] = useState('');
   const search = useDebounced(term.trim());
   const [typeFilter, setTypeFilter] = useState<'' | LeadType>('');
-  /** `/leads`' *Status* filter (P18.95-T4 AC-2): a stage code, of either ladder — one code per office across both. */
+  /** `/leads`' *Status* filter (P18.7-T4 AC-2): a stage code, of either ladder — one code per office across both. */
   const [statusFilter, setStatusFilter] = useState('');
   /** Bumped to load the open leads again from page 1 — after a reopen, or a write that shifts the pages. */
   const [reloads, setReloads] = useState(0);
@@ -334,7 +335,7 @@ export function LeadsTable({
    * cleared by an effect after the new list has already drawn in full for a frame.
    */
   const listKey = [sort?.key ?? '', sort?.dir ?? '', search, typeFilter, statusFilter, owner ?? ''].join('\n');
-  /** A list the reader has searched or filtered: some of their leads, not all of them (P18.95-T4 AC-2). */
+  /** A list the reader has searched or filtered: some of their leads, not all of them (P18.7-T4 AC-2). */
   const narrowed = search !== '' || typeFilter !== '' || statusFilter !== '';
   const [expandedFor, setExpandedFor] = useState<string | null>(null);
   /*
@@ -377,7 +378,7 @@ export function LeadsTable({
    */
   const [keyFor, setKeyFor] = useState<Record<string, string>>({});
   /**
-   * **Each field that saves itself says so beside it** (P18.95-T1 AC-5, ADR-0167 §5; UI-007): *Saving…*,
+   * **Each field that saves itself says so beside it** (P18.7-T1 AC-5, ADR-0167 §5; UI-007): *Saving…*,
    * *Saved ✓* for two seconds, or *Couldn't save — retry*, which sends the same value again. Keyed by the
    * row's own key and the field, so the inline row's name keeps its *Saved ✓* once it is a lead.
    */
@@ -401,7 +402,7 @@ export function LeadsTable({
   const [detailsFor, setDetailsFor] = useState<string | null>(null);
   /**
    * **The lead the phone's edit sheet is open on**, by its row's key — `keyFor`'s, or the inline row's own —
-   * so a new lead's sheet stays open, on the same name box, once its name has made it a lead (P18.95-T4 AC-1).
+   * so a new lead's sheet stays open, on the same name box, once its name has made it a lead (P18.7-T4 AC-1).
    */
   const [sheetFor, setSheetFor] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<Lead | null>(null);
@@ -435,10 +436,10 @@ export function LeadsTable({
     void listEveryLead(
       {
         outcome: 'open',
-        // No sort is the owner's own order (P18.8-T7 AC-3).
+        // No sort is the owner's own order (P18.5-T7 AC-3).
         sort: sort?.key,
         dir: sort?.dir,
-        // The server narrows; the screen only asks (P18.95-T4 AC-2). Nothing is sent until something is chosen.
+        // The server narrows; the screen only asks (P18.7-T4 AC-2). Nothing is sent until something is chosen.
         search: search || undefined,
         type: typeFilter || undefined,
         statusCode: statusFilter || undefined,
@@ -520,7 +521,7 @@ export function LeadsTable({
 
   const draftInputId = `${uid}-draft-name`;
   const nameId = (id: string) => `${uid}-name-${id}`;
-  /** A control in the phone's edit sheet, which holds one lead at a time (P18.95-T4 AC-1). */
+  /** A control in the phone's edit sheet, which holds one lead at a time (P18.7-T4 AC-1). */
   const sheetFieldId = (field: string) => `${uid}-sheet-${field}`;
   useEffect(() => {
     if (draft) document.getElementById(draftInputId)?.focus();
@@ -658,7 +659,7 @@ export function LeadsTable({
       forget(id, ['', ...fields]);
       /*
        * A write that can move the row under the sort — or, under a search or a filter, take it out of the
-       * list (P18.95-T4) — shifts the pages still to come. The row itself stays until the next load: a lead
+       * list (P18.7-T4) — shifts the pages still to come. The row itself stays until the next load: a lead
        * does not vanish from under the reader's finger because its type no longer matches the filter.
        */
       if ((sort && moves.includes(sort.key)) || (narrowed && moves.length > 0)) restartIfLoading();
@@ -686,7 +687,7 @@ export function LeadsTable({
   }
 
   /**
-   * One field's write **with its save confirmation** (P18.95-T1 AC-5): `run`, inside *Saving… → Saved ✓*.
+   * One field's write **with its save confirmation** (P18.7-T1 AC-5): `run`, inside *Saving… → Saved ✓*.
    *
    * **The retry sends the same value**, at the version the row holds when it is pressed — a field saved
    * meanwhile has moved it on. A row that has gone, or a refusal that re-read the row and threw the typing
@@ -777,7 +778,7 @@ export function LeadsTable({
   /** `+ Add lead`: a row at the top, or back to the one already there. */
   function addLead() {
     if (draft) {
-      // On a phone the inline row lives in the sheet, which opens on its name box (P18.95-T4 AC-1).
+      // On a phone the inline row lives in the sheet, which opens on its name box (P18.7-T4 AC-1).
       if (phone) setSheetFor(draft.key);
       else document.getElementById(draftInputId)?.focus();
       return;
@@ -873,7 +874,7 @@ export function LeadsTable({
 
   /**
    * A heading sorts ascending, then descending, then **back to the saved order** — the order the table
-   * opens on, which no heading names (P18.8-T7; the newest registration until then, ADR-0108 §4). A new
+   * opens on, which no heading names (P18.5-T7; the newest registration until then, ADR-0108 §4). A new
    * column starts ascending, as the prototype does (`Overall.html:5694-5707`). Nothing a heading does
    * is saved.
    */
@@ -924,12 +925,12 @@ export function LeadsTable({
   }
 
   /*
-   * ---------------------------------------------- the reader's own order (P18.8-T7, ADR-0161 §1)
+   * ---------------------------------------------- the reader's own order (P18.5-T7, ADR-0161 §1)
    *
    * **On `/leads` only, and while no column sort is on.** A coaching session's card (`owner`) shows the
    * coachee's order and offers no handle: the order is its owner's. Under a sort the rows are in the
    * sort's order, and a drop there would save an order the reader never saw. **Nor under a search or a
-   * filter** (P18.95-T4 AC-2): the rows are some of the reader's leads, and the order saved is all of them.
+   * filter** (P18.7-T4 AC-2): the rows are some of the reader's leads, and the order saved is all of them.
    *
    * **Every page first.** The server takes the reader's open leads all at once, so a list still arriving
    * holds its handles still until the last page lands.
@@ -1061,6 +1062,7 @@ export function LeadsTable({
     // A finalized session's lock: the details still read, and nothing else is offered.
     if (readOnly) return [details];
     const terminal = isTerminal(row);
+    const final = finalStageOf(ladderFor(row.type));
     const items: ActionMenuItem[] = [
       details,
       {
@@ -1068,15 +1070,17 @@ export function LeadsTable({
         glyph: '✓',
         tone: 'success',
         disabled: locked || !terminal,
-        reason: terminal ? undefined : t.menu.wonHeld,
+        // UI-160 item 3 (ADR-0194 §3): the office's own name for its final stage.
+        reason: terminal ? undefined : t.menu.wonHeld({ stage: final?.label ?? '' }),
         onSelect: () => setConfirmOutcome({ row, outcome: 'won' }),
       },
-      // Lost is allowed at any stage (§3.7); only won is gated.
+      // Lost below the final stage, refused on it — by the API too (UI-160 item 2; ADR-0194 §2, `LEAD_STATUS_FINAL`).
       {
         label: t.menu.markLost,
         glyph: '✕',
         tone: 'alert',
-        disabled: locked,
+        disabled: locked || terminal,
+        reason: terminal && row.type ? t.menu.lostHeld[row.type] : undefined,
         onSelect: () => setConfirmOutcome({ row, outcome: 'lost' }),
       },
     ];
@@ -1103,7 +1107,7 @@ export function LeadsTable({
    * the same accessible names, so a lead reads the same to a screen reader at any width and every
    * behaviour below holds in both.
    *
-   * **`sheet` is the phone's edit sheet** (P18.95-T4 AC-1): the same controls, each a 44px field under a
+   * **`sheet` is the phone's edit sheet** (P18.7-T4 AC-1): the same controls, each a 44px field under a
    * label of its own rather than a cell named for its row, with the same writes, the same held row and the
    * same *Saving… → Saved ✓* beside each.
    */
@@ -1120,7 +1124,8 @@ export function LeadsTable({
      * of the lead rather than a moment: no type yet, not on the final stage.
      */
     const locked = saving || isDraft || readOnly;
-    const monthAction = row.type === 'recruitment' ? t.recruitThisMonth : t.closeThisMonth;
+    // The *Potensi* switch's words by the lead's type (UI-153 item 1): the same saved field, renamed on screen.
+    const monthAction = row.type === 'recruitment' ? t.potensi.recruitment : t.potensi.sales;
     const foreign = !isDraft && row.ownerMembershipId !== myMembership;
     const sheet = variant === 'sheet';
     const dateId = sheet ? sheetFieldId('nextActionDate') : `${uid}-date-${keyFor[row.id] ?? row.id}`;
@@ -1138,10 +1143,10 @@ export function LeadsTable({
 
     return {
       /*
-       * **The reader's own open leads, on `/leads`, while no sort is on** (P18.8-T7 AC-4) — none on the
+       * **The reader's own open leads, on `/leads`, while no sort is on** (P18.5-T7 AC-4) — none on the
        * inline row, which is not a lead yet, and none on an agent's row on their leader's list: the order
        * of a list is its owner's. Held still until every page has arrived (`complete`). **44px on a phone**
-       * (P18.95-T4), where the card around it is otherwise read-only.
+       * (P18.7-T4), where the card around it is otherwise read-only.
        */
       handle: ordering && !isDraft && !foreign ? (
         <DragHandle
@@ -1213,7 +1218,7 @@ export function LeadsTable({
             density={density}
             className={cn(
               'border-hairline',
-              row.type === 'sales' && 'font-semibold text-amber-ink',
+              row.type === 'sales' && 'font-semibold text-primary-ink',
               row.type === 'recruitment' && 'font-semibold text-navy-soft',
               row.type === null && 'text-muted',
               isDraft && INERT_CONTROL,
@@ -1267,36 +1272,29 @@ export function LeadsTable({
       ),
 
       /*
-       * **Written out beside the box** (`.month-check-wrap`, `Overall.html:479-487`) — a close and a
-       * recruitment are different promises. **Not until there is a type** (`:5505-5506`, P10.1-T4
-       * AC-7): a promise has to say which of the two it is. In the sheet the box is 20px and its line 44px.
+       * **The *Potensi* switch** (P19.1-T2 AC-8; UI-153 items 1–2): *BULAN INI*'s control is the lead sheet's switch, small
+       * in a row and the 44px card in the phone's edit sheet — written out beside it, because a close and a recruitment
+       * are different promises. **Not until there is a type** (`:5505-5506`, P10.1-T4 AC-7): a promise has to say which
+       * of the two it is, so a lead with none shows the words faded and no switch.
        */
       month: (
         <InlineSaveField status={inline.statusOf(saveKey(row, 'thisMonth'))} label={saveLabel(monthAction)}>
-          <label
-            className={cn(
-              'flex items-start gap-1.5 text-xs leading-tight',
-              row.type ? 'text-muted' : 'text-muted/40',
-              sheet && 'min-h-11 items-center gap-2.5 text-md text-navy',
-            )}
-          >
-            <input
-              type="checkbox"
-              className={cn(
-                'mt-px h-[13px] w-[13px] shrink-0 accent-success disabled:cursor-not-allowed',
-                sheet && 'mt-0 h-5 w-5',
-              )}
+          {row.type ? (
+            <PotensiSwitch
+              type={row.type}
+              size={sheet ? 'card' : 'small'}
               checked={row.thisMonth}
-              disabled={!row.type}
-              aria-disabled={locked || undefined}
-              onChange={(e) => {
-                if (locked) return;
-                const thisMonth = e.target.checked;
+              disabled={locked}
+              label={monthAction}
+              onChange={(thisMonth) => {
                 void saveField(row, 'thisMonth', (version) => updateLead(row.id, { thisMonth }, version));
               }}
             />
-            {monthAction}
-          </label>
+          ) : (
+            <span className={cn('text-xs leading-tight text-muted/40', sheet && 'flex min-h-11 items-center text-md')}>
+              {monthAction}
+            </span>
+          )}
         </InlineSaveField>
       ),
 
@@ -1306,7 +1304,7 @@ export function LeadsTable({
        * keep the prototype's transparent rest, *Type* aside; these two are the boxes a reader writes
        * sentences in. **No placeholder in either since 2026-10-26** (ADR-0161 §2): the border says where
        * to write, and the grey words read as something already written. **In the sheet it grows with what
-       * is typed** (P18.95-T4 AC-1; UI-016: the remark was clipped), from 44px.
+       * is typed** (P18.7-T4 AC-1; UI-016: the remark was clipped), from 44px.
        */
       remarks: (
         <InlineSaveField status={inline.statusOf(saveKey(row, 'remarks'))} label={saveLabel(t.columns.remarks)}>
@@ -1326,7 +1324,7 @@ export function LeadsTable({
       date: (
         <InlineSaveField status={inline.statusOf(saveKey(row, 'nextActionDate'))} label={saveLabel(t.nextActionDate)}>
           {/*
-            * The shared date field (P18.96-T2 AC-4): the day as the app writes it — never the browser's *mm/dd/yyyy* —
+            * The shared date field (P18.8-T2 AC-4): the day as the app writes it — never the browser's *mm/dd/yyyy* —
             * with the calendar on its left (P13.1-T4 AC-5), and the device's picker opened by a click on the field.
             */}
           <DateField
@@ -1365,10 +1363,10 @@ export function LeadsTable({
       ),
 
       /*
-       * **WhatsApp, beside the ⋮** (P18.8-T7 AC-5, ADR-0161 §2), where it was a button in *Lead details*.
+       * **WhatsApp, beside the ⋮** (P18.5-T7 AC-5, ADR-0161 §2), where it was a button in *Lead details*.
        * The number as `wa.me` takes it (`whatsAppNumber`), in a new tab and with no opener. A finalized
        * session's card keeps it: opening a chat writes nothing. **Held, with its reason, where there is no
-       * number WhatsApp could open** (P18.95-T4 AC-3) — until then there was no link at all, and a lead with
+       * number WhatsApp could open** (P18.7-T4 AC-3) — until then there was no link at all, and a lead with
        * no phone looked the same as a lead whose WhatsApp had not loaded.
        */
       whatsapp: isDraft ? null : chat ? (
@@ -1394,7 +1392,7 @@ export function LeadsTable({
       ),
 
       /*
-       * **📞, beside WhatsApp** (P18.95-T4 AC-3, ADR-0167 §4; UI-016): `tel:` with the same number, read by the
+       * **📞, beside WhatsApp** (P18.7-T4 AC-3, ADR-0167 §4; UI-016): `tel:` with the same number, read by the
        * same rule, so the phone's own dialler rings it. Held with the same reason where WhatsApp is held.
        */
       call: isDraft ? null : call ? (
@@ -1402,7 +1400,7 @@ export function LeadsTable({
           href={call}
           aria-label={t.callWho({ who })}
           title={t.call}
-          className={cn(CONTACT_GLYPH, 'text-sm leading-none hover:bg-navy/[0.08]')}
+          className={cn(CONTACT_GLYPH, 'text-sm leading-none hover:bg-secondary/[0.08]')}
         >
           <span aria-hidden="true">📞</span>
         </a>
@@ -1527,7 +1525,7 @@ export function LeadsTable({
   }
 
   /**
-   * **Every field of a lead's save, said once on its phone card** (P18.95-T1 AC-5, P18.95-T4 AC-1): the sheet
+   * **Every field of a lead's save, said once on its phone card** (P18.7-T1 AC-5, P18.7-T4 AC-1): the sheet
    * can close while a field is still on its way, and its *Saved ✓* would then be said to nobody. A failure
    * comes first, then *Saving…*, then *Saved ✓*; the retry sends each field that failed again, as it went.
    */
@@ -1553,7 +1551,7 @@ export function LeadsTable({
   }
 
   /**
-   * One lead on a phone: **read-only, and a tap away from its edit sheet** (P18.95-T4 AC-1, ADR-0167 §4;
+   * One lead on a phone: **read-only, and a tap away from its edit sheet** (P18.7-T4 AC-1, ADR-0167 §4;
    * UI-016).
    *
    * The lead in words — the name, its type and stage, the next action and its date, the remarks **in full**,
@@ -1593,7 +1591,7 @@ export function LeadsTable({
               // The whole card is the tap, and the focus ring is drawn round the whole card.
               "after:absolute after:inset-0 after:rounded-sm after:content-['']",
               'focus-visible:outline-none focus-visible:after:outline focus-visible:after:outline-2',
-              'focus-visible:after:-outline-offset-2 focus-visible:after:outline-amber',
+              'focus-visible:after:-outline-offset-2 focus-visible:after:outline-focus-ring',
             )}
           >
             {name || <span className="font-normal text-muted">{t.newLead}</span>}
@@ -1604,7 +1602,7 @@ export function LeadsTable({
           <span
             className={cn(
               'font-semibold',
-              row.type === 'sales' && 'text-amber-ink',
+              row.type === 'sales' && 'text-primary-ink',
               row.type === 'recruitment' && 'text-navy-soft',
               row.type === null && 'font-normal text-muted',
             )}
@@ -1637,7 +1635,7 @@ export function LeadsTable({
   }
 
   /**
-   * **The phone's edit sheet** (P18.95-T4 AC-1): the lead's own fields, the ones its row edits, as 44px
+   * **The phone's edit sheet** (P18.7-T4 AC-1): the lead's own fields, the ones its row edits, as 44px
    * controls under labels of their own, the remark growing as it is typed. `Modal`, rising from the foot of
    * the screen: the focus in it and held, Escape, the backdrop and **Close** shut it, and the focus goes back
    * to the card. Each field saves as it is left, with its *Saving… → Saved ✓* under it, exactly as a cell does,
@@ -1706,7 +1704,7 @@ export function LeadsTable({
   }
 
   /**
-   * **`/leads`' search and its two filters, above the list at every size** (P18.95-T4 AC-2, AC-5; ADR-0167 §4).
+   * **`/leads`' search and its two filters, above the list at every size** (P18.7-T4 AC-2, AC-5; ADR-0167 §4).
    *
    * The coaching card's own controls and words (`Overall.html:4258-4266`) — *Search leads…*, *All types* —
    * with a *Status* filter beside them, and nothing else: the search is sent once the typing settles, each
@@ -1796,7 +1794,7 @@ export function LeadsTable({
         ) : (
           /* The prototype's toolbar: the count, and the screen's one action (`Overall.html:2791-2794`). */
           <div className="mb-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-            {/* Narrowed, the count is what matched — the whole list is not on the screen (P18.95-T4 AC-2). */}
+            {/* Narrowed, the count is what matched — the whole list is not on the screen (P18.7-T4 AC-2). */}
             <p className="text-sm text-muted">{t.count({ n: open.total, narrowed })}</p>
             <div className="flex flex-wrap items-center gap-2.5">
               {sortChoice}
@@ -1806,7 +1804,7 @@ export function LeadsTable({
         )}
 
         {loadError && <div className="mb-3"><ErrorBanner {...loadError} /></div>}
-        {/* A drag the server refused, said once above the list it was made on (P18.8-T7). */}
+        {/* A drag the server refused, said once above the list it was made on (P18.5-T7). */}
         {orderError && <div className="mb-3"><ErrorBanner {...orderError} /></div>}
 
         {cards ? (
@@ -1814,7 +1812,7 @@ export function LeadsTable({
             <div className="rounded-lg border border-card-edge bg-card">{empty}</div>
           ) : (
             <ul role="list" aria-label={caption} className="rounded-lg border border-card-edge bg-card">
-              {/* A phone's cards are read and tapped; a tablet's are edited where they stand (P18.95-T4 AC-1, AC-5). */}
+              {/* A phone's cards are read and tapped; a tablet's are edited where they stand (P18.7-T4 AC-1, AC-5). */}
               {rows.map(phone ? renderPhoneCard : renderCard)}
             </ul>
           )
@@ -1986,15 +1984,19 @@ function useCardLayout(): [React.RefObject<HTMLDivElement | null>, boolean] {
   return [frame, cards];
 }
 
-/** Both closed lists, page after page, into state as each lands. `/leads`' compact list reads them too (UI-105). */
+/**
+ * Both closed lists, page after page, into state as each lands. `/leads`' compact list reads them too (UI-105), by its
+ * *Leads milik* choice (`scope`, P19.9-T1 AC-2).
+ */
 export async function loadClosed(
   outcome: LeadOutcome,
   set: React.Dispatch<React.SetStateAction<List | null>>,
   isCurrent: () => boolean,
   owner?: string,
+  scope?: LeadScope,
 ) {
   await listEveryLead(
-    { outcome, sort: 'dateRegistered', dir: 'desc', owner },
+    { outcome, sort: 'dateRegistered', dir: 'desc', owner, scope },
     (rows, total, first) => set((list) => (first || !list
       ? { rows, total }
       : { ...list, rows: [...list.rows, ...rows.filter((r) => !list.rows.some((c) => c.id === r.id))] })),
@@ -2027,7 +2029,10 @@ export function ClosedLeads({
   refusalsOf,
   stageLabel,
   onReopen,
+  stacked = false,
 }: {
+  /** One card under the other at every width: the laptop's list column beside the lead's pane (UI-116). */
+  stacked?: boolean;
   won: ClosedCard;
   lost: ClosedCard;
   busy: Record<string, boolean>;
@@ -2049,7 +2054,7 @@ export function ClosedLeads({
   return (
     <section className="mt-8">
       <h2 className="mb-3 font-display text-md font-bold text-navy">{t.closed.title}</h2>
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className={stacked ? 'grid gap-4' : 'grid gap-4 lg:grid-cols-2'}>
         {cards.map(({ outcome, title, card: { list, error }, empty, waiting }) => (
           <div key={outcome} className="overflow-hidden rounded-lg border border-card-edge bg-card">
             <header
@@ -2086,7 +2091,7 @@ export function ClosedLeads({
                           onClick={() => onReopen(row)}
                           className={cn(
                             'shrink-0 whitespace-nowrap rounded-pill border border-hairline px-2.5 py-1',
-                            'text-xs font-semibold text-navy-soft hover:bg-navy-soft/[0.08]',
+                            'text-xs font-semibold text-navy-soft hover:bg-secondary-hover/[0.08]',
                             'disabled:cursor-not-allowed disabled:opacity-40',
                           )}
                         >
@@ -2127,5 +2132,5 @@ function stageTint(row: Lead, ladder: readonly { code: string }[]): string {
   if (at === -1) return 'text-muted';
   if (at === 0) return 'bg-alert/[0.08] text-navy';
   if (at === ladder.length - 1) return 'bg-success/10 text-navy';
-  return row.type === 'recruitment' ? 'bg-navy-soft/[0.09] text-navy' : 'bg-amber/[0.13] text-navy';
+  return row.type === 'recruitment' ? 'bg-secondary-hover/[0.09] text-navy' : 'bg-primary/[0.13] text-navy';
 }

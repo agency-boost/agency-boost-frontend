@@ -8,7 +8,7 @@ import { eventsMessages } from '@/i18n/messages/events';
 
 /**
  * **KPM Events** (`/events`, and an event's modal at `/events/[eventId]`; `Overall.html:3423-3448`, title
- * `:10413`; P18.5-T5).
+ * `:10413`; P18.2-T5).
  *
  * **A layout, so the list is mounted once** for both addresses: opening an event pushes the modal's
  * address over the list and Back closes it, the list where it was. The pages beneath are nothing — the

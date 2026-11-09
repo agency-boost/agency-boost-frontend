@@ -26,14 +26,43 @@ export const AUTOSAVE_MS = 800;
 /** A kind holds a draft the server knows of: something to publish. */
 export const hasServerDraft = (view: CompanyTemplate) => view.status === 'draft' && view.id !== '';
 
+/** Somebody else saved or published the kind after this editor read it (P19-T6 AC-2): saving again cannot help. */
+export const isStale = (error: ApiError | null | undefined) => error?.code === 'VERSION_CONFLICT';
+
 /**
- * **A section's drafts, saved as they are made** (ADR-0185 §3; P18.99-T20 AC-3): each kind read once, every edit held
+ * **Every draft save still on its way, from any section** (P19.4-T5 AC-9; the 11-03 handover's B1-10, *"a Sequis ratio-set
+ * publish didn't stick the first time"*). A section left with an edit waiting sends it as it closes, and nobody waited for
+ * it: *Terbitkan semua* pressed straight after could publish the draft before that last save landed, and the save then
+ * started a new draft over the version just published — the publish looked as if it had not stuck. Every save goes
+ * through here, so a publish can wait for all of them first ({@link settleDraftSaves}).
+ */
+const pendingSaves = new Set<Promise<unknown>>();
+
+/** A save, tracked until it settles, refusal or not. */
+function tracked<T>(save: Promise<T>): Promise<T> {
+  const settled = save.then(() => undefined, () => undefined).finally(() => { pendingSaves.delete(settled); });
+  pendingSaves.add(settled);
+  return save;
+}
+
+/** **Wait for every draft save on its way** — what *Terbitkan semua* does before it publishes (P19.4-T5 AC-9). */
+export async function settleDraftSaves(): Promise<void> {
+  while (pendingSaves.size > 0) await Promise.all([...pendingSaves]);
+}
+
+/**
+ * **A section's drafts, saved as they are made** (ADR-0185 §3; P18.11-T20 AC-3): each kind read once, every edit held
  * and — after {@link AUTOSAVE_MS} without another — `PUT` as the kind's draft, whole (the API's contract: a template
  * kind is one document). An edit made while a save is on its way is saved after it, so the last one always lands.
  *
  * **Nothing is lost by leaving.** A draft still waiting when the section closes is sent as it closes; there is no
  * *one tab at a time* any more, because nothing is held anywhere but the server. A save the server refused keeps the
  * editor's words and says so (`error`), and `flush` tries again.
+ *
+ * **Each save names the revision it was made from** (P19-T6 AC-2): the `revision` of the server's last answer for the
+ * kind. Somebody else's save or publish since is refused `409 VERSION_CONFLICT` rather than overwritten; the kind keeps
+ * the reader's words and its `error`, stops saving — another try would be refused the same — and `stale` says so, for
+ * the bar's *Muat ulang*, which is `retryLoad`: every kind read again, as the server now has it.
  *
  * `templateId` is the named template's, or `null` for the company's own carrier rules (`campaign_kinds`). `readOnly`
  * (an archived template) reads and never writes.
@@ -58,6 +87,8 @@ export function useTemplateDrafts({
   const inflight = useRef<Partial<Record<TemplateKind, Promise<boolean>>>>({});
   /** The server's last answer per kind, as soon as it lands — what `publish` reads, a render before state has it. */
   const views = useRef<Partial<Record<TemplateKind, CompanyTemplate>>>({});
+  /** Kinds whose last save was refused as stale: nothing more is sent for them until they are read again. */
+  const stale = useRef<Set<TemplateKind>>(new Set());
   const key = kinds.join(',');
 
   const patch = useCallback((kind: TemplateKind, change: Partial<KindDraft>) => {
@@ -68,9 +99,16 @@ export function useTemplateDrafts({
     let live = true;
     setLoadError(null);
     setDrafts({});
+    // A save still waiting from before the read would go out against what is being replaced: dropped.
+    for (const kind of Object.keys(timers.current) as TemplateKind[]) {
+      clearTimeout(timers.current[kind]);
+      timers.current[kind] = undefined;
+    }
     void Promise.all(kinds.map((kind) => readTemplate(companyId, kind, templateId)))
       .then((read) => {
         if (!live) return;
+        // Read again, as stored now: a kind refused as stale may save once more, from this revision.
+        stale.current = new Set();
         const next: Partial<Record<TemplateKind, KindDraft>> = {};
         read.forEach((view, i) => {
           const kind = kinds[i];
@@ -91,7 +129,7 @@ export function useTemplateDrafts({
   const saveNow = useCallback(async (kind: TemplateKind): Promise<boolean> => {
     clearTimeout(timers.current[kind]);
     timers.current[kind] = undefined;
-    if (readOnly) return false;
+    if (readOnly || stale.current.has(kind)) return false;
     const pending = inflight.current[kind];
     if (pending) {
       await pending;
@@ -100,14 +138,16 @@ export function useTemplateDrafts({
     const payload = latest.current[kind];
     if (payload === undefined || sameValue(payload, savedRef.current[kind])) return true;
     patch(kind, { saving: true, error: null });
-    const run = saveTemplateDraft(companyId, kind, payload, templateId)
+    const run = tracked(saveTemplateDraft(companyId, kind, payload, templateId, views.current[kind]?.revision))
       .then((view) => {
         savedRef.current[kind] = payload;
         views.current[kind] = view;
         patch(kind, { view, saved: payload, saving: false, error: null });
         return true;
       }, (err) => {
-        patch(kind, { saving: false, error: toDisplayError(err) });
+        const error = toDisplayError(err);
+        if (isStale(error)) stale.current.add(kind);
+        patch(kind, { saving: false, error });
         return false;
       })
       .finally(() => { inflight.current[kind] = undefined; });
@@ -153,13 +193,33 @@ export function useTemplateDrafts({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, flush, companyId, templateId, patch]);
 
+  /**
+   * **A draft the server wrote another way**, taken as the kind's state (ADR-0208 §1): a module's material saved through
+   * its own route answers the section's draft. The editor then holds that payload and its `revision`, so the next save
+   * is pinned past the material's rather than refused as stale.
+   */
+  const accept = useCallback((kind: TemplateKind, view: CompanyTemplate) => {
+    clearTimeout(timers.current[kind]);
+    timers.current[kind] = undefined;
+    stale.current.delete(kind);
+    latest.current[kind] = view.payload;
+    savedRef.current[kind] = view.payload;
+    views.current[kind] = view;
+    patch(kind, { view, payload: view.payload, saved: view.payload, saving: false, error: null });
+  }, [patch]);
+
   // Leaving with a draft still waiting sends it as the section closes: nothing is lost by leaving.
   useEffect(() => () => {
     for (const kind of Object.keys(timers.current) as TemplateKind[]) {
       if (!timers.current[kind]) continue;
       clearTimeout(timers.current[kind]);
       const payload = latest.current[kind];
-      if (payload !== undefined && !readOnly) void saveTemplateDraft(companyId, kind, payload, templateId).catch(() => undefined);
+      // Pinned like every save: a section left after somebody else saved it overwrites nothing (P19-T6).
+      if (payload !== undefined && !readOnly && !stale.current.has(kind)) {
+        // Tracked, so a publish pressed straight after leaving waits for it (P19.4-T5 AC-9).
+        void tracked(saveTemplateDraft(companyId, kind, payload, templateId, views.current[kind]?.revision))
+          .catch(() => undefined);
+      }
     }
   }, [companyId, templateId, readOnly]);
 
@@ -173,9 +233,12 @@ export function useTemplateDrafts({
     change,
     flush,
     publish,
+    accept,
     saving: all.some((d) => d.saving),
     dirty: all.some((d) => !sameValue(d.payload, d.saved)),
     error: all.find((d) => d.error)?.error ?? null,
+    /** A save was refused because somebody else saved or published first (P19-T6): *Muat ulang*, not *Coba lagi*. */
+    stale: all.some((d) => isStale(d.error)),
     /** Something waits to be published: a draft the server holds, or an edit on its way to becoming one. */
     publishable: all.some((d) => hasServerDraft(d.view) || !sameValue(d.payload, d.saved)),
   };

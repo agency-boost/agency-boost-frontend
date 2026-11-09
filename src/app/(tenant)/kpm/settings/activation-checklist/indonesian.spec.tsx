@@ -67,11 +67,11 @@ const LINKED = 'Item yang tertaut selesai secara otomatis.';
 const ENGLISH = /\b(Save draft|Publish version|Hires starting|Nothing is published|The window is|days|Rename|Remove|Edit|Add aspect|Add item|Completes from|No link|Feature|items)\b/;
 
 /**
- * **P18.98-T4, Settings › Activation checklist in ID mode**: the screen's words the approved glossary's Indonesian, its
+ * **P18.10-T4, Settings › Activation checklist in ID mode**: the screen's words the approved glossary's Indonesian, its
  * title, the features an item completes from and *new hire* English (§A), and the office's aspects and items as typed.
- * The two grey sentences keep their verdict per size in Indonesian (P18.97-T4 AC-6). In English: `page.spec.tsx`.
+ * The two grey sentences keep their verdict per size in Indonesian (P18.9-T4 AC-6). In English: `page.spec.tsx`.
  */
-describe('P18.98-T4 Settings › Activation checklist in Indonesian', () => {
+describe('P18.10-T4 Settings › Activation checklist in Indonesian', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it('AC-2 says the version card and the controls in Indonesian, the title kept English', async () => {
@@ -170,10 +170,10 @@ describe('P18.98-T4 Settings › Activation checklist in Indonesian', () => {
 });
 
 /**
- * **The grey sentences per size, in Indonesian** (P18.97-T4 AC-6, ADR-0176 §6; UI-027): the same verdicts as in English
+ * **The grey sentences per size, in Indonesian** (P18.9-T4 AC-6, ADR-0176 §6; UI-027): the same verdicts as in English
  * — *New versions* *ⓘ · ⓘ · Show*, *Linked items* *Remove · ⓘ · Show* — read from the classes CSS would apply.
  */
-describe('P18.98-T4 the checklist’s grey text per size, in Indonesian', () => {
+describe('P18.10-T4 the checklist’s grey text per size, in Indonesian', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   async function drawnAt(px: number) {
@@ -204,12 +204,12 @@ describe('P18.98-T4 the checklist’s grey text per size, in Indonesian', () => 
 });
 
 /**
- * **P18.98-T4 (new hires and activation): the link badge and *From {data}* in Indonesian** — the hire's activation's
+ * **P18.10-T4 (new hires and activation): the link badge and *From {data}* in Indonesian** — the hire's activation's
  * words (`lib/activation.ts`' `autoBadge`, `byHandBadge`, `fromDataWords`), which read English here until that module
  * moved: *Otomatis* for a live link, *Dicentang manual* for one that does not complete its item, and a data-backed item's
  * *Dari {data}*. The registry's sentence and a link's label are the server's, as it sends them.
  */
-describe('P18.98-T4 the checklist’s link badges in Indonesian', () => {
+describe('P18.10-T4 the checklist’s link badges in Indonesian', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   const SALES = {

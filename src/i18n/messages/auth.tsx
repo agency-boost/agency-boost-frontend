@@ -3,7 +3,7 @@ import { defineMessages, type MessagesOf } from '@/i18n/catalogue';
 import { kept } from '@/i18n/kept';
 
 /**
- * **The pages somebody meets before they are anybody** (P18.98-T4, public and account; `api/auth-and-sessions.md`, *The
+ * **The pages somebody meets before they are anybody** (P18.10-T4, public and account; `api/auth-and-sessions.md`, *The
  * screens' own strings*): sign-in (`/login`) with the development accounts panel's own words, registration
  * (`/register`, on a leader's invite too), *Reset your password* (`/forgot-password`), *Choose a new password*
  * (`/reset-password/[token]`), *Verify your email* (`/verify-email/[token]`), and *Choose your own password*
@@ -41,9 +41,10 @@ const en = {
     title: kept('AgencyBoost'),
     sessionEnded: 'Your session ended. Sign in again.',
     toContinue: 'Sign in to continue.',
-    /** The one refusal a person can act on from here (P4-T13). */
-    resend: 'Send the verification email again',
-    resent: 'On its way, if that address has an account waiting.',
+    /*
+     * *Removed 2026-11-04 (P19-T1 AC-4, ADR-0190 §4):* `resend` and `resent`, the button offered when sign-in refused an
+     * unverified address. Sign-in no longer refuses it; the shells' banner offers *Kirim ulang* instead (`banner`).
+     */
     email: 'Email',
     password: 'Password',
     signingIn: 'Signing in…',
@@ -72,7 +73,7 @@ const en = {
     mismatch: 'The two passwords do not match.',
     saving: 'Saving…',
   },
-  /** `/register` (ADR-0017, ADR-0158; on a leader's invite, P18.96-T3 AC-4). */
+  /** `/register` (ADR-0017, ADR-0158; on a leader's invite, P18.8-T3 AC-4). */
   register: {
     title: 'Create your account',
     line: 'Your office is added separately. This is just your login.',
@@ -140,13 +141,34 @@ const en = {
     /** `link` draws its words as the link to `/forgot-password`. */
     expired: ({ link }: { link: Wrap }) => <>Link expired? {link('Ask for another')}.</>,
   },
-  /** `/verify-email/[token]`. */
+  /**
+   * `/verify-email/[token]`. *Changed 2026-11-04 (P19-T1 AC-1, AC-2; UI-163, ADR-0190 §1–§2):* the page verifies when its
+   * one button is pressed, never on its load — a mail scanner that opens the link spends nothing — and an address
+   * already verified reads as success. `checking` stays for `/verify-email-change/[token]`, which reads it.
+   */
   verify: {
     title: 'Verify your email',
     checking: 'Checking your link…',
-    verified: 'Your email is verified. You can sign in now.',
+    verifyMine: 'Verify my email',
+    verifying: 'Verifying…',
+    verified: 'Your email is verified.',
     goToSignIn: 'Go to sign in',
-    failedLine: 'Verification links are single-use and expire after 24 hours. Sign in to request a new one.',
+    /** Signed in already, on this device: back to the app rather than to sign-in. */
+    continue: `Continue to ${kept('AgencyBoost')}`,
+    failedLine: 'Verification links expire after 24 hours.',
+    askSignedOut: 'Sign in, then press Send again for a new link.',
+    resend: 'Send again',
+    resent: 'A new link is on its way. Check your inbox.',
+  },
+  /**
+   * **The shells' reminder while the address is not verified** (P19-T1 AC-4; UI-163, ADR-0190 §4): *"Verifikasi email
+   * Anda · Kirim ulang"*, the owner's words, in every shell until it is (`VerifyEmailBanner`).
+   */
+  banner: {
+    line: 'Verify your email',
+    resend: 'Send again',
+    sending: 'Sending…',
+    sent: 'Sent. Check your inbox.',
   },
   /** `/verify-email-change/[token]` (UI V1, UI-111; ADR-0181): the link an email change sends to the new address. */
   verifyChange: {
@@ -156,7 +178,7 @@ const en = {
     goToProfile: 'Go to My profile',
     failedLine: 'Email change links are single-use and expire after 24 hours. Ask again from My profile.',
   },
-  /** `/choose-a-password` (P3.6-T4): an account whose password an operator generated. */
+  /** `/choose-a-password` (P3.2-T4): an account whose password an operator generated. */
   choose: {
     title: 'Choose your own password',
     line: `The password you signed in with was generated for you and passed on by your office, so somebody else has seen it. Nothing else in ${kept('AgencyBoost')} opens until you replace it.`,
@@ -175,10 +197,9 @@ const en = {
 const id: MessagesOf<typeof en> = {
   signIn: {
     title: kept('AgencyBoost'),
-    sessionEnded: 'Sesi Anda telah berakhir. Silakan masuk lagi.',
+    // P19-T5 AC-2 (UI-125, the report's Appendix A): the owner's words; it read *Sesi Anda telah berakhir. Silakan masuk lagi.*
+    sessionEnded: 'Sesi berakhir, silakan masuk lagi.',
     toContinue: 'Masuk untuk melanjutkan.',
-    resend: 'Kirim ulang email verifikasi',
-    resent: 'Email sedang dikirim, jika ada akun yang menunggu di alamat itu.',
     email: 'Email',
     password: 'Kata sandi',
     signingIn: 'Sedang masuk…',
@@ -267,10 +288,21 @@ const id: MessagesOf<typeof en> = {
   verify: {
     title: 'Verifikasi email Anda',
     checking: 'Memeriksa tautan Anda…',
-    verified: 'Email Anda sudah terverifikasi. Sekarang Anda dapat masuk.',
+    verifyMine: 'Verifikasi email saya',
+    verifying: 'Memverifikasi…',
+    verified: 'Email Anda sudah terverifikasi.',
     goToSignIn: 'Buka halaman masuk',
-    failedLine: 'Tautan verifikasi hanya bisa dipakai sekali dan kedaluwarsa setelah 24 jam. Masuk untuk meminta tautan '
-      + 'baru.',
+    continue: `Lanjut ke ${kept('AgencyBoost')}`,
+    failedLine: 'Tautan verifikasi kedaluwarsa setelah 24 jam.',
+    askSignedOut: 'Masuk, lalu tekan Kirim ulang untuk mendapat tautan baru.',
+    resend: 'Kirim ulang',
+    resent: 'Tautan baru sedang dikirim. Periksa kotak masuk email Anda.',
+  },
+  banner: {
+    line: 'Verifikasi email Anda',
+    resend: 'Kirim ulang',
+    sending: 'Mengirim…',
+    sent: 'Terkirim. Periksa kotak masuk email Anda.',
   },
   verifyChange: {
     title: 'Konfirmasi email baru Anda',

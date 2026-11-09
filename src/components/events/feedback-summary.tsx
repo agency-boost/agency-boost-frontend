@@ -24,8 +24,8 @@ const BUCKET: Record<NpsBucket, string> = {
 };
 
 /**
- * **The *Feedback Summary* card** (`KPM_Owner.html:3751-3795`, CSS `:174-191`; P18.5-T6 AC-5) — the one
- * component, and the one read, Phase 18.6 mounts above its tree.
+ * **The *Feedback Summary* card** (`KPM_Owner.html:3751-3795`, CSS `:174-191`; P18.2-T6 AC-5) — the one
+ * component, and the one read, Phase 18.3 mounts above its tree.
  *
  * *"{title} — Feedback Summary"*; the NPS with its formula and *"· {n} responses"*; then every answer by
  * score, each with its author's name (OD-151, ADR-0141), *"{s}/10"* tinted by its bucket, *Why:* and *How to

@@ -2,7 +2,7 @@ import { defineMessages, type MessagesOf } from '@/i18n/catalogue';
 import { kept } from '@/i18n/kept';
 
 /**
- * **The glossary terms' tips** (`lib/terms.ts`, drawn by `TermTip`; P18.95-T9 AC-3, P18.97-T3 AC-8; P18.98-T4, the
+ * **The glossary terms' tips** (`lib/terms.ts`, drawn by `TermTip`; P18.7-T9 AC-3, P18.9-T3 AC-8; P18.10-T4, the
  * shared pieces): each ⓘ's name, *What is APE?*, and its one line.
  *
  * **English is the source**, byte for byte the tips as they were (`TERMS`, which keeps them in its old shape). **A kept

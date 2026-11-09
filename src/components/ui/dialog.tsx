@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useId, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useMessages } from '@/i18n/language-provider';
 import { uiMessages } from '@/i18n/messages/ui';
+import { cn } from '@/lib/cn';
 import { useScrollLock } from '@/lib/use-scroll-lock';
 import { Button } from './field';
 
@@ -25,10 +26,17 @@ import { Button } from './field';
  * returns to whatever had it when the dialog closes — so a refused delete leaves you back on the row's
  * delete button rather than at the top of the page. Tab is trapped between the two buttons, because a
  * modal whose focus escapes into the page behind it is a modal only visually.
+ *
+ * *Added 2026-11-07 (P19.8-T3 AC-7; MOB UI-169, ADR-0228 §5), both optional, every caller before it unchanged:*
+ * **`detail`** — a second, grey line under the question, which then reads bold (*Hapus event ini?* over *Kickoff 2026 ·
+ * Rabu, 11 Nov 2026*), the dialog named by the question and described by the line; **`tone="dangerFill"`** — the
+ * confirming button filled red with white words, and the two buttons of equal width, as the 7 November mockup's
+ * `confirmDel()` draws them.
  */
 export function Dialog({
   open,
   message,
+  detail,
   confirmLabel,
   cancelLabel,
   tone = 'primary',
@@ -37,12 +45,17 @@ export function Dialog({
 }: {
   open: boolean;
   message: string;
+  /** A grey line under the question — what it is about (P19.8-T3; MOB UI-169). Given, the question reads bold. */
+  detail?: string;
   /** Says what will happen — *Delete lead*, *Discard counts* — never *OK*. */
   confirmLabel: string;
-  /** *Cancel* in the reader's language where a caller names nothing else (P18.98-T4). */
+  /** *Cancel* in the reader's language where a caller names nothing else (P18.10-T4). */
   cancelLabel?: string;
-  /** `danger` for something that destroys, which the prototype paints quieter, not louder. */
-  tone?: 'primary' | 'danger';
+  /**
+   * `danger` for something that destroys, which the prototype paints quieter, not louder. `dangerFill` where the owner
+   * drew it louder: red filled, white words, the two buttons side by side at equal width (MOB UI-169).
+   */
+  tone?: 'primary' | 'danger' | 'dangerFill';
   onConfirm: () => void;
   onCancel: () => void;
 }) {
@@ -50,6 +63,9 @@ export function Dialog({
   const confirm = useRef<HTMLButtonElement>(null);
   const cancel = useRef<HTMLButtonElement>(null);
   const returnTo = useRef<Element | null>(null);
+  const messageId = useId();
+  const detailId = useId();
+  const filled = tone === 'dangerFill';
 
   // The page behind holds still while the question is asked — over a drawer or a dialog too, counted.
   useScrollLock(open);
@@ -99,18 +115,32 @@ export function Dialog({
       <div
         role="dialog"
         aria-modal="true"
-        aria-label={message}
+        aria-label={detail === undefined ? message : undefined}
+        aria-labelledby={detail === undefined ? undefined : messageId}
+        aria-describedby={detail === undefined ? undefined : detailId}
         onClick={(e) => e.stopPropagation()}
         onKeyDown={trap}
-        // Never taller than the screen (P18.96-T1 AC-2): a long question scrolls inside, and the two buttons stay.
+        // Never taller than the screen (P18.8-T1 AC-2): a long question scrolls inside, and the two buttons stay.
         className="flex max-h-[calc(100dvh-1.25rem-max(1.25rem,env(safe-area-inset-top)))] w-full max-w-[22.5rem] flex-col rounded-lg bg-card p-6 shadow-modal"
       >
-        <p className="mb-4 min-h-0 overflow-y-auto overscroll-contain text-md leading-relaxed text-navy">{message}</p>
-        <div className="flex shrink-0 justify-end gap-2.5">
-          <Button ref={cancel} variant="secondary" onClick={onCancel}>
+        {detail === undefined ? (
+          <p className="mb-4 min-h-0 overflow-y-auto overscroll-contain text-md leading-relaxed text-navy">{message}</p>
+        ) : (
+          <div className="mb-4 min-h-0 overflow-y-auto overscroll-contain">
+            <p id={messageId} className="text-lg font-bold leading-snug text-navy">{message}</p>
+            <p id={detailId} className="mt-1.5 break-words text-sm text-muted">{detail}</p>
+          </div>
+        )}
+        <div className={cn('flex shrink-0 gap-2.5', !filled && 'justify-end')}>
+          <Button ref={cancel} variant="secondary" onClick={onCancel} className={cn(filled && 'flex-1')}>
             {cancelLabel ?? t.cancel}
           </Button>
-          <Button ref={confirm} variant={tone} onClick={onConfirm}>
+          <Button
+            ref={confirm}
+            variant={filled ? 'secondary' : tone}
+            onClick={onConfirm}
+            className={cn(filled && 'flex-1 border-alert bg-alert text-white hover:bg-alert/90')}
+          >
             {confirmLabel}
           </Button>
         </div>

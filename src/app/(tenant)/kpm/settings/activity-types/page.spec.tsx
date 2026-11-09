@@ -2,7 +2,8 @@ import { fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createHash } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { atWidth, makeMe, renderWithSession, stubFetch } from '@test/harness';
+import { atWidth, makeMe, renderWithSession, stubFetch, wears } from '@test/harness';
+import { smallTargets } from '@test/touch-audit';
 import { TenantConfigProvider } from '@/lib/tenant-config-cache';
 import ActivityTypesPage from './page';
 
@@ -472,6 +473,90 @@ describe('the office activity taxonomy (P4-T1)', () => {
     });
   });
 
+  /*
+   * ***Nama singkat*** (P19.8-T4 AC-5, ADR-0229 §5; MOB UI-180): one field beside the name wherever the name is edited —
+   * the add form, the row's editor, the phone's sheet — held to the server's 20, sent as `shortLabel`, `null` when empty.
+   */
+  describe('P19.8-T4 AC-5 MOB UI-180 a type’s short name', () => {
+    it('P19.8-T4 AC-5 MOB UI-180 the add form takes a short name beside the name, and sends it', async () => {
+      const { calls } = render();
+      await userEvent.click(await screen.findByRole('button', { name: 'Add to Selling' }));
+      await userEvent.type(screen.getByLabelText('Code'), 'SELL_REFERRAL');
+      await userEvent.type(screen.getByLabelText('Label'), 'Meminta referensi dari nasabah lama');
+      await userEvent.type(screen.getByLabelText('Short name'), 'Referensi');
+      await userEvent.click(screen.getByRole('button', { name: 'Add' }));
+      expect((await saved(calls))[0]).toMatchObject({
+        op: 'type.create', body: { code: 'SELL_REFERRAL', label: 'Meminta referensi dari nasabah lama', shortLabel: 'Referensi' },
+      });
+    });
+
+    it('P19.8-T4 AC-5 MOB UI-180 the row’s editor holds the short name, sends a change, and sends null when it is cleared', async () => {
+      const { calls } = render(OWNER, [{
+        ...TAXONOMY[0],
+        types: [
+          type({ id: 't0', code: 'SELL_PRESENTATION', label: 'Presentasi penjualan', shortLabel: 'Presentasi', displayOrder: 1 }),
+          type({ shortLabel: 'Submission polis' }),
+        ],
+      }]);
+      await userEvent.click((await screen.findAllByRole('button', { name: 'Edit' }))[0]);
+      const field = screen.getByLabelText('Short name');
+      expect(field).toHaveValue('Presentasi');
+      expect(field).toHaveAttribute('maxlength', '20');
+      expect(screen.getByText(/at most 20 characters/)).toBeInTheDocument();
+      await userEvent.clear(field);
+      await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+      await userEvent.click((await screen.findAllByRole('button', { name: 'Edit' }))[1]);
+      await userEvent.clear(screen.getByLabelText('Short name'));
+      await userEvent.type(screen.getByLabelText('Short name'), 'SPAJ');
+      await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+      expect(await saved(calls)).toEqual([
+        expect.objectContaining({ op: 'type.update', id: 't0', body: expect.objectContaining({ label: 'Presentasi penjualan', shortLabel: null }) }),
+        expect.objectContaining({ op: 'type.update', id: 't1', body: expect.objectContaining({ shortLabel: 'SPAJ' }) }),
+      ]);
+    });
+
+    it('P19.8-T4 AC-5 MOB UI-180 at 375px the type’s sheet holds the short name under the name', async () => {
+      atWidth(375);
+      const { calls } = render(OWNER, [{ ...TAXONOMY[0], types: [type({ shortLabel: 'Submission polis' })] }]);
+      await userEvent.click(await screen.findByRole('button', { name: 'Submission polis' }));
+      const sheet = await screen.findByRole('dialog', { name: 'Submission polis' });
+      const labels = within(sheet).getAllByRole('textbox').map((box) => box.id.replace(/-t1$|-type-code-SELL_SUBMISSION$/, ''));
+      expect(labels).toEqual(['code', 'label', 'short-label', 'description']);
+      // Held to the server's 20: *Submission polis baru* would be 21, and the field stops at its last letter.
+      await userEvent.type(within(sheet).getByLabelText('Short name'), ' baru');
+      expect(within(sheet).getByLabelText('Short name')).toHaveValue('Submission polis bar');
+      await userEvent.click(within(sheet).getByRole('button', { name: 'Save' }));
+      expect((await saved(calls))[0]).toMatchObject({ op: 'type.update', id: 't1', body: { shortLabel: 'Submission polis bar' } });
+    });
+
+    it('P19.8-T4 AC-5 MOB UI-180 the server’s refusal of a short name is said in the screen’s banner, not swallowed', async () => {
+      render();
+      await screen.findByText('Submission polis');
+      stubFetch({
+        '/kpm/settings/activity-types': { body: TAXONOMY },
+        '/kpm/settings/publish-state': {
+          body: { publishedVersion: 1, workingVersion: 1, hasUnpublishedChanges: false, publishedAt: null },
+        },
+        '/kpm/settings/changes': {
+          status: 400,
+          body: { error: { code: 'VALIDATION_FAILED', message: 'shortLabel must be at most 20 characters.', requestId: 'r-2' } },
+        },
+      });
+      await userEvent.click((await screen.findAllByRole('button', { name: 'Edit' }))[0]);
+      await userEvent.type(screen.getByLabelText('Short name'), 'Presentasi penjualan');
+      await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+      const alerts = await screen.findAllByRole('alert');
+      expect(alerts.some((a) => a.textContent?.includes('shortLabel must be at most 20 characters.'))).toBe(true);
+    });
+
+    it('P19.8-T4 AC-5 MOB UI-180 a reader who cannot write is offered no short name field', async () => {
+      render(AGENT);
+      await screen.findByText('Submission polis');
+      expect(screen.queryByLabelText('Short name')).toBeNull();
+    });
+  });
+
   describe('drag to reorder (P4-T18)', () => {
     /** `userEvent` has no drag API, so the HTML5 events go in by hand. */
     // `setDragImage` too: the handle points it at the whole row, which is what stopped the
@@ -809,13 +894,13 @@ describe('the office activity taxonomy (P4-T1)', () => {
   });
 
   /*
-   * P18.9-T2 AC-3 (ADR-0163): the Owner and the Admin read the office's activity binding here, read-only — the
+   * P18.6-T2 AC-3 (ADR-0163): the Owner and the Admin read the office's activity binding here, read-only — the
    * role a bound type counts as, beside its name. The Super Admin keeps it.
    */
-  describe('the activity binding, read-only (P18.9-T2)', () => {
+  describe('the activity binding, read-only (P18.6-T2)', () => {
     const READER = makeMe({ ...OWNER, permissions: [...OWNER.permissions, 'activity_binding:read'] });
 
-    it('P18.9-T2 AC-3 marks each bound type with the role it counts as, and nothing else', async () => {
+    it('P18.6-T2 AC-3 marks each bound type with the role it counts as, and nothing else', async () => {
       const stub = stubFetch({
         '/kpm/settings/activity-types': { body: TAXONOMY },
         '/kpm/settings/activity-binding': {
@@ -829,7 +914,7 @@ describe('the office activity taxonomy (P4-T1)', () => {
       });
       renderWithSession(<TenantConfigProvider><ActivityTypesPage /></TenantConfigProvider>, { me: READER });
 
-      // *Counts as:* since P18.97-T4 AC-1 (UI-022): the chip read the bare stage, and ran into the name.
+      // *Counts as:* since P18.9-T4 AC-1 (UI-022): the chip read the bare stage, and ran into the name.
       const meeting = await screen.findByText('Counts as: Sales meeting');
       expect(meeting).toHaveAttribute('title', expect.stringContaining('count this as Sales meeting'));
       expect(meeting.closest('p')).toHaveTextContent('Presentasi penjualanCounts as: Sales meeting');
@@ -839,22 +924,78 @@ describe('the office activity taxonomy (P4-T1)', () => {
       expect(stub.calls.some((c) => c.url.includes('/kpm/settings/activity-binding'))).toBe(true);
     });
 
-    it('P18.9-T2 AC-3 asks nothing of a reader without the permission', async () => {
+    it('P18.6-T2 AC-3 asks nothing of a reader without the permission', async () => {
       const { calls } = render(AGENT);
       await screen.findByText('Submission polis');
       expect(calls.some((c) => c.url.includes('/kpm/settings/activity-binding'))).toBe(false);
       expect(screen.queryByText(/Sales meeting/)).not.toBeInTheDocument();
     });
   });
+
+  /*
+   * P19.4-T3 F2 (ADR-0206 §1): the Owner and the Admin set the office's binding here — *Activity binding*, one button in
+   * the toolbar and its sheet — since the Super Admin no longer writes it. Saved at once; the markers follow.
+   */
+  describe('P19.4-T3 F2 the Owner sets the activity binding', () => {
+    const WRITER = makeMe({
+      ...OWNER, permissions: [...OWNER.permissions, 'activity_binding:read', 'activity_binding:write'],
+    });
+    const BOUND = { leads: ['LEADS_CONTACTED'], appointments: ['SELL_PRESENTATION'], closings: ['SELL_SUBMISSION'] };
+    const TYPES = TAXONOMY.flatMap((c: { types: { code: string; label: string }[] }) => c.types)
+      .map((t, i) => ({ code: t.code, label: t.label, categoryCode: 'X', displayOrder: i, status: 'active' }));
+    const stubbed = (saved = { ...BOUND, appointments: ['SELL_PRESENTATION', 'SELL_SUBMISSION'], closings: ['LEADS_CONTACTED'] }) => stubFetch({
+      '/kpm/settings/activity-types': { body: TAXONOMY },
+      '/kpm/settings/activity-binding': { body: { ...BOUND, version: 1, updatedAt: null } },
+      [`PUT /admin/tenants/${WRITER.membership!.kpmId}/activity-binding`]: {
+        body: { kpmId: WRITER.membership!.kpmId, ...saved, version: 2, updatedAt: null, types: TYPES },
+      },
+      [`GET /admin/tenants/${WRITER.membership!.kpmId}/activity-binding`]: {
+        body: { kpmId: WRITER.membership!.kpmId, ...BOUND, version: 1, updatedAt: null, types: TYPES },
+      },
+      '/kpm/config': { body: { activity: TAXONOMY, ratios: [], leadPipelines: [], version: 1 } },
+      '/kpm/org-levels': { body: LADDER },
+    });
+
+    it.each([375, 1280])('P19.4-T3 F2 at %ipx: opens the editor, saves the whole binding with the version read', async (px) => {
+      atWidth(px);
+      const { calls } = stubbed();
+      renderWithSession(<TenantConfigProvider><ActivityTypesPage /></TenantConfigProvider>, { me: WRITER });
+      await userEvent.click(await screen.findByRole('button', { name: 'Activity binding' }));
+      const dialog = await screen.findByRole('dialog', { name: 'Activity binding' });
+      const save = within(dialog).queryByRole('button', { name: 'Save binding' })
+        ?? screen.getByRole('button', { name: 'Save binding' });
+      expect(save).toBeDisabled();
+      // Move *Submission polis*'s type into *Sales meeting* beside the old one, and take *Set appointment*'s for closing.
+      await userEvent.click(within(dialog).getByRole('button', { name: /Remove .* from Submission polis/ }));
+      await userEvent.selectOptions(within(dialog).getByLabelText('Add an activity to Sales meeting'), 'SELL_SUBMISSION');
+      expect(save).toBeEnabled();
+      await userEvent.click(save);
+      await screen.findByText('Saved. The summary counts it from now.');
+      const put = calls.find((c) => c.init?.method === 'PUT')!;
+      expect(put.url).toContain(`/admin/tenants/${WRITER.membership!.kpmId}/activity-binding`);
+      expect(JSON.parse(put.init.body as string)).toMatchObject({
+        leads: ['LEADS_CONTACTED'], appointments: ['SELL_PRESENTATION', 'SELL_SUBMISSION'], expectedVersion: 1,
+      });
+    });
+
+    it('P19.4-T3 F2 a reader who may only read the binding is offered no editor', async () => {
+      stubbed();
+      renderWithSession(<TenantConfigProvider><ActivityTypesPage /></TenantConfigProvider>, {
+        me: makeMe({ ...OWNER, permissions: [...OWNER.permissions, 'activity_binding:read'] }),
+      });
+      await screen.findByText('Counts as: Sales meeting');
+      expect(screen.queryByRole('button', { name: 'Activity binding' })).not.toBeInTheDocument();
+    });
+  });
 });
 
 /**
- * **Below 1024px a section's actions sit behind one ⋮** (P18.97-T6 AC-3, ADR-0178 §2; the client's KPM Owner review of
+ * **Below 1024px a section's actions sit behind one ⋮** (P18.9-T6 AC-3, ADR-0178 §2; the client's KPM Owner review of
  * 2026-10-27, UI-037: *Rename*, *Change who it applies to* and *Archive the section* wrapped to two rows on a phone and
  * three on a tablet). One `ActionMenu` per section, at the end of its *Applies to* line, with the menu's keys and words;
  * each item does what its link does. From 1024px the line is the three links it was, to the byte.
  */
-describe('P18.97-T6 AC-3 below 1024px a section’s actions sit behind one ⋮', () => {
+describe('P18.9-T6 AC-3 below 1024px a section’s actions sit behind one ⋮', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   const INLINE = ['Rename', 'Change who it applies to', 'Archive the section'];
@@ -871,7 +1012,7 @@ describe('P18.97-T6 AC-3 below 1024px a section’s actions sit behind one ⋮',
     .find((el) => el.textContent?.includes('Applies to')) as HTMLElement;
   const digest = (el: Element) => createHash('sha256').update(el.outerHTML).digest('hex');
   /**
-   * The line's markup on the build before P18.97-T6 (frontend `68d8d61`), rendered from this fixture on 2026-10-28:
+   * The line's markup on the build before P18.9-T6 (frontend `68d8d61`), rendered from this fixture on 2026-10-28:
    * the live section's three links, and the archived one's with *Restore the section*.
    */
   const BEFORE_T6 = {
@@ -883,7 +1024,7 @@ describe('P18.97-T6 AC-3 below 1024px a section’s actions sit behind one ⋮',
     await userEvent.click(within(screen.getByRole('menu', { name: `Actions for ${section}` })).getByRole('menuitem', { name: item }));
   }
 
-  it.each([767, 768, 1023])('P18.97-T6 AC-3 at %ipx draws one ⋮ per section, on its Applies to line, and none of the three links', async (px) => {
+  it.each([767, 768, 1023])('P18.9-T6 AC-3 at %ipx draws one ⋮ per section, on its Applies to line, and none of the three links', async (px) => {
     atWidth(px);
     render(OWNER, SECTIONS);
     await userEvent.click(await screen.findByRole('checkbox', { name: 'Show archived' }));
@@ -896,7 +1037,7 @@ describe('P18.97-T6 AC-3 below 1024px a section’s actions sit behind one ⋮',
     for (const name of [...INLINE, 'Restore the section']) expect(screen.queryByRole('button', { name })).toBeNull();
   });
 
-  it('P18.97-T6 AC-3 opens on its first item, in the links’ order and words, and Archive still says what it takes', async () => {
+  it('P18.9-T6 AC-3 opens on its first item, in the links’ order and words, and Archive still says what it takes', async () => {
     atWidth(1023);
     render();
     await userEvent.click(await screen.findByRole('button', { name: 'Actions for Selling' }));
@@ -907,7 +1048,7 @@ describe('P18.97-T6 AC-3 below 1024px a section’s actions sit behind one ⋮',
       .toHaveAttribute('title', 'Archives the section and everything in it.');
   });
 
-  it('P18.97-T6 AC-3 keeps the menu’s keys: Enter opens it, ↑ ↓ go round, Escape gives the focus back to ⋮', async () => {
+  it('P18.9-T6 AC-3 keeps the menu’s keys: Enter opens it, ↑ ↓ go round, Escape gives the focus back to ⋮', async () => {
     atWidth(768);
     render();
     const button = await screen.findByRole('button', { name: 'Actions for Selling' });
@@ -924,7 +1065,7 @@ describe('P18.97-T6 AC-3 below 1024px a section’s actions sit behind one ⋮',
     expect(button).toHaveFocus();
   });
 
-  it('P18.97-T6 AC-3 Rename opens the section’s edit, as its link does', async () => {
+  it('P18.9-T6 AC-3 Rename opens the section’s edit, as its link does', async () => {
     atWidth(768);
     render();
     await choose('Selling', 'Rename');
@@ -933,7 +1074,7 @@ describe('P18.97-T6 AC-3 below 1024px a section’s actions sit behind one ⋮',
     expect(screen.queryByRole('button', { name: 'Actions for Selling' })).toBeNull();
   });
 
-  it('P18.97-T6 AC-3 Change who it applies to opens the rungs, and saves only them, as its link does', async () => {
+  it('P18.9-T6 AC-3 Change who it applies to opens the rungs, and saves only them, as its link does', async () => {
     atWidth(1023);
     const { calls } = render();
     await choose('Selling', 'Change who it applies to');
@@ -944,14 +1085,14 @@ describe('P18.97-T6 AC-3 below 1024px a section’s actions sit behind one ⋮',
     });
   });
 
-  it('P18.97-T6 AC-3 Archive the section stages the archive, as its link does', async () => {
+  it('P18.9-T6 AC-3 Archive the section stages the archive, as its link does', async () => {
     atWidth(767);
     const { calls } = render();
     await choose('Selling', 'Archive the section');
     expect((await saved(calls))[0]).toMatchObject({ op: 'category.archive', id: 'c1', expectedVersion: 1 });
   });
 
-  it('P18.97-T6 AC-3 an archived section’s ⋮ offers Restore the section in Archive’s place', async () => {
+  it('P18.9-T6 AC-3 an archived section’s ⋮ offers Restore the section in Archive’s place', async () => {
     atWidth(900);
     const { calls } = render(OWNER, SECTIONS);
     await userEvent.click(await screen.findByRole('checkbox', { name: 'Show archived' }));
@@ -962,7 +1103,7 @@ describe('P18.97-T6 AC-3 below 1024px a section’s actions sit behind one ⋮',
     expect((await saved(calls))[0]).toMatchObject({ op: 'category.restore', id: 'c2', expectedVersion: 3 });
   });
 
-  it('P18.97-T6 AC-3 offers a reader who cannot write no ⋮, below 1024px as from it', async () => {
+  it('P18.9-T6 AC-3 offers a reader who cannot write no ⋮, below 1024px as from it', async () => {
     atWidth(768);
     render(AGENT);
     await screen.findByRole('heading', { name: 'Selling' });
@@ -970,7 +1111,7 @@ describe('P18.97-T6 AC-3 below 1024px a section’s actions sit behind one ⋮',
     expect(screen.getByText('Everyone')).toBeInTheDocument();
   });
 
-  it.each([1024, 1280])('P18.97-T6 AC-3 at %ipx the line is the three links it was, to the byte, and no ⋮', async (px) => {
+  it.each([1024, 1280])('P18.9-T6 AC-3 at %ipx the line is the three links it was, to the byte, and no ⋮', async (px) => {
     atWidth(px);
     render(OWNER, SECTIONS);
     await userEvent.click(await screen.findByRole('checkbox', { name: 'Show archived' }));
@@ -983,12 +1124,12 @@ describe('P18.97-T6 AC-3 below 1024px a section’s actions sit behind one ⋮',
 });
 
 /**
- * **A bound type's chip: *Counts as: {stage}*** (P18.97-T4 AC-1, ADR-0176 §3; the client's KPM Owner review of
+ * **A bound type's chip: *Counts as: {stage}*** (P18.9-T4 AC-1, ADR-0176 §3; the client's KPM Owner review of
  * 2026-10-27, UI-022: *"Set Appointment Set appointment"*, *"… existing nasabah Sales meeting"*). The chip is the stage
  * the office's activity binding counts the type as (ADR-0163 §3), not a name of the type, so it says so, on the quiet
  * chip of its own, apart from the name — the lead's reading, not the plan's *Short name*. The tooltip is unchanged.
  */
-describe('P18.97-T4 AC-1 a bound type’s chip says the stage it counts as', () => {
+describe('P18.9-T4 AC-1 a bound type’s chip says the stage it counts as', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   const READER = makeMe({ ...OWNER, permissions: [...OWNER.permissions, 'activity_binding:read'] });
@@ -1010,7 +1151,7 @@ describe('P18.97-T4 AC-1 a bound type’s chip says the stage it counts as', () 
     renderWithSession(<TenantConfigProvider><ActivityTypesPage /></TenantConfigProvider>, { me: READER });
   }
 
-  it('P18.97-T4 AC-1 reads Counts as: {stage} for each of the three, and the name stays the name', async () => {
+  it('P18.9-T4 AC-1 reads Counts as: {stage} for each of the three, and the name stays the name', async () => {
     renderBound();
     for (const [name, stage] of [
       ['Set Appointment', 'Set appointment'], ['Presentasi penjualan', 'Sales meeting'], ['Submission polis', 'Submission polis'],
@@ -1023,7 +1164,7 @@ describe('P18.97-T4 AC-1 a bound type’s chip says the stage it counts as', () 
     }
   });
 
-  it('P18.97-T4 AC-1 draws the chip as the prototype’s quiet activity chip, in sentence case, set apart by its own ground', async () => {
+  it('P18.9-T4 AC-1 draws the chip as the prototype’s quiet activity chip, in sentence case, set apart by its own ground', async () => {
     renderBound();
     const chip = (await screen.findByText('Counts as: Sales meeting')).parentElement!;
     expect(chip).toHaveAttribute('data-tone', 'navy');
@@ -1031,14 +1172,14 @@ describe('P18.97-T4 AC-1 a bound type’s chip says the stage it counts as', () 
     expect(chip).not.toHaveClass('uppercase');
   });
 
-  it('P18.97-T4 AC-1 keeps the tooltip as it was, naming the stage and who changes it', async () => {
+  it('P18.9-T4 AC-1 keeps the tooltip as it was, naming the stage and who changes it', async () => {
     renderBound();
     expect(await screen.findByText('Counts as: Set appointment')).toHaveAttribute(
-      'title', 'The summary and the goal plan count this as Set appointment. A Super Admin changes which activities count.',
+      'title', 'The summary and the goal plan count this as Set appointment. Change which activities count under Activity binding.',
     );
   });
 
-  it('P18.97-T4 AC-1 never calls the chip a short name, and an unbound type wears none', async () => {
+  it('P18.9-T4 AC-1 never calls the chip a short name, and an unbound type wears none', async () => {
     renderBound();
     await screen.findByText('Counts as: Sales meeting');
     expect(screen.queryByText(/Short name/)).toBeNull();
@@ -1047,13 +1188,13 @@ describe('P18.97-T4 AC-1 a bound type’s chip says the stage it counts as', () 
 });
 
 /**
- * **Opening a section's editor moves the focus into it, and closing it gives the focus back** (WCAG 2.4.3; P18.97-T4,
+ * **Opening a section's editor moves the focus into it, and closing it gives the focus back** (WCAG 2.4.3; P18.9-T4,
  * parity F-255). *Rename* and *Change who it applies to* replace their line with an editor — the inline links from
- * 1024px, the ⋮'s items below it (P18.97-T6 AC-3) — so the control chosen is gone the moment it is chosen. The focus
+ * 1024px, the ⋮'s items below it (P18.9-T6 AC-3) — so the control chosen is gone the moment it is chosen. The focus
  * lands on the editor's first field, and Save or Cancel returns it to the link, or to the section's ⋮. The line's
  * markup from 1024px is the one T6 pinned (its digests above still pass).
  */
-describe('P18.97-T4 F-255 a section’s editor takes the focus and gives it back', () => {
+describe('P18.9-T4 F-255 a section’s editor takes the focus and gives it back', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   async function choose(section: string, item: string) {
@@ -1061,7 +1202,7 @@ describe('P18.97-T4 F-255 a section’s editor takes the focus and gives it back
     await userEvent.click(within(screen.getByRole('menu', { name: `Actions for ${section}` })).getByRole('menuitem', { name: item }));
   }
 
-  it.each([1024, 1280])('P18.97-T4 F-255 at %ipx Rename moves the focus to Name, and Cancel back to Rename', async (px) => {
+  it.each([1024, 1280])('P18.9-T4 F-255 at %ipx Rename moves the focus to Name, and Cancel back to Rename', async (px) => {
     atWidth(px);
     render();
     await userEvent.click(await screen.findByRole('button', { name: 'Rename' }));
@@ -1070,7 +1211,7 @@ describe('P18.97-T4 F-255 a section’s editor takes the focus and gives it back
     expect(screen.getByRole('button', { name: 'Rename' })).toHaveFocus();
   });
 
-  it('P18.97-T4 F-255 at 1280px Change who it applies to moves the focus to the first rung, and Save back to the link', async () => {
+  it('P18.9-T4 F-255 at 1280px Change who it applies to moves the focus to the first rung, and Save back to the link', async () => {
     atWidth(1280);
     render();
     await userEvent.click(await screen.findByRole('button', { name: 'Change who it applies to' }));
@@ -1080,7 +1221,7 @@ describe('P18.97-T4 F-255 a section’s editor takes the focus and gives it back
     expect(screen.getByRole('button', { name: 'Change who it applies to' })).toHaveFocus();
   });
 
-  it('P18.97-T4 F-255 a rename refused at its field keeps the focus in the editor', async () => {
+  it('P18.9-T4 F-255 a rename refused at its field keeps the focus in the editor', async () => {
     atWidth(1280);
     render();
     await userEvent.click(await screen.findByRole('button', { name: 'Rename' }));
@@ -1090,7 +1231,7 @@ describe('P18.97-T4 F-255 a section’s editor takes the focus and gives it back
     expect(screen.getByLabelText('Name')).toHaveFocus();
   });
 
-  it.each([767, 768, 1023])('P18.97-T4 F-255 at %ipx Rename from ⋮ moves the focus to Name, and Cancel back to ⋮', async (px) => {
+  it.each([767, 768, 1023])('P18.9-T4 F-255 at %ipx Rename from ⋮ moves the focus to Name, and Cancel back to ⋮', async (px) => {
     atWidth(px);
     render();
     await choose('Selling', 'Rename');
@@ -1099,7 +1240,7 @@ describe('P18.97-T4 F-255 a section’s editor takes the focus and gives it back
     expect(screen.getByRole('button', { name: 'Actions for Selling' })).toHaveFocus();
   });
 
-  it('P18.97-T4 F-255 at 768px Change who it applies to from ⋮ moves the focus to the first rung, and Cancel back to ⋮', async () => {
+  it('P18.9-T4 F-255 at 768px Change who it applies to from ⋮ moves the focus to the first rung, and Cancel back to ⋮', async () => {
     atWidth(768);
     render();
     await choose('Selling', 'Change who it applies to');
@@ -1110,7 +1251,7 @@ describe('P18.97-T4 F-255 a section’s editor takes the focus and gives it back
     expect(screen.getByRole('button', { name: 'Actions for Selling' })).toHaveFocus();
   });
 
-  it('P18.97-T4 F-255 at 1023px a renamed section’s ⋮ takes the focus back under its new name', async () => {
+  it('P18.9-T4 F-255 at 1023px a renamed section’s ⋮ takes the focus back under its new name', async () => {
     atWidth(1023);
     render();
     await choose('Selling', 'Rename');
@@ -1118,5 +1259,115 @@ describe('P18.97-T4 F-255 a section’s editor takes the focus and gives it back
     await userEvent.type(screen.getByLabelText('Name'), 'Sales');
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     expect(screen.getByRole('button', { name: 'Actions for Sales' })).toHaveFocus();
+  });
+});
+
+/**
+ * **A type on a phone: one line, and its editor in its sheet** (P19.2-T3 AC-3; UI-141: *Activity types and Campaigns:
+ * same row + sheet*, 3.6 screens at 375). The sections, their ⋮ and *Add* stay.
+ */
+describe('P19.2-T3 AC-3 the activity types on a phone (UI-141)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('P19.2-T3 AC-3 at 375px draws each type as a 56px row — its number, its name, › — with no editor and no inline actions', async () => {
+    atWidth(375);
+    render();
+    const row = (await screen.findByRole('button', { name: 'Submission polis' })).closest('li')!;
+    expect(wears(row, 375).split(' ')).toContain('min-h-14');
+    expect(row).toHaveTextContent('2');
+    expect(document.querySelectorAll('[data-list-row]')).toHaveLength(2);
+    expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Archive' })).toBeNull();
+    expect(screen.queryByRole('textbox')).toBeNull();
+    // The section's own controls stay: its ⋮ and *Add*.
+    expect(screen.getByRole('button', { name: 'Actions for Selling' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^\+ Add to Selling|Add to Selling/ })).toBeInTheDocument();
+  });
+
+  it('P19.2-T3 AC-3 at 375px opens the type’s sheet and stages its edit from the pinned Save, as the row’s editor did', async () => {
+    atWidth(375);
+    const { calls } = render();
+    await userEvent.click(await screen.findByRole('button', { name: 'Submission polis' }));
+    const sheet = await screen.findByRole('dialog', { name: 'Submission polis' });
+    expect(within(sheet).getByLabelText('Code')).toHaveValue('SELL_SUBMISSION');
+    await userEvent.clear(within(sheet).getByLabelText('Label'));
+    await userEvent.type(within(sheet).getByLabelText('Label'), 'Submission');
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Save' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.getByText('Edited — not saved yet')).toBeInTheDocument();
+    expect(await saved(calls)).toEqual([
+      // *Nama singkat* travels with the name since P19.8-T4 (AC-5): none here, so `null` (2026-11-07).
+      expect.objectContaining({ op: 'type.update', id: 't1', body: { label: 'Submission', shortLabel: null, description: '' } }),
+    ]);
+  });
+
+  it('P19.2-T3 AC-3 at 375px archives a type from its sheet, staged, and moves it with ↑ ↓', async () => {
+    atWidth(375);
+    const { calls } = render();
+    await userEvent.click(await screen.findByRole('button', { name: 'Submission polis' }));
+    let sheet = await screen.findByRole('dialog', { name: 'Submission polis' });
+    await userEvent.click(within(sheet).getByRole('button', { name: /Move Submission polis up/ }));
+    expect(calls.some((c) => c.url.includes('/kpm/settings/activity-types/reorder'))).toBe(true);
+    sheet = screen.getByRole('dialog', { name: 'Submission polis' });
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Archive' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.getByText('Archived — not saved yet')).toBeInTheDocument();
+  });
+
+  it('P19.2-T3 AC-3 at 375px shows a reader the type’s sheet with nothing to change', async () => {
+    atWidth(375);
+    render(AGENT);
+    await userEvent.click(await screen.findByRole('button', { name: 'Submission polis' }));
+    const sheet = await screen.findByRole('dialog', { name: 'Submission polis' });
+    expect(within(sheet).queryByRole('textbox')).toBeNull();
+    expect(within(sheet).queryByRole('button', { name: 'Save' })).toBeNull();
+  });
+
+  it.each([768, 1024, 1280])('P19.2-T3 AC-3 at %ipx keeps the rows as they were: Edit and Archive on each, no sheet', async (px) => {
+    atWidth(px);
+    render();
+    await screen.findByText('Submission polis');
+    expect(document.querySelectorAll('[data-list-row]')).toHaveLength(0);
+    expect(screen.getAllByRole('button', { name: 'Edit' })).toHaveLength(2);
+  });
+});
+
+/**
+ * **No target under 44px on a phone or a tablet** (P19.2-T3 AC-4; UI-142), inside the field shell's frame the Owner's
+ * pages wear (ADR-0197), which `data-surface` stands for here.
+ */
+describe('P19.2-T3 AC-4 the activity types’ targets (UI-142)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it.each([375, 768])('P19.2-T3 AC-4 at %ipx finds no target under 44px, with an item staged and the archived shown', async (px) => {
+    atWidth(px);
+    const stub = stubFetch({
+      '/kpm/settings/activity-types': { body: TAXONOMY },
+      '/kpm/config': { body: { activity: TAXONOMY, ratios: [], leadPipelines: [], version: 1 } },
+      '/kpm/org-levels': { body: LADDER },
+      '/kpm/settings/publish-state': {
+        body: { publishedVersion: 1, workingVersion: 1, hasUnpublishedChanges: false, publishedAt: null },
+      },
+    });
+    const { container } = renderWithSession(
+      <div data-surface="v1"><TenantConfigProvider><ActivityTypesPage /></TenantConfigProvider></div>,
+      { me: OWNER },
+    );
+    await screen.findByText('Submission polis');
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Show archived' }));
+    expect(smallTargets(container, px)).toEqual([]);
+    expect(stub.calls.length).toBeGreaterThan(0);
+  });
+
+  it('P19.2-T3 AC-4 draws Show archived as a 44px switch row below 1024px, and the checkbox it was from 1024px', () => {
+    // Read off the class it wears: the label's own pseudo-elements draw the switch, so no element is added.
+    atWidth(375);
+    render();
+    return screen.findByRole('checkbox', { name: 'Show archived' }).then((box) => {
+      const label = box.closest('label')!;
+      expect(wears(label, 375).split(' ')).toEqual(expect.arrayContaining(['min-h-11', 'relative', "after:content-['']"]));
+      expect(wears(label, 768).split(' ')).toContain('min-h-11');
+      expect(wears(label, 1024)).toBe('flex items-center gap-2 text-md text-navy');
+    });
   });
 });

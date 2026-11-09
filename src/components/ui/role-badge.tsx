@@ -27,7 +27,7 @@ export type HierarchyRole = 'ab' | 'aab' | 'agent';
  * ships one ladder, and this is it.
  *
  * **Its labels are the seed's** — *AB*, *AAB*, *Agent*, the backend's `DEFAULT_ORG_LADDER` — since
- * P18.95-T9 AC-1 (ADR-0167 §10, OD-205; the client's UI review, UI-027). Until then this copy said
+ * P18.7-T9 AC-1 (ADR-0167 §10, OD-205; the client's UI review, UI-027). Until then this copy said
  * *Agency Builder* and *Associate Agency Builder* where every office's own ladder says *AB* and *AAB*, so
  * the console and the development accounts named a rung one way and the offices another.
  */
@@ -54,7 +54,7 @@ function paletteFor(ladder: OrgLevel[], code: string) {
 
 /**
  * **What a rung is called, wherever a person's role is named** — the badge, a pane's head, a sub-line, a
- * sentence (P18.95-T9 AC-1; ADR-0167 §10, OD-205: one name per role).
+ * sentence (P18.7-T9 AC-1; ADR-0167 §10, OD-205: one name per role).
  *
  * A code that reads as an acronym is already the short form — `AB`, `AAB`. A longer one
  * would be shouted, so the label is used instead: `AGENT` renders `Agent`, which is
@@ -91,8 +91,8 @@ export function rungLabel(code: string, ladder: OrgLevel[] = SEEDED_LADDER): str
 
 /**
  * **A rung's short name, without a hook** — what `RoleBadge` prints: *AB*, *AAB*, *Agent* on the seeded
- * ladder. For a legend that names the badges beside it (the group tree's, P18.95-T8 AC-3), so the two
- * say one name per rung (ADR-0167 §10, OD-205), and since P18.95-T9 AC-1 for every other place a role is
+ * ladder. For a legend that names the badges beside it (the group tree's, P18.7-T8 AC-3), so the two
+ * say one name per rung (ADR-0167 §10, OD-205), and since P18.7-T9 AC-1 for every other place a role is
  * named in words. A rung the caller already holds is named as it is; a code is found in the ladder.
  */
 export function rungShort(rung: string | { code: string; label: string }, ladder: OrgLevel[] = SEEDED_LADDER): string {
@@ -125,7 +125,7 @@ export function useRoleLabel(code: string): string {
   return ladder.find((l) => l.code === code.toUpperCase())?.label ?? code.toUpperCase();
 }
 
-/** A rung's short name, from the office's ladder: what its badge prints (P18.95-T9 AC-1). */
+/** A rung's short name, from the office's ladder: what its badge prints (P18.7-T9 AC-1). */
 export function useRoleShort(code: string): string {
   return rungShort(code, useLadder());
 }

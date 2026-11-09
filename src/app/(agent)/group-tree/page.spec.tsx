@@ -63,7 +63,7 @@ const rowIn = (layout: HTMLElement, id: string) => {
 };
 const ready = () => screen.findByTestId('group-tree-list');
 
-describe('group tree (UI V1, Phase 18.99 T9)', () => {
+describe('group tree (UI V1, Phase 18.11 T9)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   describe('UI-058 rows at every size, no canvas', () => {
@@ -202,7 +202,7 @@ describe('group tree (UI V1, Phase 18.99 T9)', () => {
       expect(link).toHaveFocus();
       await userEvent.tab();
       expect(within(sari).getByRole('button', { name: 'Show Sari Puspita’s team' })).toHaveFocus();
-      expect(sari.className).toContain('has-[[data-row-main]:focus-visible]:outline-amber');
+      expect(sari.className).toContain('has-[[data-row-main]:focus-visible]:outline-primary');
     });
 
     it('UI-072 an Admin’s field view: their own leader a node and inert, nobody outside their downline coached', async () => {
@@ -241,7 +241,7 @@ describe('group tree (UI V1, Phase 18.99 T9)', () => {
       expect(rowIn(list(), 'mem-b-ag')).toBeNull();
     });
 
-    it('UI-072 a leader on the agent rung opens leaders’ units, but no Personal Summary (ADR-0087)', async () => {
+    it('P19.9-T6 AC-3 a leader on the agent rung opens leaders’ units and, coaching them now, their agents’ Personal Summary (ADR-0234)', async () => {
       const AGENT_LEADER = makeMe({
         membership: {
           membershipId: 'mem-ab', kpmId: 'kpm-1', orgLevelCode: 'AGENT', hierarchyRole: 'agent', status: 'active',
@@ -252,7 +252,8 @@ describe('group tree (UI V1, Phase 18.99 T9)', () => {
       open(TREE, AGENT_LEADER);
       await ready();
       expect(within(rowIn(list(), 'mem-sari')!).getByRole('link')).toHaveAttribute('href', '/unit/dashboard/mem-sari');
-      expect(within(rowIn(list(), 'mem-dewi')!).queryByRole('link')).toBeNull();
+      // Was: no link — an Agent-rung leader coached nobody (UI-072). Every upline coaches since P19.9-T6.
+      expect(within(rowIn(list(), 'mem-dewi')!).getByRole('link')).toHaveAttribute('href', '/coaching/mem-dewi/summary');
     });
   });
 
@@ -324,7 +325,11 @@ describe('group tree (UI V1, Phase 18.99 T9)', () => {
       leader: null, rootIds: ['mem-ab'], selfId: 'mem-ab',
       counts: { ab: 0, aab: 0, agent: 0, total: 0 },
     });
-    expect(await screen.findByText(/Nobody reports to you yet/)).toBeInTheDocument();
+    // P19-T4 AC-3 (D-37: *"Undang agen" on an empty Group Tree*): the tree as it will look, greyed, and the next step.
+    expect(await screen.findByText('No data yet')).toBeInTheDocument();
+    expect(screen.getByText('Example')).toBeInTheDocument();
+    expect(document.querySelector('[data-sample]')!.textContent).toContain('Sample agent 3');
+    expect(screen.getByRole('link', { name: 'Invite an agent' })).toHaveAttribute('href', '/new-hires');
     expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
   });
 

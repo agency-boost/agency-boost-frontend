@@ -6,7 +6,7 @@ import { useLanguage } from '@/i18n/language-provider';
 import { uiMessages } from '@/i18n/messages/ui';
 
 /**
- * **The words of the two primitives that read no hook** (P18.98-T4, the shared pieces): `field.tsx` is reached from the
+ * **The words of the two primitives that read no hook** (P18.10-T4, the shared pieces): `field.tsx` is reached from the
  * server's graph as well as the client's, so what it writes in the reader's language is drawn by these small client
  * components, as `ConsoleCode` draws its console line.
  */
@@ -17,9 +17,9 @@ export function CodeWord() {
 }
 
 /**
- * **A failure's sentence in the reader's language** (P18.98-T4, the shared pieces), drawn by `ErrorBanner`.
+ * **A failure's sentence in the reader's language** (P18.10-T4, the shared pieces), drawn by `ErrorBanner`.
  *
- * - **A server's sentence arrives in the reader's language already** (P18.98-T5: the API writes for `Accept-Language`),
+ * - **A server's sentence arrives in the reader's language already** (P18.10-T5: the API writes for `Accept-Language`),
  *   and is shown as it came.
  * - **What the browser composed itself** — `toDisplayError`'s *the request never arrived* and *the screen broke*, and
  *   `api()`'s answer with no body — is composed in English wherever it is thrown, outside React and with no language

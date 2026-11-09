@@ -83,6 +83,7 @@ export function projectTraining(tree: TrainingCategoryRow[], staged: ConfigChang
       code: String(body.code ?? '').toUpperCase(),
       categoryCode: String(body.categoryCode ?? ''),
       label: String(body.label ?? ''),
+      description: body.description ? String(body.description) : null,
       displayOrder: flat.skills.length + 1,
       version: 0,
       status: 'active' as const,
@@ -101,6 +102,7 @@ export function projectTraining(tree: TrainingCategoryRow[], staged: ConfigChang
       code: String(body.code ?? '').toUpperCase(),
       skillCode: String(body.skillCode ?? ''),
       title: String(body.title ?? ''),
+      description: body.description ? String(body.description) : null,
       // What the server defaults it to: nothing in P5-T1 gives a module content.
       publishState: body.publishState === 'published' ? 'published' as const : 'draft' as const,
       displayOrder: flat.modules.length + 1,

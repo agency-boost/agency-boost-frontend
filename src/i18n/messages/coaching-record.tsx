@@ -3,7 +3,7 @@ import { defineMessages, type MessagesOf } from '@/i18n/catalogue';
 import { kept } from '@/i18n/kept';
 
 /**
- * **The record after the meeting** (P18.98-T4, coaching and unit; `functional/coaching.md`, *Archive*, *`/coaching/me`*,
+ * **The record after the meeting** (P18.10-T4, coaching and unit; `functional/coaching.md`, *Archive*, *`/coaching/me`*,
  * *The module's own strings*): a past session's archive and the reader's own coaching — the record's header, the
  * history behind *View past sessions ▾*, the earlier versions with who reopened them and why, the states a record can
  * be in, and *Sessions you led*. What a session agreed — last week's items, the tips, the next actions — and the cards

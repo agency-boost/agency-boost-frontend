@@ -10,7 +10,7 @@ import { cn } from '@/lib/cn';
 import type { RungState } from '@/lib/capability-view';
 
 /**
- * **The parts the *Capability mapping* tab and its ladder sheet share** (Phase 18.99 T10; UI-035, UI-037): a tick row,
+ * **The parts the *Capability mapping* tab and its ladder sheet share** (Phase 18.11 T10; UI-035, UI-037): a tick row,
  * a step of the progress line, the current stage's pill and the *Archived* badge. Their own file, so the sheet — loaded
  * only when it is opened — and the page draw one row one way.
  */
@@ -27,7 +27,7 @@ export function ArchivedBadge() {
 /**
  * **One tick row** (UI-037): the whole row is the target — the label wraps the box — at least 44px tall on a phone and
  * a tablet with a 22px box, 32px with an 18px box on a desktop. Its save says itself at the row's end (*Menyimpan… →
- * Tersimpan ✓*, P18.95-T1 AC-5), outside the label, so the box's name stays its words and a retry is its own button.
+ * Tersimpan ✓*, P18.7-T1 AC-5), outside the label, so the box's name stays its words and a retry is its own button.
  */
 export function TickRow({
   label, archived = false, checked, locked, muted = false, onChange, status,
@@ -81,8 +81,8 @@ export function StepMarker({ state, n, size = 'sm' }: { state: RungState; n: num
       className={cn(
         'flex shrink-0 items-center justify-center rounded-full font-bold',
         size === 'sm' ? 'h-5 w-5 text-xs' : 'h-[26px] w-[26px] text-base lg:h-6 lg:w-6 lg:text-xs',
-        state === 'next' ? 'border-2 border-line bg-card text-signal-grey' : 'bg-amber text-navy',
-        state === 'current' && 'ring-4 ring-amber/40',
+        state === 'next' ? 'border-2 border-line bg-card text-signal-grey' : 'bg-primary text-primary-contrast',
+        state === 'current' && 'ring-4 ring-primary/40',
       )}
     >
       {state === 'done' ? <LineIcon name="check" className="h-3.5 w-3.5" /> : n}

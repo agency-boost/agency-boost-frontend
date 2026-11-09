@@ -9,54 +9,33 @@ const words = (...parts: ReactNode[]) => createElement(Fragment, null, ...parts)
 type Hidden = (words: string) => ReactNode;
 
 /**
- * **The Company template's *Recruitment* tab** (`components/recruitment-playbook-tab.tsx`, P17-T8, ADR-0125; P18.98-T6,
- * area "admin-template"; `functional/recruitment.md`, *The module's own strings*): the company's recruitment playbook —
- * a card per candidate type, *Objections*, *Next action* — with the line that says it is live, *Save playbook*, the
- * notice when somebody saved first, and a company with none.
+ * **A template's *Rekrutmen* section** (`components/recruitment-playbook-tab.tsx`, P19.4-T5, ADR-0210; P17-T8, ADR-0125;
+ * P18.10-T6, area "admin-template"; `functional/recruitment.md`, *The module's own strings*): the template's recruitment
+ * playbook — a card per candidate type, *Objections*, *Next action* — a template with none, and a publish refused field
+ * by field. Its draft, its *Terbitkan* and a conflict are the section's draft bar's.
  *
  * **What the attack plans already say is theirs, and read from there** (`plan.ts`): *Good fit for* and *Opening lines*.
  * **English is the source**, every word as it was; the Indonesian is the approved glossary's, with the field's words for
  * the same things (§B.10: *kandidat*, *keberatan*, *manfaat*, *Tindakan berikutnya*, *Dia berkata*, *Anda menjawab*).
  * **Kept English** (§A): *Playbook*, *recruitment*, *Attack Plan*, *AgencyBoost*. **Content stays as typed** (ADR-0179 §5):
  * every word of the playbook — a profile's label and tagline, its benefits, an opening, an objection and its answer, the
- * next action — and the brief's vocabulary (a candidate type, a motivation, a hesitation), as the API serves it. **A
- * message never writes a figure** (P18.98-T3): when it was saved is written in the reader's figures and handed in.
+ * next action — and the brief's vocabulary (a candidate type, a motivation, a hesitation), as the API serves it.
  *
  * @moved components/recruitment-playbook-tab.tsx
  * @moved lib/recruitment-playbook.ts
  */
 const en = {
-  /** What a field left empty says when *Save playbook* is pressed; a refusal the server gave no words for. */
-  writeThis: 'Write this before saving.',
+  /** A refusal the server gave no words for. */
   refused: 'Refused by the server.',
 
-  /** The tab's states. `message` is the API's, as sent. */
-  readFailed: ({ message }: { message: string }) => `Could not read this company’s recruitment playbook. ${message}`,
-  tryAgain: 'Try again',
-  none: 'This company has no recruitment playbook yet, so its agents’ Attack Plan has nothing to build from.',
+  /** A template with none, *Kosong* (ADR-0210 §1): the two starts, each the section's draft until *Terbitkan*. */
+  none: 'This template has no recruitment playbook yet, so the Attack Plan of every KPM made from it has nothing to '
+    + 'build from.',
   startFromDefaults: 'Start from the AgencyBoost words',
   startFromNothing: 'Start from nothing',
 
-  /** The card at the head: live, or not saved yet, and who saved it when. `when` is written in the reader's figures. */
-  live: 'This playbook is live.',
-  liveDetail: 'Each save reaches every agent of this company on their next plan.',
-  notSaved: 'Not saved yet.',
-  notSavedDetail: 'Nothing reaches this company’s agents until you save it.',
-  /** `name` the person who saved it, or `null` for the playbook a company was given. */
-  saved: ({ version, name, when }: { version: number; name: string | null; when: string }) =>
-    `Version ${version} · saved${name === null ? '' : ` by ${name}`} on ${when}`,
-  saving: 'Saving…',
-  save: 'Save playbook',
-  discard: 'Discard changes',
-  refusedFields: 'Not saved. Each field marked below needs a fix.',
-
-  /** Somebody saved first (`409 VERSION_CONFLICT`): the version stored now, and the two ways on. */
-  conflict: 'This playbook was changed somewhere else.',
-  conflictDetail: ({ version, name, when }: { version: number; name: string | null; when: string }) =>
-    `It is now version ${version}, saved${name === null ? '' : ` by ${name}`} on ${when}. Your edits are still here, `
-    + 'and saving them replaces that version.',
-  loadVersion: ({ version }: { version: number }) => `Load version ${version}`,
-  keepMine: 'Keep my edits',
+  /** *Terbitkan* refused field by field: each field marked below. */
+  refusedFields: 'Not published. Each field marked below needs a fix.',
 
   /** A card: read as text until *Edit*. */
   notWritten: 'Not written yet.',
@@ -89,33 +68,14 @@ const en = {
 };
 
 const id: MessagesOf<typeof en> = {
-  writeThis: 'Isi ini sebelum menyimpan.',
   refused: 'Ditolak oleh server.',
 
-  readFailed: ({ message }) =>
-    `Tidak dapat membaca ${kept('playbook')} ${kept('recruitment')} perusahaan ini. ${message}`,
-  tryAgain: 'Coba lagi',
-  none: `Perusahaan ini belum punya ${kept('playbook')} ${kept('recruitment')}, jadi ${kept('Attack Plan')} agent-nya `
-    + 'belum punya bahan untuk disusun.',
+  none: `Template ini belum punya ${kept('playbook')} ${kept('recruitment')}, jadi ${kept('Attack Plan')} setiap KPM yang `
+    + 'dibuat darinya belum punya bahan untuk disusun.',
   startFromDefaults: `Mulai dari kata-kata ${kept('AgencyBoost')}`,
   startFromNothing: 'Mulai dari kosong',
 
-  live: `${kept('Playbook')} ini langsung berlaku.`,
-  liveDetail: 'Setiap penyimpanan sampai ke setiap agent perusahaan ini pada rencana berikutnya.',
-  notSaved: 'Belum disimpan.',
-  notSavedDetail: 'Belum ada yang sampai ke agent perusahaan ini sampai Anda menyimpannya.',
-  saved: ({ version, name, when }) => `Versi ${version} · disimpan${name === null ? '' : ` oleh ${name}`} pada ${when}`,
-  saving: 'Menyimpan…',
-  save: `Simpan ${kept('playbook')}`,
-  discard: 'Buang perubahan',
-  refusedFields: 'Tidak tersimpan. Setiap kolom yang ditandai di bawah perlu diperbaiki.',
-
-  conflict: `${kept('Playbook')} ini diubah di tempat lain.`,
-  conflictDetail: ({ version, name, when }) =>
-    `Sekarang versi ${version}, disimpan${name === null ? '' : ` oleh ${name}`} pada ${when}. Perubahan Anda masih ada `
-    + 'di sini, dan menyimpannya akan menggantikan versi itu.',
-  loadVersion: ({ version }) => `Muat versi ${version}`,
-  keepMine: 'Pertahankan perubahan saya',
+  refusedFields: 'Belum terbit. Setiap kolom yang ditandai di bawah perlu diperbaiki.',
 
   notWritten: 'Belum ditulis.',
   edit: 'Ubah',

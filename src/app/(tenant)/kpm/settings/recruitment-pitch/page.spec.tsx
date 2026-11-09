@@ -1,7 +1,8 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { makeMe, renderWithSession, stubFetch, type StubReply } from '@test/harness';
+import { atWidth, makeMe, renderWithSession, stubFetch, type StubReply } from '@test/harness';
+import { smallTargets } from '@test/touch-audit';
 import { GCS_UPLOAD_URL, gcsSignedUpload } from '@test/storage-fixtures';
 import type { PitchMaterialsView, PitchSlot } from '@/lib/recruitment-pitch';
 import RecruitmentPitchPage from './page';
@@ -88,7 +89,7 @@ const field = (orgLevelCode: string, hierarchyRole: 'ab' | 'aab' | 'agent') => m
   permissions: ['member:read_profile', 'tenant_config:read', 'recruitment:read'],
 });
 
-/** A GCS signed POST policy, as the API answers since Phase 18.7 (ADR-0153). */
+/** A GCS signed POST policy, as the API answers since Phase 18.4 (ADR-0153). */
 const SIGNED = gcsSignedUpload('dev/kpm-1/recruitment-pitch/01NEW');
 
 function render(read: StubReply | StubReply[] = { body: DEMO }, me = OWNER, extra: Record<string, StubReply | StubReply[]> = {}) {
@@ -141,7 +142,7 @@ describe('Settings › Recruitment pitch (P17-T5)', () => {
       expect(within(card('Opportunity Overview')).getByText('Complete')).toBeInTheDocument();
     });
 
-    it('P18.97-T5 AC-1, AC-2 draws the six cards in the server’s order, each with its badge in words, the optional two tagged', async () => {
+    it('P18.9-T5 AC-1, AC-2 draws the six cards in the server’s order, each with its badge in words, the optional two tagged', async () => {
       render();
       await screen.findByRole('article', { name: 'FAQ' });
       expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(SIX_TITLES);
@@ -158,7 +159,7 @@ describe('Settings › Recruitment pitch (P17-T5)', () => {
       expect(within(card('Agency Profile')).queryByText('Missing')).not.toBeInTheDocument();
     });
 
-    it('P18.97-T5 AC-1 the partial document’s checklist still shows which items are ticked, under the amber badge', async () => {
+    it('P18.9-T5 AC-1 the partial document’s checklist still shows which items are ticked, under the amber badge', async () => {
       render();
       const opp = await screen.findByRole('article', { name: 'Opportunity Overview' });
       expect(within(opp).getByText('Uploaded · needs confirmation')).toBeInTheDocument();
@@ -166,7 +167,7 @@ describe('Settings › Recruitment pitch (P17-T5)', () => {
         .toEqual([true, false, true, false]);
     });
 
-    it('P18.97-T5 AC-3 the ring and the banner read the four: complete at 4/4 with neither optional document', async () => {
+    it('P18.9-T5 AC-3 the ring and the banner read the four: complete at 4/4 with neither optional document', async () => {
       render({ body: COMPLETE });
       expect(await screen.findByRole('img', { name: '4 of 4 documents complete' })).toHaveTextContent('4/4');
       expect(within(card('Company Profile')).getByText('Not uploaded yet')).toBeInTheDocument();
@@ -174,17 +175,17 @@ describe('Settings › Recruitment pitch (P17-T5)', () => {
       expect(screen.queryByText('Missing')).not.toBeInTheDocument();
     });
 
-    it('P18.97-T5 AC-4 a file under 1 KB reads “< 1 KB”', async () => {
+    it('P18.9-T5 AC-4 a file under 1 KB reads “< 1 KB”', async () => {
       render();
       const profile = await screen.findByRole('article', { name: 'Company Profile' });
       expect(within(profile).getByText('< 1 KB · updated 26 Sep 2026')).toBeInTheDocument();
     });
 
-    it('P18.95-T7 AC-1 shows a file’s own name, size and day, and the missing line in the client’s words on a dashed card', async () => {
+    it('P18.7-T7 AC-1 shows a file’s own name, size and day, and the missing line in the client’s words on a dashed card', async () => {
       render();
       const opp = await screen.findByRole('article', { name: 'Opportunity Overview' });
       expect(within(opp).getByText('Opportunity_Overview_v3.pdf')).toBeInTheDocument();
-      // The size and the day in the spec's language since P18.98-T4 wired them (the harness's English is a chosen English).
+      // The size and the day in the spec's language since P18.10-T4 wired them (the harness's English is a chosen English).
       expect(within(opp).getByText('2.4 MB · updated 12 Sep 2026')).toBeInTheDocument();
       expect(within(card('Proof & Credibility')).getByText('1.1 MB · updated 30 Aug 2026')).toBeInTheDocument();
       expect(within(card('FAQ')).getByText('Not uploaded yet')).toBeInTheDocument();
@@ -220,7 +221,7 @@ describe('Settings › Recruitment pitch (P17-T5)', () => {
   });
 
   describe('who reaches it, and who writes (AC-5, AC-8)', () => {
-    it.each([['the Owner', OWNER], ['the Admin', ADMIN]])('P18.97-T5 AC-2 gives %s every control, on the optional documents too', async (_who, me) => {
+    it.each([['the Owner', OWNER], ['the Admin', ADMIN]])('P18.9-T5 AC-2 gives %s every control, on the optional documents too', async (_who, me) => {
       render({ body: DEMO }, me);
       const opp = await screen.findByRole('article', { name: 'Opportunity Overview' });
       expect(within(opp).getByRole('group', { name: 'Confirm this PDF actually includes' })).toBeInTheDocument();
@@ -336,7 +337,7 @@ describe('Settings › Recruitment pitch (P17-T5)', () => {
       expect(screen.queryByText('Confirm this PDF actually includes')).not.toBeInTheDocument();
     });
 
-    describe('P18.95-T1 AC-5 — each tick says it is saved, beside its box', () => {
+    describe('P18.7-T1 AC-5 — each tick says it is saved, beside its box', () => {
       /** The save confirmation in the box's own row: the nearest ancestor with a status for a child. */
       const besides = (el: HTMLElement) => {
         for (let box = el.parentElement; box; box = box.parentElement) {
@@ -351,7 +352,7 @@ describe('Settings › Recruitment pitch (P17-T5)', () => {
       });
       const RETRY = `Couldn't save — retry: ${LABELS.income}, Opportunity Overview`;
 
-      it('P18.95-T1 AC-5: a tick says Saved ✓ beside its box once it is kept, and nowhere else', async () => {
+      it('P18.7-T1 AC-5: a tick says Saved ✓ beside its box once it is kept, and nowhere else', async () => {
         render([{ body: DEMO }, { body: view([ticked, ...DEMO.slots.slice(1)]) }], OWNER, {
           'PUT /confirmations/income': { body: ticked },
         });
@@ -366,7 +367,7 @@ describe('Settings › Recruitment pitch (P17-T5)', () => {
         expect(besides(within(opp).getByRole('checkbox', { name: LABELS.support }))).toBeNull();
       });
 
-      it('P18.95-T1 AC-5: a tick that fails says Couldn’t save — retry, and the retry sends the same tick again', async () => {
+      it('P18.7-T1 AC-5: a tick that fails says Couldn’t save — retry, and the retry sends the same tick again', async () => {
         const stub = render([{ body: DEMO }, { body: view([ticked, ...DEMO.slots.slice(1)]) }], OWNER, {
           'PUT /confirmations/income': [
             { status: 500, body: { error: { code: 'INTERNAL_ERROR', message: 'Something broke.', requestId: 'r-3' } } },
@@ -396,7 +397,7 @@ describe('Settings › Recruitment pitch (P17-T5)', () => {
         expect(screen.queryByRole('button', { name: /^Couldn't save/ })).not.toBeInTheDocument();
       });
 
-      it('P18.95-T1 AC-5: a tick refused because the file was replaced (409) leaves nothing to retry', async () => {
+      it('P18.7-T1 AC-5: a tick refused because the file was replaced (409) leaves nothing to retry', async () => {
         const replaced = opportunity({ state: 'partial', file: file('Opportunity_Overview_v4.pdf'), version: 2 });
         render([{ body: DEMO }, { body: view([replaced, ...DEMO.slots.slice(1)]) }], OWNER, {
           'PUT /confirmations/income': {
@@ -420,7 +421,7 @@ describe('Settings › Recruitment pitch (P17-T5)', () => {
       await screen.findByRole('article', { name: 'FAQ' });
       await userEvent.upload(picker('FAQ'), pdf('huge.pdf', 26 * 1024 * 1024));
 
-      // The size in the spec's language since P18.98-T4 wired it (the harness's English is a chosen English).
+      // The size in the spec's language since P18.10-T4 wired it (the harness's English is a chosen English).
       expect(await within(card('FAQ')).findByText('“huge.pdf” is 26.0 MB. A PDF can be 25 MB at most.')).toBeInTheDocument();
       expect(calls(stub, '/uploads', 'POST')).toEqual([]);
     });
@@ -430,7 +431,8 @@ describe('Settings › Recruitment pitch (P17-T5)', () => {
       await screen.findByRole('article', { name: 'FAQ' });
       fireEvent.change(picker('FAQ'), { target: { files: [new File(['x'], 'photo.png', { type: 'image/png' })] } });
 
-      expect(await within(card('FAQ')).findByText('“photo.png” is not a PDF. Only a PDF can be uploaded here.')).toBeInTheDocument();
+      // P19.6-T2 (ADR-0217 §1): a page is accepted too.
+      expect(await within(card('FAQ')).findByText('“photo.png” is not a PDF or an HTML page. Only a PDF or an HTML page can be uploaded here.')).toBeInTheDocument();
       expect(calls(stub, '/uploads', 'POST')).toEqual([]);
     });
 
@@ -495,7 +497,7 @@ describe('Settings › Recruitment pitch (P17-T5)', () => {
       expect(calls(stub, '/recruitment-pitch/faq', 'PUT')).toEqual([]);
     });
 
-    it('P18.97-T5 AC-2, AC-3 uploads an optional document through the same three calls, and the banner does not move', async () => {
+    it('P18.9-T5 AC-2, AC-3 uploads an optional document through the same three calls, and the banner does not move', async () => {
       const filled = agency({ state: 'uploaded', file: file('Agency_Profile.pdf', 30_720, '2026-10-09'), version: 1 });
       const stub = render([{ body: DEMO }, { body: view([...DEMO.slots.slice(0, 5), filled]) }], OWNER, {
         'POST /kpm/settings/recruitment-pitch/uploads': { body: SIGNED },
@@ -600,5 +602,23 @@ describe('Settings › Recruitment pitch (P17-T5)', () => {
       expect(await screen.findByRole('article', { name: 'FAQ' })).toBeInTheDocument();
       expect(calls(stub, '/recruitment/pitch-materials')).toHaveLength(2);
     });
+  });
+});
+
+/**
+ * **No target under 44px on a phone or a tablet** (P19.2-T3 AC-4; UI-142: text links 17px tall, *Tampilkan yang
+ * diarsipkan* 13px, tab rows 38px, ⠿ 20px), inside the field shell's frame the Owner's pages wear (ADR-0197), which
+ * `data-surface` stands for here.
+ */
+describe('P19.2-T3 AC-4 the recruitment pitch’s targets (UI-142)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it.each([375, 768])('P19.2-T3 AC-4 at %ipx finds no target under 44px', async (px) => {
+    atWidth(px);
+    render();
+    const frame = document.body.firstElementChild!;
+    frame.setAttribute('data-surface', 'v1');
+    await screen.findByRole('article', { name: 'FAQ' });
+    expect(smallTargets(frame, px)).toEqual([]);
   });
 });

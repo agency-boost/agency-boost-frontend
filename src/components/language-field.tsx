@@ -8,7 +8,7 @@ import { useLanguage, useLanguageChoice, useMessages } from '@/i18n/language-pro
 import { languageMessages } from '@/i18n/messages/language';
 
 /**
- * ***Language* on *Your account*** (ADR-0179 §2; P18.98-T2 AC-4; the product owner's UI-041): *Bahasa Indonesia* or
+ * ***Language* on *Your account*** (ADR-0179 §2; P18.10-T2 AC-4; the product owner's UI-041): *Bahasa Indonesia* or
  * *English*, **the same preference as the *ID | EN* switch** — it shows the language the screen is in, and choosing
  * goes through the same `useChooseLanguage`: the screen changes at once, the browser keeps it, the account saves it.
  *

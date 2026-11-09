@@ -3,7 +3,7 @@ import { kept } from '@/i18n/kept';
 import type { TrainingItemKind, TrainingStatus } from '@/lib/training';
 
 /**
- * **Training, as the learner and the coach read it** (P18.98-T4, training; `functional/training.md`, *The module's own
+ * **Training, as the learner and the coach read it** (P18.10-T4, training; `functional/training.md`, *The module's own
  * strings*): the learner's `/training/*` — the subtabs, *Skills List* and its skill cards, a module's page with its tiles
  * and the status toggle, the states — and the coaching *Training* tab (`person-training.tsx`), a coachee's and the
  * reader's own, which draw the same parts (`training-parts.tsx`).
@@ -12,9 +12,9 @@ import type { TrainingItemKind, TrainingStatus } from '@/lib/training';
  * module's own Fills; the Indonesian is the approved glossary's (OD-237; §B.0's voice), with what it lacked in the
  * glossary for approval's §B.10. **Kept English** (§A): the page's title and the nav item (*Training Modules*,
  * *Training modules* — the report's own words in ID mode, UI-067's *‹ Training Modules*), *Training* (the category row's
- * name, a category's *Training {label}*), and the column *Module* (§A.6). **UI V1 (Phase 18.99 T10)**: *Skills List*,
+ * name, a category's *Training {label}*), and the column *Module* (§A.6). **UI V1 (Phase 18.11 T10)**: *Skills List*,
  * *No.*, *Skill*, the subtitle and the captions are gone (UI-063, UI-066, UI-067); the lesson card's *Module 1 of 3* and
- * the video's *Play Video: {label}* are proposed in §B.10 (*UI V1, Phase 18.99 T10*). In a sentence *training* is *pelatihan* and *module* *modul* (§A.6's own alternative; §B.10 *Modul
+ * the video's *Play Video: {label}* are proposed in §B.10 (*UI V1, Phase 18.11 T10*). In a sentence *training* is *pelatihan* and *module* *modul* (§A.6's own alternative; §B.10 *Modul
  * Training*), while *skill* stays (§B.10 *grid skill*). **Content stays as typed** (ADR-0179 §5): a category's, a skill's
  * and a module's name, a category's description, an item's label. **None of OD-39's six words in either language**, and
  * no promise of a *Skill Tracker* (OD-150) — `components/training/copy.spec.ts` reads both languages.
@@ -24,7 +24,7 @@ import type { TrainingItemKind, TrainingStatus } from '@/lib/training';
  * @moved app/(agent)/training/
  */
 const en = {
-  /** Every learner page's title, the nav item's words (P18.95-T9 AC-2), and the not-found card's way back (the item). */
+  /** Every learner page's title, the nav item's words (P18.7-T9 AC-2), and the not-found card's way back (the item). */
   title: kept('Training Modules'),
   trainingModules: kept('Training modules'),
   /** The subtabs' `nav`, named. */
@@ -79,7 +79,7 @@ const en = {
   /** A tile's button, named: its words first (WCAG 2.5.3), the item, and that it leaves. */
   openName: ({ button, label }: { button: string; label: string }) => `${button}: ${label} (opens in a new tab)`,
   openFailed: ({ label }: { label: string }) => `Couldn’t open ${label}. Try again.`,
-  /** `why` the server's sentence (P18.98-T5's). */
+  /** `why` the server's sentence (P18.10-T5's). */
   notSaved: ({ why }: { why: string }) => `Not saved. ${why}`,
   noFormatName: 'No material yet',
 };

@@ -44,7 +44,7 @@ export function SummaryStrip({ tiles, className }: { tiles: SummaryTile[]; class
           <span
             className={cn(
               'block font-body text-2xl font-bold',
-              tile.total ? 'text-amber-deep' : 'text-navy',
+              tile.total ? 'text-primary-deep' : 'text-navy',
             )}
           >
             {tile.value}

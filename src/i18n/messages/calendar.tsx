@@ -3,7 +3,7 @@ import { defineMessages, type MessagesOf } from '@/i18n/catalogue';
 import { kept } from '@/i18n/kept';
 
 /**
- * **The calendar, in words** (P18.98-T4, events, campaigns and the calendar; `functional/calendar.md`, *The calendar's
+ * **The calendar, in words** (P18.10-T4, events, campaigns and the calendar; `functional/calendar.md`, *The calendar's
  * own strings*): the entry types, the toolbar — *Today*, ‹ ›, *Week · Month* and a phone's *Agenda* and *Filters* — the
  * compare bar and its popover, the week's and the month's panes and a phone's agenda, an entry's name, the detail and
  * entry dialogs with *Block time*, the invite field, *Hide my personal activities*, and every refusal the calendar words
@@ -17,9 +17,10 @@ import { kept } from '@/i18n/kept';
  * Month* (§A.3) and *Agenda* beside them, *event* (§A.6; *Event created ✓ → Event dibuat ✓*), *1:1*, *coaching*,
  * *KPM*, *AAB*, *unit*, *downline*, *Leader*. **Typed content stays as typed**: an entry's title and notes, a person's
  * name and rung. **A figure is never a message's**: a day, a time, a range and a limit are written by the caller in the
- * figures' language and passed in; the weekday and month names are the formatters' (P18.98-T3).
+ * figures' language and passed in; the weekday and month names are the formatters' (P18.10-T3).
  *
  * @moved lib/calendar.ts
+ * @moved lib/calendar-settings.ts
  * @moved lib/calendar-form.ts
  * @moved lib/calendar-layout.ts
  * @moved components/calendar/
@@ -58,8 +59,11 @@ const en = {
 
   /** The compare bar and its popover (`:296-307`, `:905-965`). */
   viewing: 'Viewing:',
+  /** A phone's *Filter* panel (P19.8-T3 AC-6): *Melihat* as the label over its chips, and the compare chip's words. */
+  viewingLabel: 'Viewing',
   myCalendar: 'My Calendar',
   compare: '+ Compare with downline',
+  compareChip: 'Compare with downline',
   searchDownline: 'Search your downline…',
   added: ' · added ✓',
   compareCap: ({ max }: { max: number }) => `You're comparing ${max} people already — remove one below to add another.`,
@@ -90,9 +94,9 @@ const en = {
    */
   entryName: ({ type, title, time, owes }: { type: string; title: string; time: string; owes: Owes }) =>
     `${type}: ${title}${time ? `, ${time}` : ''}${owes ? OWES_EN[owes] : ''}`,
-  /** A month's line: its time first, as drawn — *{type}: 09.00 {title}*. */
+  /** A month's line: its title first, as drawn since UI-119 (P19.1-T3 AC-9) — *{type}: {title}, 09.00*. */
   lineName: ({ type, time, title, owes }: { type: string; time: string; title: string; owes: Owes }) =>
-    `${type}: ${time ? `${time} ` : ''}${title}${owes ? OWES_EN[owes] : ''}`,
+    `${type}: ${title}${time ? `, ${time}` : ''}${owes ? OWES_EN[owes] : ''}`,
   /** What the reader owes, after an entry's name: a pending invitation, and time placed on them. */
   owes: OWES_EN,
   untitled: '(untitled event)',
@@ -116,9 +120,15 @@ const en = {
   edit: 'Edit',
   delete: 'Delete',
   cancel: 'Cancel',
-  /** The prototype's question less its second sentence, which a soft delete makes false (H-06, I-101). */
-  deleteQuestion: ({ title }: { title: string }) => `Delete "${title}"?`,
-  /** A meeting link in *Location / notes* (P18.95-T8 AC-2), and what a screen reader hears after it. */
+  /**
+   * **The question *Hapus* asks first** (P19.8-T3 AC-7; MOB UI-169, ADR-0228 §5): the owner's words, bold, with the
+   * entry's title and day in grey under it (`deleteWhat`) — the detail's and *Edit event*'s alike. Never the
+   * prototype's *This can't be undone.*, which a soft delete makes false (H-06, I-101).
+   */
+  deleteQuestion: 'Delete this event?',
+  /** The line under it: *Kickoff 2026 · Wednesday, 11 Nov 2026*, the day written by the caller in the figures' language. */
+  deleteWhat: ({ title, day }: { title: string; day: string }) => (day ? `${title} · ${day}` : title),
+  /** A meeting link in *Location / notes* (P18.7-T8 AC-2), and what a screen reader hears after it. */
   joinZoom: 'Join Zoom',
   joinMeeting: 'Join meeting',
   newTab: ', opens in a new tab',
@@ -246,8 +256,10 @@ const id: MessagesOf<typeof en> = {
   newEvent: `+ ${kept('Event')} baru`,
 
   viewing: 'Melihat:',
+  viewingLabel: 'Melihat',
   myCalendar: 'Kalender saya',
   compare: `+ Bandingkan dengan ${kept('downline')}`,
+  compareChip: `Bandingkan dengan ${kept('downline')}`,
   searchDownline: `Cari ${kept('downline')} Anda…`,
   added: ' · ditambahkan ✓',
   compareCap: ({ max }) => `Anda sudah membandingkan ${max} orang — hapus satu di bawah untuk menambah yang lain.`,
@@ -268,7 +280,7 @@ const id: MessagesOf<typeof en> = {
   moreCount: ({ n }) => `+${n}`,
   moreRest: ' lainnya…',
   entryName: ({ type, title, time, owes }) => `${type}: ${title}${time ? `, ${time}` : ''}${owes ? OWES_ID[owes] : ''}`,
-  lineName: ({ type, time, title, owes }) => `${type}: ${time ? `${time} ` : ''}${title}${owes ? OWES_ID[owes] : ''}`,
+  lineName: ({ type, time, title, owes }) => `${type}: ${title}${time ? `, ${time}` : ''}${owes ? OWES_ID[owes] : ''}`,
   owes: OWES_ID,
   untitled: `(${kept('event')} tanpa judul)`,
 
@@ -289,7 +301,8 @@ const id: MessagesOf<typeof en> = {
   edit: 'Ubah',
   delete: 'Hapus',
   cancel: 'Batal',
-  deleteQuestion: ({ title }) => `Hapus "${title}"?`,
+  deleteQuestion: `Hapus ${kept('event')} ini?`,
+  deleteWhat: ({ title, day }) => (day ? `${title} · ${day}` : title),
   joinZoom: 'Gabung Zoom',
   joinMeeting: 'Gabung rapat',
   newTab: ', terbuka di tab baru',

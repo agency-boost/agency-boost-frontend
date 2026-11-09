@@ -76,7 +76,7 @@ export function whatsAppLink(phone: string | null | undefined): string | null {
 }
 
 /**
- * **A call, `tel:`, to the number WhatsApp is given** (P18.95-T4 AC-3, ADR-0167 §4; UI-016): the same digits,
+ * **A call, `tel:`, to the number WhatsApp is given** (P18.7-T4 AC-3, ADR-0167 §4; UI-016): the same digits,
  * read by the same rule, with the `+` a dialler needs for a country code — `0812-1100-2200` is
  * `tel:+6281211002200`. One rule for both, so a lead the 📞 can ring is a lead WhatsApp can open, and the
  * other way round. `null` where it cannot.
@@ -86,7 +86,7 @@ export function callLink(phone: string | null | undefined): string | null {
   return number ? `tel:+${number}` : null;
 }
 
-/** WhatsApp's chat link, with a message typed in where there is one (UI-101's reminder; here since P18.99-T16). */
+/** WhatsApp's chat link, with a message typed in where there is one (UI-101's reminder; here since P18.11-T16). */
 export function whatsAppHref(phone: string | null | undefined, text?: string): string | null {
   const link = whatsAppLink(phone);
   if (!link) return null;
@@ -119,7 +119,7 @@ export const saveMemberPhone = (membershipId: string, phone: string) =>
  * goes with it unchanged, and `version` pins the write (a leader's write needs it, ADR-0044).
  *
  * `updateLead` is fetched as the number is saved, not imported: this module is a member's WhatsApp button's too, and a
- * static import would load the leads' module and their catalogue onto every screen that draws one (P18.99-T16).
+ * static import would load the leads' module and their catalogue onto every screen that draws one (P18.11-T16).
  */
 export const saveLeadPhone = async (lead: Pick<Lead, 'id' | 'contact' | 'version'>, phone: string) => {
   const { updateLead } = await import('@/lib/leads');

@@ -23,3 +23,12 @@ export function joinInFlight<T>(key: string, read: () => Promise<T>): Promise<T>
   held.set(key, next);
   return next;
 }
+
+/**
+ * **Let go of every read still out** (P19.2-T1 AC-7; ADR-0198 §6): a switch of view clears the client's cached reads
+ * before the next page renders, so the new view's page sends its own reads rather than joining one the old view's page
+ * started. The promises still settle for whoever already holds them; nobody new is handed one.
+ */
+export function forgetInFlight(): void {
+  held.clear();
+}

@@ -24,9 +24,9 @@ import { cn } from '@/lib/cn';
  * un-registered at once. Here declining leaves them in the office, free to ask somebody
  * else; it is a refusal, not a removal, and the screen says so.
  *
- * Its words are the catalogue's (`user-management.ts`; P18.98-T4); the inbox's are `requests.ts`'.
+ * Its words are the catalogue's (`user-management.ts`; P18.10-T4); the inbox's are `requests.ts`'.
  *
- * **UI V1 (2026-10-30, Phase 18.99 T9).** No sub-line below 1024px (UI-087). **Nothing waiting is a small empty state
+ * **UI V1 (2026-10-30, Phase 18.11 T9).** No sub-line below 1024px (UI-087). **Nothing waiting is a small empty state
  * with Boost thinking** (UI-089, D-11): one card under 120px — Boost, the heading and the inbox's own line, the
  * client's *Approve to add them…* from 768px only. The tab's count follows the inbox as it changes (UI-085).
  */
@@ -48,11 +48,11 @@ export default function PendingPage() {
         {count !== 0 && (
           <>
             <h2 className="font-display text-lg font-bold text-navy">{t.heading}</h2>
-            {/* The client's words from 768px (P18.95-T7 AC-1, grey text row 7; UI-089: gone on a phone). */}
+            {/* The client's words from 768px (P18.7-T7 AC-1, grey text row 7; UI-089: gone on a phone). */}
             <p className={cn('mt-1 text-md text-muted', REMOVED_ON_PHONE)}>{t.line}</p>
           </>
         )}
-        {/* The list, and approving with the join date (P18.96-T3 AC-5): one component, the one /new-hires opens too. */}
+        {/* The list, and approving with the join date (P18.8-T3 AC-5): one component, the one /new-hires opens too. */}
         <RequestInbox
           onCount={setCount}
           empty={(

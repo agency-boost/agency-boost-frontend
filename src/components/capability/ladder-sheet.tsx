@@ -10,7 +10,7 @@ import { cn } from '@/lib/cn';
 import type { LadderRung } from '@/lib/capability-view';
 
 /**
- * **The capability ladder, in a sheet** (Phase 18.99 T10; UI-035): a bottom sheet below 1024px, a centred ~560px modal
+ * **The capability ladder, in a sheet** (Phase 18.11 T10; UI-035): a bottom sheet below 1024px, a centred ~560px modal
  * from 1024px (`ResponsiveSheet`). The four stages as a ladder, **each listing only the criteria it adds** — each
  * criterion once — the current stage tinted with its pill. A tick saves as it is ticked (*Menyimpan… → Tersimpan ✓*
  * beside it, as the page's do), and the tile under the sheet takes the stage the server answers.
@@ -59,7 +59,7 @@ function Rung({
       <div
         className={cn(
           '-mx-2 flex min-h-11 items-center gap-2.5 rounded-row px-2 text-lg font-bold text-navy lg:min-h-10',
-          current && 'bg-amber/10',
+          current && 'bg-primary/10',
         )}
       >
         <StepMarker state={rung.state} n={rung.n} size="md" />

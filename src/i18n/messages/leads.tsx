@@ -3,11 +3,11 @@ import { defineMessages, type MessagesOf } from '@/i18n/catalogue';
 import { kept } from '@/i18n/kept';
 
 /**
- * **Leads Management's own words** (P18.98-T4, field selling; `functional/leads.md`): `/leads`, the leads table the
+ * **Leads Management's own words** (P18.10-T4, field selling; `functional/leads.md`): `/leads`, the leads table the
  * coaching session's *Leads* card mounts too (`components/leads-table.tsx`) — its columns, its cards and the phone's
  * edit sheet, its search and filters, its ⋮ menu, its questions and toasts, the closed cards — the lead's details
- * dialog (`components/lead-details-dialog.tsx`), and `lib/leads.ts`' attention flags and why the 📞 and WhatsApp are
- * held, which Personal Summary's *Leads that need you* reads too.
+ * dialog (`components/lead-details-dialog.tsx`), and why `lib/leads.ts` holds the 📞 and WhatsApp. The attention flags'
+ * words are their own area's (`lead-flags.ts`), which Personal Summary's *Leads that need you* reads without this one.
  *
  * **English is the source** of the keys, the prototype's words as built (`Overall.html:2787-2846`, `:5432-5707`, the
  * coaching card's `:10809-10901`); the Indonesian is the approved glossary's (OD-237; §B.0's voice), with the words it
@@ -22,6 +22,7 @@ import { kept } from '@/i18n/kept';
  * @moved components/leads-table.tsx
  * @moved components/lead-details-dialog.tsx
  * @moved app/(agent)/leads/page.tsx
+ * @moved components/client-age-gender.tsx
  */
 const en = {
   /** The page (`Overall.html:2787-2790`). */
@@ -46,7 +47,7 @@ const en = {
   /** A control named for its row: *Lead name, row 3*. */
   inRow: ({ label, n }: { label: string; n: number }) => `${label}, row ${n}`,
   /**
-   * The card layout's sort, each order said in words (P18.95-T4 AC-4): what the order does, not which way a key runs.
+   * The card layout's sort, each order said in words (P18.7-T4 AC-4): what the order does, not which way a key runs.
    */
   sort: {
     label: 'Sort leads',
@@ -87,7 +88,7 @@ const en = {
   /** A lead with no name yet, and the inline row before it is one. */
   thisLead: 'this lead',
   theNewLead: 'the new lead',
-  /** WhatsApp and 📞 beside the ⋮, named for the lead (P18.8-T7 AC-5, P18.95-T4 AC-3). */
+  /** WhatsApp and 📞 beside the ⋮, named for the lead (P18.5-T7 AC-5, P18.7-T4 AC-3). */
   whatsapp: 'WhatsApp',
   chatOpens: ({ who }: { who: string }) => `Chat with ${who} on WhatsApp (opens in a new tab)`,
   chat: ({ who }: { who: string }) => `Chat with ${who} on WhatsApp`,
@@ -99,17 +100,35 @@ const en = {
   menu: {
     details: 'Lead details',
     markWon: 'Mark successful',
-    wonHeld: 'Available once status reaches the final stage',
+    /**
+     * Why *Mark successful* is held (UI-160 item 3; ADR-0194 §3): the office's own name for its final stage — *Polis paid
+     * and issued* at one office, *Dibayar dan diterbitkan* at another — is content, shown as the office typed it.
+     */
+    wonHeld: ({ stage }: { stage: string }) => `Active after status ${stage}`,
     markLost: 'Mark not successful',
+    /** Why *Mark not successful* is held at the final stage (UI-160 item 2; ADR-0194 §2), by the lead's type. */
+    lostHeld: { sales: 'Policy already paid and issued', recruitment: 'The candidate has joined' },
     delete: 'Delete',
     deleteHeld: 'Only the person who owns this lead can delete it.',
+  },
+
+  /**
+   * **The *Potensi* switch and the avatar's badge** (P19.1-T2; UI-153 items 1, 2 and 5; Q-3; ADR-0193 §1): the same saved
+   * field as the old *Close / Recruit this month*, labelled by the lead's type. The badges are named, since the yellow and
+   * the green differ too little to be told apart by colour (1.4.1); each name is its tooltip too.
+   */
+  potensi: {
+    sales: 'Potential closing this month',
+    recruitment: 'Potential recruit this month',
+    badge: 'Potential this month',
+    badgeWon: 'Potential this month, closed',
   },
   /** *Last changed by {name}* (ADR-0044), in the details: a name the payload no longer has, said without *office* in a session. */
   editedBy: ({ name }: { name: string }) => `Last changed by ${name}`,
   someoneElse: 'someone else',
   someoneInYourOffice: 'someone in your office',
 
-  /** A phone's card and its edit sheet (P18.95-T4 AC-1). */
+  /** A phone's card and its edit sheet (P18.7-T4 AC-1). */
   editNew: 'Edit the new lead',
   editWho: ({ who }: { who: string }) => `Edit ${who}`,
   newLead: 'New lead',
@@ -120,7 +139,7 @@ const en = {
   noneMatch: 'No leads match.',
   noneYet: 'No leads yet — add your first one above.',
 
-  /** `/leads`' search and filters (P18.95-T4 AC-2), the coaching card's own words (`Overall.html:4258-4266`). */
+  /** `/leads`' search and filters (P18.7-T4 AC-2), the coaching card's own words (`Overall.html:4258-4266`). */
   searchAndFilter: 'Search and filter leads',
   search: 'Search leads',
   searchPlaceholder: 'Search leads…',
@@ -184,15 +203,11 @@ const en = {
     registered: ({ day }: { day: ReactNode }) => <>Registered {day}</>,
   },
 
-  /** What each attention flag is called on screen (`lib/leads.ts`' `FLAG_LABEL`): one place, so two screens agree. */
-  flags: {
-    overdue: 'Overdue',
-    noNextAction: 'No next action',
-    noRemarks: 'No remarks',
-    /** *Overdue 14 days* (`leads-management.md` §4): the server's count, in the office's days. */
-    overdueDays: ({ days }: { days: number }) => `Overdue ${days} ${days === 1 ? 'day' : 'days'}`,
-  },
-  /** Why the 📞 and WhatsApp are held on a lead, and where to put it right (P18.95-T4 AC-3). */
+  /*
+   * *The attention flags' words are `messages/lead-flags.ts`'s since 2026-11-06* (the bundle): Personal Summary draws
+   * them, and loading this area for three words put all of Leads Management's in its first load.
+   */
+  /** Why the 📞 and WhatsApp are held on a lead, and where to put it right (P18.7-T4 AC-3). */
   phoneHeld: {
     missing: 'No phone number yet — add one in Lead details.',
     unusable: 'This number can’t be dialled — check it in Lead details.',
@@ -200,7 +215,7 @@ const en = {
 
   /**
    * **`/leads` below 1024px: the compact list** (UI V1, UI-105; D-10, D-18). The report's words in Indonesian; the
-   * English is the glossary for approval's §B.10 (*Phase 18.99 T12*).
+   * English is the glossary for approval's §B.10 (*Phase 18.11 T12*).
    */
   list: {
     /** The title row's title on a phone and a tablet (UI-004: *"Leads" + avatar*). */
@@ -226,6 +241,8 @@ const en = {
     add: 'Add lead',
     open: ({ who }: { who: string }) => `Open ${who}`,
     noneOfType: 'No leads here yet.',
+    /** From 1024px, the pane beside the list with no lead open in it (UI-116; P19.1-T2, the *Fill* of an empty pane). */
+    choose: 'Choose a lead to open it here.',
     filters: {
       title: 'Filter and sort',
       type: 'Type',
@@ -234,7 +251,27 @@ const en = {
       allStatuses: 'All',
       clear: 'Clear',
       done: 'Show leads',
+      /** P19.7-T2 AC-12 (the proposal spec, *Proposals on the Leads page*): the filter's third group. */
+      proposal: 'Proposal',
+      withProposal: 'Has a proposal',
+      withoutProposal: 'No proposal yet',
+      /**
+       * ***Leads milik: Saya · Tim*** (P19.9-T1 AC-3; ADR-0232, OD-286): the filter's first group, for a reader whose
+       * grant reaches beyond their own leads. *Tim* is their downline's leads, without their own.
+       */
+      owners: 'Whose leads',
+      mine: 'Mine',
+      team: 'Team',
     },
+    /** A card whose lead is not the reader's (P19.9-T1 AC-4): whose it is, on the line under the name. */
+    ownedBy: ({ name }: { name: string }) => `${name}’s`,
+    /**
+     * **The card's proposal pill and its *Buat proposal*** (P19.7-T2 AC-1, AC-12): the pill's count where it has no
+     * product's name (an empty draft), and the icon link's name. The pill's own name is `filters.proposal`.
+     */
+    proposalCount: ({ n }: { n: number }) => (n === 1 ? '1 proposal' : `${n} proposals`),
+    makeProposal: 'Make a proposal',
+    makeProposalFor: ({ who }: { who: string }) => `Make a proposal for ${who}`,
   },
 
   /**
@@ -295,6 +332,23 @@ const en = {
     saved: 'Saved',
     discard: 'You have changes that are not saved yet. Close without saving?',
     discardConfirm: 'Close without saving',
+    /** The client's age and gender (P19.7-T1 AC-1; ADR-0224): the stepper and the two buttons. */
+    age: 'Age at next birthday',
+    ageLess: 'One year less',
+    ageMore: 'One year more',
+    ageOutOfRange: ({ min, max }: { min: number; max: number }) => `Age must be ${min}–${max}.`,
+    gender: 'Gender',
+    genders: { male: 'Male', female: 'Female' },
+    /**
+     * **The sheet's *Proposal* section, above *Riwayat*** (P19.7-T2 AC-12; the proposal spec, *Proposals on the Leads
+     * page*), on the reader's own lead: each proposal's row, its status pill, *+ Buat proposal*, and *Riwayat*'s note
+     * (AC-11). `products` is the names already joined; a figure is the caller's.
+     */
+    proposals: 'Proposal',
+    proposalsLoading: 'Loading the proposals…',
+    newProposal: 'Make a proposal',
+    proposalStatus: { draft: 'Draft', done: 'Done' },
+    proposalMade: ({ products }: { products: string }) => `Proposal made · ${products}`,
   },
 };
 
@@ -357,10 +411,21 @@ const id: MessagesOf<typeof en> = {
   menu: {
     details: `Detail ${kept('lead')}`,
     markWon: 'Tandai berhasil',
-    wonHeld: 'Tersedia setelah status mencapai tahap akhir',
+    // UI-160 item 3, verbatim: *Aktif setelah status Polis paid and issued*, the stage as the office named it.
+    wonHeld: ({ stage }) => `Aktif setelah status ${stage}`,
     markLost: 'Tandai tidak berhasil',
+    // UI-160 item 2, verbatim for Sales; the Recruit line worded by ADR-0194 §2 (glossary for approval, §B.10).
+    lostHeld: { sales: 'Polis sudah dibayar dan terbit', recruitment: 'Kandidat sudah bergabung' },
     delete: 'Hapus',
     deleteHeld: `Hanya pemilik ${kept('lead')} ini yang dapat menghapusnya.`,
+  },
+
+  potensi: {
+    // UI-153 item 1, verbatim.
+    sales: `Potensi ${kept('closing')} bulan ini`,
+    recruitment: 'Potensi rekrut bulan ini',
+    badge: 'Potensi bulan ini',
+    badgeWon: 'Potensi bulan ini, berhasil',
   },
   editedBy: ({ name }) => `Terakhir diubah oleh ${name}`,
   someoneElse: 'orang lain',
@@ -431,12 +496,6 @@ const id: MessagesOf<typeof en> = {
     registered: ({ day }) => <>Terdaftar {day}</>,
   },
 
-  flags: {
-    overdue: 'Terlambat',
-    noNextAction: 'Tanpa tindakan berikutnya',
-    noRemarks: 'Tanpa keterangan',
-    overdueDays: ({ days }) => `Terlambat ${days} hari`,
-  },
   phoneHeld: {
     missing: `Belum ada nomor telepon — tambahkan di Detail ${kept('lead')}.`,
     unusable: `Nomor ini tidak dapat dihubungi — periksa di Detail ${kept('lead')}.`,
@@ -461,6 +520,7 @@ const id: MessagesOf<typeof en> = {
     add: `Tambah ${kept('lead')}`,
     open: ({ who }) => `Buka ${who}`,
     noneOfType: `Belum ada ${kept('leads')} di sini.`,
+    choose: `Pilih ${kept('lead')} untuk membukanya di sini.`,
     filters: {
       title: 'Filter dan urutan',
       type: 'Jenis',
@@ -469,7 +529,18 @@ const id: MessagesOf<typeof en> = {
       allStatuses: 'Semua',
       clear: 'Hapus filter',
       done: `Tampilkan ${kept('leads')}`,
+      // The proposal spec's own words (*Proposals on the Leads page*).
+      proposal: 'Proposal',
+      withProposal: 'Sudah ada proposal',
+      withoutProposal: 'Belum ada proposal',
+      owners: `${kept('Leads')} milik`,
+      mine: 'Saya',
+      team: 'Tim',
     },
+    ownedBy: ({ name }) => `Milik ${name}`,
+    proposalCount: ({ n }) => `${n} proposal`,
+    makeProposal: 'Buat proposal',
+    makeProposalFor: ({ who }) => `Buat proposal untuk ${who}`,
   },
 
   stageShort: {
@@ -519,6 +590,19 @@ const id: MessagesOf<typeof en> = {
     saved: 'Tersimpan',
     discard: 'Ada perubahan yang belum disimpan. Tutup tanpa menyimpan?',
     discardConfirm: 'Tutup tanpa menyimpan',
+    // The proposal spec's own words (step 1): *Umur ulang tahun berikutnya*, *Laki-laki / Perempuan*, *"Umur harus 1–100."*
+    age: 'Umur ulang tahun berikutnya',
+    ageLess: 'Kurangi satu tahun',
+    ageMore: 'Tambah satu tahun',
+    ageOutOfRange: ({ min, max }) => `Umur harus ${min}–${max}.`,
+    gender: 'Jenis kelamin',
+    genders: { male: 'Laki-laki', female: 'Perempuan' },
+    // The proposal spec's own words: *Proposal*, *+ Buat proposal*, *Draf / Selesai*, *"Proposal dibuat · {produk}"*.
+    proposals: 'Proposal',
+    proposalsLoading: 'Memuat proposal…',
+    newProposal: 'Buat proposal',
+    proposalStatus: { draft: 'Draf', done: 'Selesai' },
+    proposalMade: ({ products }) => `Proposal dibuat · ${products}`,
   },
 };
 

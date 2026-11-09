@@ -47,7 +47,7 @@ export function Stepper({
   /** 28×34, and 44px where a finger is doing the tapping. */
   const BUTTON = cn(
     'flex h-[34px] w-7 shrink-0 items-center justify-center bg-base text-md font-bold leading-none text-navy',
-    'transition-colors hover:bg-navy/[0.06] active:scale-[0.94]',
+    'transition-colors hover:bg-secondary/[0.06] active:scale-[0.94]',
     /*
      * **40%, the project's standard for a disabled control — not the 30% an icon button uses.**
      * A day arrives with every count at 0, so every `–` on the screen is disabled at once: at 30%
@@ -67,7 +67,7 @@ export function Stepper({
         'inline-flex shrink-0 items-center overflow-hidden rounded-md border border-hairline bg-card',
         // One indicator, on the group, at the weight `globals.css` gives a bare input — the inner
         // input suppresses its own, or focusing the field draws two rings around two halves of it.
-        'focus-within:border-amber focus-within:ring-2 focus-within:ring-amber focus-within:ring-offset-1',
+        'focus-within:border-primary focus-within:ring-2 focus-within:ring-focus-ring focus-within:ring-offset-1',
       )}
     >
       <button
@@ -110,7 +110,7 @@ export function Stepper({
         onClick={() => set(value + 1)}
         /* The prototype tints `+` amber-dark rather than filling it (`:137`) — a counter you press
            dozens of times should not be a row of amber blocks. `amber-deep` for the contrast floor. */
-        className={cn(BUTTON, 'text-amber-deep hover:bg-amber/10 disabled:hover:bg-base')}
+        className={cn(BUTTON, 'text-primary-deep hover:bg-primary/10 disabled:hover:bg-base')}
       >
         +
       </button>

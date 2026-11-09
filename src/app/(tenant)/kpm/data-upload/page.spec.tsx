@@ -1,9 +1,14 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest';
 import {
-  atWidth, browserChose, digestAt, InLanguage, makeMe, renderWithLanguage, renderWithSession, resetLanguage, stubFetch, wears,
+  atWidth, browserChose, digestAt, InLanguage, makeMe, renderInIndonesian, renderWithLanguage, renderWithSession, resetLanguage,
+  stubFetch, wears,
 } from '@test/harness';
 import { englishOnly, englishShown } from '@test/english-left';
+import {
+  CASES, cellsOf, configOf, FYC_FROM_DEC, KOMISI, statusOf, V1_COLUMNS, V1_FILE_COLUMNS, V2_FILE_COLUMNS, viewOf,
+} from '@test/data-upload-fixtures';
+import { columnHeading, correctionKey } from '@/lib/production';
 import { dataUploadMessages } from '@/i18n/messages/data-upload';
 import { setAccessToken } from '@/lib/api-client';
 import { showFigure } from './correction-panel';
@@ -48,14 +53,15 @@ const state = (m = '2026-09', over: Record<string, unknown> = {}) => ({
   month: m, revision: 3, locked: false, reason: 'open', editableUntil: '2026-10-07',
   changedAt: null, changedBy: null, ...over,
 });
-const month = (rows: unknown[], withData = 0, m = '2026-09', st: unknown = state(m)) => ({ month: m, rows, withData, state: st });
+/** A month read as the server answers it since P19.5-T2: version 1's seven columns, rows by kode (`viewOf`). */
+const month = (rows: Parameters<typeof viewOf>[0], withData = 0, m = '2026-09', st: unknown = state(m)) => viewOf(rows, withData, m, st);
 
 const HEADER = 'Agent Code,Agent Name,APE (Rp M) — This Month,Rolling Persistency (%) — This Month,'
   + 'Recruitment — This Month,New Active Agents — This Month,FYP (Rp M) — This Month,# of Policy — This Month,'
   + 'APE (Rp M) — YTD,Rolling Persistency (%) — YTD,Recruitment — YTD,New Active Agents — YTD,'
   + 'FYP (Rp M) — YTD,# of Policy — YTD';
 const template = (m = '2026-09') => ({
-  month: m, version: 1, filename: 'KPM0417-agent-data-Sep-2026.csv', header: HEADER.split(','),
+  month: m, version: 1, filename: `0417-agent-data-${m}.csv`, header: HEADER.split(','),
   file: `${HEADER}\nPRU-001,"Rina Wijaya",,,,,,,,,,,,`, rowCount: 1,
 });
 
@@ -99,7 +105,7 @@ describe('Data upload — the month table (P9-T1)', () => {
       renderWithSession(<DataUploadPage />, { me: OWNER });
 
       const a = await link();
-      expect(a).toHaveAttribute('download', 'KPM0417-agent-data-Sep-2026.csv');
+      expect(a).toHaveAttribute('download', '0417-agent-data-2026-09.csv');
       // The prototype's ⬇ is drawn on the control it drew it on — now the workbook's — and kept out of the name, as on
       // the Summary's Download (ADR-0068).
       const workbook = screen.getByRole('button', { name: 'Download template' });
@@ -137,11 +143,11 @@ describe('Data upload — the month table (P9-T1)', () => {
         ...routes(month([rina()])),
         '/kpm/data-upload/2026-08': { body: month([rina()], 0, '2026-08') },
         '/kpm/data-upload/template?month=2026-08': {
-          body: { ...template('2026-08'), filename: 'KPM0417-agent-data-Aug-2026.csv' },
+          body: { ...template('2026-08'), filename: '0417-agent-data-2026-08.csv' },
         },
       });
       renderWithSession(<DataUploadPage />, { me: OWNER });
-      expect(await link()).toHaveAttribute('download', 'KPM0417-agent-data-Sep-2026.csv');
+      expect(await link()).toHaveAttribute('download', '0417-agent-data-2026-09.csv');
 
       fireEvent.change(screen.getByLabelText('Month'), { target: { value: '2026-08' } });
 
@@ -149,7 +155,7 @@ describe('Data upload — the month table (P9-T1)', () => {
       expect(screen.queryByRole('link', { name: 'Download CSV' })).not.toBeInTheDocument();
       expect(screen.queryByRole('button', { name: 'Download template' })).not.toBeInTheDocument();
       await waitFor(async () => {
-        expect(await link()).toHaveAttribute('download', 'KPM0417-agent-data-Aug-2026.csv');
+        expect(await link()).toHaveAttribute('download', '0417-agent-data-2026-08.csv');
       });
     });
 
@@ -186,7 +192,7 @@ describe('Data upload — the month table (P9-T1)', () => {
 
       fireEvent.click(await screen.findByRole('button', { name: 'Try again' }));
 
-      expect(await link()).toHaveAttribute('download', 'KPM0417-agent-data-Sep-2026.csv');
+      expect(await link()).toHaveAttribute('download', '0417-agent-data-2026-09.csv');
       expect(screen.queryByRole('alert')).not.toBeInTheDocument();
       expect(templateCalls(calls)).toHaveLength(2);
     });
@@ -245,7 +251,7 @@ describe('Data upload — the month table (P9-T1)', () => {
         renderWithSession(<DataUploadPage />, { me: OWNER });
 
         fireEvent.click(await screen.findByRole('button', { name: 'Download template' }));
-        await waitFor(() => expect(saved).toEqual(['KPM0417-agent-data-Sep-2026.xlsx']));
+        await waitFor(() => expect(saved).toEqual(['0417-agent-data-2026-09.xlsx']));
         const asked = calls.find((c) => c.url.includes('format=xlsx'))!;
         expect(asked.url).toContain('/kpm/data-upload/template?month=2026-09&format=xlsx');
         expect((asked.init.headers as Record<string, string>).Authorization).toBe('Bearer token-in-memory');
@@ -274,7 +280,7 @@ describe('Data upload — the month table (P9-T1)', () => {
         // The CSV is still there to take.
         expect(screen.getByRole('link', { name: 'Download CSV' })).toBeInTheDocument();
         fireEvent.click(within(alert).getByRole('button', { name: 'Try again' }));
-        await waitFor(() => expect(saved).toEqual(['KPM0417-agent-data-Sep-2026.xlsx']));
+        await waitFor(() => expect(saved).toEqual(['0417-agent-data-2026-09.xlsx']));
         expect(screen.queryByRole('alert')).not.toBeInTheDocument();
       });
     });
@@ -287,7 +293,10 @@ describe('Data upload — the month table (P9-T1)', () => {
     expect(await screen.findByText('Rina Wijaya')).toBeInTheDocument();
     expect(screen.getByText('Budi Santoso')).toBeInTheDocument();
     expect(screen.getByText('PRU-001')).toBeInTheDocument();
-    expect(screen.getAllByRole('columnheader').map((h) => h.textContent)).toContain('This Month');
+    // *Changed 2026-11-05 (P19.2-T3 AC-1; UI-139):* the table shows one side of the *Bulan ini | YTD* switch at a time,
+    // this month's first.
+    expect(screen.getByRole('button', { name: 'This month' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getAllByRole('columnheader').map((h) => h.textContent)).toContain('APE');
   });
 
   it('AC-4: shows a dash for nothing reported and a number for a reported zero', async () => {
@@ -303,9 +312,14 @@ describe('Data upload — the month table (P9-T1)', () => {
     // Rina: a reported zero is a figure.
     expect(within(rinaRow).getByText('IDR 0')).toBeInTheDocument();
     expect(within(rinaRow).getAllByText('3').length).toBeGreaterThan(0);
-    // Budi: twelve dashes, none of them a zero.
-    expect(within(budiRow).getAllByLabelText('nothing reported')).toHaveLength(12);
+    // Budi: a dash for each of this month's six, none of them a zero — and, an agent, a dash under *Unit persistency
+    // (%)* (P19.3-T2) — and five more on the switch's YTD side (P19.2-T3 AC-1: one side at a time; P19.5-T2: the five
+    // columns with a year to date — a persistency has none).
+    expect(within(budiRow).getAllByLabelText('nothing reported')).toHaveLength(7);
     expect(within(budiRow).queryByText('IDR 0')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'YTD' }));
+    const budiYtd = screen.getAllByRole('row').find((r) => within(r).queryByText('Budi Santoso'))!;
+    expect(within(budiYtd).getAllByLabelText('nothing reported')).toHaveLength(5);
   });
 
   it('formats money as rupiah in full, not as the file’s Rp M', async () => {
@@ -317,12 +331,12 @@ describe('Data upload — the month table (P9-T1)', () => {
     expect(await screen.findByText('IDR 150,000,000')).toBeInTheDocument();
   });
 
-  it('P18.97-T3 AC-2, AC-3 keeps the file’s own figures as filed: money to the rupiah, a persistency’s every place and no ,0', async () => {
+  it('P18.9-T3 AC-2, AC-3 keeps the file’s own figures as filed: money to the rupiah, a persistency’s every place and no ,0', async () => {
     // Data upload's cells are where precision matters (ADR-0174 §3, §4): never *Rp 5,7 M*, never *87%* for 87,35.
     stubFetch(routes(month([rina({
       metrics: {
         ...blank(),
-        ape: { monthly: cell(5_672_500_000_00), ytd: empty },
+        ape: { monthly: cell(5_672_500_000_00), ytd: cell(9_672_500_000_00) },
         persistency: { monthly: cell(87.35), ytd: cell(90) },
       },
     })], 1)));
@@ -331,24 +345,29 @@ describe('Data upload — the month table (P9-T1)', () => {
     const row = (await screen.findAllByRole('row')).find((r) => within(r).queryByText('Rina Wijaya'))!;
     expect(within(row).getByText('IDR 5,672,500,000')).toBeInTheDocument();
     expect(within(row).getByText('87.35%')).toBeInTheDocument();
-    expect(within(row).getByText('90%')).toBeInTheDocument();
     expect(within(row).queryByText(/,0%/)).not.toBeInTheDocument();
+    // The year to date on the switch's other side (P19.2-T3 AC-1) — APE's the sum of the months (P19.5-T2, R4); a
+    // persistency has none.
+    fireEvent.click(screen.getByRole('button', { name: 'YTD' }));
+    const ytd = screen.getAllByRole('row').find((r) => within(r).queryByText('Rina Wijaya'))!;
+    expect(within(ytd).getByText('IDR 9,672,500,000')).toBeInTheDocument();
+    expect(within(ytd).queryByText('90%')).not.toBeInTheDocument();
   });
 
-  it('P18.97-T3 AC-2, AC-3 writes the correction panel’s and its confirmation’s figures as the cells do', () => {
-    expect(showFigure('ape', 5_672_500_000_00, 'id')).toBe('Rp 5.672.500.000');
-    expect(showFigure('persistency', 87.35, 'id')).toBe('87,35%');
-    expect(showFigure('persistency', 87, 'id')).toBe('87%');
-    expect(showFigure('policyCount', 3, 'id')).toBe('3');
-    expect(showFigure('persistency', null, 'id')).toBe('nothing reported');
+  it('P18.9-T3 AC-2, AC-3 writes the correction panel’s and its confirmation’s figures as the cells do', () => {
+    expect(showFigure('rp_million', 5_672_500_000_00, 'id')).toBe('Rp 5.672.500.000');
+    expect(showFigure('percent', 87.35, 'id')).toBe('87,35%');
+    expect(showFigure('percent', 87, 'id')).toBe('87%');
+    expect(showFigure('count', 3, 'id')).toBe('3');
+    expect(showFigure('percent', null, 'id')).toBe('nothing reported');
   });
 
-  it('P18.98-T3 AC-4 writes the file’s figures in full in the reader’s language, the same figure in each', () => {
-    expect(showFigure('ape', 5_672_500_000_00, 'en')).toBe('IDR 5,672,500,000');
-    expect(showFigure('persistency', 87.35, 'en')).toBe('87.35%');
-    expect(showFigure('persistency', 87, 'en')).toBe('87%');
-    expect(showFigure('policyCount', 1_250, 'en')).toBe('1,250');
-    expect(showFigure('policyCount', 1_250, 'id')).toBe('1.250');
+  it('P18.10-T3 AC-4 writes the file’s figures in full in the reader’s language, the same figure in each', () => {
+    expect(showFigure('rp_million', 5_672_500_000_00, 'en')).toBe('IDR 5,672,500,000');
+    expect(showFigure('percent', 87.35, 'en')).toBe('87.35%');
+    expect(showFigure('percent', 87, 'en')).toBe('87%');
+    expect(showFigure('count', 1_250, 'en')).toBe('1,250');
+    expect(showFigure('count', 1_250, 'id')).toBe('1.250');
   });
 
   it('says so when nothing has been uploaded, and still lists everybody', async () => {
@@ -359,7 +378,7 @@ describe('Data upload — the month table (P9-T1)', () => {
     // on the first match. The two never coexist, which is why a screen has exactly one `status`.
     await screen.findByText('Rina Wijaya');
     expect(screen.getByRole('status')).toHaveTextContent('Nothing has been uploaded for Sep 2026 yet');
-    expect(screen.getAllByRole('row')).toHaveLength(4); // two heading rows + two members
+    expect(screen.getAllByRole('row')).toHaveLength(3); // the heading row + two members (one head row since P19.2-T3)
   });
 
   it('counts the rows that hold a figure once something has', async () => {
@@ -415,13 +434,11 @@ describe('Data upload — the month table (P9-T1)', () => {
 
 // ── P9-T3 ────────────────────────────────────────────────────────────────────────────────────
 
-const METRICS = ['ape', 'persistency', 'recruitment', 'newActiveAgents', 'fyp', 'policyCount'] as const;
-/** Twelve cells, not provided unless given, keyed `metric.cadence`. */
-const cells = (given: Record<string, Partial<{ status: string; before: number | null; after: number | null; raw: string }>> = {}) =>
-  (['monthly', 'ytd'] as const).flatMap((cadence) => METRICS.map((metric) => ({
-    metric, cadence, status: 'not_provided', before: null, after: null, raw: null,
-    ...given[`${metric}.${cadence}`],
-  })));
+/**
+ * A row's cells, one per column a version 1 file is read for — this month's six (P19.5-T2: its YTD headers are not
+ * stored, R4) — not provided unless given, keyed by the metric's old name (`cellsOf`).
+ */
+const cells = (given: Parameters<typeof cellsOf>[0] = {}) => cellsOf(given);
 
 const PREVIEW_REVISION = 3;
 const PREVIEW = {
@@ -431,8 +448,10 @@ const PREVIEW = {
   encoding: 'utf-8',
   delimiter: ';',
   revision: PREVIEW_REVISION,
+  columns: V1_FILE_COLUMNS,
+  notes: [] as unknown[],
   summary: {
-    rows: 3, ready: 2, refused: 1, newCells: 1, changedCells: 1, unchangedCells: 0,
+    rows: 3, ready: 2, refused: 1, held: 0, newCells: 1, changedCells: 1, unchangedCells: 0,
     notProvidedCells: 21, refusedCells: 1, notInFile: 4,
   },
   rows: [
@@ -440,13 +459,13 @@ const PREVIEW = {
       line: 2, agentCode: 'PRU-001', membershipId: 'mem-rina', resolvedAgentCode: 'PRU-001', name: 'Rina Wijaya',
       fileName: 'Rina Wijaya', nameDiffers: false, codeRecovered: false, status: 'ready',
       issues: [{
-        code: 'UPLOAD_VALUE_OUT_OF_RANGE', metric: 'persistency', cadence: 'monthly',
-        message: 'Rolling Persistency (%) — This Month: “140” is above 100 — persistency is a percentage.',
+        code: 'UPLOAD_VALUE_OUT_OF_RANGE', kode: 'PERSISTENCY', ytd: false,
+        message: 'Rolling persistency (%) [PERSISTENCY]: “140” is above 100 — persistency is a percentage.',
       }],
       cells: cells({
-        'ape.monthly': { status: 'new', after: 150_000_000, raw: '1,5' },
-        'ape.ytd': { status: 'changed', before: 100_000_000, after: 600_000_000, raw: '6' },
-        'persistency.monthly': { status: 'refused', raw: '140' },
+        ape: { status: 'new', after: 150_000_000, raw: '1,5' },
+        fyp: { status: 'changed', before: 100_000_000, after: 600_000_000, raw: '6' },
+        persistency: { status: 'refused', raw: '140' },
       }),
     },
     {
@@ -456,7 +475,7 @@ const PREVIEW = {
     {
       line: 4, agentCode: 'PRU-999', membershipId: null, resolvedAgentCode: null, name: null,
       fileName: 'Nobody', nameDiffers: false, codeRecovered: false, status: 'refused', cells: [],
-      issues: [{ code: 'UPLOAD_UNKNOWN_AGENT_CODE', metric: null, cadence: null, message: 'No active member of this office has this code.' }],
+      issues: [{ code: 'UPLOAD_UNKNOWN_AGENT_CODE', kode: null, ytd: null, message: 'No active member of this office has this code.' }],
     },
   ],
 };
@@ -554,12 +573,13 @@ describe('Data upload — reading a filled file (P9-T3)', () => {
     const table = await screen.findByRole('table', { name: 'What “filled.csv” would change' });
     const rinaRow = within(table).getAllByRole('row').find((r) => within(r).queryByText('Rina Wijaya'))!;
     const cellsOf = within(rinaRow).getAllByRole('cell');
-    // The month table's order (P13.1-T7): name, code, this month's six from [2], the year's from [8].
+    // The template's order (P13.1-T7, P19.5-T2): name, code, then the columns the file is read for from [2] — APE,
+    // Rolling persistency, Recruitment, New active agents, FYP, # of policy.
     expect(cellsOf[2]).toHaveTextContent('IDR 1,500,000');
-    expect(cellsOf[8]).toHaveTextContent('IDR 6,000,000');
-    expect(cellsOf[8]).toHaveTextContent('was IDR 1,000,000');
+    expect(cellsOf[6]).toHaveTextContent('IDR 6,000,000');
+    expect(cellsOf[6]).toHaveTextContent('was IDR 1,000,000');
     expect(cellsOf[3]).toHaveTextContent('✕ 140 — not taken');
-    expect(within(cellsOf[9]).getByLabelText('left blank')).toHaveTextContent('—');
+    expect(within(cellsOf[4]).getByLabelText('left blank')).toHaveTextContent('—');
     // The row the file could not attribute is in the list, not the table.
     expect(within(table).queryByText('PRU-999')).not.toBeInTheDocument();
   });
@@ -661,7 +681,9 @@ describe('Data upload — confirm, history, revert and the month lock (P9-T4)', 
     it('says a month is open, and until when', async () => {
       stubFetch(everything());
       renderWithSession(<DataUploadPage />, { me: EVERYTHING });
-      expect(await screen.findByText('Open for imports and corrections until 7 Oct 2026, when it locks.')).toBeInTheDocument();
+      // *Changed 2026-11-05 (P19.2-T3 AC-1; UI-139):* the strip says *Open until …*, and the sentence is its ⓘ.
+      expect(await screen.findByText('Open until 7 Oct 2026')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Open for imports and corrections until 7 Oct 2026, when it locks.' })).toBeInTheDocument();
     });
 
     it.each([
@@ -671,7 +693,8 @@ describe('Data upload — confirm, history, revert and the month lock (P9-T4)', 
     ])('says why: %j', async (over, sentence) => {
       stubFetch(everything({ '/kpm/data-upload/': { body: month([rina()], 1, '2026-09', state('2026-09', over)) } }));
       renderWithSession(<DataUploadPage />, { me: EVERYTHING });
-      expect(await screen.findByText(sentence)).toBeInTheDocument();
+      // The sentence is the strip's ⓘ since P19.2-T3 (UI-139: long explanations behind ⓘ).
+      expect(await screen.findByRole('button', { name: sentence })).toBeInTheDocument();
     });
 
     it('locks the month after asking, and says so', async () => {
@@ -698,7 +721,8 @@ describe('Data upload — confirm, history, revert and the month lock (P9-T4)', 
       stubFetch(everything());
       renderWithSession(<DataUploadPage />, { me: OWNER });
       await screen.findByText('Rina Wijaya');
-      expect(screen.queryByRole('button', { name: /month$/ })).not.toBeInTheDocument();
+      // *Lock month* and *Reopen month* — not the table's *This month* switch (P19.2-T3).
+    expect(screen.queryByRole('button', { name: /^(Lock|Reopen) month$/ })).not.toBeInTheDocument();
     });
   });
 
@@ -824,7 +848,7 @@ describe('Data upload — correcting one figure (P9-T5)', () => {
 
   const withApe = () => rina({ metrics: { ...blank(), ape: { monthly: cell(150_000_000), ytd: empty } } });
   const correction = (over: Record<string, unknown> = {}) => ({
-    membershipId: 'mem-rina', metric: 'ape', cadence: 'monthly', changed: true,
+    membershipId: 'mem-rina', kode: 'APE', ytd: false, changed: true,
     before: { value: 150_000_000, provenance: 'imported' }, after: { value: 200_000_000, provenance: 'corrected' },
     state: state('2026-09', { revision: 4 }), ...over,
   });
@@ -837,7 +861,10 @@ describe('Data upload — correcting one figure (P9-T5)', () => {
     stubFetch(routes(month([withApe()], 1)));
     renderWithSession(<DataUploadPage />, { me: CORRECTOR });
     expect(await screen.findByText('Tap any number to correct it manually — no need to re-upload for a single fix.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Correct FYP year to date for Rina Wijaya, now nothing reported' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Correct FYP this month for Rina Wijaya, now nothing reported' })).toBeInTheDocument();
+    // P19.5-T2 AC-7 (R4): a summed year to date is the months', on the switch's other side, and never a control.
+    fireEvent.click(screen.getByRole('button', { name: 'YTD' }));
+    expect(screen.queryByRole('button', { name: /year to date/ })).not.toBeInTheDocument();
   });
 
   it('leaves figures as text without the grant, and in a locked month', async () => {
@@ -879,7 +906,7 @@ describe('Data upload — correcting one figure (P9-T5)', () => {
     const sent = calls.find((c) => c.url.includes('/kpm/data-upload/cell'))!;
     expect(sent.init.method).toBe('PATCH');
     expect(JSON.parse(sent.init.body as string)).toEqual({
-      month: '2026-09', membershipId: 'mem-rina', metric: 'ape', cadence: 'monthly',
+      month: '2026-09', membershipId: 'mem-rina', kode: 'APE', ytd: false,
       value: 200_000_000, revision: 3, reason: 'Carrier restated it',
     });
     expect(screen.queryByRole('region', { name: /^Correct / })).not.toBeInTheDocument();
@@ -917,7 +944,7 @@ describe('Data upload — correcting one figure (P9-T5)', () => {
   });
 
   it('reads a decimal comma in a persistency figure', async () => {
-    const { calls } = stubFetch({ ...routes(month([withApe()], 1)), '/kpm/data-upload/cell': { body: correction({ metric: 'persistency' }) } });
+    const { calls } = stubFetch({ ...routes(month([withApe()], 1)), '/kpm/data-upload/cell': { body: correction({ kode: 'PERSISTENCY' }) } });
     renderWithSession(<DataUploadPage />, { me: CORRECTOR });
     fireEvent.click(await screen.findByRole('button', { name: 'Correct Rolling persistency this month for Rina Wijaya, now nothing reported' }));
     const panel = screen.getByRole('region', { name: /Rolling persistency/ });
@@ -996,11 +1023,11 @@ describe('Data upload — a correction the file would change (ADR-0053)', () => 
       ...PREVIEW.rows[0],
       issues: [],
       cells: cells({
-        'ape.monthly': {
+        ape: {
           status: 'changed', before: 200_000_000, after: 150_000_000, raw: '1,5',
           correction: { by: 'Maya Halim', at: '2026-09-26T03:00:00.000Z', reason: 'Carrier restated it', replacedValue: 150_000_000 },
-        } as never,
-        'fyp.monthly': { status: 'changed', before: 50_000_000, after: 60_000_000, raw: '0,6' },
+        },
+        fyp: { status: 'changed', before: 50_000_000, after: 60_000_000, raw: '0,6' },
       }),
     }],
   };
@@ -1052,7 +1079,8 @@ describe('Data upload — a correction the file would change (ADR-0053)', () => 
 
     expect(await screen.findByText('Imported 1 agent record for Sep 2026. 1 correction replaced with the file’s figure.')).toBeInTheDocument();
     const form = calls.find((c) => c.url.includes('/commit'))!.init.body as FormData;
-    expect(form.get('replace')).toBe('mem-rina:apeMonthly');
+    // By kode since P19.5-T2 (ADR-0214 §9): `membershipId:KODE`.
+    expect(form.get('replace')).toBe('mem-rina:APE');
   });
 
   it('ticks and unticks them all', async () => {
@@ -1069,7 +1097,7 @@ describe('Data upload — a correction the file would change (ADR-0053)', () => 
     const only = {
       ...CONFLICTED,
       summary: { ...CONFLICTED.summary, changedCells: 1 },
-      rows: [{ ...CONFLICTED.rows[0], cells: CONFLICTED.rows[0].cells.map((c) => (c.metric === 'fyp' ? { ...c, status: 'not_provided', after: null } : c)) }],
+      rows: [{ ...CONFLICTED.rows[0], cells: CONFLICTED.rows[0].cells.map((c) => (c.kode === 'FYP' ? { ...c, status: 'not_provided' as const, after: null } : c)) }],
     };
     stubFetch(withConflict(only));
     renderWithSession(<DataUploadPage />, { me: EVERYTHING });
@@ -1101,7 +1129,7 @@ describe('Data upload — whose each figure is (P9-T6)', () => {
     },
   });
 
-  // *Amended 2026-10-28 (P18.97-T4 AC-2; UI-023):* the 45-word sentence is the client's one-line legend.
+  // *Amended 2026-10-28 (P18.9-T4 AC-2; UI-023):* the 45-word sentence is the client's one-line legend.
   it('says once, above the table, that figures are the carrier’s unless marked', async () => {
     stubFetch(routes(month([withCorrections()], 1)));
     renderWithSession(<DataUploadPage />, { me: OWNER });
@@ -1114,11 +1142,14 @@ describe('Data upload — whose each figure is (P9-T6)', () => {
     const row = (await screen.findByText('Rina Wijaya')).closest('tr')!;
     const cells = within(row).getAllByRole('cell');
 
-    expect(cells[2]).toHaveTextContent('IDR 2,000,000✎, corrected by hand by Maya Halim on 26 Sep 2026 — “Carrier restated it”');
-    expect(within(cells[2]).getByTitle('corrected by hand by Maya Halim on 26 Sep 2026 — “Carrier restated it”')).toBeInTheDocument();
-    // A carrier figure is plain.
-    expect(cells[8]).toHaveTextContent('IDR 9,000,000');
-    expect(cells[8]).not.toHaveTextContent('✎');
+    // The name and its code are one column since P19.2-T3, so this month's APE is the second cell.
+    expect(cells[1]).toHaveTextContent('IDR 2,000,000✎, corrected by hand by Maya Halim on 26 Sep 2026 — “Carrier restated it”');
+    expect(within(cells[1]).getByTitle('corrected by hand by Maya Halim on 26 Sep 2026 — “Carrier restated it”')).toBeInTheDocument();
+    // A carrier figure is plain: the year's APE, on the switch's other side.
+    fireEvent.click(screen.getByRole('button', { name: 'YTD' }));
+    const ytd = within(screen.getByText('Rina Wijaya').closest('tr')!).getAllByRole('cell');
+    expect(ytd[1]).toHaveTextContent('IDR 9,000,000');
+    expect(ytd[1]).not.toHaveTextContent('✎');
   });
 
   it('marks a figure emptied by hand apart from one nothing was ever reported for', async () => {
@@ -1126,8 +1157,11 @@ describe('Data upload — whose each figure is (P9-T6)', () => {
     renderWithSession(<DataUploadPage />, { me: OWNER });
     const row = (await screen.findByText('Rina Wijaya')).closest('tr')!;
     const cells = within(row).getAllByRole('cell');
-    expect(cells[6]).toHaveTextContent('—✎, emptied by hand by Maya Halim on 26 Sep 2026 — “Belongs to October”');
-    expect(within(cells[12]).getByLabelText('nothing reported')).toBeInTheDocument();
+    expect(cells[5]).toHaveTextContent('—✎, emptied by hand by Maya Halim on 26 Sep 2026 — “Belongs to October”');
+    fireEvent.click(screen.getByRole('button', { name: 'YTD' }));
+    const ytd = within(screen.getByText('Rina Wijaya').closest('tr')!).getAllByRole('cell');
+    // FYP's year to date, the fourth of the five with one (P19.5-T2): nothing held.
+    expect(within(ytd[4]).getByLabelText('nothing reported')).toBeInTheDocument();
   });
 
   it('carries the same note on a correctable figure’s name, and in the form it opens', async () => {
@@ -1183,7 +1217,7 @@ describe('Data upload — the Active (MAA) column (OD-21, ADR-0054)', () => {
     expect(within(await mark('Rina Wijaya')).getByRole('img', { name: 'Not reported' })).toBeInTheDocument();
   });
 
-  // *Amended 2026-10-28 (P18.97-T4 AC-2; UI-023):* the column's sentence is the legend's third part, the client's words.
+  // *Amended 2026-10-28 (P18.9-T4 AC-2; UI-023):* the column's sentence is the legend's third part, the client's words.
   it('says what the column is beside the table, rather than in a hover', async () => {
     stubFetch(routes(month([rina({ monthlyActiveAgent: true })], 1)));
     renderWithSession(<DataUploadPage />, { me: OWNER });
@@ -1208,39 +1242,54 @@ describe('Data upload — the prototype’s order (P13.1-T7)', () => {
   beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-09-20T03:00:00Z')); });
   afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
-  const SIX = ['APE', 'Rolling Persistency (%)', 'Recruitment', 'New Active Agents', 'FYP', '# of Policy'];
+  /** Version 1's columns as the table heads them, in the reader's language (P19.5-T2): this month's side. */
+  const SIX = ['APE', 'Rolling persistency (%)', 'Recruitment', 'New active agents', 'FYP', '# of policy (case issued)'];
+  /** The YTD side: the five columns with a year to date — a persistency has none (R4). */
+  const FIVE = ['APE', 'Recruitment', 'New active agents', 'FYP', '# of policy (case issued)'];
   const monthTable = () => screen.findByRole('table', { name: 'Data for Sep 2026' });
   const texts = (els: HTMLElement[]) => els.map((el) => el.textContent);
   /** What a cell's `headers` attribute names, in order — what a screen reader says before the figure. */
   const headingsOf = (cell: HTMLElement) =>
     (cell.getAttribute('headers') ?? '').split(' ').map((id) => document.getElementById(id)?.textContent);
 
-  it('AC-1: draws the head in two rows — Agent, Agent code, This Month over six, YTD over the same six, Active (MAA)', async () => {
+  /*
+   * *Changed 2026-11-05 (P19.2-T3 AC-1; the client's UI-139, `kpm-owner-desktop-2026-11-03` screen 2):* the month's table
+   * is one head row — *Agent*, then **one side of the *Bulan ini | YTD* switch**, six figures in the template's order, then
+   * *Active (MAA)* — where it was two rows of fifteen columns (1,816px in 933px at 1280). The preview keeps both groups.
+   */
+  it('AC-1, P19.2-T3 AC-1: draws one head row — Agent, the switch’s six, Active (MAA) — and the year’s six on the switch’s other side', async () => {
     stubFetch(routes(month([rina(), budi()])));
     renderWithSession(<DataUploadPage />, { me: OWNER });
 
-    const [groups, metrics] = within(await monthTable()).getAllByRole('row');
-    const top = within(groups).getAllByRole('columnheader');
-    expect(texts(top)).toEqual(['Agent', 'Agent code', 'This Month', 'YTD', 'Active (MAA)']);
-    expect(top.map((th) => [th.getAttribute('rowspan'), th.getAttribute('colspan')])).toEqual([
-      ['2', null], ['2', null], [null, '6'], [null, '6'], ['2', null],
-    ]);
-    expect(texts(within(metrics).getAllByRole('columnheader'))).toEqual([...SIX, ...SIX]);
+    const [head] = within(await monthTable()).getAllByRole('row');
+    // P19.3-T2 (T1's AC-6): the leader rows' *Unit persistency (%)* on the month's side, before *Active (MAA)*.
+    expect(texts(within(head).getAllByRole('columnheader'))).toEqual(['Agent', ...SIX, 'Unit persistency (%)', 'Active (MAA)']);
+    expect(within(head).getAllByRole('columnheader').every((th) => th.getAttribute('scope') === 'col')).toBe(true);
+    const sides = screen.getByRole('group', { name: 'Figures for' });
+    expect(within(sides).getAllByRole('button').map((b) => [b.textContent, b.getAttribute('aria-pressed')]))
+      .toEqual([['This month', 'true'], ['YTD', 'false']]);
+    fireEvent.click(within(sides).getByRole('button', { name: 'YTD' }));
+    // The year's side: the columns with a year to date (P19.5-T2) — no persistency, no *Active (MAA)*, which is a month's.
+    expect(texts(within(within(await monthTable()).getAllByRole('row')[0]).getAllByRole('columnheader')))
+      .toEqual(['Agent', ...FIVE]);
+    expect(within(sides).getByRole('button', { name: 'YTD' })).toHaveAttribute('aria-pressed', 'true');
   });
 
-  it('AC-1: marks the groups as groups, over a real column group each', async () => {
-    stubFetch(routes(month([rina()])));
+  it('AC-1: marks the preview’s groups as groups, over a real column group each', async () => {
+    stubFetch({ ...routes(month([rina()])), '/kpm/data-upload/preview': { body: PREVIEW } });
     renderWithSession(<DataUploadPage />, { me: OWNER });
+    await choose();
 
-    const table = await monthTable();
+    const table = await screen.findByRole('table', { name: 'What “filled.csv” would change' });
     const [groups] = within(table).getAllByRole('row');
-    expect(within(groups).getByRole('columnheader', { name: 'This Month' })).toHaveAttribute('scope', 'colgroup');
-    expect(within(groups).getByRole('columnheader', { name: 'YTD' })).toHaveAttribute('scope', 'colgroup');
-    // Agent and code, this month's six, the year's six, and Active (MAA).
-    expect([...table.querySelectorAll('colgroup')].map((g) => g.querySelectorAll('col').length)).toEqual([2, 6, 6, 1]);
+    expect(within(groups).getByRole('columnheader', { name: 'This month' })).toHaveAttribute('scope', 'colgroup');
+    // Agent and code, and the six this version 1 file is read for (P19.5-T2): its YTD headers are not stored, so there
+    // is no YTD group — one comes only with a column whose year to date is uploaded.
+    expect(within(groups).queryByRole('columnheader', { name: 'YTD' })).not.toBeInTheDocument();
+    expect([...table.querySelectorAll('colgroup')].map((g) => g.querySelectorAll('col').length)).toEqual([2, 6]);
   });
 
-  it('AC-1: puts the name before the code, and names both headings on every figure — “This Month, APE”', async () => {
+  it('AC-1, P19.2-T3 AC-1: puts the code beside the name, and each figure under its heading on the side the switch shows', async () => {
     stubFetch(routes(month([rina({
       metrics: { ...blank(), ape: { monthly: cell(150_000_000_00), ytd: cell(900_000_000_00) } },
     })], 1)));
@@ -1248,14 +1297,14 @@ describe('Data upload — the prototype’s order (P13.1-T7)', () => {
 
     const row = (await screen.findByText('Rina Wijaya')).closest('tr')!;
     const cells = within(row).getAllByRole('cell');
-    expect(texts(cells.slice(0, 2))).toEqual(['Rina Wijaya', 'PRU-001']);
-    expect(cells[2]).toHaveTextContent('IDR 150,000,000');
-    expect(headingsOf(cells[2])).toEqual(['This Month', 'APE']);
-    expect(cells[8]).toHaveTextContent('IDR 900,000,000');
-    expect(headingsOf(cells[8])).toEqual(['YTD', 'APE']);
-    expect(cells.slice(2, 14).map(headingsOf)).toEqual([
-      ...SIX.map((m) => ['This Month', m]), ...SIX.map((m) => ['YTD', m]),
-    ]);
+    expect(cells[0]).toHaveTextContent('Rina Wijaya PRU-001');
+    expect(cells[1]).toHaveTextContent('IDR 150,000,000');
+    expect(cells).toHaveLength(9);
+    // P19.5-T2 AC-7: the year's APE is the sum of the months — greyed, worked out, never typed.
+    fireEvent.click(screen.getByRole('button', { name: 'YTD' }));
+    const ytd = within(screen.getByText('Rina Wijaya').closest('tr')!).getAllByRole('cell');
+    expect(ytd[1]).toHaveTextContent('IDR 900,000,000');
+    expect(ytd[1].querySelector('[data-ytd]')).toHaveAttribute('data-ytd', 'calculated');
   });
 
   it('AC-1: gives the preview the month table’s head and order, without Active (MAA)', async () => {
@@ -1265,10 +1314,12 @@ describe('Data upload — the prototype’s order (P13.1-T7)', () => {
 
     const preview = await screen.findByRole('table', { name: 'What “filled.csv” would change' });
     const [groups, metrics] = within(preview).getAllByRole('row');
-    expect(texts(within(groups).getAllByRole('columnheader'))).toEqual(['Agent', 'Agent code', 'This Month', 'YTD']);
-    expect(texts(within(metrics).getAllByRole('columnheader'))).toEqual([...SIX, ...SIX]);
+    expect(texts(within(groups).getAllByRole('columnheader'))).toEqual(['Agent', 'Agent code', 'This month']);
+    // The columns the file is read for, in the template's order (P19.5-T2), each headed in the reader's language.
+    expect(texts(within(metrics).getAllByRole('columnheader')))
+      .toEqual(['APE', 'Rolling persistency (%)', 'Recruitment', 'New active agents', 'FYP', '# of policy (case issued)']);
     const rinaRow = within(preview).getByText('Rina Wijaya').closest('tr')!;
-    expect(headingsOf(within(rinaRow).getAllByRole('cell')[8])).toEqual(['YTD', 'APE']);
+    expect(headingsOf(within(rinaRow).getAllByRole('cell')[2])).toEqual(['This month', 'APE']);
   });
 
   it('AC-1: keeps two tables’ headings apart — each figure names its own table’s', async () => {
@@ -1288,45 +1339,51 @@ describe('Data upload — the prototype’s order (P13.1-T7)', () => {
     stubFetch(routes(month([budi(), rina()])));
     renderWithSession(<DataUploadPage />, { me: OWNER });
 
-    const [, , ...rows] = within(await monthTable()).getAllByRole('row');
-    expect(rows.map((r) => within(r).getAllByRole('cell')[0].textContent)).toEqual(['Budi Santoso', 'Rina Wijaya']);
+    const [, ...rows] = within(await monthTable()).getAllByRole('row');
+    expect(rows.map((r) => within(r).getAllByRole('cell')[0].textContent)).toEqual(['Budi Santoso PRU-002', 'Rina Wijaya PRU-001']);
   });
 
-  it('AC-3: runs the figures in the template’s order — each heading is the file’s, without its Rp M', async () => {
+  it('AC-3, P19.5-T2 AC-1: runs the columns in the template’s order — each headed by its name, money without its Rp juta', async () => {
     stubFetch(routes(month([rina()])));
     renderWithSession(<DataUploadPage />, { me: OWNER });
 
-    const row = (await screen.findByText('Rina Wijaya')).closest('tr')!;
-    const screenOrder = within(row).getAllByRole('cell').slice(2, 14).map(headingsOf)
-      .map(([group, metric]) => `${metric} — ${group}`);
-    // `HEADER` is the backend's pinned version-1 header (`production-template.spec.ts`).
-    expect(screenOrder).toEqual(HEADER.split(',').slice(2).map((h) => h.replace(' (Rp M)', '')));
+    // Each side of the switch in turn (P19.2-T3 AC-1): this month's columns, then the year's.
+    const table = await monthTable();
+    const side = () => texts(within(within(table).getAllByRole('row')[0]).getAllByRole('columnheader')).slice(1);
+    expect(side()).toEqual([...V1_COLUMNS.map((c) => columnHeading(c, 'en')), 'Active (MAA)']);
+    fireEvent.click(screen.getByRole('button', { name: 'YTD' }));
+    expect(side()).toEqual(V1_COLUMNS.filter((c) => c.ytd !== 'none').map((c) => columnHeading(c, 'en')));
+    expect(side().join(' ')).not.toMatch(/Rp|IDR/);
   });
 });
 
 /**
- * **The intro and the legend, in the client's words** (P18.97-T4 AC-2, ADR-0176 §6; the client's KPM Owner review of
+ * **The intro and the legend, in the client's words** (P18.9-T4 AC-2, ADR-0176 §6; the client's KPM Owner review of
  * 2026-10-27, UI-023: *"APE ⓘ What is APE? , rolling persistency, …"*, and a 45-word legend). The intro is one sentence
  * with *APE*'s ⓘ after it; the legend is one line — the grey-text table's *Show* at every size.
  */
-describe('P18.97-T4 AC-2 Data upload’s intro and legend', () => {
+describe('P18.9-T4 AC-2 Data upload’s intro and legend', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   const LEGEND = '✎ = corrected by hand · —a dash = not reported · Active = APE or policies > 0 this month';
 
-  it('P18.97-T4 AC-2 reads the intro as one sentence, its ⓘ after the full stop and never inside it', async () => {
+  /*
+   * *Changed 2026-11-05 (P19.2-T3 AC-1; UI-139: "long explanations behind ⓘ", UI-112):* the intro is no longer a grey
+   * sub-line under the title but the words of one ⓘ in the toolbar, at every size — still one sentence, and *APE*'s
+   * definition after it, so the term's ⓘ (P18.7-T9 AC-3) is not lost.
+   */
+  it('P18.9-T4 AC-2, P19.2-T3 AC-1 reads the intro as one sentence behind one ⓘ, APE’s definition after its full stop', async () => {
     stubFetch(routes(month([rina()])));
     renderWithSession(<DataUploadPage />, { me: OWNER });
-    const tip = await screen.findByRole('button', { name: 'What is APE?' });
-    const intro = tip.closest('p')!;
-    // The sentence, then the ⓘ's own name: nothing of the ⓘ between its words.
-    expect(intro).toHaveTextContent(
-      /^APE, rolling persistency, recruitment, new active agents, FYP and # of policy — one file per month, matched by agent code\. ⓘ\s*What is APE\?/,
+    const about = await screen.findByRole('button', { name: 'About Data upload' });
+    expect(about).toHaveAccessibleDescription(
+      /^Each agent’s figures for the month, in the columns of the KPM’s template — one file per month, matched by agent code\. Annualised Premium Equivalent/,
     );
-    expect(intro.lastElementChild!.contains(tip)).toBe(true);
+    // No sub-line under the title any more.
+    expect(screen.getByRole('heading', { level: 1, name: 'Data upload' }).nextElementSibling).toBeNull();
   });
 
-  it('P18.97-T4 AC-2 says the legend in one line of three parts, the dash spoken as a dash', async () => {
+  it('P18.9-T4 AC-2 says the legend in one line of three parts, the dash spoken as a dash', async () => {
     stubFetch(routes(month([withCorrectionsRow()], 1)));
     renderWithSession(<DataUploadPage />, { me: OWNER });
     const legend = (await screen.findByText(/= corrected by hand/)).closest('p')!;
@@ -1337,7 +1394,7 @@ describe('P18.97-T4 AC-2 Data upload’s intro and legend', () => {
     expect(within(legend).getByText('—')).toHaveAttribute('aria-hidden', 'true');
   });
 
-  it.each([375, 767, 768, 1023, 1024, 1280])('P18.97-T4 AC-2 at %ipx shows the legend: no size takes it away', async (px) => {
+  it.each([375, 767, 768, 1023, 1024, 1280])('P18.9-T4 AC-2 at %ipx shows the legend: no size takes it away', async (px) => {
     atWidth(px);
     stubFetch(routes(month([rina()])));
     renderWithSession(<DataUploadPage />, { me: OWNER });
@@ -1346,7 +1403,7 @@ describe('P18.97-T4 AC-2 Data upload’s intro and legend', () => {
     expect(legend).toHaveTextContent(LEGEND);
   });
 
-  it('P18.97-T4 AC-10 says a template that could not be prepared without a code the browser made', async () => {
+  it('P18.9-T4 AC-10 says a template that could not be prepared without a code the browser made', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const { mock } = stubFetch(routes(month([rina()])));
     // The template's request never arrives, as a dropped connection's does: `fetch` itself refuses.
@@ -1375,12 +1432,16 @@ function withCorrectionsRow() {
 }
 
 /**
- * **The month on a phone: a card per agent, and an edit sheet** (P18.97-T7 AC-2, AC-6, ADR-0178 §4, §5; the client's
+ * **The month on a phone: a card per agent, and an edit sheet** (P18.9-T7 AC-2, AC-6, ADR-0178 §4, §5; the client's
  * KPM Owner review of 2026-10-27, UI-034: the table, 1816px; UI-040: 340 tappable cells under 44px). Below 768px each
  * member is a card, and a tap opens a sheet of their twelve figures as labelled fields, each saved through the
  * unchanged `PATCH /kpm/data-upload/cell` with its reason. At 768px and wider the page it was, to the byte.
+ *
+ * *Changed 2026-11-05 (P19.2-T3 AC-1; the client's UI-139, `kpm-owner-mobile-2026-11-03` screens 2–3):* **below 1024px**
+ * — a phone and a tablet — a 56px row per member in place of the card, and the sheet's figures under a *Bulan ini |
+ * YTD* switch, saying *Tersimpan ✓* with ✎ on each figure a save wrote; from 1024px the table of one side at a time.
  */
-describe('P18.97-T7 AC-2 Data upload on a phone (UI-034, UI-040)', () => {
+describe('P18.9-T7 AC-2 Data upload on a phone (UI-034, UI-040)', () => {
   beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-09-20T03:00:00Z')); });
   afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
@@ -1388,17 +1449,28 @@ describe('P18.97-T7 AC-2 Data upload on a phone (UI-034, UI-040)', () => {
     value, provenance: 'corrected' as const,
     correction: { by: 'Maya Halim', at: '2026-09-18T03:00:00Z', reason: 'Carrier restated it' },
   });
-  /** Rina with a figure in every kind — money, a persistency, counts — one corrected by hand; Budi with nothing. */
+  /**
+   * Rina with a figure in every kind — money, a persistency, counts — one corrected by hand; Budi with nothing. *Since
+   * P19.5-T2* the correction is this month's policies: a year to date is the months' sum (R4), never corrected itself.
+   */
   const RINA = rina({
     metrics: {
       ...blank(),
       ape: { monthly: cell(150_000_000), ytd: cell(900_000_000) },
-      persistency: { monthly: cell(87.35), ytd: cell(86) },
-      policyCount: { monthly: cell(2), ytd: corrected(11) },
+      persistency: { monthly: cell(87.35), ytd: empty },
+      policyCount: { monthly: corrected(2), ytd: cell(11) },
     },
     monthlyActiveAgent: true,
   });
   const BUDI = { ...budi(), monthlyActiveAgent: null };
+
+  /**
+   * Rina, on a template with one more column whose year to date the carrier uploads (P19.5-T2): *Commission*, `KOMISI`
+   * — the only year to date a sheet can hold as a field.
+   */
+  const RINA_KOMISI = { ...RINA, metrics: { ...RINA.metrics, KOMISI: { monthly: cell(30_000_000), ytd: cell(86_000_000) } } };
+  const WITH_KOMISI = configOf({ columns: [...V1_COLUMNS, KOMISI] });
+  const komisiMonth = () => viewOf([RINA_KOMISI, BUDI], 1, '2026-09', state('2026-09'), { config: WITH_KOMISI });
 
   /** Every grant the page has: the template, the upload, the history, the lock, and correcting a figure. */
   const ALL = makeMe({ membership, permissions: [...EVERYTHING.permissions, 'data_upload:correct_cell'] });
@@ -1408,108 +1480,125 @@ describe('P18.97-T7 AC-2 Data upload on a phone (UI-034, UI-040)', () => {
     ...over,
   });
 
-  /** The page's markup on the build before P18.97-T7, rendered from this fixture on 2026-10-28. */
-  const BEFORE_T7: Record<768 | 1280, string> = {
-    // Re-recorded 2026-10-30 (UI V1): UI-008's card edge (`border-card-edge`) and UI-010's 44px/48px targets below 1024px.
-    // Re-recorded 2026-11-01 (ADR-0184): ⬇ Download template is the Excel workbook's button, and Download CSV beside it
-    // is the CSV's link; the upload accepts .xlsx as well. Nothing else in the page moved.
-    768: '58a838af9aefefc58518bee08b873b6ea9bfc111f3e115bf7feabd70bac447c7',
-    1280: '58a838af9aefefc58518bee08b873b6ea9bfc111f3e115bf7feabd70bac447c7',
+  /**
+   * **The page's markup from 1024px, as P19.2-T3 built it** (UI-139, `kpm-owner-desktop-2026-11-03` screen 2), rendered
+   * from this fixture on 2026-11-05.
+   *
+   * *Re-recorded 2026-11-05 (P19.2-T3 AC-1):* the digest was the page before P18.9-T7 at 768 and 1280 (re-recorded for
+   * UI V1 on 2026-10-30 and for ADR-0184 on 2026-11-01). UI-139 changes the page at every size — the toolbar, the
+   * strip, the switch, the chips and the one-row head — and a tablet now draws the phone's rows, so this pins the laptop's
+   * markup as built, at 1024 and 1280, where nothing between the two moves.
+   *
+   * *Re-recorded 2026-11-05 (P19.3-T2; T1's AC-6, ADR-0201 §2):* the month's side gains *Unit Persistency (%)*, a leader
+   * row's own column, between *# of Policy* and *Active (MAA)* — the only change; the AC-1 tests above pin where it is.
+   *
+   * *Re-recorded 2026-11-05 (P19.5-T2; ADR-0214 §5, §14):* the columns are the template's, headed by their names in the
+   * reader's language (*Rolling persistency (%)*, *# of policy (case issued)*); the banner says how many columns and what
+   * a greyed YTD is; the history names the template version; the intro is the template's. The tests above pin each.
+   */
+  const AS_BUILT_T3: Record<1024 | 1280, string> = {
+    1024: '512cea5e7231e682821a3ee4a9ea3b131bc9ac0900dcdf221760d5d1973ebe9a',
+    1280: '512cea5e7231e682821a3ee4a9ea3b131bc9ac0900dcdf221760d5d1973ebe9a',
   };
 
-  it.each([768, 1280] as const)('P18.97-T7 AC-2 at %ipx draws the month table and its controls as they were, to the byte', async (px) => {
+  it.each([1024, 1280] as const)('P19.2-T3 AC-1 at %ipx draws the month table and its controls as built, to the byte', async (px) => {
     atWidth(px);
     stubFetch(everything());
-    // As a reader who has chosen no language reads it while the switch is not live: the bytes are the page's as it was
-    // before T7, when every figure was written in Indonesian and every word in English. It was rendered in Indonesian
-    // (`InLanguage`) until P18.98-T4 moved the page's words, which an Indonesian screen now writes in Indonesian too.
+    // As a reader who has chosen no language reads it while the switch is not live (P18.10-T3).
     const { container } = renderWithLanguage(<DataUploadPage />, { me: ALL }, { live: false });
     await screen.findByRole('table', { name: 'Data for Sep 2026' });
     await screen.findByRole('button', { name: 'Download template' });
     await screen.findByText(/KPM0417-agent-data-Sep-2026-corrected\.csv/);
-    expect(digestAt(container, px)).toBe(BEFORE_T7[px]);
+    expect(digestAt(container, px)).toBe(AS_BUILT_T3[px]);
     resetLanguage();
   });
 
   /** The server's answer to one correction: what was there, what is now, the month one revision on. */
   const answer = ({ body }: { body: unknown }) => {
-    const sent = body as { metric: 'ape' | 'persistency' | 'policyCount'; cadence: 'monthly' | 'ytd'; value: number | null; revision: number };
-    const before = (RINA.metrics as Record<string, Record<string, { value: number | null }>>)[sent.metric][sent.cadence].value;
+    const sent = body as { kode: string; ytd: boolean; value: number | null; revision: number };
+    const row = komisiMonth().rows[0];
+    const before = (sent.ytd ? row.ytd[sent.kode] : row.values[sent.kode])?.value ?? null;
     return {
       body: {
-        membershipId: 'mem-rina', metric: sent.metric, cadence: sent.cadence, changed: true,
+        membershipId: 'mem-rina', kode: sent.kode, ytd: sent.ytd, changed: true,
         before: { value: before, provenance: 'imported' }, after: { value: sent.value, provenance: 'corrected' },
         state: state('2026-09', { revision: sent.revision + 1 }),
       },
     };
   };
-  const cardsOf = () => screen.findByRole('list', { name: 'Data for Sep 2026' });
-  const cardOf = (name: string) => screen.getByText(name, { selector: 'button, span' }).closest('li')!;
+  const rowsOf = () => screen.findByRole('list', { name: 'Data for Sep 2026' });
   const openSheet = async (name = 'Rina Wijaya') => {
-    await cardsOf();
+    await rowsOf();
     fireEvent.click(screen.getByRole('button', { name: `Correct figures for ${name}` }));
     return screen.getByRole('dialog', { name: `Correct figures for ${name}` });
   };
+  /** The switch inside the sheet, onto its *YTD* side. */
+  const toYtd = (sheet: HTMLElement) => fireEvent.click(within(sheet).getByRole('tab', { name: 'YTD' }));
   const patches = (calls: { url: string; init: RequestInit }[]) => calls
     .filter((c) => c.url.includes('/kpm/data-upload/cell'))
     .map((c) => JSON.parse(c.init.body as string));
 
-  it.each([375, 767])('P18.97-T7 AC-2 at %ipx draws a card per agent and no table, each figure under its heading', async (px) => {
+  /*
+   * **P19.2-T3 AC-1, a phone and a tablet** (the client's UI-139: *"Mobile + Tablet: one 56px row per person (NAME caps,
+   * agent code, APE this month or grey 'Belum dilaporkan' pill, ›)"*; `kpm-owner-mobile-2026-11-03` screen 2). *Replaces
+   * P18.9-T7 AC-2's card per agent*, ~600px each below 768px, and the 1,816px table at 768–1023px.
+   */
+  it.each([375, 767, 768, 1023])('P19.2-T3 AC-1 at %ipx draws a 56px row per member and no table: NAME, code, this month’s APE or Belum dilaporkan, ✎, ›', async (px) => {
     atWidth(px);
     stubFetch(everything());
     renderWithSession(<DataUploadPage />, { me: ALL });
-    const cards = await cardsOf();
+    const list = await rowsOf();
     expect(screen.queryByRole('table', { name: 'Data for Sep 2026' })).not.toBeInTheDocument();
-    expect(within(cards).getAllByRole('listitem')).toHaveLength(2);
-    const rina = cardOf('Rina Wijaya');
+    const items = within(list).getAllByRole('listitem');
+    expect(items).toHaveLength(2);
+    for (const item of items) expect(wears(item, px).split(' ')).toContain('min-h-14');
+    const rina = items[0];
+    const name = within(rina).getByRole('button', { name: 'Correct figures for Rina Wijaya' });
+    // The NAME in capitals, the code under it, this month's APE in full and the ✎ of a figure corrected by hand.
+    expect(name).toHaveTextContent('Rina Wijaya');
+    expect(name.className).toContain('uppercase');
     expect(rina).toHaveTextContent('PRU-001');
-    // The table's two groups, each its six figures under their headings, in the table's order and formats.
-    const month = within(rina).getByRole('group', { name: 'This Month' });
-    expect([...month.querySelectorAll('dt')].map((dt) => dt.textContent))
-      .toEqual(['APE', 'Rolling Persistency (%)', 'Recruitment', 'New Active Agents', 'FYP', '# of Policy']);
-    expect([...month.querySelectorAll('dd')].map((dd) => dd.textContent))
-      .toEqual(['IDR 1,500,000', '87.35%', '—', '—', '—', '2']);
-    const ytd = within(rina).getByRole('group', { name: 'YTD' });
-    expect(within(ytd).getByText('IDR 9,000,000')).toBeInTheDocument();
-    // A figure corrected by hand keeps its ✎ and, for a screen reader, who, when and why.
-    expect(ytd).toHaveTextContent('11✎');
-    expect(ytd).toHaveTextContent('corrected by hand by Maya Halim on 18 Sep 2026 — “Carrier restated it”');
-    expect(within(rina).getByRole('img', { name: 'Active' })).toBeInTheDocument();
-    expect(within(cardOf('Budi Santoso')).getByRole('img', { name: 'Not reported' })).toBeInTheDocument();
-    // On a phone the tap is the agent's, so the line says so.
-    expect(screen.getByText('Tap an agent to correct their figures — no need to re-upload for a single fix.')).toBeInTheDocument();
+    expect(rina).toHaveTextContent('IDR 1,500,000✎corrected by hand');
+    // The whole row is the target, opening a sheet, with a ›.
+    expect(name).toHaveAttribute('aria-haspopup', 'dialog');
+    expect(name.className).toContain('after:inset-0');
+    expect(rina.querySelector('svg')).not.toBeNull();
+    // Budi has nothing at all: the grey pill.
+    expect(within(items[1]).getByText('Not reported')).toHaveAttribute('data-tone', 'grey');
+    // No switch on the page below 1024px: it is the sheet's.
+    expect(screen.queryByRole('group', { name: 'Figures for' })).not.toBeInTheDocument();
   });
 
-  it('P18.97-T7 AC-2 edits no cell on a phone: no figure is a control, the card is, and a reader’s card is neither', async () => {
-    atWidth(375);
+  it('P19.2-T3 AC-1 opens a sheet that reads for somebody who may not correct, and in a locked month', async () => {
+    atWidth(768);
     stubFetch(everything());
-    const { unmount } = renderWithSession(<DataUploadPage />, { me: ALL });
-    await cardsOf();
-    expect(screen.queryByRole('button', { name: /^Correct APE this month/ })).not.toBeInTheDocument();
-    const name = screen.getByRole('button', { name: 'Correct figures for Rina Wijaya' });
-    expect(name).toHaveAttribute('aria-haspopup', 'dialog');
-    // Its tap covers the card, and the focus ring is drawn round the card.
-    expect(name.className).toContain("after:absolute after:inset-0");
-    expect(cardOf('Rina Wijaya').className).toContain('relative');
+    const { unmount } = renderWithSession(<DataUploadPage />, { me: EVERYTHING });
+    await rowsOf();
+    expect(screen.queryByRole('button', { name: /^Correct figures for/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Figures for Rina Wijaya' }));
+    let sheet = screen.getByRole('dialog', { name: 'Figures for Rina Wijaya' });
+    expect(within(sheet).queryByRole('textbox')).not.toBeInTheDocument();
+    expect(within(sheet).getByText('IDR 1,500,000')).toBeInTheDocument();
+    expect(sheet).toHaveTextContent('2✎');
+    expect(within(sheet).getByRole('img', { name: 'Active' })).toBeInTheDocument();
+    toYtd(sheet);
+    // P19.5-T2 AC-7: the year's APE, the months' sum, greyed.
+    expect(within(sheet).getByText('IDR 9,000,000').closest('[data-ytd]')).toHaveAttribute('data-ytd', 'calculated');
+    fireEvent.click(within(sheet.closest('[data-placement]') as HTMLElement).getAllByRole('button', { name: 'Close' }).at(-1)!);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     unmount();
 
-    stubFetch(everything());
-    renderWithSession(<DataUploadPage />, { me: EVERYTHING });
-    await cardsOf();
-    expect(screen.queryByRole('button', { name: /^Correct figures for/ })).not.toBeInTheDocument();
-    expect(screen.queryByText(/Tap an agent/)).not.toBeInTheDocument();
-  });
-
-  it('P18.97-T7 AC-2 holds a locked month’s cards still', async () => {
-    atWidth(375);
     stubFetch(everything({ '/kpm/data-upload/': { body: month([RINA, BUDI], 1, '2026-09', state('2026-09', { locked: true, reason: 'schedule' })) } }));
     renderWithSession(<DataUploadPage />, { me: ALL });
-    await cardsOf();
+    await rowsOf();
     expect(screen.queryByRole('button', { name: /^Correct figures for/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Figures for Rina Wijaya' }));
+    sheet = screen.getByRole('dialog', { name: 'Figures for Rina Wijaya' });
+    expect(within(sheet).queryByRole('textbox')).not.toBeInTheDocument();
   });
 
-  it('P18.97-T7 AC-2 never draws the table first on a phone: the width is asked before the month answers', async () => {
-    atWidth(375);
+  it.each([375, 768])('P19.2-T3 AC-1 at %ipx never draws the table first: the width is asked before the month answers', async (px) => {
+    atWidth(px);
     stubFetch(everything());
     // The month's table, that is: the frame before the width answers is a skeleton (`role="status"`), never figures.
     let drew = false;
@@ -1524,124 +1613,167 @@ describe('P18.97-T7 AC-2 Data upload on a phone (UI-034, UI-040)', () => {
     });
     observer.observe(document.body, { childList: true, subtree: true });
     renderWithSession(<DataUploadPage />, { me: ALL });
-    await cardsOf();
+    await rowsOf();
     await screen.findByText(/KPM0417-agent-data-Sep-2026-corrected\.csv/);
     observer.disconnect();
     expect(drew).toBe(false);
   });
 
-  it('P18.97-T7 AC-2, AC-5 opens the agent’s sheet: twelve labelled figures, 16px fields 44px tall, held as the cells hold them', async () => {
+  it('P18.9-T7 AC-2, AC-5, P19.2-T3 AC-1 opens the agent’s sheet: the switch, six labelled figures a side, 16px fields 48px tall', async () => {
     atWidth(375);
     stubFetch(everything());
     renderWithSession(<DataUploadPage />, { me: ALL });
     const sheet = await openSheet();
-    expect(sheet.closest('[data-placement]')).toHaveAttribute('data-placement', 'sheet');
+    // A sheet below 1024px, a centred box from it (P19.2-T3: it opens on a tablet too).
+    expect(sheet.closest('[data-placement]')).toHaveAttribute('data-placement', 'responsive');
     expect(sheet).toHaveAccessibleDescription('PRU-001 · Sep 2026');
     // Opened on its title, so no keyboard rises before a field is chosen.
     expect(sheet).toHaveFocus();
-    expect(within(sheet).getAllByRole('group').map((g) => g.querySelector('legend')!.textContent)).toEqual(['This Month', 'YTD']);
+    // The switch, this month first; the visible side is one group of the template's columns.
+    expect(within(sheet).getAllByRole('tab').map((tab) => [tab.textContent, tab.getAttribute('aria-selected')]))
+      .toEqual([['This month', 'true'], ['YTD', 'false']]);
+    expect(within(sheet).getAllByRole('group').map((g) => g.querySelector('legend')!.textContent)).toEqual(['This month']);
     const ape = within(sheet).getByLabelText('APE this month');
     expect(ape).toHaveValue('1,500,000');
-    expect(within(sheet).getByLabelText('APE year to date')).toHaveValue('9,000,000');
     expect(within(sheet).getByLabelText('Rolling persistency this month')).toHaveValue('87.35');
-    expect(within(sheet).getByLabelText('# of policy this month')).toHaveValue('2');
+    expect(within(sheet).getByLabelText('# of policy (case issued) this month')).toHaveValue('2');
     expect(within(sheet).getByLabelText('FYP this month')).toHaveValue('');
-    // Whose a corrected figure is, under its field, as the table's ✎ says it.
-    expect(within(sheet).getByLabelText('# of policy year to date'))
-      .toHaveAccessibleDescription('corrected by hand by Maya Halim on 18 Sep 2026 — “Carrier restated it”');
+    expect(within(sheet).getByRole('img', { name: 'Active' })).toBeInTheDocument();
+    // Six fields and the reason on this side: *Unit persistency* is a leader's, and Rina an agent, so it reads *—*.
+    expect(within(sheet).getAllByRole('textbox')).toHaveLength(7);
+    // Whose a corrected figure is, under its field, and its ✎ beside the label.
+    const policies = within(sheet).getByLabelText('# of policy (case issued) this month');
+    expect(policies).toHaveAccessibleDescription('corrected by hand by Maya Halim on 18 Sep 2026 — “Carrier restated it”');
+    expect(policies.closest('div.relative')!.querySelector('[data-corrected]')).toHaveTextContent('✎');
+    toYtd(sheet);
+    expect(within(sheet).getAllByRole('group').map((g) => g.querySelector('legend')!.textContent)).toEqual(['YTD']);
+    // P19.5-T2 AC-7 (R4): every year to date of version 1 is the months' sum — shown greyed, never a field.
+    expect(within(sheet).queryByLabelText('APE year to date')).not.toBeInTheDocument();
+    expect(within(sheet).getByText('IDR 9,000,000').closest('[data-ytd]')).toHaveAttribute('data-ytd', 'calculated');
     // Every field a text box of the shared style — 16px on a phone through the field rule (globals.css; theme.spec.ts) —
-    // and 48px tall there, so an input inside a box with *Rp* or *%* still has 44px; nothing a size of its own the rule
-    // could not reach.
-    const boxes = within(sheet).getAllByRole('textbox');
-    expect(boxes).toHaveLength(13);
-    for (const box of boxes) {
+    // and 48px tall on a phone and a tablet, so an input inside a box with *Rp* or *%* still has 44px.
+    for (const box of within(sheet).getAllByRole('textbox')) {
       expect(box.tagName).toBe('INPUT');
       expect(box.className).toMatch(/\btext-base\b/);
       expect(box.className).not.toMatch(/text-\[/);
       const tall = box.closest('span.inline-flex') ?? box;
-      expect(wears(tall, 375).split(' ')).toEqual(expect.arrayContaining(['w-full', 'h-12']));
+      for (const px of [375, 768]) expect(wears(tall, px).split(' ')).toEqual(expect.arrayContaining(['w-full', 'h-12']));
     }
     for (const button of within(sheet.closest('[data-placement]') as HTMLElement).getAllByRole('button', { name: /^(Save corrections|Cancel)$/ })) {
-      expect(wears(button, 375).split(' ')).toContain('h-11');
+      for (const px of [375, 768]) expect(wears(button, px).split(' ')).toContain('h-11');
     }
   });
 
-  it('P18.97-T7 AC-2 saves each changed figure through PATCH /kpm/data-upload/cell with its reason, the year before the month it would pass', async () => {
+  it('P18.9-T7 AC-2, P19.2-T3 AC-1, P19.5-T2 AC-7 saves each changed figure by kode — an uploaded YTD a field — then says Saved ✓ with ✎ on each', async () => {
     atWidth(375);
-    const { calls } = stubFetch({ ...everything(), 'PATCH /kpm/data-upload/cell': answer });
+    const { calls } = stubFetch({
+      ...everything({ '/kpm/data-upload/': { body: komisiMonth() } }), 'PATCH /kpm/data-upload/cell': answer,
+    });
     renderWithSession(<DataUploadPage />, { me: ALL });
     const sheet = await openSheet();
-    // The month raised past the year held: the year goes first, so the server never holds a month above its year.
     fireEvent.change(within(sheet).getByLabelText('APE this month'), { target: { value: '12000000' } });
-    fireEvent.change(within(sheet).getByLabelText('APE year to date'), { target: { value: '15.000.000' } });
     fireEvent.change(within(sheet).getByLabelText('Rolling persistency this month'), { target: { value: '88,5' } });
+    // The other side keeps what was typed on this one; *Commission*'s year to date is uploaded, so it is a field.
+    toYtd(sheet);
+    fireEvent.change(within(sheet).getByLabelText('Commission year to date'), { target: { value: '1.500.000' } });
     fireEvent.change(within(sheet).getByLabelText('Why is it being corrected?'), { target: { value: 'Carrier restated it' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save corrections' }));
 
-    expect(await screen.findByText(
-      'Corrected 3 figures for Rina Wijaya: APE year to date IDR 9,000,000 → IDR 15,000,000; APE this month IDR 1,500,000 → IDR 12,000,000; Rolling persistency this month 87.35% → 88.5%.',
-    )).toBeInTheDocument();
-    // Each on the revision the one before it answered: the month's 3, then 4, then 5.
-    expect(patches(calls)).toEqual([
-      { month: '2026-09', membershipId: 'mem-rina', metric: 'ape', cadence: 'ytd', value: 1_500_000_000, revision: 3, reason: 'Carrier restated it' },
-      { month: '2026-09', membershipId: 'mem-rina', metric: 'ape', cadence: 'monthly', value: 1_200_000_000, revision: 4, reason: 'Carrier restated it' },
-      { month: '2026-09', membershipId: 'mem-rina', metric: 'persistency', cadence: 'monthly', value: 88.5, revision: 5, reason: 'Carrier restated it' },
-    ]);
+    // Each on the revision the one before it answered: the month's 3, then 4, then 5 — `{ kode, ytd }`, in the sheet's order.
+    await waitFor(() => expect(patches(calls)).toEqual([
+      { month: '2026-09', membershipId: 'mem-rina', kode: 'APE', ytd: false, value: 1_200_000_000, revision: 3, reason: 'Carrier restated it' },
+      { month: '2026-09', membershipId: 'mem-rina', kode: 'PERSISTENCY', ytd: false, value: 88.5, revision: 4, reason: 'Carrier restated it' },
+      { month: '2026-09', membershipId: 'mem-rina', kode: 'KOMISI', ytd: true, value: 150_000_000, revision: 5, reason: 'Carrier restated it' },
+    ]));
     expect(calls.filter((c) => c.url.includes('/kpm/data-upload/cell')).every((c) => c.init.method === 'PATCH')).toBe(true);
-    // The sheet is put away and the month read again, as after a correction on the table.
+    // UI-139's *Done when*: the sheet stays, says *Saved ✓*, and every figure it wrote wears ✎.
+    expect(await within(sheet.closest('[data-placement]') as HTMLElement).findByRole('status')).toHaveTextContent('Saved ✓');
+    expect(within(sheet).getByLabelText('Commission year to date').closest('div.relative')!.querySelector('[data-corrected]')).not.toBeNull();
+    fireEvent.click(within(sheet).getByRole('tab', { name: 'This month' }));
+    expect(within(sheet).getByLabelText('APE this month')).toHaveValue('12,000,000');
+    expect(within(sheet).getByLabelText('APE this month').closest('div.relative')!.querySelector('[data-corrected]')).not.toBeNull();
+    expect(within(sheet).getByLabelText('APE this month')).toHaveAccessibleDescription('corrected by hand');
+    expect(screen.getByRole('button', { name: 'Save corrections' })).toBeDisabled();
+    // Closing says what it did, and the month is read again, as after a correction on the table.
+    fireEvent.click(within(sheet.closest('[data-placement]') as HTMLElement).getAllByRole('button', { name: 'Close' }).at(-1)!);
+    expect(await screen.findByText(
+      'Corrected 3 figures for Rina Wijaya: APE this month IDR 1,500,000 → IDR 12,000,000; Rolling persistency this month 87.35% → 88.5%; Commission year to date IDR 860,000 → IDR 1,500,000.',
+    )).toBeInTheDocument();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     await waitFor(() => expect(calls.filter((c) => /\/kpm\/data-upload\/2026-09$/.test(c.url))).toHaveLength(2));
   });
 
-  it('P18.97-T7 AC-2 asks for a reason before sending anything, and saves nothing unchanged', async () => {
+  it('P18.9-T7 AC-2 asks for a reason before sending anything, and saves nothing unchanged', async () => {
     atWidth(375);
     const { calls } = stubFetch({ ...everything(), 'PATCH /kpm/data-upload/cell': answer });
     renderWithSession(<DataUploadPage />, { me: ALL });
     const sheet = await openSheet();
     expect(screen.getByRole('button', { name: 'Save corrections' })).toBeDisabled();
-    fireEvent.change(within(sheet).getByLabelText('# of policy this month'), { target: { value: '3' } });
+    fireEvent.change(within(sheet).getByLabelText('Recruitment this month'), { target: { value: '3' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save corrections' }));
     expect(within(sheet).getByLabelText('Why is it being corrected?')).toHaveAccessibleDescription(/Say why the figure is being corrected\./);
-    fireEvent.change(within(sheet).getByLabelText('# of policy this month'), { target: { value: 'tiga' } });
+    fireEvent.change(within(sheet).getByLabelText('Recruitment this month'), { target: { value: 'tiga' } });
     fireEvent.change(within(sheet).getByLabelText('Why is it being corrected?'), { target: { value: 'x' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save corrections' }));
-    expect(within(sheet).getByLabelText('# of policy this month')).toHaveAccessibleDescription('# of policy this month is not a number.');
+    expect(within(sheet).getByLabelText('Recruitment this month')).toHaveAccessibleDescription('Recruitment this month is not a number.');
     expect(patches(calls)).toEqual([]);
   });
 
-  it('P18.97-T7 AC-2 puts a refusal on its figure, keeps what saved before it, and says both once the sheet closes', async () => {
+  it('P19.2-T3 AC-1 brings a figure that is not a number into sight, on whichever side of the switch it is', async () => {
+    atWidth(768);
+    // A count whose year to date the carrier uploads: its field reads what is typed, as a count's does.
+    const cases = viewOf([RINA, BUDI], 1, '2026-09', state('2026-09'), { config: configOf({ columns: [...V1_COLUMNS, CASES] }) });
+    stubFetch({ ...everything({ '/kpm/data-upload/': { body: cases } }), 'PATCH /kpm/data-upload/cell': answer });
+    renderWithSession(<DataUploadPage />, { me: ALL });
+    const sheet = await openSheet();
+    toYtd(sheet);
+    fireEvent.change(within(sheet).getByLabelText('Cases year to date'), { target: { value: 'dua' } });
+    fireEvent.click(within(sheet).getByRole('tab', { name: 'This month' }));
+    fireEvent.change(within(sheet).getByLabelText('Why is it being corrected?'), { target: { value: 'x' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save corrections' }));
+    expect(within(sheet).getByRole('tab', { name: 'YTD' })).toHaveAttribute('aria-selected', 'true');
+    expect(within(sheet).getByLabelText('Cases year to date')).toHaveAccessibleDescription('Cases year to date is not a number.');
+  });
+
+  it('P18.9-T7 AC-2, P19.2-T3 AC-1 puts a refusal on its figure in sight, keeps what saved before it, and says both once the sheet closes', async () => {
     atWidth(375);
     const refusal = {
       status: 422,
-      body: { error: { code: 'UPLOAD_VALUE_OUT_OF_RANGE', message: 'Rolling persistency year to date is above 100 — persistency is a percentage.', requestId: 'r' } },
+      body: { error: { code: 'UPLOAD_VALUE_OUT_OF_RANGE', message: 'Commission year to date is above this column’s maximum, 100.', requestId: 'r' } },
     };
     const { calls } = stubFetch({
-      ...everything(),
-      // The server's range rule, as it answers it: a persistency over 100 is refused.
-      'PATCH /kpm/data-upload/cell': (call) => ((call.body as { value: number }).value > 100 ? refusal : answer(call)),
+      ...everything({ '/kpm/data-upload/': { body: komisiMonth() } }),
+      // The server's range rule, as it answers it: a commission's year to date over Rp 100 juta is refused.
+      'PATCH /kpm/data-upload/cell': (call) => ((call.body as { value: number }).value > 10_000_000_000 ? refusal : answer(call)),
     });
     renderWithSession(<DataUploadPage />, { me: ALL });
     const sheet = await openSheet();
-    fireEvent.change(within(sheet).getByLabelText('# of policy this month'), { target: { value: '3' } });
-    fireEvent.change(within(sheet).getByLabelText('Rolling persistency year to date'), { target: { value: '140' } });
+    toYtd(sheet);
+    fireEvent.change(within(sheet).getByLabelText('Commission year to date'), { target: { value: '140.000.000' } });
+    fireEvent.click(within(sheet).getByRole('tab', { name: 'This month' }));
+    fireEvent.change(within(sheet).getByLabelText('# of policy (case issued) this month'), { target: { value: '3' } });
     fireEvent.change(within(sheet).getByLabelText('Why is it being corrected?'), { target: { value: 'Carrier restated it' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save corrections' }));
 
-    const ytd = within(sheet).getByLabelText('Rolling persistency year to date');
-    await waitFor(() => expect(ytd).toHaveAccessibleDescription('Rolling persistency year to date is above 100 — persistency is a percentage.'));
+    const ytd = within(sheet).getByLabelText('Commission year to date');
+    await waitFor(() => expect(ytd).toHaveAccessibleDescription('Commission year to date is above this column’s maximum, 100.'));
+    // The refused figure's side is the one in sight.
+    expect(within(sheet).getByRole('tab', { name: 'YTD' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('dialog', { name: 'Correct figures for Rina Wijaya' })).toBeInTheDocument();
     // The month's figure saved; sent again it would be nothing, so only the year goes, on the revision the first answered.
-    fireEvent.change(ytd, { target: { value: '89' } });
+    fireEvent.change(ytd, { target: { value: '890.000' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save corrections' }));
+    expect(await within(sheet.closest('[data-placement]') as HTMLElement).findByRole('status')).toHaveTextContent('Saved ✓');
+    fireEvent.click(within(sheet.closest('[data-placement]') as HTMLElement).getAllByRole('button', { name: 'Close' }).at(-1)!);
     expect(await screen.findByText(
-      'Corrected 2 figures for Rina Wijaya: # of policy this month 2 → 3; Rolling persistency year to date 86% → 89%.',
+      'Corrected 2 figures for Rina Wijaya: # of policy (case issued) this month 2 → 3; Commission year to date IDR 860,000 → IDR 890,000.',
     )).toBeInTheDocument();
-    expect(patches(calls).map((b) => [b.metric, b.value, b.revision])).toEqual([
-      ['policyCount', 3, 3], ['persistency', 140, 4], ['persistency', 89, 4],
+    expect(patches(calls).map((b) => [b.kode, b.ytd, b.value, b.revision])).toEqual([
+      ['POLICY_COUNT', false, 3, 3], ['KOMISI', true, 14_000_000_000, 4], ['KOMISI', true, 89_000_000, 4],
     ]);
   });
 
-  it('P18.97-T7 AC-2 reports what saved when the sheet is closed after a refusal', async () => {
+  it('P18.9-T7 AC-2 reports what saved when the sheet is closed after a refusal', async () => {
     atWidth(375);
     const { calls } = stubFetch({
       ...everything(),
@@ -1649,7 +1781,7 @@ describe('P18.97-T7 AC-2 Data upload on a phone (UI-034, UI-040)', () => {
     });
     renderWithSession(<DataUploadPage />, { me: ALL });
     const sheet = await openSheet();
-    fireEvent.change(within(sheet).getByLabelText('# of policy this month'), { target: { value: '4' } });
+    fireEvent.change(within(sheet).getByLabelText('# of policy (case issued) this month'), { target: { value: '4' } });
     fireEvent.change(within(sheet).getByLabelText('Recruitment this month'), { target: { value: '1' } });
     fireEvent.change(within(sheet).getByLabelText('Why is it being corrected?'), { target: { value: 'x' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save corrections' }));
@@ -1661,7 +1793,7 @@ describe('P18.97-T7 AC-2 Data upload on a phone (UI-034, UI-040)', () => {
     expect(patches(calls)).toHaveLength(2);
   });
 
-  it('P18.97-T7 AC-2 clears an emptied figure only after asking, naming it, with an explicit null', async () => {
+  it('P18.9-T7 AC-2 clears an emptied figure only after asking, naming it, with an explicit null', async () => {
     atWidth(375);
     const { calls } = stubFetch({ ...everything(), 'PATCH /kpm/data-upload/cell': answer });
     renderWithSession(<DataUploadPage />, { me: ALL });
@@ -1674,13 +1806,14 @@ describe('P18.97-T7 AC-2 Data upload on a phone (UI-034, UI-040)', () => {
     expect(ask).toHaveTextContent('The figure is emptied, as if nothing had been reported, and your reason is kept with the change.');
     expect(patches(calls)).toEqual([]);
     fireEvent.click(within(ask).getByRole('button', { name: 'Clear figure' }));
+    await waitFor(() => expect(patches(calls)).toEqual([
+      { month: '2026-09', membershipId: 'mem-rina', kode: 'APE', ytd: false, value: null, revision: 3, reason: 'Belongs to August' },
+    ]));
+    fireEvent.click(within(sheet.closest('[data-placement]') as HTMLElement).getAllByRole('button', { name: 'Close' }).at(-1)!);
     expect(await screen.findByText('Corrected APE this month for Rina Wijaya: IDR 1,500,000 → nothing reported.')).toBeInTheDocument();
-    expect(patches(calls)).toEqual([
-      { month: '2026-09', membershipId: 'mem-rina', metric: 'ape', cadence: 'monthly', value: null, revision: 3, reason: 'Belongs to August' },
-    ]);
   });
 
-  it('P18.97-T7 AC-2 puts the sheet away on Cancel, Escape or the backdrop, sending nothing and saying nothing', async () => {
+  it('P18.9-T7 AC-2 puts the sheet away on Cancel, Escape or the backdrop, sending nothing and saying nothing', async () => {
     atWidth(375);
     const { calls } = stubFetch({ ...everything(), 'PATCH /kpm/data-upload/cell': answer });
     renderWithSession(<DataUploadPage />, { me: ALL });
@@ -1697,11 +1830,11 @@ describe('P18.97-T7 AC-2 Data upload on a phone (UI-034, UI-040)', () => {
     expect(screen.queryByText(/^Corrected /)).not.toBeInTheDocument();
   });
 
-  it('P18.97-T7 AC-6 makes every field and button of the page a 44px target on a phone, and nothing at 768px', async () => {
+  it('P18.9-T7 AC-6, P19.2-T3 AC-1 makes every field and button of the page a 44px target on a phone and a tablet, and nothing from 1024px', async () => {
     atWidth(375);
     stubFetch(everything());
     renderWithSession(<DataUploadPage />, { me: ALL });
-    await cardsOf();
+    await rowsOf();
     const workbook = await screen.findByRole('button', { name: 'Download template' });
     const tall = [
       screen.getByLabelText('Month'),
@@ -1711,31 +1844,96 @@ describe('P18.97-T7 AC-2 Data upload on a phone (UI-034, UI-040)', () => {
     ];
     for (const el of tall) {
       expect(wears(el, 375).split(' ')).toContain('h-11');
-      expect(wears(el, 768).split(' ')).not.toContain('h-11');
+      expect(wears(el, 768).split(' ')).toContain('h-11');
+      expect(wears(el, 1024).split(' ')).not.toContain('h-11');
     }
-    // The month's lock and the history's Revert are inline buttons, 44 × 44 on a phone already (`TAP_TARGET`).
+    // The month's lock and the history's Revert are inline buttons, 44 × 44 on a phone already (`TAP_TARGET`), and on a
+    // tablet inside the shell (`TAP_TARGET_TABLET`).
     for (const name of ['Lock month', 'Revert']) {
       expect(wears(screen.getAllByRole('button', { name })[0], 375).split(' ')).toEqual(expect.arrayContaining(['min-h-11', 'min-w-11']));
     }
+    // The chips and the rows, 44px and more.
+    for (const chip of within(screen.getByRole('group', { name: 'Show members' })).getAllByRole('button')) {
+      for (const px of [375, 768]) expect(wears(chip, px).split(' ')).toContain('min-h-11');
+    }
+  });
+
+  /*
+   * **P19.2-T3 AC-1, the chips** (UI-139: *"chips Semua n · Belum dilaporkan n · Dikoreksi n"*): counted from the month
+   * the server sent, each a toggle, and the rows or the table the chosen one's.
+   */
+  it.each([375, 1280])('P19.2-T3 AC-1 at %ipx counts and filters: Semua 2 · Not reported 1 · Corrected 1', async (px) => {
+    atWidth(px);
+    stubFetch(everything());
+    renderWithSession(<DataUploadPage />, { me: ALL });
+    const chips = await screen.findByRole('group', { name: 'Show members' });
+    expect(within(chips).getAllByRole('button').map((b) => [b.textContent, b.getAttribute('aria-pressed')]))
+      .toEqual([['All2', 'true'], ['Not reported1', 'false'], ['Corrected1', 'false']]);
+    const names = () => (px < 1024
+      ? within(screen.getByRole('list', { name: 'Data for Sep 2026' })).getAllByRole('listitem')
+      : within(screen.getByRole('table', { name: 'Data for Sep 2026' })).getAllByRole('row').slice(1))
+      .map((r) => (r.textContent ?? '').replace(/^(\S+ \S+).*$/s, '$1'));
+    expect(names()).toHaveLength(2);
+    fireEvent.click(within(chips).getByRole('button', { name: /^Not reported/ }));
+    expect(names()).toEqual([expect.stringMatching(/^Budi Santoso/)]);
+    fireEvent.click(within(chips).getByRole('button', { name: /^Corrected/ }));
+    expect(names()).toEqual([expect.stringMatching(/^Rina Wijaya/)]);
+  });
+
+  it('P19.2-T3 AC-1 says so when a chip leaves nobody, and starts on All again in another month', async () => {
+    stubFetch(everything({ '/kpm/data-upload/': { body: month([BUDI], 0) } }));
+    renderWithSession(<DataUploadPage />, { me: ALL });
+    const chips = await screen.findByRole('group', { name: 'Show members' });
+    fireEvent.click(within(chips).getByRole('button', { name: /^Corrected/ }));
+    expect(screen.getByText('Nobody here this month.')).toBeInTheDocument();
+    expect(screen.queryByRole('table', { name: 'Data for Sep 2026' })).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Month'), { target: { value: '2026-08' } });
+    expect(await screen.findByRole('button', { name: /^All/ })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  /*
+   * **P19.2-T3 AC-1, the laptop** (UI-139's *Done when*: *"no sideways scroll at 1280, 1024, 768"*;
+   * `kpm-owner-desktop-2026-11-03` screen 2): the table has no minimum width — eight columns that share the page — its
+   * head and its name column held while it scrolls inside its own box, which is no taller than the window.
+   */
+  it.each([1024, 1280])('P19.2-T3 AC-1 at %ipx lays the table out to fit: no minimum width, the head and name column sticky', async (px) => {
+    atWidth(px);
+    stubFetch(everything());
+    renderWithSession(<DataUploadPage />, { me: ALL });
+    const table = await screen.findByRole('table', { name: 'Data for Sep 2026' });
+    expect(table.className).not.toMatch(/min-w-/);
+    expect(wears(table, px).split(' ')).toContain('w-full');
+    const box = table.closest('[data-month-grid]')!;
+    expect(wears(box, px).split(' ')).toEqual(expect.arrayContaining(['overflow-auto', 'max-h-[calc(100dvh-12rem)]']));
+    for (const th of within(table).getAllByRole('columnheader')) expect(th.className).toContain('sticky');
+    expect(within(table).getAllByRole('columnheader')[0].className).toContain('left-0');
+    const nameCell = within(table).getAllByRole('row')[1].querySelector('td')!;
+    expect(nameCell.className).toEqual(expect.stringContaining('sticky left-0'));
+    // The month is a navy pill, and the lock a strip with *Lock month*.
+    expect(screen.getByLabelText('Month')).toHaveClass('rounded-pill', 'bg-secondary');
+    expect(screen.getByText('Open until 7 Oct 2026').closest('[data-lock-strip]')).toHaveAttribute('data-tone', 'green');
   });
 
   /**
-   * **P18.98-T3 figures on Data upload** (ADR-0174, ADR-0179 §6), under the app's own provider: written in the
+   * **P18.10-T3 figures on Data upload** (ADR-0174, ADR-0179 §6), under the app's own provider: written in the
    * reader's chosen language, and in Indonesian with no choice, whether or not the switch is live. Until it is, a
    * reader with no choice reads the page exactly as before T3 — its words English, its figures *Rp 1.500.000* and
    * *87,35%* — never *IDR* beside an unwired screen's *Rp* (the client's UI-019).
    */
-  describe('P18.98-T3 figures on Data upload', () => {
+  describe('P18.10-T3 figures on Data upload', () => {
     afterEach(() => resetLanguage());
 
-    /** Rina's six figures for this month on her phone card, as read. */
+    /**
+     * Rina's APE this month on her phone row, as read (P19.2-T3: the row writes this month's APE where the card wrote
+     * the six; the sheet holds the rest).
+     */
     const thisMonth = async (list = 'Data for Sep 2026') => {
-      await screen.findByRole('list', { name: list });
-      const month = within(cardOf('Rina Wijaya')).getByRole('group', { name: 'This Month' });
-      return [...month.querySelectorAll('dd')].map((dd) => dd.textContent);
+      const rows = await screen.findByRole('list', { name: list });
+      const rina = within(rows).getAllByRole('listitem')[0];
+      return rina.querySelector('[data-list-row] > div:last-of-type span.text-ink')?.textContent;
     };
 
-    it.each([768, 1280] as const)('P18.98-T3 figures, unchosen and not live, at %ipx: the page as before T3, to the byte — English words, Indonesian figures', async (px) => {
+    it.each([1024, 1280] as const)('P18.10-T3 figures, unchosen and not live, at %ipx: the page as built, to the byte — English words, Indonesian figures', async (px) => {
       atWidth(px);
       stubFetch(everything());
       const { container } = renderWithLanguage(<DataUploadPage />, { me: ALL }, { live: false });
@@ -1748,64 +1946,64 @@ describe('P18.97-T7 AC-2 Data upload on a phone (UI-034, UI-040)', () => {
       expect(within(row).getByText('87,35%')).toBeInTheDocument();
       expect(screen.queryByText(/IDR/)).not.toBeInTheDocument();
       expect(document.documentElement.lang).toBe('en');
-      // The bytes of the page before T7, when every figure was Indonesian and every word English.
-      expect(digestAt(container, px)).toBe(BEFORE_T7[px]);
+      // The bytes of the page as P19.2-T3 built it: every figure Indonesian, every word English.
+      expect(digestAt(container, px)).toBe(AS_BUILT_T3[px]);
     });
 
-    it('P18.98-T3 figures, unchosen and not live, on a phone: Indonesian figures in English words, the sheet’s sum grouped with dots', async () => {
+    it('P18.10-T3 figures, unchosen and not live, on a phone: Indonesian figures in English words, the sheet’s sum grouped with dots', async () => {
       atWidth(375);
       stubFetch(everything());
       renderWithLanguage(<DataUploadPage />, { me: ALL }, { live: false });
 
-      expect(await thisMonth()).toEqual(['Rp 1.500.000', '87,35%', '—', '—', '—', '2']);
-      expect(screen.getByText('Tap an agent to correct their figures — no need to re-upload for a single fix.')).toBeInTheDocument();
-      expect(within(cardOf('Rina Wijaya')).getByRole('group', { name: 'YTD' })).toHaveTextContent('corrected by hand by Maya Halim on 18 Sep 2026');
+      expect(await thisMonth()).toBe('Rp 1.500.000');
       fireEvent.click(screen.getByRole('button', { name: 'Correct figures for Rina Wijaya' }));
       const sheet = screen.getByRole('dialog', { name: 'Correct figures for Rina Wijaya' });
       expect(within(sheet).getByLabelText('APE this month')).toHaveValue('1.500.000');
+      expect(within(sheet).getByLabelText('Rolling persistency this month')).toHaveValue('87,35');
+      expect(within(sheet).getByLabelText('# of policy (case issued) this month')).toHaveAccessibleDescription(/corrected by hand by Maya Halim on 18 Sep 2026/);
     });
 
-    it('P18.98-T3 figures, chosen English by the browser, not live: IDR 1,500,000 and 87.35%, the sheet’s sum grouped with commas', async () => {
+    it('P18.10-T3 figures, chosen English by the browser, not live: IDR 1,500,000 and 87.35%, the sheet’s sum grouped with commas', async () => {
       browserChose('en');
       atWidth(375);
       stubFetch(everything());
       renderWithLanguage(<DataUploadPage />, { me: ALL }, { live: false });
 
-      expect(await thisMonth()).toEqual(['IDR 1,500,000', '87.35%', '—', '—', '—', '2']);
+      expect(await thisMonth()).toBe('IDR 1,500,000');
       fireEvent.click(screen.getByRole('button', { name: 'Correct figures for Rina Wijaya' }));
       const sheet = screen.getByRole('dialog', { name: 'Correct figures for Rina Wijaya' });
       expect(within(sheet).getByLabelText('APE this month')).toHaveValue('1,500,000');
     });
 
-    it('P18.98-T3 figures, chosen Indonesian by the browser, not live: Rp 1.500.000 and 87,35%, the screen in Indonesian', async () => {
+    it('P18.10-T3 figures, chosen Indonesian by the browser, not live: Rp 1.500.000 and 87,35%, the screen in Indonesian', async () => {
       browserChose('id');
       atWidth(375);
       stubFetch(everything());
       renderWithLanguage(<DataUploadPage />, { me: ALL }, { live: false });
 
-      // Its words Indonesian too since P18.98-T4: the list is *Data untuk Sep 2026*.
-      expect(await thisMonth('Data untuk Sep 2026')).toEqual(['Rp 1.500.000', '87,35%', '—', '—', '—', '2']);
+      // Its words Indonesian too since P18.10-T4: the list is *Data untuk Sep 2026*.
+      expect(await thisMonth('Data untuk Sep 2026')).toBe('Rp 1.500.000');
       expect(document.documentElement.lang).toBe('id');
     });
 
-    it('P18.98-T3 figures, live and unchosen: Indonesian figures on a screen whose language is Indonesian', async () => {
+    it('P18.10-T3 figures, live and unchosen: Indonesian figures on a screen whose language is Indonesian', async () => {
       atWidth(375);
       stubFetch(everything());
       renderWithLanguage(<DataUploadPage />, { me: ALL }, { live: true });
 
-      // The words' language too (`<html lang>`), and since P18.98-T4 the page's own words: *Data untuk Sep 2026*.
-      expect(await thisMonth('Data untuk Sep 2026')).toEqual(['Rp 1.500.000', '87,35%', '—', '—', '—', '2']);
+      // The words' language too (`<html lang>`), and since P18.10-T4 the page's own words: *Data untuk Sep 2026*.
+      expect(await thisMonth('Data untuk Sep 2026')).toBe('Rp 1.500.000');
       expect(document.documentElement.lang).toBe('id');
     });
   });
 });
 
 /**
- * **P18.98-T4 Data upload in Indonesian** (`i18n/messages/data-upload.ts`; ADR-0179): the page's name and the table's
+ * **P18.10-T4 Data upload in Indonesian** (`i18n/messages/data-upload.ts`; ADR-0179): the page's name and the table's
  * metric headings kept English — the carrier's file's own names — every other word the approved glossary's, a member's
  * name and code, a file's name and the server's sentences as sent, and the figures Indonesian.
  */
-describe('P18.98-T4 Data upload in Indonesian', () => {
+describe('P18.10-T4 Data upload in Indonesian', () => {
   beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-09-20T03:00:00Z')); });
   afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
@@ -1814,7 +2012,7 @@ describe('P18.98-T4 Data upload in Indonesian', () => {
   const withApe = () => rina({ metrics: { ...blank(), ape: { monthly: cell(150_000_000), ytd: empty } } });
   const inIndonesian = (me = ALL_GRANTS) => renderWithSession(<InLanguage language="id"><DataUploadPage /></InLanguage>, { me });
 
-  it('P18.98-T4 reads the month in Indonesian: its toolbar, lock, legend, table and history, the headings kept', async () => {
+  it('P18.10-T4 reads the month in Indonesian: its toolbar, lock, legend, table and history, the headings kept', async () => {
     stubFetch({
       ...routes(month([withApe(), budi()], 1)),
       '/kpm/data-upload/history': { body: { month: '2026-09', batches: [batch(), REVERTED] } },
@@ -1826,21 +2024,28 @@ describe('P18.98-T4 Data upload in Indonesian', () => {
     expect(screen.getByRole('link', { name: 'Unduh CSV' })).toBeInTheDocument();
     expect(screen.getByLabelText('+ Unggah template yang sudah diisi')).toHaveAttribute('type', 'file');
     expect(screen.getByLabelText('Bulan')).toHaveValue('2026-09');
-    expect(screen.getByText('Terbuka untuk impor dan koreksi sampai 7 Okt 2026, lalu terkunci.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Terbuka untuk impor dan koreksi sampai 7 Okt 2026, lalu terkunci.' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Kunci bulan' })).toBeInTheDocument();
     expect(screen.getByText('1 dari 2 anggota memiliki angka untuk bulan ini.')).toBeInTheDocument();
     expect(screen.getByText('Ketuk angka mana pun untuk mengoreksinya secara manual — tidak perlu mengunggah ulang untuk satu perbaikan.'))
       .toBeInTheDocument();
+    // One head row since P19.2-T3, under the switch's *Bulan ini | YTD* (UI-139's words) — since P19.5-T2 the template's
+    // columns by their Indonesian names (ADR-0214 §5: *the label is in the reader's language*).
     expect(within(table).getAllByRole('columnheader').map((th) => th.textContent)).toEqual([
-      'Agent', 'Kode agen', 'This Month', 'YTD', 'Aktif (MAA)',
-      'APE', 'Rolling Persistency (%)', 'Recruitment', 'New Active Agents', 'FYP', '# of Policy',
-      'APE', 'Rolling Persistency (%)', 'Recruitment', 'New Active Agents', 'FYP', '# of Policy',
+      'Agent', 'APE', 'Persistensi rolling (%)', 'Rekrutmen', 'Agen aktif baru', 'FYP', 'Jumlah polis (case issued)',
+      'Unit persistency (%)', 'Aktif (MAA)',
     ]);
+    expect(within(screen.getByRole('group', { name: 'Angka untuk' })).getAllByRole('button').map((b) => b.textContent))
+      .toEqual(['Bulan ini', 'YTD']);
+    expect(within(screen.getByRole('group', { name: 'Tampilkan anggota' })).getAllByRole('button').map((b) => b.textContent))
+      .toEqual(['Semua2', 'Belum dilaporkan1', 'Dikoreksi0']);
+    expect(screen.getByText('Terbuka sampai 7 Okt 2026')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Tentang Data upload' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Koreksi APE bulan ini untuk Rina Wijaya, sekarang Rp 1.500.000' })).toBeInTheDocument();
     expect(screen.getByText(/= APE atau polis > 0 bulan ini/)).toBeInTheDocument();
     // The history: who imported and reverted what, in Indonesian, the file's name as it is.
     expect(await screen.findByRole('heading', { name: 'Impor untuk Sep 2026' })).toBeInTheDocument();
-    expect(screen.getByText('Diimpor oleh Wilson Tanoto pada 26 Sep 2026 · 6 agent, 72 angka')).toBeInTheDocument();
+    expect(screen.getByText('Diimpor oleh Wilson Tanoto pada 26 Sep 2026 · 6 agent, 72 angka · template v1')).toBeInTheDocument();
     expect(screen.getByText('Dikembalikan oleh Maya Halim pada 25 Sep 2026 — 96 angka dipulihkan.')).toBeInTheDocument();
     expect(screen.getByText('Berlaku')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Kembalikan' })).toBeInTheDocument();
@@ -1850,9 +2055,9 @@ describe('P18.98-T4 Data upload in Indonesian', () => {
     expect(englishShown(document.body, englishOnly(dataUploadMessages))).toEqual([]);
   });
 
-  it('P18.98-T4 corrects a figure in Indonesian, and says what changed', async () => {
+  it('P18.10-T4 corrects a figure in Indonesian, and says what changed', async () => {
     const correction = {
-      membershipId: 'mem-rina', metric: 'ape', cadence: 'monthly', changed: true,
+      membershipId: 'mem-rina', kode: 'APE', ytd: false, changed: true,
       before: { value: 150_000_000, provenance: 'imported' }, after: { value: 200_000_000, provenance: 'corrected' },
       state: state('2026-09', { revision: 4 }),
     };
@@ -1873,7 +2078,7 @@ describe('P18.98-T4 Data upload in Indonesian', () => {
     expect(await screen.findByText('APE bulan ini untuk Rina Wijaya dikoreksi: Rp 1.500.000 → Rp 2.000.000.')).toBeInTheDocument();
   });
 
-  it('P18.98-T4 asks before a figure is cleared, in Indonesian', async () => {
+  it('P18.10-T4 asks before a figure is cleared, in Indonesian', async () => {
     stubFetch(routes(month([withApe()], 1)));
     inIndonesian(CORRECTOR);
     fireEvent.click(await screen.findByRole('button', { name: 'Koreksi APE bulan ini untuk Rina Wijaya, sekarang Rp 1.500.000' }));
@@ -1886,7 +2091,7 @@ describe('P18.98-T4 Data upload in Indonesian', () => {
     expect(within(dialog).getByRole('button', { name: 'Batal' })).toBeInTheDocument();
   });
 
-  it('P18.98-T4 previews a filled file in Indonesian: the summary, what is not taken, and the diff', async () => {
+  it('P18.10-T4 previews a filled file in Indonesian: the summary, what is not taken, and the diff', async () => {
     stubFetch({ ...routes(month([rina(), budi()])), '/kpm/data-upload/preview': { body: PREVIEW } });
     inIndonesian();
     fireEvent.change(await screen.findByLabelText('+ Unggah template yang sudah diisi'), { target: { files: [csvFile()] } });
@@ -1905,18 +2110,368 @@ describe('P18.98-T4 Data upload in Indonesian', () => {
     expect(screen.getByRole('button', { name: 'Batal' })).toBeInTheDocument();
   });
 
-  it('P18.98-T4 opens an agent’s figures on a phone in Indonesian, each field named as a sentence names it', async () => {
+  it('P18.10-T4 opens an agent’s figures on a phone in Indonesian, each field named as a sentence names it', async () => {
     atWidth(375);
     stubFetch(routes(month([withApe(), budi()], 1)));
     inIndonesian();
     await screen.findByRole('list', { name: 'Data untuk Sep 2026' });
-    expect(screen.getByText('Ketuk agent untuk mengoreksi angkanya — tidak perlu mengunggah ulang untuk satu perbaikan.')).toBeInTheDocument();
+    // The row's › says a tap opens the figures (P19.2-T3); Budi's grey pill says nothing is reported.
+    expect(screen.getByText('Belum dilaporkan', { selector: '[data-tone]' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Koreksi angka Rina Wijaya' }));
     const sheet = screen.getByRole('dialog', { name: 'Koreksi angka Rina Wijaya' });
     expect(within(sheet).getByLabelText('APE bulan ini')).toHaveValue('1.500.000');
-    expect(within(sheet).getByLabelText('FYP sejak awal tahun')).toHaveValue('');
+    expect(within(sheet).getByLabelText('Persistensi rolling bulan ini')).toHaveValue('');
+    // P19.5-T2 (R4): a summed year to date is no field.
+    expect(within(sheet).queryByLabelText('FYP sejak awal tahun')).not.toBeInTheDocument();
     expect(within(sheet).getByRole('button', { name: 'Simpan koreksi' })).toBeDisabled();
     expect(within(sheet).getByRole('button', { name: 'Batal' })).toBeInTheDocument();
     expect(within(sheet).getByLabelText('Mengapa angka ini dikoreksi?')).toBeInTheDocument();
+  });
+});
+
+/**
+ * **P19.3-T2 — Data upload on the month the Overview names, and the leader rows' *Unit Persistency (%)*** (AC-7; UI-150,
+ * the route registry's `?month=YYYY-MM`; T1's AC-6, ADR-0201 §2, which T2 draws on the screen).
+ */
+describe('P19.3-T2 Data upload: ?month= and Unit Persistency (%)', () => {
+  beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-11-03T03:00:00Z')); });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, '', '/kpm/data-upload');
+  });
+
+  const monthCalls = (calls: { url: string }[]) => calls
+    .map((c) => /\/kpm\/data-upload\/(\d{4}-\d{2})$/.exec(c.url)?.[1]).filter(Boolean);
+
+  it('P19.3-T2 AC-7 Overview case 8: /kpm/data-upload?month=2026-10 opens on October, and the office’s zone does not move it', async () => {
+    window.history.replaceState({}, '', '/kpm/data-upload?month=2026-10');
+    const { calls } = stubFetch({
+      ...routes(month([rina()], 0, '2026-10', state('2026-10', { editableUntil: '2026-11-07' })), template('2026-10')),
+      '/kpm/settings/branch-info': { body: { timezone: 'Asia/Jakarta' } },
+    });
+    renderWithSession(<DataUploadPage />, { me: OWNER });
+    expect(await screen.findByRole('table', { name: 'Data for Oct 2026' })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByLabelText('Month')).toHaveValue('2026-10'));
+    expect(monthCalls(calls).at(-1)).toBe('2026-10');
+  });
+
+  it('P19.3-T2 AC-7 a month in the address that is locked falls back to the page’s own default', async () => {
+    window.history.replaceState({}, '', '/kpm/data-upload?month=2026-01');
+    stubFetch({
+      '/kpm/data-upload/2026-01': { body: month([rina()], 0, '2026-01', state('2026-01', { locked: true, reason: 'schedule', editableUntil: '2026-02-07' })) },
+      '/kpm/data-upload/2026-11': { body: month([rina()], 0, '2026-11', state('2026-11', { editableUntil: '2026-12-07' })) },
+      '/kpm/data-upload/template': { body: template('2026-11') },
+      '/kpm/data-upload/history': { body: { month: '2026-11', batches: [] } },
+      '/kpm/settings/branch-info': { body: { timezone: 'Asia/Jakarta' } },
+    });
+    renderWithSession(<DataUploadPage />, { me: OWNER });
+    await waitFor(() => expect(screen.getByLabelText('Month')).toHaveValue('2026-11'));
+    expect(await screen.findByRole('table', { name: 'Data for Nov 2026' })).toBeInTheDocument();
+  });
+
+  it('P19.3-T2 AC-7 an address month that is no month is ignored', async () => {
+    window.history.replaceState({}, '', '/kpm/data-upload?month=2026-13');
+    stubFetch({
+      ...routes(month([rina()], 0, '2026-11', state('2026-11')), template('2026-11')),
+      '/kpm/settings/branch-info': { body: { timezone: 'Asia/Jakarta' } },
+    });
+    renderWithSession(<DataUploadPage />, { me: OWNER });
+    await waitFor(() => expect(screen.getByLabelText('Month')).toHaveValue('2026-11'));
+  });
+
+  it('P19.3-T2 (T1 AC-6): a leader’s row shows its uploaded Unit Persistency (%); an agent’s reads —', async () => {
+    const agus = {
+      membershipId: 'mem-agus', agentCode: 'PRU-010', name: 'Agus Prasetyo', metrics: blank(),
+      unitPersistency: { value: 87.5, provenance: 'imported' }, leader: true,
+    };
+    stubFetch(routes(month([agus, { ...rina(), unitPersistency: empty, leader: false }], 1)));
+    renderWithSession(<DataUploadPage />, { me: OWNER });
+    const table = await screen.findByRole('table', { name: 'Data for Sep 2026' });
+    // *Since P19.5-T2* a column of the template like any other, `rows: 'leaders'` (ADR-0214 §2).
+    const leaderCell = within(table).getByText('Agus Prasetyo').closest('tr')!.querySelector('[data-kode="UNIT_PERSISTENCY"]')!;
+    expect(leaderCell).toHaveTextContent('87.5%');
+    const agentCell = within(table).getByText('Rina Wijaya').closest('tr')!.querySelector('[data-kode="UNIT_PERSISTENCY"]')!;
+    expect(within(agentCell as HTMLElement).getByLabelText('nothing reported')).toHaveTextContent('—');
+  });
+
+  it('P19.3-T2 (T1 AC-6): the preview shows a version 2 file’s unitPersistency cell, and — where the row has none', async () => {
+    vi.setSystemTime(new Date('2026-09-20T03:00:00Z'));
+    // A version 2 file: version 1's six and *Unit Persistency (%)*, read as the template's `UNIT_PERSISTENCY` (P19.5-T2).
+    const v2 = {
+      ...PREVIEW,
+      templateVersion: 2,
+      columns: V2_FILE_COLUMNS,
+      rows: PREVIEW.rows.map((row, i) => (row.status === 'refused' ? row : {
+        ...row,
+        cells: i === 0
+          ? [...row.cells, { kode: 'UNIT_PERSISTENCY', ytd: false, status: 'new', before: null, after: 90, raw: '90', correction: null }]
+          : [...row.cells, { kode: 'UNIT_PERSISTENCY', ytd: false, status: 'not_provided', before: null, after: null, raw: null, correction: null }],
+      })),
+    };
+    stubFetch({ ...routes(month([rina()])), '/kpm/data-upload/preview': { body: v2 } });
+    renderWithSession(<DataUploadPage />, { me: OWNER });
+    await choose();
+    const preview = await screen.findByRole('table', { name: 'What “filled.csv” would change' });
+    const header = within(preview).getByRole('columnheader', { name: 'Unit persistency (%)' });
+    const rinaRow = within(preview).getByText('Rina Wijaya').closest('tr')!;
+    const last = within(rinaRow).getAllByRole('cell').at(-1)!;
+    expect((last.getAttribute('headers') ?? '').split(' ')).toContain(header.id);
+    expect(last).toHaveTextContent('90%');
+    const sariRow = within(preview).getByText('Sari Dewi').closest('tr')!;
+    expect(within(sariRow).getAllByRole('cell').at(-1)).toHaveTextContent('—');
+  });
+});
+
+/**
+ * **P19.5-T2 — Data upload from the template** (ADR-0214 §5, §8, §10 to §12; the Advanced analytics spec §4, R2, R4, R5,
+ * D8; AA UI-010, UI-012, UI-013, UI-016, UI-025; the template mockup's *Lihat sisi KPM → Data upload*). The screen draws
+ * what the month read says: the template's columns, the years to date summed and *Belum lengkap*, the months from the
+ * required history on, *Belum terdaftar*, *Di luar batas sejak v<n>* and the current month's *as of*.
+ */
+describe('P19.5-T2 Data upload from the template', () => {
+  beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-11-05T03:00:00Z')); });
+  afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); resetLanguage(); });
+
+  const ALL = makeMe({ membership, permissions: [...EVERYTHING.permissions, 'data_upload:correct_cell'] });
+  const NOV = (over: Record<string, unknown> = {}) => state('2026-11', { editableUntil: '2026-12-07', ...over });
+  const withMonth = (view: unknown) => ({
+    '/kpm/data-upload/': { body: view },
+    '/kpm/data-upload/template': { body: template('2026-11') },
+    '/kpm/data-upload/history': { body: { month: '2026-11', batches: [] } },
+  });
+  /** Rina with APE this month and its year to date; the leader Agus with a unit persistency of 105, flagged. */
+  const RINA = rina({ metrics: { ...blank(), ape: { monthly: cell(150_000_000), ytd: cell(900_000_000) } }, monthlyActiveAgent: true });
+  const monthTable = () => screen.findByRole('table', { name: 'Data for Nov 2026' });
+
+  it('P19.5-T2 AC-4, AT-1 draws the template’s columns — a column before its start month reads —, Berlaku mulai on its tooltip', async () => {
+    atWidth(1280);
+    const view = viewOf([RINA], 1, '2026-11', NOV(), { config: configOf({ columns: [...V1_COLUMNS, FYC_FROM_DEC] }) });
+    stubFetch(withMonth(view));
+    renderInIndonesian(<DataUploadPage />, { me: OWNER });
+    const table = await screen.findByRole('table', { name: 'Data untuk Nov 2026' });
+    expect(within(table).getAllByRole('columnheader').map((th) => th.textContent)).toContain('Komisi tahun pertama');
+    const fyc = within(table).getByText('Rina Wijaya').closest('tr')!.querySelector('[data-kode="FYC"] [data-not-in-force]')!;
+    expect(fyc).toHaveTextContent('—');
+    expect(fyc).toHaveAttribute('title', 'Berlaku mulai Des 2026');
+    // The banner names the template and how many columns, and what a greyed YTD is (the mockup's KPM side).
+    expect(screen.getByText(/^Kolom mengikuti Prudential template v1\./).closest('p')).toHaveTextContent(
+      'Kolom mengikuti Prudential template v1. 8 kolom per agen. Kolom YTD yang abu-abu dihitung otomatis dari bulan-bulan sebelumnya, jadi tidak perlu diunggah.',
+    );
+  });
+
+  it('P19.5-T2 AC-7, AT-6, AA UI-012 draws a year to date missing a month as Belum lengkap — the cell and the page’s banner', async () => {
+    atWidth(1280);
+    const columns = V1_COLUMNS.map((c) => (c.ytd === 'sum' ? { ...c, ytdMissingMonths: ['2026-03'] } : c));
+    const view = viewOf([RINA], 1, '2026-11', NOV(), { config: configOf({ columns }), ytdMissingMonths: ['2026-03'] });
+    stubFetch(withMonth(view));
+    renderInIndonesian(<DataUploadPage />, { me: OWNER });
+    await screen.findByRole('table', { name: 'Data untuk Nov 2026' });
+    expect(screen.getByText('YTD belum lengkap: Mar 2026 belum diunggah.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'YTD' }));
+    const ape = screen.getByText('Rina Wijaya').closest('tr')!.querySelector('[data-kode="APE"] [data-ytd]')!;
+    expect(ape).toHaveAttribute('data-ytd', 'incomplete');
+    expect(ape).toHaveAttribute('title', 'Belum lengkap · Mar belum diunggah');
+    // The partial sum is still the figure, said with its words for a screen reader.
+    expect(ape).toHaveTextContent('Rp 9.000.000, Belum lengkap · Mar belum diunggah');
+    expect(ape.className).toEqual(expect.stringContaining('bg-pill-amber'));
+  });
+
+  it('P19.5-T2 AC-7 draws a complete summed year to date greyed, and none of it as a control', async () => {
+    atWidth(1280);
+    stubFetch(withMonth(viewOf([RINA], 1, '2026-11', NOV())));
+    renderWithSession(<DataUploadPage />, { me: ALL });
+    await monthTable();
+    expect(screen.queryByText(/^YTD incomplete/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'YTD' }));
+    const ape = screen.getByText('Rina Wijaya').closest('tr')!.querySelector('[data-kode="APE"] [data-ytd]')!;
+    expect(ape).toHaveAttribute('data-ytd', 'calculated');
+    expect(ape.className).toEqual(expect.stringContaining('bg-hover-row'));
+    expect(ape.closest('button')).toBeNull();
+  });
+
+  it('P19.5-T2 AC-7 corrects an uploaded year to date as { kode, ytd: true }', async () => {
+    atWidth(1280);
+    const komisi = { ...RINA, metrics: { ...RINA.metrics, KOMISI: { monthly: cell(30_000_000), ytd: cell(86_000_000) } } };
+    const view = viewOf([komisi], 1, '2026-11', NOV(), { config: configOf({ columns: [...V1_COLUMNS, KOMISI] }) });
+    const { calls } = stubFetch({
+      ...withMonth(view),
+      '/kpm/data-upload/cell': {
+        body: {
+          membershipId: 'mem-rina', kode: 'KOMISI', ytd: true, changed: true,
+          before: { value: 86_000_000, provenance: 'imported' }, after: { value: 90_000_000, provenance: 'corrected' },
+          state: NOV({ revision: 4 }),
+        },
+      },
+    });
+    renderWithSession(<DataUploadPage />, { me: ALL });
+    await monthTable();
+    fireEvent.click(screen.getByRole('button', { name: 'YTD' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Correct Commission year to date for Rina Wijaya, now IDR 860,000' }));
+    const panel = screen.getByRole('region', { name: 'Correct Commission year to date for Rina Wijaya' });
+    fireEvent.change(within(panel).getByLabelText('New figure'), { target: { value: '900.000' } });
+    fireEvent.change(within(panel).getByLabelText('Why is it being corrected?'), { target: { value: 'Carrier restated it' } });
+    fireEvent.click(within(panel).getByRole('button', { name: 'Save correction' }));
+    expect(await screen.findByText('Corrected Commission year to date for Rina Wijaya: IDR 860,000 → IDR 900,000.')).toBeInTheDocument();
+    expect(JSON.parse(calls.find((c) => c.url.includes('/kpm/data-upload/cell'))!.init.body as string)).toEqual({
+      month: '2026-11', membershipId: 'mem-rina', kode: 'KOMISI', ytd: true, value: 90_000_000, revision: 3, reason: 'Carrier restated it',
+    });
+  });
+
+  it('P19.5-T2 AC-11, AA UI-025 outlines a stored value outside its column’s limits: Di luar batas sejak v2', async () => {
+    atWidth(1280);
+    const agus = {
+      membershipId: 'mem-agus', agentCode: 'PRU-010', name: 'Agus Prasetyo', leader: true, metrics: blank(),
+      unitPersistency: { value: 105, provenance: 'corrected' as const, outOfBounds: { sinceVersion: 2 } },
+    };
+    stubFetch(withMonth(viewOf([agus], 1, '2026-11', NOV())));
+    renderInIndonesian(<DataUploadPage />, { me: OWNER });
+    const table = await screen.findByRole('table', { name: 'Data untuk Nov 2026' });
+    const flagged = within(table).getByText('Agus Prasetyo').closest('tr')!.querySelector('[data-out-of-bounds]')!;
+    expect(flagged).toHaveAttribute('title', 'Di luar batas sejak v2');
+    expect(flagged.className).toEqual(expect.stringContaining('outline-alert'));
+    // The value is the stored one, never changed; the words are on the cell for a screen reader.
+    expect(flagged).toHaveTextContent('105%, Di luar batas sejak v2');
+  });
+
+  it.each([375, 1280])('P19.5-T2 AC-5 at %ipx lists the Belum terdaftar rows after the members, read-only, and says how many', async (px) => {
+    atWidth(px);
+    const view = viewOf([RINA], 1, '2026-11', NOV(), {
+      unregistered: [{
+        agentCode: '70019999', fileName: 'Calon Baru',
+        values: { APE: { value: 50_000_000, provenance: 'imported', correction: null } }, ytd: {},
+      }],
+    });
+    stubFetch(withMonth(view));
+    renderInIndonesian(<DataUploadPage />, { me: ALL });
+    await screen.findByText('Rina Wijaya');
+    // A table row from 1024px, a list row below it (`data-row="held:<code>"`).
+    const held = document.querySelector('[data-unregistered="70019999"], [data-row="held:70019999"]')!;
+    expect(held).toHaveTextContent('Belum terdaftar');
+    expect(held).toHaveTextContent('70019999');
+    // Read-only: it opens nothing and corrects nothing — it is nobody's yet.
+    expect(within(held as HTMLElement).queryByRole('button')).not.toBeInTheDocument();
+    expect(screen.getByText('1 kode belum terdaftar: disimpan terpisah dan tidak dihitung sampai kode itu dipakai anggota KPM ini.')).toBeInTheDocument();
+  });
+
+  it('P19.5-T2 AC-8, AT-9, AA UI-016 offers the months from the required history on, each as complete or not, and picks one', async () => {
+    atWidth(1280);
+    const months = [
+      statusOf('2026-03', 'missing'), statusOf('2026-04', 'incomplete'), statusOf('2026-10'), statusOf('2026-11', 'missing'),
+    ];
+    const { calls } = stubFetch({
+      ...withMonth(viewOf([RINA], 1, '2026-11', NOV(), { config: configOf({ historyFrom: '2026-03' }), months })),
+      '/kpm/data-upload/2026-03': { body: viewOf([RINA], 0, '2026-03', state('2026-03'), { months }) },
+    });
+    renderInIndonesian(<DataUploadPage />, { me: OWNER });
+    await screen.findByRole('table', { name: 'Data untuk Nov 2026' });
+    const grid = document.querySelector('[data-month-status]') as HTMLElement;
+    expect(within(grid).getByText(/^Data wajib mulai Mar 2026/)).toHaveTextContent('Data wajib mulai Mar 2026 · 3 belum lengkap');
+    const pills = within(grid).getAllByRole('button');
+    expect(pills.map((b) => b.textContent)).toEqual([
+      'Mar 2026Belum diunggah', 'Apr 2026Belum lengkap', 'Okt 2026Lengkap', 'Nov 2026Belum diunggah',
+    ]);
+    expect(pills[3]).toHaveAttribute('aria-current', 'true');
+    fireEvent.click(pills[0]);
+    await waitFor(() => expect(calls.some((c) => c.url.endsWith('/kpm/data-upload/2026-03'))).toBe(true));
+    expect(screen.getByLabelText('Bulan')).toHaveValue('2026-03');
+  });
+
+  it('P19.5-T2 AC-8 says a never-written month of the history is open until its first upload', async () => {
+    stubFetch(withMonth(viewOf([RINA], 0, '2026-03', state('2026-03', { reason: 'history', editableUntil: '2026-11-12' }))));
+    renderWithSession(<DataUploadPage />, { me: OWNER });
+    expect(await screen.findByRole('button', {
+      name: 'A required month that was never uploaded: open until its first upload — uploaded today, it stays open until 12 Nov 2026.',
+    })).toBeInTheDocument();
+  });
+
+  it('P19.5-T2 AC-9, D8 shows the current month’s as of day, and sends one with an upload into it', async () => {
+    atWidth(1280);
+    const preview = { ...PREVIEW, month: '2026-11' };
+    const { calls } = stubFetch({
+      ...withMonth(viewOf([rina(), budi()], 1, '2026-11', NOV({ asOf: '2026-11-03' }))),
+      '/kpm/data-upload/preview': { body: preview },
+      '/kpm/data-upload/commit': { status: 201, body: result({ month: '2026-11', asOf: '2026-11-04' }, NOV({ revision: 4 })) },
+    });
+    renderInIndonesian(<DataUploadPage />, { me: EVERYTHING });
+    expect(await screen.findByText('per 3 Nov 2026')).toBeInTheDocument();
+    fireEvent.change(await screen.findByLabelText('+ Unggah template yang sudah diisi'), { target: { files: [csvFile()] } });
+    const asOf = await screen.findByLabelText('Data per tanggal');
+    expect(asOf).toHaveValue('2026-11-05');
+    expect(asOf).toHaveAttribute('min', '2026-11-01');
+    expect(asOf).toHaveAttribute('max', '2026-11-05');
+    fireEvent.change(asOf, { target: { value: '2026-11-04' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Konfirmasi impor' }));
+    await waitFor(() => expect(calls.some((c) => c.url.includes('/commit'))).toBe(true));
+    expect((calls.find((c) => c.url.includes('/commit'))!.init.body as FormData).get('asOf')).toBe('2026-11-04');
+  });
+
+  it('P19.5-T2 AC-9 sends no as of day with a month that has ended — its upload is final', async () => {
+    const { calls } = stubFetch({
+      ...withMonth(viewOf([rina(), budi()], 1, '2026-10', state('2026-10', { editableUntil: '2026-11-07' }))),
+      '/kpm/data-upload/2026-11': { body: viewOf([rina(), budi()], 1, '2026-10', state('2026-10', { editableUntil: '2026-11-07' })) },
+      '/kpm/data-upload/preview': { body: { ...PREVIEW, month: '2026-10' } },
+      '/kpm/data-upload/commit': { status: 201, body: result({ month: '2026-10' }) },
+    });
+    window.history.replaceState({}, '', '/kpm/data-upload?month=2026-10');
+    renderWithSession(<DataUploadPage />, { me: EVERYTHING });
+    await choose();
+    await screen.findByRole('region');
+    expect(screen.queryByLabelText('Figures as of')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm import' }));
+    await waitFor(() => expect(calls.some((c) => c.url.includes('/commit'))).toBe(true));
+    expect((calls.find((c) => c.url.includes('/commit'))!.init.body as FormData).get('asOf')).toBeNull();
+    window.history.replaceState({}, '', '/kpm/data-upload');
+  });
+
+  it('P19.5-T2 AC-3, AT-3, AA UI-013 lists what the header says about the file’s columns — a missing one in amber', async () => {
+    const preview = {
+      ...PREVIEW,
+      month: '2026-11',
+      notes: [
+        { code: 'column_missing', kode: 'FYC', header: null, message: 'Kolom Komisi tahun pertama kosong di file ini. Baris tetap diimpor.' },
+        { code: 'column_retired', kode: 'APE', header: 'APE (Rp M) — YTD', message: 'Kolom APE YTD tidak dipakai lagi' },
+      ],
+    };
+    stubFetch({ ...withMonth(viewOf([rina(), budi()], 1, '2026-11', NOV())), '/kpm/data-upload/preview': { body: preview } });
+    renderInIndonesian(<DataUploadPage />, { me: OWNER });
+    fireEvent.change(await screen.findByLabelText('+ Unggah template yang sudah diisi'), { target: { files: [csvFile()] } });
+    const missing = await screen.findByText('Kolom Komisi tahun pertama kosong di file ini. Baris tetap diimpor.');
+    expect(missing).toHaveAttribute('data-note', 'column_missing');
+    expect(missing.className).toEqual(expect.stringContaining('text-pill-amber-ink'));
+    expect(screen.getByText('Kolom APE YTD tidak dipakai lagi')).toHaveAttribute('data-note', 'column_retired');
+  });
+
+  it('P19.5-T2 AC-5 previews a held row as Belum terdaftar and names a correction on it held:<CODE>:KODE', async () => {
+    const held = {
+      line: 5, agentCode: '70019999', membershipId: null, resolvedAgentCode: null, name: null, fileName: 'Calon Baru',
+      nameDiffers: false, codeRecovered: false, status: 'held', issues: [],
+      cells: cellsOf({ ape: { status: 'new', after: 50_000_000, raw: '0,5' } }),
+    };
+    const preview = {
+      ...PREVIEW, month: '2026-11', rows: [...PREVIEW.rows, held], summary: { ...PREVIEW.summary, rows: 4, held: 1 },
+    };
+    stubFetch({ ...withMonth(viewOf([rina(), budi()], 1, '2026-11', NOV())), '/kpm/data-upload/preview': { body: preview } });
+    renderWithSession(<DataUploadPage />, { me: OWNER });
+    await choose();
+    const card = await screen.findByRole('region');
+    expect(card).toHaveTextContent('1 row of a code not registered yet, kept as Not registered.');
+    const table = within(card).getByRole('table', { name: 'What “filled.csv” would change' });
+    const row = within(table).getByText('70019999').closest('tr')!;
+    expect(row).toHaveTextContent('Not registered');
+    expect(row).toHaveTextContent('IDR 500,000');
+    expect(correctionKey({ status: 'held', membershipId: null, agentCode: ' 70019999 ' }, { kode: 'APE', ytd: false })).toBe('held:70019999:APE');
+    expect(correctionKey({ status: 'ready', membershipId: 'mem-rina', agentCode: 'PRU-001' }, { kode: 'KOMISI', ytd: true })).toBe('mem-rina:KOMISI_YTD');
+  });
+
+  it('P19.5-T2 AC-12, R6 names the template version each import was read against, and a running month’s as of', async () => {
+    stubFetch({
+      ...withMonth(viewOf([rina()], 1, '2026-11', NOV())),
+      '/kpm/data-upload/history': { body: { month: '2026-11', batches: [batch({ month: '2026-11', templateVersion: 2, asOf: '2026-11-03', heldRowCount: 1 })] } },
+    });
+    renderInIndonesian(<DataUploadPage />, { me: EVERYTHING });
+    expect(await screen.findByText(/^Diimpor oleh Wilson Tanoto/)).toHaveTextContent(
+      'Diimpor oleh Wilson Tanoto pada 26 Sep 2026 · 6 agent, 72 angka · template v2 · per 3 Nov 2026 · 1 belum terdaftar',
+    );
   });
 });

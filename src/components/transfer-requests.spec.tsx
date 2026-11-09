@@ -20,13 +20,13 @@ const OWNER = (permissions: string[]) => makeMe({
   permissions,
 });
 
-describe('transfer requests, decided by the office (P18.96-T3 AC-3)', () => {
+describe('transfer requests, decided by the office (P18.8-T3 AC-3)', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     window.history.replaceState(null, '', '/');
   });
 
-  it('P18.96-T3 AC-3 lists who would move, from whom to whom, and who asked', async () => {
+  it('P18.8-T3 AC-3 lists who would move, from whom to whom, and who asked', async () => {
     stubFetch({ '/transfer-requests': { body: [transfer()] } });
     renderWithSession(<TransferRequests />);
     const table = await screen.findByRole('table', { name: 'Transfer requests, oldest first' });
@@ -39,7 +39,7 @@ describe('transfer requests, decided by the office (P18.96-T3 AC-3)', () => {
     expect(row).not.toHaveTextContent('Added as');
   });
 
-  it('P18.96-T8 M3 says the name the leader typed on the code’s line where it is not the account’s, so a wrong code is seen', async () => {
+  it('P18.8-T8 M3 says the name the leader typed on the code’s line where it is not the account’s, so a wrong code is seen', async () => {
     stubFetch({
       '/transfer-requests': {
         body: [
@@ -59,7 +59,7 @@ describe('transfer requests, decided by the office (P18.96-T3 AC-3)', () => {
     expect(older).not.toHaveTextContent('Added as');
   });
 
-  it('P18.96-T3 AC-3 Approve asks first — it moves their whole unit — then moves them and confirms', async () => {
+  it('P18.8-T3 AC-3 Approve asks first — it moves their whole unit — then moves them and confirms', async () => {
     const { calls } = stubFetch({
       '/transfer-requests': { body: [transfer()] },
       'POST /transfer-requests/tr-1/approve': { body: [] },
@@ -74,7 +74,7 @@ describe('transfer requests, decided by the office (P18.96-T3 AC-3)', () => {
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
   });
 
-  it('P18.96-T3 AC-3 Decline asks why, and sends it to the leader who asked', async () => {
+  it('P18.8-T3 AC-3 Decline asks why, and sends it to the leader who asked', async () => {
     const { calls } = stubFetch({
       '/transfer-requests': { body: [transfer()] },
       'POST /transfer-requests/tr-1/decline': { body: [] },
@@ -88,7 +88,7 @@ describe('transfer requests, decided by the office (P18.96-T3 AC-3)', () => {
     expect(await screen.findByText('Transfer declined ✓')).toBeInTheDocument();
   });
 
-  it('P18.96-T3 AC-3 a decision somebody made first is said, and the queue read again', async () => {
+  it('P18.8-T3 AC-3 a decision somebody made first is said, and the queue read again', async () => {
     const { calls } = stubFetch({
       '/transfer-requests': [{ body: [transfer()] }, { body: [] }],
       'POST /transfer-requests/tr-1/decline': {
@@ -102,14 +102,14 @@ describe('transfer requests, decided by the office (P18.96-T3 AC-3)', () => {
     expect(calls.filter((c) => c.url.endsWith('/transfer-requests')).length).toBe(2);
   });
 
-  it('P18.96-T3 AC-3 draws nothing while none waits', async () => {
+  it('P18.8-T3 AC-3 draws nothing while none waits', async () => {
     const { calls } = stubFetch({ '/transfer-requests': { body: [] } });
     renderWithSession(<TransferRequests />);
     await vi.waitFor(() => expect(calls.length).toBe(1));
     expect(screen.queryByRole('heading', { name: 'Transfer requests' })).not.toBeInTheDocument();
   });
 
-  it('P18.96-T3 AC-3 sits on All Members’ Pending tab for whoever decides them — opened by the notice’s ?tab=pending', async () => {
+  it('P18.8-T3 AC-3 sits on All Members’ Pending tab for whoever decides them — opened by the notice’s ?tab=pending', async () => {
     window.history.replaceState(null, '', '/people/members?tab=pending');
     stubFetch({
       '/join/requests': { body: [] },
@@ -122,7 +122,7 @@ describe('transfer requests, decided by the office (P18.96-T3 AC-3)', () => {
     expect(screen.getByRole('button', { name: /^Pending/ })).toHaveAttribute('aria-current', 'page');
   });
 
-  it('P18.96-T3 AC-7 asks nothing of the transfers for somebody who does not decide them', async () => {
+  it('P18.8-T3 AC-7 asks nothing of the transfers for somebody who does not decide them', async () => {
     window.history.replaceState(null, '', '/people/members?tab=pending');
     const { calls } = stubFetch({
       '/join/requests': { body: [] },

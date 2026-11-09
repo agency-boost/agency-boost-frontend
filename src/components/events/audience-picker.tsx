@@ -10,7 +10,7 @@ import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { chosenCount, leftRow, readInvitees, type EventInvitee } from '@/lib/events-admin';
 
 /**
- * **Who is invited, one by one** (P18.5-T5 AC-10; D-picker): the *Chosen people* and *Chosen leaders*
+ * **Who is invited, one by one** (P18.2-T5 AC-10; D-picker): the *Chosen people* and *Chosen leaders*
  * audiences, live. No prototype draws a picker (`KPM_Owner.html:1649` is an `alert()`), so this is a Fill in
  * the console's idiom: a search field and a checklist of the office's active members, each with their role,
  * and how many are chosen.
@@ -124,7 +124,7 @@ export function AudiencePicker({ leadersOnly, chosen, disabled, onChange }: {
         <ul className="mt-2 max-h-64 list-none overflow-y-auto p-0">
           {shown.map((person) => (
             <li key={person.membershipId}>
-              <label className="flex cursor-pointer items-center gap-2.5 rounded-sm px-1 py-1.5 text-md text-navy hover:bg-navy/[0.04]">
+              <label className="flex cursor-pointer items-center gap-2.5 rounded-sm px-1 py-1.5 text-md text-navy hover:bg-secondary/[0.04]">
                 <input
                   type="checkbox"
                   checked={picked.has(person.membershipId)}
@@ -132,7 +132,7 @@ export function AudiencePicker({ leadersOnly, chosen, disabled, onChange }: {
                   onChange={(e) => toggle(person.membershipId, e.target.checked)}
                 />
                 <span className="min-w-0 flex-1 break-words">{person.name}</span>
-                {/* The rung by its badge's name (P18.95-T9 AC-1): the server sends the ladder's label beside the code. */}
+                {/* The rung by its badge's name (P18.7-T9 AC-1): the server sends the ladder's label beside the code. */}
                 <span className="shrink-0 text-sm text-muted">{shortOfRung({ code: person.orgLevelCode, label: person.rung })}</span>
               </label>
             </li>
@@ -151,7 +151,7 @@ function KeptRow({ label, reason, disabled, onClear }: {
   onClear: () => void;
 }) {
   return (
-    <label className="flex cursor-pointer items-center gap-2.5 rounded-sm px-1 py-1.5 text-md text-navy hover:bg-navy/[0.04]">
+    <label className="flex cursor-pointer items-center gap-2.5 rounded-sm px-1 py-1.5 text-md text-navy hover:bg-secondary/[0.04]">
       <input type="checkbox" checked disabled={disabled} onChange={onClear} />
       <span className="min-w-0 flex-1 break-words">{label}</span>
       {reason && <span className="shrink-0 text-sm text-muted">{reason}</span>}

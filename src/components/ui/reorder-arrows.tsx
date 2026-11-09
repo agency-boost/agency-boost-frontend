@@ -6,7 +6,7 @@ import { uiMessages } from '@/i18n/messages/ui';
 import { Button } from './field';
 
 /**
- * **↑ and ↓ for a list reordered by drag, on a phone** (P18.97-T7 AC-6, ADR-0178 §5; the client's UI-040 of 2026-10-27).
+ * **↑ and ↓ for a list reordered by drag, on a phone** (P18.9-T7 AC-6, ADR-0178 §5; the client's UI-040 of 2026-10-27).
  *
  * A drag never starts on a touch screen — HTML5 drag does not fire there — and the handle's own ↑ ↓ keys need a
  * keyboard, so a phone could not reorder the list at all. Two buttons, each a 44 × 44px target (`Button variant="icon"`,

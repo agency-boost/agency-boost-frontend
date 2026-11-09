@@ -1,5 +1,5 @@
 /**
- * **Addresses one screen links to on another's behalf, in a module that imports nothing** (UI V1, P18.99-T16, the
+ * **Addresses one screen links to on another's behalf, in a module that imports nothing** (UI V1, P18.11-T16, the
  * bundle, 2026-10-30).
  *
  * Importing one export loads the module it lives in and everything that module imports. *Schedule 1:1* on New Hires
@@ -19,7 +19,7 @@ export const coachingSessionHref = (membershipId: string, from?: string) =>
   `/coaching/${encodeURIComponent(membershipId)}/session` + (from ? `?from=${encodeURIComponent(from)}` : '');
 
 /**
- * **A 1:1 with somebody, on the calendar** (P18.96-T6 AC-4; ADR-0173 §3): the address `/new-hires`' *Schedule 1:1*
+ * **A 1:1 with somebody, on the calendar** (P18.8-T6 AC-4; ADR-0173 §3): the address `/new-hires`' *Schedule 1:1*
  * opens — the calendar's new-entry dialog as a *1:1 coaching* entry with them invited. By membership id alone, so no
  * name rides in the address: the calendar finds it in the reader's own downline (`GET /calendar/downline`).
  */

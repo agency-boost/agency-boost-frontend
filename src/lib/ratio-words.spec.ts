@@ -7,12 +7,12 @@ import {
 const SEED = { numerator: 'Selling', denominator: 'Recruitment' };
 
 /**
- * **P18.98-T4: the words beside a ratio's figure are the catalogue's** (`i18n/messages/ratio-words.ts`). Each function
+ * **P18.10-T4: the words beside a ratio's figure are the catalogue's** (`i18n/messages/ratio-words.ts`). Each function
  * takes the words' language after the figures' — English when none is passed, so every screen not moved yet reads as
  * it did (`ratio-format.spec.ts` and `ratio-balance.spec.ts`, untouched) — and the two are independent: a reader with
- * no choice while the switch is not live reads English words and Indonesian figures (P18.98-T3).
+ * no choice while the switch is not live reads English words and Indonesian figures (P18.10-T3).
  */
-describe('P18.98-T4 a ratio’s words in each language', () => {
+describe('P18.10-T4 a ratio’s words in each language', () => {
   it('names each unit with an example figure, in the words’ and the figures’ languages apart', () => {
     expect(displayUnitLabels('en', 'en')).toEqual({ percent: 'A percentage — 15%', decimal: 'A number — 0.30' });
     expect(displayUnitLabels('id', 'id')).toEqual({ percent: 'Persentase — 15%', decimal: 'Angka — 0,30' });

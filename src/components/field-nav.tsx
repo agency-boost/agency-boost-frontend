@@ -3,115 +3,24 @@
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { createContext, useContext, useEffect, useRef, useState } from 'react';
-import { UnreadBadge, withUnread } from '@/components/notification-bell';
+import { useEffect, useRef, useState } from 'react';
+import type { FieldChrome } from '@/components/field-chrome';
 import { NavIcon } from '@/components/ui/nav-icon';
-import { kept } from '@/i18n/kept';
-import { useLanguage, useMessages } from '@/i18n/language-provider';
+import { useMessages } from '@/i18n/language-provider';
 import { shellMessages } from '@/i18n/messages/shell';
 import { cn } from '@/lib/cn';
-import type { FieldDestination, FieldNav } from '@/lib/field-nav';
+import { hasSurveyDot, useSurveyPending } from '@/lib/survey-pending';
+import type { FieldDestination } from '@/lib/field-nav';
 
 /**
  * **The field shell below 1024px** (UI V1, UI-004; D-13, D-20; ADR-0180): no dark app bar — each page's own title row,
  * with the avatar at its end — the floating tab bar at the foot of the screen, and the *Lainnya* sheet it opens.
  *
  * Built once here and drawn by `AppShell` when the field shell passes it `field`; a page sets only its title row's
- * control and which of its sub-lines to hide, through `PageHeader` (`Page`).
+ * control and which of its sub-lines to hide, through `PageHeader` (`Page`). **The chrome's context, the title row's
+ * avatar, its view menu and Home's bell are `field-chrome.tsx`'s** (the bundle, 2026-11-06): every page's header draws
+ * them, and none of it needs the tab bar.
  */
-
-/** Who is signed in, as the title row's avatar and the sheet's account row show them. */
-export interface FieldAccount {
-  readonly name: string;
-  /** The line under the name: the rung · Core Leader · the groups · the office (`profileLine`). */
-  readonly role: string;
-  readonly initials: string;
-  /** Their photo (`users.avatarUrl`), when they have one; the initials otherwise. */
-  readonly avatarUrl?: string | null;
-  /** *Profil saya*, where the avatar and *Ubah foto* go. */
-  readonly profileHref: string;
-  readonly onSignOut: () => void;
-  readonly signingOut?: boolean;
-  /** *Open Owner view* / *Open Admin view* (ADR-0114), for an Owner or an Admin in their field view. */
-  readonly viewSwitch?: { href: string; label: string };
-}
-
-export interface FieldChrome {
-  readonly nav: FieldNav;
-  readonly account: FieldAccount;
-  /** The bell's count and the inbox, for the one title row that draws the bell — Home's. */
-  readonly notifications?: { href: string; unread: number };
-  /**
-   * **Below 1024px**: the title row's avatar and the tab bar are drawn. `AppShell` reads the width (`useMediaQuery`)
-   * and sets it; a caller passes nothing.
-   */
-  readonly compact?: boolean;
-}
-
-/** The field shell's chrome, for a page's title row (`PageHeader`); `null` in the other two shells. */
-export const FieldChromeContext = createContext<FieldChrome | null>(null);
-
-export function useFieldChrome(): FieldChrome | null {
-  return useContext(FieldChromeContext);
-}
-
-/** The reader's photo, or their initials on amber: the title row's 36px and the sheet's 40px. */
-export function FieldAvatar({ account, className }: { account: Pick<FieldAccount, 'initials' | 'avatarUrl'>; className?: string }) {
-  if (account.avatarUrl) {
-    return (
-      // A photo the person chose: its own address, so no optimisation pipeline stands between them and it.
-      // eslint-disable-next-line @next/next/no-img-element
-      <img src={account.avatarUrl} alt="" aria-hidden="true" className={cn('shrink-0 rounded-full object-cover', className)} />
-    );
-  }
-  return (
-    <span
-      aria-hidden="true"
-      className={cn('flex shrink-0 items-center justify-center rounded-full bg-amber font-bold text-navy', className)}
-    >
-      {account.initials}
-    </span>
-  );
-}
-
-/**
- * **The title row's avatar** (UI-004): 36px, at the row's right end, opening *Profil saya*. Its target is 44 × 44px, the
- * circle centred in it, its edge on the page's 16px gutter (`-mr-1`).
- */
-export function TitleAvatar({ chrome }: { chrome: FieldChrome }) {
-  const t = useMessages(shellMessages);
-  return (
-    <Link
-      href={chrome.account.profileHref}
-      aria-label={t.yourProfile}
-      title={chrome.account.name}
-      className="-mr-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-full lg:hidden"
-    >
-      <FieldAvatar account={chrome.account} className="h-9 w-9 text-base" />
-    </Link>
-  );
-}
-
-/**
- * **The bell, on Home's title row alone** (UI-004, the owner, 30 Oct: *the notification bell (with the count, e.g. "9+")
- * only on Home, left of the avatar*). A link to the inbox, 44px, the count on its corner and in its name.
- */
-export function TitleBell({ chrome }: { chrome: FieldChrome }) {
-  const language = useLanguage();
-  const notifications = chrome.notifications;
-  if (!notifications) return null;
-  return (
-    <Link
-      href={notifications.href}
-      aria-label={withUnread(kept('Notifications'), notifications.unread, language)}
-      data-title-bell=""
-      className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-navy lg:hidden"
-    >
-      <NavIcon name="bell" className="h-[22px] w-[22px]" />
-      <UnreadBadge unread={notifications.unread} />
-    </Link>
-  );
-}
 
 /** The sheet's own module, loaded the first time it is opened (common.md: a rarely opened sheet costs nothing until then). */
 const MoreSheet = dynamic(() => import('@/components/field-more-sheet').then((m) => m.MoreSheet), { ssr: false });
@@ -144,7 +53,7 @@ function TabFace({ icon, label, current }: { icon: FieldDestination['icon']; lab
       data-tab-face=""
       className={cn(
         'flex flex-col items-center gap-px rounded-pill px-2 py-1 text-xs leading-tight whitespace-nowrap',
-        current ? 'bg-navy font-bold text-white' : 'font-medium text-muted',
+        current ? 'bg-secondary font-bold text-secondary-contrast' : 'font-medium text-muted',
       )}
     >
       <NavIcon name={icon} className="h-[21px] w-[21px] shrink-0" />
@@ -174,6 +83,7 @@ export function TabBar({ chrome }: { chrome: FieldChrome }) {
   }, [pathname]);
 
   const [activity, calendar, home, fourth] = chrome.nav.tabs;
+  const surveyDot = hasSurveyDot(useSurveyPending(chrome.nav.groups.some((g) => g.items.some((i) => i.id === 'surveys'))));
   return (
     <>
       <nav
@@ -182,6 +92,8 @@ export function TabBar({ chrome }: { chrome: FieldChrome }) {
         className={cn(
           'fixed inset-x-3 bottom-[calc(0.75rem+env(safe-area-inset-bottom))] z-40 h-16 rounded-[32px] bg-card',
           'shadow-bar print:hidden lg:hidden',
+          // P19.1-T1 AC-2 (UI-113): on a tablet at most 470px wide, centred — not stretched to ~750px. A phone's is as before.
+          'md:mx-auto md:max-w-[470px]',
         )}
       >
         {/*
@@ -202,9 +114,18 @@ export function TabBar({ chrome }: { chrome: FieldChrome }) {
             aria-controls={MORE_SHEET_ID}
             aria-current={chrome.nav.inSheet ? 'page' : undefined}
             onClick={() => setOpen(true)}
-            className="flex h-full w-full min-w-0 items-center justify-center"
+            aria-label={surveyDot ? `${t.more}${t.surveyWaiting}` : undefined}
+            className={cn('flex h-full w-full min-w-0 items-center justify-center', surveyDot && 'relative')}
           >
             <TabFace icon="grid" label={t.more} current={open || chrome.nav.inSheet} />
+            {/* P19.5-T4 (C-R2): the red dot while a survey the reader was invited to waits, open and not sent. */}
+            {surveyDot && (
+              <span
+                aria-hidden="true"
+                data-survey-dot=""
+                className="absolute right-[calc(50%-16px)] top-1.5 h-2.5 w-2.5 rounded-full border-2 border-card bg-alert"
+              />
+            )}
           </button>
         </div>
       </nav>

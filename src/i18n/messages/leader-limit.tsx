@@ -3,7 +3,7 @@ import { defineMessages, type MessagesOf } from '@/i18n/catalogue';
 import { kept } from '@/i18n/kept';
 
 /**
- * **The leader limit, in plain words** (P18.98-T4, people and forum; ADR-0113 §2, ADR-0157; `functional/org-hierarchy.md`,
+ * **The leader limit, in plain words** (P18.10-T4, people and forum; ADR-0113 §2, ADR-0157; `functional/org-hierarchy.md`,
  * *The office's leader limit*): the refusal as every screen that can meet it says it (`components/leader-limit-notice.tsx`
  * — a role change, an approval, an Owner's assignment, a roster import), the ask of AgencyBoost, the line a request
  * waits on, and what it asks for (`lib/leader-limit-requests.ts`'s `requestedChange`).
@@ -15,6 +15,7 @@ import { kept } from '@/i18n/kept';
  *
  * @moved components/leader-limit-notice.tsx
  * @moved lib/leader-limit-requests.ts
+ * @moved lib/leader-limit-queue.ts
  */
 
 /** What was being done when the limit was met, and what the reader may do next: the sentence's two halves. */

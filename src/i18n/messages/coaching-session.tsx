@@ -5,7 +5,7 @@ import type { Pronoun } from '@/lib/coaching';
 import { ENGLISH_PRONOUNS } from './coaching';
 
 /**
- * **A coaching session's words** (P18.98-T4, coaching and unit; `functional/coaching.md`, *The module's own strings*):
+ * **A coaching session's words** (P18.10-T4, coaching and unit; `functional/coaching.md`, *The module's own strings*):
  * the *Coaching Session* tab's workspace — its header, *▶ Start coaching session*, last week's items, the Goal, Ratios
  * and Activity cards, the tips, the next actions, finalize and *Edit again* — the parts the archive and `/coaching/me`
  * draw it with (`coaching-parts.tsx`), and the print (`coaching-print.tsx`). The record's own words are
@@ -34,7 +34,7 @@ const cap = (word: string) => word.charAt(0).toUpperCase() + word.slice(1);
 const en = {
   /** `.session-header-card` (`Overall.html:4169-4175`): the day drawn bold, the session's own once finalized. */
   today: ({ day }: { day: ReactNode }) => <>{"Today's session — "}{day}</>,
-  /** The header's tag (P18.95-T7 AC-2, UI-021). */
+  /** The header's tag (P18.7-T7 AC-2, UI-021). */
   tag: { notStarted: 'Not started', draft: 'Draft', finalized: 'Finalized' },
   /** *View past sessions ▾* and its list; the arrow is drawn apart. */
   past: {

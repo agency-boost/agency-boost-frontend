@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
+import { fieldNav } from './field-nav';
 import {
-  coachedWords, daysAgoWords, inTeam, lastLoggedWords, leftOutWords, markerAt, moreWords, newThisMonth, officeLine,
-  ofTarget, OWN_COPY, parseTarget, pctText, projectedWords, PROTOTYPE_COPY, recruitPill, rungShort, showingWords,
-  targetLegend, targetValueWords, toneOf, trendWords, unitNums,
+  coachedWords, daysAgoWords, inTeam, leftOutWords, markerAt, newThisMonth, officeLine, ofTarget, OWN_COPY, parseTarget,
+  pctText, projectedWords, PROTOTYPE_COPY, RATIO_BENCHMARKS_HREF, recruitPill, REVIEWED_PAGES, rungShort,
+  SETTINGS_PAGE_COUNT, SETTINGS_PAGES, settingsLine, SETUP_STEPS, showingWords, silentMeta, STEP_HREF, targetLegend,
+  targetValueWords, toneOf, unitNums, uploadHref,
 } from './kpm-overview';
+import { makeMe } from '@test/harness';
 
 const rp = (millions: number) => Math.round(millions * 1_000_000 * 100);
 
@@ -23,44 +26,24 @@ describe('KPM Overview words (P18-T1)', () => {
     expect(newThisMonth(0)).toBe('+0 new this month');
   });
 
-  describe('the trend against last month to the same day (AC-4, D-figures)', () => {
-    it('AC-4, P18.97-T3 AC-1: Up, with the rise relative to last month, whole — 142 against 138 is +3% (`:977`; ADR-0174 §1)', () => {
-      expect(trendWords(142, 138)).toEqual({ direction: 'up', lead: 'Up from 138 last month', change: '+3%' });
+  describe('P19.3-T2 the not-logged list (AC-2; UI-148, `kpm-overview-mobile` 3)', () => {
+    const member = (over: Partial<Parameters<typeof silentMeta>[0]> = {}) => ({
+      rung: { code: 'AGENT', label: 'Agent' }, leader: { membershipId: 'm-sari', name: 'Sari Puspita' }, daysSince: 14, ...over,
     });
 
-    it('AC-4, P18.97-T3 AC-1: Down, with the fall, whole and with no ,0', () => {
-      expect(trendWords(120, 150)).toEqual({ direction: 'down', lead: 'Down from 150 last month', change: '−20%' });
+    it('P19.3-T2 AC-2 a row’s meta is role · leader · last log — "Agent · ke Sari · 14 hari lalu"', () => {
+      expect(silentMeta(member(), false, 'id')).toBe('Agent · ke Sari · 14 hari lalu');
+      expect(silentMeta(member(), false)).toBe('Agent · under Sari · 14 days ago');
     });
 
-    it('P18.97-T3 F-254 the change rounds an exact half up in integers: 63 against 40 is +58%, which Math.round made +57%', () => {
-      expect(Math.round(((63 - 40) / 40) * 100)).toBe(57);
-      expect(trendWords(63, 40)).toEqual({ direction: 'up', lead: 'Up from 40 last month', change: '+58%' });
-      // A fall of 23 on 40 is −57,5%: its size half up, so −58%, its sign apart.
-      expect(trendWords(17, 40)).toEqual({ direction: 'down', lead: 'Down from 40 last month', change: '−58%' });
+    it('P19.3-T2 AC-2 never logged reads "Belum pernah"; the top of the tree names no leader', () => {
+      expect(silentMeta(member({ daysSince: null, leader: { membershipId: 'm-agus', name: 'Agus Prasetyo' } }), false, 'id'))
+        .toBe('Agent · ke Agus · Belum pernah');
+      expect(silentMeta(member({ rung: { code: 'AB', label: 'AB' }, leader: null, daysSince: 18 }), false, 'id')).toBe('AB · 18 hari lalu');
     });
 
-    it('AC-4: the same count is said as the same, with no percentage', () => {
-      expect(trendWords(40, 40)).toEqual({ direction: 'same', lead: 'Same as last month (40)', change: null });
-    });
-
-    it('AC-9: nothing logged by this day last month gives no percentage to divide by', () => {
-      expect(trendWords(5, 0)).toEqual({ direction: 'up', lead: 'Up from 0 last month', change: null });
-    });
-
-    it('AC-4: nothing to compare against draws no line', () => {
-      expect(trendWords(5, null)).toBeNull();
-    });
-  });
-
-  describe('the not-logged list (AC-4)', () => {
-    it('AC-4: *"Last logged {n} days ago"* or *"Never logged"* (`:991-999`)', () => {
-      expect(lastLoggedWords(9)).toBe('Last logged 9 days ago');
-      expect(lastLoggedWords(1)).toBe('Last logged 1 day ago');
-      expect(lastLoggedWords(null)).toBe('Never logged');
-    });
-
-    it('AC-4: the more-line, verbatim with its count (`:1001`)', () => {
-      expect(moreWords(66)).toBe('+ 66 more — full list on the People screen');
+    it('P19.3-T2 AC-2 the reader’s own row reads Anda in the leader’s place', () => {
+      expect(silentMeta(member({ rung: { code: 'AB', label: 'AB' }, leader: null, daysSince: 16 }), true, 'id')).toBe('AB · Anda · 16 hari lalu');
     });
 
     it('AC-4: a rung after a name is its short form — AAB, Agent — as the prototype writes it', () => {
@@ -71,13 +54,13 @@ describe('KPM Overview words (P18-T1)', () => {
   });
 
   describe('coverage and the leaderboard (AC-5)', () => {
-    it('AC-5, P18.97-T3 AC-1: *"· {n} in team"* and *"{c}/{n} · {p}%"* (`:1027-1029`), the percentage whole', () => {
+    it('AC-5, P18.9-T3 AC-1: *"· {n} in team"* and *"{c}/{n} · {p}%"* (`:1027-1029`), the percentage whole', () => {
       expect(inTeam(31)).toBe('· 31 in team');
       expect(coachedWords({ coached: 6, teamSize: 31, pct: 19, leads: true })).toBe('6/31 · 19%');
       expect(coachedWords({ coached: 0, teamSize: 0, pct: null, leads: true })).toBe('0/0 · —');
     });
 
-    it('P18.97-T3 AC-5 an AB who leads nobody reads No team where the figure would be — never 0/0, never 0%', () => {
+    it('P18.9-T3 AC-5 an AB who leads nobody reads No team where the figure would be — never 0/0, never 0%', () => {
       expect(coachedWords({ coached: 0, teamSize: 0, pct: null, leads: false })).toBe('No team');
       expect(OWN_COPY.noTeam).toBe('No team');
     });
@@ -101,7 +84,7 @@ describe('KPM Overview words (P18-T1)', () => {
       expect(pctText(0)).toBe('0%');
     });
 
-    it('P18.97-T3 AC-1: writes the server’s whole percent as it came — 96%, never 96,0% (UI-018, OD-213)', () => {
+    it('P18.9-T3 AC-1: writes the server’s whole percent as it came — 96%, never 96,0% (UI-018, OD-213)', () => {
       // 27 of 28 is 96,4, which `rateOver` serves as 96: one rounding, the server's, and no ,0 after it.
       expect(pctText(96)).toBe('96%');
       expect(pctText(57)).toBe('57%');
@@ -120,14 +103,14 @@ describe('KPM Overview words (P18-T1)', () => {
       expect(recruitPill(13, null)).toBeNull();
     });
 
-    it('P18.97-T3 AC-7 the Target reads as a value — its number, or No target set — with Edit and its toast', () => {
+    it('P18.9-T3 AC-7 the Target reads as a value — its number, or No target set — with Edit and its toast', () => {
       expect(targetValueWords(15)).toBe('15');
       expect(targetValueWords(0)).toBe('0');
       expect(targetValueWords(null)).toBe('No target set');
       expect([OWN_COPY.edit, OWN_COPY.editTarget, OWN_COPY.targetSaved]).toEqual(['Edit', 'Edit target', 'Target saved ✓']);
     });
 
-    it('P18.97-T3 AC-6 Engagement’s sub-line names the two periods its cards read (UI-020)', () => {
+    it('P18.9-T3 AC-6 Engagement’s sub-line names the two periods its cards read (UI-020)', () => {
       expect(PROTOTYPE_COPY.engagementSub).toBe('This month · Last 7 days');
     });
 
@@ -183,3 +166,43 @@ describe('KPM Overview words (P18-T1)', () => {
     expect(daysAgoWords(null)).toBe('Never');
   });
 });
+
+describe('P19.3-T2 the Overview’s links and its setup card (UI-148, UI-149, UI-150)', () => {
+  it('P19.3-T2 AC-4 the seven steps in the card’s order: the four settings pages first, the server’s SETUP_STEPS', () => {
+    expect([...SETUP_STEPS]).toEqual([
+      'branch-info', 'activity-types', 'activation-checklist', 'products', 'import', 'upload', 'recruit-target',
+    ]);
+    expect([...REVIEWED_PAGES]).toEqual(SETUP_STEPS.slice(0, 4));
+    expect(Object.values(STEP_HREF)).toEqual(REVIEWED_PAGES.map((page) => `/kpm/settings/${page}`));
+  });
+
+  it('P19.3-T2 AC-7 a month opens Data upload on itself: /kpm/data-upload?month=YYYY-MM', () => {
+    expect(uploadHref('2026-10')).toBe('/kpm/data-upload?month=2026-10');
+  });
+
+  it('P19.3-T2 AC-3 the settings list is the menu’s Pengaturan group, in its order, Activity types first and Branch info last', () => {
+    const owner = makeMe({
+      membership: {
+        membershipId: 'mem-owner', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab', status: 'active',
+        isKpmOwner: true, isKpmAdmin: false, directCount: 2,
+      },
+      permissions: ['kpm_overview:read'],
+    });
+    const group = fieldNav(owner, '/kpm/overview', 'kpm_owner').groups.find((g) => g.id === 'pengaturan')!;
+    // *Changed 2026-11-06 (P19.6-T1; ADR-0218 §1):* but *Tampilan KPM*, which the Overview's mockup (UI-148) does not list.
+    expect(SETTINGS_PAGES.map((p) => p.href)).toEqual(group.items.map((item) => item.href).filter((href) => href !== '/kpm/settings/branding'));
+    expect(SETTINGS_PAGES[0].key).toBe('activity-types');
+    expect(SETTINGS_PAGES.at(-1)!.key).toBe('branch-info');
+    // Ratio benchmarks under Activity types: eleven pages, every one two taps from the Overview.
+    expect(RATIO_BENCHMARKS_HREF).toBe('/kpm/settings/ratio-benchmarks');
+    expect(SETTINGS_PAGE_COUNT).toBe(11);
+  });
+
+  it('P19.3-T2 AC-3 Pengaturan KPM’s line: the count, then what waits — products, then the checklist’s draft', () => {
+    expect(settingsLine({ productsAwaiting: 2, checklistDraftVersion: 2 }, 'id'))
+      .toBe('11 pengaturan · 2 produk menunggu Anda · checklist draf versi 2');
+    expect(settingsLine({ productsAwaiting: 0, checklistDraftVersion: null }, 'id')).toBe('11 pengaturan');
+    expect(settingsLine({ productsAwaiting: 1, checklistDraftVersion: null })).toBe('11 settings · 1 product waiting for you');
+  });
+});
+

@@ -2,7 +2,7 @@ import { defineMessages, type MessagesOf } from '@/i18n/catalogue';
 import { kept } from '@/i18n/kept';
 
 /**
- * **New Hires** (P18.98-T4, new hires and activation; `functional/activation.md`, *3M activation and `/new-hires`*;
+ * **New Hires** (P18.10-T4, new hires and activation; `functional/activation.md`, *3M activation and `/new-hires`*;
  * `functional/org-hierarchy.md`, *Adding an agent*): the leader's `/new-hires` — the **3M activation %** with its
  * filter and its units, the three sections as tables and as a phone's cards, a row's result, *Schedule 1:1* and *Mark
  * left* — one hire's `/new-hires/[membershipId]` — the way back, the join date's correction, the coaching note, how an
@@ -27,15 +27,15 @@ import { kept } from '@/i18n/kept';
  * @moved app/(agent)/new-hires/
  */
 const en = {
-  /** The roster's title, the nav item's words (P18.95-T9 AC-2), and its line (`:3354-3361`). */
+  /** The roster's title, the nav item's words (P18.7-T9 AC-2), and its line (`:3354-3361`). */
   title: kept('New Hires'),
   subtitle: "Track your new agents' 90-day activation progress.",
   loading: 'Loading your new hires…',
-  /** Nobody who joined as a new hire in the year it lists (P18.96-T6). */
-  empty: 'No one you lead joined as a new hire in the last 12 months.',
+  /** Nobody who joined as a new hire this year or last (P18.8-T6; the two years since P19.9-T3, ADR-0233). */
+  empty: 'No one you lead joined as a new hire this year or last year.',
 
   /**
-   * The 3M activation % (P18.96-T6 AC-2, AC-3): its counts, a share over nobody decided, its filter. **UI V1 (UI-023)**:
+   * The 3M activation % (P18.8-T6 AC-2, AC-3): its counts, a share over nobody decided, its filter. **UI V1 (UI-023)**:
    * *Aktivasi 3M*, the percentage alone — the counts and the month filter are no longer drawn.
    */
   activation3M: '3M activation rate',
@@ -67,11 +67,11 @@ const en = {
   },
   /** A new hire with no checklist: an AB or an AAB placed as one (ADR-0103). */
   noChecklist: 'No checklist',
-  /** A phone's card (P18.95-T3 AC-4; UI-012): the day in words, and the two dates, each written or *—*. */
+  /** A phone's card (P18.7-T3 AC-4; UI-012): the day in words, and the two dates, each written or *—*. */
   dayOf: ({ day, of }: { day: string; of: number }) => `Day ${day} of ${of}`,
   cardDates: ({ join, firstSale }: { join: string; firstSale: string }) => `Join date ${join} · First sale ${firstSale}`,
 
-  /** *Schedule 1:1* (P18.96-T6 AC-4; UI-027's detail button): its name begins with its visible words (WCAG 2.5.3). */
+  /** *Schedule 1:1* (P18.8-T6 AC-4; UI-027's detail button): its name begins with its visible words (WCAG 2.5.3). */
   scheduleOneOnOne: 'Schedule 1:1',
   scheduleOneOnOneName: ({ name }: { name: string }) => `Schedule 1:1 with ${name}`,
   cancel: 'Cancel',
@@ -89,6 +89,8 @@ const en = {
     /** How an activation that is over ended, in the subtitle's place (parity L-89); `by` a name or *you*. */
     closedGraduated: ({ by, on }: { by: string; on: string }) => `Marked complete by ${by} on ${on}.`,
     closedExpired: ({ on }: { on: string }) => `Ended on ${on}, six months after it started.`,
+    /** P19.9-T3 AC-5 (OD-289): an activation past its first year, served empty — its one line, `on` the day it ended. */
+    firstYearOver: ({ on }: { on: string }) => `The ${kept('90-Day Activation')} covers the first year after joining only — it ended on ${on}.`,
     notFoundTitle: 'This person isn’t one of your new hires.',
     notFoundLine: 'They may have moved to another leader, or the address may be mistyped.',
   },
@@ -129,6 +131,13 @@ const en = {
     status: { activated: 'Activated', activated_late: 'Activated after 3M', not_yet: 'Not yet' },
     columns: { name: 'Name', status: 'Status', checklist: 'Checklist' },
     noWaiting: 'Nobody is waiting to join.',
+    /** P19.9-T3 AC-2 (ADR-0233, the owner's R3): the year control, its two choices, and a year with nobody in it. */
+    yearName: 'Year',
+    year: { current: 'This year', previous: 'Last year' },
+    yearEmpty: {
+      current: `No one has joined as a ${kept('new hire')} this year yet.`,
+      previous: `No one joined as a ${kept('new hire')} last year.`,
+    },
   },
 
   /** **UI V1 — one hire** (UI-027, D-25, D-26): the header, the strip, the tiles, the buttons, First Sale's date. */
@@ -205,7 +214,7 @@ const id: MessagesOf<typeof en> = {
   title: kept('New Hires'),
   subtitle: `Pantau progres ${kept('90-day activation')} agen baru Anda.`,
   loading: `Memuat ${kept('new hires')} Anda…`,
-  empty: `Tidak ada orang yang Anda pimpin yang bergabung sebagai ${kept('new hire')} dalam 12 bulan terakhir.`,
+  empty: `Tidak ada orang yang Anda pimpin yang bergabung sebagai ${kept('new hire')} tahun ini maupun tahun lalu.`,
 
   activation3M: 'Aktivasi 3M',
   counts: ({ activated, notActivated, inProgress }) =>
@@ -250,6 +259,7 @@ const id: MessagesOf<typeof en> = {
     startSaved: 'Tanggal bergabung diperbarui.',
     closedGraduated: ({ by, on }) => `Ditandai selesai oleh ${by} pada ${on}.`,
     closedExpired: ({ on }) => `Berakhir pada ${on}, enam bulan setelah dimulai.`,
+    firstYearOver: ({ on }) => `${kept('90-Day Activation')} hanya untuk tahun pertama sejak bergabung — berakhir pada ${on}.`,
     notFoundTitle: `Orang ini bukan ${kept('new hire')} Anda.`,
     notFoundLine: `Dia mungkin sudah pindah ke ${kept('leader')} lain, atau alamatnya salah ketik.`,
   },
@@ -283,6 +293,12 @@ const id: MessagesOf<typeof en> = {
     status: { activated: 'Teraktivasi', activated_late: 'Teraktivasi, lewat 3M', not_yet: 'Belum' },
     columns: { name: 'Nama', status: 'Status', checklist: 'Checklist' },
     noWaiting: 'Tidak ada yang menunggu bergabung.',
+    yearName: 'Tahun',
+    year: { current: 'Tahun berjalan', previous: 'Tahun lalu' },
+    yearEmpty: {
+      current: `Belum ada yang bergabung sebagai ${kept('new hire')} tahun ini.`,
+      previous: `Tidak ada yang bergabung sebagai ${kept('new hire')} tahun lalu.`,
+    },
   },
 
   hire: {

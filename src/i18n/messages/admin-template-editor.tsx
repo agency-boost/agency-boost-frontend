@@ -9,13 +9,13 @@ const words = (...parts: ReactNode[]) => createElement(Fragment, null, ...parts)
 type Strong = (words: string) => ReactNode;
 
 /**
- * **The Company template's editors** (`components/template-editor.tsx`, P4-T8 onwards; P18.98-T6, area "admin-template";
+ * **The Company template's editors** (`components/template-editor.tsx`, P4-T8 onwards; P18.10-T6, area "admin-template";
  * `functional/tenant-config.md`, *The module's own strings*): one per kind of preset a new office is copied from — the
  * activity taxonomy with its *Activity binding*, the two lead ladders, the ratios, the training tree, the activation
  * checklist, the event types, the carrier rules and the capability ladder — and the two pieces every one of them
  * shares: a row read as text until *Edit*, and *Add …* under a list.
  *
- * **What the office's own screens already say is theirs, and read from there** (the brief of P18.98-T6): the controls
+ * **What the office's own screens already say is theirs, and read from there** (the brief of P18.10-T6): the controls
  * every settings screen shares (*Save*, *Cancel*, *Edit*, *Remove*, *Name*, *Description* …, `settings.ts`), a
  * section's *Summary tile* (`settings-activity-types.ts`), the lead ladder's badges (`settings-lead-statuses.ts`), a
  * ratio's benchmark and formula words (`settings-ratio-benchmarks.ts`, and a unit's name `ratio-words.ts`), what a
@@ -24,13 +24,13 @@ type Strong = (words: string) => ReactNode;
  * `autoBadge` and `byHandBadge`). Here is only what a template says and an office's screen does not.
  *
  * **English is the source**, every word as it was; the Indonesian the approved glossary's, with the API's words for the
- * same things (P18.98-T5's rows of §B.10: a template is a ***template***, a rule an ***aturan***, a comparator a
+ * same things (P18.10-T5's rows of §B.10: a template is a ***template***, a rule an ***aturan***, a comparator a
  * ***pembanding***, a tier a ***tingkat***, a promotion path a ***jalur promosi***, a standing a ***hasil campaign***), and
  * what it lacked proposed in the glossary for approval's §B.10. **Kept English** (§A): the tabs a sentence names, the
  * three features an item may complete from (§A.2), *Maintenance of Contract* and *Promotion paths* (§A.3), *KPM* (§B.9),
  * *goal*, *pipeline*, *ratio*, *skill*, *event*, *campaign* (§A.6). **Content stays as typed** (ADR-0179 §5): every
  * section, type, stage, ratio, category, skill, module, aspect, item, event type, rule, milestone, stage, grid and reward
- * a template holds, a module's title, a code. **A message never writes a figure** (P18.98-T3): a threshold, a benchmark
+ * a template holds, a module's title, a code. **A message never writes a figure** (P18.10-T3): a threshold, a benchmark
  * and a unit's example are written in the reader's figures and handed in.
  *
  * @moved components/template-editor.tsx
@@ -74,6 +74,8 @@ const en = {
   /** A new row's code: filled in from its name where the list suggests one (P5-T1). */
   codeHintSuggested: 'Filled in from the name. Permanent once published.',
   codeHint: 'Permanent once published.',
+  /** The code's length as it is typed, against the most a code takes (P19.4-T4 AC-14, B1-9). */
+  codeCount: ({ n, max }: { n: number; max: number }) => `${n} of ${max} characters.`,
   /** A module's name field. */
   title: 'Title',
 
@@ -120,6 +122,10 @@ const en = {
     categoryHint: 'Optional. Agents read it under the category.',
     noCategories: 'No training categories yet.',
     categoryEditHint: "Optional. Shown under the name on the agent's training screen.",
+    /** A skill's and a module's *Deskripsi singkat* (UI-161, ADR-0220 §1), as Settings › Training names it. */
+    shortDescription: 'Short description',
+    shortDescriptionHint: ({ max }: { max: number }) =>
+      `Optional, at most ${max} characters. Shown in grey under the name on the agent\u2019s training screens.`,
     removeSkillsFirst: 'Remove its skills first.',
     empty: 'Empty',
     /** A category's badge: its skills, and the published modules under them. */
@@ -266,6 +272,7 @@ const id: MessagesOf<typeof en> = {
   },
   codeHintSuggested: 'Diisi dari nama. Permanen setelah diterbitkan.',
   codeHint: 'Permanen setelah diterbitkan.',
+  codeCount: ({ n, max }) => `${n} dari ${max} karakter.`,
   title: 'Judul',
 
   // One form for one and many (§B.0 rule 8).
@@ -306,6 +313,9 @@ const id: MessagesOf<typeof en> = {
     // As Settings › Training says the same (`training-settings.tsx`).
     noCategories: `Belum ada kategori ${kept('Training')}.`,
     categoryEditHint: 'Opsional. Ditampilkan di bawah nama di layar pelatihan agent.',
+    shortDescription: 'Deskripsi singkat',
+    shortDescriptionHint: ({ max }) =>
+      `Opsional, maksimal ${max} karakter. Ditampilkan abu-abu di bawah nama di layar pelatihan agent.`,
     removeSkillsFirst: `Hapus ${kept('skill')}-nya terlebih dahulu.`,
     empty: 'Kosong',
     // A kept noun keeps its English plural; *modul* has one form (§B.0 rule 8).
@@ -354,7 +364,7 @@ const id: MessagesOf<typeof en> = {
       moc: { label: kept('Maintenance of Contract'), blurb: 'Syarat yang harus terus dipenuhi sebuah kontrak.' },
       promotion_path: { label: kept('Promotion paths'), blurb: 'Yang diminta sebuah promosi.' },
     },
-    // A campaign's requirement in words, as the API writes it (P18.98-T5's row of §B.10).
+    // A campaign's requirement in words, as the API writes it (P18.10-T5's row of §B.10).
     comparators: {
       gte: 'minimal (≥)',
       gt: 'lebih dari (>)',

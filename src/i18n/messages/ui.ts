@@ -2,7 +2,7 @@ import { defineMessages, type MessagesOf } from '@/i18n/catalogue';
 import { kept } from '@/i18n/kept';
 
 /**
- * **The shared primitives' own words** (`components/ui/`; P18.98-T4, the shared pieces; `components-and-patterns.md`,
+ * **The shared primitives' own words** (`components/ui/`; P18.10-T4, the shared pieces; `components-and-patterns.md`,
  * *Words*): what a primitive says by itself, whatever screen draws it — the code field's label, the error banner's
  * client-side outcomes, a confirmation's *Cancel*, the date field's *Choose a date*, a copy button, the invite's QR,
  * the reorder controls' names, the stepper's, the pager, the password's *Show*, the progress bar, the status pill, the
@@ -11,7 +11,7 @@ import { kept } from '@/i18n/kept';
  * **English is the source**, byte for byte what the primitives wrote before; the Indonesian is the approved glossary's
  * (§B.1–§B.5: *Batal*, *Kode*, *Memuat…*, *Sesuai target*, *Data belum cukup*, *Naikkan · Turunkan*, *Sebelumnya*,
  * *Berikutnya*, *Target belum diatur*; *tautan*, *kata sandi*, §B.0 rule 6), with what it lacked proposed in the
- * glossary for approval's §B.10 (*P18.98-T4, the shared pieces*). **Kept** (§A): *benchmark*. A label a caller hands a
+ * glossary for approval's §B.10 (*P18.10-T4, the shared pieces*). **Kept** (§A): *benchmark*. A label a caller hands a
  * primitive — a row's name, a field's, a table's caption — is the caller's, in the caller's language, or content as
  * typed. **A figure is never a message's**: a caller writes it and passes it in.
  *
@@ -58,7 +58,7 @@ const en = {
      */
     config: ({ detail }: { detail: string }) => detail,
   },
-  /** `DateField`'s face with nothing chosen (P18.96-T2). */
+  /** `DateField`'s face with nothing chosen (P18.8-T2). */
   chooseDate: 'Choose a date',
   /** `CopyableValue`. */
   copy: {

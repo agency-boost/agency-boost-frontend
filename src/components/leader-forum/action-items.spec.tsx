@@ -48,7 +48,7 @@ describe('P18.1-T2 AC-6 the tracker, as drawn (`:2822-2843`)', () => {
     renderTab(ActionItems);
     const planned = within(within(table()).getAllByRole('row')[1]).getByRole('button', { name: 'Planned. Change to Implemented' });
     expect(planned).toHaveTextContent(/^Planned$/);
-    expect(planned).toHaveClass('bg-amber/15', 'text-navy', 'rounded-pill');
+    expect(planned).toHaveClass('bg-primary/15', 'text-navy', 'rounded-pill');
     const notPlanned = within(within(table()).getAllByRole('row')[3]).getByRole('button', { name: 'Not yet planned. Change to Planned' });
     expect(notPlanned).toHaveClass('bg-alert/10', 'text-alert');
   });
@@ -253,7 +253,7 @@ describe('P18.1-T2 AC-6 moving a row, by the keyboard and by drag (I-255)', () =
     const rows = within(table()).getAllByRole('row');
     fireEvent.dragStart(button(/^Move row 4,/), { dataTransfer: { setDragImage: () => undefined, effectAllowed: '' } });
     fireEvent.dragOver(rows[2]);
-    expect(rows[2].className).toContain('shadow-[inset_0_2px_0_var(--color-amber)]');
+    expect(rows[2].className).toContain('shadow-[inset_0_2px_0_var(--color-primary)]');
     fireEvent.drop(rows[2]);
     fireEvent.dragEnd(button(/^Move row 2,/));
     await screen.findByText('Reordered');
@@ -281,7 +281,7 @@ describe('P18.1-T2 AC-1 read-only: the six columns, and no control drawn', () =>
     expect(screen.queryByRole('button')).toBeNull();
     expect(screen.queryByText('Drag ⠿ to reorder')).toBeNull();
     expect(within(table()).getAllByRole('row')[0].children).toHaveLength(6);
-    expect(screen.getAllByText('Planned')[0]).toHaveClass('bg-amber/15', 'text-navy');
+    expect(screen.getAllByText('Planned')[0]).toHaveClass('bg-primary/15', 'text-navy');
     expect(screen.getByText('Socialization on Activity Tracking Tool in LWS session')).toBeInTheDocument();
     expect(screen.getByText(/^🔒 Only Wilson Tanoto, Maya Halim and tagged core leaders/)).toBeInTheDocument();
   });

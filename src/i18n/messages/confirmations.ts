@@ -2,7 +2,7 @@ import { defineMessages, type MessagesOf } from '@/i18n/catalogue';
 import { kept } from '@/i18n/kept';
 
 /**
- * **The confirmations every screen toasts** (`lib/confirmations.ts`; P18.95-T1 AC-6, ADR-0167 §5, OD-200; P18.98-T4,
+ * **The confirmations every screen toasts** (`lib/confirmations.ts`; P18.7-T1 AC-6, ADR-0167 §5, OD-200; P18.10-T4,
  * the shared pieces): *Activity logged ✓*, *Link copied ✓* and the rest, through the shell's toast.
  *
  * **English is the source**, byte for byte `CONFIRMED` as it was, which stays the catalogue's English for a caller

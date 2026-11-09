@@ -2,7 +2,7 @@ import { defineMessages, type MessagesOf } from '@/i18n/catalogue';
 import { kept } from '@/i18n/kept';
 
 /**
- * **Settings › Activity types** (`/kpm/settings/activity-types`, P4-T1; P18.98-T4): what an office counts, a card per
+ * **Settings › Activity types** (`/kpm/settings/activity-types`, P4-T1; P18.10-T4): what an office counts, a card per
  * section with its types numbered under it. The frame, the bars and the controls every settings screen shares —
  * *Save*, *Rename*, *Applies to*, *Show archived* — are `settings.ts`'.
  *
@@ -36,10 +36,15 @@ const en = {
   /** Why a type's code cannot change, in its edit. */
   codeReason: 'Every activity logged, every ratio and every goal points at it.',
   descriptionHint: "Optional. Shown under the name on the agent's screen.",
-  /** The chip on a bound type: the cascade stage it counts as (P18.97-T4 AC-1), and its tooltip. */
+  /** *Nama singkat* (P19.8-T4, ADR-0229 §5; MOB UI-180): a type's second name, beside its name in every edit. */
+  shortLabel: 'Short name',
+  shortLabelHint: ({ max }: { max: number }) =>
+    `Optional, at most ${max} characters. One line in the Unit Dashboard’s activity table; the full name shows on tap.`,
+  /** The chip on a bound type: the cascade stage it counts as (P18.9-T4 AC-1), and its tooltip. */
   countsAs: ({ stage }: { stage: string }) => `Counts as: ${stage}`,
   countsAsTip: ({ stage }: { stage: string }) =>
-    `The summary and the goal plan count this as ${stage}. A Super Admin changes which activities count.`,
+    // P19.4-T3 (ADR-0206 §1): the Owner and the Admin change it now, under *Activity binding* on this page.
+    `The summary and the goal plan count this as ${stage}. Change which activities count under Activity binding.`,
   typeCodeHint: 'Permanent. Ratios and goals bind to it.',
   /** The button under a section's types. */
   addTo: ({ name }: { name: string }) => `Add to ${name}`,
@@ -63,10 +68,14 @@ const id: MessagesOf<typeof en> = {
   archiveSectionHint: 'Mengarsipkan bagian ini beserta semua isinya.',
   codeReason: `Setiap aktivitas yang tercatat, setiap ${kept('ratio')}, dan setiap ${kept('goal')} merujuk ke kode ini.`,
   descriptionHint: 'Opsional. Ditampilkan di bawah nama di layar agent.',
+  shortLabel: 'Nama singkat',
+  shortLabelHint: ({ max }) =>
+    `Opsional, paling banyak ${max} karakter. Satu baris di tabel aktivitas ${kept('Unit Dashboard')}; nama lengkap `
+    + 'tampil saat diketuk.',
   countsAs: ({ stage }) => `Dihitung sebagai: ${stage}`,
   countsAsTip: ({ stage }) =>
-    `Ringkasan dan rencana ${kept('goal')} menghitung ini sebagai ${stage}. ${kept('Super Admin')} yang mengubah `
-    + 'aktivitas mana yang dihitung.',
+    `Ringkasan dan rencana ${kept('goal')} menghitung ini sebagai ${stage}. Ubah aktivitas mana yang dihitung di `
+    + 'Pengaitan aktivitas.',
   typeCodeHint: `Permanen. Setiap ${kept('ratio')} dan ${kept('goal')} terikat padanya.`,
   addTo: ({ name }) => `Tambah ke ${name}`,
 };

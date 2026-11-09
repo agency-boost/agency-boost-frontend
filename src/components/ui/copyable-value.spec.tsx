@@ -25,7 +25,7 @@ describe('CopyableValue', () => {
     expect(await screen.findByText('Copied.')).toHaveAttribute('role', 'status');
   });
 
-  it('P18.95-T1 AC-6: toasts the caller’s words once the copy has worked, and nothing when it has not', async () => {
+  it('P18.7-T1 AC-6: toasts the caller’s words once the copy has worked, and nothing when it has not', async () => {
     vi.stubGlobal('navigator', { clipboard: { writeText: vi.fn(async () => undefined) } });
     const { unmount } = render(<CopyableValue label="Leader code" value="JOR417" mono copied="Code copied ✓" />);
     await userEvent.click(screen.getByRole('button', { name: 'Copy' }));

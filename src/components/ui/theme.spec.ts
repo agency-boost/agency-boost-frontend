@@ -144,7 +144,7 @@ describe('the Tailwind theme', () => {
 });
 
 /**
- * **A phone's sizes, in the stylesheet** (P18.95-T1 AC-9, AC-10, AC-12; ADR-0167; the client's UI review
+ * **A phone's sizes, in the stylesheet** (P18.7-T1 AC-9, AC-10, AC-12; ADR-0167; the client's UI review
  * of 2026-10-26: UI-014, UI-029).
  *
  * The type scale's five steps under 16px are custom properties, so a phone moves them once and nothing
@@ -188,7 +188,7 @@ describe('on a phone', () => {
   });
 
   it('UI-008 reads nothing under 12px at any width: the two steps that were 10px and 11px are 12px everywhere', () => {
-    // UI V1 (UI-008, *12px minimum: All sizes*): what a phone alone had since UI-029 (P18.95-T1 AC-10), now every width's.
+    // UI V1 (UI-008, *12px minimum: All sizes*): what a phone alone had since UI-029 (P18.7-T1 AC-10), now every width's.
     expect(decls(topRoot)).toMatchObject({
       '--text-2xs': '0.75rem',
       '--text-xs': '0.75rem',
@@ -220,6 +220,8 @@ describe('on a phone', () => {
       '--color-card-edge': 'transparent',
       '--radius-card': '16px',
       '--radius-row': '14px',
+      // P19.1-T1 AC-4 (UI-114): the field shell's icon rail is 64px.
+      '--sidebar-rail-width': '64px',
     });
   });
 
@@ -242,14 +244,25 @@ describe('on a phone', () => {
     expect(decls(topRoot)['--font-body']).toMatch(/^'Inter', 'Inter Fallback',/);
   });
 
-  it('UI-004 sizes a title 20px, 22px from 768px and 24px from 1024px, through one class', async () => {
+  /*
+   * *Changed 2026-11-04 (P19.1-T1 AC-1, ADR-0196; UI-112, the phase file's Decisions 7):* the tablet's title is the
+   * phone's 20px, as `shared-2026-11-02.css` draws it; it was 22px from 768px.
+   */
+  it('P19.1-T1 AC-1 sizes a title 20px up to 1024px and 24px from it, through one class — no 22px tablet step', async () => {
     expect(decls(topRoot)['--text-title']).toBe('1.25rem');
-    const at = (query: string) => sheet.nodes.find(
+    const media = (query: string) => sheet.nodes.filter(
       (n): n is AtRule => n.type === 'atrule' && n.name === 'media' && n.params === query,
-    )!;
-    expect(decls(rulesIn(at('(min-width: 768px)'))[0])).toEqual({ '--text-title': '1.375rem' });
-    expect(decls(rulesIn(at('(min-width: 1024px)'))[0])).toEqual({ '--text-title': '1.5rem' });
+    );
+    const titleIn = (query: string) => media(query).flatMap(rulesIn).map(decls).filter((d) => '--text-title' in d);
+    expect(titleIn('(min-width: 768px)')).toEqual([]);
+    expect(titleIn('(min-width: 1024px)')).toEqual([{ '--text-title': '1.5rem' }]);
     expect(await compile('text-title')).toContain('font-size: var(--text-title)');
+  });
+
+  it('P19.1-T1 AC-4 makes the field shell’s rail 64px, and leaves the consoles’ 56px', () => {
+    expect(decls(topRoot)['--sidebar-rail-width']).toBe('56px');
+    const field = sheet.nodes.find((n): n is Rule => n.type === 'rule' && n.selector === ":root:has([data-surface='v1'])")!;
+    expect(decls(field)['--sidebar-rail-width']).toBe('64px');
   });
 
   it('UI-004 leaves room for the tab bar below 1024px, only where the field shell draws it', () => {
@@ -321,13 +334,13 @@ describe('on a phone', () => {
       expect(d['mask-image']).not.toMatch(/#[0-9a-f]{3,8}/i);
     }
     // Nowhere else: a row that overflows at 768px and wider is not faded — but a row that says it is one row below
-    // 1024px as well (P18.97-T6 AC-4, the next case), and only below 1024px.
+    // 1024px as well (P18.9-T6 AC-4, the next case), and only below 1024px.
     const elsewhere = sheet.nodes.filter((n) => n !== block && n.toString().includes('data-fade'));
     expect(elsewhere.map((n) => (n as AtRule).params)).toEqual(['not all and (min-width: 1024px)']);
     expect(decls(topRoot)['--tab-fade']).toBe('1.5rem');
   });
 
-  it('P18.97-T6 AC-4 fades a row that scrolls below 1024px there too — only a row that says so, with the phone’s masks', async () => {
+  it('P18.9-T6 AC-4 fades a row that scrolls below 1024px there too — only a row that says so, with the phone’s masks', async () => {
     // The query a `max-lg:` class compiles to, so the row's classes and its fade change at the same pixel.
     const css = await compile('max-lg:flex-nowrap');
     const query = /@media ([^{]+?)\s*\{/.exec(css)![1];
@@ -352,7 +365,7 @@ describe('on a phone', () => {
   it('AC-10 leaves no arbitrary text size under 12px in the source, but for a glyph that is not text', () => {
     // The scale's steps are raised in one place; an arbitrary `text-[10px]` would escape it. A glyph may
     // stay smaller (AC-10) — each such one is named here, with what it is.
-    // *Changed 2026-10-30 (UI V1, Phase 18.99 T4):* the roster's ▸ disclosure went with its ⌄ (UI-011); none is left.
+    // *Changed 2026-10-30 (UI V1, Phase 18.11 T4):* the roster's ▸ disclosure went with its ⌄ (UI-011); none is left.
     const GLYPHS: Record<string, string> = {};
     const src = join(__dirname, '../..');
     const found: string[] = [];

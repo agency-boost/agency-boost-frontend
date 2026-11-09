@@ -81,7 +81,7 @@ describe('/new-hires/[membershipId], one hire as a leader reads it (P13-T5, P13-
     expect(within(row('CRM_SETUP')).getByRole('button', { name: 'Ticked by you · 3 Oct 2026' })).toBeInTheDocument();
   });
 
-  it('P18.95-T1 AC-5: a leader’s tick says Saved ✓ beside its box, and keeps the prototype’s toast', async () => {
+  it('P18.7-T1 AC-5: a leader’s tick says Saved ✓ beside its box, and keeps the prototype’s toast', async () => {
     show({ 'PUT /new-hires/mem-rina/items/': () => ({ body: crmTickedBySari() }) });
     await ready();
     await userEvent.click(within(row('CRM_SETUP')).getByRole('checkbox', { name: 'Set up company CRM system' }));
@@ -90,7 +90,7 @@ describe('/new-hires/[membershipId], one hire as a leader reads it (P13-T5, P13-
     expect(screen.getByText('Activation status updated.')).toBeInTheDocument();
   });
 
-  it('P18.95-T1 AC-5: a refused tick offers the retry, which sends the same state again', async () => {
+  it('P18.7-T1 AC-5: a refused tick offers the retry, which sends the same state again', async () => {
     const { calls } = show({
       'PUT /new-hires/mem-rina/items/': [
         { status: 500, body: { error: { code: 'INTERNAL_ERROR', message: 'Something went wrong.', requestId: 'r-1' } } },
@@ -108,7 +108,7 @@ describe('/new-hires/[membershipId], one hire as a leader reads it (P13-T5, P13-
     expect(await within(row('CRM_SETUP')).findByText('Saved ✓')).toBeInTheDocument();
   });
 
-  it('P18.95-T1 AC-5, P18.96-T2 AC-5: a corrected join date says Saved ✓ under the field, and a refused one offers the retry', async () => {
+  it('P18.7-T1 AC-5, P18.8-T2 AC-5: a corrected join date says Saved ✓ under the field, and a refused one offers the retry', async () => {
     const corrected = leaderView({ startDate: '2026-08-01', day: 64, startCorrected: { by: SARI, at: '2026-10-03T02:00:00.000Z' } });
     const { calls } = show({
       'PUT /new-hires/mem-rina/start-date': [
@@ -181,7 +181,7 @@ describe('/new-hires/[membershipId], one hire as a leader reads it (P13-T5, P13-
     expect(screen.queryByText('Activation status updated.')).not.toBeInTheDocument();
   });
 
-  it('P13-T5 AC-5, P18.96-T2 AC-3 AC-4 the join date is the leader’s to correct, in the shared field, within the bounds, written once it is whole', async () => {
+  it('P13-T5 AC-5, P18.8-T2 AC-3 AC-4 the join date is the leader’s to correct, in the shared field, within the bounds, written once it is whole', async () => {
     const corrected = leaderView({ startDate: '2026-08-01', day: 64, startCorrected: { by: SARI, at: '2026-10-03T02:00:00.000Z' } });
     const { calls } = show({ 'PUT /new-hires/mem-rina/start-date': { body: corrected } });
     await ready();
@@ -189,7 +189,7 @@ describe('/new-hires/[membershipId], one hire as a leader reads it (P13-T5, P13-
     expect(field).toHaveValue('2026-08-06');
     expect(field).toHaveAttribute('max', '2026-10-03');
     expect(field).toHaveAttribute('min', '2025-10-03');
-    // P18.96-T2 AC-4: the date as the app writes it, on the shared field's face — never the browser's mm/dd/yyyy.
+    // P18.8-T2 AC-4: the date as the app writes it, on the shared field's face — never the browser's mm/dd/yyyy.
     expect(field.nextElementSibling).toHaveTextContent('6 Aug 2026');
 
     vi.useFakeTimers();

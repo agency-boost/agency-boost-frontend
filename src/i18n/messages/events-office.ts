@@ -2,7 +2,7 @@ import { defineMessages, type MessagesOf } from '@/i18n/catalogue';
 import { kept } from '@/i18n/kept';
 
 /**
- * **The office's side of its events, in words** (P18.98-T4, events, campaigns and the calendar; `functional/events.md`,
+ * **The office's side of its events, in words** (P18.10-T4, events, campaigns and the calendar; `functional/events.md`,
  * *The module's own strings*): what *View feedback* opens on a past row of Settings › Events — the roll call, the
  * *Feedback Summary* and the two tabs between them — and the picker *Chosen people* and *Chosen leaders* choose from
  * (`lib/events-admin.ts`). The *Feedback Summary* is also KPM Analytics' (the compliance tree's past event).
@@ -40,7 +40,7 @@ const en = {
   absentTip: 'Marked absent — not counted in the NPS',
   loadingSummary: 'Loading feedback…',
 
-  /** *View feedback*'s two tabs (P18.8-T13, ADR-0161 §6), and the strip's name. */
+  /** *View feedback*'s two tabs (P18.5-T13, ADR-0161 §6), and the strip's name. */
   rollCall: 'Roll call',
   feedbackSummaryTab: 'Feedback summary',
   feedbackParts: 'Roll call and feedback',
@@ -72,7 +72,7 @@ const en = {
   leadsNobodyNow: 'Leads nobody now',
   /** The chosen people who have left, one row for all of them. */
   left: ({ n }: { n: number }) => (n === 1 ? 'Somebody who has left' : `${n} people who have left`),
-  /** The settings panel (P18.5-T5 AC-9), the spec's own words for `EVENT_HAS_RESPONSES`. */
+  /** The settings panel (P18.2-T5 AC-9), the spec's own words for `EVENT_HAS_RESPONSES`. */
   hasResponses: 'People have already responded to this event, so its start can’t move and it can’t end in the future.',
 };
 

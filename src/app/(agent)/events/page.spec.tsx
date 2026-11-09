@@ -50,7 +50,7 @@ const titlesIn = (name: string) => within(section(name)).queryAllByRole('heading
 const card = (title: string) => screen.getByRole('heading', { level: 3, name: title }).closest<HTMLElement>('[data-event]')!;
 const bodyOf = (call: { init: RequestInit }) => JSON.parse(String(call.init.body));
 
-describe('/events, KPM Events (P18.5-T5, T6)', () => {
+describe('/events, KPM Events (P18.2-T5, T6)', () => {
   beforeEach(() => {
     nav.push.mockReset();
     nav.replace.mockReset();
@@ -58,8 +58,19 @@ describe('/events, KPM Events (P18.5-T5, T6)', () => {
   });
   afterEach(() => vi.unstubAllGlobals());
 
+  /*
+   * **The list as a desktop reads it** — jsdom answers no width, so these draw the laptop's list. *Changed 2026-11-05
+   * (P19.1-T5 AC-4, AC-5; UI-123: "Card content as UI-108"):* a tablet and a laptop draw the phone's two groups and
+   * compact cards, so the prototype's *Going · Upcoming · Past* in small capitals, the empty *Going*, the type's icon,
+   * the blurb, the pill with a dot, *Join* and *View event* are gone from here; the tests that pinned them now pin what
+   * replaced each. The grid's columns are pinned at their widths in `events-wide.spec.tsx`.
+   */
   describe('the list, verbatim (T5 AC-4)', () => {
-    it('P18.5-T5 AC-4 Event list is live in the nav, no pill, and current', async () => {
+    const answers = (title: string) => within(card(title)).queryByRole('group', { name: `Your answer for ${title}` });
+    const pressed = (title: string) => within(answers(title)!).getAllByRole('button')
+      .filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.textContent);
+
+    it('P18.2-T5 AC-4 Event list is live in the nav, no pill, and current', async () => {
       list();
       await listReady();
       // The field shell's sidebar since UI V1 (UI-004): *Event*, under *Program*.
@@ -70,180 +81,164 @@ describe('/events, KPM Events (P18.5-T5, T6)', () => {
       expect(within(item).queryByText('Upcoming')).not.toBeInTheDocument();
     });
 
-    it('P18.5-T5 AC-4 is titled and sub-titled as drawn, and reads the list once', async () => {
+    it('P18.2-T5 AC-4 is titled and sub-titled as drawn, and reads the list once', async () => {
       const { calls } = list();
       await listReady();
-      // P18.95-T9 AC-2: the nav item's words, *Event list*, where the prototype titled it *KPM Events*.
+      // P18.7-T9 AC-2: the nav item's words, *Event list*, where the prototype titled it *KPM Events*.
       expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Event List$/);
       expect(screen.getByText('Browse upcoming and past events from your KPM — join, and share feedback once they wrap up.'))
         .toBeInTheDocument();
       expect(calls.filter((c) => /\/events$/.test(c.url))).toHaveLength(1);
     });
 
-    it('P18.5-T5 AC-4 the filter All · Upcoming · Past, the one on pressed and navy (ADR-0137 §2)', async () => {
+    it('P18.2-T5 AC-4, P19.1-T5 AC-4 the filter All · Upcoming · Past, one segmented control, the one on pressed and navy', async () => {
       list();
       await listReady();
-      const buttons = within(screen.getByRole('group', { name: 'Show events' })).getAllByRole('button');
+      const group = screen.getByRole('group', { name: 'Show events' });
+      const buttons = within(group).getAllByRole('button');
       expect(buttons.map((b) => [b.textContent, b.getAttribute('aria-pressed')])).toEqual([
         ['All', 'true'], ['Upcoming', 'false'], ['Past', 'false'],
       ]);
-      expect(buttons[0]).toHaveClass('bg-navy', 'text-white');
-      expect(buttons[0]).not.toHaveClass('bg-amber');
+      expect(buttons[0]).toHaveClass('bg-secondary', 'text-secondary-contrast', 'rounded-pill');
+      expect(buttons[0]).not.toHaveClass('bg-primary');
+      expect(group).toHaveClass('rounded-pill', 'bg-card');
     });
 
-    it('P18.5-T5 AC-4 Going, Upcoming and Past in their orders: soonest first, the past latest first', async () => {
+    it('P18.2-T5 AC-4, P19.1-T5 AC-4 Upcoming and Past in their orders, each in sentence case with its count', async () => {
       const later = guestEvent({ id: 'ev-later', title: 'Later one', startsAt: '2026-11-02T02:00:00.000Z', startsOn: '2026-11-02' });
       list({ 'GET /events': { body: eventList([later, ...RINA_EVENTS]) } });
       await listReady();
-      expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['Going', 'Upcoming', 'Past']);
-      expect(titlesIn('Going')).toEqual(['Product refresh briefing']);
-      expect(titlesIn('Upcoming')).toEqual(['Kickoff 2026', 'Later one']);
+      expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['Upcoming3', 'Past3']);
+      for (const h of screen.getAllByRole('heading', { level: 2 })) expect(h).not.toHaveClass('uppercase');
+      // A joined event stays with the upcoming ones, its *Join* filled (UI-108): there is no *Going* group to be empty.
+      expect(titlesIn('Upcoming')).toEqual(['Product refresh briefing', 'Kickoff 2026', 'Later one']);
       expect(titlesIn('Past')).toEqual(['PRULink briefing', 'August Town Hall', 'New Agent Bootcamp']);
+      expect(screen.queryByRole('region', { name: 'Going' })).not.toBeInTheDocument();
     });
 
-    it('P18.5-T5 AC-4 a running event sits with the upcoming ones (F-42)', async () => {
+    it('P18.2-T5 AC-4 a running event sits with the upcoming ones (F-42)', async () => {
       const huddle = guestEvent({ id: 'ev-huddle', title: "Leaders' huddle", phase: 'running', me: { rsvp: 'going', claimed: false, feedback: null } });
       list({ 'GET /events': { body: eventList([huddle, KICKOFF]) } });
       await listReady();
-      expect(titlesIn('Going')).toEqual(["Leaders' huddle"]);
-      expect(within(card("Leaders' huddle")).getByText('Going', { selector: '[data-pill]' })).toBeInTheDocument();
+      expect(titlesIn('Upcoming')).toEqual(["Leaders' huddle", 'Kickoff 2026']);
+      expect(pressed("Leaders' huddle")).toEqual(['Join']);
     });
 
-    it('P18.5-T5 AC-4 Upcoming shows Going and Upcoming, Past only the past', async () => {
+    it('P18.2-T5 AC-4 Upcoming shows the open events, Past only the past', async () => {
       list();
       await listReady();
       await userEvent.click(screen.getByRole('button', { name: 'Upcoming' }));
-      expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['Going', 'Upcoming']);
+      expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['Upcoming2']);
       expect(screen.getByRole('button', { name: 'Upcoming' })).toHaveAttribute('aria-pressed', 'true');
       await userEvent.click(screen.getByRole('button', { name: 'Past' }));
-      expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['Past']);
+      expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['Past3']);
     });
 
-    it('P18.5-T5 AC-4 the three empty rows, verbatim', async () => {
+    it('P18.2-T5 AC-4, P19.1-T5 AC-5 an empty group is hidden; with nothing to show, one line, verbatim', async () => {
       list({ 'GET /events': { body: eventList([]) } });
-      expect(await screen.findByText("You haven't joined any upcoming events yet.")).toBeInTheDocument();
-      expect(screen.getByText('No upcoming events right now.')).toBeInTheDocument();
+      expect(await screen.findByText('No upcoming events right now.')).toBeInTheDocument();
+      // D-08 (UI-123): never *"You haven't joined any upcoming events yet."* under an empty heading.
+      expect(screen.queryByText("You haven't joined any upcoming events yet.")).not.toBeInTheDocument();
+      expect(screen.queryByRole('heading', { level: 2 })).not.toBeInTheDocument();
+      await userEvent.click(screen.getByRole('button', { name: 'Past' }));
       expect(screen.getByText('No past events yet.')).toBeInTheDocument();
     });
 
-    it('P18.5-T5 AC-4, P18.95-T10 AC-1 each card: the type’s icon, audience line, title, date and time, place ↗, blurb, pill, View event', async () => {
+    it('P18.2-T5 AC-4, P19.1-T5 AC-4 each card: the audience line in plain grey, the title, the date block, start – end, the place', async () => {
       list();
       await listReady();
       const refresh = card('Product refresh briefing');
-      expect(within(refresh).getByText('Going', { selector: '[data-pill]' })).toBeInTheDocument();
-      expect(within(refresh).getByText('Prudential Event | All agents')).toBeInTheDocument();
-      expect(within(refresh).getByText(/15 Oct 2026, 14:00/)).toBeInTheDocument();
-      const where = within(refresh).getByRole('link', { name: /Online — Zoom/ });
-      expect(where).toHaveAttribute('href', 'https://zoom.us/j/1234567890');
-      expect(where).toHaveAttribute('target', '_blank');
-      expect(where).toHaveTextContent('↗');
-      expect(within(refresh).getByText("ev-refresh's line.")).toBeInTheDocument();
-      expect(within(refresh).getByRole('button', { name: 'View event' })).toBeInTheDocument();
-      // The type's colour is the icon's, as the office set it.
-      expect(refresh.querySelector('[style]')).toHaveStyle({ backgroundColor: '#2D9CDB' });
-      // A place with no address is words, not a link.
-      expect(within(card('Kickoff 2026')).queryByRole('link')).not.toBeInTheDocument();
-      expect(within(card('Kickoff 2026')).getByText('KPM | All agents')).toBeInTheDocument();
+      const audience = refresh.querySelector('[data-audience]')!;
+      expect(audience).toHaveTextContent(/^Prudential Event \| All agents$/);
+      expect(audience).toHaveClass('text-muted');
+      expect(audience).not.toHaveClass('uppercase');
+      expect(refresh).toHaveTextContent('15Oct');
+      expect(refresh).toHaveTextContent('14:00 – 16:00');
+      expect(refresh).toHaveTextContent('Online — Zoom');
+      // The audience is said once, on its line: the time line names no scope a second time.
+      expect(card('New Agent Bootcamp').querySelector('[data-audience]')).toHaveTextContent('KPM | Select agents');
+      expect(card('New Agent Bootcamp')).not.toHaveTextContent('· Select agents');
+      expect(card('Kickoff 2026').querySelector('[data-audience]')).toHaveTextContent('KPM | All agents');
+      // UI-108: the description is the event's own page; *View event* is the whole card.
+      expect(within(refresh).queryByText("ev-refresh's line.")).not.toBeInTheDocument();
+      expect(within(refresh).queryByRole('button', { name: 'View event' })).not.toBeInTheDocument();
     });
 
-    it('P18.5-T5 AC-4, T6 AC-4 the five foot pills', async () => {
+    it('P18.2-T5 AC-4, T6 AC-4, P19.1-T5 AC-5 where the reader stands: the answer on an upcoming card, a tinted pill on a past one, no dot', async () => {
       list();
       await listReady();
-      const pill = (title: string) => card(title).querySelector('[data-pill]')!.textContent;
-      expect(pill('Product refresh briefing')).toBe('Going');
-      expect(pill('Kickoff 2026')).toBe('Not joined');
-      expect(pill('PRULink briefing')).toBe('Feedback pending');
-      expect(pill('August Town Hall')).toBe("Didn't join");
-      expect(pill('New Agent Bootcamp')).toBe('Feedback sent');
+      expect(pressed('Product refresh briefing')).toEqual(['Join']);
+      expect(pressed('Kickoff 2026')).toEqual([]);
+      expect(within(card('PRULink briefing')).getByText('Feedback pending')).toHaveAttribute('data-tone', 'amber');
+      expect(within(card('August Town Hall')).getByText("Didn't join")).toHaveAttribute('data-tone', 'grey');
+      expect(within(card('New Agent Bootcamp')).getByText('Feedback sent')).toHaveAttribute('data-tone', 'green');
+      // D-27: never a dot — the prototype's *• Going* and *• Not joined* are gone with their pill.
+      expect(document.querySelector('[data-event] .rounded-full.h-1\\.5')).toBeNull();
+      expect(document.querySelector('[data-pill]')).toBeNull();
     });
 
-    it('P18.95-T10 AC-1 one status per card: the pill, in words, and no poster tag saying it again', async () => {
+    it('P18.7-T10 AC-1 one status per card, in words, and no poster tag saying it again', async () => {
       list();
       await listReady();
-      for (const title of ['Product refresh briefing', 'Kickoff 2026', 'PRULink briefing', 'August Town Hall', 'New Agent Bootcamp']) {
-        const c = card(title);
-        expect(c.querySelectorAll('[data-pill]')).toHaveLength(1);
-        expect(c.querySelector('[data-tag]')).toBeNull();
-        // Never colour alone: the one status carries its words.
-        expect(c.querySelector('[data-pill]')!.textContent!.trim()).not.toBe('');
+      for (const title of ['PRULink briefing', 'August Town Hall', 'New Agent Bootcamp']) {
+        expect(card(title).querySelectorAll('[data-tone]')).toHaveLength(1);
+        expect(card(title).querySelector('[data-tag]')).toBeNull();
+        expect(answers(title)).toBeNull();
       }
-      expect(within(card('Kickoff 2026')).getAllByText(/not joined/i)).toHaveLength(1);
-      expect(within(card('August Town Hall')).queryByText(/not joined/i)).not.toBeInTheDocument();
-      expect(within(card('Product refresh briefing')).getAllByText(/^going$/i)).toHaveLength(1);
+      for (const title of ['Product refresh briefing', 'Kickoff 2026']) {
+        expect(card(title).querySelector('[data-tone]')).toBeNull();
+        expect(answers(title)).not.toBeNull();
+      }
     });
 
-    it('P18.95-T10 AC-1 the icon in place of the banner: the type’s emoji at 32px on its colour, hidden from a screen reader', async () => {
+    it('P19.1-T5 AC-4 the date block where the type’s icon was: the day and the month, and no emoji', async () => {
       list();
       await listReady();
       const kickoff = card('Kickoff 2026');
-      const emoji = within(kickoff).getByText('🏆');
-      expect(emoji).toHaveAttribute('aria-hidden', 'true');
-      const icon = emoji.parentElement!;
-      expect(icon).toHaveClass('h-8', 'w-8', 'shrink-0', 'rounded-md');
-      expect(icon).toHaveStyle({ backgroundColor: '#27AE60' });
-      // No 110px poster on any card.
-      expect(document.querySelector('[data-event] .h-\\[110px\\]')).toBeNull();
-      // The icon sits beside the audience line and the title, inside the card's body.
-      expect(icon.parentElement).toContainElement(screen.getByRole('heading', { level: 3, name: 'Kickoff 2026' }));
-      // A past event's icon keeps its veil.
-      expect(within(card('August Town Hall')).getByText('📚').parentElement!.className).toMatch(/before:bg-navy/);
+      expect(kickoff.textContent).not.toMatch(/\p{Extended_Pictographic}/u);
+      expect(kickoff.querySelector('[style]')).toBeNull();
+      expect(kickoff).toHaveTextContent(/^24Oct/);
     });
 
-    it('P18.95-T10 AC-1 an event with no colour or emoji: a navy icon and 📅', async () => {
-      const plain = guestEvent({ id: 'ev-plain', title: 'Plain one', type: { code: 'X', label: 'X', emoji: null, color: null } });
-      list({ 'GET /events': { body: eventList([plain]) } });
-      const emoji = within(await screen.findByRole('heading', { level: 3, name: 'Plain one' }).then((h) => h.closest<HTMLElement>('[data-event]')!))
-        .getByText('📅');
-      expect(emoji.parentElement).toHaveClass('bg-navy', 'h-8', 'w-8');
-    });
-
-    it('P18.5-T5 AC-4 a past card is grey; an upcoming one is not', async () => {
+    it('P18.2-T5 AC-4, P19.1-T5 AC-4 the grid: columns of at least 340px, never wider than the page', async () => {
       list();
       await listReady();
-      expect(card('PRULink briefing')).toHaveClass('grayscale-[45%]');
-      expect(card('Kickoff 2026')).not.toHaveClass('grayscale-[45%]');
+      const grid = within(section('Upcoming')).getByRole('list');
+      expect(grid).toHaveClass('grid', 'grid-cols-[repeat(auto-fill,minmax(min(100%,340px),1fr))]');
     });
 
-    it('P18.5-T5 AC-4 one column on a phone: the grid is one column until the md breakpoint', async () => {
-      list();
-      await listReady();
-      const grid = within(section('Going')).getByRole('list');
-      expect(grid).toHaveClass('grid-cols-1');
-      expect(grid.className).toMatch(/md:grid-cols-\[repeat\(auto-fill,minmax\(280px,1fr\)\)\]/);
-    });
-
-    it('P18.5-T5 AC-3 the reader is never sent an invitee list, and the screen asks for none', async () => {
+    it('P18.2-T5 AC-3 the reader is never sent an invitee list, and the screen asks for none', async () => {
       const { calls } = list();
       await listReady();
       expect(calls.some((c) => c.url.includes('/kpm/settings/events'))).toBe(false);
     });
 
-    it('P18.5-T5 AC-4 the card and View event both open the modal at its own address', async () => {
+    it('P18.2-T5 AC-4 the whole card opens the modal at its own address', async () => {
       list();
       await listReady();
-      await userEvent.click(within(card('Kickoff 2026')).getByRole('button', { name: 'View event' }));
+      await userEvent.click(within(card('Kickoff 2026')).getByRole('button', { name: 'Kickoff 2026' }));
       expect(nav.push).toHaveBeenCalledWith('/events/ev-kickoff', { scroll: false });
-      await userEvent.click(screen.getByRole('heading', { level: 3, name: 'August Town Hall' }));
+      await userEvent.click(within(card('August Town Hall')).getByRole('button', { name: 'August Town Hall' }));
       expect(nav.push).toHaveBeenLastCalledWith('/events/ev-townhall', { scroll: false });
     });
 
-    it('P18.5-T5 contradiction 25: authored words are text, never markup', async () => {
-      const evil = guestEvent({ id: 'ev-x', title: '<script>alert(1)</script>', blurb: '<img src=x onerror=alert(1)>' });
+    it('P18.2-T5 contradiction 25: authored words are text, never markup', async () => {
+      const evil = guestEvent({ id: 'ev-x', title: '<script>alert(1)</script>', location: '<img src=x onerror=alert(1)>' });
       list({ 'GET /events': { body: eventList([evil]) } });
-      expect(await screen.findByText('<script>alert(1)</script>')).toBeInTheDocument();
+      expect(await screen.findByRole('heading', { level: 3, name: '<script>alert(1)</script>' })).toBeInTheDocument();
       expect(screen.getByText('<img src=x onerror=alert(1)>')).toBeInTheDocument();
       expect(document.querySelector('script, img[src="x"]')).toBeNull();
     });
   });
 
   describe('the list’s states (Fills, L-01)', () => {
-    it('P18.5-T5 AC-4 a skeleton shaped like the cards while it loads', async () => {
+    it('P18.2-T5 AC-4 a skeleton shaped like the cards while it loads', async () => {
       list({ 'GET /events': { body: eventList() } });
       expect((await screen.findByText('Loading events…')).closest('[role="status"]')).not.toBeNull();
       await listReady();
     });
 
-    it('P18.5-T5 AC-4 an error with a retry that reads again', async () => {
+    it('P18.2-T5 AC-4 an error with a retry that reads again', async () => {
       const { calls } = list({ 'GET /events': [serverError, { body: eventList() }] });
       expect(await screen.findByRole('alert')).toHaveTextContent('Something went wrong.');
       await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
@@ -251,57 +246,65 @@ describe('/events, KPM Events (P18.5-T5, T6)', () => {
       expect(calls.filter((c) => /\/events$/.test(c.url))).toHaveLength(2);
     });
 
-    it('P18.5-T5 AC-1 a reader without event:read_list is not shown the list', async () => {
+    it('P18.2-T5 AC-1 a reader without event:read_list is not shown the list', async () => {
       const { calls } = list({}, { ...RINA_ME, permissions: [] });
       await waitFor(() => expect(screen.queryByRole('button', { name: 'All' })).not.toBeInTheDocument());
       expect(calls.some((c) => /\/events$/.test(c.url))).toBe(false);
     });
   });
 
-  describe('Join on the card (P18.95-T10 AC-1)', () => {
-    const joinOn = (title: string) => within(card(title)).queryByRole('button', { name: `Join ${title}` });
+  /*
+   * *Changed 2026-11-05 (P19.1-T5 AC-4):* the card's *Join* (P18.7-T10 AC-1) is UI-108's *Ikut* beside *Tidak ikut* on a
+   * tablet and a laptop too — the same call, toast and refusal; the phone's undo and change are `UI-108 /events on a
+   * phone`'s.
+   */
+  describe('Join on the card (P18.7-T10 AC-1)', () => {
+    const answers = (title: string) => within(card(title)).queryByRole('group', { name: `Your answer for ${title}` });
+    const joinOn = (title: string) => (answers(title) ? within(answers(title)!).getByRole('button', { name: /Join/ }) : null);
+    const pressed = (title: string) => within(answers(title)!).getAllByRole('button')
+      .filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.textContent);
 
-    it('P18.95-T10 AC-1 Join is on a card the reader may join, and on no other', async () => {
+    it('P18.7-T10 AC-1 Join is on a card the reader may answer, and on no past one', async () => {
       list();
       await listReady();
       expect(joinOn('Kickoff 2026')).toBeInTheDocument();
-      // Going already, past, and past unjoined: the one status says so, and there is nothing to press.
-      expect(joinOn('Product refresh briefing')).not.toBeInTheDocument();
-      expect(joinOn('PRULink briefing')).not.toBeInTheDocument();
-      expect(joinOn('August Town Hall')).not.toBeInTheDocument();
-      expect(joinOn('New Agent Bootcamp')).not.toBeInTheDocument();
-      // Its words are the client's Join, its name the event's too, beside View event.
+      expect(joinOn('Product refresh briefing')).toBeInTheDocument();
+      expect(joinOn('PRULink briefing')).toBeNull();
+      expect(joinOn('August Town Hall')).toBeNull();
+      expect(joinOn('New Agent Bootcamp')).toBeNull();
       expect(joinOn('Kickoff 2026')).toHaveTextContent(/^Join$/);
-      expect(within(card('Kickoff 2026')).getByRole('button', { name: 'View event' })).toBeInTheDocument();
+      expect(within(answers('Kickoff 2026')!).getByRole('button', { name: 'Not going' })).toBeInTheDocument();
     });
 
-    it('P18.95-T10 AC-1 Join is the action button: amber, navy words (ADR-0137)', async () => {
+    it('P18.7-T10 AC-1 a chosen Join is amber with navy words (ADR-0137)', async () => {
       list();
       await listReady();
-      expect(joinOn('Kickoff 2026')).toHaveClass('bg-amber', 'text-navy');
+      expect(joinOn('Product refresh briefing')).toHaveClass('bg-primary', 'text-primary-contrast');
+      expect(joinOn('Kickoff 2026')).toHaveClass('bg-card', 'text-navy');
     });
 
-    it('P18.95-T10 AC-1, P18.95-T1 AC-10 Join is a 44px target on a phone, 32px from 768px', async () => {
+    it('P18.7-T10 AC-1, P18.7-T1 AC-10 each answer takes a 44px tap through its reach into the card’s padding', async () => {
       list();
       await listReady();
-      expect(joinOn('Kickoff 2026')).toHaveClass('h-8', 'max-md:min-h-11');
+      expect(joinOn('Kickoff 2026')).toHaveClass('h-[2.125rem]', 'after:-top-2');
+      expect(within(answers('Kickoff 2026')!).getByRole('button', { name: 'Not going' })).toHaveClass('after:-bottom-2');
     });
 
-    it('P18.95-T10 AC-1 a read-only support session is shown no Join on any card', async () => {
+    it('P18.7-T10 AC-1 a read-only support session is shown no Join on any card', async () => {
       list({ 'GET /events': { body: eventList(RINA_EVENTS, { can: CAN_NONE }) } }, READ_ONLY_RINA);
       await listReady();
       expect(screen.queryByRole('button', { name: /^Join/ })).not.toBeInTheDocument();
-      expect(card('Kickoff 2026').querySelector('[data-pill]')).toHaveTextContent('Not joined');
+      expect(answers('Kickoff 2026')).toBeNull();
     });
 
-    it('P18.95-T10 AC-1 a running event the reader has not joined can be joined from its card', async () => {
+    it('P18.7-T10 AC-1 a running event the reader has not joined can be joined from its card', async () => {
       const huddle = guestEvent({ id: 'ev-huddle', title: "Leaders' huddle", phase: 'running' });
       list({ 'GET /events': { body: eventList([huddle, KICKOFF]) } });
       await listReady();
       expect(joinOn("Leaders' huddle")).toBeInTheDocument();
     });
 
-    it('P18.95-T10 AC-1, P18.95-T1 AC-6 Join is the modal’s call: POST …/rsvp, "Joined ✓ — you\'re going to {title}", the card to Going', async () => {
+    it('P18.7-T10 AC-1, P18.7-T1 AC-6 Join is the modal’s call: POST …/rsvp, "Joined ✓ — you\'re going to {title}", Join filled', async () => {
       const going = { ...KICKOFF, me: { ...KICKOFF.me, rsvp: 'going' as const } };
       const { calls } = list({ 'POST /events/ev-kickoff/rsvp': { status: 201, body: going } });
       await listReady();
@@ -310,16 +313,13 @@ describe('/events, KPM Events (P18.5-T5, T6)', () => {
       const post = calls.find((c) => c.url.endsWith('/events/ev-kickoff/rsvp'))!;
       expect(post.init.method).toBe('POST');
       expect(bodyOf(post)).toEqual({});
-      await waitFor(() => expect(titlesIn('Going')).toContain('Kickoff 2026'));
-      expect(card('Kickoff 2026').querySelector('[data-pill]')).toHaveTextContent('Going');
-      expect(joinOn('Kickoff 2026')).not.toBeInTheDocument();
+      await waitFor(() => expect(pressed('Kickoff 2026')).toEqual(['Join']));
+      expect(titlesIn('Upcoming')).toContain('Kickoff 2026');
       // A press on Join is not a press on the card: the modal stays shut.
       expect(nav.push).not.toHaveBeenCalled();
-      // The Join it was on is gone; the focus follows the card to its View event.
-      await waitFor(() => expect(within(card('Kickoff 2026')).getByRole('button', { name: 'View event' })).toHaveFocus());
     });
 
-    it('P18.95-T10 AC-1 a refusal is said under the card in the spec’s words, and the list read again: the card moves to Past', async () => {
+    it('P18.7-T10 AC-1 a refusal is said under the card in the spec’s words, and the list read again: the card moves to Past', async () => {
       const ended = { ...KICKOFF, phase: 'past' as const, ended: true };
       const { calls } = list({
         'GET /events': [{ body: eventList() }, { body: eventList([PRODUCT_REFRESH, ended, PRULINK, TOWN_HALL, BOOTCAMP]) }],
@@ -332,13 +332,13 @@ describe('/events, KPM Events (P18.5-T5, T6)', () => {
       expect(alert).toHaveTextContent('EVENT_RSVP_CLOSED');
       await waitFor(() => expect(titlesIn('Past')).toContain('Kickoff 2026'));
       expect(calls.filter((c) => /\/events$/.test(c.url))).toHaveLength(2);
-      expect(card('Kickoff 2026').querySelector('[data-pill]')).toHaveTextContent("Didn't join");
-      expect(joinOn('Kickoff 2026')).not.toBeInTheDocument();
+      expect(within(card('Kickoff 2026')).getByText("Didn't join")).toBeInTheDocument();
+      expect(joinOn('Kickoff 2026')).toBeNull();
       expect(screen.queryByText(/^Joined ✓/)).not.toBeInTheDocument();
       expect(nav.push).not.toHaveBeenCalled();
     });
 
-    it('P18.95-T10 AC-1 another refusal is said and the list is not read again', async () => {
+    it('P18.7-T10 AC-1 another refusal is said and the list is not read again', async () => {
       const { calls } = list({ 'POST /events/ev-kickoff/rsvp': serverError });
       await listReady();
       await userEvent.click(joinOn('Kickoff 2026')!);
@@ -349,7 +349,7 @@ describe('/events, KPM Events (P18.5-T5, T6)', () => {
   });
 
   describe('the modal (T5 AC-5)', () => {
-    it('P18.5-T5 AC-5 opens over the list at its address, named by the event, with the tag, audience, 📅, 📍 and description', async () => {
+    it('P18.2-T5 AC-5 opens over the list at its address, named by the event, with the tag, audience, 📅, 📍 and description', async () => {
       modal(KICKOFF);
       const box = await dialog('Kickoff 2026');
       expect(within(box).getByText('Not Joined')).toBeInTheDocument();
@@ -361,7 +361,7 @@ describe('/events, KPM Events (P18.5-T5, T6)', () => {
       expect(box).toHaveAttribute('aria-modal', 'true');
     });
 
-    it('P18.5-T5 AC-5 the ✕ is named Close; Close, Escape and the scrim each close it', async () => {
+    it('P18.2-T5 AC-5 the ✕ is named Close; Close, Escape and the scrim each close it', async () => {
       modal(KICKOFF);
       const box = await dialog('Kickoff 2026');
       await userEvent.click(within(box).getByRole('button', { name: 'Close' }));
@@ -373,7 +373,7 @@ describe('/events, KPM Events (P18.5-T5, T6)', () => {
       expect(nav.replace).toHaveBeenCalledTimes(3);
     });
 
-    it('P18.5-T5 AC-5 the focus moves into the dialog and Tab stays inside it', async () => {
+    it('P18.2-T5 AC-5 the focus moves into the dialog and Tab stays inside it', async () => {
       modal(KICKOFF);
       const box = await dialog('Kickoff 2026');
       await waitFor(() => expect(box).toHaveFocus());
@@ -386,7 +386,7 @@ describe('/events, KPM Events (P18.5-T5, T6)', () => {
       expect(join).toHaveFocus();
     });
 
-    it('P18.5-T5 AC-5 the list behind the open modal takes no focus and no click', async () => {
+    it('P18.2-T5 AC-5 the list behind the open modal takes no focus and no click', async () => {
       modal(KICKOFF);
       await dialog('Kickoff 2026');
       const behind = document.querySelector('[inert]');
@@ -394,7 +394,7 @@ describe('/events, KPM Events (P18.5-T5, T6)', () => {
       expect(behind).toContainElement(screen.getByRole('group', { name: 'Show events', hidden: true }));
     });
 
-    it('P18.5-T5 AC-5, P18.95-T1 AC-6 Join event → "Joined ✓ — you\'re going to {title}", the card moves to Going', async () => {
+    it('P18.2-T5 AC-5, P18.7-T1 AC-6 Join event → "Joined ✓ — you\'re going to {title}", the card behind says Join', async () => {
       const going = { ...KICKOFF, me: { ...KICKOFF.me, rsvp: 'going' as const } };
       const { calls } = modal(KICKOFF, { 'POST /events/ev-kickoff/rsvp': { status: 201, body: going } });
       const box = await dialog('Kickoff 2026');
@@ -404,16 +404,17 @@ describe('/events, KPM Events (P18.5-T5, T6)', () => {
       expect(within(box).getByRole('button', { name: 'Cancel RSVP' })).toBeInTheDocument();
       expect(within(box).queryByRole('button', { name: 'Join event' })).not.toBeInTheDocument();
       expect(calls.find((c) => c.url.endsWith('/events/ev-kickoff/rsvp'))!.init.method).toBe('POST');
-      await waitFor(() => expect(titlesIn('Going')).toContain('Kickoff 2026'));
+      // The card behind takes the answer: since P19.1-T5 its *Join* filled under *Upcoming*, where it moved to *Going*.
+      await waitFor(() => expect(within(card('Kickoff 2026')).getByRole('button', { name: /Join/, hidden: true })).toHaveAttribute('aria-pressed', 'true'));
     });
 
-    it('P18.5-T5 AC-5 Join event is the action button: amber, navy words (ADR-0137)', async () => {
+    it('P18.2-T5 AC-5 Join event is the action button: amber, navy words (ADR-0137)', async () => {
       modal(KICKOFF);
       const join = within(await dialog('Kickoff 2026')).getByRole('button', { name: 'Join event' });
-      expect(join).toHaveClass('bg-amber', 'text-navy');
+      expect(join).toHaveClass('bg-primary', 'text-primary-contrast');
     });
 
-    it('P18.5-T5 AC-5 You\'re going + Cancel RSVP → "RSVP cancelled for {title}"', async () => {
+    it('P18.2-T5 AC-5 You\'re going + Cancel RSVP → "RSVP cancelled for {title}"', async () => {
       const cancelled = { ...PRODUCT_REFRESH, me: { ...PRODUCT_REFRESH.me, rsvp: 'cancelled' as const } };
       modal(PRODUCT_REFRESH, { 'POST /events/ev-refresh/rsvp/cancel': { status: 201, body: cancelled } });
       const box = await dialog('Product refresh briefing');
@@ -423,7 +424,7 @@ describe('/events, KPM Events (P18.5-T5, T6)', () => {
       expect(within(box).getByRole('button', { name: 'Join event' })).toBeInTheDocument();
     });
 
-    it('P18.5-T5 AC-5 a refusal from endsAt is said in the spec’s words beside the button, and the event read again', async () => {
+    it('P18.2-T5 AC-5 a refusal from endsAt is said in the spec’s words beside the button, and the event read again', async () => {
       const ended = { ...KICKOFF, phase: 'past' as const, ended: true };
       const { calls } = modal(KICKOFF, {
         [`GET /events/${KICKOFF.id}`]: [{ body: KICKOFF }, { body: ended }],
@@ -439,7 +440,7 @@ describe('/events, KPM Events (P18.5-T5, T6)', () => {
       expect(calls.filter((c) => c.url.endsWith('/events/ev-kickoff'))).toHaveLength(2);
     });
 
-    it('P18.5-T5 AC-5 after a refusal the card behind takes the re-read: it moves to Past', async () => {
+    it('P18.2-T5 AC-5 after a refusal the card behind takes the re-read: it moves to Past', async () => {
       const ended = { ...KICKOFF, phase: 'past' as const, ended: true };
       modal(KICKOFF, {
         [`GET /events/${KICKOFF.id}`]: [{ body: KICKOFF }, { body: ended }],
@@ -453,10 +454,10 @@ describe('/events, KPM Events (P18.5-T5, T6)', () => {
         .queryAllByRole('heading', { level: 3, hidden: true }).map((h) => h.textContent);
       await waitFor(() => expect(pastTitles()).toContain('Kickoff 2026'));
       const behind = screen.getByRole('heading', { level: 3, name: 'Kickoff 2026', hidden: true }).closest('[data-event]')!;
-      expect(behind.querySelector('[data-pill]')).toHaveTextContent("Didn't join");
+      expect(within(behind as HTMLElement).getByText("Didn't join")).toBeInTheDocument();
     });
 
-    it('P18.5-T5 AC-5 at 360px the toast is in front of the full-screen modal', async () => {
+    it('P18.2-T5 AC-5 at 360px the toast is in front of the full-screen modal', async () => {
       const width = window.innerWidth;
       window.innerWidth = 360;
       window.dispatchEvent(new Event('resize'));
@@ -480,14 +481,14 @@ describe('/events, KPM Events (P18.5-T5, T6)', () => {
       }
     });
 
-    it('P18.5-T5 AC-5 not found: an event outside the reader’s audience, archived, or none', async () => {
+    it('P18.2-T5 AC-5 not found: an event outside the reader’s audience, archived, or none', async () => {
       modal(KICKOFF, { [`GET /events/${KICKOFF.id}`]: notFound });
       expect(await screen.findByText('This event isn’t one you can open.')).toBeInTheDocument();
       await userEvent.click(screen.getByRole('button', { name: 'Back to events' }));
       expect(nav.replace).toHaveBeenCalledWith('/events', { scroll: false });
     });
 
-    it('P18.5-T5 AC-5 an error reading the event, with a retry', async () => {
+    it('P18.2-T5 AC-5 an error reading the event, with a retry', async () => {
       modal(KICKOFF, { [`GET /events/${KICKOFF.id}`]: [serverError, { body: KICKOFF }] });
       const box = await screen.findByRole('dialog', { name: 'Event List' });
       expect(await within(box).findByRole('alert')).toHaveTextContent('Something went wrong.');
@@ -495,7 +496,7 @@ describe('/events, KPM Events (P18.5-T5, T6)', () => {
       expect(await dialog('Kickoff 2026')).toBeInTheDocument();
     });
 
-    it('P18.5-T5 AC-1 a read-only support session reads the event and draws no write control', async () => {
+    it('P18.2-T5 AC-1 a read-only support session reads the event and draws no write control', async () => {
       modal(PRODUCT_REFRESH, { 'GET /events': { body: eventList(RINA_EVENTS, { can: CAN_NONE }) } }, READ_ONLY_RINA);
       const box = await dialog('Product refresh briefing');
       expect(within(box).getByText("You're going")).toBeInTheDocument();
@@ -509,12 +510,12 @@ describe('/events, KPM Events (P18.5-T5, T6)', () => {
    * screen with ✕ in it, and *Submit feedback* below the foot; `overflow-hidden` and no height cap meant nothing
    * scrolled to either. jsdom lays nothing out, so these pin the classes that do; the walk measured them.
    */
-  describe('a short window (P18.96-T1 AC-1)', () => {
+  describe('a short window (P18.8-T1 AC-1)', () => {
     afterEach(() => {
       document.body.style.overflow = '';
     });
 
-    it('P18.96-T1 AC-1 the box is capped at the dynamic viewport and scrolls inside itself, never pushed off the screen', async () => {
+    it('P18.8-T1 AC-1 the box is capped at the dynamic viewport and scrolls inside itself, never pushed off the screen', async () => {
       modal(PRULINK);
       const box = await dialog('PRULink briefing');
       // From 640px: at most the screen less its 1.25rem margins; below it, the whole screen, the same way. Either way
@@ -531,7 +532,7 @@ describe('/events, KPM Events (P18.5-T5, T6)', () => {
       expect(box.parentElement).not.toHaveClass('overflow-y-auto');
     });
 
-    it('P18.96-T1 AC-1 ✕ rides on the poster, held at the top; Submit feedback is held at the foot', async () => {
+    it('P18.8-T1 AC-1 ✕ rides on the poster, held at the top; Submit feedback is held at the foot', async () => {
       modal(PRULINK);
       const box = await dialog('PRULink briefing');
       const close = within(box).getByRole('button', { name: 'Close' });
@@ -550,7 +551,7 @@ describe('/events, KPM Events (P18.5-T5, T6)', () => {
       expect(block.parentElement).toContainElement(screen.getByRole('heading', { level: 2, name: 'PRULink briefing' }));
     });
 
-    it('P18.96-T1 AC-1 the 190px banner shrinks to the card’s 110px while the feedback form shows, and only then', async () => {
+    it('P18.8-T1 AC-1 the 190px banner shrinks to the card’s 110px while the feedback form shows, and only then', async () => {
       modal(PRULINK);
       const withForm = await dialog('PRULink briefing');
       const posterOf = (box: HTMLElement) => within(box).getByRole('button', { name: 'Close' }).parentElement!;
@@ -562,7 +563,7 @@ describe('/events, KPM Events (P18.5-T5, T6)', () => {
       expect(posterOf(await dialog('Kickoff 2026'))).toHaveClass('h-[190px]');
     });
 
-    it('P18.96-T1 AC-1 the page behind does not scroll while it is open, and gets its scroll back when it closes', async () => {
+    it('P18.8-T1 AC-1 the page behind does not scroll while it is open, and gets its scroll back when it closes', async () => {
       document.body.style.overflow = 'auto';
       modal(PRULINK);
       await dialog('PRULink briefing');
@@ -571,7 +572,7 @@ describe('/events, KPM Events (P18.5-T5, T6)', () => {
       expect(document.body.style.overflow).toBe('auto');
     });
 
-    it('P18.96-T1 AC-1 Submit feedback still submits from the held foot, and a refusal shows beside it', async () => {
+    it('P18.8-T1 AC-1 Submit feedback still submits from the held foot, and a refusal shows beside it', async () => {
       const { calls } = modal(PRULINK, { 'POST /events/ev-prulink/feedback': serverError });
       const box = await dialog('PRULink briefing');
       await userEvent.click(within(box).getByRole('radio', { name: '9' }));
@@ -583,7 +584,7 @@ describe('/events, KPM Events (P18.5-T5, T6)', () => {
   });
 
   describe('a past event: the claim (T5 AC-6)', () => {
-    it('P18.5-T5 AC-6 for a past event the reader did not join: the block, its sub-line, and the claim', async () => {
+    it('P18.2-T5 AC-6 for a past event the reader did not join: the block, its sub-line, and the claim', async () => {
       modal(TOWN_HALL);
       const box = await dialog('August Town Hall');
       expect(within(box).getByText("You didn't join this event")).toBeInTheDocument();
@@ -592,7 +593,7 @@ describe('/events, KPM Events (P18.5-T5, T6)', () => {
       expect(within(box).queryByRole('button', { name: 'Join event' })).not.toBeInTheDocument();
     });
 
-    it('P18.5-T5 AC-6 I actually attended this event writes the claim only, says so, and opens the form', async () => {
+    it('P18.2-T5 AC-6 I actually attended this event writes the claim only, says so, and opens the form', async () => {
       const claimed = { ...TOWN_HALL, me: { ...TOWN_HALL.me, claimed: true } };
       const { calls } = modal(TOWN_HALL, { 'POST /events/ev-townhall/attendance/claim': { status: 201, body: claimed } });
       const box = await dialog('August Town Hall');
@@ -607,7 +608,7 @@ describe('/events, KPM Events (P18.5-T5, T6)', () => {
       expect(box).not.toHaveTextContent(/confirm/i);
     });
 
-    it('P18.5-T5 AC-6 a claim before the end (409 EVENT_NOT_ENDED) is said in the spec’s words, and the event read again', async () => {
+    it('P18.2-T5 AC-6 a claim before the end (409 EVENT_NOT_ENDED) is said in the spec’s words, and the event read again', async () => {
       const { calls } = modal(TOWN_HALL, {
         'POST /events/ev-townhall/attendance/claim': conflict('EVENT_NOT_ENDED', 'This event has not ended yet.'),
       });
@@ -617,7 +618,7 @@ describe('/events, KPM Events (P18.5-T5, T6)', () => {
       await waitFor(() => expect(calls.filter((c) => c.url.endsWith('/events/ev-townhall'))).toHaveLength(2));
     });
 
-    it('P18.5-T5 AC-1 a read-only support session reads the block with no claim', async () => {
+    it('P18.2-T5 AC-1 a read-only support session reads the block with no claim', async () => {
       modal(TOWN_HALL, { 'GET /events': { body: eventList(RINA_EVENTS, { can: CAN_NONE }) } }, READ_ONLY_RINA);
       const box = await dialog('August Town Hall');
       expect(within(box).getByText("You didn't join this event")).toBeInTheDocument();
@@ -626,7 +627,7 @@ describe('/events, KPM Events (P18.5-T5, T6)', () => {
   });
 
   describe('a past event: feedback (T6)', () => {
-    it('P18.5-T6 AC-2 the form verbatim: question, hint, eleven scores as a radio group, ends, two labelled fields', async () => {
+    it('P18.2-T6 AC-2 the form verbatim: question, hint, eleven scores as a radio group, ends, two labelled fields', async () => {
       modal(PRULINK);
       const box = await dialog('PRULink briefing');
       expect(within(box).getByText('This is the last step for this event — your feedback helps shape future ones.')).toBeInTheDocument();
@@ -639,19 +640,19 @@ describe('/events, KPM Events (P18.5-T5, T6)', () => {
       expect(why).toHaveAttribute('placeholder', 'What stood out, good or bad?');
       expect(why).toHaveAttribute('maxLength', '1000');
       expect(within(box).getByLabelText('How can we improve? (optional)')).toHaveAttribute('placeholder', 'Any suggestions for next time?');
-      expect(within(box).getByRole('button', { name: 'Submit feedback' })).toHaveClass('bg-amber');
+      expect(within(box).getByRole('button', { name: 'Submit feedback' })).toHaveClass('bg-primary');
     });
 
-    it('P18.5-T6 AC-2 the chosen score is checked and navy', async () => {
+    it('P18.2-T6 AC-2 the chosen score is checked and navy', async () => {
       modal(PRULINK);
       const box = await dialog('PRULink briefing');
       await userEvent.click(within(box).getByRole('radio', { name: '8' }));
       expect(within(box).getByRole('radio', { name: '8' })).toBeChecked();
-      expect(within(box).getByText('8', { selector: 'span' })).toHaveClass('bg-navy', 'text-white');
-      expect(within(box).getByText('7', { selector: 'span' })).not.toHaveClass('bg-navy');
+      expect(within(box).getByText('8', { selector: 'span' })).toHaveClass('bg-secondary', 'text-secondary-contrast');
+      expect(within(box).getByText('7', { selector: 'span' })).not.toHaveClass('bg-secondary');
     });
 
-    it('P18.5-T6 AC-2 without a score: "Pick a score from 0–10 first", and nothing is sent', async () => {
+    it('P18.2-T6 AC-2 without a score: "Pick a score from 0–10 first", and nothing is sent', async () => {
       const { calls } = modal(PRULINK);
       const box = await dialog('PRULink briefing');
       await userEvent.click(within(box).getByRole('button', { name: 'Submit feedback' }));
@@ -659,7 +660,7 @@ describe('/events, KPM Events (P18.5-T5, T6)', () => {
       expect(calls.some((c) => c.url.endsWith('/feedback'))).toBe(false);
     });
 
-    it('P18.5-T6 AC-2, AC-3 submits the score, the why and the improve; says thanks; the card reads Feedback sent', async () => {
+    it('P18.2-T6 AC-2, AC-3 submits the score, the why and the improve; says thanks; the card reads Feedback sent', async () => {
       const answered = {
         ...PRULINK,
         me: { ...PRULINK.me, feedback: { score: 8, why: 'Clear.', improve: 'Shorter.', submittedAt: '2026-10-10T03:00:00.000Z' } },
@@ -674,10 +675,10 @@ describe('/events, KPM Events (P18.5-T5, T6)', () => {
       expect(bodyOf(calls.find((c) => c.url.endsWith('/feedback'))!)).toEqual({ score: 8, why: 'Clear.', improve: 'Shorter.' });
       expect(within(box).getByText('Thanks for your feedback')).toBeInTheDocument();
       expect(within(box).getByText('You scored this event 8/10 — "Clear."')).toBeInTheDocument();
-      await waitFor(() => expect(card('PRULink briefing').querySelector('[data-pill]')).toHaveTextContent('Feedback sent'));
+      await waitFor(() => expect(card('PRULink briefing').querySelector('[data-tone]')).toHaveTextContent('Feedback sent'));
     });
 
-    it('P18.5-T6 AC-3 leaves the optional fields out when empty', async () => {
+    it('P18.2-T6 AC-3 leaves the optional fields out when empty', async () => {
       const answered = { ...PRULINK, me: { ...PRULINK.me, feedback: { score: 3, why: '', improve: '', submittedAt: '2026-10-10T03:00:00.000Z' } } };
       const { calls } = modal(PRULINK, { 'POST /events/ev-prulink/feedback': { status: 201, body: answered } });
       const box = await dialog('PRULink briefing');
@@ -689,7 +690,7 @@ describe('/events, KPM Events (P18.5-T5, T6)', () => {
       expect(within(box).getByText('You scored this event 3/10')).toBeInTheDocument();
     });
 
-    it('P18.5-T6 AC-3 an answer already sent (409) brings back the thanks, read again', async () => {
+    it('P18.2-T6 AC-3 an answer already sent (409) brings back the thanks, read again', async () => {
       const answered = {
         ...PRULINK, me: { ...PRULINK.me, feedback: { score: 7, why: 'Sent from my phone.', improve: '', submittedAt: '2026-10-10T03:00:00.000Z' } },
       };
@@ -702,10 +703,10 @@ describe('/events, KPM Events (P18.5-T5, T6)', () => {
       await userEvent.click(within(box).getByRole('button', { name: 'Submit feedback' }));
       expect(await within(box).findByText('You scored this event 7/10 — "Sent from my phone."')).toBeInTheDocument();
       expect(calls.filter((c) => c.url.endsWith('/events/ev-prulink'))).toHaveLength(2);
-      await waitFor(() => expect(card('PRULink briefing').querySelector('[data-pill]')).toHaveTextContent('Feedback sent'));
+      await waitFor(() => expect(card('PRULink briefing').querySelector('[data-tone]')).toHaveTextContent('Feedback sent'));
     });
 
-    it('P18.5-T6 AC-4 thanks: the stored score and why, as text', async () => {
+    it('P18.2-T6 AC-4 thanks: the stored score and why, as text', async () => {
       const evil = { ...BOOTCAMP, me: { ...BOOTCAMP.me, feedback: { ...BOOTCAMP.me.feedback!, why: '<script>alert(1)</script>' } } };
       modal(evil);
       const box = await dialog('New Agent Bootcamp');
@@ -715,7 +716,7 @@ describe('/events, KPM Events (P18.5-T5, T6)', () => {
       expect(within(box).queryByRole('radiogroup')).not.toBeInTheDocument();
     });
 
-    it('P18.5-T6 AC-2 the scale’s ends and the text bound are the served ones, never written on the screen', async () => {
+    it('P18.2-T6 AC-2 the scale’s ends and the text bound are the served ones, never written on the screen', async () => {
       modal(PRULINK, {
         'GET /events': { body: eventList(RINA_EVENTS, { limits: { feedbackTextMax: 500, nps: { scaleMin: 0, scaleMax: 5, promoterMin: 5, detractorMax: 3 } } }) },
       });
@@ -725,7 +726,7 @@ describe('/events, KPM Events (P18.5-T5, T6)', () => {
       expect(within(box).getByLabelText('Why? (optional)')).toHaveAttribute('maxLength', '500');
     });
 
-    it('P18.5-T6 AC-2 a read-only support session is shown no form at all: no write control', async () => {
+    it('P18.2-T6 AC-2 a read-only support session is shown no form at all: no write control', async () => {
       modal(PRULINK, { 'GET /events': { body: eventList(RINA_EVENTS, { can: CAN_NONE }) } }, READ_ONLY_RINA);
       const box = await dialog('PRULink briefing');
       expect(within(box).getByText('About ev-prulink.')).toBeInTheDocument();
@@ -736,7 +737,7 @@ describe('/events, KPM Events (P18.5-T5, T6)', () => {
       expect(within(box).getAllByRole('button').map((b) => b.getAttribute('aria-label') ?? b.textContent)).toEqual(['Close']);
     });
 
-    it('P18.5-T6 AC-4 a read-only support session still reads the thanks', async () => {
+    it('P18.2-T6 AC-4 a read-only support session still reads the thanks', async () => {
       modal(BOOTCAMP, { 'GET /events': { body: eventList(RINA_EVENTS, { can: CAN_NONE }) } }, READ_ONLY_RINA);
       const box = await dialog('New Agent Bootcamp');
       expect(within(box).getByText('You scored this event 9/10 — "Clear and practical."')).toBeInTheDocument();

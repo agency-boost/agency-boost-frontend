@@ -41,21 +41,25 @@ function render(templateId = 't-bsd', extra: Record<string, StubReply | StubRepl
 const rows = async () => within(await screen.findByRole('list', { name: 'Template sections' })).getAllByRole('link');
 
 /**
- * **A template as a checklist of its sections** (ADR-0185 §3–§4; P18.99-T20 AC-2): each section's state, *Publish all*
+ * **A template as a checklist of its sections** (ADR-0185 §3–§4; P18.11-T20 AC-2): each section's state, *Publish all*
  * and what it did, the offices on an older version, and the template's ⋮.
  */
-describe('P18.99-T20 a template’s checklist', () => {
+describe('P18.11-T20 a template’s checklist', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     push.mockReset();
   });
 
-  it('AC-2 lists the six sections in the Owner’s order, each a link to its editor with its state in words', async () => {
+  it('AC-2, P19.4-T5 AC-6, P19.5-T1 AC-1 lists the eight sections in the Owner’s order, Rekrutmen then Advanced analytics last', async () => {
     render();
     const list = await rows();
     expect(list.map((r) => r.getAttribute('href'))).toEqual([
-      'activity', 'leads', 'activation', 'training', 'capability', 'events',
+      'activity', 'leads', 'activation', 'training', 'capability', 'events', 'recruitment', 'branding', 'analytics',
     ].map((s) => `/admin/companies/c1/templates/t-bsd/${s}`));
+    expect(list[6]).toHaveTextContent('Recruitment');
+    // P19.6-T1 (ADR-0218 §3): *Branding*, before the last.
+    expect(list[7]).toHaveTextContent('Branding');
+    expect(list[8]).toHaveTextContent('Advanced analytics');
     // Two kinds, one empty: partly published, each named.
     expect(list[0]).toHaveTextContent('Activities & ratios');
     expect(within(list[0]).getByText('Partly published')).toHaveAttribute('data-tone', 'blue');
@@ -119,10 +123,12 @@ describe('P18.99-T20 a template’s checklist', () => {
       expect(await screen.findByText('2 sections changed')).toBeInTheDocument();
       await userEvent.click(screen.getByRole('button', { name: 'Publish all (2)' }));
 
-      const dialog = within(screen.getByRole('dialog', { name: 'Publish all changes?' }));
+      // The dialog loads on its first opening (the bundle, 2026-11-06).
+      const dialog = within(await screen.findByRole('dialog', { name: 'Publish all changes?' }));
       expect(dialog.getByText('These sections will be published:')).toBeInTheDocument();
       expect(dialog.getAllByRole('listitem').map((li) => li.textContent)).toEqual(['Lead pipeline', 'Events']);
-      expect(dialog.getByText('Offices that already exist do not change; only new offices use this version.'))
+      // *Amended 2026-11-05 (P19.4-T1, ADR-0208 §4):* existing offices may take it, asked after the publish.
+      expect(dialog.getByText('Afterwards you choose whether the offices that already exist take it too.'))
         .toBeInTheDocument();
       expect(stub.calls.some((c) => c.init.method === 'POST')).toBe(false);
       await userEvent.click(dialog.getByRole('button', { name: 'Publish all' }));
@@ -141,7 +147,7 @@ describe('P18.99-T20 a template’s checklist', () => {
     it('Cancel publishes nothing', async () => {
       const { stub } = render();
       await userEvent.click(await screen.findByRole('button', { name: 'Publish all (2)' }));
-      await userEvent.click(within(screen.getByRole('dialog', { name: 'Publish all changes?' })).getByRole('button', { name: 'Cancel' }));
+      await userEvent.click(within(await screen.findByRole('dialog', { name: 'Publish all changes?' })).getByRole('button', { name: 'Cancel' }));
       expect(screen.queryByRole('dialog')).toBeNull();
       expect(stub.calls.some((c) => c.init.method === 'POST')).toBe(false);
     });
@@ -153,22 +159,23 @@ describe('P18.99-T20 a template’s checklist', () => {
         },
       });
       await userEvent.click(await screen.findByRole('button', { name: 'Publish all (2)' }));
-      await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Publish all' }));
+      await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Publish all' }));
       expect(await screen.findByText('You do not have permission to do that.')).toBeInTheDocument();
     });
   });
 
-  it('AC-2, ADR-0185 §4 says how many offices are on an older version, and lists them — information only', async () => {
-    render();
+  /*
+   * *Amended 2026-11-05 (P19.4-T1 AC-6, ADR-0208 §4):* the offices on an older version were information only (ADR-0185
+   * §4). The count now opens *Terapkan juga ke KPM yang sudah ada?*, where the newest version can be pushed.
+   */
+  it('P19.4-T1 AC-6 says how many offices are on an older version, and opens the push for them', async () => {
+    render('t-bsd', {
+      '/admin/companies/c1/templates/t-bsd/offices?kind=': { body: OFFICES.map((o) => ({ ...o, state: 'unchanged', kinds: [] })) },
+    });
     await userEvent.click(await screen.findByRole('button', { name: '1 office is on an older version' }));
-    const dialog = within(screen.getByRole('dialog', { name: 'Offices on an older version' }));
-    expect(dialog.getByRole('link', { name: 'KPM 0417 · BSD City Branch' })).toHaveAttribute('href', '/admin/tenants/k-0417');
-    expect(dialog.getByText('Older: Activities & ratios, Lead pipeline')).toBeInTheDocument();
-    expect(dialog.getByText('1 other office was created before its version was recorded.')).toBeInTheDocument();
-    expect(dialog.queryByRole('link', { name: /0419/ })).toBeNull();
-    // Nothing to apply: a copy is never a link.
-    expect(dialog.getAllByRole('button').map((b) => b.textContent)).not.toContain('Apply');
-    await userEvent.click(dialog.getByRole('button', { name: 'Close' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Apply to existing offices too?' }));
+    expect(await dialog.findByText('KPM 0417 · BSD City Branch')).toBeInTheDocument();
+    await userEvent.click(dialog.getByRole('button', { name: 'Not now' }));
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
@@ -254,7 +261,7 @@ describe('P18.99-T20 a template’s checklist', () => {
     render('t-old');
     expect(await screen.findByText('Archived: it can be read and copied, not changed.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Publish all/ })).toBeNull();
-    expect(await rows()).toHaveLength(6);
+    expect(await rows()).toHaveLength(9);
   });
 
   it('says a template the company does not hold, and leads back', async () => {
@@ -274,9 +281,12 @@ describe('P18.99-T20 a template’s checklist', () => {
     await rows();
     await clean();
     await userEvent.click(screen.getByRole('button', { name: 'Publish all (2)' }));
+    // Each dialog loads on its first opening (the bundle, 2026-11-06): axe reads it once it is drawn.
+    const asked = await screen.findByRole('dialog');
     await clean();
-    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }));
+    await userEvent.click(within(asked).getByRole('button', { name: 'Cancel' }));
     await userEvent.click(screen.getByRole('button', { name: '1 office is on an older version' }));
+    await screen.findByRole('dialog', { name: 'Apply to existing offices too?' });
     await clean();
   });
 });

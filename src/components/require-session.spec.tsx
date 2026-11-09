@@ -115,7 +115,8 @@ describe('RequireSession', () => {
     it('asks it before the permission: a reader of another family is not refused here, but sent on', () => {
       replace.mockClear();
       renderWithSession(<RequireSession family="admin" permission="kpm:list_all">secret</RequireSession>, { me: OWNER });
-      expect(replace.mock.calls).toEqual([['/kpm/overview']]);
+      // Their own landing: Home, where an Owner signs in since P19.2-T1 (UI-169 item 1).
+      expect(replace.mock.calls).toEqual([['/home']]);
       expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     });
 

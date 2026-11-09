@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/field';
 import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
 import { kpmAnalyticsMessages } from '@/i18n/messages/kpm-analytics';
 import { cn } from '@/lib/cn';
-import { criterionValue, criterionVerdict, mocButtonName, periodWords, type Moc } from '@/lib/kpm-analytics';
+import { criterionPair, criterionVerdict, mocButtonName, periodWords, type Moc } from '@/lib/kpm-analytics';
 
 /** Which leader's MOC the dialog shows. */
 export interface MocOpen {
@@ -29,7 +29,7 @@ export function MocCell({
   moc: Moc | null;
   name: string;
   onOpen: (open: MocOpen) => void;
-  /** Beside its paint — on a phone's card, the 44px square that takes the tap (P18.97-T7 AC-1). */
+  /** Beside its paint — on a phone's card, the 44px square that takes the tap (P18.9-T7 AC-1). */
   className?: string;
 }) {
   const t = useMessages(kpmAnalyticsMessages);
@@ -107,9 +107,9 @@ export function MocDialog({ open, onClose }: { open: MocOpen | null; onClose: ()
               {criterion.period && <span className="block text-xs text-muted">{periodWords(criterion.period, figures)}</span>}
             </span>
             <span className="shrink-0 text-right text-sm text-muted">
-              <strong className="font-bold text-navy">{criterionValue(criterion.code, criterion.current, figures)}</strong>
+              <strong className="font-bold text-navy">{criterionPair(criterion.code, criterion.current, criterion.required, figures)[0]}</strong>
               {' / '}
-              {criterionValue(criterion.code, criterion.required, figures)}
+              {criterionPair(criterion.code, criterion.current, criterion.required, figures)[1]}
               {' — '}
               <span
                 className={cn(

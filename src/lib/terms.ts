@@ -3,7 +3,7 @@ import { SOURCE_LANGUAGE, type Language } from '@/i18n/language';
 import { termMessages } from '@/i18n/messages/terms';
 
 /**
- * **The words a reader may not know, each with one plain line** (P18.95-T9 AC-3; ADR-0167 §10, OD-205; the
+ * **The words a reader may not know, each with one plain line** (P18.7-T9 AC-3; ADR-0167 §10, OD-205; the
  * client's UI review of 2026-10-26, UI-028: *APE, MDRT, AAB, NBO, NPA, BOP, JFW, "touches", "CI premium
  * waiver", "as-billed"* shown with nothing to say what they mean).
  *
@@ -22,7 +22,7 @@ export interface Term {
   readonly name: string;
   /** The glossary row the line is written from: its *Term* column, verbatim. */
   readonly glossary: string;
-  /** The one line the ⓘ shows, in English: the catalogue's source (`termMessages`, P18.98-T4); `termDefinition` writes it in a language. */
+  /** The one line the ⓘ shows, in English: the catalogue's source (`termMessages`, P18.10-T4); `termDefinition` writes it in a language. */
   readonly definition: string;
   /** How the term is found in a sentence somebody else wrote. */
   readonly pattern: RegExp;
@@ -97,8 +97,8 @@ export const TERMS = {
     pattern: /\bPotential (?:MAA|Monthly Active Agents?)\b/i,
   },
   /*
-   * P18.97-T3 AC-8 (ADR-0176 §3; the client's KPM Owner findings, UI-021: *"MOC", "ELITE CLUB", "STAR CLUB" … unexplained*):
-   * the analytics' MOC and its three production clubs. The company's own names stay (Phase 18.98's glossary lists them);
+   * P18.9-T3 AC-8 (ADR-0176 §3; the client's KPM Owner findings, UI-021: *"MOC", "ELITE CLUB", "STAR CLUB" … unexplained*):
+   * the analytics' MOC and its three production clubs. The company's own names stay (Phase 18.10's glossary lists them);
    * no threshold is written here — each company sets its own, and the MOC ⓘ shows the company's rules beneath this line.
    */
   MOC: {
@@ -132,7 +132,7 @@ export type TermKey = keyof typeof TERMS;
 /** Every term, in the order the glossary spells them out here. */
 export const TERM_KEYS = Object.keys(TERMS) as TermKey[];
 
-/** The analytics' own words (P18.97-T3 AC-8): drawn by that screen where they first show, and nobody's content. */
+/** The analytics' own words (P18.9-T3 AC-8): drawn by that screen where they first show, and nobody's content. */
 const ANALYTICS_TERM_KEYS: readonly TermKey[] = ['MOC', 'STAR_CLUB', 'ELITE_CLUB', 'CHAIRMANS_CLUB'];
 
 /**
@@ -146,11 +146,11 @@ export const CONTENT_TERM_KEYS = TERM_KEYS.filter(
   (key) => key !== 'TOUCHES' && key !== 'POTENTIAL_MAA' && !ANALYTICS_TERM_KEYS.includes(key),
 );
 
-/** The ⓘ's accessible name, *What is APE?* — *Apa itu APE?* — in the reader's `language` (P18.98-T4). */
+/** The ⓘ's accessible name, *What is APE?* — *Apa itu APE?* — in the reader's `language` (P18.10-T4). */
 export const termQuestion = (key: TermKey, language: Language = SOURCE_LANGUAGE): string =>
   messagesIn(termMessages, language)[key].question;
 
-/** The ⓘ's one line, in the reader's `language` (P18.98-T4): the glossary's definition, its kept terms kept. */
+/** The ⓘ's one line, in the reader's `language` (P18.10-T4): the glossary's definition, its kept terms kept. */
 export const termDefinition = (key: TermKey, language: Language = SOURCE_LANGUAGE): string =>
   messagesIn(termMessages, language)[key].definition;
 

@@ -42,7 +42,7 @@ describe('/activation, the hire’s own 90-Day Activation (P13-T4)', () => {
     vi.useRealTimers();
   });
 
-  it('P13-T4 AC-2, P18.95-T9 AC-2 is titled as its nav item, headed verbatim, and reads the reader’s own activation once', async () => {
+  it('P13-T4 AC-2, P18.7-T9 AC-2 is titled as its nav item, headed verbatim, and reads the reader’s own activation once', async () => {
     const { calls } = show();
     await ready();
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Your 90-Day Activation$/);
@@ -50,7 +50,7 @@ describe('/activation, the hire’s own 90-Day Activation (P13-T4)', () => {
     expect(calls.filter((c) => c.url.includes('/activation/me')).map((c) => c.url)).toEqual(['http://api.test/api/v1/activation/me']);
   });
 
-  it('P13-T4 AC-2, P18.96-T2 AC-3 AC-5 draws the join date read-only (OD-118): named Join date, shown, and no field to change it', async () => {
+  it('P13-T4 AC-2, P18.8-T2 AC-3 AC-5 draws the join date read-only (OD-118): named Join date, shown, and no field to change it', async () => {
     show();
     await ready();
     const term = screen.getByText('Join date');
@@ -196,7 +196,7 @@ describe('/activation, the hire’s own 90-Day Activation (P13-T4)', () => {
     expect(box).not.toBeChecked();
   });
 
-  it('P18.95-T1 AC-5: a tick says Saved ✓ beside its box once it lands', async () => {
+  it('P18.7-T1 AC-5: a tick says Saved ✓ beside its box once it lands', async () => {
     show({ 'PUT /activation/me/items/': () => ({ body: crmTicked() }) });
     await ready();
     await userEvent.click(within(row('CRM_SETUP')).getByRole('checkbox', { name: 'Set up company CRM system' }));
@@ -207,7 +207,7 @@ describe('/activation, the hire’s own 90-Day Activation (P13-T4)', () => {
     expect(said.parentElement).toContainElement(within(row('CRM_SETUP')).getByRole('checkbox'));
   });
 
-  it('P18.95-T1 AC-5: a refused tick says Couldn’t save — retry, and the retry sends the same tick again', async () => {
+  it('P18.7-T1 AC-5: a refused tick says Couldn’t save — retry, and the retry sends the same tick again', async () => {
     const { calls } = show({
       'PUT /activation/me/items/': [
         { status: 500, body: { error: { code: 'INTERNAL_ERROR', message: 'Something went wrong.', requestId: 'r-1' } } },
@@ -230,7 +230,7 @@ describe('/activation, the hire’s own 90-Day Activation (P13-T4)', () => {
     expect(within(row('CRM_SETUP')).getByRole('checkbox')).toBeChecked();
   });
 
-  it('P18.95-T1 AC-5: the note says Saved ✓ under its own box, and the date has none of its own', async () => {
+  it('P18.7-T1 AC-5: the note says Saved ✓ under its own box, and the date has none of its own', async () => {
     show({ 'PUT /activation/me/items/': () => ({ body: activationView() }) });
     await ready();
     const crm = within(row('CRM_SETUP'));
@@ -352,7 +352,7 @@ describe('/activation, the hire’s own 90-Day Activation (P13-T4)', () => {
     expect(within(row('CRM_SETUP')).queryByText('ⓘ')).not.toBeInTheDocument();
   });
 
-  it('P13-T4 AC-5, P18.96-T2 AC-5 a correction of the join date is said beside it', async () => {
+  it('P13-T4 AC-5, P18.8-T2 AC-5 a correction of the join date is said beside it', async () => {
     show({ 'GET /activation/me': { body: activationView({ startCorrected: { by: SARI, at: '2026-09-01T02:00:00.000Z' } }) } });
     await ready();
     expect(screen.getByRole('button', { name: 'Join date corrected by Sari Puspita · 1 Sep 2026' })).toBeInTheDocument();
@@ -374,7 +374,7 @@ describe('/activation, the hire’s own 90-Day Activation (P13-T4)', () => {
     expect(screen.queryByRole('region', { name: 'Coaching note' })).not.toBeInTheDocument();
   });
 
-  it('P13-T7 AC-1, P18.96-T6 AC-5 Mark checklist complete is drawn disabled below 100%, saying why', async () => {
+  it('P13-T7 AC-1, P18.8-T6 AC-5 Mark checklist complete is drawn disabled below 100%, saying why', async () => {
     show();
     await ready();
     const button = screen.getByRole('button', { name: 'Mark checklist complete' });
@@ -387,7 +387,7 @@ describe('/activation, the hire’s own 90-Day Activation (P13-T4)', () => {
   it('P13-T7 AC-2 at 100% it asks in the product’s dialog, in the hire’s terms; Cancel leaves everything as it was', async () => {
     const { calls } = show({ 'GET /activation/me': { body: completeView() } });
     await ready();
-    // P18.96-T6 AC-5: nothing left to wait on, so no reason is drawn.
+    // P18.8-T6 AC-5: nothing left to wait on, so no reason is drawn.
     expect(screen.queryByText(/Unlocks when all/)).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Mark checklist complete' }));
     const dialog = screen.getByRole('dialog', { name: 'Mark your checklist complete? The 90-Day Activation menu will be removed.' });
@@ -401,7 +401,7 @@ describe('/activation, the hire’s own 90-Day Activation (P13-T4)', () => {
     const { calls, session } = show({
       'GET /activation/me': { body: completeView() },
       'POST /activation/me/graduate': { body: completeView({ state: 'graduated', graduatedAt: '2026-10-03T03:00:00.000Z', graduatedBy: RINA }) },
-      // At 100%, as the session says once the last tick lands — and not where an unfinished one starts (P18.96-T3).
+      // At 100%, as the session says once the last tick lands — and not where an unfinished one starts (P18.8-T3).
     }, { ...RINA_ME, activation: { open: true, complete: true } });
     await ready();
     await userEvent.click(screen.getByRole('button', { name: 'Mark checklist complete' }));
@@ -493,6 +493,21 @@ describe('/activation, the hire’s own 90-Day Activation (P13-T4)', () => {
     show({ 'GET /activation/me': { body: activationView({ state: 'expired', endsOn: '2026-09-30' }) } });
     expect(await screen.findByRole('heading', { level: 2, name: 'Your 90-day activation has ended.' })).toBeInTheDocument();
     expect(screen.getByText('It ran for six months, until 30 Sep 2026.')).toBeInTheDocument();
+  });
+
+  it('P19.9-T3 AC-5 past her first year it opens empty: the card says the activation covers the first year only — no checklist, no link to one', async () => {
+    show({
+      'GET /activation/me': {
+        body: {
+          empty: 'first_year_over', hire: RINA, today: '2026-11-08', joinDate: '2025-08-06', firstYearEndsOn: '2026-08-06', leader: null,
+        },
+      },
+    });
+    expect(await screen.findByRole('heading', { level: 2, name: 'Your 90-day activation was for your first year.' })).toBeInTheDocument();
+    expect(screen.getByText('It covers the first year after joining only, which ended on 6 Aug 2026.')).toBeInTheDocument();
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Your own coaching' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Mark checklist complete/ })).not.toBeInTheDocument();
   });
 });
 

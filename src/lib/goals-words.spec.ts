@@ -2,12 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { monthsLeftInWords, producedFrom } from './goals';
 
 /**
- * **P18.98-T4: `lib/goals.ts`' words in each language** (field selling; `i18n/messages/goal-words.ts`). The marker
+ * **P18.10-T4: `lib/goals.ts`' words in each language** (field selling; `i18n/messages/goal-words.ts`). The marker
  * beside the APE produced and the months left in words take the figures' language and then the words' — English words
  * and Indonesian figures when neither is passed, as `goals.spec.ts` reads them, unchanged. In Indonesian a coachee is
  * *-nya* whatever their pronoun, and no word names the office about them (ADR-0084).
  */
-describe('P18.98-T4 producedFrom in Indonesian', () => {
+describe('P18.10-T4 producedFrom in Indonesian', () => {
   it('AC-1 names the office’s upload, a correction and who made it, the month written Indonesian', () => {
     expect(producedFrom({ provenance: 'imported', month: '2026-08' }, 'month', undefined, 'id', 'id'))
       .toBe('Dari unggahan KPM Anda, Agu 2026');
@@ -21,9 +21,10 @@ describe('P18.98-T4 producedFrom in Indonesian', () => {
 
   it('AC-3 names the reader’s own figure, and a coachee’s as theirs whatever their pronoun', () => {
     const own = { provenance: 'self_reported', month: null } as const;
-    expect(producedFrom(own, 'year', undefined, 'id', 'id')).toBe('Angka Anda sendiri, diisi di Goal Settings');
+    // P19.1-T4 (UI-157, ADR-0195): the member's estimate — *perkiraan Anda*, the handover's words.
+    expect(producedFrom(own, 'year', undefined, 'id', 'id')).toBe('Perkiraan Anda, bukan dari unggahan');
     for (const pronoun of ['she', 'he', 'they'] as const) {
-      expect(producedFrom(own, 'year', pronoun, 'id', 'id')).toBe('Angkanya sendiri, diisi di Goal Settings');
+      expect(producedFrom(own, 'year', pronoun, 'id', 'id')).toBe('Perkiraannya, bukan dari unggahan');
     }
   });
 
@@ -43,7 +44,7 @@ describe('P18.98-T4 producedFrom in Indonesian', () => {
     for (const w of words) expect(w).not.toMatch(/\bKPM\b|kantor/i);
   });
 
-  it('P18.98-T3 keeps the figures’ language apart from the words’: a reader with no choice reads English words, Indonesian months', () => {
+  it('P18.10-T3 keeps the figures’ language apart from the words’: a reader with no choice reads English words, Indonesian months', () => {
     expect(producedFrom({ provenance: 'imported', month: '2026-10' }, 'year')).toBe('As of Okt 2026');
     expect(producedFrom({ provenance: 'imported', month: '2026-10' }, 'year', undefined, 'id', 'en')).toBe('As of Okt 2026');
     expect(producedFrom({ provenance: 'imported', month: '2026-10' }, 'year', undefined, 'en', 'id')).toBe('Per Oct 2026');
@@ -51,7 +52,7 @@ describe('P18.98-T4 producedFrom in Indonesian', () => {
   });
 });
 
-describe('P18.98-T4 monthsLeftInWords in Indonesian', () => {
+describe('P18.10-T4 monthsLeftInWords in Indonesian', () => {
   it.each([
     [2.2, 'sekitar 2 bulan'],
     [2.5, 'sekitar 3 bulan'],

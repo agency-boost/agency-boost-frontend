@@ -3,8 +3,6 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { StatusPill } from '@/components/ui/status-pill';
-import { useMessages } from '@/i18n/language-provider';
-import { kpmAnalyticsMessages } from '@/i18n/messages/kpm-analytics';
 import { cn } from '@/lib/cn';
 import { drillsAnywhere, unitDashboardHref } from '@/lib/kpm-analytics';
 import { COMPLIANCE_PILL_CLASS, type CompliancePerson, type PillWords, type TagTone } from '@/lib/kpm-compliance';
@@ -19,32 +17,22 @@ export function CompliancePill({ words }: { words: PillWords }) {
 
 /**
  * A name in the tree (D-drill; the prototype's alerts, `:4855-4867`, contradiction 13): somebody who leads opens
- * their Unit Dashboard in a new tab, as the comparison's leaders do, and says so; anybody else opens their
- * person page in this tab. **Inside a support session the Unit Dashboard opens in the same tab**: the session's
- * token lives in this tab's memory only, so a new tab would open as the Super Admin, who has no office.
- * Following one writes nothing.
+ * their Unit Dashboard, anybody else their person page — **each in the same tab** (UI-095; P19.3-T3 AC-11), where a
+ * leader's opened a new one: on a phone or a home-screen app that left the app, and *Back* did not return. Another
+ * leader's Unit Dashboard opens read-only for the Owner and an Admin (AC-3). Following one writes nothing.
  */
 export function PersonLink({ person, className, children }: { person: CompliancePerson; className?: string; children?: ReactNode }) {
-  // The new-tab hint is the comparison's own, so the two drills say it in the same words.
-  const t = useMessages(kpmAnalyticsMessages);
   const { me } = useSession();
   const isReader = person.membershipId === me?.membership?.membershipId;
-  const style = cn('text-navy hover:text-amber-ink hover:underline', className);
+  const style = cn('text-navy hover:text-primary-ink hover:underline', className);
   // A Core Leader opens their own unit alone (ADR-0159 §2): anybody else's name is plain text, not a link to a refusal.
   if (!drillsAnywhere(me, isReader && person.leads)) return <span className={cn('text-navy', className)}>{children ?? person.name}</span>;
   if (!person.leads) {
     return <Link href={`/people/members/${person.membershipId}`} className={style}>{children ?? person.name}</Link>;
   }
-  const newTab = !me?.isImpersonating;
   return (
-    <Link
-      href={unitDashboardHref({ membershipId: person.membershipId, isReader })}
-      target={newTab ? '_blank' : undefined}
-      rel={newTab ? 'noopener noreferrer' : undefined}
-      className={style}
-    >
+    <Link href={unitDashboardHref({ membershipId: person.membershipId, isReader })} className={style}>
       {children ?? person.name}
-      {newTab && <span className="sr-only">{isReader ? t.newTabOwn : t.newTab}</span>}
     </Link>
   );
 }
@@ -55,9 +43,9 @@ export function PersonLink({ person, className, children }: { person: Compliance
  * comparison's tags do (F-126's paint for *Personal*).
  */
 const ROLE_TAG: Record<'AB' | 'AAB' | 'personal', string> = {
-  AB: 'bg-navy/[0.08] text-navy',
+  AB: 'bg-secondary/[0.08] text-navy',
   AAB: 'bg-info/10 text-navy-soft',
-  personal: 'bg-amber/[0.14] text-navy',
+  personal: 'bg-primary/[0.14] text-navy',
 };
 
 export function RoleTag({ kind, children }: { kind: keyof typeof ROLE_TAG; children: ReactNode }) {
@@ -80,7 +68,7 @@ export function RoleTag({ kind, children }: { kind: keyof typeof ROLE_TAG; child
  */
 const TYPE_TAG: Record<TagTone, string> = {
   upcoming: 'bg-info/10 text-navy-soft',
-  past: 'bg-navy/[0.08] text-navy',
+  past: 'bg-secondary/[0.08] text-navy',
   structural: 'bg-club-chairman/[0.12] text-club-chairman',
   ongoing: 'bg-success/10 text-success',
 };

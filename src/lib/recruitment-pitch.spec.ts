@@ -23,7 +23,7 @@ describe('the pitch documents’ client (P17-T4 routes)', () => {
     expect(calls[0].url).toMatch(/\/recruitment\/pitch-materials\/howtojoin\/url$/);
   });
 
-  it('P18.97-T5 AC-2 asks for an optional document’s link and attaches one by the same routes, its code in the address', async () => {
+  it('P18.9-T5 AC-2 asks for an optional document’s link and attaches one by the same routes, its code in the address', async () => {
     const { calls } = stubFetch({
       '/url': { body: { url: 'https://cdn.test/x', expiresAt: '2026-10-09T00:05:00Z' } },
       '/kpm/settings/recruitment-pitch/': { body: {} },
@@ -73,7 +73,7 @@ describe('formatFileSize', () => {
     expect(formatFileSize(1536)).toBe('2 KB');
   });
 
-  it('P18.97-T5 AC-4 writes a file under 1 KB as “< 1 KB”, never rounded up to 1 KB (UI-029; I-521)', () => {
+  it('P18.9-T5 AC-4 writes a file under 1 KB as “< 1 KB”, never rounded up to 1 KB (UI-029; I-521)', () => {
     expect(UNDER_A_KILOBYTE).toBe('< 1 KB');
     // The seed's one-page demonstration PDFs are a few hundred bytes; storage's figure, as the server serves it.
     for (const bytes of [0, 1, 10, 640, 1023]) expect([bytes, formatFileSize(bytes)]).toEqual([bytes, '< 1 KB']);
@@ -86,7 +86,7 @@ describe('formatFileSize', () => {
 });
 
 describe('the pitch’s words', () => {
-  it('P18.97-T5 AC-1, AC-2 a partial document reads “Uploaded · needs confirmation”, and an optional one is tagged “Optional”', () => {
+  it('P18.9-T5 AC-1, AC-2 a partial document reads “Uploaded · needs confirmation”, and an optional one is tagged “Optional”', () => {
     expect(PITCH_COPY.needsConfirmation).toBe('Uploaded · needs confirmation');
     expect(PITCH_COPY.optional).toBe('Optional');
     // The office's "{n}/{m} confirmed" is gone: nothing but the ring has the shape x/y (ADR-0177).
@@ -94,8 +94,8 @@ describe('the pitch’s words', () => {
     expect([PITCH_COPY.missing, PITCH_COPY.uploaded, PITCH_COPY.complete]).toEqual(['Missing', 'Uploaded', 'Complete']);
   });
 
-  it('P18.95-T7 AC-1 are the prototype’s (`Recruitment_Section.html:681-818`), but for the client’s two lines', () => {
-    // P18.95-T7 AC-1 (grey text rows 11 and 12): the client's words where the prototype's were.
+  it('P18.7-T7 AC-1 are the prototype’s (`Recruitment_Section.html:681-818`), but for the client’s two lines', () => {
+    // P18.7-T7 AC-1 (grey text rows 11 and 12): the client's words where the prototype's were.
     expect(PITCH_COPY.noFile).toBe('Not uploaded yet');
     expect(PITCH_COPY.updated('2.4 MB', '12 Sep 2026')).toBe('2.4 MB · updated 12 Sep 2026');
     expect(PITCH_COPY.completeLine(4))

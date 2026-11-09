@@ -25,9 +25,14 @@ import {
  *   sentence under its field, and moves the focus to the first it refused.
  */
 export function QuoteDialog({
-  period, names, dates, onNames, onCancel, onGenerate,
+  period, names, dates, onNames, onCancel, onGenerate, kpmReadOnly = false,
 }: {
   period: BillingPeriod;
+  /**
+   * The KPM's own name, read-only (P19.4-T3 AC-10; ADR-0211 §4): on a KPM's *Billing* tab the quote is that KPM's, and
+   * the name the Owner receives is the server's — so the field shows it and takes no typing.
+   */
+  kpmReadOnly?: boolean;
   /** The three names, held by the page across opens. */
   names: Pick<QuoteDetails, 'kpm' | 'pic' | 'sales'>;
   /** The two dates the dialog opens on. */
@@ -68,6 +73,7 @@ export function QuoteDialog({
     <Field label={label} htmlFor={fieldId(name)} error={errors[name]} className="mb-4">
       <TextInput
         id={fieldId(name)}
+        readOnly={name === 'kpm' && kpmReadOnly}
         value={names[name]}
         placeholder={placeholder}
         invalid={Boolean(errors[name])}

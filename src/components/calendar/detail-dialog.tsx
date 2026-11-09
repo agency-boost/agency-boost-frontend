@@ -4,7 +4,6 @@ import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { Dialog } from '@/components/ui/dialog';
 import { Modal } from '@/components/ui/modal';
 import { Button, ButtonLink, ErrorBanner } from '@/components/ui/field';
 import { LineIcon } from '@/components/ui/line-icon';
@@ -19,12 +18,13 @@ import {
 import { coachingSessionHref } from '@/lib/coaching';
 import { formatDayClock, formatTripWhen, formatWhen } from '@/lib/format';
 import { cn } from '@/lib/cn';
-import { useCan } from '@/lib/session';
+import { useCan, useSession } from '@/lib/session';
 import { TEXT_TAP } from '@/components/ui/phone';
 
 /** *Pick who to coach*'s search (UI-012), loaded when it is asked for: most details never draw it. */
 const AgentSearch = dynamic(() => import('@/components/agent-search').then((m) => m.AgentSearch), { ssr: false });
 import { Avatar, BADGE_TONE, CHIP, DETAIL_LABEL } from './calendar-parts';
+import { DeleteQuestion } from './delete-question';
 
 /** An invitee's answer, as the organiser's chip shows it (ADR-0097, form 2): its glyph, and its name's message. */
 const ANSWER_GLYPH: Record<Answer, { glyph: string; name: 'accepted' | 'declined' | 'noAnswer' }> = {
@@ -39,16 +39,16 @@ const ANSWER_GLYPH: Record<Answer, { glyph: string; name: 'accepted' | 'declined
  *
  * The prototype's, verbatim: the badge, the title, *When*, *Location / notes* or *—*, *Invitees* or
  * *No one else invited*. **The badge names the type as the legend does** — *Internal meeting*, where the
- * prototype's capitalised its code, *Meeting* (P18.95-T8 AC-2; the client's UI review, UI-020: one set
+ * prototype's capitalised its code, *Meeting* (P18.7-T8 AC-2; the client's UI review, UI-020: one set
  * of type names). **A meeting link in the notes is a link**: *Join Zoom* on a Zoom host, *Join meeting*
  * on any other, opening in a new tab (`NotesText`). **What it offers follows the server's `readerIs`,
  * and draws nothing the API would refuse** (D-write):
  *
  * | Reader | Left | Right |
  * |---|---|---|
- * | organiser | *Delete* | *Close*, *Edit* |
- * | invitee | *Decline* | *Close*, *Accept* — in *Delete*'s and *Edit*'s places (ADR-0097) |
- * | placed, ancestor | — | *Close* (ADR-0098, D-write) |
+ * | organiser | *Hapus*, red outline | *Ubah*, white · *Tutup*, orange (P19.8-T3 AC-7; MOB UI-169, ADR-0228 §5) |
+ * | invitee | *Decline* | *Close*, *Accept* — where they were (ADR-0097; ADR-0228 §5) |
+ * | placed, ancestor | — | *Close*, orange (ADR-0098, D-write) |
  *
  * **And only what the reader may write** (`may`): in a read-only support session every one of them is
  * withheld, and the organiser and the invitee alike are offered *Close* alone (roles §3.13).
@@ -59,8 +59,9 @@ const ANSWER_GLYPH: Record<Answer, { glyph: string; name: 'accepted' | 'declined
  * On a *1:1 coaching* entry, the chip of each invitee the reader coaches opens that person's *Coaching
  * Session* tab (ADR-0099): the server says which, in `readerCoaches`.
  *
- * **Delete asks first, in the product's dialog** (F-72): *Delete "{title}"?*, without the prototype's
- * *This can't be undone.*, which a soft delete makes false (H-06, I-101).
+ * **Delete asks first, in the product's dialog** (F-72), without the prototype's *This can't be undone.*, which a soft
+ * delete makes false (H-06, I-101). *Since P19.8-T3 AC-7 (MOB UI-169):* ***Hapus event ini?***, the title and day under
+ * it, *Batal* · *Hapus* filled red (`DeleteQuestion`) — over the Calendar and over Home (R2's *Aksi hari ini*) alike.
  */
 /** The writes the reader may make: none in a read-only support session (D-write). */
 export interface DetailWrites {
@@ -185,7 +186,7 @@ export function DetailDialog({
         {notice && <p role="status" className="mt-3 text-md font-semibold text-navy">{notice}</p>}
         {banner && <div className="mt-3"><ErrorBanner {...banner} /></div>}
 
-        <div className={cn('mt-5 flex gap-2', canDelete || canAnswer ? 'justify-between' : 'justify-end')}>
+        <div data-detail-actions="" className={cn('mt-5 flex gap-2', canDelete || canAnswer ? 'justify-between' : 'justify-end')}>
           {canDelete && (
             <Button variant="danger" disabled={busy} onClick={() => setAsking(true)}>{t.delete}</Button>
           )}
@@ -194,31 +195,30 @@ export function DetailDialog({
               {t.decline}
             </AnswerButton>
           )}
-          <div className="flex gap-2">
-            <Button variant="secondary" onClick={onClose}>{t.close}</Button>
-            {canEdit && <Button disabled={busy} onClick={() => onEdit(entry)}>{t.edit}</Button>}
-            {canAnswer && (
+          {canAnswer ? (
+            // An invitee's answers where they were (ADR-0228 §5): *Tutup*, then *Terima* the one orange action.
+            <div className="flex gap-2">
+              <Button variant="secondary" onClick={onClose}>{t.close}</Button>
               <AnswerButton variant="primary" pressed={entry.myAnswer === 'accepted'} disabled={busy} onClick={() => answer('accepted')}>
                 {t.accept}
               </AnswerButton>
-            )}
-          </div>
+            </div>
+          ) : (
+            // MOB UI-169 (P19.8-T3 AC-7): white *Ubah*, then orange *Tutup* — *Tutup* alone when there is nothing to write.
+            <div className="flex gap-2">
+              {canEdit && <Button variant="secondary" disabled={busy} onClick={() => onEdit(entry)}>{t.edit}</Button>}
+              <Button onClick={onClose}>{t.close}</Button>
+            </div>
+          )}
         </div>
       </Modal>
-      <Dialog
-        open={asking}
-        message={t.deleteQuestion({ title })}
-        confirmLabel={t.delete}
-        tone="danger"
-        onConfirm={() => void remove()}
-        onCancel={() => setAsking(false)}
-      />
+      <DeleteQuestion open={asking} entry={entry} onConfirm={() => void remove()} onCancel={() => setAsking(false)} />
     </>
   );
 }
 
 /**
- * ***Location / notes*, as the organiser wrote it, with each meeting link a link** (P18.95-T8 AC-2; the
+ * ***Location / notes*, as the organiser wrote it, with each meeting link a link** (P18.7-T8 AC-2; the
  * client's UI review, UI-020: *the Zoom link in the event popup is plain text*). The link reads *Join
  * Zoom* or *Join meeting* (`notesParts`), is a 44px target on a phone (`TEXT_TAP`), opens in a new tab
  * with neither the opener nor the referrer handed on, and says so to a screen reader; its address is
@@ -240,7 +240,7 @@ function NotesText({ notes }: { notes: string }) {
           rel="noopener noreferrer"
           title={part.href}
           className={cn(
-            'inline-flex items-center rounded-pill bg-navy-soft/[0.12] px-2.5 py-0.5 align-baseline text-sm font-semibold text-navy hover:bg-navy-soft/20',
+            'inline-flex items-center rounded-pill bg-secondary-hover/[0.12] px-2.5 py-0.5 align-baseline text-sm font-semibold text-navy hover:bg-secondary-hover/20',
             TEXT_TAP,
           )}
         >
@@ -266,11 +266,17 @@ function NotesText({ notes }: { notes: string }) {
  * **Who they may coach is the server's**: `readerCoaches`, worked out when the entry is read (`COACH`, ADR-0099); the
  * agent search lists only people the reader reaches, and the session refuses anybody they do not coach. Held to
  * `coaching_session:create` as well, so a role that coaches nobody sees none of it.
+ *
+ * **An Agent who leads coaches since P19.9-T6** (ADR-0234), so their 1:1 offers its coachees' sessions — **but not *Pick
+ * who to coach***: the agent search reaches through `member:read_profile`, an Agent's `own`, and would list nobody for
+ * them. Their roster (*Tim saya › Coaching*) is the way to somebody not on the entry.
  */
 function CoachButtons({ entry }: { entry: CalendarEntry }) {
   const t = useMessages(calendarMessages);
   const router = useRouter();
+  const { me } = useSession();
   const mayCoach = useCan('coaching_session:create');
+  const mayPick = me?.membership?.hierarchyRole !== 'agent';
   const [picking, setPicking] = useState(false);
   if (entry.type !== 'coaching' || entry.readerIs !== 'organiser' || !mayCoach) return null;
   const coachable = entry.invitees.filter((person) => person.readerCoaches);
@@ -297,7 +303,7 @@ function CoachButtons({ entry }: { entry: CalendarEntry }) {
       </div>
     );
   }
-  if (entry.invitees.length > 0) return null;
+  if (entry.invitees.length > 0 || !mayPick) return null;
   return (
     <div className="mt-5">
       {picking ? (

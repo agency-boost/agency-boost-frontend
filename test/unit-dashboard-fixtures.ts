@@ -35,6 +35,8 @@ export function unitRow(membershipId: string, name: string, over: Partial<UnitRo
   return {
     membershipId,
     name,
+    // P19.9-T4 AC-1: no number on file unless a row says so.
+    phone: null,
     isReader: false,
     rung: { code: 'AGENT', label: 'Agent' },
     depth: 1,
@@ -47,6 +49,7 @@ export function unitRow(membershipId: string, name: string, over: Partial<UnitRo
     },
     leadsCounts: { salesOpen: 9, salesClosing: 4, recruitOpen: 0, recruitNominated: 0 },
     closings: 0,
+    proposalsMade: 0,
     activity: {
       leads: { logged: 63, target: 70 },
       appointments: { logged: 18, target: 20 },
@@ -68,6 +71,7 @@ export const total = (over: Partial<UnitTotal> = {}): UnitTotal => ({
   goal: { targetMinor: rp(320), actualMinor: rp(262.4), attainmentPct: 82, missing: 0, gapMinor: rp(57.6), overMinor: 0 },
   leadsCounts: { salesOpen: 36, salesClosing: 16, recruitOpen: 2, recruitNominated: 1 },
   closings: 3,
+  proposalsMade: 0,
   touches: { logged: 340, target: 380 },
   potentialActive: { count: 3, of: 4 },
   newHires: 0,
@@ -76,7 +80,7 @@ export const total = (over: Partial<UnitTotal> = {}): UnitTotal => ({
 
 const AAB = { code: 'AAB', label: 'Associate Agency Builder' };
 
-/** The seed's chases (`phase-18.5-agent-enablement.md`, *Seed*): Agus MDRT; Dimas and Rina MDRT and the sprint. */
+/** The seed's chases (`phase-18.2-agent-enablement.md`, *Seed*): Agus MDRT; Dimas and Rina MDRT and the sprint. */
 const MDRT = { code: 'MDRT_QUALIFICATION', title: 'MDRT Qualification' };
 const SPRINT = { code: 'APE_SPRINT', title: 'Q4 APE Sprint' };
 
@@ -91,7 +95,7 @@ export const DIMAS = unitRow('mem-dimas', 'Dimas Pratama', {
   followUp: { text: 'Role-play objection handling before next presentation', dueDate: '2026-10-05', overdueDays: 3 },
 });
 export const INDAH = unitRow('mem-indah', 'Indah Lestari', {
-  status: 'on_track', closings: 2,
+  status: 'on_track', closings: 2, phone: '+6281234567001',
   leadsCounts: { salesOpen: 6, salesClosing: 2, recruitOpen: 2, recruitNominated: 1 },
   goal: goalCell({
     source: {
@@ -159,6 +163,7 @@ export function dashboard(over: Partial<UnitDashboardView> = {}): UnitDashboardV
     overdueAfterDays: 7,
     head: { membershipId: 'mem-agus', name: 'Agus Santoso', isReader: true },
     empty: false,
+    readOnly: false,
     tiles: {
       team: { total: 16, direct: 4, units: 3, underUnits: 9, newHires: 0 },
       directGroupProduction: {
@@ -213,7 +218,7 @@ export const SARI_UNIT = dashboard({
 });
 
 /**
- * **Yanti as the seed has her since P18.96-T5** (ADR-0172): rejoined weeks ago, no first sale yet — a *New hire*, in
+ * **Yanti as the seed has her since P18.8-T5** (ADR-0172): rejoined weeks ago, no first sale yet — a *New hire*, in
  * Sari's unit and in Agus's team, out of every total's production and of *On pace*'s count — and, since UI V1
  * (UI-013), in its `of`: manpower. Her missing figure is no longer *missing*: the production leaves her out for the
  * other reason, and says so.
@@ -275,21 +280,24 @@ export const RATIOS = {
 };
 
 /*
- * ── UI V1 (Phase 18.99 T4): the Activities tab ─────────────────────────────────────────────────
+ * ── UI V1 (Phase 18.11 T4): the Activities tab ─────────────────────────────────────────────────
  */
 
-/** The seed's office sections, as the office named them (content: never translated). */
+/**
+ * The seed's office sections, as the office named them (content: never translated), each type with its *Nama singkat*
+ * (P19.8-T4, MOB UI-180) — but *Sales meeting*, which the office gave none, so a phone shows its name on two lines.
+ */
 const SECTIONS: UnitActivitiesView['sections'] = [
   { code: 'LEADS_GENERATION', label: 'Leads Generation', status: 'active', types: [
-    { code: 'LEADS_CONTACTED', label: 'Set Appointment', status: 'active' },
-    { code: 'NEW_PROSPECT', label: 'Mendapatkan calon prospek baru', status: 'active' },
+    { code: 'LEADS_CONTACTED', label: 'Set Appointment', shortLabel: 'Set appointment', status: 'active' },
+    { code: 'NEW_PROSPECT', label: 'Mendapatkan calon prospek baru', shortLabel: 'Prospek baru', status: 'active' },
   ] },
   { code: 'SELLING', label: 'Selling', status: 'active', types: [
-    { code: 'SELL_PRESENTATION', label: 'Sales meeting', status: 'active' },
-    { code: 'SELL_SUBMISSION', label: 'Submission polis', status: 'active' },
+    { code: 'SELL_PRESENTATION', label: 'Sales meeting', shortLabel: null, status: 'active' },
+    { code: 'SELL_SUBMISSION', label: 'Submission polis', shortLabel: 'Submission polis', status: 'active' },
   ] },
   { code: 'RECRUITMENT', label: 'Recruitment', status: 'active', types: [
-    { code: 'RECRUIT_PRESENTATION', label: 'Melakukan presentasi recruitment', status: 'active' },
+    { code: 'RECRUIT_PRESENTATION', label: 'Melakukan presentasi recruitment', shortLabel: 'Presentasi rekrut', status: 'active' },
   ] },
 ];
 
@@ -332,6 +340,7 @@ export function activities(over: Partial<UnitActivitiesView> = {}): UnitActiviti
         ratio({ value: 0.33, numeratorCount: 10, denominatorCount: 30 }),
         ratio({ code: 'RECRUITMENT_SUCCESS_RATE', label: 'Recruitment success rate', value: 0.5, numeratorCount: 2, denominatorCount: 4 }),
       ] as UnitActivitiesView['ratios']['group'],
+      person: null,
     },
     ...over,
   };

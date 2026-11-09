@@ -269,3 +269,20 @@ export const entryIdOf = (item: CalendarItem) => (isBusy(item) ? '' : item.entry
 
 /** How many lines a month cell shows before *"+{n} more…"* (`:1042-1049`). */
 export const MONTH_LINES = 3;
+
+/**
+ * **The hour 3 Hari and Week open at** (P19.1-T3 AC-4; UI-117, UI-144): an hour before the office's now when today is
+ * in view — *now 10.20 − 1 h* opens at 09.00 — and 07.00 on any other days (`OPEN_AT_HOUR`). Never before midnight.
+ * `nowMinute` is the read's, moved on each minute; `null` while it is unknown, which opens at 07.00 too.
+ */
+export function openingHour(days: readonly string[], today: string, nowMinute: number | null): number {
+  if (nowMinute === null || !days.includes(today)) return OPEN_AT_HOUR;
+  return Math.max(0, Math.floor((nowMinute - 60) / 60));
+}
+
+/** Is an office date a Saturday or a Sunday? Date arithmetic on the date itself, never a clock (invariant §9). */
+export function isWeekend(day: string): boolean {
+  const [y, m, d] = day.split('-').map(Number);
+  const weekday = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+  return weekday === 0 || weekday === 6;
+}

@@ -86,12 +86,12 @@ const rowOf = (text: string) => screen.getByText(text).closest('li') as HTMLElem
 const tabs = () => within(screen.getByRole('navigation', { name: 'Bagian Training' }));
 
 /**
- * **P18.98-T4, Settings › Training in ID mode** (ADR-0179 §3–§5): the list, a module's page and its Files, Videos and
+ * **P18.10-T4, Settings › Training in ID mode** (ADR-0179 §3–§5): the list, a module's page and its Files, Videos and
  * Links in the approved glossary's Indonesian; the title, the tabs, *Skill* and *KPM* English (§A); every category, skill,
  * module, file and link as the office typed it; a file's size in the reader's figures. In English: `page.spec.tsx`,
  * `[moduleId]/page.spec.tsx` and `components/module-content.spec.tsx`.
  */
-describe('P18.98-T4 Settings › Training in Indonesian', () => {
+describe('P18.10-T4 Settings › Training in Indonesian', () => {
   beforeEach(() => window.history.replaceState(null, '', '/kpm/settings/training'));
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -243,7 +243,8 @@ describe('P18.98-T4 Settings › Training in Indonesian', () => {
     stubs({ [CONTENT_URL]: { body: content({ overridden: true }) } });
     renderInIndonesian(<ModuleContentEditor moduleCode="DAFTAR_PROSPEK" canWrite />, { me: OWNER });
     expect(await screen.findByText('KPM ini punya materi sendiri untuk modul ini.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Gunakan lagi materi perusahaan saya' }))
+    // *Amended 2026-11-05 (P19.4-T1 AC-4, ADR-0208 §3):* §B6's words, *Urungkan perubahan saya*.
+    expect(screen.getByRole('button', { name: 'Urungkan perubahan saya' }))
       .toHaveAttribute('title', 'Mengembalikan 1 file dan 0 tautan milik perusahaan Anda.');
     const big = new File(['x'], 'besar.pdf', { type: 'application/pdf' });
     Object.defineProperty(big, 'size', { value: 26 * 1024 * 1024 });
@@ -253,7 +254,7 @@ describe('P18.98-T4 Settings › Training in Indonesian', () => {
     );
   });
 
-  it('P18.98-T3 figures: a reader with no choice reads the words in English and the size in Indonesian figures', async () => {
+  it('P18.10-T3 figures: a reader with no choice reads the words in English and the size in Indonesian figures', async () => {
     stubs();
     renderWithLanguage(<ModuleContentEditor moduleCode="DAFTAR_PROSPEK" canWrite />, { me: OWNER }, { live: false });
     expect(await screen.findByText('This is your company’s material.')).toBeInTheDocument();

@@ -1,7 +1,8 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { makeMe, renderWithSession, stubFetch } from '@test/harness';
+import { atWidth, makeMe, renderWithSession, stubFetch } from '@test/harness';
+import { smallTargets } from '@test/touch-audit';
 import { feedbackSummary, INVITEES, rollCall } from '@test/events-fixtures';
 import EventsSettingsPage from './page';
 
@@ -189,7 +190,7 @@ describe('the office’s Events screen', () => {
     expect(new Date(sent.endsAt).getTime()).toBeGreaterThan(new Date(sent.startsAt).getTime());
   });
 
-  it('P18.5-T5 AC-10 Chosen people and Chosen leaders are live, no longer coming soon (D-picker)', async () => {
+  it('P18.2-T5 AC-10 Chosen people and Chosen leaders are live, no longer coming soon (D-picker)', async () => {
     render([type()], []);
     await userEvent.click(await screen.findByRole('button', { name: 'Add an event' }));
 
@@ -199,7 +200,7 @@ describe('the office’s Events screen', () => {
     expect(scope).not.toHaveTextContent(/coming soon/i);
   });
 
-  it('P18.5-T5 AC-10 Chosen people: a searchable checklist of the active members, and Save waits for one', async () => {
+  it('P18.2-T5 AC-10 Chosen people: a searchable checklist of the active members, and Save waits for one', async () => {
     const stub = render([type()], []);
     await userEvent.click(await screen.findByRole('button', { name: 'Add an event' }));
     await userEvent.type(screen.getByLabelText('Title'), 'Bootcamp');
@@ -229,7 +230,7 @@ describe('the office’s Events screen', () => {
     expect(stub.calls.filter((c) => c.url.endsWith('/kpm/settings/events/invitees'))).toHaveLength(1);
   });
 
-  it('P18.5-T5 AC-10 Chosen leaders lists only members who lead somebody (the graph, not the title)', async () => {
+  it('P18.2-T5 AC-10 Chosen leaders lists only members who lead somebody (the graph, not the title)', async () => {
     render([type()], []);
     await userEvent.click(await screen.findByRole('button', { name: 'Add an event' }));
     await userEvent.selectOptions(screen.getByLabelText('Who is invited'), 'select_leaders');
@@ -239,7 +240,7 @@ describe('the office’s Events screen', () => {
       .map((c) => c.closest('label')!.querySelector('span')!.textContent)).toEqual(['Agus Wibowo', 'Sari Puspita']);
   });
 
-  it('P18.5-T5 AC-10 a chosen person the list cannot offer is kept, never dropped, and saving unchanged sends no audience', async () => {
+  it('P18.2-T5 AC-10 a chosen person the list cannot offer is kept, never dropped, and saving unchanged sends no audience', async () => {
     const stub = render([type()], [event({
       audience: { issuer: 'kpm', scope: 'select_agents', inviteeMembershipIds: ['mem-rina', 'mem-gone'] },
     })]);
@@ -263,7 +264,7 @@ describe('the office’s Events screen', () => {
     expect(sent).not.toHaveProperty('endsAt');
   });
 
-  it('P18.5-T5 AC-10 a chosen leader who leads nobody now is kept with the reason, and can be cleared but not chosen again', async () => {
+  it('P18.2-T5 AC-10 a chosen leader who leads nobody now is kept with the reason, and can be cleared but not chosen again', async () => {
     const stub = render([type()], [event({
       audience: { issuer: 'kpm', scope: 'select_leaders', inviteeMembershipIds: ['mem-agus', 'mem-dewi'] },
     })]);
@@ -282,7 +283,7 @@ describe('the office’s Events screen', () => {
     expect(sent.audience).toEqual({ issuer: 'kpm', scope: 'select_leaders', inviteeMembershipIds: ['mem-agus'] });
   });
 
-  it('P18.5-T5 AC-9 an audience change the server refuses is said under Who is invited, the panel kept', async () => {
+  it('P18.2-T5 AC-9 an audience change the server refuses is said under Who is invited, the panel kept', async () => {
     stubFetch({
       '/kpm/settings/events/types': { body: [type()] },
       '/kpm/settings/events': { body: [event({ phase: 'past', title: 'Town Hall' })] },
@@ -304,7 +305,7 @@ describe('the office’s Events screen', () => {
     expect(screen.getByRole('button', { name: 'Save the event' })).toBeInTheDocument();
   });
 
-  it('P18.5-T5 AC-9 moving an answered event back into the future: the spec’s line under Ends', async () => {
+  it('P18.2-T5 AC-9 moving an answered event back into the future: the spec’s line under Ends', async () => {
     stubFetch({
       '/kpm/settings/events/types': { body: [type()] },
       '/kpm/settings/events': { body: [event({ phase: 'past', title: 'Town Hall' })] },
@@ -324,7 +325,7 @@ describe('the office’s Events screen', () => {
     expect(screen.getByLabelText('Ends')).toHaveValue('2027-01-01T13:00');
   });
 
-  it('P18.5-T5 AC-10 a scope with no list sends none', async () => {
+  it('P18.2-T5 AC-10 a scope with no list sends none', async () => {
     const stub = render([type()], [event({ audience: { issuer: 'kpm', scope: 'select_agents', inviteeMembershipIds: ['mem-rina'] } })]);
     await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
     await userEvent.selectOptions(screen.getByLabelText('Who is invited'), 'all_agents');
@@ -335,7 +336,7 @@ describe('the office’s Events screen', () => {
     expect(sent.audience).toEqual({ issuer: 'kpm', scope: 'all_agents' });
   });
 
-  it('P18.5-T5 AC-7 View feedback on a past row only, opening the roll call and the Feedback Summary', async () => {
+  it('P18.2-T5 AC-7 View feedback on a past row only, opening the roll call and the Feedback Summary', async () => {
     render([type()], [
       event(),
       event({ id: 'e2', code: 'NOW', title: 'Happening', phase: 'running' }),
@@ -348,7 +349,7 @@ describe('the office’s Events screen', () => {
 
     await userEvent.click(buttons[0]);
     const box = await screen.findByRole('dialog', { name: 'Last month' });
-    // Two tabs since P18.8-T13 (ADR-0161 §6): the roll call open, the summary a tab away.
+    // Two tabs since P18.5-T13 (ADR-0161 §6): the roll call open, the summary a tab away.
     expect(await within(box).findByRole('heading', { name: 'Roll call' })).toBeInTheDocument();
     await userEvent.click(within(box).getByRole('tab', { name: 'Feedback summary' }));
     expect(await within(box).findByRole('heading', { name: 'Last month — Feedback Summary' })).toBeInTheDocument();
@@ -356,7 +357,7 @@ describe('the office’s Events screen', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
-  it('P18.5-T5 AC-7 View feedback is a read: a reader who cannot write still has it', async () => {
+  it('P18.2-T5 AC-7 View feedback is a read: a reader who cannot write still has it', async () => {
     const reader = makeMe({ membership: member, permissions: ['tenant_config:read', 'event_settings:read', 'event_feedback:read'] });
     render([type()], [event({ id: 'e3', code: 'LAST', title: 'Last month', phase: 'past' })], reader);
     await screen.findByText('Last month');
@@ -364,7 +365,7 @@ describe('the office’s Events screen', () => {
     expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
   });
 
-  it('P18.5-T5 AC-2 the list is the office’s administration’s: without event_settings:read nothing is read', async () => {
+  it('P18.2-T5 AC-2 the list is the office’s administration’s: without event_settings:read nothing is read', async () => {
     const stub = render([type()], [event()], makeMe({ membership: member, permissions: ['tenant_config:read'] }));
     await waitFor(() => expect(screen.queryByText('Kickoff 2026')).not.toBeInTheDocument());
     expect(stub.calls.some((c) => /\/kpm\/settings\/events(\?|$)/.test(c.url))).toBe(false);
@@ -437,7 +438,7 @@ describe('the office’s Events screen', () => {
     expect(screen.getByLabelText('Title')).toHaveValue('Kickoff');
   });
 
-  it('P18.8-T13 AC-2 the events are one bordered list, a row each, the row’s actions one group with View feedback first', async () => {
+  it('P18.5-T13 AC-2 the events are one bordered list, a row each, the row’s actions one group with View feedback first', async () => {
     render([type()], [
       event(),
       event({ id: 'e3', code: 'LAST', title: 'Last month', phase: 'past' }),
@@ -455,7 +456,7 @@ describe('the office’s Events screen', () => {
       .toBe(within(past).getByRole('button', { name: 'Edit' }).parentElement);
   });
 
-  it('P18.8-T13 AC-2 the toolbar: Show archived and the tab’s add button together, above the list, on both tabs', async () => {
+  it('P18.5-T13 AC-2 the toolbar: Show archived and the tab’s add button together, above the list, on both tabs', async () => {
     render([type()], [event()]);
     const toggle = await screen.findByRole('checkbox', { name: 'Show archived' });
     const add = screen.getByRole('button', { name: 'Add an event' });
@@ -489,7 +490,7 @@ describe('the office’s Events screen in a browser outside Jakarta', () => {
   afterAll(() => { process.env.TZ = original; });
   afterEach(() => vi.unstubAllGlobals());
 
-  it('P18.5-T5 AC-9 a typed time is read as Jakarta’s: 09:00 there is 02:00 UTC', async () => {
+  it('P18.2-T5 AC-9 a typed time is read as Jakarta’s: 09:00 there is 02:00 UTC', async () => {
     expect(new Date('2026-10-01T09:00').toISOString()).toBe('2026-10-01T16:00:00.000Z');
     const stub = render([type()], []);
     await userEvent.click(await screen.findByRole('button', { name: 'Add an event' }));
@@ -503,7 +504,7 @@ describe('the office’s Events screen in a browser outside Jakarta', () => {
     expect(sent.endsAt).toBe('2026-10-01T06:00:00.000Z');
   });
 
-  it('P18.5-T5 AC-9 a stored instant is shown as Jakarta’s wall clock, and saved back unchanged when untouched', async () => {
+  it('P18.2-T5 AC-9 a stored instant is shown as Jakarta’s wall clock, and saved back unchanged when untouched', async () => {
     const stub = render([type()], [event({ startsAt: '2026-10-01T02:00:00.000Z', endsAt: '2026-10-01T06:00:00.000Z' })]);
     await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
     expect(screen.getByLabelText('Starts')).toHaveValue('2026-10-01T09:00');
@@ -519,14 +520,14 @@ describe('the office’s Events screen in a browser outside Jakarta', () => {
 });
 
 /**
- * **The events settings in order** (P18.97-T4 AC-8, ADR-0176 §8; the client's KPM Owner review of 2026-10-27, UI-030:
+ * **The events settings in order** (P18.9-T4 AC-8, ADR-0176 §8; the client's KPM Owner review of 2026-10-27, UI-030:
  * *"past events first, upcoming at the bottom"*): upcoming soonest first, then happening now, then past latest first —
  * the order the agents' Events list reads its sections in.
  */
-describe('P18.97-T4 AC-8 the events settings: upcoming, then running, then past', () => {
+describe('P18.9-T4 AC-8 the events settings: upcoming, then running, then past', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('P18.97-T4 AC-8 lists upcoming soonest first, then happening now, then past latest first', async () => {
+  it('P18.9-T4 AC-8 lists upcoming soonest first, then happening now, then past latest first', async () => {
     render([type()], [
       event({ id: 'e1', code: 'BOOTCAMP', title: 'New Agent Bootcamp', phase: 'past', startsAt: '2026-09-08T02:00:00.000Z' }),
       event({ id: 'e2', code: 'AWARDS', title: 'Awards night', phase: 'past', startsAt: '2026-10-10T11:00:00.000Z' }),
@@ -540,7 +541,7 @@ describe('P18.97-T4 AC-8 the events settings: upcoming, then running, then past'
     ]);
   });
 
-  it('P18.97-T4 AC-8 keeps an archived event in its own phase’s place when archived ones are shown', async () => {
+  it('P18.9-T4 AC-8 keeps an archived event in its own phase’s place when archived ones are shown', async () => {
     render([type()], [
       event({ id: 'e1', code: 'OLD', title: 'Archived launch', phase: 'past', status: 'archived', startsAt: '2026-10-20T02:00:00.000Z' }),
       event({ id: 'e2', code: 'NEXT', title: 'Next training', phase: 'upcoming', startsAt: '2026-11-01T02:00:00.000Z' }),
@@ -550,5 +551,26 @@ describe('P18.97-T4 AC-8 the events settings: upcoming, then running, then past'
     expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
       'Next training', 'Archived launch', 'Older training',
     ]);
+  });
+});
+
+/**
+ * **No target under 44px on a phone or a tablet** (P19.2-T3 AC-4; UI-142: text links 17px tall, *Tampilkan yang
+ * diarsipkan* 13px, tab rows 38px, ⠿ 20px), inside the field shell's frame the Owner's pages wear (ADR-0197), which
+ * `data-surface` stands for here.
+ */
+describe('P19.2-T3 AC-4 the events’s targets (UI-142)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it.each([375, 768])('P19.2-T3 AC-4 at %ipx finds no target under 44px', async (px) => {
+    atWidth(px);
+    render();
+    const frame = document.body.firstElementChild!;
+    frame.setAttribute('data-surface', 'v1');
+    await screen.findByText('Upcoming');
+    expect(smallTargets(frame, px)).toEqual([]);
+    await userEvent.click(screen.getByRole('link', { name: 'Event types' }));
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'Show archived' }));
+    expect(smallTargets(frame, px)).toEqual([]);
   });
 });

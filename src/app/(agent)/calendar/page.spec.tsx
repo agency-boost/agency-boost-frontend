@@ -2,7 +2,9 @@ import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-libra
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { axe } from 'vitest-axe';
-import { atWidth, InLanguage, makeMe, renderInLayout, renderWithSession, stubFetch, type StubReply } from '@test/harness';
+import {
+  atWidth, InLanguage, makeMe, renderInLayout, renderWithSession, stubFetch, wears, type StubReply,
+} from '@test/harness';
 import {
   AAB_RUNG, agendaRead, AGUS, busy, coachingTask, DOWNLINE, entry, joinedEvent, leadTask, monthRead, peoplePage, person, RINA,
   SHELL_STUBS, threeDayRead, trip, WEEK, weekRead,
@@ -92,6 +94,33 @@ function drag(column: HTMLElement, from: number, to: number) {
 
 const standup = () => screen.getByRole('button', { name: 'Internal meeting: Weekly unit standup, 09:00–09:30' });
 
+/** The four views' words, as the picker and the switcher draw them. */
+const VIEW_WORDS: Record<string, string> = { agenda: 'Agenda', three_days: '3 Days', week: 'Week', month: 'Month' };
+/**
+ * **A phone's view picker** (P19.8-T3 AC-1; MOB UI-171): a button named by the picker and its value — *View Agenda* —
+ * that opens a small menu under it; never a native select.
+ */
+const viewButton = () => screen.getByRole('button', { name: /^View / });
+/**
+ * **The header control's size** (P19.8-T1 AC-7, P19.8-T3 AC-1; MOB UI-171, ADR-0227 §1): 13px (`text-base`), 600, 44px —
+ * its own `min-h-11`/`h-11`, or the 44px pill it is half of. Where P19.1-T3 AC-3 (UI-156, superseded) pinned 16px / 48px.
+ */
+function expectHeaderSize(control: HTMLElement, px: number) {
+  const worn = wears(control, px).split(' ');
+  expect(worn, control.outerHTML).toEqual(expect.arrayContaining(['text-base', 'font-semibold']));
+  expect(worn.includes('min-h-11') || worn.includes('h-11') || control.closest('.h-11') !== null, control.outerHTML).toBe(true);
+  expect(worn).not.toContain('text-lg');
+  expect(control.closest('.h-12')).toBeNull();
+}
+/** A row's buttons by what a reader hears: the picker as *View {value}*, the others by name or words. */
+const buttonsOf = (row: Element) => [...row.querySelectorAll<HTMLElement>('button')]
+  .map((b) => (b.hasAttribute('data-picker-button') ? `View ${b.textContent}` : b.getAttribute('aria-label') ?? b.textContent));
+/** Choose a view on a phone: the button, then the option in the menu under it. */
+async function chooseView(view: string) {
+  await userEvent.click(viewButton());
+  await userEvent.click(await screen.findByRole('option', { name: VIEW_WORDS[view] }));
+}
+
 /**
  * The *Drag to block* pill's name: its visible words, then *": Block time — {name}"*, read and not drawn
  * (M2). jsdom puts a space before the colon, taking an element's text as a block's; a browser need not.
@@ -128,8 +157,9 @@ describe('P12-T2 — my calendar, week view', () => {
       ['Internal meeting', 'true'], ['1:1 coaching', 'true'], ['Client meeting', 'true'], ['Task', 'true'], ['Travel', 'true'], ['Event', 'true'],
     ]);
     const pane = region.closest('section')!;
-    expect(within(pane).getByText('Agus Santoso')).toBeInTheDocument();
-    expect(within(pane).getByText('AB · You')).toBeInTheDocument();
+    // P19.8-T3 AC-5 (MOB UI-175): no person row on the reader's own calendar — only beside somebody compared.
+    expect(within(pane).queryByText('Agus Santoso')).not.toBeInTheDocument();
+    expect(within(pane).queryByText('AB · You')).not.toBeInTheDocument();
     for (const [weekday, number] of [['Mon', '28'], ['Wed', '30'], ['Thu', '1 Oct'], ['Sun', '4']]) {
       expect(within(pane).getByText(number).parentElement).toHaveTextContent(`${weekday}${number}`);
     }
@@ -138,16 +168,22 @@ describe('P12-T2 — my calendar, week view', () => {
     expect(standup()).toHaveTextContent(/^Weekly unit standup$/);
     expect(screen.getByRole('button', { name: 'Task: Prospecting call block, 10:00–11:30' }))
       .toHaveTextContent('Prospecting call block10:00–11:30');
-    // Opened scrolled to 07:00 (`DEFAULT_SCROLL_HOUR`, `:455`).
-    expect(region.scrollTop).toBe(7 * HOUR_PX);
+    // P19.1-T3 AC-4 (UI-117): opened an hour before now — 09:45 less an hour, so 08:00 — where it opened at 07:00.
+    expect(region.scrollTop).toBe(8 * HOUR_PX);
   });
 
-  it('P12-T2 AC-2 tints today and the weekend, and today’s number is amber-ink (H-19)', async () => {
+  it('P12-T2 AC-2, P19.1-T3 AC-5 shades today on a phone and circles it from 768px; the weekend keeps its tint (OD-252)', async () => {
     show();
     const monday = await day('Monday, 28 Sep 2026');
-    expect(monday.className).toContain('bg-amber/[0.08]');
-    expect((await day('Saturday, 3 Oct 2026')).className).toContain('bg-navy/[0.015]');
-    expect(screen.getByText('28').className).toContain('text-amber-ink');
+    // UI-154: the phone's column shaded, its date in today's ink and no circle; UI-117: from 768px the amber circle alone.
+    expect(wears(monday, 375)).toContain('bg-today');
+    expect(wears(monday, 1280)).not.toMatch(/\bbg-(today|amber)/);
+    expect((await day('Saturday, 3 Oct 2026')).className).toContain('bg-secondary/[0.015]');
+    const date = screen.getByText('28');
+    expect(date).toHaveAttribute('aria-current', 'date');
+    expect(wears(date, 375)).toContain('text-today-ink');
+    expect(wears(date, 375)).not.toContain('bg-primary');
+    expect(wears(date, 768).split(' ')).toEqual(expect.arrayContaining(['bg-primary', 'text-primary-contrast', 'rounded-full']));
     expect(screen.getByText('29').className).toContain('text-navy');
   });
 
@@ -192,11 +228,11 @@ describe('P12-T2 — my calendar, week view', () => {
   });
 
   /*
-   * P18.96-T6 AC-4 (ADR-0173 §3): `/new-hires`' *Schedule 1:1* opens `/calendar?with={membershipId}` — the new-entry
+   * P18.8-T6 AC-4 (ADR-0173 §3): `/new-hires`' *Schedule 1:1* opens `/calendar?with={membershipId}` — the new-entry
    * dialog as a 1:1 with them. The name comes from the reader's own downline; the address carries only the id.
    */
-  describe('P18.96-T6 AC-4 a 1:1 asked for by the address', () => {
-    it('P18.96-T6 AC-4 opens New event as 1:1 coaching with them — titled, invited — on the office’s today', async () => {
+  describe('P18.8-T6 AC-4 a 1:1 asked for by the address', () => {
+    it('P18.8-T6 AC-4 opens New event as 1:1 coaching with them — titled, invited — on the office’s today', async () => {
       const stub = show({ '/calendar/downline': { body: DOWNLINE } }, AGUS, { with: 'mem-indah' });
       const dialog = await screen.findByRole('dialog', { name: 'New event' });
       expect(within(dialog).getByRole('button', { name: '1:1 coaching' })).toHaveAttribute('aria-pressed', 'true');
@@ -206,14 +242,14 @@ describe('P12-T2 — my calendar, week view', () => {
       expect(calls(stub, '/calendar/downline')).toHaveLength(1);
     });
 
-    it('P18.96-T6 AC-4 somebody not in the downline: the coaching entry with nobody invited and no name', async () => {
+    it('P18.8-T6 AC-4 somebody not in the downline: the coaching entry with nobody invited and no name', async () => {
       show({ '/calendar/downline': { body: DOWNLINE } }, AGUS, { with: 'mem-nobody' });
       const dialog = await screen.findByRole('dialog', { name: 'New event' });
       expect(within(dialog).getByRole('button', { name: '1:1 coaching' })).toHaveAttribute('aria-pressed', 'true');
       expect(within(dialog).getByLabelText('Title')).toHaveValue('');
     });
 
-    it('P18.96-T6 AC-4 a reader who may not create an entry is opened nothing, and nothing is read for it', async () => {
+    it('P18.8-T6 AC-4 a reader who may not create an entry is opened nothing, and nothing is read for it', async () => {
       const stub = show({ '/calendar/downline': { body: DOWNLINE } }, { ...AGUS, permissions: ['calendar_entry:read'] }, { with: 'mem-indah' });
       await grid();
       expect(screen.queryByRole('dialog', { name: 'New event' })).not.toBeInTheDocument();
@@ -227,7 +263,8 @@ describe('P12-T2 — my calendar, week view', () => {
       await grid();
       await userEvent.click(screen.getByRole('button', { name: '+ New event' }));
       const dialog = await screen.findByRole('dialog', { name: 'New event' });
-      expect(dialog).toHaveAccessibleDescription('Add a meeting, task, or coaching session to your calendar.');
+      // P19.1-T3 AC-10 (UI-120, UI-112): no grey sub-line from 768px — a phone keeps it (*P19.1-T3*, below).
+      expect(dialog).not.toHaveAccessibleDescription();
       expect(within(dialog).getByLabelText('Date')).toHaveValue('2026-09-28');
       expect(within(dialog).getByLabelText('Start')).toHaveValue('10:00');
       expect(within(dialog).getByLabelText('End')).toHaveValue('10:30');
@@ -307,7 +344,7 @@ describe('P12-T2 — my calendar, week view', () => {
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
 
-    it('saves a new entry and moves the grid to its week, and says Event created ✓ (P18.95-T1 AC-6)', async () => {
+    it('saves a new entry and moves the grid to its week, and says Event created ✓ (P18.7-T1 AC-6)', async () => {
       const saved = entry({ entryId: 'e-new', title: 'Call list', date: '2026-10-06', start: '10:00', end: '10:30' });
       const stub = show({ 'POST /calendar/entries': { status: 201, body: saved } });
       await grid();
@@ -326,7 +363,7 @@ describe('P12-T2 — my calendar, week view', () => {
       expect(screen.queryByText(/saved/i)).not.toBeInTheDocument();
     });
 
-    it('P18.95-T1 AC-6: a refused new entry toasts nothing; its reason stays in the dialog', async () => {
+    it('P18.7-T1 AC-6: a refused new entry toasts nothing; its reason stays in the dialog', async () => {
       show({ 'POST /calendar/entries': refusal(500, 'INTERNAL_ERROR') });
       await grid();
       await userEvent.click(screen.getByRole('button', { name: '+ New event' }));
@@ -412,15 +449,16 @@ describe('P12-T2 — my calendar, week view', () => {
       show();
       await grid();
       await userEvent.click(standup());
-      // The detail's module is fetched on the first opening (P18.99-T16).
+      // The detail's module is fetched on the first opening (P18.11-T16).
       const dialog = await screen.findByRole('dialog', { name: 'Weekly unit standup' });
-      // P18.95-T8 AC-2: the legend's name, not the prototype's capitalised code (*Meeting*).
+      // P18.7-T8 AC-2: the legend's name, not the prototype's capitalised code (*Meeting*).
       expect(within(dialog).getByText('Internal meeting')).toBeInTheDocument();
       expect(within(dialog).getByText('Monday, 28 Sep 2026 · 09:00 – 09:30')).toBeInTheDocument();
-      // P18.95-T8 AC-2: the seed's bare *zoom.us/j/…* is a link, *Join Zoom*; the words around it stay.
+      // P18.7-T8 AC-2: the seed's bare *zoom.us/j/…* is a link, *Join Zoom*; the words around it stay.
       expect(within(dialog).getByText('Location / notes').nextElementSibling).toHaveTextContent('Zoom — Join Zoom, opens in a new tab');
       expect(within(dialog).getByText('No one else invited')).toBeInTheDocument();
-      expect(within(dialog).getAllByRole('button').map((b) => b.textContent)).toEqual(['Delete', 'Close', 'Edit']);
+      // P19.8-T3 AC-7 (MOB UI-169): red-outline *Delete*, then white *Edit* and orange *Close*.
+      expect(within(dialog).getAllByRole('button').map((b) => b.textContent)).toEqual(['Delete', 'Edit', 'Close']);
     });
 
     it('reads an empty title and notes as the prototype does', async () => {
@@ -463,7 +501,8 @@ describe('P12-T2 — my calendar, week view', () => {
       await userEvent.click(standup());
       await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
       const dialog = await screen.findByRole('dialog', { name: 'Edit event' });
-      expect(dialog).toHaveAccessibleDescription('Update the details below.');
+      // P19.1-T3 AC-10: no sub-line from 768px.
+      expect(dialog).not.toHaveAccessibleDescription();
       expect(within(dialog).getByLabelText('Title')).toHaveValue('Weekly unit standup');
       expect(within(dialog).getByLabelText('Start')).toHaveValue('09:00');
       await userEvent.clear(within(dialog).getByLabelText('Title'));
@@ -473,7 +512,7 @@ describe('P12-T2 — my calendar, week view', () => {
       expect(bodyOf(calls(stub, '/calendar/entries/e-standup', 'PATCH')[0])).toMatchObject({
         version: 1, title: 'Unit standup', date: '2026-09-28', start: '09:00', end: '09:30', inviteeIds: [],
       });
-      // An edit creates nothing: the entry it redraws is its answer (P18.95-T1 AC-6).
+      // An edit creates nothing: the entry it redraws is its answer (P18.7-T1 AC-6).
       expect(screen.queryByText('Event created ✓')).not.toBeInTheDocument();
     });
 
@@ -495,13 +534,15 @@ describe('P12-T2 — my calendar, week view', () => {
   });
 
   describe('P12-T2 AC-9 deleting', () => {
-    it('asks *Delete "{title}"?* in the product’s dialog, with no *can’t be undone*, and deletes pinned', async () => {
+    it('asks first in the product’s dialog — since P19.8-T3 AC-7 *Delete this event?* over the title and day — with no *can’t be undone*, and deletes pinned', async () => {
       const stub = show({ 'DELETE /calendar/entries/e-standup': { body: { entryId: 'e-standup', deletedAt: '2026-09-28T03:00:00.000Z' } } });
       await grid();
       await userEvent.click(standup());
-      await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
-      const question = await screen.findByRole('dialog', { name: 'Delete "Weekly unit standup"?' });
+      // The detail's module is fetched on the first opening (P18.11-T16).
+      await userEvent.click(await screen.findByRole('button', { name: 'Delete' }));
+      const question = await screen.findByRole('dialog', { name: 'Delete this event?' });
       expect(question).not.toHaveTextContent(/undone/);
+      expect(question).toHaveAccessibleDescription('Weekly unit standup · Monday, 28 Sep 2026');
       await userEvent.click(within(question).getByRole('button', { name: 'Delete' }));
       await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
       expect(calls(stub, '/calendar/entries/e-standup?version=1', 'DELETE')).toHaveLength(1);
@@ -516,17 +557,17 @@ describe('P12-T2 — my calendar, week view', () => {
       await grid();
       await userEvent.click(standup());
       await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
-      await userEvent.click(within(await screen.findByRole('dialog', { name: 'Delete "Weekly unit standup"?' })).getByRole('button', { name: 'Cancel' }));
+      await userEvent.click(within(await screen.findByRole('dialog', { name: 'Delete this event?' })).getByRole('button', { name: 'Cancel' }));
       expect(calls(stub, '/calendar/entries/e-standup', 'DELETE')).toHaveLength(0);
       await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
-      await userEvent.click(within(await screen.findByRole('dialog', { name: 'Delete "Weekly unit standup"?' })).getByRole('button', { name: 'Delete' }));
+      await userEvent.click(within(await screen.findByRole('dialog', { name: 'Delete this event?' })).getByRole('button', { name: 'Delete' }));
       expect(await screen.findByText('This entry was changed somewhere else, so it has been read again.')).toBeInTheDocument();
     });
 
     const deleted = { body: { entryId: 'e-standup', deletedAt: '2026-09-28T03:00:00.000Z' } };
     const confirmDelete = async () => {
       await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
-      await userEvent.click(within(await screen.findByRole('dialog', { name: 'Delete "Weekly unit standup"?' })).getByRole('button', { name: 'Delete' }));
+      await userEvent.click(within(await screen.findByRole('dialog', { name: 'Delete this event?' })).getByRole('button', { name: 'Delete' }));
     };
 
     it('m7 puts the focus on the reader’s own week once the read without the entry lands', async () => {
@@ -546,9 +587,9 @@ describe('P12-T2 — my calendar, week view', () => {
         [MONTH_READ]: [{ body: monthRead() }, { body: monthRead({ entries: [] }) }],
         'DELETE /calendar/entries/e-standup': deleted,
       }, AGUS, { view: 'month' });
-      await userEvent.click(await screen.findByRole('button', { name: 'Internal meeting: 9-9:30 Weekly unit standup' }));
+      await userEvent.click(await screen.findByRole('button', { name: 'Internal meeting: Weekly unit standup, 9-9:30' }));
       await confirmDelete();
-      await waitFor(() => expect(screen.queryByRole('button', { name: /^Internal meeting: 9-9:30 Weekly unit standup/ })).not.toBeInTheDocument());
+      await waitFor(() => expect(screen.queryByRole('button', { name: /^Internal meeting: Weekly unit standup, 9-9:30/ })).not.toBeInTheDocument());
       await waitFor(() => expect(screen.getByRole('button', { name: '+ New event' })).toHaveFocus());
     });
 
@@ -572,7 +613,7 @@ describe('P12-T2 — my calendar, week view', () => {
         const dialog = await editDialog();
         expect(within(dialog).getAllByRole('button').map((b) => b.textContent).slice(-3)).toEqual(['Delete', 'Cancel', 'Save event']);
         await userEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
-        const question = await screen.findByRole('dialog', { name: 'Delete "Weekly unit standup"?' });
+        const question = await screen.findByRole('dialog', { name: 'Delete this event?' });
         expect(question).not.toHaveTextContent(/undone/);
         await userEvent.click(within(question).getByRole('button', { name: 'Delete' }));
         await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
@@ -589,15 +630,15 @@ describe('P12-T2 — my calendar, week view', () => {
         await grid();
         const dialog = await editDialog();
         await userEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
-        await userEvent.click(within(await screen.findByRole('dialog', { name: 'Delete "Weekly unit standup"?' })).getByRole('button', { name: 'Cancel' }));
+        await userEvent.click(within(await screen.findByRole('dialog', { name: 'Delete this event?' })).getByRole('button', { name: 'Cancel' }));
         expect(calls(stub, '/calendar/entries/e-standup', 'DELETE')).toHaveLength(0);
         expect(screen.getByRole('dialog', { name: 'Edit event' })).toBeInTheDocument();
 
         await userEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
-        await userEvent.click(within(await screen.findByRole('dialog', { name: 'Delete "Weekly unit standup"?' })).getByRole('button', { name: 'Delete' }));
+        await userEvent.click(within(await screen.findByRole('dialog', { name: 'Delete this event?' })).getByRole('button', { name: 'Delete' }));
         expect(await screen.findByText('This entry was changed somewhere else, so it has been read again.')).toBeInTheDocument();
         await userEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
-        await userEvent.click(within(await screen.findByRole('dialog', { name: 'Delete "Weekly unit standup"?' })).getByRole('button', { name: 'Delete' }));
+        await userEvent.click(within(await screen.findByRole('dialog', { name: 'Delete this event?' })).getByRole('button', { name: 'Delete' }));
         await waitFor(() => expect(calls(stub, '/calendar/entries/e-standup?version=2', 'DELETE')).toHaveLength(1));
       });
 
@@ -616,7 +657,7 @@ describe('P12-T2 — my calendar, week view', () => {
         await userEvent.click(await screen.findByRole('button', { name: 'Internal meeting: Unit standup, 09:00–09:30' }));
         await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
         await userEvent.click(within(await screen.findByRole('dialog', { name: 'Edit event' })).getByRole('button', { name: 'Delete' }));
-        await userEvent.click(within(await screen.findByRole('dialog', { name: 'Delete "Unit standup"?' })).getByRole('button', { name: 'Delete' }));
+        await userEvent.click(within(await screen.findByRole('dialog', { name: 'Delete this event?' })).getByRole('button', { name: 'Delete' }));
         await waitFor(() => expect(calls(stub, '/calendar/entries/e-standup', 'DELETE')).toHaveLength(1));
         expect(calls(stub, '/calendar/entries/e-standup', 'DELETE')[0].url).toMatch(/\?version=2$/);
       });
@@ -636,7 +677,7 @@ describe('P12-T2 — my calendar, week view', () => {
         await grid();
         const dialog = await editDialog();
         await userEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
-        await userEvent.click(within(await screen.findByRole('dialog', { name: 'Delete "Weekly unit standup"?' })).getByRole('button', { name: 'Delete' }));
+        await userEvent.click(within(await screen.findByRole('dialog', { name: 'Delete this event?' })).getByRole('button', { name: 'Delete' }));
         expect(await within(dialog).findByText('Refused: PERM_DENIED')).toBeInTheDocument();
       });
     });
@@ -646,13 +687,13 @@ describe('P12-T2 — my calendar, week view', () => {
       await grid();
       await userEvent.click(standup());
       await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
-      await userEvent.click(within(await screen.findByRole('dialog', { name: 'Delete "Weekly unit standup"?' })).getByRole('button', { name: 'Delete' }));
+      await userEvent.click(within(await screen.findByRole('dialog', { name: 'Delete this event?' })).getByRole('button', { name: 'Delete' }));
       expect(await screen.findByText('Refused: PERM_DENIED')).toBeInTheDocument();
     });
   });
 
   describe('P12-T2 AC-10 moving about', () => {
-    it('steps a week with ‹ and ›, by the dates the server named, and Today returns to 07:00', async () => {
+    it('steps a week with ‹ and ›, by the dates the server named, and Today returns to an hour before now (P19.1-T3 AC-4)', async () => {
       const stub = show();
       const region = await grid();
       await userEvent.click(screen.getByRole('button', { name: 'Next week' }));
@@ -662,7 +703,7 @@ describe('P12-T2 — my calendar, week view', () => {
       region.scrollTop = 900;
       await userEvent.click(screen.getByRole('button', { name: 'Today' }));
       await waitFor(() => expect(calls(stub, `${WEEK_READ}&date=2026-09-28`)).toHaveLength(1));
-      expect(region.scrollTop).toBe(7 * HOUR_PX);
+      expect(region.scrollTop).toBe(8 * HOUR_PX);
     });
   });
 
@@ -689,12 +730,20 @@ describe('P12-T2 — my calendar, week view', () => {
     expect(screen.getByRole('button', { name: '+ New event' })).toHaveFocus();
   });
 
-  it('P12-T2 AC-13 lets a pane scroll sideways inside itself on a phone, never the page', async () => {
+  it('P12-T2 AC-13, P19.1-T3 AC-4, P19.8-T3 AC-4 fits the week’s seven days on a phone — a 46px gutter, no minimum width, nothing scrolling sideways', async () => {
     show();
     const region = await grid();
-    const sideways = region.parentElement!;
-    expect(sideways.className).toContain('max-md:min-w-[388px]');
-    expect(sideways.parentElement!.className).toContain('overflow-x-auto');
+    const pane = region.closest('section')!;
+    // UI-144 (*Conflicts* row 155): *Sen* to *Min* in view at 360px, where it scrolled — since MOB UI-174 46px of hours
+    // and 7 × ~45px, the grid running the screen's full width.
+    expect(pane.innerHTML).not.toMatch(/min-w-\[388px\]|overflow-x-auto/);
+    const gutter = within(region).getByText('07:00').parentElement!;
+    expect(wears(gutter, 360).split(' ')).toContain('w-[46px]');
+    expect(wears(gutter, 768).split(' ')).toContain('w-14');
+    expect(within(region).getAllByRole('group')).toHaveLength(7);
+    // An entry is its colour there, and still names itself in full and opens its details.
+    expect(wears(standup().querySelector('span')!, 360)).toContain('sr-only');
+    expect(wears(standup().querySelector('span')!, 768)).not.toContain('sr-only');
   });
 
   describe('P12-T2 AC-14 the states the prototype lacks', () => {
@@ -775,8 +824,9 @@ describe('P12-T3 — month view', () => {
     await screen.findByText('Sep 2026');
     const cell = document.querySelector<HTMLElement>('[data-date="2026-09-28"]')!;
     const lines = within(cell).getAllByRole('listitem').map((li) => li.textContent);
-    expect(lines).toEqual(['9-9:30Weekly unit standup', '11-121:1 Coaching — Rina Wijaya', '14-15Client review — Hartono family', '+1 more…']);
-    expect(within(cell).getByRole('button', { name: 'Internal meeting: 9-9:30 Weekly unit standup' })).toBeInTheDocument();
+    // P19.1-T3 AC-9 (UI-119): a line reads its title first, then its time.
+    expect(lines).toEqual(['Weekly unit standup9-9:30', '1:1 Coaching — Rina Wijaya11-12', 'Client review — Hartono family14-15', '+1 more…']);
+    expect(within(cell).getByRole('button', { name: 'Internal meeting: Weekly unit standup, 9-9:30' })).toBeInTheDocument();
     // An adjacent month's day shows its entries; a trip shows on each day it spans, with no time.
     const october = document.querySelector<HTMLElement>('[data-date="2026-10-01"]')!;
     expect(within(october).getByText('Leads follow-up block')).toBeInTheDocument();
@@ -786,14 +836,21 @@ describe('P12-T3 — month view', () => {
     }
   });
 
-  it('P12-T3 AC-6 mutes only an adjacent month’s number, and marks today in amber-ink', async () => {
+  it('P12-T3 AC-6, P19.1-T3 AC-5, AC-9 greys an adjacent month’s day, and circles today in amber from 768px with no tint', async () => {
     showMonth();
     await grid();
     await userEvent.click(screen.getByRole('button', { name: 'Month' }));
     await screen.findByText('Sep 2026');
+    const cell = (date: string) => document.querySelector<HTMLElement>(`[data-date="${date}"]`)!;
     const number = (date: string) => document.querySelector(`[data-date="${date}"] > span > span`)!;
+    // UI-119: the days outside the month grey — the cell and its number.
     expect(number('2026-08-31').className).toContain('text-muted');
-    expect(number('2026-09-28').className).toContain('text-amber-ink');
+    expect(cell('2026-08-31').className).toContain('bg-hover-row');
+    expect(cell('2026-09-15').className).not.toContain('bg-hover-row');
+    // UI-117: today is the amber circle behind its number, and the cell is not tinted.
+    expect(number('2026-09-28').className).toContain('rounded-full');
+    expect(number('2026-09-28').className).toContain('bg-primary');
+    expect(cell('2026-09-28').className).not.toMatch(/\bbg-(today|amber)/);
     expect(number('2026-09-15').className).toContain('text-navy');
     expect(screen.getByRole('button', { name: 'Monday, 28 Sep 2026' })).toHaveAttribute('aria-current', 'date');
   });
@@ -830,11 +887,11 @@ describe('P12-T3 — month view', () => {
       showMonth();
       await grid();
       await userEvent.click(screen.getByRole('button', { name: 'Month' }));
-      await userEvent.click(await screen.findByRole('button', { name: '1:1 coaching: 11-12 1:1 Coaching — Rina Wijaya' }));
+      await userEvent.click(await screen.findByRole('button', { name: '1:1 coaching: 1:1 Coaching — Rina Wijaya, 11-12' }));
       expect(await screen.findByRole('dialog', { name: '1:1 Coaching — Rina Wijaya' })).toBeInTheDocument();
     });
 
-    it('P18.95-T8 AC-2 offers compare in Month as in Week (UI-020): the chips stay, and each compared month is a pane of its own, read once', async () => {
+    it('P18.7-T8 AC-2 offers compare in Month as in Week (UI-020): the chips stay, and each compared month is a pane of its own, read once', async () => {
       const indahMonth = monthRead({
         subject: { membershipId: 'mem-indah', name: 'Indah Permata', rung: { code: 'AGENT', label: 'Agent' }, phone: null },
         entries: [
@@ -859,9 +916,9 @@ describe('P12-T3 — month view', () => {
       // Her month under its head, her entries in full and her busy block as *Busy*, which opens nothing.
       const theirs = await screen.findByRole('region', { name: 'Indah Permata' });
       expect(within(theirs).getByText('Agent')).toBeInTheDocument();
-      expect(within(theirs).getByRole('button', { name: 'Task: 9-9:30 Prospecting' })).toBeInTheDocument();
+      expect(within(theirs).getByRole('button', { name: 'Task: Prospecting, 9-9:30' })).toBeInTheDocument();
       const busyLine = within(theirs.querySelector<HTMLElement>('[data-date="2026-09-16"]')!).getByText('Busy');
-      expect(busyLine.closest('[data-busy]')).toHaveTextContent('13-14Busy');
+      expect(busyLine.closest('[data-busy]')).toHaveTextContent('Busy13-14');
       expect(busyLine.closest('button')).toBeNull();
       // The reader's own month heads its pane too, as the week's does.
       expect(screen.getByRole('region', { name: 'Agus Santoso' })).toHaveTextContent('AB · You');
@@ -1410,7 +1467,8 @@ describe('P12-T5 — compare and Block time', () => {
     expect(within(pane).getAllByText('Busy')).toHaveLength(2);
     // Every stacked pane draws its own hours (contradiction 8): the gutter shows below 980px.
     expect(within(theirs).getByText('07:00').parentElement!.className).toContain('max-[979.98px]:block');
-    expect(theirs.scrollTop).toBe(7 * HOUR_PX);
+    // P19.1-T3 AC-4: an hour before now, as the reader's own.
+    expect(theirs.scrollTop).toBe(8 * HOUR_PX);
   });
 
   it('P12-T5 AC-4 opens a downline’s entry with Close alone', async () => {
@@ -1422,7 +1480,7 @@ describe('P12-T5 — compare and Block time', () => {
     expect(within(dialog).getAllByRole('button').map((b) => b.textContent)).toEqual(['★Organiser', 'Close']);
   });
 
-  it('P12-T5 AC-3 moves every pane together, and back to 07:00 when somebody is removed', async () => {
+  it('P12-T5 AC-3 moves every pane together, and back to an hour before now when somebody is removed (P19.1-T3 AC-4)', async () => {
     showCompare();
     await openPopover();
     await userEvent.click(await screen.findByRole('button', { name: /^Indah Permata/ }));
@@ -1433,7 +1491,7 @@ describe('P12-T5 — compare and Block time', () => {
     expect(theirs.scrollTop).toBe(800);
     await userEvent.keyboard('{Escape}');
     await userEvent.click(screen.getByRole('button', { name: 'Remove Indah Permata' }));
-    expect(mine.scrollTop).toBe(7 * HOUR_PX);
+    expect(mine.scrollTop).toBe(8 * HOUR_PX);
     expect(screen.queryByRole('region', { name: `Calendar, Indah Permata, ${RANGE}` })).not.toBeInTheDocument();
   });
 
@@ -1529,8 +1587,8 @@ describe('P12-T5 — compare and Block time', () => {
       await compareBoth(stub);
 
       await userEvent.click(screen.getByRole('button', { name: 'Next week' }));
-      await screen.findByRole('region', { name: 'Calendar, Indah Permata, 5 Oct – 11 Oct 2026' });
-      await screen.findByRole('region', { name: 'Calendar, Sari Dewi, 5 Oct – 11 Oct 2026' });
+      await screen.findByRole('region', { name: 'Calendar, Indah Permata, 5 – 11 Oct 2026' });
+      await screen.findByRole('region', { name: 'Calendar, Sari Dewi, 5 – 11 Oct 2026' });
       await act(async () => {});
       expect(reads(stub, 'mem-indah', '2026-10-05')).toHaveLength(1);
       expect(reads(stub, 'mem-sari', '2026-10-05')).toHaveLength(1);
@@ -1590,7 +1648,7 @@ describe('P12-T5 — compare and Block time', () => {
 
       await userEvent.click(within(await grid()).getByRole('button', { name: /^Client meeting: Field visit/ }));
       await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
-      await userEvent.click(within(await screen.findByRole('dialog', { name: 'Delete "Field visit"?' })).getByRole('button', { name: 'Delete' }));
+      await userEvent.click(within(await screen.findByRole('dialog', { name: 'Delete this event?' })).getByRole('button', { name: 'Delete' }));
       await waitFor(() => expect(reads(stub, 'mem-indah')).toHaveLength(2));
       await act(async () => {});
       expect(reads(stub, 'mem-sari')).toHaveLength(2);
@@ -1612,8 +1670,8 @@ describe('P12-T5 — compare and Block time', () => {
       await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
       fireEvent.change(screen.getByLabelText('Date'), { target: { value: '2026-10-06' } });
       await userEvent.click(screen.getByRole('button', { name: 'Save event' }));
-      await screen.findByRole('region', { name: 'Calendar, Sari Dewi, 5 Oct – 11 Oct 2026' });
-      await screen.findByRole('region', { name: 'Calendar, Indah Permata, 5 Oct – 11 Oct 2026' });
+      await screen.findByRole('region', { name: 'Calendar, Sari Dewi, 5 – 11 Oct 2026' });
+      await screen.findByRole('region', { name: 'Calendar, Indah Permata, 5 – 11 Oct 2026' });
       await act(async () => {});
       // Sari's week is read once, where the grid went; the week it left is not read on the way out.
       expect(reads(stub, 'mem-sari', '2026-10-05')).toHaveLength(1);
@@ -1628,7 +1686,7 @@ describe('P12-T5 — compare and Block time', () => {
 
       await userEvent.click(screen.getByRole('button', { name: 'Month' }));
       await screen.findByText('Sep 2026');
-      // P18.95-T8 AC-2: Month compares too, so each person's month is read — once — for the month shown.
+      // P18.7-T8 AC-2: Month compares too, so each person's month is read — once — for the month shown.
       await waitFor(() => expect(stub.calls.filter((c) => c.url.endsWith('view=month&date=2026-09-01&for=mem-indah'))).toHaveLength(1));
       await userEvent.click(screen.getByRole('button', { name: 'Week' }));
       expect(await screen.findByRole('region', { name: `Calendar, Indah Permata, ${RANGE}` })).toBeInTheDocument();
@@ -1860,7 +1918,7 @@ describe('P12-T5 — compare and Block time', () => {
       await grid();
       expect(screen.getByRole('button', { name: '+ New event' })).toBeInTheDocument();
       await userEvent.click(standup());
-      expect(buttonsIn('Weekly unit standup')).toEqual(['Delete', 'Close', 'Edit']);
+      expect(buttonsIn('Weekly unit standup')).toEqual(['Delete', 'Edit', 'Close']);
     });
   });
 
@@ -1908,7 +1966,7 @@ describe('P12-T6 — 1:1 coaching entries (ADR-0099)', () => {
     }, RINA);
     await grid();
     await userEvent.click(screen.getByRole('button', { name: /^1:1 coaching: 1:1 Coaching — Indah Permata/ }));
-    // The notes' Zoom address is a link of its own (P18.95-T8 AC-2); no chip is.
+    // The notes' Zoom address is a link of its own (P18.7-T8 AC-2); no chip is.
     expect(within(screen.getByRole('dialog')).getAllByRole('link').map((a) => a.textContent)).toEqual(['Join Zoom, opens in a new tab']);
     await userEvent.keyboard('{Escape}');
     await userEvent.click(screen.getByRole('button', { name: /^Internal meeting: Goal review/ }));
@@ -2027,13 +2085,13 @@ describe('P13.1-T8 — an entry’s words, and Hide my personal activities (ADR-
 });
 
 /*
- * P18.95-T8 (the client's UI review of 2026-10-26, UI-020; ADR-0167): below 768px the page opens on an
+ * P18.7-T8 (the client's UI review of 2026-10-26, UI-020; ADR-0167): below 768px the page opens on an
  * agenda, a month's tap lists its day, and the controls sit in one row with *Filters* for the rest; at
  * every size the popup's meeting link is *Join Zoom* or *Join meeting*, the types have one set of names,
  * and Week and Month offer the same controls. The phone is jsdom with `matchMedia` answering the query
  * `usePhone` asks; without it, the spec is the desktop every test above was written against.
  */
-describe('P18.95-T8 — the calendar on a phone, its links and its names (UI-020)', () => {
+describe('P18.7-T8 — the calendar on a phone, its links and its names (UI-020)', () => {
   const onPhone = () => vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
     media: query,
     matches: query === PHONE_QUERY,
@@ -2041,18 +2099,22 @@ describe('P18.95-T8 — the calendar on a phone, its links and its names (UI-020
     removeEventListener: () => undefined,
   })));
   const agenda = (range = RANGE) => screen.findByRole('region', { name: `Calendar, ${range}` });
-  const WEEKDAYS = [
+  /**
+   * The week's bands: **every day its own** (P19.9-T5 AC-1, R11; OD-290) — today, a day with things on it, then each empty
+   * day under its own band, where P19.1-T3 AC-7 (UI-144) merged the five into *Wednesday, 30 Sep – Sunday, 4 Oct*.
+   */
+  const BANDS = [
     'Monday, 28 Sep 2026 · Today', 'Tuesday, 29 Sep 2026', 'Wednesday, 30 Sep 2026', 'Thursday, 1 Oct 2026',
     'Friday, 2 Oct 2026', 'Saturday, 3 Oct 2026', 'Sunday, 4 Oct 2026',
   ];
   const dayOf = (region: HTMLElement, date: string) => region.querySelector<HTMLElement>(`[data-day="${date}"]`)!;
 
-  describe('P18.95-T8 AC-1 the agenda', () => {
-    it('P18.95-T8 AC-1, UI-104 opens on the Agenda on a phone: its own read from today, as a list by day, each entry by time, title and type', async () => {
+  describe('P18.7-T8 AC-1 the agenda', () => {
+    it('P18.7-T8 AC-1, UI-104 opens on the Agenda on a phone: its own read from today, as a list by day, each entry by time, title and type', async () => {
       onPhone();
       const stub = show();
       const region = await agenda();
-      expect(within(region).getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(WEEKDAYS);
+      expect(within(region).getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(BANDS);
       expect(within(region).getByRole('heading', { name: 'Monday, 28 Sep 2026 · Today' })).toHaveAttribute('aria-current', 'date');
       // Named as the grid names it; its time, title and type drawn in full.
       const standupLine = within(region).getByRole('button', { name: 'Internal meeting: Weekly unit standup, 09:00–09:30' });
@@ -2062,9 +2124,12 @@ describe('P18.95-T8 — the calendar on a phone, its links and its names (UI-020
         'Travel: Client trip — Surabaya', 'Task: Prospecting call block, 10:00–11:30',
       ]);
       expect(within(dayOf(region, '2026-09-30')).getByText('No events')).toBeInTheDocument();
+      // P19.9-T5 AC-1: no merged band — the next empty day is a band of its own.
+      expect(within(dayOf(region, '2026-10-01')).getByText('No events')).toBeInTheDocument();
+      expect(region.querySelector('[data-days]')).toBeNull();
       // No hours: it is not the grid. One read, the week's, and nothing else asked for.
       expect(within(region).queryByText('07:00')).not.toBeInTheDocument();
-      expect(screen.getByRole('combobox', { name: 'View' })).toHaveValue('agenda');
+      expect(viewButton()).toHaveAccessibleName('View Agenda');
       expect(calls(stub, '/calendar/entries')).toHaveLength(1);
       // UI-104 point 10: the Agenda's own read, asked with no date — the office's today is its first day.
       expect(calls(stub, AGENDA_READ)[0].url).toMatch(/\?view=agenda$/);
@@ -2073,46 +2138,51 @@ describe('P18.95-T8 — the calendar on a phone, its links and its names (UI-020
       expect(await screen.findByRole('dialog', { name: 'Weekly unit standup' })).toBeInTheDocument();
     });
 
-    it('P18.95-T8 AC-1 at 768px and wider opens on Week as before: the grid, the toolbar, no Agenda and no Filters', async () => {
+    it('P18.7-T8 AC-1, P19.1-T3 AC-1 a laptop opens on Week: the grid, the switcher, no picker, and Filter with its row shown', async () => {
       show();
       const region = await grid();
       expect(within(region).getByText('07:00')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Week' })).toHaveAttribute('aria-pressed', 'true');
-      expect(screen.queryByRole('combobox', { name: 'View' })).not.toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: 'Filters' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^View / })).not.toBeInTheDocument();
+      // UI-117: *Filter* is in a laptop's toolbar too; its row — *Melihat* and the chips (UI-118) — is shown until hidden.
+      expect(screen.getByRole('button', { name: 'Filters' })).toHaveAttribute('aria-expanded', 'true');
       // UI-104 point 5: the four views at every width — Week pressed, as before.
       expect(screen.getByRole('button', { name: 'Agenda' })).toHaveAttribute('aria-pressed', 'false');
       expect(screen.getByRole('button', { name: '+ Compare with downline' })).toBeInTheDocument();
     });
 
-    it('P18.95-T8 AC-1 a phone keeps Week and Month: view=week opens the grid, and the Agenda and the Week share one read', async () => {
+    it('P18.7-T8 AC-1 a phone keeps Week and Month: view=week opens the grid, and the Agenda and the Week share one read', async () => {
       onPhone();
       const stub = show({ [MONTH_READ]: { body: monthRead() } }, AGUS, { view: 'week' });
       const region = await grid();
       expect(within(region).getByText('07:00')).toBeInTheDocument();
-      const views = screen.getByRole('combobox', { name: 'View' });
-      expect(views).toHaveValue('week');
-      expect(within(views).getAllByRole('option').map((o) => o.textContent)).toEqual(['Agenda', '3 Days', 'Week', 'Month']);
-      await userEvent.selectOptions(views, 'agenda');
+      expect(viewButton()).toHaveAccessibleName('View Week');
+      // P19.8-T3 AC-1 (MOB UI-171): the menu under the button, the chosen one ticked.
+      await userEvent.click(viewButton());
+      const menu = await screen.findByRole('listbox', { name: 'View' });
+      expect(within(menu).getAllByRole('option').map((o) => o.textContent)).toEqual(['Agenda', '3 Days', 'Week', 'Month']);
+      expect(within(menu).getByRole('option', { name: 'Week' })).toHaveAttribute('aria-selected', 'true');
+      await userEvent.click(within(menu).getByRole('option', { name: 'Agenda' }));
+      // P19.9-T5 AC-1 (R11): every day its own band, the empty days after Tuesday included.
       expect(within(await agenda()).getAllByRole('heading', { level: 2 })).toHaveLength(7);
       // UI-104 point 10: the Agenda asks for its own seven days from the office's today.
       expect(calls(stub, AGENDA_READ)[0].url).toMatch(/\?view=agenda&date=2026-09-28$/);
       expect(calls(stub, WEEK_READ)).toHaveLength(1);
-      await userEvent.selectOptions(views, 'month');
+      await chooseView('month');
       expect(await screen.findByText('Sep 2026')).toBeInTheDocument();
       expect(calls(stub, MONTH_READ)).toHaveLength(1);
     });
 
-    it('P18.95-T8 AC-1 opens a notice’s entry on its week’s agenda, with its detail', async () => {
+    it('P18.7-T8 AC-1 opens a notice’s entry on its week’s agenda, with its detail', async () => {
       onPhone();
       show({ '/calendar/entries/e-standup': { body: entry() }, [`${AGENDA_READ}&date=2026-09-28`]: { body: agendaRead() } }, AGUS, {
         entry: 'e-standup', date: '2026-09-28',
       });
       expect(await screen.findByRole('dialog', { name: 'Weekly unit standup' })).toBeInTheDocument();
-      expect(screen.getByRole('combobox', { name: 'View' })).toHaveValue('agenda');
+      expect(viewButton()).toHaveAccessibleName('View Agenda');
     });
 
-    it('P18.95-T8 AC-1 m7 puts the focus on the reader’s own agenda once the read without a deleted entry lands', async () => {
+    it('P18.7-T8 AC-1 m7 puts the focus on the reader’s own agenda once the read without a deleted entry lands', async () => {
       onPhone();
       show({
         [AGENDA_READ]: [{ body: agendaRead() }, { body: agendaRead({ entries: [] }) }],
@@ -2120,13 +2190,13 @@ describe('P18.95-T8 — the calendar on a phone, its links and its names (UI-020
       });
       await userEvent.click(within(await agenda()).getByRole('button', { name: /^Internal meeting: Weekly unit standup/ }));
       await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
-      await userEvent.click(within(await screen.findByRole('dialog', { name: 'Delete "Weekly unit standup"?' })).getByRole('button', { name: 'Delete' }));
+      await userEvent.click(within(await screen.findByRole('dialog', { name: 'Delete this event?' })).getByRole('button', { name: 'Delete' }));
       await waitFor(() => expect(screen.getByRole('region', { name: `Calendar, ${RANGE}` })).toHaveFocus());
     });
   });
 
-  describe('P18.95-T8 AC-1 the month on a phone', () => {
-    it('P18.95-T8 AC-1, UI-104 draws a day’s entries as dots and its Tugas as a badge, and a tap on the day opens it in the Agenda', async () => {
+  describe('P18.7-T8 AC-1 the month on a phone', () => {
+    it('P18.7-T8 AC-1, UI-104 draws a day’s entries as dots and its Tugas as a badge, and a tap on the day opens it in the Agenda', async () => {
       onPhone();
       const stub = show({
         [MONTH_READ]: { body: monthRead({ tasks: [leadTask(), coachingTask()] }) },
@@ -2143,38 +2213,40 @@ describe('P18.95-T8 — the calendar on a phone, its links and its names (UI-020
       // UI-104 point 2: a tap on a day opens that day in the Agenda, and no week.
       await userEvent.click(screen.getByRole('button', { name: 'Tuesday, 29 Sep 2026, 2 events' }));
       await waitFor(() => expect(calls(stub, `${AGENDA_READ}&date=2026-09-29`)).toHaveLength(1));
-      expect(screen.getByRole('combobox', { name: 'View' })).toHaveValue('agenda');
+      expect(viewButton()).toHaveAccessibleName('View Agenda');
       expect(calls(stub, WEEK_READ)).toHaveLength(0);
     });
 
-    it('P18.95-T8 AC-1 at 768px and wider a month cell still opens its week, its lines drawn as before', async () => {
+    it('P18.7-T8 AC-1 at 768px and wider a month cell still opens its week, its lines drawn as before', async () => {
       const stub = show({ [MONTH_READ]: { body: monthRead() } }, AGUS, { view: 'month' });
       await screen.findByText('Sep 2026');
       expect(screen.queryByRole('heading', { level: 2, name: 'Monday, 28 Sep 2026' })).not.toBeInTheDocument();
       const cell = document.querySelector<HTMLElement>('[data-date="2026-09-28"]')!;
-      expect(within(cell).getByRole('button', { name: 'Internal meeting: 9-9:30 Weekly unit standup' })).toBeInTheDocument();
+      expect(within(cell).getByRole('button', { name: 'Internal meeting: Weekly unit standup, 9-9:30' })).toBeInTheDocument();
       await userEvent.click(screen.getByRole('button', { name: 'Wednesday, 16 Sep 2026' }));
       await waitFor(() => expect(calls(stub, `${WEEK_READ}&date=2026-09-16`)).toHaveLength(1));
     });
   });
 
-  describe('P18.95-T8 AC-1 the controls in one row, and Filters', () => {
-    it('P18.95-T8 AC-1 puts Today, ‹ ›, the view and Filters in one row, the range and + New event under it', async () => {
+  describe('P18.7-T8 AC-1 the controls in one row, and Filters', () => {
+    it('P18.7-T8 AC-1 puts Today, ‹ ›, the view and Filters in one row, the range and + New event under it', async () => {
       onPhone();
       show({ '/calendar/downline': { body: DOWNLINE } });
       await agenda();
       const row = screen.getByRole('button', { name: 'Today' }).parentElement!;
-      expect([...row.children].map((el) => el.getAttribute('aria-label') ?? el.textContent)).toEqual(['Today', '‹›', 'View', 'Filters']);
-      for (const name of ['Previous week', 'Next week', 'Filters']) expect(within(row).getByRole('button', { name })).toBeInTheDocument();
-      expect(within(row).getByRole('combobox', { name: 'View' })).toBeInTheDocument();
+      expect(buttonsOf(row)).toEqual(['Today', 'Previous week', 'Next week', 'View Agenda', 'Filters']);
+      // ‹ and › are the two halves of one pill.
+      expect(screen.getByRole('button', { name: 'Previous week' }).parentElement).toBe(screen.getByRole('button', { name: 'Next week' }).parentElement);
+      expect(row.querySelector('select')).toBeNull();
       const next = row.nextElementSibling as HTMLElement;
       expect(next).toHaveTextContent(RANGE);
       expect(within(next).getByRole('button', { name: '+ New event' })).toBeInTheDocument();
-      // Every control a 44px target.
-      for (const control of [...row.querySelectorAll('button, select')]) expect(control.className).toMatch(/\bh-11\b/);
+      // P19.8-T1 AC-7 (was P19.1-T3 AC-3's 16px / 48px): every control 13px / 600 / 44px, on one line that never wraps.
+      for (const control of [...row.querySelectorAll<HTMLElement>('button')]) expectHeaderSize(control, 375);
+      expect(row.className).toContain('flex-nowrap');
     });
 
-    it('P18.95-T8 AC-1, UI-104 Filter slides open Melihat and Jenis — the compare bar and the type chips — turns navy, and closes', async () => {
+    it('P18.7-T8 AC-1, UI-104, P19.8-T3 AC-6 Filter slides open Melihat alone — My Calendar and the compare chip, no Jenis — turns navy, and closes', async () => {
       onPhone();
       show({ '/calendar/downline': { body: DOWNLINE } });
       await agenda();
@@ -2182,23 +2254,24 @@ describe('P18.95-T8 — the calendar on a phone, its links and its names (UI-020
       expect(filters).toHaveAttribute('aria-expanded', 'false');
       const panel = document.getElementById(filters.getAttribute('aria-controls')!)!;
       expect(panel).not.toBeVisible();
-      expect(screen.queryByRole('button', { name: '+ Compare with downline' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Compare with downline' })).not.toBeInTheDocument();
       await userEvent.click(filters);
       expect(filters).toHaveAttribute('aria-expanded', 'true');
-      expect(filters.className).toContain('bg-navy');
-      expect(within(panel).getByText('Viewing:')).toBeInTheDocument();
-      expect(within(panel).getByRole('button', { name: '+ Compare with downline' })).toBeInTheDocument();
-      expect(within(within(panel).getByRole('group', { name: 'Type' })).getAllByRole('button').map((b) => b.textContent)).toEqual([
-        'Internal meeting', '1:1 coaching', 'Client meeting', 'Task', 'Travel', 'Event',
-      ]);
+      expect(filters.className).toContain('bg-secondary');
+      // The brief's Calendar 3: *Melihat* over its chips, and no *Jenis* on a phone.
+      expect(within(panel).getByText('Viewing')).toHaveClass('uppercase');
+      expect(within(panel).getByText('My Calendar')).toBeInTheDocument();
+      expect(within(panel).getByRole('button', { name: 'Compare with downline' })).toBeInTheDocument();
+      expect(within(panel).queryByRole('group', { name: 'Type' })).not.toBeInTheDocument();
+      expect(within(panel).queryByText('Type')).not.toBeInTheDocument();
       // The switch is Profil saya's now (UI-104 point 9).
       expect(within(panel).queryByRole('switch')).not.toBeInTheDocument();
       await userEvent.click(filters);
       expect(filters).toHaveAttribute('aria-expanded', 'false');
-      expect(screen.queryByRole('button', { name: '+ Compare with downline' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Compare with downline' })).not.toBeInTheDocument();
     });
 
-    it('P18.95-T8 AC-2, UI-104 compares on a phone: the person’s things join the Agenda with their avatar, their Tugas grouped, read once', async () => {
+    it('P18.7-T8 AC-2, UI-104 compares on a phone: the person’s things join the Agenda with their avatar, their Tugas grouped, read once', async () => {
       onPhone();
       const indah = agendaRead({
         subject: { membershipId: 'mem-indah', name: 'Indah Permata', rung: { code: 'AGENT', label: 'Agent' }, phone: '+6281299990000' },
@@ -2211,7 +2284,8 @@ describe('P18.95-T8 — the calendar on a phone, its links and its names (UI-020
       const stub = show({ '/calendar/downline': { body: DOWNLINE }, [`${AGENDA_READ}&date=2026-09-28&for=mem-indah`]: { body: indah } });
       await agenda();
       await userEvent.click(screen.getByRole('button', { name: 'Filters' }));
-      await userEvent.click(screen.getByRole('button', { name: '+ Compare with downline' }));
+      // A phone's compare chip (P19.8-T3 AC-6).
+      await userEvent.click(screen.getByRole('button', { name: 'Compare with downline' }));
       await userEvent.click(await screen.findByRole('button', { name: /^Indah Permata/ }));
       await userEvent.keyboard('{Escape}');
       const region = await agenda();
@@ -2237,7 +2311,8 @@ describe('P18.95-T8 — the calendar on a phone, its links and its names (UI-020
       show({ '/calendar/downline': { body: DOWNLINE }, [`${AGENDA_READ}&date=2026-09-28&for=mem-indah`]: { body: siti } });
       await agenda();
       await userEvent.click(screen.getByRole('button', { name: 'Filters' }));
-      await userEvent.click(screen.getByRole('button', { name: '+ Compare with downline' }));
+      // A phone's compare chip (P19.8-T3 AC-6).
+      await userEvent.click(screen.getByRole('button', { name: 'Compare with downline' }));
       await userEvent.click(await screen.findByRole('button', { name: /^Indah Permata/ }));
       await userEvent.keyboard('{Escape}');
       const region = await agenda();
@@ -2248,10 +2323,10 @@ describe('P18.95-T8 — the calendar on a phone, its links and its names (UI-020
     });
   });
 
-  describe('P18.95-T8 AC-2 Join Zoom, Join meeting', () => {
+  describe('P18.7-T8 AC-2 Join Zoom, Join meeting', () => {
     const NOTES = 'Zoom: https://us02web.zoom.us/j/81234567890?pwd=abc — backup meet.google.com/abc-defg-hij. Not a link: javascript:alert(1)';
 
-    it('P18.95-T8 AC-2 makes a Zoom address Join Zoom and any other Join meeting, each opening a new tab with no opener and no referrer', async () => {
+    it('P18.7-T8 AC-2 makes a Zoom address Join Zoom and any other Join meeting, each opening a new tab with no opener and no referrer', async () => {
       show({ [WEEK_READ]: { body: weekRead({ entries: [entry({ notes: NOTES })] }) } });
       await grid();
       await userEvent.click(standup());
@@ -2277,7 +2352,7 @@ describe('P18.95-T8 — the calendar on a phone, its links and its names (UI-020
       expect(dialog.querySelector('a[href^="javascript"]')).toBeNull();
     });
 
-    it('P18.95-T8 AC-2 draws notes with no address as written, and none as —', async () => {
+    it('P18.7-T8 AC-2 draws notes with no address as written, and none as —', async () => {
       show({
         [WEEK_READ]: {
           body: weekRead({ entries: [entry({ notes: 'Office — Meeting Room 2' }), entry({ entryId: 'e-bare', title: 'Bare', notes: '', date: '2026-09-29' })] }),
@@ -2295,8 +2370,8 @@ describe('P18.95-T8 — the calendar on a phone, its links and its names (UI-020
     });
   });
 
-  describe('P18.95-T8 AC-2 one set of type names, the same controls in Week and Month', () => {
-    it('P18.95-T8 AC-2 names each type in the popup as the legend names it, and the grid’s entry by the same word', async () => {
+  describe('P18.7-T8 AC-2 one set of type names, the same controls in Week and Month', () => {
+    it('P18.7-T8 AC-2 names each type in the popup as the legend names it, and the grid’s entry by the same word', async () => {
       const types = [['meeting', 'e-m'], ['coaching', 'e-c'], ['client', 'e-cl'], ['task', 'e-t']] as const;
       show({
         [WEEK_READ]: {
@@ -2322,7 +2397,7 @@ describe('P18.95-T8 — the calendar on a phone, its links and its names (UI-020
       expect(document.body.textContent).not.toMatch(/\bMeeting\b(?!:)|Coaching\b(?! —)|\bClient\b(?! meeting)/);
     });
 
-    it('P18.95-T8 AC-2 offers the same controls in Week and in Month, + Compare with downline included', async () => {
+    it('P18.7-T8 AC-2 offers the same controls in Week and in Month, + Compare with downline included', async () => {
       show({ [MONTH_READ]: { body: monthRead() }, '/calendar/downline': { body: DOWNLINE } });
       await grid();
       const controls = () => ({
@@ -2344,7 +2419,7 @@ describe('P18.95-T8 — the calendar on a phone, its links and its names (UI-020
     });
   });
 
-  it('P18.95-T8 AC-1, AC-2 the agenda, Filters open, a month’s day list and a Join link pass axe (WCAG 2.1 AA)', async () => {
+  it('P18.7-T8 AC-1, AC-2 the agenda, Filters open, a month’s day list and a Join link pass axe (WCAG 2.1 AA)', async () => {
     onPhone();
     show({
       [AGENDA_READ]: {
@@ -2369,26 +2444,26 @@ describe('P18.95-T8 — the calendar on a phone, its links and its names (UI-020
     await screen.findByRole('link', { name: /^Join Zoom ?, opens in a new tab$/ });
     await clean('detail with Join Zoom');
     await userEvent.keyboard('{Escape}');
-    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'View' }), 'month');
+    await chooseView('month');
     await screen.findByText('Sep 2026');
     await clean('month with its Tugas badge');
   });
 });
 
 /**
- * **P18.98-T3 AC-5: the calendar in each language.** Every case above reads English, the harness's default (ADR-0179
+ * **P18.10-T3 AC-5: the calendar in each language.** Every case above reads English, the harness's default (ADR-0179
  * §9): *28 Sep – 4 Oct 2026*, *Mon … Sun*, *09:00–09:30*. An Indonesian reader reads the same week the office served,
- * **Monday first in both**, in Indonesian names, and its times with a dot — and, since P18.98-T4 moved the calendar's words,
+ * **Monday first in both**, in Indonesian names, and its times with a dot — and, since P18.10-T4 moved the calendar's words,
  * its own words in Indonesian too (*Kalender, …*, *Tugas: …*).
  */
-describe('P18.98-T3 AC-5 the calendar in Indonesian', () => {
+describe('P18.10-T3 AC-5 the calendar in Indonesian', () => {
   const showIn = (routes: Record<string, StubReply | StubReply[]> = {}) => {
     const stub = stubFetch({ [WEEK_READ]: { body: weekRead() }, [SETTINGS]: { body: { hideDetails: false } }, ...routes });
     renderWithSession(<InLanguage language="id"><CalendarPage /></InLanguage>, { me: AGUS });
     return stub;
   };
 
-  it('P18.98-T3 AC-5 labels the week 28 Sep – 4 Okt 2026, Monday first, its hours and times 24-hour with a dot', async () => {
+  it('P18.10-T3 AC-5 labels the week 28 Sep – 4 Okt 2026, Monday first, its hours and times 24-hour with a dot', async () => {
     showIn();
     const region = await screen.findByRole('region', { name: 'Kalender, 28 Sep – 4 Okt 2026' });
     const pane = region.closest('section')!;
@@ -2401,7 +2476,7 @@ describe('P18.98-T3 AC-5 the calendar in Indonesian', () => {
     expect(screen.getByRole('button', { name: 'Tugas: Prospecting call block, 10.00–11.30' })).toBeInTheDocument();
   });
 
-  it('P18.98-T3 AC-5 heads the month Sen … Min, Monday first, and names its lines and days in Indonesian', async () => {
+  it('P18.10-T3 AC-5 heads the month Sen … Min, Monday first, and names its lines and days in Indonesian', async () => {
     showIn({ [MONTH_READ]: { body: monthRead() } });
     await screen.findByRole('region', { name: 'Kalender, 28 Sep – 4 Okt 2026' });
     await userEvent.click(screen.getByRole('button', { name: 'Month' }));
@@ -2462,14 +2537,18 @@ describe('UI-104 — Calendar: auto items, Tugas, 3 Hari, the coaching button, t
     expect(within(grid2).getByRole('link', { name: /^Event: BOP Surabaya/ })).toBeInTheDocument();
   });
 
-  it('UI-104 #2 the Month carries an orange count badge on a date with Tugas, which opens that day in the Agenda', async () => {
+  it('UI-104 #2, P19.1-T3 AC-6 the Month carries a blue ✓ count badge on a date with Tugas, which opens that day in the Agenda', async () => {
     const stub = show({
       [MONTH_READ]: { body: monthRead({ tasks }) },
       [`${AGENDA_READ}&date=2026-09-28`]: { body: agendaWith() },
     }, AGUS, { view: 'month' });
     await screen.findByText('Sep 2026');
     const badge = screen.getByRole('button', { name: 'Tasks on Mon, 28 Sep: 2' });
-    expect(badge.className).toContain('bg-amber');
+    // UI-154: *Tugas* blue at every size (*Decisions* 6), a ✓ before the count — never amber, never green.
+    expect(badge.className).toContain('bg-tugas');
+    expect(badge.className).toContain('text-tugas-ink');
+    expect(badge.className).not.toMatch(/bg-amber|success|green/);
+    expect(badge.querySelector('svg')).not.toBeNull();
     await userEvent.click(badge);
     await waitFor(() => expect(calls(stub, `${AGENDA_READ}&date=2026-09-28`)).toHaveLength(1));
     expect(screen.getByRole('button', { name: 'Agenda' })).toHaveAttribute('aria-pressed', 'true');
@@ -2514,7 +2593,17 @@ describe('UI-104 — Calendar: auto items, Tugas, 3 Hari, the coaching button, t
     const stub = show({
       [AGENDA_READ]: { body: agendaWith() },
       'PUT /leads/lead-wiwik/next-action/done': { body: { id: 'lead-wiwik', version: 4, nextActionDate: null, nextActionNote: null } },
-      '/leads/lead-wiwik': { body: { id: 'lead-wiwik', name: 'Ibu Wiwik Setyaningsih' } },
+      // The whole lead, as `GET /leads/:id` answers: the sheet the › opens draws its form from it, and a bare
+      // `{ id, name }` threw there once the test had finished (an unhandled error that fails the run).
+      '/leads/lead-wiwik': {
+        body: {
+          id: 'lead-wiwik', ownerMembershipId: 'mem-agus', type: 'sales', name: 'Ibu Wiwik Setyaningsih',
+          contact: { phone: '+6281234567890', email: null }, statusCode: null, thisMonth: false, remarks: null,
+          nextActionDate: null, nextActionNote: null, outcome: null, source: null,
+          dateRegistered: '2026-09-04T03:00:00.000Z', version: 4, flags: [], overdueDays: null, committedMonths: [],
+          lastEditedBy: null, history: [],
+        },
+      },
     });
     const list = within(today(await region())).getByRole('region', { name: 'Tasks' });
     await userEvent.click(within(list).getByRole('checkbox', { name: 'Done: Ibu Wiwik Setyaningsih' }));
@@ -2702,7 +2791,7 @@ describe('UI-104 — Calendar: auto items, Tugas, 3 Hari, the coaching button, t
     onPhone();
     const stub = show({ [AGENDA_READ]: { body: agendaWith() } });
     const r = await region();
-    expect(screen.getByRole('combobox', { name: 'View' })).toHaveValue('agenda');
+    expect(viewButton()).toHaveAccessibleName('View Agenda');
     expect(calls(stub, '/calendar/entries')[0].url).toMatch(/\?view=agenda$/);
     expect(within(r).getAllByRole('heading', { level: 2 })[0]).toHaveTextContent('Monday, 28 Sep 2026 · Today');
     for (const row of r.querySelectorAll('[data-task]')) {
@@ -2714,26 +2803,32 @@ describe('UI-104 — Calendar: auto items, Tugas, 3 Hari, the coaching button, t
     await waitFor(() => expect(calls(stub, `${AGENDA_READ}&date=2026-09-21`)).toHaveLength(1));
   });
 
-  it('UI-104 #6 3 Hari: three columns from today, today circled orange, full-bleed on a phone, a swipe pages exactly three days', async () => {
+  it('UI-104 #6, P19.1-T3 AC-5 3 Hari: three columns from today, today shaded on a phone, full-bleed, a swipe pages exactly three days', async () => {
     onPhone();
     const stub = show({
       [`${THREE_READ}&date=2026-09-28`]: { body: threeDayRead({ tasks }) },
       [`${THREE_READ}&date=2026-10-01`]: { body: threeDayRead({ from: '2026-10-01', to: '2026-10-03', days: WEEK.slice(3, 6).map((date) => ({ date, inPeriod: true })) }) },
     });
     await region();
-    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'View' }), 'three_days');
+    await chooseView('three_days');
     await waitFor(() => expect(calls(stub, `${THREE_READ}&date=2026-09-28`)).toHaveLength(1));
     const view = await waitFor(() => document.querySelector<HTMLElement>('[data-three-days]')!);
     expect(view.className).toContain('max-md:-mx-4');
-    expect(view.querySelector('[aria-current="date"]')!.className).toContain('bg-amber');
+    // UI-154 (OD-252): on a phone today's date is today's ink on the shade, no circle; from 768px the amber circle.
+    const date = view.querySelector('[aria-current="date"]')!;
+    expect(wears(date, 375).split(' ')).toContain('text-today-ink');
+    expect(wears(date, 375)).not.toContain('bg-primary');
+    expect(wears(date, 768).split(' ')).toContain('bg-primary');
     expect(within(view).getAllByRole('group').map((g) => g.getAttribute('aria-label'))).toEqual([
       'Monday, 28 Sep 2026', 'Tuesday, 29 Sep 2026', 'Wednesday, 30 Sep 2026',
     ]);
-    // The pinned header: sticky, with its own ‹ › and the switcher; the Tugas row in it.
-    const header = view.firstElementChild as HTMLElement;
-    expect(header.className).toContain('sticky');
-    // Below the top inset, never under a Home Screen app's clock (staging review, 2026-10-31).
-    expect(header).toHaveClass('top-[env(safe-area-inset-top)]');
+    // The heads, the Tugas row in them — since UI-144 no ‹ ›, range or second picker of their own — and, since P19.8-T3
+    // AC-2 (MOB UI-172), above the grid's own scroll box rather than pinned over a scrolling page.
+    const header = view.querySelector<HTMLElement>('[data-grid-head]')!;
+    expect(header.className).not.toContain('sticky');
+    expect(header.nextElementSibling).toHaveAttribute('data-time-grid', 'box');
+    expect(within(header).queryByRole('button', { name: /^View / })).not.toBeInTheDocument();
+    expect(within(header).queryByRole('button', { name: /^(Previous|Next)/ })).not.toBeInTheDocument();
     expect(within(header).getByRole('button', { name: 'Tasks on Mon, 28 Sep: 2' })).toBeInTheDocument();
     // A swipe left, past the line: exactly three days on — the server's `next`.
     fireEvent.touchStart(view, { touches: [{ clientX: 300, clientY: 400 }] });
@@ -2793,6 +2888,26 @@ describe('UI-104 — Calendar: auto items, Tugas, 3 Hari, the coaching button, t
     expect(within(await screen.findByRole('dialog', { name: 'Open 1:1' })).getByRole('button', { name: 'Pick who to coach' })).toBeInTheDocument();
   });
 
+  it('P19.9-T6 AC-2 an Agent who leads coaches from their 1:1 — Coach <name> for whom the server says they coach — and is offered no picker that would find nobody (ADR-0234)', async () => {
+    const AGENT_COACH = makeMe({
+      ...COACH,
+      membership: { ...COACH.membership!, orgLevelCode: 'AGENT', hierarchyRole: 'agent', directCount: 1 },
+    });
+    const theirs = entry({
+      entryId: 'e-14', type: 'coaching', title: '1:1 coaching — Tari',
+      invitees: [{ membershipId: 'mem-tari', name: 'Tari Anggraini', placed: false, answer: 'accepted', readerCoaches: true }],
+    });
+    const nobody = entry({ entryId: 'e-15', type: 'coaching', title: 'Open 1:1', date: '2026-09-29', invitees: [] });
+    show({ [WEEK_READ]: { body: weekRead({ entries: [theirs, nobody] }) } }, AGENT_COACH);
+    await grid();
+    await userEvent.click(screen.getByRole('button', { name: /^1:1 coaching: 1:1 coaching — Tari/ }));
+    expect(within(await screen.findByRole('dialog', { name: '1:1 coaching — Tari' })).getByRole('link', { name: 'Start coaching session' }))
+      .toHaveAttribute('href', '/coaching/mem-tari/session');
+    await userEvent.keyboard('{Escape}');
+    await userEvent.click(screen.getByRole('button', { name: /^1:1 coaching: Open 1:1/ }));
+    expect(within(await screen.findByRole('dialog', { name: 'Open 1:1' })).queryByRole('button', { name: 'Pick who to coach' })).not.toBeInTheDocument();
+  });
+
   it('UI-104 #8 Travel’s Sepanjang hari is on by default; off, it takes a start and an end date and time, and saves allDay false', async () => {
     const stub = show({ 'POST /calendar/entries': { status: 201, body: trip({ allDay: false }) } });
     await grid();
@@ -2835,10 +2950,9 @@ describe('UI-104 — Calendar: auto items, Tugas, 3 Hari, the coaching button, t
   });
 
   it('UI-104 #9 unticking a type hides it at once in every view, auto items included: Task takes the Tugas, Event the events joined', async () => {
-    onPhone();
-    show({ [AGENDA_READ]: { body: agendaWith() } });
+    // A laptop's row under the toolbar, shown until hidden: a phone's *Filter* holds *Melihat* alone since P19.8-T3 AC-6.
+    show({ [AGENDA_READ]: { body: agendaWith() } }, AGUS, { view: 'agenda' });
     const r = await region();
-    await userEvent.click(screen.getByRole('button', { name: 'Filters' }));
     const chips = screen.getByRole('group', { name: 'Type' });
     await userEvent.click(within(chips).getByRole('button', { name: 'Task' }));
     expect(within(chips).getByRole('button', { name: 'Task' })).toHaveAttribute('aria-pressed', 'false');
@@ -2859,10 +2973,804 @@ describe('UI-104 — Calendar: auto items, Tugas, 3 Hari, the coaching button, t
       expect([state, (results.violations ?? []).map((v) => v.id)]).toEqual([state, []]);
     };
     await clean('agenda with Tugas');
-    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'View' }), 'three_days');
+    await chooseView('three_days');
     await waitFor(() => expect(document.querySelector('[data-three-days]')).not.toBeNull());
     await clean('3 Hari');
     await userEvent.click(screen.getByRole('button', { name: 'Tasks on Mon, 28 Sep: 2' }));
     await clean('Tugas popup');
+  });
+});
+
+/**
+ * **Phase 19.1 — P19.1-T3, Calendar** (UI-117 to UI-120, UI-144; the 6 Nov handover's UI-154 and UI-156;
+ * `functional/calendar.md`, *November 2026*): one toolbar in every view and at every size, one time grid for 3 Hari and
+ * Week, *Tugas* blue, today shaded on a phone and circled from 768px (OD-252), the default view by size and the last
+ * one remembered, the merged empty days, and *+ Event baru*'s layout. jsdom is a laptop unless `atWidth` says otherwise.
+ * Today is Monday 28 Sep 2026, 09:45 in the office, in these doubles.
+ */
+describe('P19.1-T3 — Calendar: one toolbar, one time grid, Tugas blue, today', () => {
+  const tasks = [coachingTask(), leadTask()];
+  const ALL_VIEWS = {
+    [AGENDA_READ]: { body: agendaRead({ tasks }) },
+    [THREE_READ]: { body: threeDayRead({ tasks }) },
+    [MONTH_READ]: { body: monthRead({ tasks }) },
+    [WEEK_READ]: { body: weekRead({ tasks }) },
+  };
+  const toolbar = () => document.querySelector<HTMLElement>('[data-toolbar]')!;
+  /** What a row of controls holds, each by its name or its words — the range by a placeholder, since it is the period's. */
+  const controlsOf = (row: Element) => [...row.querySelectorAll('button, select, [aria-live]')]
+    .filter((el) => !el.closest('[role="group"]') || el.getAttribute('role') === 'group')
+    .map((el) => (el.hasAttribute('aria-live') ? '{range}' : el.getAttribute('aria-label') ?? el.textContent));
+  const groupOf = () => screen.getByRole('group', { name: 'View' });
+  const pick = async (view: string) => userEvent.click(within(groupOf()).getByRole('button', { name: view }));
+
+  it('P19.1-T3 AC-1 a laptop: one row — Today ‹ › range · Agenda | 3 Days | Week | Month · Filters · + New event — the same in every view', async () => {
+    show(ALL_VIEWS);
+    await grid();
+    const row = toolbar();
+    const drawn = () => [...toolbar().children].map((el) => (el.getAttribute('role') === 'group'
+      ? `[${[...el.querySelectorAll('button')].map((b) => b.textContent).join(' | ')}]`
+      : el.hasAttribute('aria-live') ? '{range}' : el.getAttribute('aria-label') ?? el.textContent));
+    const expected = ['Today', 'Previous week', 'Next week', '{range}', '', '[Agenda | 3 Days | Week | Month]', 'Filters', '+ New event'];
+    expect(drawn()).toEqual(expected);
+    expect(row.className).toContain('flex-nowrap');
+    // No navigation inside the grid's card, and no second picker, in any view.
+    for (const view of ['Agenda', '3 Days', 'Month', 'Week']) {
+      await pick(view);
+      await waitFor(() => expect(within(groupOf()).getByRole('button', { name: view })).toHaveAttribute('aria-pressed', 'true'));
+      expect(toolbar()).toBe(row);
+      expect(drawn().map((d) => d.replace(/^(Previous|Next) (week|month|3 days)$/, '$1'))).toEqual(
+        expected.map((d) => d.replace(/^(Previous|Next) week$/, '$1')),
+      );
+      expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+    }
+  });
+
+  it('P19.1-T3 AC-1 a tablet: Today ‹ › range … Filters, then the switcher across and + New event — the same in every view', async () => {
+    atWidth(768);
+    show(ALL_VIEWS);
+    await screen.findByRole('region', { name: 'Calendar, 28 – 30 Sep 2026' });
+    const first = toolbar();
+    const second = first.nextElementSibling as HTMLElement;
+    expect(controlsOf(first)).toEqual(['Today', 'Previous 3 days', 'Next 3 days', '{range}', 'Filters']);
+    expect(within(second).getByRole('group', { name: 'View' }).className).toContain('flex-1');
+    expect(within(second).getByRole('button', { name: '+ New event' })).toBeInTheDocument();
+    for (const view of ['Agenda', 'Week', 'Month', '3 Days']) {
+      await pick(view);
+      await waitFor(() => expect(within(groupOf()).getByRole('button', { name: view })).toHaveAttribute('aria-pressed', 'true'));
+      expect(toolbar()).toBe(first);
+      expect(first.nextElementSibling).toBe(second);
+      expect(controlsOf(first).length).toBe(5);
+    }
+  });
+
+  it('P19.1-T3 AC-2 a phone keeps its toolbar in all four views — no second picker, the range whole (2 – 4 Nov style)', async () => {
+    atWidth(360);
+    show({ ...ALL_VIEWS, [`${THREE_READ}&date=2026-09-28`]: { body: threeDayRead({ tasks }) } });
+    await screen.findByRole('region', { name: `Calendar, ${RANGE}` });
+    const row = toolbar();
+    for (const view of ['three_days', 'week', 'month', 'agenda']) {
+      await chooseView(view);
+      await waitFor(() => expect(viewButton()).toHaveAccessibleName(`View ${VIEW_WORDS[view]}`));
+      expect(toolbar()).toBe(row);
+      expect(buttonsOf(row).map((b) => b.replace(/^(Previous|Next) .*$/, '$1'))).toEqual(['Today', 'Previous', 'Next', `View ${VIEW_WORDS[view]}`, 'Filters']);
+      // One picker, and no native select (P19.8-T3 AC-1).
+      expect(document.querySelectorAll('[data-picker-button]')).toHaveLength(1);
+      expect(document.querySelector('select')).toBeNull();
+      const range = row.nextElementSibling!.querySelector('[aria-live]')!;
+      expect(range.className).toContain('whitespace-nowrap');
+      expect(range.className).not.toContain('truncate');
+    }
+    // 3 Hari's range: the month said once.
+    await chooseView('three_days');
+    expect(await screen.findByText('28 – 30 Sep 2026')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Previous 3 days' })).toBeInTheDocument();
+  });
+
+  it.each([[360], [375], [768], [1280]])('P19.8-T1 AC-7, P19.8-T3 AC-1 MOB UI-171 at %ipx every toolbar control is 13px / 600 / 44px — no 16px / 48px, no native select', async (width) => {
+    atWidth(width);
+    show(ALL_VIEWS);
+    await waitFor(() => expect(toolbar()).not.toBeNull());
+    await screen.findAllByRole('region');
+    const rows = [toolbar(), ...(width < 1024 ? [toolbar().nextElementSibling!] : [])];
+    const controls = rows.flatMap((row) => [...row.querySelectorAll<HTMLElement>('button')]);
+    expect(controls.length).toBeGreaterThan(4);
+    // Each 44px itself, or a segment of the switcher's 44px track, or a half of ‹ ›'s 44px pill.
+    for (const control of controls) expectHeaderSize(control, width);
+    // ‹ › at the same weight as their neighbours (UI-156: they were 400).
+    expect(screen.getByRole('button', { name: /^Previous/ }).className).toContain('font-semibold');
+    expect(document.querySelector('select')).toBeNull();
+    if (width < 768) {
+      // The picker takes the row's free width, so *Agenda* is whole at 360px; its neighbours keep theirs, 10px either side.
+      const picker = viewButton();
+      expect(picker.className.split(' ')).toEqual(expect.arrayContaining(['flex-1', 'min-w-0']));
+      for (const name of ['Today', 'Filters']) expect(wears(screen.getByRole('button', { name }), width).split(' ')).toEqual(expect.arrayContaining(['shrink-0', 'px-2.5']));
+      expect(picker).toHaveTextContent('Agenda');
+    }
+  });
+
+  it('P19.1-T3 AC-4 3 Hari and Week are one time grid: hours 07:00 at the top of their row, opened an hour before now, an orange now-line', async () => {
+    atWidth(768);
+    show(ALL_VIEWS);
+    const three = await screen.findByRole('region', { name: 'Calendar, 28 – 30 Sep 2026' });
+    const look = (region: HTMLElement) => {
+      const label = within(region).getByText('07:00');
+      return {
+        grid: region.getAttribute('data-time-grid'),
+        label: label.className,
+        gutter: label.parentElement!.className,
+        scrollTop: region.scrollTop,
+        now: region.querySelector('[data-now]')!.className,
+      };
+    };
+    const threeLook = look(three);
+    await pick('Week');
+    const week = await grid();
+    expect(look(week)).toEqual(threeLook);
+    // 09:45 less an hour: 08:00; top-aligned, never shifted up under the Tugas row; the line orange.
+    expect(threeLook.scrollTop).toBe(8 * HOUR_PX);
+    expect(threeLook.label).toContain('pt-0.5');
+    expect(threeLook.label).not.toMatch(/translate/);
+    expect(threeLook.now).toContain('border-primary');
+    // The day heads and the Tugas row stay above the hours' scroll box.
+    expect(week.previousElementSibling!.querySelector('[data-task-row]')).not.toBeNull();
+  });
+
+  it('P19.1-T3 AC-4 on another week the grid opens at 07:00', async () => {
+    show({ [WEEK_READ]: { body: weekRead({ today: '2026-10-07' }) } });
+    expect((await grid()).scrollTop).toBe(7 * HOUR_PX);
+  });
+
+  it('P19.1-T3 AC-5 a phone: today’s whole column shaded in 3 Hari — head, Tugas cell, hours — its date in today’s ink with no circle', async () => {
+    atWidth(375);
+    show({ ...ALL_VIEWS, [`${THREE_READ}&date=2026-09-28`]: { body: threeDayRead({ tasks }) } });
+    await screen.findByRole('region', { name: `Calendar, ${RANGE}` });
+    await chooseView('three_days');
+    const view = await waitFor(() => document.querySelector<HTMLElement>('[data-three-days]')!);
+    const date = view.querySelector<HTMLElement>('[aria-current="date"]')!;
+    const head = date.parentElement!;
+    const pill = within(view).getByRole('button', { name: 'Tasks on Mon, 28 Sep: 2' });
+    const column = within(view).getByRole('group', { name: 'Monday, 28 Sep 2026' });
+    for (const cell of [head, pill.parentElement!, column]) expect(wears(cell, 375).split(' ')).toContain('bg-today');
+    for (const cell of [head, pill.parentElement!, column]) expect(wears(cell, 768)).not.toContain('bg-today');
+    expect(wears(date, 375)).not.toMatch(/bg-amber|rounded-full.*bg-/);
+    // The Agenda keeps its *Hari ini* band, in today's shade and ink.
+    await chooseView('agenda');
+    const band = await screen.findByRole('heading', { level: 2, name: 'Monday, 28 Sep 2026 · Today' });
+    expect(band.className).toEqual(expect.stringContaining('bg-today'));
+    expect(band.className).toContain('text-today-ink');
+  });
+
+  it('P19.1-T3 AC-5, AC-7 a phone’s Month: today’s cell shaded, no circle; a grey count pill and a blue ✓ Tugas pill under the day; no dots', async () => {
+    atWidth(375);
+    show({ [MONTH_READ]: { body: monthRead({ tasks }) } }, AGUS, { view: 'month' });
+    await screen.findByText('Sep 2026');
+    const today = document.querySelector<HTMLElement>('[data-date="2026-09-28"]')!;
+    expect(today.className).toContain('bg-today');
+    const number = today.querySelector('span > span')!;
+    expect(number.className).toContain('text-today-ink');
+    expect(number.className).not.toContain('bg-primary');
+    const events = today.querySelector<HTMLElement>('[data-event-count]')!;
+    expect(events).toHaveTextContent('2');
+    expect(events.className).toContain('bg-pill-grey');
+    const tugas = today.querySelector<HTMLElement>('[data-task-badge]')!;
+    expect(tugas).toHaveTextContent('2');
+    expect(tugas.className).toContain('bg-tugas');
+    expect(tugas.querySelector('svg')).not.toBeNull();
+    // Under the day, not beside it; no dot anywhere (D-27).
+    expect(number.compareDocumentPosition(events) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(document.querySelector('[data-date] .rounded-full.h-1\\.5')).toBeNull();
+    // Another month's day is grey.
+    expect(document.querySelector('[data-date="2026-08-31"]')!.className).toContain('bg-hover-row');
+  });
+
+  it('P19.1-T3 AC-6 a phone: every Tugas piece blue — the checklist’s dashed border and heading, a ticked box, the count pill — and none green', async () => {
+    atWidth(375);
+    const stub = show({
+      ...ALL_VIEWS,
+      'PUT /coaching/sessions/sess-1/action-items/item-1/done': { body: { sessionId: 'sess-1', itemId: 'item-1', done: true } },
+    });
+    const region = await screen.findByRole('region', { name: `Calendar, ${RANGE}` });
+    const list = within(region).getByRole('region', { name: 'Tasks' });
+    expect(list.className).toContain('border-tugas-edge');
+    expect(list.firstElementChild!.className).toContain('text-tugas-ink');
+    const box = within(list).getByRole('checkbox', { name: 'Done: From: Wilson Tanoto' });
+    expect(box.nextElementSibling!.className).toContain('border-tugas-ink');
+    await userEvent.click(box);
+    await waitFor(() => expect(calls(stub, '/action-items/item-1/done', 'PUT')).toHaveLength(1));
+    await waitFor(() => expect(box.nextElementSibling!.className).toContain('bg-tugas-ink'));
+    expect(list.outerHTML).not.toMatch(/success|green/);
+    // 3 Hari's and Week's count pill.
+    await chooseView('week');
+    const pill = await screen.findByRole('button', { name: 'Tasks on Mon, 28 Sep: 1' });
+    expect(pill.firstElementChild!.className.split(' ')).toEqual(expect.arrayContaining(['bg-tugas', 'text-tugas-ink']));
+    expect(pill.outerHTML).not.toMatch(/amber|success|green/);
+    // *Tugas* in the 46px gutter, one line, right-aligned 4px from the line (P19.8-T3 AC-4; MOB UI-174).
+    const label = document.querySelector<HTMLElement>('[data-task-row]')!.firstElementChild!;
+    expect(label).toHaveTextContent('Tasks');
+    expect(wears(label, 375).split(' ')).toEqual(expect.arrayContaining(['whitespace-nowrap', 'w-[46px]', 'text-xs', 'justify-end', 'pr-1']));
+  });
+
+  it('P19.1-T3 AC-6 the Tugas blue reaches the tablet and the laptop too (Decisions 6), and a compared person’s group is blue', async () => {
+    show(ALL_VIEWS);
+    await grid();
+    const pill = screen.getByRole('button', { name: 'Tasks on Mon, 28 Sep: 2' });
+    expect(pill.firstElementChild!.className).toContain('bg-tugas');
+    await pick('Agenda');
+    const list = await screen.findByRole('region', { name: 'Tasks' });
+    expect(list.className).toContain('border-tugas-edge');
+  });
+
+  it('P19.9-T5 AC-1 an empty week in the Agenda is seven bands, each day its own with No events (was two, P19.1-T3 AC-7)', async () => {
+    atWidth(375);
+    show({ [AGENDA_READ]: { body: agendaRead({ entries: [] }) } });
+    const region = await screen.findByRole('region', { name: `Calendar, ${RANGE}` });
+    expect(within(region).getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
+      'Monday, 28 Sep 2026 · Today', 'Tuesday, 29 Sep 2026', 'Wednesday, 30 Sep 2026', 'Thursday, 1 Oct 2026',
+      'Friday, 2 Oct 2026', 'Saturday, 3 Oct 2026', 'Sunday, 4 Oct 2026',
+    ]);
+    expect(within(region).getAllByText('No events')).toHaveLength(7);
+  });
+
+  it('P19.1-T3 AC-8 a laptop: Viewing and the type chips share one row under the toolbar, which Filters hides and shows', async () => {
+    show({ ...ALL_VIEWS, '/calendar/downline': { body: DOWNLINE } });
+    await grid();
+    const row = document.querySelector<HTMLElement>('[data-filter-row]')!;
+    expect(row).toBeVisible();
+    const line = row.firstElementChild as HTMLElement;
+    expect(within(line).getByText('Viewing:').closest('[data-compare-bar]')!.parentElement).toBe(line);
+    expect(within(line).getByRole('group', { name: 'Type' }).parentElement).toBe(line);
+    // Not a card of its own any more: no frame, no margin of its own.
+    expect(line.querySelector('[data-compare-bar]')!.className).not.toMatch(/\bborder\b|\bmb-4\b/);
+    // The chips are 32px targets on a laptop, 44px below it.
+    const chip = within(line).getByRole('button', { name: 'Task' });
+    expect(wears(chip, 1280).split(' ')).toContain('min-h-8');
+    expect(wears(chip, 768).split(' ')).toContain('min-h-11');
+    const filters = screen.getByRole('button', { name: 'Filters' });
+    await userEvent.click(filters);
+    expect(filters).toHaveAttribute('aria-expanded', 'false');
+    expect(row).not.toBeVisible();
+    await userEvent.click(filters);
+    expect(row).toBeVisible();
+  });
+
+  it('P19.1-T3 AC-8 a tablet: Viewing and Jenis live in the Filter panel, the button navy while it is open, every control 44px or more', async () => {
+    atWidth(768);
+    show({ ...ALL_VIEWS, '/calendar/downline': { body: DOWNLINE } });
+    await screen.findByRole('region', { name: 'Calendar, 28 – 30 Sep 2026' });
+    const filters = screen.getByRole('button', { name: 'Filters' });
+    expect(filters).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('group', { name: 'Type' })).not.toBeInTheDocument();
+    await userEvent.click(filters);
+    expect(filters.className).toContain('bg-secondary');
+    const panel = document.getElementById(filters.getAttribute('aria-controls')!)!;
+    expect(within(panel).getByText('Viewing:')).toBeInTheDocument();
+    expect(within(panel).getByRole('button', { name: '+ Compare with downline' })).toBeInTheDocument();
+    for (const chip of within(within(panel).getByRole('group', { name: 'Type' })).getAllByRole('button')) {
+      expect(wears(chip, 768).split(' ')).toContain('min-h-11');
+    }
+    // The Tugas row's pill is a 44px target on a tablet.
+    const pill = screen.getByRole('button', { name: 'Tasks on Mon, 28 Sep: 2' });
+    expect(wears(pill, 768).split(' ')).toContain('h-11');
+    await userEvent.click(filters);
+    expect(filters.className).not.toContain('bg-secondary');
+  });
+
+  it('P19.1-T3 AC-9 a tablet opens on 3 Hari, a laptop on Week, a phone on the Agenda', async () => {
+    atWidth(768);
+    let stub = show(ALL_VIEWS);
+    await waitFor(() => expect(calls(stub, '/calendar/entries')[0]?.url).toMatch(/\?view=three_days$/));
+    cleanup();
+    vi.unstubAllGlobals();
+    atWidth(1280);
+    stub = show(ALL_VIEWS);
+    await waitFor(() => expect(calls(stub, '/calendar/entries')[0]?.url).toMatch(/\?view=week$/));
+    cleanup();
+    vi.unstubAllGlobals();
+    atWidth(375);
+    stub = show(ALL_VIEWS);
+    await waitFor(() => expect(calls(stub, '/calendar/entries')[0]?.url).toMatch(/\?view=agenda$/));
+  });
+
+  it('P19.1-T3 AC-9 remembers the last view chosen on the device from 768px, and a refused storage falls back to the default', async () => {
+    const stub = show(ALL_VIEWS);
+    await grid();
+    await pick('Month');
+    await screen.findByText('Sep 2026');
+    expect(window.localStorage.getItem('ab.calendar.view')).toBe('month');
+    cleanup();
+    const again = show(ALL_VIEWS);
+    await screen.findByText('Sep 2026');
+    expect(calls(again, '/calendar/entries')[0].url).toMatch(/\?view=month$/);
+    expect(calls(stub, '/calendar/entries').length).toBeGreaterThan(0);
+    cleanup();
+    // A phone opens on the Agenda whatever was kept, and keeps nothing it chooses.
+    atWidth(375);
+    show(ALL_VIEWS);
+    await screen.findByRole('region', { name: `Calendar, ${RANGE}` });
+    expect(viewButton()).toHaveAccessibleName('View Agenda');
+    await chooseView('week');
+    expect(window.localStorage.getItem('ab.calendar.view')).toBe('month');
+    cleanup();
+    vi.unstubAllGlobals();
+    // Storage refused: the size's default, and nothing breaks.
+    const getItem = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('SecurityError'); });
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('SecurityError'); });
+    try {
+      const refused = show(ALL_VIEWS);
+      await grid();
+      expect(calls(refused, '/calendar/entries')[0].url).toMatch(/\?view=week$/);
+      await pick('Agenda');
+      await waitFor(() => expect(within(groupOf()).getByRole('button', { name: 'Agenda' })).toHaveAttribute('aria-pressed', 'true'));
+    } finally {
+      getItem.mockRestore();
+      setItem.mockRestore();
+    }
+  });
+
+  it('P19.1-T3 AC-9 a laptop’s Month: an event line reads its title first, the days of the months either side grey', async () => {
+    show(ALL_VIEWS, AGUS, { view: 'month' });
+    await screen.findByText('Sep 2026');
+    const line = screen.getByRole('button', { name: 'Internal meeting: Weekly unit standup, 9-9:30' });
+    expect(line.firstElementChild).toHaveTextContent('Weekly unit standup');
+    expect(document.querySelector('[data-date="2026-10-01"]')!.className).toContain('bg-hover-row');
+  });
+
+  it('P19.1-T3 AC-10 + New event from 768px: no sub-line, Date on its own row, Start | End half and half, the type chips one line each', async () => {
+    show();
+    await grid();
+    await userEvent.click(screen.getByRole('button', { name: '+ New event' }));
+    const dialog = await screen.findByRole('dialog', { name: 'New event' });
+    expect(dialog).not.toHaveAccessibleDescription();
+    const timing = dialog.querySelector<HTMLElement>('[data-timing]')!;
+    const [date, start, end] = [...timing.children] as HTMLElement[];
+    expect(within(date).getByLabelText('Date')).toBeInTheDocument();
+    expect(wears(date, 768).split(' ')).toContain('basis-full');
+    expect(wears(date, 375)).not.toContain('basis-full');
+    for (const half of [start, end]) expect(half.className).toContain('flex-1');
+    for (const chip of within(within(dialog).getByRole('group', { name: 'Type' })).getAllByRole('button')) {
+      expect(wears(chip, 1280).split(' ')).toEqual(expect.arrayContaining(['flex-none', 'whitespace-nowrap']));
+      expect(wears(chip, 768).split(' ')).toContain('min-h-11');
+      expect(wears(chip, 375).split(' ')).toContain('flex-[1_1_30%]');
+    }
+    // The footer is pinned, Cancel then Save event.
+    expect(within(dialog).getAllByRole('button').slice(-2).map((b) => b.textContent)).toEqual(['Cancel', 'Save event']);
+  });
+
+  it('P19.1-T3 AC-10 a phone keeps the sub-line under New event', async () => {
+    atWidth(375);
+    show();
+    await screen.findByRole('region', { name: `Calendar, ${RANGE}` });
+    await userEvent.click(screen.getByRole('button', { name: '+ New event' }));
+    const dialog = await screen.findByRole('dialog', { name: 'New event' });
+    await waitFor(() => expect(dialog).toHaveAccessibleDescription('Add a meeting, task, or coaching session to your calendar.'));
+  });
+
+  it('P19.1-T3 AC-11 keeps the type colours — the Task entry its green, a Travel bar its teal — and the 3px coloured left border', async () => {
+    show();
+    await grid();
+    const task = screen.getByRole('button', { name: 'Task: Prospecting call block, 10:00–11:30' });
+    expect(task.className.split(' ')).toEqual(expect.arrayContaining(['border-l-[3px]', 'border-success']));
+    expect(screen.getByRole('button', { name: 'Travel: Client trip — Surabaya' }).className).toContain('bg-teal/[0.14]');
+    const swatch = within(screen.getByRole('group', { name: 'Type' })).getByRole('button', { name: 'Task' }).firstElementChild!;
+    expect(swatch.className).toContain('bg-success');
+  });
+
+  it('P19.1-T3 AC-1 to AC-10 a tablet’s 3 Hari with the Filter open, and a phone’s Month, pass axe (WCAG 2.1 AA)', async () => {
+    const clean = async (state: string) => {
+      const results = await axe(document.body, { rules: { 'color-contrast': { enabled: false }, region: { enabled: false } } });
+      expect([state, (results.violations ?? []).map((v) => v.id)]).toEqual([state, []]);
+    };
+    atWidth(768);
+    show({ ...ALL_VIEWS, '/calendar/downline': { body: DOWNLINE } });
+    await screen.findByRole('region', { name: 'Calendar, 28 – 30 Sep 2026' });
+    await userEvent.click(screen.getByRole('button', { name: 'Filters' }));
+    await clean('tablet 3 Hari, Filter open');
+    cleanup();
+    vi.unstubAllGlobals();
+    atWidth(375);
+    show({ [MONTH_READ]: { body: monthRead({ tasks }) } }, AGUS, { view: 'month' });
+    await screen.findByText('Sep 2026');
+    await clean('phone Month with its pills');
+  });
+});
+
+/**
+ * **P19.8-T3 — the Calendar on a phone, as the owner approved it on 7 November** (`revisions/2026-11-09/`, the brief's
+ * *Calendar*, MOB UI-171 to UI-175, `calendar-mobile-stopmotion-2026-11-07.html`; ADR-0226, ADR-0227). Each AC at 375px
+ * and 360px, the two widths the review walked.
+ */
+describe('P19.8-T3 — Calendar: the header controls, 3 Hari at the top, today one stripe, the 46px column, one way to compare', () => {
+  const tasks = [coachingTask(), leadTask()];
+  const VIEWS = {
+    [AGENDA_READ]: { body: agendaRead({ tasks }) },
+    [THREE_READ]: { body: threeDayRead({ tasks }) },
+    [`${THREE_READ}&date=2026-09-28`]: { body: threeDayRead({ tasks }) },
+    [MONTH_READ]: { body: monthRead({ tasks }) },
+    [WEEK_READ]: { body: weekRead({ tasks }) },
+  };
+  const toolbar = () => document.querySelector<HTMLElement>('[data-toolbar]')!;
+  const agenda = () => screen.findByRole('region', { name: `Calendar, ${RANGE}` });
+  const three = () => screen.findByRole('region', { name: 'Calendar, 28 – 30 Sep 2026' });
+  /** The page's own scroll: never moved by a view (MOB UI-172). */
+  const pageTop = () => (document.scrollingElement ?? document.documentElement).scrollTop;
+
+  describe.each([[375], [360]])('at %ipx', (width) => {
+    it(`P19.8-T3 AC-1 MOB UI-171 at ${width}px: Hari ini · ‹ › · the view picker · Filter, then the range and + Event baru; the picker a menu under its button`, async () => {
+      atWidth(width);
+      show(VIEWS);
+      await agenda();
+      const row = toolbar();
+      expect(buttonsOf(row)).toEqual(['Today', 'Previous week', 'Next week', 'View Agenda', 'Filters']);
+      for (const control of row.querySelectorAll<HTMLElement>('button')) expectHeaderSize(control, width);
+      const second = row.nextElementSibling as HTMLElement;
+      expect(second.querySelector('[aria-live]')!.className.split(' ')).toEqual(expect.arrayContaining(['text-lg', 'font-bold', 'whitespace-nowrap']));
+      const create = within(second).getByRole('button', { name: '+ New event' });
+      expectHeaderSize(create, width);
+      expect(create.className.split(' ')).toEqual(expect.arrayContaining(['rounded-pill', 'bg-primary']));
+      // *Agenda* whole: the picker takes the free width and its words are never cut by a fixed box.
+      expect(viewButton()).toHaveTextContent('Agenda');
+      expect(viewButton().className).not.toMatch(/\bw-\[|\bmax-w-/);
+      expect(document.querySelector('select')).toBeNull();
+      // The menu under the button: the four views, the chosen one ticked; a choice closes it, the focus on the button.
+      await userEvent.click(viewButton());
+      expect(viewButton()).toHaveAttribute('aria-expanded', 'true');
+      const menu = screen.getByRole('listbox', { name: 'View' });
+      expect(within(menu).getAllByRole('option').map((o) => [o.textContent, o.getAttribute('aria-selected')])).toEqual([
+        ['Agenda', 'true'], ['3 Days', 'false'], ['Week', 'false'], ['Month', 'false'],
+      ]);
+      expect(within(menu).getByRole('option', { name: 'Agenda' }).querySelector('svg')).not.toBeNull();
+      await userEvent.click(within(menu).getByRole('option', { name: '3 Days' }));
+      expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+      expect(viewButton()).toHaveFocus();
+      expect(await three()).toBeInTheDocument();
+      expect(viewButton()).toHaveAccessibleName('View 3 Days');
+      // Escape closes it, nothing chosen.
+      await userEvent.click(viewButton());
+      await userEvent.keyboard('{Escape}');
+      expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+      expect(viewButton()).toHaveAccessibleName('View 3 Days');
+    });
+
+    it(`P19.8-T3 AC-2 MOB UI-172 at ${width}px: 3 Hari opens at the top — the page still, the grid its own box from 07:00 to the screen’s foot; Week the same`, async () => {
+      atWidth(width);
+      const scrollTo = vi.fn();
+      vi.stubGlobal('scrollTo', scrollTo);
+      show(VIEWS);
+      await agenda();
+      await chooseView('three_days');
+      const box = await three();
+      expect(pageTop()).toBe(0);
+      expect(scrollTo).not.toHaveBeenCalled();
+      expect(box).toHaveAttribute('data-time-grid', 'box');
+      expect(box).toHaveAttribute('data-fill', 'true');
+      // To the foot of the screen (jsdom's window is 768px tall and the box starts at its top), never the 620px cap.
+      expect(box.style.height).toBe(`${window.innerHeight}px`);
+      expect(box.className).not.toContain('max-h-[620px]');
+      // 07:00 at its top although it is 09:45 — an hour before now would be 08:00 — and 00:00–07:00 above it.
+      expect(box.scrollTop).toBe(7 * HOUR_PX);
+      expect(within(box).getByText('00:00')).toBeInTheDocument();
+      // The day heads and the Tugas row stand above the box; the now-line where it falls, in today's column.
+      expect(box.previousElementSibling!.querySelector('[data-task-row]')).not.toBeNull();
+      expect(within(box).getByRole('group', { name: 'Monday, 28 Sep 2026' }).querySelector('[data-now]')).toHaveStyle({ top: `${(585 / 60) * HOUR_PX}px` });
+      // Full-bleed, down over the page's foot room to the screen's foot, behind the tab bar.
+      const pane = box.closest<HTMLElement>('[data-three-days]')!;
+      expect(wears(pane, width).split(' ')).toEqual(expect.arrayContaining(['-mx-4', '-mb-[calc(var(--tab-bar-space)+1.5rem)]', 'rounded-t-row']));
+      // Week behaves the same; switching leaves the page at the top.
+      await chooseView('week');
+      const week = await grid();
+      expect(pageTop()).toBe(0);
+      expect(scrollTo).not.toHaveBeenCalled();
+      expect(week).toHaveAttribute('data-fill', 'true');
+      expect(week.scrollTop).toBe(7 * HOUR_PX);
+      // *Hari ini* takes the grid back to 07:00, not to an hour before now.
+      week.scrollTop = 900;
+      await userEvent.click(screen.getByRole('button', { name: 'Today' }));
+      expect(week.scrollTop).toBe(7 * HOUR_PX);
+    });
+
+    it(`P19.8-T3 AC-3 MOB UI-173 at ${width}px: today one unbroken stripe — its head, its Tugas cell and every hour — in 3 Hari and Week`, async () => {
+      atWidth(width);
+      show(VIEWS);
+      await agenda();
+      for (const view of ['three_days', 'week']) {
+        await chooseView(view);
+        const region = view === 'week' ? await grid() : await three();
+        const head = region.previousElementSibling as HTMLElement;
+        const date = head.querySelector<HTMLElement>('[aria-current="date"]')!;
+        const taskCell = within(head).getByRole('button', { name: /^Tasks on Mon, 28 Sep/ }).parentElement!;
+        const column = within(region).getByRole('group', { name: 'Monday, 28 Sep 2026' });
+        for (const cell of [date.parentElement!, taskCell, column]) expect(wears(cell, width).split(' ')).toContain('bg-today');
+        // Today's cell alone: every other day's is the card's white.
+        const cells = [...head.querySelector('[data-task-row]')!.querySelectorAll<HTMLElement>('.place-items-center')];
+        expect(cells.length).toBeGreaterThan(2);
+        expect(cells.filter((cell) => wears(cell, width).split(' ').includes('bg-today'))).toEqual([taskCell]);
+      }
+    });
+
+    it(`P19.8-T3 AC-4 MOB UI-174 at ${width}px: a 46px time column, Tugas and the hours right-aligned 4px from the line; Week’s seven days fit`, async () => {
+      atWidth(width);
+      show(VIEWS);
+      await agenda();
+      await chooseView('week');
+      const region = await grid();
+      const label = region.previousElementSibling!.querySelector('[data-task-row]')!.firstElementChild!;
+      expect(label).toHaveTextContent('Tasks');
+      expect(wears(label, width).split(' ')).toEqual(expect.arrayContaining(['w-[46px]', 'justify-end', 'pr-1', 'whitespace-nowrap']));
+      const hour = within(region).getByText('07:00');
+      expect(wears(hour, width).split(' ')).toEqual(expect.arrayContaining(['text-right', 'pr-1']));
+      expect(wears(hour.parentElement!, width).split(' ')).toContain('w-[46px]');
+      // From 768px the 56px gutter, as before.
+      expect(wears(hour.parentElement!, 768).split(' ')).toContain('w-14');
+      // Seven columns, no minimum width, nothing scrolling sideways; the grid the screen's full width.
+      expect(within(region).getAllByRole('group')).toHaveLength(7);
+      expect(region.closest('section')!.innerHTML).not.toMatch(/min-w-\[388px\]|overflow-x-auto/);
+      expect(wears(region.closest('section')!, width).split(' ')).toContain('-mx-4');
+    });
+
+    it(`P19.8-T3 AC-6 the brief’s Calendar 3 at ${width}px: Filter opens Melihat alone — My Calendar · Compare with downline, 44px chips — navy while open`, async () => {
+      atWidth(width);
+      show({ ...VIEWS, '/calendar/downline': { body: DOWNLINE } });
+      await agenda();
+      const filters = screen.getByRole('button', { name: 'Filters' });
+      await userEvent.click(filters);
+      expect(filters.className.split(' ')).toEqual(expect.arrayContaining(['bg-secondary', 'text-secondary-contrast']));
+      const panel = document.getElementById(filters.getAttribute('aria-controls')!)!;
+      expect(panel).toHaveAttribute('data-filter-panel');
+      expect(within(panel).getByText('Viewing')).toHaveClass('uppercase');
+      const mine = within(panel).getByText('My Calendar');
+      const compare = within(panel).getByRole('button', { name: 'Compare with downline' });
+      for (const chip of [mine, compare]) expect(chip.className.split(' ')).toEqual(expect.arrayContaining(['min-h-11', 'text-base', 'font-semibold', 'rounded-pill']));
+      expect(mine.querySelector('svg')).not.toBeNull();
+      expect(within(panel).queryByRole('group', { name: 'Type' })).not.toBeInTheDocument();
+      // The chip opens the same list as before.
+      await userEvent.click(compare);
+      expect(await screen.findByRole('textbox', { name: 'Search your downline…' })).toBeInTheDocument();
+    });
+  });
+
+  it('P19.8-T3 AC-2 a tablet is checked the same way: 3 Hari in its own 620px box, the page still, opened an hour before now as before', async () => {
+    atWidth(768);
+    const scrollTo = vi.fn();
+    vi.stubGlobal('scrollTo', scrollTo);
+    show(VIEWS);
+    const box = await three();
+    expect(pageTop()).toBe(0);
+    expect(scrollTo).not.toHaveBeenCalled();
+    expect(box).toHaveAttribute('data-time-grid', 'box');
+    expect(box).not.toHaveAttribute('data-fill');
+    expect(box.className).toContain('max-h-[620px]');
+    expect(box.style.height).toBe('');
+    expect(box.scrollTop).toBe(8 * HOUR_PX);
+  });
+
+  it('P19.8-T3 AC-5 MOB UI-175 no person row on My Calendar in 3 Hari or Week; compared, both draw a person row above each person’s grid', async () => {
+    const indahThree = threeDayRead({
+      subject: { membershipId: 'mem-indah', name: 'Indah Permata', rung: { code: 'AGENT', label: 'Agent' }, phone: null },
+      entries: [entry({ entryId: 'i-1', type: 'task', title: 'Prospecting', organiser: { membershipId: 'mem-indah', name: 'Indah Permata' }, readerIs: 'ancestor', date: '2026-09-29' })],
+    });
+    const stub = show({
+      ...VIEWS,
+      '/calendar/downline': { body: DOWNLINE },
+      [`${THREE_READ}&date=2026-09-28&for=mem-indah`]: { body: indahThree },
+      [`${WEEK_READ}&date=2026-09-28&for=mem-indah`]: { body: weekRead({ subject: indahThree.subject, entries: indahThree.entries }) },
+    });
+    await grid();
+    const groupOf = () => screen.getByRole('group', { name: 'View' });
+    // My Calendar: no *Agus Santoso · AB · You* above either grid.
+    expect(screen.queryByText('AB · You')).not.toBeInTheDocument();
+    await userEvent.click(within(groupOf()).getByRole('button', { name: '3 Days' }));
+    await three();
+    expect(screen.queryByText('AB · You')).not.toBeInTheDocument();
+    // Compared: a pane each, a person row above each grid — in 3 Hari as in Week.
+    await userEvent.click(screen.getByRole('button', { name: '+ Compare with downline' }));
+    await userEvent.click(await screen.findByRole('button', { name: /^Indah Permata/ }));
+    await userEvent.keyboard('{Escape}');
+    for (const view of ['3 Days', 'Week']) {
+      if (view === 'Week') await userEvent.click(within(groupOf()).getByRole('button', { name: 'Week' }));
+      const range = view === 'Week' ? RANGE : '28 – 30 Sep 2026';
+      const mine = await screen.findByRole('region', { name: 'Agus Santoso' });
+      expect(within(mine).getByText('AB · You')).toBeInTheDocument();
+      expect(within(mine).getByRole('region', { name: `Calendar, ${range}` })).toBeInTheDocument();
+      const theirs = await screen.findByRole('region', { name: 'Indah Permata' });
+      expect(within(theirs).getByText('Agent')).toBeInTheDocument();
+      const grid2 = await within(theirs).findByRole('region', { name: `Calendar, Indah Permata, ${range}` });
+      expect(within(grid2).getByRole('button', { name: 'Task: Prospecting, 09:00–09:30' })).toBeInTheDocument();
+      // Their things are theirs: none joins the reader's own columns with an avatar any more.
+      expect(within(mine).queryByRole('button', { name: /Prospecting, 09:00/ })).not.toBeInTheDocument();
+    }
+    expect(calls(stub, `${THREE_READ}&date=2026-09-28&for=mem-indah`)).toHaveLength(1);
+  });
+
+  it('P19.8-T3 AC-5 a phone with somebody compared: the panes stack, each its own 620px box opened at 07:00, the page holding them all', async () => {
+    atWidth(375);
+    show({
+      ...VIEWS,
+      '/calendar/downline': { body: DOWNLINE },
+      [`${AGENDA_READ}&date=2026-09-28&for=mem-indah`]: { body: agendaRead({ subject: { membershipId: 'mem-indah', name: 'Indah Permata', rung: { code: 'AGENT', label: 'Agent' }, phone: null }, entries: [] }) },
+      [`${THREE_READ}&date=2026-09-28&for=mem-indah`]: { body: threeDayRead({ subject: { membershipId: 'mem-indah', name: 'Indah Permata', rung: { code: 'AGENT', label: 'Agent' }, phone: null }, entries: [] }) },
+    });
+    await agenda();
+    await userEvent.click(screen.getByRole('button', { name: 'Filters' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Compare with downline' }));
+    await userEvent.click(await screen.findByRole('button', { name: /^Indah Permata/ }));
+    await userEvent.keyboard('{Escape}');
+    await chooseView('three_days');
+    const mine = await three();
+    const theirs = await screen.findByRole('region', { name: 'Calendar, Indah Permata, 28 – 30 Sep 2026' });
+    for (const box of [mine, theirs]) {
+      expect(box).not.toHaveAttribute('data-fill');
+      expect(box.className).toContain('max-h-[620px]');
+      expect(box.scrollTop).toBe(7 * HOUR_PX);
+    }
+    expect(screen.getByRole('region', { name: 'Agus Santoso' })).toHaveTextContent('AB · You');
+  });
+
+  it('P19.8-T3 AC-6 a tablet keeps Melihat and Jenis in its Filter panel until its mockup (ADR-0226 §4)', async () => {
+    atWidth(768);
+    show({ ...VIEWS, '/calendar/downline': { body: DOWNLINE } });
+    await three();
+    await userEvent.click(screen.getByRole('button', { name: 'Filters' }));
+    const panel = document.getElementById(screen.getByRole('button', { name: 'Filters' }).getAttribute('aria-controls')!)!;
+    expect(within(panel).getByText('Viewing:')).toBeInTheDocument();
+    expect(within(panel).getByRole('button', { name: '+ Compare with downline' })).toBeInTheDocument();
+    expect(within(panel).getByRole('group', { name: 'Type' })).toBeInTheDocument();
+  });
+
+  describe('P19.8-T3 AC-7 MOB UI-169 the detail: red-outline Delete · white Edit · orange Close; Delete asks first', () => {
+    it('P19.8-T3 AC-7 the organiser’s buttons, in the mockup’s order and look', async () => {
+      atWidth(375);
+      show(VIEWS, AGUS, { view: 'week' });
+      await grid();
+      await userEvent.click(standup());
+      const dialog = await screen.findByRole('dialog', { name: 'Weekly unit standup' });
+      const actions = dialog.querySelector<HTMLElement>('[data-detail-actions]')!;
+      const [del, edit, close] = within(actions).getAllByRole('button');
+      expect([del, edit, close].map((b) => b.textContent)).toEqual(['Delete', 'Edit', 'Close']);
+      expect(del.className.split(' ')).toEqual(expect.arrayContaining(['border-alert', 'text-alert', 'bg-transparent']));
+      expect(edit.className.split(' ')).toEqual(expect.arrayContaining(['bg-card', 'text-navy']));
+      expect(close.className.split(' ')).toEqual(expect.arrayContaining(['bg-primary', 'text-primary-contrast']));
+    });
+
+    it('P19.8-T3 AC-7 Delete asks “Delete this event?” over the title and day; Cancel goes back to the detail; Delete, filled red, deletes pinned', async () => {
+      atWidth(360);
+      const stub = show({ ...VIEWS, 'DELETE /calendar/entries/e-standup': { body: { entryId: 'e-standup', deletedAt: '2026-09-28T03:00:00.000Z' } } }, AGUS, { view: 'week' });
+      await grid();
+      await userEvent.click(standup());
+      await userEvent.click(within(await screen.findByRole('dialog', { name: 'Weekly unit standup' })).getByRole('button', { name: 'Delete' }));
+      const question = await screen.findByRole('dialog', { name: 'Delete this event?' });
+      expect(question).toHaveAccessibleDescription('Weekly unit standup · Monday, 28 Sep 2026');
+      expect(within(question).getByText('Delete this event?').className).toContain('font-bold');
+      const [cancel, confirm] = within(question).getAllByRole('button');
+      expect([cancel.textContent, confirm.textContent]).toEqual(['Cancel', 'Delete']);
+      for (const b of [cancel, confirm]) expect(b.className).toContain('flex-1');
+      expect(confirm.className.split(' ')).toEqual(expect.arrayContaining(['bg-alert', 'text-white']));
+      await userEvent.click(cancel);
+      expect(screen.queryByRole('dialog', { name: 'Delete this event?' })).not.toBeInTheDocument();
+      expect(screen.getByRole('dialog', { name: 'Weekly unit standup' })).toBeInTheDocument();
+      expect(calls(stub, '/calendar/entries/e-standup', 'DELETE')).toHaveLength(0);
+      await userEvent.click(within(screen.getByRole('dialog', { name: 'Weekly unit standup' })).getByRole('button', { name: 'Delete' }));
+      await userEvent.click(within(await screen.findByRole('dialog', { name: 'Delete this event?' })).getByRole('button', { name: 'Delete' }));
+      await waitFor(() => expect(calls(stub, '/calendar/entries/e-standup?version=1', 'DELETE')).toHaveLength(1));
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    });
+
+    it('P19.8-T3 AC-7 Edit event’s Delete asks the same question', async () => {
+      show(VIEWS, AGUS, { view: 'week' });
+      await grid();
+      await userEvent.click(standup());
+      await userEvent.click(within(await screen.findByRole('dialog', { name: 'Weekly unit standup' })).getByRole('button', { name: 'Edit' }));
+      const edit = await screen.findByRole('dialog', { name: 'Edit event' });
+      await userEvent.click(within(edit).getByRole('button', { name: 'Delete' }));
+      const question = await screen.findByRole('dialog', { name: 'Delete this event?' });
+      expect(question).toHaveAccessibleDescription('Weekly unit standup · Monday, 28 Sep 2026');
+    });
+
+    it('P19.8-T3 AC-7 nothing to write — a read-only support session, an ancestor — leaves Close alone, orange', async () => {
+      show({ ...VIEWS, [WEEK_READ]: { body: weekRead({ entries: [entry({ readerIs: 'ancestor' })] }) } }, AGUS, { view: 'week' });
+      await grid();
+      await userEvent.click(standup());
+      const actions = (await screen.findByRole('dialog', { name: 'Weekly unit standup' })).querySelector<HTMLElement>('[data-detail-actions]')!;
+      const buttons = within(actions).getAllByRole('button');
+      expect(buttons.map((b) => b.textContent)).toEqual(['Close']);
+      expect(buttons[0].className).toContain('bg-primary');
+    });
+  });
+
+  it('P19.8-T3 AC-8 D-30, D-32 kept on a phone: the Agenda’s grey day bands and today’s orange band, the Tugas checklist, the type colours', async () => {
+    atWidth(360);
+    show(VIEWS);
+    const region = await agenda();
+    const [today, ...rest] = within(region).getAllByRole('heading', { level: 2 });
+    expect(today.className.split(' ')).toEqual(expect.arrayContaining(['bg-today', 'text-today-ink']));
+    for (const band of rest) expect(band.className).toContain('bg-base');
+    expect(within(region).getByRole('region', { name: 'Tasks' }).className).toContain('border-tugas-edge');
+    expect(within(region).getByRole('button', { name: /^Internal meeting: Weekly unit standup/ }).className).toContain('border-navy-soft');
+    // Month changes only in its header controls (the owner's *Still to do*): the toolbar above it is the same row.
+    const row = toolbar();
+    await chooseView('month');
+    await screen.findByText('Sep 2026');
+    expect(toolbar()).toBe(row);
+    expect(buttonsOf(row)).toEqual(['Today', 'Previous month', 'Next month', 'View Month', 'Filters']);
+  });
+
+  it.each([[375], [360]])('P19.8-T3 AC-10 the mockup’s frames at %ipx — the fixed Agenda, the view menu, 3 Hari at the top, Week, Filter, the event’s detail — pass axe', async (width) => {
+    atWidth(width);
+    show({ ...VIEWS, '/calendar/downline': { body: DOWNLINE } });
+    const clean = async (state: string) => {
+      const results = await axe(document.body, { rules: { 'color-contrast': { enabled: false }, region: { enabled: false } } });
+      expect([state, (results.violations ?? []).map((v) => v.id)]).toEqual([state, []]);
+    };
+    await agenda();
+    await clean('the fixed Agenda');
+    await userEvent.click(viewButton());
+    await screen.findByRole('listbox', { name: 'View' });
+    await clean('the view menu open');
+    await userEvent.click(screen.getByRole('option', { name: '3 Days' }));
+    const box = await three();
+    expect(box.scrollTop).toBe(7 * HOUR_PX);
+    expect(pageTop()).toBe(0);
+    await clean('3 Hari at the top');
+    await chooseView('week');
+    await grid();
+    expect(screen.queryByText('AB · You')).not.toBeInTheDocument();
+    await clean('Week');
+    await userEvent.click(screen.getByRole('button', { name: 'Filters' }));
+    await clean('Filter open, Melihat alone');
+    await userEvent.click(screen.getByRole('button', { name: 'Filters' }));
+    await chooseView('agenda');
+    const region = await agenda();
+    await userEvent.click(within(region).getByRole('button', { name: /^Internal meeting: Weekly unit standup/ }));
+    await screen.findByRole('dialog', { name: 'Weekly unit standup' });
+    await clean('the event’s detail');
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    await screen.findByRole('dialog', { name: 'Delete this event?' });
+    await clean('Delete asks first');
+  });
+});
+
+/**
+ * **P19.9-T5 — the owner's requests of 6 November for the Calendar** (R11, R12; ADR-0235, OD-290; parity I-919, I-920):
+ * the Agenda lists every day under its own band, never a merged range; 3 Hari's *Tugas* row is one row whose cells fill
+ * it — today's orange unbroken and no white band — also when none of the three days has a task (the owner's screenshot).
+ * The row's heights are measured in a real browser, `time-grid.browser.spec.ts`; here, what the markup says.
+ */
+describe('P19.9-T5 — Calendar: each Agenda day its own band, 3 Hari’s Tugas row filled', () => {
+  const three = () => screen.findByRole('region', { name: 'Calendar, 28 – 30 Sep 2026' });
+
+  it.each([[375], [768], [1280]])('P19.9-T5 AC-1 at %ipx the Agenda heads each day with its own date — no range band anywhere', async (width) => {
+    atWidth(width);
+    show({ [AGENDA_READ]: { body: agendaRead({ entries: [] }) } }, AGUS, { view: 'agenda' });
+    const region = await screen.findByRole('region', { name: `Calendar, ${RANGE}` });
+    const headings = within(region).getAllByRole('heading', { level: 2 });
+    expect(headings).toHaveLength(7);
+    for (const heading of headings) expect(heading.textContent).not.toContain('–');
+    // Each band its day, each empty day its own *No events*; today's band today's shade.
+    expect([...region.querySelectorAll('[data-day]')].map((d) => d.getAttribute('data-day'))).toEqual([
+      '2026-09-28', '2026-09-29', '2026-09-30', '2026-10-01', '2026-10-02', '2026-10-03', '2026-10-04',
+    ]);
+    expect(headings[0]).toHaveAttribute('aria-current', 'date');
+    expect(headings[0]).toHaveClass('bg-today');
+  });
+
+  it.each([[375], [360]])('P19.9-T5 AC-2 at %ipx 3 Hari with no task on any of its three days: the strip fills the Tugas row, today’s cell shaded, a · in each', async (width) => {
+    atWidth(width);
+    show({ [AGENDA_READ]: { body: agendaRead() }, [THREE_READ]: { body: threeDayRead({ tasks: [] }) } });
+    await screen.findByRole('region', { name: `Calendar, ${RANGE}` });
+    await chooseView('three_days');
+    const head = (await three()).previousElementSibling as HTMLElement;
+    const row = head.querySelector<HTMLElement>('[data-task-row]')!;
+    expect(wears(row, width).split(' ')).toEqual(expect.arrayContaining(['flex', 'h-11']));
+    // The cause (I-920): the paged strip was as tall as its ·; it fills the row now, its transform untouched.
+    const strip = row.querySelector<HTMLElement>('[data-pager-strip]')!;
+    expect(wears(strip, width).split(' ')).toEqual(expect.arrayContaining(['flex', 'h-full', 'w-[300%]']));
+    expect(strip.style.transform).toMatch(/^translateX\(calc\(-100% \/ 3/);
+    const shown = strip.children[1] as HTMLElement;
+    const cells = [...shown.querySelectorAll<HTMLElement>('.place-items-center')];
+    expect(cells).toHaveLength(3);
+    // No task anywhere: no count pill, a · in each, and today's cell — the first — shaded all the same.
+    expect(within(row).queryAllByRole('button')).toEqual([]);
+    for (const cell of cells) expect(cell).toHaveTextContent('·');
+    expect(cells.filter((cell) => wears(cell, width).split(' ').includes('bg-today'))).toEqual([cells[0]]);
   });
 });

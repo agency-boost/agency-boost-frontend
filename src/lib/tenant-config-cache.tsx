@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from './api-client';
+import { hasNoKpm } from './no-kpm';
 import { SessionContext } from './session';
 import type {
   ActivityCategoryRow, LeadPipelineRow, RatioRow, TrainingCategoryRow,
@@ -125,7 +126,7 @@ export function TenantConfigProvider({ children }: { children: React.ReactNode }
      * every screen is drawn from, so fetching it per screen would be the thing this
      * provider exists to prevent. It changes about once a year.
      *
-     * **Each read settles on its own** (P18.95-T5 AC-3; the client's UI review, UI-030: Log Activity's
+     * **Each read settles on its own** (P18.7-T5 AC-3; the client's UI review, UI-030: Log Activity's
      * skeleton still up after 2 s). They were one `Promise.all`, so `loading` — which only the screens
      * that need the *configuration* read — waited for the ladder as well, which neither of them draws, and
      * a ladder that failed threw a configuration that had arrived away with it. Now `loading` clears when
@@ -169,7 +170,12 @@ export function TenantConfigProvider({ children }: { children: React.ReactNode }
   const session = useContext(SessionContext);
   const settled = session === null || !session.loading;
   const signedIn = session === null || session.me !== null;
-  const ready = settled && signedIn;
+  /*
+   * **Nor for somebody in no office** (P19-T4 AC-4; ADR-0189 §5): `/kpm/config` and `/kpm/org-levels` are an office's,
+   * and a person who has joined none would only draw two refusals on every page. They read the seeded ladder meanwhile.
+   */
+  const inOffice = session === null || !hasNoKpm(session.me);
+  const ready = settled && signedIn && inOffice;
 
   useEffect(() => {
     if (ready) void refresh();

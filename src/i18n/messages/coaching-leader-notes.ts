@@ -2,15 +2,15 @@ import { defineMessages, type MessagesOf } from '@/i18n/catalogue';
 import { kept } from '@/i18n/kept';
 
 /**
- * **A coachee's *🔒 Leader Notes* tab** (P18.98-T4, coaching and unit; `functional/coaching.md`, *Leader Notes*, *The
+ * **A coachee's *🔒 Leader Notes* tab** (P18.10-T4, coaching and unit; `functional/coaching.md`, *Leader Notes*, *The
  * module's own strings*): the *Capability mapping* ladder, the *Skill tracker*, the leader's *Personal notes* and those
  * somebody below them wrote — their states, their saves and their refusals.
  *
  * **English is the source**: the prototype's words (`Overall.html:4344-4382`, `:11189-11282`) and ours (L-01). The
  * Indonesian is the approved glossary's (OD-237; §B.0), with the settings' own words for the same things —
  * *tahap* for a stage, *grid skill*, *Diarsipkan* (§B.3) — and *Catatan pribadi* for approval in §B.10. **UI V1
- * (Phase 18.99 T10):** *Skill tracker* kept English at every size (UI-006, UI-036; was *Pelacak skill*), *Tidak berlaku*
- * the report's (UI-036), and the tile's button name proposed in §B.10 (*UI V1, Phase 18.99 T10*). **Kept** (§A): *Capability mapping*, the module's name as §A.1's *Capability Mapping* (its sentence-case card
+ * (Phase 18.11 T10):** *Skill tracker* kept English at every size (UI-006, UI-036; was *Pelacak skill*), *Tidak berlaku*
+ * the report's (UI-036), and the tile's button name proposed in §B.10 (*UI V1, Phase 18.11 T10*). **Kept** (§A): *Capability mapping*, the module's name as §A.1's *Capability Mapping* (its sentence-case card
  * title, for approval), *leader*, *skill*; *office* is *KPM* (§B.9) in the one sentence that says it. **Content stays as
  * typed** (ADR-0179 §5): a stage's, a milestone's, a grid's and an item's label, a note, an author's name.
  *

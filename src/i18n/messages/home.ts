@@ -2,14 +2,18 @@ import { defineMessages, type MessagesOf } from '@/i18n/catalogue';
 import { kept } from '@/i18n/kept';
 
 /**
- * **Home** — `/home` (UI V1, 2026-10-30, Phase 18.99 T11; UI-100, UI-101; `functional/home.md`): the greeting, the
+ * **Home** — `/home` (UI V1, 2026-10-30, Phase 18.11 T11; UI-100, UI-101; `functional/home.md`): the greeting, the
  * tiles, *Aksi hari ini*, *Laporan tim*, the 7-day chart and the WhatsApp reminder.
+ *
+ * *Changed 2026-11-07 (P19.8-T2; ADR-0228; MOB UI-163 to UI-170):* *Tim saya* is gone with its words; the button row
+ * (*Buat proposal* is the proposal catalogue's, *Tambah user* here), *Leads*, *New hires*, the month chip of *Active
+ * Agent*, *Laporan aktivitas tim* and *Tambah agent pertama →* are the 7 November revision's, word for word.
  *
  * **The Indonesian is the report's** where it gives the words (O-12: *Home's labels as given*) — *Pagi, AGUS*,
  * *Aktivitas saya*, *Jadwal hari ini*, *Aksi hari ini*, *Laporan tim*, *Coaching 7 hari*, *Kemarin*, *Tugas*, *meeting*,
  * *Kmrn*, *Hari ini*, *Semua*, *Dari:*, *Aktivitas 7 hari terakhir*, *Belum ada aktivitas 7 hari terakhir*, *+ Log* and
  * the reminder, word for word (Appendix A, UI-100, UI-101). The rest — *Siang*, *Sore*, *Malam*, the names a screen
- * reader hears — is proposed in the glossary's §B.10 (*Phase 18.99 T11*). *Active Agent {Bulan}* and *dari 12* are the
+ * reader hears — is proposed in the glossary's §B.10 (*Phase 18.11 T11*). *Active Agent {Bulan}* and *dari 12* are the
  * Unit Dashboard's own words (`unit-dashboard.ts`), read from there so the two tiles never differ. **Kept** (§A):
  * *Coaching*, *Unit*, *Group*, *Home*.
  *
@@ -47,6 +51,16 @@ const en = {
     /** The chip: *Tugas 3*. */
     tasks: 'Tasks',
     coached: `${kept('Coaching')} 7 days`,
+    /** *Leads* (P19.8-T2 AC-4; P19.9-T1 AC-5): every open lead the reader owns, as `/leads` opens on. A product word, kept. */
+    leads: kept('Leads'),
+    /** *New hires* (P19.8-T2 AC-4): the Group's new hires before a first sale. */
+    newHires: kept('New hires'),
+    /** *Active Agent* on a phone, its month a chip beside it (MOB UI-167). */
+    activeAgent: kept('Active Agent'),
+  },
+  /** The button row above the tiles (P19.8-T2 AC-3; MOB UI-164, OD-277). *Buat proposal* is the proposal catalogue's. */
+  buttons: {
+    addUser: 'Add user',
   },
   actions: {
     heading: 'Today’s actions',
@@ -58,7 +72,8 @@ const en = {
     typeOn: ({ type, day }: { type: string; day: string }) => `${type} · ${day}`,
   },
   team: {
-    heading: 'Team report',
+    /** *Laporan aktivitas tim* at every size (MOB UI-165, the owner's copy change). */
+    heading: 'Team activity report',
     /** The *Unit | Group* pill, for a screen reader. */
     scopeLabel: `${kept('Unit')} or ${kept('Group')}`,
     unit: kept('Unit'),
@@ -68,9 +83,14 @@ const en = {
     yesterdayLong: 'Yesterday',
     today: 'Today',
     all: 'All',
-    allLabel: ({ n }: { n: number }) => `Show all ${n}`,
-    /** A scope with nobody in it: an AB's *Unit* when every agent of theirs leads a unit. */
-    empty: 'Nobody in this scope yet.',
+    /** *Semua ›*: the rest of the scope, opened in place (P19.9-T2 AC-1; ADR-0235, OD-278 option 3). */
+    allLabel: ({ n }: { n: number }) => `All ${n} people`,
+    /** The same button once open: back to five. */
+    fewer: 'Show fewer',
+    /** A day with no report: the grey ✕'s name (MOB UI-165). */
+    notReported: 'Not reported',
+    /** A scope with nobody in it: the card's one line (MOB UI-166, ADR-0228 §6), to New Hires. */
+    firstAgent: 'Add your first agent →',
     /**
      * **The WhatsApp reminder** (UI-101), typed into WhatsApp for the person: `both` when they reported neither day
      * (*hari ini* → *kemarin & hari ini*). `link` opens today's Log Activity; `leader` is the reader's first name.
@@ -116,6 +136,12 @@ const id: MessagesOf<typeof en> = {
     meetings: () => 'meeting',
     tasks: 'Tugas',
     coached: `${kept('Coaching')} 7 hari`,
+    leads: kept('Leads'),
+    newHires: kept('New hires'),
+    activeAgent: kept('Active Agent'),
+  },
+  buttons: {
+    addUser: 'Tambah user',
   },
   actions: {
     heading: 'Aksi hari ini',
@@ -125,7 +151,7 @@ const id: MessagesOf<typeof en> = {
     typeOn: ({ type, day }) => `${type} · ${day}`,
   },
   team: {
-    heading: 'Laporan tim',
+    heading: 'Laporan aktivitas tim',
     scopeLabel: `${kept('Unit')} atau ${kept('Group')}`,
     unit: kept('Unit'),
     group: kept('Group'),
@@ -133,8 +159,10 @@ const id: MessagesOf<typeof en> = {
     yesterdayLong: 'Kemarin',
     today: 'Hari ini',
     all: 'Semua',
-    allLabel: ({ n }) => `Tampilkan semua ${n}`,
-    empty: 'Belum ada orang di sini.',
+    allLabel: ({ n }) => `Semua ${n} orang`,
+    fewer: 'Lebih sedikit',
+    notReported: 'Belum lapor',
+    firstAgent: 'Tambah agent pertama →',
     reminder: ({ name, both, link, leader }) =>
       `Halo ${name} 👋 Aktivitas ${both ? 'kemarin & hari ini' : 'hari ini'} belum diisi. Yuk lapor, 1 menit: ${link} – ${leader}`,
   },

@@ -4,7 +4,7 @@ import { cn } from '@/lib/cn';
 
 /**
  * **A question's chips on a phone** (UI V1, UI-107; `attack-plan-mobile` 1 and 2; Mobile only): pill chips that wrap,
- * 38px to the eye and 6px apart — where they were two to a 44px row since P18.95-T6 — on the warm row ground, the chosen
+ * 38px to the eye and 6px apart — where they were two to a 44px row since P18.7-T6 — on the warm row ground, the chosen
  * one navy. Each takes a 44px tap (UI-010) through an invisible area 3px above and below it, which reaches the next
  * row's and no further. From 768px the chips are as drawn before.
  */
@@ -53,7 +53,7 @@ export interface ChoiceOption<T extends string | number> {
  * identical buttons (contradiction 12). Here the group is named by its question and each chip says
  * whether it is chosen (`aria-pressed`); choosing one releases the others.
  *
- * **Below 768px the chips are pills that wrap** (UI V1, UI-107; `PLAN_CHIP_PHONE`), where P18.95-T6 had them two to a
+ * **Below 768px the chips are pills that wrap** (UI V1, UI-107; `PLAN_CHIP_PHONE`), where P18.7-T6 had them two to a
  * row; the label is in sentence case. At 768px and wider they wrap as drawn.
  */
 export function ChoiceGroup<T extends string | number>({
@@ -84,7 +84,7 @@ export function ChoiceGroup<T extends string | number>({
               className={cn(
                 'rounded-md border px-[15px] py-[9px] text-base font-semibold transition-colors',
                 PLAN_CHIP_PHONE,
-                on ? 'border-navy bg-navy text-white' : cn('border-hairline bg-base text-navy hover:border-navy', PLAN_CHIP_OFF_PHONE),
+                on ? 'border-secondary bg-secondary text-secondary-contrast' : cn('border-hairline bg-base text-navy hover:border-secondary', PLAN_CHIP_OFF_PHONE),
               )}
             >
               {option.label}

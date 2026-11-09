@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useState, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
+import { Avatar } from './avatar';
 import { useMessages } from '@/i18n/language-provider';
 import { uiV1Messages } from '@/i18n/messages/ui-v1';
 import { cn } from '@/lib/cn';
@@ -12,81 +13,8 @@ import { LineIcon } from './line-icon';
  * Dashboard's roster, the Coaching list, New Hires, User Management and Home's team list.
  */
 
-/** Two letters for an avatar: the first of the first and of the last name (*AP* for *Agus Prasetyo*). */
-export function initialsFor(name: string): string {
-  const words = name.trim().split(/\s+/).filter(Boolean);
-  if (words.length === 0) return '?';
-  const last = words.length > 1 ? words[words.length - 1][0] : '';
-  return (words[0][0] + last).toUpperCase();
-}
-
-/**
- * **A soft tint that varies per person** (UI-059: *initials on a soft tint varying per person*), the same one every
- * time for the same person: picked by a hash of `seed` (their membership id, or their name). Six tints, each with
- * words on it above 4.5:1. Never a role's colour: a role is a pill's words (D-27).
- */
-const TINTS = [
-  'bg-amber/20 text-amber-ink',
-  'bg-lavender/20 text-navy',
-  'bg-pill-green text-pill-green-ink',
-  'bg-pill-blue text-pill-blue-ink',
-  'bg-pill-amber text-pill-amber-ink',
-  'bg-teal/15 text-teal-ink',
-] as const;
-
-export function tintFor(seed: string): string {
-  let hash = 0;
-  for (const ch of seed) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
-  return TINTS[hash % TINTS.length];
-}
-
-/** The smallest initials an avatar draws, in px: the type scale's floor (UI-008). */
-export const AVATAR_MIN_TEXT_PX = 12;
-
-/**
- * **An avatar: the photo when there is one, else initials on a tint** (UI-059). A photo that fails to load falls back to
- * the initials rather than a broken image. Decorative — the name is always beside it — so it is hidden from assistive
- * technology.
- */
-export function Avatar({
-  name,
-  photoUrl,
-  seed,
-  size = 36,
-  className,
-}: {
-  name: string;
-  photoUrl?: string | null;
-  /** What picks the tint; the name when absent. */
-  seed?: string;
-  /** In px: 28 (an upline), 32, 36, 40, 44. */
-  size?: number;
-  className?: string;
-}) {
-  const [broken, setBroken] = useState(false);
-  const box = cn('inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full font-bold', className);
-  // Initials at about a third of the circle, never under 12px (UI-008: *nothing under 12px, at any width*; T16).
-  const style = { width: size, height: size, fontSize: Math.max(AVATAR_MIN_TEXT_PX, Math.round(size * 0.36)) };
-  if (photoUrl && !broken) {
-    return (
-      // A member's photo is a user upload served from storage: `next/image` would need its host configured.
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={photoUrl}
-        alt=""
-        aria-hidden="true"
-        className={cn(box, 'object-cover')}
-        style={style}
-        onError={() => setBroken(true)}
-      />
-    );
-  }
-  return (
-    <span aria-hidden="true" className={cn(box, tintFor(seed ?? name))} style={style}>
-      {initialsFor(name)}
-    </span>
-  );
-}
+/** The avatar and its two helpers live in `avatar.tsx`, which a page draws without a person row (the bundle). */
+export { AVATAR_MIN_TEXT_PX, Avatar, initialsFor, tintFor } from './avatar';
 
 /** How a row is drawn (UI-059). */
 export type PersonRowTone = 'default' | 'self' | 'tinted' | 'muted';
@@ -95,16 +23,16 @@ const TONE: Record<PersonRowTone, string> = {
   // An agent: white; the desktop's row under the pointer.
   default: 'bg-card lg:hover:bg-hover-row',
   // The reader's own row: navy, white name.
-  self: 'bg-navy text-white lg:hover:bg-navy-soft',
+  self: 'bg-secondary text-secondary-contrast lg:hover:bg-secondary-hover',
   // An AAB's row: the accent's tint (`#FDF1E6`).
-  tinted: 'bg-amber/[0.12] lg:hover:bg-amber/20',
+  tinted: 'bg-primary/[0.12] lg:hover:bg-primary/20',
   // The upline: no fill, a 1px outline, grey words — and never a link.
   muted: 'border border-line bg-transparent text-muted',
 };
 
 const META: Record<PersonRowTone, string> = {
   default: 'text-muted',
-  self: 'text-on-navy-muted',
+  self: 'text-secondary-muted',
   tinted: 'text-muted',
   muted: 'text-muted',
 };
@@ -121,8 +49,10 @@ const HEIGHT = { 48: 'min-h-12', 56: 'min-h-14', 60: 'min-h-[3.75rem]', 64: 'min
  *   controls in `trailing` — WhatsApp, a role pill, a ⌄ — stay their own targets, above it, never inside a link.
  * - **The focus ring is the row's**, drawn when the name has the keyboard's focus.
  * - **`chevron`** draws the › of a tappable row (D-09); the Group Tree, the owner's exception (UI-072), leaves it off.
- * - **Names** in capitals, 15px/700 on a phone, 16px on a tablet, 14px on a desktop, one line, *…* only when they cannot
- *   fit (UI-059). A caller with another size passes `nameClassName`.
+ * - **Names** in capitals, 700: 13px on a phone and a tablet, 14px on a desktop (UI-059; P19.8-T1 AC-4, MOB UI-168: it
+ *   was 15px on a phone). **On a phone a name is never cut** — it wraps to a second line and the row grows (P19.8-T1
+ *   AC-5; R6, MOB UI-165, MOB UI-178); from 768px it stays on one line, *…* only when it cannot fit. A caller with another
+ *   size passes `nameClassName`, which stands at every width (13 to 14px on a phone).
  */
 export function PersonRow({
   name,
@@ -131,6 +61,7 @@ export function PersonRow({
   meta,
   trailing,
   badge,
+  tag,
   href,
   onSelect,
   chevron = false,
@@ -151,9 +82,15 @@ export function PersonRow({
   trailing?: ReactNode;
   /**
    * Beside the name, on its line, never cut short — the Group Tree's *Anda* on the reader's own row (UI-059, UI-075;
-   * added by Phase 18.99 T9). The name gives way with *…* first.
+   * added by Phase 18.11 T9). The name gives way with *…* first.
    */
   badge?: ReactNode;
+  /**
+   * **Before the name, inline** — the Unit roster's level tag (`RungTag`; P19.9-T4 AC-1, ADR-0235), as *Potensi* draws
+   * it: the name wraps after it on a phone, as words do. Outside the row's target, so the row is still named by the
+   * person's name alone; the tag is read just before it.
+   */
+  tag?: ReactNode;
   href?: string;
   onSelect?: () => void;
   /** The › of a tappable row (D-09). */
@@ -163,7 +100,7 @@ export function PersonRow({
   avatarSize?: number;
   /**
    * In the avatar's place — New Hires' status circle (UI-024: *✓ Teraktivasi, amber ✓ after day 90, empty when not
-   * yet*; added by Phase 18.99 T6). Decorative or labelled by the caller; the avatar when absent.
+   * yet*; added by Phase 18.11 T6). Decorative or labelled by the caller; the avatar when absent.
    */
   lead?: ReactNode;
   nameClassName?: string;
@@ -171,18 +108,30 @@ export function PersonRow({
 }) {
   const live = tone !== 'muted' && (href !== undefined || onSelect !== undefined);
   const nameClass = cn(
-    'block truncate font-bold uppercase tracking-[0.2px]',
-    tone === 'muted' ? 'text-sm' : 'text-[0.9375rem] md:max-lg:text-base lg:text-md',
-    tone === 'self' ? 'text-white' : tone === 'muted' ? 'text-muted' : 'text-ink',
+    // **Never cut on a phone** (P19.8-T1 AC-5; R6, MOB UI-165, MOB UI-178): below 768px the name wraps to a second line
+    // and the row grows, rather than ending in *…*. From 768px it keeps its one line, as the tablet and laptop layouts do.
+    'block truncate font-bold uppercase tracking-[0.2px] max-md:whitespace-normal max-md:break-words',
+    /*
+     * 13px on a phone (P19.8-T1 AC-4; MOB UI-168: *list names 13–14px*; the mockups' rosters at 13px), where it was the
+     * bare 15px — **unless the caller names its own size**, which stands at every width as before. The bare class stays
+     * in the list, worn at no width without a caller's size, so that from 768px — which MOB UI-168 does not reach — the
+     * markup is the baseline's to the byte (`digestAt`).
+     */
+    tone === 'muted' ? 'text-sm' : cn('text-[0.9375rem] md:max-lg:text-base lg:text-md', !nameClassName && 'max-md:text-base'),
+    tone === 'self' ? 'text-secondary-contrast' : tone === 'muted' ? 'text-muted' : 'text-ink',
     nameClassName,
   );
   // The target covers the row; the trailing controls sit above it.
   const stretch = 'text-left after:absolute after:inset-0 after:rounded-row after:content-[""] focus-visible:outline-none';
-  const target = live
+  // With a tag the name's line is a block holding the tag and the target inline, the target only the name (P19.9-T4).
+  const tagged = tag !== undefined && tag !== null;
+  const own = tagged ? undefined : nameClass;
+  const linked = live
     ? href !== undefined
-      ? <Link href={href} data-row-main="" className={cn(nameClass, stretch)}>{name}</Link>
-      : <button type="button" data-row-main="" onClick={onSelect} className={cn(nameClass, stretch, 'w-full')}>{name}</button>
-    : <span className={nameClass}>{name}</span>;
+      ? <Link href={href} data-row-main="" className={cn(own, stretch)}>{name}</Link>
+      : <button type="button" data-row-main="" onClick={onSelect} className={cn(own, stretch, !tagged && 'w-full')}>{name}</button>
+    : <span className={own}>{name}</span>;
+  const target = tagged ? <div className={nameClass}>{tag}{linked}</div> : linked;
 
   return (
     <div
@@ -192,7 +141,7 @@ export function PersonRow({
         'relative flex items-center gap-3 rounded-row px-3 py-2',
         HEIGHT[tone === 'muted' ? 48 : height],
         TONE[tone],
-        live && 'cursor-pointer has-[[data-row-main]:focus-visible]:outline has-[[data-row-main]:focus-visible]:outline-2 has-[[data-row-main]:focus-visible]:outline-offset-1 has-[[data-row-main]:focus-visible]:outline-amber',
+        live && 'cursor-pointer has-[[data-row-main]:focus-visible]:outline has-[[data-row-main]:focus-visible]:outline-2 has-[[data-row-main]:focus-visible]:outline-offset-1 has-[[data-row-main]:focus-visible]:outline-primary',
         className,
       )}
     >
@@ -219,7 +168,7 @@ export function PersonRow({
       {chevron && live && (
         <LineIcon
           name="chevronRight"
-          className={cn('h-5 w-5', tone === 'self' ? 'text-on-navy-muted' : 'text-signal-grey')}
+          className={cn('h-5 w-5', tone === 'self' ? 'text-secondary-muted' : 'text-signal-grey')}
         />
       )}
     </div>
@@ -257,7 +206,7 @@ export function TreeToggle({
       onClick={onToggle}
       className={cn(
         'relative z-[1] -mr-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-pill md:max-lg:h-12 md:max-lg:w-12 lg:h-8 lg:w-8',
-        onNavy ? 'text-on-navy-muted hover:bg-white/10' : 'text-signal-grey hover:bg-hover-row',
+        onNavy ? 'text-secondary-muted hover:bg-secondary-contrast/10' : 'text-signal-grey hover:bg-hover-row',
       )}
     >
       <LineIcon name={open ? 'chevronUp' : 'chevronDown'} className="h-5 w-5" />

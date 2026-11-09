@@ -8,7 +8,7 @@ import { campaignsMessages } from '@/i18n/messages/campaigns';
 
 /**
  * **Campaigns** (`/campaigns`, and its dialog at `/campaigns/[campaignCode]`; `Overall.html:3664-3702`, title
- * `:10411`; P18.5-T7).
+ * `:10411`; P18.2-T7).
  *
  * **A layout, so the list is mounted once** for both addresses: opening a campaign pushes the dialog's
  * address over the list and Back closes it, the list where it was (P14's D-urls). The pages beneath are

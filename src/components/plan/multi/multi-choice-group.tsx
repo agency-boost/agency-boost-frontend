@@ -17,7 +17,7 @@ import {
  * **The answer is in the chips' order, not the order clicked** (`:521`): `onChange` is handed the chosen
  * values as `options` lists them. Props only — every word comes in.
  *
- * **Below 768px the chips are two to a row**, as `ChoiceGroup`'s are (P18.95-T6 AC-1; UI-015); at 768px and
+ * **Below 768px the chips are two to a row**, as `ChoiceGroup`'s are (P18.7-T6 AC-1; UI-015); at 768px and
  * wider they wrap as drawn.
  */
 export function MultiChoiceGroup<T extends string | number>({
@@ -55,7 +55,7 @@ export function MultiChoiceGroup<T extends string | number>({
               className={cn(
                 'rounded-md border px-[15px] py-[9px] text-base font-semibold transition-colors',
                 PLAN_CHIP_PHONE,
-                on ? 'border-navy bg-navy text-white' : cn('border-hairline bg-base text-navy hover:border-navy', PLAN_CHIP_OFF_PHONE),
+                on ? 'border-secondary bg-secondary text-secondary-contrast' : cn('border-hairline bg-base text-navy hover:border-secondary', PLAN_CHIP_OFF_PHONE),
               )}
             >
               {option.label}

@@ -2,6 +2,7 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { atWidth, digestAt, makeMe, renderWithSession, stubFetch, wears, type StubReply } from '@test/harness';
+import { smallTargets } from '@test/touch-audit';
 import LeadStatusesPage from './page';
 
 vi.mock('next/navigation', () => ({
@@ -209,7 +210,7 @@ describe('the office lead pipelines (P4-T3)', () => {
       expect(screen.queryByRole('switch')).toBeNull();
     });
 
-    describe('P18.95-T1 AC-5 — the switch says it is saved, beside it', () => {
+    describe('P18.7-T1 AC-5 — the switch says it is saved, beside it', () => {
       /** The save confirmation in the switch's own row: the nearest ancestor with a status for a child. */
       const besides = (el: HTMLElement) => {
         for (let box = el.parentElement; box; box = box.parentElement) {
@@ -229,7 +230,7 @@ describe('the office lead pipelines (P4-T3)', () => {
       const sends = (stub: ReturnType<typeof stubFetch>) =>
         stub.calls.filter((c) => c.url.includes('/s0/late-stage')).map((c) => JSON.parse(String(c.init.body)));
 
-      it('P18.95-T1 AC-5: says Saved ✓ beside the switch once it is kept, and beside no other', async () => {
+      it('P18.7-T1 AC-5: says Saved ✓ beside the switch once it is kept, and beside no other', async () => {
         stubFetch({
           '/kpm/settings/lead-statuses': [{ body: withLate }, { body: lateOn }],
           '/kpm/settings/publish-state': PUBLISHED,
@@ -248,7 +249,7 @@ describe('the office lead pipelines (P4-T3)', () => {
         expect(screen.getAllByText('Saved ✓')).toHaveLength(1);
       });
 
-      it('P18.95-T1 AC-5: a refused switch says Couldn’t save — retry, and the retry sends the same value again', async () => {
+      it('P18.7-T1 AC-5: a refused switch says Couldn’t save — retry, and the retry sends the same value again', async () => {
         const stub = stubFetch({
           '/kpm/settings/lead-statuses': [{ body: withLate }, { body: lateOn }],
           '/kpm/settings/publish-state': PUBLISHED,
@@ -361,12 +362,12 @@ describe('the office lead pipelines (P4-T3)', () => {
 });
 
 /**
- * **A stage's controls on a phone** (P18.97-T7 AC-3, ADR-0178 §5; the client's KPM Owner review of 2026-10-27,
+ * **A stage's controls on a phone** (P18.9-T7 AC-3, ADR-0178 §5; the client's KPM Owner review of 2026-10-27,
  * UI-035: each row's *Edit · Expected to close · Make this close the pipeline · Archive* reached 449px on a 375px
  * screen, and the page scrolled sideways). Below 768px the three actions sit behind one ⋮ and the switch has a line of
  * its own; at 768px and wider the row is as it was — the client's *Don't change* for a desktop.
  */
-describe('P18.97-T7 AC-3 a stage’s controls on a phone (UI-035)', () => {
+describe('P18.9-T7 AC-3 a stage’s controls on a phone (UI-035)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   const LADDER = [
@@ -382,20 +383,22 @@ describe('P18.97-T7 AC-3 a stage’s controls on a phone (UI-035)', () => {
     PIPELINES[1],
   ];
 
-  /** The ladder's markup on the build before P18.97-T7, archived stages hidden and shown, from this fixture on 2026-10-28. */
+  /** The ladder's markup on the build before P18.9-T7, archived stages hidden and shown, from this fixture on 2026-10-28. */
   const BEFORE_T7: Record<'active' | 'archived', Record<768 | 1280, string>> = {
     active: {
       // Re-recorded 2026-10-30 (UI V1): UI-008's card edge (`border-card-edge`) and UI-010's 44px/48px targets below 1024px.
-      768: '357eded24416d089de470529ea0ee3fbfb1117458d3bcc7cc1f50ad4374307b2',
+      // Re-recorded 2026-11-05 (P19.2-T3 AC-4; UI-142): the ⠿ and the *Expected to close* switch 44px on a tablet; 1280
+      // unchanged (ADR-0178 §6: lead statuses on a laptop).
+      768: '074110b490baca1f9b46cf28d8f38aa8cc676266af887ddaa4ec78d312e413fb',
       1280: '357eded24416d089de470529ea0ee3fbfb1117458d3bcc7cc1f50ad4374307b2',
     },
     archived: {
-      768: '321834a3ae96938b11f18ef3be826453cea26082eee752b2f41b430ad8a2e45e',
+      768: '3ed8f9602f42603c56d818c4fb7ce9cf549fd39d7f793ca06608e9a6071b8019',
       1280: '321834a3ae96938b11f18ef3be826453cea26082eee752b2f41b430ad8a2e45e',
     },
   };
 
-  it.each([768, 1280] as const)('P18.97-T7 AC-3 at %ipx draws every stage as it was, to the byte', async (px) => {
+  it.each([768, 1280] as const)('P18.9-T7 AC-3 at %ipx draws every stage as it was, to the byte', async (px) => {
     atWidth(px);
     stubFetch({ '/kpm/settings/lead-statuses': { body: LADDER } });
     const { container } = renderWithSession(<LeadStatusesPage />, { me: OWNER });
@@ -416,7 +419,7 @@ describe('P18.97-T7 AC-3 a stage’s controls on a phone (UI-035)', () => {
   const menuOf = (label: string) => screen.getByRole('button', { name: `Actions for ${label}` });
   const items = () => screen.getAllByRole('menuitem').map((item) => item.textContent);
 
-  it.each([375, 767])('P18.97-T7 AC-3 at %ipx puts a stage’s three actions behind one ⋮ and its switch on a line of its own', async (px) => {
+  it.each([375, 767])('P18.9-T7 AC-3 at %ipx puts a stage’s three actions behind one ⋮ and its switch on a line of its own', async (px) => {
     onAPhone(px);
     await screen.findByText('Paid and issued');
     const follow = rowOf('Follow-up');
@@ -425,7 +428,7 @@ describe('P18.97-T7 AC-3 a stage’s controls on a phone (UI-035)', () => {
       expect(within(follow).queryByRole('button', { name })).not.toBeInTheDocument();
     }
     await userEvent.click(within(follow).getByRole('button', { name: 'Actions for Follow-up' }));
-    // The ⠿'s two moves first since P18.97-T8 F3 (below), then the row's three.
+    // The ⠿'s two moves first since P18.9-T8 F3 (below), then the row's three.
     expect(items()).toEqual(['Move up', 'Move down', 'Edit', 'Make this close the pipeline', 'Archive']);
     await userEvent.keyboard('{Escape}');
     expect(menuOf('Follow-up')).toHaveFocus();
@@ -440,7 +443,7 @@ describe('P18.97-T7 AC-3 a stage’s controls on a phone (UI-035)', () => {
     expect(wears(toggle.parentElement!.parentElement!, px).split(' ')).toContain('min-h-11');
   });
 
-  it('P18.97-T7 AC-3 offers the stage that closes the pipeline Edit, and Archive held with its reason, and no switch', async () => {
+  it('P18.9-T7 AC-3 offers the stage that closes the pipeline Edit, and Archive held with its reason, and no switch', async () => {
     onAPhone();
     await screen.findByText('Paid and issued');
     const paid = rowOf('Paid and issued');
@@ -452,7 +455,7 @@ describe('P18.97-T7 AC-3 a stage’s controls on a phone (UI-035)', () => {
     expect(archive).toHaveAccessibleDescription('Make another stage close the pipeline first.');
   });
 
-  it('P18.97-T7 AC-3 makes a stage close the pipeline and archives one from the menu, through the routes the row uses', async () => {
+  it('P18.9-T7 AC-3 makes a stage close the pipeline and archives one from the menu, through the routes the row uses', async () => {
     const { calls } = onAPhone(375, {
       'POST /kpm/settings/lead-statuses/s1/terminal': { body: LADDER[0] },
       'DELETE /kpm/settings/lead-statuses/s0': { body: stage({ id: 's0', status: 'archived' }) },
@@ -466,7 +469,7 @@ describe('P18.97-T7 AC-3 a stage’s controls on a phone (UI-035)', () => {
     await waitFor(() => expect(calls.some((c) => c.url.endsWith('/kpm/settings/lead-statuses/s0') && c.init.method === 'DELETE')).toBe(true));
   });
 
-  it('P18.97-T7 AC-3 opens Edit from the menu on the label’s field, and gives the ⋮ the focus back when it closes', async () => {
+  it('P18.9-T7 AC-3 opens Edit from the menu on the label’s field, and gives the ⋮ the focus back when it closes', async () => {
     onAPhone();
     await screen.findByText('Paid and issued');
     await userEvent.click(menuOf('Follow-up'));
@@ -478,7 +481,7 @@ describe('P18.97-T7 AC-3 a stage’s controls on a phone (UI-035)', () => {
     await waitFor(() => expect(menuOf('Follow-up')).toHaveFocus());
   });
 
-  it('P18.97-T7 AC-3 restores an archived stage from its menu', async () => {
+  it('P18.9-T7 AC-3 restores an archived stage from its menu', async () => {
     const { calls } = onAPhone(375, { 'POST /kpm/settings/lead-statuses/s3/restore': { body: stage({ id: 's3' }) } });
     await screen.findByText('Paid and issued');
     await userEvent.click(screen.getByRole('checkbox', { name: 'Show archived' }));
@@ -488,7 +491,7 @@ describe('P18.97-T7 AC-3 a stage’s controls on a phone (UI-035)', () => {
     await waitFor(() => expect(calls.some((c) => c.url.endsWith('/s3/restore'))).toBe(true));
   });
 
-  it('P18.97-T7 AC-3 at 768px keeps the row’s own words and no ⋮', async () => {
+  it('P18.9-T7 AC-3 at 768px keeps the row’s own words and no ⋮', async () => {
     atWidth(768);
     stubFetch({ '/kpm/settings/lead-statuses': { body: LADDER } });
     renderWithSession(<LeadStatusesPage />, { me: OWNER });
@@ -499,12 +502,12 @@ describe('P18.97-T7 AC-3 a stage’s controls on a phone (UI-035)', () => {
 });
 
 /**
- * **A phone moves a stage from its ⋮** (P18.97-T8 F3, parity F-257; ADR-0178 §5's ↑ and ↓ for a list reordered by
+ * **A phone moves a stage from its ⋮** (P18.9-T8 F3, parity F-257; ADR-0178 §5's ↑ and ↓ for a list reordered by
  * drag). The production build's walk found the ⠿ all a phone had: a drag never starts on a touch screen, its ↑ ↓ keys
  * need a keyboard, and it is 10 × 20px. Below 768px a stage's ⋮ offers *Move up* and *Move down* — `ReorderArrows`'
  * words — through the reorder call the ⠿ makes; from 768px the row is as it was (T7's digests above).
  */
-describe('P18.97-T8 F3 a stage moves from its ⋮ on a phone', () => {
+describe('P18.9-T8 F3 a stage moves from its ⋮ on a phone', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   const LADDER = [
@@ -542,7 +545,7 @@ describe('P18.97-T8 F3 a stage moves from its ⋮ on a phone', () => {
   const items = () => screen.getAllByRole('menuitem').map((it) => it.textContent);
   const held = (name: string) => item(name).getAttribute('aria-disabled') === 'true';
 
-  it.each([375, 767])('P18.97-T8 F3 at %ipx a stage’s ⋮ offers Move up and Move down first, held at the ends of the stages in view', async (px) => {
+  it.each([375, 767])('P18.9-T8 F3 at %ipx a stage’s ⋮ offers Move up and Move down first, held at the ends of the stages in view', async (px) => {
     onAPhone(px);
     await screen.findByText('Paid and issued');
     await userEvent.click(menuOf('Not yet approached'));
@@ -566,7 +569,7 @@ describe('P18.97-T8 F3 a stage moves from its ⋮ on a phone', () => {
     expect([held('Move up'), held('Move down')]).toEqual([false, false]);
   });
 
-  it('P18.97-T8 F3 Move down saves the whole pipeline, archived included, through the reorder call; the ladder is read again in its new order', async () => {
+  it('P18.9-T8 F3 Move down saves the whole pipeline, archived included, through the reorder call; the ladder is read again in its new order', async () => {
     const after = reordered(['s1', 's0', 's2', 's3']);
     const { calls, container } = onAPhone(375, {
       '/kpm/settings/lead-statuses': [{ body: LADDER }, { body: after }],
@@ -580,7 +583,7 @@ describe('P18.97-T8 F3 a stage moves from its ⋮ on a phone', () => {
     expect(reorders(calls)).toEqual([{ pipeline: 'sales', ids: ['s1', 's0', 's2', 's3'] }]);
   });
 
-  it('P18.97-T8 F3 the moved stage’s ⋮ keeps the focus once its row has its new place, the menu closed', async () => {
+  it('P18.9-T8 F3 the moved stage’s ⋮ keeps the focus once its row has its new place, the menu closed', async () => {
     const after = reordered(['s1', 's0', 's2', 's3']);
     const { container } = onAPhone(375, { '/kpm/settings/lead-statuses': [{ body: LADDER }, { body: after }], [REORDER]: { body: after[0] } });
     await screen.findByText('Paid and issued');
@@ -591,7 +594,7 @@ describe('P18.97-T8 F3 a stage moves from its ⋮ on a phone', () => {
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();
   });
 
-  it('P18.97-T8 F3 Move up sends what the ⠿’s ↑ key sends: the same endpoint, the same order', async () => {
+  it('P18.9-T8 F3 Move up sends what the ⠿’s ↑ key sends: the same endpoint, the same order', async () => {
     const { calls } = onAPhone(375);
     await screen.findByText('Paid and issued');
     fireEvent.keyDown(handleFor('Follow-up'), { key: 'ArrowUp' });
@@ -606,7 +609,7 @@ describe('P18.97-T8 F3 a stage moves from its ⋮ on a phone', () => {
     expect(byMenu).toEqual({ pipeline: 'sales', ids: ['s1', 's0', 's2', 's3'] });
   });
 
-  it('P18.97-T8 F3 at an end Move up does nothing: no call, the menu open on it', async () => {
+  it('P18.9-T8 F3 at an end Move up does nothing: no call, the menu open on it', async () => {
     const { calls } = onAPhone(375);
     await screen.findByText('Paid and issued');
     await userEvent.click(menuOf('Not yet approached'));
@@ -616,7 +619,7 @@ describe('P18.97-T8 F3 a stage moves from its ⋮ on a phone', () => {
     expect(item('Move up')).toHaveFocus();
   });
 
-  it('P18.97-T8 F3 while a move is out both moves are held on every stage, as the row’s other actions are', async () => {
+  it('P18.9-T8 F3 while a move is out both moves are held on every stage, as the row’s other actions are', async () => {
     let release!: () => void;
     const gate = new Promise<void>((open) => { release = open; });
     const { calls, mock } = onAPhone(375);
@@ -636,5 +639,24 @@ describe('P18.97-T8 F3 a stage moves from its ⋮ on a phone', () => {
     await waitFor(() => expect(handleFor('Follow-up')).toBeEnabled());
     // The one move, and not the one asked while it was out.
     expect(reorders(calls)).toEqual([{ pipeline: 'sales', ids: ['s0', 's2', 's1', 's3'] }]);
+  });
+});
+
+/**
+ * **No target under 44px on a phone or a tablet** (P19.2-T3 AC-4; UI-142: text links 17px tall, *Tampilkan yang
+ * diarsipkan* 13px, tab rows 38px, ⠿ 20px), inside the field shell's frame the Owner's pages wear (ADR-0197), which
+ * `data-surface` stands for here.
+ */
+describe('P19.2-T3 AC-4 the lead statuses’s targets (UI-142)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it.each([375, 768])('P19.2-T3 AC-4 at %ipx finds no target under 44px', async (px) => {
+    atWidth(px);
+    render();
+    const frame = document.body.firstElementChild!;
+    frame.setAttribute('data-surface', 'v1');
+    await screen.findByText('Paid and issued');
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Show archived' }));
+    expect(smallTargets(frame, px)).toEqual([]);
   });
 });

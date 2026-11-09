@@ -7,7 +7,8 @@ import {
   ACTIVATION_3M_LABEL, ACTIVATION_NOTE_MAX, aspectTitle, attributionOf, autoBadge, byHandBadge, correctionOf, correctStartDate,
   dayShown, earliestStart, fromDataWords, inFilter, newHireCounts, newHireGroups,
   FIRST_CASE_CLOSED, graduateMyActivation, groupTitle, isComplete, isDataBacked, isManual, isTickedByHandLink, isWholeDate, ITEM_NOTE_MAX,
-  newHireHref, OWN_COPY, PROTOTYPE_COPY, readHireClosings, readMyActivation, readMyClosings, readNewHire, readNewHires, recordHref,
+  isEmptyActivation, newHireHref, newHiresHref, newHireYearFrom, OWN_COPY, PROTOTYPE_COPY, readHireClosings, readMyActivation,
+  readMyClosings, readNewHire, readNewHires, recordHref,
   saveActivationNote, saveHireItem, saveMyItem, sourceLineOf, startDateAllowed, startDateRangeText, takesHandWrite,
 } from './activation';
 
@@ -33,12 +34,15 @@ describe('the activation’s calls (P13, the fixed contract)', () => {
   it('reads the roster and one hire, and writes a leader’s tick, start date and note, with the id encoded', async () => {
     const { calls } = stubFetch({ '/new-hires': { body: {} } });
     await readNewHires();
+    await readNewHires('previous');
     await readNewHire('mem/1');
     await saveHireItem('mem-1', 'CRM SETUP', false);
     await correctStartDate('mem-1', '2026-08-01');
     await saveActivationNote('mem-1', 'Keep going.');
     expect(calls.map((c) => [c.init.method, c.url.replace('http://api.test/api/v1', ''), c.init.body])).toEqual([
-      ['GET', '/new-hires', undefined],
+      // P19.9-T3 AC-1, AC-2: the year is always named, this calendar year unless the other is asked for.
+      ['GET', '/new-hires?year=current', undefined],
+      ['GET', '/new-hires?year=previous', undefined],
       ['GET', '/new-hires/mem%2F1', undefined],
       ['PUT', '/new-hires/mem-1/items/CRM%20SETUP', '{"done":false}'],
       ['PUT', '/new-hires/mem-1/start-date', '{"startDate":"2026-08-01"}'],
@@ -46,7 +50,7 @@ describe('the activation’s calls (P13, the fixed contract)', () => {
     ]);
   });
 
-  it('P18.96-T4 AC-3 reads the closings and sends a data-backed item’s tick with its record, in one request', async () => {
+  it('P18.8-T4 AC-3 reads the closings and sends a data-backed item’s tick with its record, in one request', async () => {
     const { calls } = stubFetch({
       '/activation/me/closings': { body: { closings: [] } }, '/activation/me': { body: activationView() }, '/new-hires': { body: {} },
     });
@@ -86,7 +90,7 @@ describe('the small readings', () => {
     expect(dayShown(61, 60)).toBe('60+');
   });
 
-  it('P18.95-T3 AC-4 writes a phone card’s day in words, Day 64 of 90, the window the office’s and 90+ past it', () => {
+  it('P18.7-T3 AC-4 writes a phone card’s day in words, Day 64 of 90, the window the office’s and 90+ past it', () => {
     expect(OWN_COPY.dayOf(dayShown(64, 90), 90)).toBe('Day 64 of 90');
     expect(OWN_COPY.dayOf(dayShown(91, 90), 90)).toBe('Day 90+ of 90');
     expect(OWN_COPY.dayOf(dayShown(12, 60), 60)).toBe('Day 12 of 60');
@@ -101,13 +105,30 @@ describe('the small readings', () => {
     expect(newHireHref('mem 1')).toBe('/new-hires/mem%201');
   });
 
+  it('P19.9-T3 AC-2, AC-4 the year in an address: Tahun lalu only by name, carried to a detail and back', () => {
+    expect([newHireYearFrom(undefined), newHireYearFrom('previous'), newHireYearFrom('current'), newHireYearFrom('2025')])
+      .toEqual(['current', 'previous', 'current', 'current']);
+    expect(newHireYearFrom(['previous', 'current'])).toBe('previous');
+    expect([newHiresHref(), newHiresHref('current'), newHiresHref('previous')]).toEqual(['/new-hires', '/new-hires', '/new-hires?year=previous']);
+    expect(newHireHref('mem 1', 'previous')).toBe('/new-hires/mem%201?year=previous');
+    expect(newHireHref('mem-1', 'current')).toBe('/new-hires/mem-1');
+  });
+
+  it('P19.9-T3 AC-5 tells an activation served empty from the activation by its `empty`', () => {
+    const empty = {
+      empty: 'first_year_over' as const, hire: SARI, today: '2026-11-08', joinDate: '2025-08-06', firstYearEndsOn: '2026-08-06', leader: null,
+    };
+    expect(isEmptyActivation(empty)).toBe(true);
+    expect(isEmptyActivation({ hire: SARI, state: 'open' })).toBe(false);
+  });
+
   it('a manual item is one with no link, or a link that does not work yet (ADR-0031)', () => {
     expect(isManual(item('A', 'a'))).toBe(true);
     expect(isManual(item('A', 'a', { link: { ...LINK, live: false } }))).toBe(true);
     expect(isManual(item('A', 'a', { link: LINK }))).toBe(false);
   });
 
-  it('P18.5-T3 AC-4, D-orphan: a link not live is ticked by hand, unless the link already completed the item', () => {
+  it('P18.2-T3 AC-4, D-orphan: a link not live is ticked by hand, unless the link already completed the item', () => {
     const orphan = { ...LINK, live: false };
     expect(isManual(item('A', 'a', { link: orphan }))).toBe(true);
     expect(isTickedByHandLink(item('A', 'a', { link: orphan }))).toBe(true);
@@ -120,12 +141,12 @@ describe('the small readings', () => {
     expect(isManual(item('A', 'a', { link: orphan, done: true, source: 'hire' }))).toBe(true);
   });
 
-  describe('the data-backed items (P18.96-T4 AC-2 to AC-4)', () => {
+  describe('the data-backed items (P18.8-T4 AC-2 to AC-4)', () => {
     const at = '2026-09-30T23:30:00.000Z';
     const sale = (over = {}) => item('FIRST_CASE_CLOSED', 'Close first case independently', { link: LINKS['sales:first'], ...over });
     const checkIn = (over = {}) => item('WEEKLY_CHECK_IN', 'Weekly 1-on-1 check-in (4 weeks)', { link: LINKS['coaching:weekly:4'], ...over });
 
-    it('P18.96-T4 AC-2 knows one by its link’s form, never by its code', () => {
+    it('P18.8-T4 AC-2 knows one by its link’s form, never by its code', () => {
       expect(isDataBacked(sale())).toBe(true);
       expect(isDataBacked(item('FIRST_CASE_CLOSED', 'x'))).toBe(false);
       expect(isDataBacked(item('A', 'a', { link: LINK }))).toBe(false);
@@ -133,7 +154,7 @@ describe('the small readings', () => {
       expect(isManual(sale())).toBe(false);
     });
 
-    it('P18.96-T4 AC-2 reads “Completed from Sales data · {date}” from its data, naming nobody', () => {
+    it('P18.8-T4 AC-2 reads “Completed from Sales data · {date}” from its data, naming nobody', () => {
       const done = sale({ done: true, doneAt: at, source: 'link', doneBy: RINA, record: { collection: 'leads', id: 'l1' } });
       expect(sourceLineOf(done, 'mem-rina')).toBe('Completed from Sales data · 1 Okt 2026');
       expect(attributionOf(done, 'mem-rina')).toBe('Completed from Sales data · 1 Okt 2026');
@@ -143,14 +164,14 @@ describe('the small readings', () => {
       expect(sourceLineOf(item('A', 'a', { done: true, source: 'hire', doneBy: RINA }), 'mem-rina')).toBeNull();
     });
 
-    it('P18.96-T4 AC-4 reads “Ticked by {name}, waiting for data” for a hand tick not yet confirmed — you, for the reader', () => {
+    it('P18.8-T4 AC-4 reads “Ticked by {name}, waiting for data” for a hand tick not yet confirmed — you, for the reader', () => {
       expect(sourceLineOf(checkIn({ done: true, doneAt: at, source: 'leader', doneBy: SARI, waiting: true }), 'mem-rina'))
         .toBe('Ticked by Sari Puspita, waiting for data');
       expect(sourceLineOf(sale({ done: true, doneAt: at, source: 'hire', doneBy: RINA, waiting: true }), 'mem-rina'))
         .toBe('Ticked by you, waiting for data');
     });
 
-    it('P18.96-T4 AC-2 links the record its reader has a page for: the hire’s Leads and sessions, a leader’s session archive', () => {
+    it('P18.8-T4 AC-2 links the record its reader has a page for: the hire’s Leads and sessions, a leader’s session archive', () => {
       const session = checkIn({ done: true, source: 'link', record: { collection: 'coachingSessions', id: 's 1' } });
       expect(recordHref(session, 'hire', 'mem-rina')).toBe('/coaching/me?session=s%201');
       expect(recordHref(session, 'leader', 'mem-rina')).toBe('/coaching/mem-rina/archive/s%201');
@@ -161,7 +182,7 @@ describe('the small readings', () => {
       expect(recordHref(sale(), 'hire', 'x')).toBeNull();
     });
 
-    it('P18.96-T4 AC-3 takes a hand write until its data completed it', () => {
+    it('P18.8-T4 AC-3 takes a hand write until its data completed it', () => {
       expect(takesHandWrite(sale())).toBe(true);
       expect(takesHandWrite(sale({ done: true, source: 'hire', waiting: true }))).toBe(true);
       expect(takesHandWrite(sale({ done: true, source: 'link' }))).toBe(false);
@@ -194,13 +215,13 @@ describe('the small readings', () => {
       expect(attributionOf(item('A', 'a', { done: true, doneAt: null, source: 'hire', doneBy: null }), 'mem-rina')).toBeNull();
     });
 
-    it('P18.96-T2 AC-5 says who corrected a join date, or nothing when nobody did', () => {
+    it('P18.8-T2 AC-5 says who corrected a join date, or nothing when nobody did', () => {
       expect(correctionOf(activationView(), 'mem-rina')).toBeNull();
       expect(correctionOf(activationView({ startCorrected: { by: SARI, at } }), 'mem-sari')).toBe('Join date corrected by you · 1 Okt 2026');
       expect(correctionOf(activationView({ startCorrected: { by: SARI, at } }), 'mem-rina')).toBe('Join date corrected by Sari Puspita · 1 Okt 2026');
     });
 
-    it('P18.96-T2 AC-5 one name for the one date: Join date, and its toast', () => {
+    it('P18.8-T2 AC-5 one name for the one date: Join date, and its toast', () => {
       expect(PROTOTYPE_COPY.joinDate).toBe('Join date');
       expect(OWN_COPY.startSaved).toBe('Join date updated.');
       expect(PROTOTYPE_COPY).not.toHaveProperty('startDate');
@@ -260,7 +281,7 @@ describe('the words (D-copy)', () => {
     }
   });
 
-  it('P18.96-T6 AC-5 the hire’s button reads Mark checklist complete, and its reason names the checklist’s own total', () => {
+  it('P18.8-T6 AC-5 the hire’s button reads Mark checklist complete, and its reason names the checklist’s own total', () => {
     expect(PROTOTYPE_COPY.graduate).toBe('Mark checklist complete');
     expect(OWN_COPY.graduateLocked(16)).toBe('Unlocks when all 16 items are done');
     expect(OWN_COPY.graduatedTitle).toBe('Your 90-day checklist is complete.');
@@ -270,11 +291,11 @@ describe('the words (D-copy)', () => {
   it('the prototype’s strings are its own, verbatim, with its straight apostrophes', () => {
     expect(PROTOTYPE_COPY.footer).toBe("Visible only to new agents, for their first 6 months. Tenured agents won't see this section.");
     expect(PROTOTYPE_COPY.rosterSubtitle).toBe("Track your new agents' 90-day activation progress.");
-    // A placeholder holds no ⓘ, so *JFW* is spelled out (P18.95-T9 AC-3; UI-028): the prototype's *your first JFW*.
+    // A placeholder holds no ⓘ, so *JFW* is spelled out (P18.7-T9 AC-3; UI-028): the prototype's *your first JFW*.
     expect(PROTOTYPE_COPY.noteExample).toBe("e.g. Great pace on prospecting — let's focus on booking your first joint field work this week.");
     expect(PROTOTYPE_COPY.noteSaved('Rina Wijaya')).toBe('Coaching note saved — visible to Rina Wijaya.');
     expect(PROTOTYPE_COPY.graduated).toBe('Marked as tenured agent — 90-Day Activation removed from menu.');
-    // OD-28 and D-copy: the confirm speaks to the hire, without the demo's sentence. P18.96-T6 AC-5 (ADR-0173 §4): the
+    // OD-28 and D-copy: the confirm speaks to the hire, without the demo's sentence. P18.8-T6 AC-5 (ADR-0173 §4): the
     // checklist is what is complete, never *activation*, which is the 3M result.
     expect(PROTOTYPE_COPY.graduateQuestion).toBe('Mark your checklist complete? The 90-Day Activation menu will be removed.');
     expect(PROTOTYPE_COPY.graduateQuestion).not.toMatch(/same as when a real agent/);
@@ -292,12 +313,12 @@ describe('FIRST_CASE_CLOSED (invariant §7, Phase 13’s docs audit)', () => {
 });
 
 /**
- * **P18.98-T4: the module's words in both languages** (new hires and activation; `i18n/messages/activation.ts`,
+ * **P18.10-T4: the module's words in both languages** (new hires and activation; `i18n/messages/activation.ts`,
  * `new-hires.ts`). A function that writes words takes the words' language, and one that writes a day the figures' too;
  * given neither it writes English words and an Indonesian day, as every caller of this module did before (the cases
  * above). The copy objects stay English, the catalogue's source.
  */
-describe('P18.98-T4 the activation’s words in Indonesian', () => {
+describe('P18.10-T4 the activation’s words in Indonesian', () => {
   const at = '2026-09-30T23:30:00.000Z';
   const sale = (over = {}) => item('FIRST_CASE_CLOSED', 'Close first case independently', { link: LINKS['sales:first'], ...over });
 

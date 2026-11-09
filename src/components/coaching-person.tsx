@@ -3,11 +3,11 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { createContext, Suspense, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
-import { PageHeader, PageLanguageSwitch, usePageLanguageSwitch } from '@/components/app-shell';
+import { PageHeader, PageLanguageSwitch, usePageLanguageSwitch } from '@/components/page-header';
 import { TitledPageContext } from '@/components/require-session';
 import { Card, ErrorBanner } from '@/components/ui/field';
 import { LineIcon } from '@/components/ui/line-icon';
-import { Avatar } from '@/components/ui/person-row';
+import { Avatar } from '@/components/ui/avatar';
 import { TAB_PHONE, TAP_HEIGHT } from '@/components/ui/phone';
 import { useTabRow } from '@/components/ui/use-tab-row';
 import { Skeleton, SkeletonBar } from '@/components/ui/skeleton';
@@ -99,7 +99,7 @@ export function useCoacheeNotFound(): () => void {
 interface ShellTab {
   tab: CoachingTab;
   /** Its name's key in the catalogue (`messages/coaching.ts`): the same words in both languages (§A.3). */
-  name: keyof typeof coachingMessages.en.person.tabs;
+  name: keyof typeof coachingMessages.en.person.tabs | 'survey';
   /** The leader's own tab, the line lock before its name (UI-029: 🔒 → a line icon). */
   leaderOnly?: boolean;
 }
@@ -116,6 +116,8 @@ const TABS: readonly ShellTab[] = [
   { tab: 'goal-setting', name: 'goalSetting' },
   { tab: 'summary', name: 'summary' },
   { tab: 'activation', name: 'activation' },
+  // P19.5-T4 (ADR-0216 §7; B2): *Survei*, between *Activation* and *Training*, as the coaching mockup draws it.
+  { tab: 'survey', name: 'survey' },
   { tab: 'training', name: 'training' },
   { tab: 'leader-notes', name: 'leaderNotes', leaderOnly: true },
 ];
@@ -172,7 +174,7 @@ export function PersonShell({ membershipId, children }: { membershipId: string; 
   }, [membershipId]);
 
   /*
-   * **The page's title** (P18.95-T7 AC-2; UI-021): the person's name, as the header's heading, once they are read; the
+   * **The page's title** (P18.7-T7 AC-2; UI-021): the person's name, as the header's heading, once they are read; the
    * prototype's *Coaching Session* while there is nobody to name — not found, a read that failed, a former coach's
    * archive. Whatever is drawn beneath is under that title (`TitledPageContext`), so a tab's refusal is a section.
    */
@@ -266,7 +268,7 @@ function WayBack() {
 }
 
 /**
- * **The coachee's header, the page's one `<h1>`** (P18.95-T7 AC-2; UI V1, UI-031, D-23).
+ * **The coachee's header, the page's one `<h1>`** (P18.7-T7 AC-2; UI V1, UI-031, D-23).
  *
  * - **Below 1024px, one 48px row**: the way back as a *‹* (44px, its words for a screen reader), the 36px avatar, and
  *   the name 20px/800 (22px on a tablet) with *Agent · Unit langsung* in 12px **on its own line directly under it** —
@@ -297,7 +299,7 @@ function PersonHeader({ coachee, back }: { coachee: Coachee; back: string | null
       <Avatar name={coachee.name} photoUrl={coachee.photoUrl ?? null} seed={coachee.membershipId} size={36} className="lg:hidden" />
       <span
         aria-hidden="true"
-        className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full bg-amber text-[1.1875rem] font-bold text-navy max-lg:hidden"
+        className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full bg-primary text-[1.1875rem] font-bold text-primary-contrast max-lg:hidden"
       >
         {coacheeInitials(coachee.name)}
       </span>
@@ -324,21 +326,21 @@ export function backFrom(search: string): string | null {
 /**
  * The avatar, the name and the line under it (`.person-header`, `Overall.html:3972-3979`, `:4387-4394`),
  * with whatever goes on the right. The name is an `<h2>` under the page's own title, or with `title` **the page's
- * title**, its `<h1>` (the person shell's, P18.95-T7 AC-2) — drawn the same either way. `line` is `null`
+ * title**, its `<h1>` (the person shell's, P18.7-T7 AC-2) — drawn the same either way. `line` is `null`
  * for a person whose rung the reader is not told: the archive a former coach reads (ADR-0082).
  */
 export function PersonIdentity({
   initials, name, line, title = false, children,
 }: { initials: string; name: string; line: string | null; title?: boolean; children?: ReactNode }) {
   const Name = title ? 'h1' : 'h2';
-  // The page's own header (`title`): once the language switch is live, it sits here, before the view toggle (P18.98-T2).
+  // The page's own header (`title`): once the language switch is live, it sits here, before the view toggle (P18.10-T2).
   const withLanguage = usePageLanguageSwitch() && title;
   const row = (
     <div className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-4">
       <div className="flex items-center gap-3.5">
         <span
           aria-hidden="true"
-          className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full bg-amber text-[1.1875rem] font-bold text-navy"
+          className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full bg-primary text-[1.1875rem] font-bold text-primary-contrast"
         >
           {initials}
         </span>
@@ -365,12 +367,15 @@ export function PersonIdentity({
  * mapping* behind a line lock.
  */
 function PersonTabs({ membershipId, current }: { membershipId: string; current: CoachingTab | null }) {
-  const names = useMessages(coachingMessages).person.tabs;
+  const person = useMessages(coachingMessages).person;
+  const names = person.tabs;
+  // *Survei* is the reader's word (EN *Survey*), not one of §A.3's kept tab names.
+  const survey = person.surveyTab;
   return (
     <CoachingTabBar
       items={TABS.map((t) => ({
         key: t.tab,
-        label: names[t.name],
+        label: t.name === 'survey' ? survey : names[t.name],
         href: coachingTabHref(membershipId, t.tab),
         current: current === t.tab,
         locked: t.leaderOnly,
@@ -449,7 +454,7 @@ export function CoachingTabBar({ items }: { items: readonly CoachingTabItem[] })
             key={tab.key}
             href={tab.href}
             aria-current={tab.current ? 'page' : undefined}
-            className={cn(TAB, tab.current ? 'border-amber text-navy' : 'border-transparent text-muted')}
+            className={cn(TAB, tab.current ? 'border-primary text-navy' : 'border-transparent text-muted')}
           >
             {tab.locked && <LineIcon name="lock" className="h-3.5 w-3.5 text-navy-soft" />}
             {tab.label}

@@ -16,6 +16,7 @@ import { useMessages } from '@/i18n/language-provider';
 import { settingsMessages } from '@/i18n/messages/settings';
 import { leadStatusesMessages } from '@/i18n/messages/settings-lead-statuses';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
+import { cn } from '@/lib/cn';
 import { useCan } from '@/lib/session';
 import { usePhone } from '@/lib/use-phone';
 import {
@@ -30,6 +31,7 @@ import {
   type LeadPipeline,
   type LeadPipelineRow,
 } from '@/lib/tenant-config';
+import { ARCHIVED_SWITCH_ROW, HANDLE_TOUCH } from '../settings-touch';
 
 /** The two ladders by their tabs' names: §A.3's, the same in both languages. */
 const TITLE: Record<LeadPipeline, string> = {
@@ -37,7 +39,7 @@ const TITLE: Record<LeadPipeline, string> = {
   recruitment: kept('Recruitment'),
 };
 
-/** A stage's *Expected to close* switch, in its *Saving… → Saved ✓* (P18.95-T1 AC-5). */
+/** A stage's *Expected to close* switch, in its *Saving… → Saved ✓* (P18.7-T1 AC-5). */
 const lateKey = (stageId: string) => `${stageId}\nlate`;
 
 /** The switch's name and the badge's words: a metric's name, kept English (§A.4). */
@@ -88,7 +90,7 @@ export default function LeadStatusesPage() {
   const [editLabel, setEditLabel] = useState('');
   const inline = useInlineSave();
   /*
-   * **On a phone, one ⋮ and the switch on a line of its own** (P18.97-T7 AC-3, ADR-0178 §5; the client's UI-035: each
+   * **On a phone, one ⋮ and the switch on a line of its own** (P18.9-T7 AC-3, ADR-0178 §5; the client's UI-035: each
    * row's *Edit · Expected to close · Make this close the pipeline · Archive* reached 449px on a 375px screen, and the
    * page scrolled sideways). Asked of the window here, where the screen mounts; from 768px the row is as it was — the
    * client's *Don't change* for a desktop.
@@ -113,7 +115,7 @@ export default function LeadStatusesPage() {
   /**
    * A stage's actions behind ⋮, in the row's order and words — held while a write is out, as the row's are.
    *
-   * **On a phone the ⋮ also moves the stage, first, as the ⠿ is first on the row** (P18.97-T8 F3, parity F-257;
+   * **On a phone the ⋮ also moves the stage, first, as the ⠿ is first on the row** (P18.9-T8 F3, parity F-257;
    * ADR-0178 §5's ↑ and ↓ for a list reordered by drag): a drag never starts on a touch screen and the ⠿'s ↑ ↓ keys need
    * a keyboard, so a phone could not reorder the ladder at all. *Move up* and *Move down* — `ReorderArrows`' words —
    * make the move the ⠿'s keys make (`moveStage`, the same reorder call). At the ends of the stages the reader sees
@@ -149,9 +151,11 @@ export default function LeadStatusesPage() {
         checked={stage.isLateStage}
         disabled={busy}
         describedBy="late-stage-hint"
-        // A 44 × 44px target on a phone (P18.97-T7 AC-3, AC-6); from 768px the switch it was.
+        // A 44 × 44px target on a phone (P18.9-T7 AC-3, AC-6) and a tablet (P19.2-T3 AC-4; UI-142); from 1024px the
+        // switch it was.
         phoneTarget={phone}
-        // It saves itself, and says so beside it (P18.95-T1 AC-5): a retry sends this same
+        tabletTarget
+        // It saves itself, and says so beside it (P18.7-T1 AC-5): a retry sends this same
         // value again. The reason for a refusal stays in the banner above, where it was.
         onChange={(next) => void inline.save(lateKey(stage.id), () => run(
           () => setLateStageLeadStatus(stage.id, next),
@@ -271,7 +275,7 @@ export default function LeadStatusesPage() {
           }),
         actions: (
           <>
-            <label className="flex items-center gap-2 text-md text-navy">
+            <label className={cn('flex items-center gap-2 text-md text-navy', ARCHIVED_SWITCH_ROW)}>
               <input
                 type="checkbox"
                 checked={showArchived}
@@ -336,7 +340,8 @@ export default function LeadStatusesPage() {
                       <DragHandle
                         label={stage.label}
                         disabled={busy}
-                        className="cursor-grab select-none text-md text-muted disabled:cursor-not-allowed"
+                        // 44 × 44px below 1024px (P19.2-T3 AC-4; UI-142: *⠿ 20px*).
+                        className={HANDLE_TOUCH}
                         onPick={() => setDragging(stage.id)}
                         onDrop={() => { setDragging(null); setOver(null); }}
                         onMove={(by) => void moveStage(pipeline.pipeline, stage.id, by)}
@@ -392,7 +397,7 @@ export default function LeadStatusesPage() {
                                 an unbadged one reads as a row whose state failed to load,
                                 and *Open* is the thing most stages actually are. */}
                             {stage.isTerminal ? (
-                              <span className="rounded-full bg-amber px-2 py-0.5 text-sm font-semibold uppercase tracking-wide text-navy">
+                              <span className="rounded-full bg-primary px-2 py-0.5 text-sm font-semibold uppercase tracking-wide text-primary-contrast">
                                 {t.closesPipeline}
                               </span>
                             ) : (

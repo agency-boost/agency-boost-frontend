@@ -279,10 +279,10 @@ describe('TaxonomyEditor', () => {
 });
 
 /*
- * P18.9-T2 AC-3 (ADR-0163): the template's activity binding — which of its types each cascade stage counts in every
+ * P18.6-T2 AC-3 (ADR-0163): the template's activity binding — which of its types each cascade stage counts in every
  * office made from it — read as a line per stage and edited behind *Edit binding*.
  */
-describe('TaxonomyEditor — the activity binding (P18.9-T2)', () => {
+describe('TaxonomyEditor — the activity binding (P18.6-T2)', () => {
   const BOUND: TaxonomyPayload = {
     ...TAXONOMY,
     bindings: { leads: ['RECRUIT_APPROACH'], appointments: ['SELL_PRESENTATION'], closings: ['SELL_SUBMISSION'] },
@@ -294,19 +294,19 @@ describe('TaxonomyEditor — the activity binding (P18.9-T2)', () => {
   }
   const card = () => screen.getByRole('heading', { name: 'Activity binding' }).closest('.rounded-lg') as HTMLElement;
 
-  it('P18.9-T2 AC-3 reads one line per stage, in the template’s own labels', () => {
+  it('P18.6-T2 AC-3 reads one line per stage, in the template’s own labels', () => {
     render(<TaxonomyEditor payload={BOUND} onChange={vi.fn()} />);
     expect(within(card()).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
       'Set appointment: Approach', 'Sales meeting: Presentasi', 'Submission polis: Submission',
     ]);
   });
 
-  it('P18.9-T2 AC-3 says a template that never set one gives its offices the platform’s', () => {
+  it('P18.6-T2 AC-3 says a template that never set one gives its offices the platform’s', () => {
     render(<TaxonomyEditor payload={TAXONOMY} onChange={vi.fn()} />);
     expect(card()).toHaveTextContent('Not set: offices made from this template count the platform’s default activities.');
   });
 
-  it('P18.9-T2 AC-3 adds a replacement beside the old one, into the payload the draft saves', async () => {
+  it('P18.6-T2 AC-3 adds a replacement beside the old one, into the payload the draft saves', async () => {
     const onChange = vi.fn();
     render(<Harness start={BOUND} onChange={onChange} />);
     await userEvent.click(within(card()).getByRole('button', { name: 'Edit binding' }));
@@ -319,7 +319,7 @@ describe('TaxonomyEditor — the activity binding (P18.9-T2)', () => {
     expect(within(card()).getByText('Submission polis: Submission')).toBeInTheDocument();
   });
 
-  it('P18.9-T2 AC-3 a type removed from the template is taken out of the binding too', async () => {
+  it('P18.6-T2 AC-3 a type removed from the template is taken out of the binding too', async () => {
     const onChange = vi.fn();
     render(<TaxonomyEditor payload={BOUND} onChange={onChange} />);
     const row = screen.getAllByText('Presentasi').map((el) => el.closest('li')).find((li) => li?.querySelector('button'))!;
@@ -335,7 +335,7 @@ describe('RatioSetEditor writes benchmarks in their unit (P4-T25)', () => {
     displayUnit: 'decimal' as const, displayOrder: 1, ...over,
   });
 
-  it('shows a percentage, a number and a band the way the registry writes them — P18.97-T3 AC-2, as typed', () => {
+  it('shows a percentage, a number and a band the way the registry writes them — P18.9-T3 AC-2, as typed', () => {
     render(<RatioSetEditor
       available={[]}
       onChange={vi.fn()}
@@ -347,7 +347,7 @@ describe('RatioSetEditor writes benchmarks in their unit (P4-T25)', () => {
     />);
 
     expect(screen.getByText('15%')).toBeInTheDocument();
-    // In the reader's figures since P18.98-T6 — English here, as every spec reads: *0,30* in Indonesian.
+    // In the reader's figures since P18.10-T6 — English here, as every spec reads: *0,30* in Indonesian.
     expect(screen.getByText('0.30')).toBeInTheDocument();
     expect(screen.getByText('±30 points')).toBeInTheDocument();
   });
@@ -494,7 +494,8 @@ describe('TrainingEditor (P5-T1)', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Add' }));
 
     expect(onChange.mock.calls.at(-1)![0].skills.at(-1)).toEqual({
-      code: 'FEATURE_WALKTHROUGHS', categoryCode: 'PRODUCT', label: 'Feature walkthroughs',
+      // With no *Deskripsi singkat* typed, none (P19.6-T4).
+      code: 'FEATURE_WALKTHROUGHS', categoryCode: 'PRODUCT', label: 'Feature walkthroughs', description: null,
     });
   });
 
@@ -525,7 +526,7 @@ describe('TrainingEditor (P5-T1)', () => {
 
     // A draft, as an office's own new module is.
     expect(onChange.mock.calls.at(-1)![0].modules.at(-1)).toEqual({
-      code: 'TRIAL_CLOSES', skillCode: 'CLOSING', title: 'Trial closes', publishState: 'draft',
+      code: 'TRIAL_CLOSES', skillCode: 'CLOSING', title: 'Trial closes', description: null, publishState: 'draft',
     });
     expect(within(rowOf('Trial closes')).getByText('Draft')).toBeInTheDocument();
   });
@@ -559,7 +560,7 @@ describe('ActivationChecklistEditor (P5-T3)', () => {
     ],
   };
   const MODULES = [{ code: 'PROSPECT_LIST', title: 'Building Your Prospect List' }];
-  /** The template read's resolved links (P18.5-T3 AC-6), as the contract serves them: every kind live. */
+  /** The template read's resolved links (P18.2-T3 AC-6), as the contract serves them: every kind live. */
   const LINK_KINDS: TemplateLinkKinds = {
     'feature:goals': { label: 'Goal Settings', route: '/goals', completesWhen: 'the hire has saved a goal', live: true },
     'feature:leads': { label: 'Leads Management', route: '/leads', completesWhen: 'the hire has added a lead', live: true },
@@ -655,12 +656,12 @@ describe('ActivationChecklistEditor (P5-T3)', () => {
   });
 
   /*
-   * P18.5-T3 AC-6 (I-80; the carry at `functional/activation.md:1404-1407`): the badge is the office's own
+   * P18.2-T3 AC-6 (I-80; the carry at `functional/activation.md:1404-1407`): the badge is the office's own
    * screen's, from the `live` the template read serves — *Auto* with the registry's sentence for a link
    * that completes the item, *Ticked by hand* for one that does not, and nothing on a manual item. It
    * said *Auto* for any link and *Ticked by the leader* for a manual item.
    */
-  it('P18.5-T3 AC-6 says Auto only for a link the server serves as live, with its words as the name', () => {
+  it('P18.2-T3 AC-6 says Auto only for a link the server serves as live, with its words as the name', () => {
     render(<Editor />);
 
     const goal = rowOf('Goal setting');
@@ -669,7 +670,7 @@ describe('ActivationChecklistEditor (P5-T3)', () => {
     expect(screen.queryByText(/Auto ·/)).not.toBeInTheDocument();
   });
 
-  it('P18.5-T3 AC-6 draws no badge on a manual item: Ticked by the leader is gone', () => {
+  it('P18.2-T3 AC-6 draws no badge on a manual item: Ticked by the leader is gone', () => {
     render(<Editor />);
 
     const manual = rowOf('Learn insurance basics');
@@ -677,7 +678,7 @@ describe('ActivationChecklistEditor (P5-T3)', () => {
     expect(screen.queryByText('Ticked by the leader')).not.toBeInTheDocument();
   });
 
-  it('P18.5-T3 AC-6 reads a training link’s badge from the training kind, live', () => {
+  it('P18.2-T3 AC-6 reads a training link’s badge from the training kind, live', () => {
     const payload: ActivationChecklistPayload = {
       aspects: [{ code: 'SKILLS', label: '3. Skills', items: [{ code: 'MANDATORY_TRAINING', label: 'Mandatory training', autoLink: 'training:PROSPECT_LIST' }] }],
     };
@@ -688,14 +689,14 @@ describe('ActivationChecklistEditor (P5-T3)', () => {
     expect(within(row).getByText('Training · Building Your Prospect List')).toBeInTheDocument();
   });
 
-  it('P18.5-T3 AC-6 says Ticked by hand for a link the server serves as not live', () => {
+  it('P18.2-T3 AC-6 says Ticked by hand for a link the server serves as not live', () => {
     render(<Editor linkKinds={{ ...LINK_KINDS, 'feature:goals': { ...LINK_KINDS['feature:goals'], live: false } }} />);
 
     expect(within(rowOf('Goal setting')).getByRole('button', { name: /^Ticked by hand/ })).toBeInTheDocument();
     expect(within(rowOf('Goal setting')).queryByRole('button', { name: /^Auto/ })).not.toBeInTheDocument();
   });
 
-  it('P18.5-T3 AC-6 claims neither before the server has resolved the links', () => {
+  it('P18.2-T3 AC-6 claims neither before the server has resolved the links', () => {
     render(<Editor linkKinds={null} />);
 
     expect(within(rowOf('Goal setting')).queryByRole('button', { name: /Auto|Ticked by hand/ })).not.toBeInTheDocument();
@@ -857,6 +858,46 @@ describe('a create form offers what its edit panel does', () => {
   });
 });
 
+/*
+ * ***Nama singkat*** in the template's activity section (P19.8-T4 AC-5, ADR-0229 §5; MOB UI-180): the field the office
+ * edits, beside the name — on Add and on Edit — held to the server's 20, written into the draft, `null` when empty.
+ */
+describe('P19.8-T4 AC-5 MOB UI-180 the template’s activity short names', () => {
+  const card = () => screen.getByRole('heading', { name: 'Selling' }).closest('.rounded-lg') as HTMLElement;
+
+  it('P19.8-T4 AC-5 MOB UI-180 takes a short name on Add, beside the name, held to 20', async () => {
+    const onChange = vi.fn();
+    render(<TaxonomyEditor payload={TAXONOMY} onChange={onChange} />);
+    await userEvent.click(within(card()).getByRole('button', { name: 'Add an activity type' }));
+    await userEvent.type(within(card()).getByLabelText('Code'), 'SELL_REFERRAL');
+    await userEvent.type(within(card()).getByLabelText('Name'), 'Meminta referensi dari nasabah lama');
+    const short = within(card()).getByLabelText('Short name');
+    expect(short).toHaveAttribute('maxlength', '20');
+    await userEvent.type(short, 'Referensi');
+    await userEvent.click(within(card()).getByRole('button', { name: 'Add' }));
+    expect(onChange.mock.calls[0][0].types.find((t: { code: string }) => t.code === 'SELL_REFERRAL'))
+      .toMatchObject({ label: 'Meminta referensi dari nasabah lama', shortLabel: 'Referensi' });
+  });
+
+  it('P19.8-T4 AC-5 MOB UI-180 edits a type’s short name into the draft, and clearing it writes none', async () => {
+    const onChange = vi.fn();
+    const payload: TaxonomyPayload = {
+      ...TAXONOMY,
+      types: TAXONOMY.types.map((t) => (t.code === 'SELL_PRESENTATION' ? { ...t, shortLabel: 'Presentasi' } : t)),
+    };
+    render(<TaxonomyEditor payload={payload} onChange={onChange} />);
+    const row = within(card()).getByText('Presentasi', { selector: 'p' }).closest('li')!;
+    await userEvent.click(within(row).getByRole('button', { name: 'Edit' }));
+    const short = within(row).getByLabelText('Short name');
+    expect(short).toHaveValue('Presentasi');
+    expect(within(row).getByText(/at most 20 characters/)).toBeInTheDocument();
+    await userEvent.clear(short);
+    await userEvent.click(within(row).getByRole('button', { name: 'Save' }));
+    expect(onChange.mock.calls[0][0].types.find((t: { code: string }) => t.code === 'SELL_PRESENTATION'))
+      .toMatchObject({ label: 'Presentasi', shortLabel: null });
+  });
+});
+
 describe('EventTypesEditor (P5-T9)', () => {
   it('renders an unauthored preset as empty instead of crashing', () => {
     render(<EventTypesEditor payload={{} as EventTypesPayload} onChange={vi.fn()} />);
@@ -989,7 +1030,7 @@ describe('CampaignKindsEditor (P5-T9)', () => {
     expect(row).not.toHaveTextContent(/registry/);
   });
 
-  it('P18.5-T7 AC-10 (X-68) prints a money threshold in rupiah from sen, and a count as it is', () => {
+  it('P18.2-T7 AC-10 (X-68) prints a money threshold in rupiah from sen, and a count as it is', () => {
     render(<CampaignKindsEditor
       section="production_club"
       payload={{
@@ -1009,7 +1050,7 @@ describe('CampaignKindsEditor (P5-T9)', () => {
       onChange={vi.fn()}
     />);
 
-    // A rule in words, compact where that loses nothing (ADR-0167 §1) — in the reader's figures since P18.98-T6,
+    // A rule in words, compact where that loses nothing (ADR-0167 §1) — in the reader's figures since P18.10-T6,
     // English here as every spec reads (*Rp 600 jt*, *1.200* in Indonesian).
     expect(screen.getByText(/APE achieved/).closest('p')).toHaveTextContent(/IDR 600M$/);
     expect(screen.getByText(/APE achieved/).closest('p')).not.toHaveTextContent('60,000,000,000');

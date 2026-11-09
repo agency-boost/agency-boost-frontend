@@ -22,16 +22,18 @@ describe('/leader-meetings — the list (P18.1-T2)', () => {
   beforeEach(() => { nav.push.mockReset(); nav.replace.mockReset(); });
   afterEach(() => vi.unstubAllGlobals());
 
-  it('P18.1-T2 AC-2, P18.97-T2 AC-1: the title and one subtitle — the list’s second line gone — in the Owner’s console', async () => {
+  it('P18.1-T2 AC-2, P18.9-T2 AC-1, P19.2-T1 AC-6: the title and one subtitle, in the Owner’s office view of the one shell', async () => {
     list();
+    // The office view (ADR-0198 §5): a shared page keeps the tab's view, and the forum is its KPM group's item.
+    window.sessionStorage.setItem('ab.view', 'kpm_owner');
     renderWithSession(<LeaderMeetingsPage />, { me: OWNER_ME });
     expect(await screen.findByRole('heading', { level: 1, name: 'Strategic Leader Forum' })).toBeInTheDocument();
     expect(screen.getByText('Biweekly check-ins with your core leaders — agenda, notes, and action items')).toBeInTheDocument();
     await screen.findByText('Strategic Check-in — #14');
     expect(screen.queryByText(/^Biweekly strategic check-ins/)).toBeNull();
     expect(screen.getAllByText(/^Biweekly/)).toHaveLength(1);
-    // The console's own shell, with the item live.
-    expect(screen.getByText('KPM OWNER')).toBeInTheDocument();
+    // The one shell (no console tag since P19.2-T1), with the item live.
+    expect(screen.queryByText('KPM OWNER')).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Strategic Leader Forum' })).toHaveAttribute('href', '/leader-meetings');
   });
 
@@ -53,7 +55,7 @@ describe('/leader-meetings — the list (P18.1-T2)', () => {
 
     expect(upcoming.getByText('Oct')).toBeInTheDocument();
     expect(upcoming.getByText('13')).toBeInTheDocument();
-    expect(rows[0].querySelector('[aria-hidden="true"]')).toHaveClass('bg-navy');
+    expect(rows[0].querySelector('[aria-hidden="true"]')).toHaveClass('bg-secondary');
     // Grey once Completed (`:630`).
     expect(rows[1].querySelector('[aria-hidden="true"]')).toHaveClass('bg-muted');
 
@@ -69,7 +71,7 @@ describe('/leader-meetings — the list (P18.1-T2)', () => {
     expect(rows[1]).toHaveTextContent('2 open items');
     expect(clear.getByText('All clear')).toBeInTheDocument();
 
-    // P18.97-T2 AC-2: the whole card is one link — one stop, named by its title, described by its line — and *Open*
+    // P18.9-T2 AC-2: the whole card is one link — one stop, named by its title, described by its line — and *Open*
     // the visible cue inside it, no link of its own.
     const link = upcoming.getByRole('link', { name: 'Strategic Check-in — #14' });
     expect(link).toHaveAttribute('href', '/leader-meetings/m-14');
@@ -82,7 +84,7 @@ describe('/leader-meetings — the list (P18.1-T2)', () => {
     expect(upcoming.queryByRole('link', { name: 'Open' })).toBeNull();
   });
 
-  it('P18.97-T2 AC-2: one keyboard stop per card, in the list’s order', async () => {
+  it('P18.9-T2 AC-2: one keyboard stop per card, in the list’s order', async () => {
     list();
     renderWithSession(<LeaderMeetingsPage />, { me: OWNER_ME });
     await screen.findByText('Strategic Check-in — #14');
@@ -141,15 +143,15 @@ describe('/leader-meetings — the list (P18.1-T2)', () => {
     await screen.findByText('Strategic Check-in — #14');
     const all = screen.getByRole('button', { name: 'All' });
     const past = screen.getByRole('button', { name: 'Past' });
-    expect(all).toHaveClass('bg-navy', 'text-white');
-    expect(past).not.toHaveClass('bg-navy');
+    expect(all).toHaveClass('bg-secondary', 'text-secondary-contrast');
+    expect(past).not.toHaveClass('bg-secondary');
     await userEvent.click(past);
-    expect(past).toHaveClass('bg-navy', 'text-white');
-    for (const option of [all, past]) expect(option).not.toHaveClass('bg-amber');
+    expect(past).toHaveClass('bg-secondary', 'text-secondary-contrast');
+    for (const option of [all, past]) expect(option).not.toHaveClass('bg-primary');
 
     const create = screen.getByRole('button', { name: '+ New meeting' });
-    expect(create).toHaveClass('bg-amber', 'text-navy', 'hover:bg-amber-dark');
-    expect(create).not.toHaveClass('bg-navy');
+    expect(create).toHaveClass('bg-primary', 'text-primary-contrast', 'hover:bg-primary-hover');
+    expect(create).not.toHaveClass('bg-secondary');
   });
 
   it('P18.1-T2 AC-2: "No meetings match this filter." when a filter leaves nothing (`:2619`)', async () => {
@@ -198,7 +200,7 @@ describe('/leader-meetings — the list (P18.1-T2)', () => {
   });
 
   it('a reader not signed in is sent to sign in, and back here after (D-share)', async () => {
-    // Sent by the shell since P18.8-T15 AC-2, from the address the browser is on.
+    // Sent by the shell since P18.5-T15 AC-2, from the address the browser is on.
     window.history.replaceState(null, '', '/leader-meetings');
     onTestFinished(() => window.history.replaceState(null, '', '/'));
     stubFetch({});
@@ -235,7 +237,7 @@ describe('/leader-meetings — the list (P18.1-T2)', () => {
     renderWithSession(<LeaderMeetingsPage />, { me: OWNER_ME });
     await screen.findByText('Strategic Check-in — #14');
     const [first] = cards();
-    // The card is its link since P18.97-T2 AC-2: the link is the box that wraps.
+    // The card is its link since P18.9-T2 AC-2: the link is the box that wraps.
     expect(within(first).getByRole('link')).toHaveClass('flex-wrap');
     expect(within(first).getByRole('heading').parentElement).toHaveClass('min-w-0');
     expect(within(first).getByRole('heading')).toHaveClass('break-words');
@@ -251,7 +253,7 @@ describe('/leader-meetings — the list (P18.1-T2)', () => {
       renderWithSession(<LeaderMeetingsPage />, { me: OWNER_ME });
       await userEvent.click(await screen.findByRole('button', { name: '+ New meeting' }));
 
-      // The dialog's module is fetched on this first opening (P18.99-T16).
+      // The dialog's module is fetched on this first opening (P18.11-T16).
       const dialog = within(await screen.findByRole('dialog', { name: 'New meeting' }));
       const title = dialog.getByRole('textbox', { name: 'Title' });
       expect(title).toHaveValue('Strategic Check-in — #15');

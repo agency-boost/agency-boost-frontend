@@ -4,12 +4,12 @@ import { kept } from '@/i18n/kept';
 import type { Voice } from './goal-words';
 
 /**
- * **Goal Settings' own words** (P18.98-T4, field selling; `functional/goals.md`): `/goals` and the calculator a coachee's
+ * **Goal Settings' own words** (P18.10-T4, field selling; `functional/goals.md`): `/goals` and the calculator a coachee's
  * *Goal Setting* tab mounts too (`components/goal-calculator.tsx`) — its five steps, their fields and tiles, *Save goal*
  * and its status, the cascade, the commitment, the disclaimer, and the states a plan can be in. The marker beside the
  * APE produced and the months left in words are `lib/goals.ts`' (`goal-words.ts`).
  *
- * **UI V1 (P18.99-T5, 2026-10-30)**: the result card on top (UI-014), the commitment in the report's shorter sentence
+ * **UI V1 (P18.11-T5, 2026-10-30)**: the result card on top (UI-014), the commitment in the report's shorter sentence
  * built from the result card's own three names (UI-017), the save state the shared one's (`save-state.tsx`, UI-019) and
  * the ⚡ the shared marker's (`auto-marker.tsx`, UI-020) — so this area no longer holds a status, an *auto* badge or a
  * per-month line.
@@ -66,6 +66,15 @@ const en = {
   /** The months field's unit, beside its box. */
   months: 'months',
   produced: 'APE already produced this year',
+  /**
+   * **Step 2's line under a figure's name** (P19.8-T5; MOB UI-190, ADR-0230 §1, §4; the draft mockup's words): the
+   * automatic figure's — *Automatic*, with the month the office's year to date reads when there is one — and a figure
+   * the reader typed over it. `month` written by the caller.
+   */
+  automatic: ({ month }: { month: string | null }) => (month ? `Automatic · as of ${month}` : 'Automatic'),
+  edited: 'Edited by you',
+  /** Puts the automatic figure back (ADR-0230 §4, the findings' words): `amount` written short by the caller, *IDR 67M*. */
+  useAutomatic: ({ amount }: { amount: string }) => `Use automatic (${amount})`,
   remaining: 'Remaining needed',
   monthlyTarget: "This month's APE target",
 
@@ -152,6 +161,11 @@ const id: MessagesOf<typeof en> = {
   monthsLeftThisYear: 'Sisa bulan tahun ini',
   months: 'bulan',
   produced: 'APE yang sudah dicapai tahun ini',
+  // The draft mockup's and the findings' own words (MOB UI-190): *⚡ Otomatis · per Okt 2026*, *Diubah oleh Anda*,
+  // *↶ Pakai otomatis (Rp 67 jt)*.
+  automatic: ({ month }) => (month ? `Otomatis · per ${month}` : 'Otomatis'),
+  edited: 'Diubah oleh Anda',
+  useAutomatic: ({ amount }) => `Pakai otomatis (${amount})`,
   remaining: 'Sisa yang dibutuhkan',
   monthlyTarget: 'Target APE bulan ini',
 

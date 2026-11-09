@@ -6,7 +6,7 @@ import { PDF_MAX_BYTES } from '@/lib/recruitment-pitch';
 import { GCS_UPLOAD_URL, gcsSignedUpload } from '@test/storage-fixtures';
 import { PdfUploadNotice, usePdfUpload } from './pdf-upload';
 
-/** A GCS signed POST policy, as the API answers since Phase 18.7 (ADR-0153). */
+/** A GCS signed POST policy, as the API answers since Phase 18.4 (ADR-0153). */
 const SIGNED = gcsSignedUpload('dev/k/products/01A');
 
 type Options = Parameters<typeof usePdfUpload<string>>[0];
@@ -68,7 +68,7 @@ describe('usePdfUpload', () => {
     render(<Harness sign={sign} />);
 
     await userEvent.upload(input(), pdf('over.pdf', PDF_MAX_BYTES + 1));
-    // The size in the spec's language since P18.98-T4 wired it (the harness's English is a chosen English).
+    // The size in the spec's language since P18.10-T4 wired it (the harness's English is a chosen English).
     expect(await screen.findByText(/“over\.pdf” is 25\.0 MB\. A PDF can be 25 MB at most\./)).toBeInTheDocument();
     expect(sign).not.toHaveBeenCalled();
 
@@ -80,7 +80,7 @@ describe('usePdfUpload', () => {
     const sign = vi.fn(async () => SIGNED);
     render(<Harness sign={sign} />);
     await userEvent.upload(input(), new File(['x'], 'notes.pdf', { type: 'text/plain' }));
-    expect(await screen.findByText('“notes.pdf” is not a PDF. Only a PDF can be uploaded here.')).toBeInTheDocument();
+    expect(await screen.findByText('“notes.pdf” is not a PDF or an HTML page. Only a PDF or an HTML page can be uploaded here.')).toBeInTheDocument();
     expect(sign).not.toHaveBeenCalled();
   });
 
@@ -97,8 +97,44 @@ describe('usePdfUpload', () => {
     const sign = vi.fn(async () => SIGNED);
     render(<Harness sign={sign} />);
     await userEvent.setup({ applyAccept: false }).upload(input(), new File(['x'], 'notes', { type: '' }));
-    expect(await screen.findByText('“notes” is not a PDF. Only a PDF can be uploaded here.')).toBeInTheDocument();
+    expect(await screen.findByText('“notes” is not a PDF or an HTML page. Only a PDF or an HTML page can be uploaded here.')).toBeInTheDocument();
     expect(sign).not.toHaveBeenCalled();
+  });
+
+  describe('P19.6-T2 an HTML page, as a pitch or product document (ADR-0217 §1)', () => {
+    it('P19.6-T2 AC-1 offers an HTML page in the picker beside a PDF', () => {
+      render(<Harness />);
+      expect(input().getAttribute('accept')).toBe('application/pdf,.pdf,text/html,.html,.htm');
+    });
+
+    it('P19.6-T2 AC-1 signs an HTML page as text/html, sends it, and attaches it', async () => {
+      const sign = vi.fn(async () => SIGNED);
+      const attach = vi.fn(async () => 'row');
+      vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true }) as Response));
+      render(<Harness sign={sign} attach={attach} />);
+      const page = new File(['<!doctype html><p>Peluang</p>'], 'Peluang.html', { type: 'text/html' });
+      await userEvent.upload(input(), page);
+      await waitFor(() => expect(attach).toHaveBeenCalledWith('dev/k/products/01A', page));
+      expect(sign).toHaveBeenCalledWith({ filename: 'Peluang.html', mimeType: 'text/html', bytes: page.size });
+    });
+
+    it('P19.6-T2 AC-1 takes a .htm the browser reports with no type, and signs it as text/html (storage still checks)', async () => {
+      const sign = vi.fn(async () => SIGNED);
+      vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true }) as Response));
+      render(<Harness sign={sign} />);
+      await userEvent.setup({ applyAccept: false }).upload(input(), new File(['<html>'], 'Peluang.HTM', { type: '' }));
+      await waitFor(() => expect(sign).toHaveBeenCalledWith(expect.objectContaining({ mimeType: 'text/html' })));
+    });
+
+    it('P19.6-T2 AC-1 refuses an HTML page over 25 MB before anything is sent', async () => {
+      const sign = vi.fn(async () => SIGNED);
+      render(<Harness sign={sign} />);
+      const big = new File(['x'], 'besar.html', { type: 'text/html' });
+      Object.defineProperty(big, 'size', { value: PDF_MAX_BYTES + 1 });
+      await userEvent.upload(input(), big);
+      expect(await screen.findByText(/“besar\.html” is 25\.0 MB\./)).toBeInTheDocument();
+      expect(sign).not.toHaveBeenCalled();
+    });
   });
 
   it.each([

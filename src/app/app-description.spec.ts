@@ -5,11 +5,11 @@ import { appMessages } from '@/i18n/messages/app';
 import { metadata } from './layout';
 
 /**
- * **The app's description, in the language the pages are prerendered in** (P18.98-T4, public and account): written into
+ * **The app's description, in the language the pages are prerendered in** (P18.10-T4, public and account): written into
  * every page's `<head>` before any reader's language is known, so in `LANGUAGE_UNCHOSEN`, as `<html lang>` starts —
  * Bahasa Indonesia since the switch went live on 2026-10-29, English before. The title is the product's name, kept.
  */
-describe('P18.98-T4 the app’s title and description', () => {
+describe('P18.10-T4 the app’s title and description', () => {
   it('writes them in LANGUAGE_UNCHOSEN: English, word for word as before, while the switch is not live', () => {
     expect(metadata.title).toBe('AgencyBoost');
     expect(metadata.description).toBe(messagesIn(appMessages, LANGUAGE_UNCHOSEN).description);

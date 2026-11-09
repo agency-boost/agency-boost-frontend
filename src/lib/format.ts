@@ -8,7 +8,7 @@ import { DEFAULT_LANGUAGE, type Language } from '@/i18n/language';
  * they happened to pick, and the leads table drifted to `en-GB`. That is the drift the rule exists to
  * stop; the prototype has three inconsistent currency formats for the same reason.
  *
- * **One way of writing a date, a sum and a number in each language** (P18.98-T3; ADR-0174 §6, ADR-0179 §6; the
+ * **One way of writing a date, a sum and a number in each language** (P18.10-T3; ADR-0174 §6, ADR-0179 §6; the
  * approved glossary's §E, OD-237). Every function takes the reader's **`language` as its last parameter**, and a
  * caller that passes none gets **Indonesian** (`DEFAULT_LANGUAGE`), the forms every screen wrote before — so nothing
  * changes until a screen passes `useFigureLanguage()`: the reader's chosen language, and Indonesian with no choice,
@@ -30,7 +30,7 @@ import { DEFAULT_LANGUAGE, type Language } from '@/i18n/language';
  * on Monday in both languages (`weekdayHeadings`). What a field holds keeps its own form, and a typed decimal is read
  * with either separator in either language (`parseDecimal`).
  *
- * **Percentages and money since ADR-0174** (OD-226, OD-227; P18.97-T3; parity I-501, I-502), the client's KPM
+ * **Percentages and money since ADR-0174** (OD-226, OD-227; P18.9-T3; parity I-501, I-502), the client's KPM
  * Owner findings of 2026-10-27:
  *
  * - a percentage **whole**, rounded half up, with no *,0* — `96%` — but a ratio compared with its benchmark keeps
@@ -39,7 +39,7 @@ import { DEFAULT_LANGUAGE, type Language } from '@/i18n/language';
  *   only in Data upload's cells and correction panel, an input and what it echoes, and a price — `Rp 357.500.000`.
  *
  * **Figures, not words.** The words around a figure — *points*, *of*, *Not tracked* — are the catalogue's
- * (`src/i18n/`), and move with their module (P18.98-T4, T6). The backend writes its own sentences in the same forms,
+ * (`src/i18n/`), and move with their module (P18.10-T4, T6). The backend writes its own sentences in the same forms,
  * in `backend/src/common/format/format.ts`; a ratio's tenth beside its benchmark and `lossless`' cap of
  * {@link PERCENT_LOSSLESS_MAX_DECIMALS} places are this module's alone (`metrics-and-definitions.md` §B.25).
  *
@@ -215,7 +215,7 @@ export function formatWeekday(day: string, language: Language = DEFAULT_LANGUAGE
 }
 
 /**
- * **The seven headings of a calendar's week, Monday first in both languages** (P18.98-T3 AC-5): `Sen … Min`,
+ * **The seven headings of a calendar's week, Monday first in both languages** (P18.10-T3 AC-5): `Sen … Min`,
  * `Mon … Sun`. The week is the office's Monday-to-Sunday (`nfr/i18n-dates-and-money.md`, *Period definitions*), as
  * the calendar read serves its days, so an English reader's week starts on Monday too — never the US Sunday.
  */
@@ -233,7 +233,7 @@ export function weekdayHeadings(language: Language = DEFAULT_LANGUAGE): string[]
  * the browser's zone cannot move anything here. The places are the prototype's, each for its own
  * space (`Calendar_Section.html:285`, `:330`, `:590`, `:611`, `:827`, `:1013`, `:1036-1040`); the
  * shapes are `id-ID` since ADR-0167 §1, so the week's times are 24-hour, `09.00`, as the month's
- * `9-9.30` always was (parity I-393) — and English's since P18.98-T3, `09:00` and `9-9:30`.
+ * `9-9.30` always was (parity I-393) — and English's since P18.10-T3, `09:00` and `9-9:30`.
  */
 
 /** Minutes after the office's midnight for `HH:mm`; `null` for anything that is not a time. */
@@ -259,6 +259,19 @@ export function formatWeekRange(from: string, to: string, language: Language = D
   if (!a || !b) return '';
   if (a.getFullYear() !== b.getFullYear()) return `${dayText(a, language)} – ${dayText(b, language)}`;
   return `${dayText(a, language, false)} – ${dayText(b, language)}`;
+}
+
+/**
+ * **The calendar toolbar's range** (P19.1-T3 AC-2; UI-144, the 2 Nov mockups): `formatWeekRange`, with the month said
+ * once when both days are in it — `2 – 4 Nov 2026`, `2 – 8 Nov 2026`; `28 Sep – 4 Okt 2026` across a month as before.
+ */
+export function formatDayRange(from: string, to: string, language: Language = DEFAULT_LANGUAGE): string {
+  const [a, b] = [localDate(from), localDate(to)];
+  if (!a || !b) return '';
+  if (a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth()) {
+    return a.getDate() === b.getDate() ? dayText(b, language) : `${a.getDate()} – ${dayText(b, language)}`;
+  }
+  return formatWeekRange(from, to, language);
 }
 
 /**
@@ -442,7 +455,7 @@ export function formatNoticeFull(iso: string, timeZone: string = OFFICE_TIME_ZON
 }
 
 /*
- * ── Numbers (ADR-0167 §1, parity I-395; P18.98-T3) ──────────────────────────────────────────────
+ * ── Numbers (ADR-0167 §1, parity I-395; P18.10-T3) ──────────────────────────────────────────────
  *
  * `id-ID`: a thousand takes a dot, `1.250`, and a decimal a comma, `2,13`. Through `Intl.NumberFormat`,
  * which every runtime agrees on for `id-ID` digits (`format.spec.ts` pins the four-digit grouping).
@@ -557,7 +570,7 @@ export function formatPercent(
 }
 
 /**
- * **`part / of` as a whole percent, rounded half up in integers** (P18.97-T3, parity F-254; the client's UI-018,
+ * **`part / of` as a whole percent, rounded half up in integers** (P18.9-T3, parity F-254; the client's UI-018,
  * *"correctly rounded"*) — the server's rule (`rateOver`, `wholePercent`; `metrics-and-definitions.md` §A.11), for
  * the few shares a screen still works out from two figures it was served: the Overview's trend against last month,
  * the Super Admin's signed-in shares, `ProgressBar`. A share the server serves is written as it came (invariant §7);
@@ -568,7 +581,7 @@ export function formatPercent(
  * count is. Half up is toward +∞, as `Math.round` is: −57,5 is −57. `null` when `of` is not above 0: there is no share
  * of nobody, never 0% and never a division by zero.
  *
- * **A number, in no language** (P18.98-T3 AC-2): the share is rounded here, once, and `formatPercent` writes the same
+ * **A number, in no language** (P18.10-T3 AC-2): the share is rounded here, once, and `formatPercent` writes the same
  * figure in either.
  */
 export function percentOf(part: number, of: number): number | null {
@@ -580,7 +593,7 @@ export function percentOf(part: number, of: number): number | null {
  * What a reader **typed** as a decimal, back to a number — a comma or a point (ADR-0167 §1, AC-3): `1,4` and `1.4`
  * are both 1.4. `NaN` for anything that is not a number, and for an empty field.
  *
- * **The same in both languages** (P18.98-T3 AC-3): an Indonesian reader may type a point, and an English one a comma,
+ * **The same in both languages** (P18.10-T3 AC-3): an Indonesian reader may type a point, and an English one a comma,
  * so the field never asks which language the reader is in — `17,6` and `17.6` are 17.6 whatever the screen's.
  *
  * **For small values only** — a ratio benchmark, a rate, a count of months — never money, which takes whole
@@ -610,7 +623,7 @@ export function parseDecimal(typed: string): number {
 }
 
 /**
- * **A decimal as a field holds it** (P18.98-T3 AC-3): `3,5` in Indonesian and `3.5` in English — the language's
+ * **A decimal as a field holds it** (P18.10-T3 AC-3): `3,5` in Indonesian and `3.5` in English — the language's
  * decimal mark, no grouping (the values a decimal field takes are small), every place the number has. `''` for
  * nothing. What `DecimalInput` writes when its value is set from outside, read back by `parseDecimal` in either
  * language.
@@ -632,7 +645,7 @@ export function formatDecimalInput(value: number | null, language: Language = DE
  *   its correction panel (the carrier's file's own figures); an **input** and what it echoes (the read-only
  *   figure that stands in one); and a **price** — the Super Admin's billing quote and a subscription's costs.
  *
- * **English since P18.98-T3** (§E; UI-019): `IDR 500M`, `IDR 5.8B`, `IDR 750K`, and `IDR 500,000,000` in full. The
+ * **English since P18.10-T3** (§E; UI-019): `IDR 500M`, `IDR 5.8B`, `IDR 750K`, and `IDR 500,000,000` in full. The
  * currency's mark is the language's (`moneyPrefix`: *Rp*, *IDR*), so is each unit's (*M* · *B*, *jt* · *M*, *rb* ·
  * *K*), and Indonesian puts a space before its unit where English puts none. The sum is rounded once.
  */
@@ -647,7 +660,7 @@ export const toMinor = (major: number) => Math.round(major * MINOR_UNITS_PER_MAJ
 const CURRENCY_MARK: Readonly<Record<Language, string>> = { id: 'Rp', en: 'IDR' };
 
 /**
- * **A money field's prefix, and the mark before every sum** (P18.98-T3 AC-3): *Rp* in Indonesian, *IDR* in English.
+ * **A money field's prefix, and the mark before every sum** (P18.10-T3 AC-3): *Rp* in Indonesian, *IDR* in English.
  * A field's affix (`TextInput`'s `prefix`) reads it, so the box says what the sums around it say.
  */
 export function moneyPrefix(language: Language = DEFAULT_LANGUAGE): string {
@@ -680,6 +693,31 @@ export function formatRupiah(minor: number, language: Language = DEFAULT_LANGUAG
 }
 
 /**
+ * **The currencies a product is sold in, as its card writes them** (P19.4-T4 AC-12; ADR-0209 §8; §B.25): the codes,
+ * *IDR*, *USD* or *IDR + USD*, the same in both languages — a label, never a sum. In the API's order, `IDR` first.
+ */
+export function formatCurrencies(currencies: readonly string[]): string {
+  return currencies.join(' + ');
+}
+
+/**
+ * **A sum in full, in the currency it is held in** (ADR-0209 §8, amending ADR-0174 §4 to §6; §B.25): the currency's
+ * code before the figure and **two decimal places** — *USD 1.250,00* in Indonesian, *USD 1,250.00* in English — for a
+ * currency other than IDR, whose minor unit (the cent) is a hundredth; never compact, since *M*, *jt* and *rb* are
+ * IDR's words alone. IDR is `formatRupiah`, as before. No product stores an amount yet: this is the one way one is
+ * written when it does.
+ */
+export function formatMoneyInFull(minor: number, currency: string, language: Language = DEFAULT_LANGUAGE): string {
+  if (currency === 'IDR') return formatRupiah(minor, language);
+  if (!Number.isFinite(minor)) return '';
+  const cents = Math.round(Math.abs(minor));
+  const whole = Math.floor(cents / 100);
+  const fraction = String(cents % 100).padStart(2, '0');
+  const sign = minor < 0 && cents > 0 ? '-' : '';
+  return `${sign}${currency} ${grouped(whole, language)}${NUMBER_MARKS[language].decimal}${fraction}`;
+}
+
+/**
  * **Rupiah in each compact unit, by the mark a screen writes after it** (ADR-0174 §4; `metrics-and-definitions.md`
  * §B.25): `M` a *miliar*, `jt` a *juta*, `rb` a *ribu*. Held once, here — a screen that writes a figure in a header's
  * unit, the forum's *APE (Rp M)* and *Avg. Case Size (Rp jt)*, reads its size from this, never a second `1e9`.
@@ -703,7 +741,7 @@ const UNIT_GAP: Readonly<Record<Language, string>> = { id: ' ', en: '' };
 const COMPACT_UNITS: readonly CompactUnit[] = ['M', 'jt', 'rb'];
 
 /**
- * **A header's money unit** (P18.98-T3 AC-1; ADR-0174 §5): what goes in the brackets of a column or a row whose
+ * **A header's money unit** (P18.10-T3 AC-1; ADR-0174 §5): what goes in the brackets of a column or a row whose
  * figures are written in one unit — *Rp M* and *Rp jt* in Indonesian, *IDR B* and *IDR M* in English, so the forum's
  * *APE (Rp M)* reads *APE (IDR B)* and its *Avg. Case Size (Rp jt)* reads *Avg. Case Size (IDR M)*. The name before
  * the brackets is a kept-English term (§A.4); the unit is a format. **Not for a file's header**: the production file's

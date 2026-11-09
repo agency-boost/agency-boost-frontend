@@ -1,7 +1,7 @@
 import { api } from './api-client';
 
 /**
- * **Home** (UI V1, 2026-10-30, Phase 18.99 T11; UI-100, UI-101; `functional/home.md`): `GET /home`, every block of the
+ * **Home** (UI V1, 2026-10-30, Phase 18.11 T11; UI-100, UI-101; `functional/home.md`): `GET /home`, every block of the
  * page in one read. The screen draws the server's figures and adds nothing up: the tiles are the Unit Dashboard's, the
  * schedule Calendar's, the counts Activity Management's.
  *
@@ -113,15 +113,31 @@ export interface HomeTeamPerson {
   /** A signed link; `null` draws initials. */
   photoUrl: string | null;
   inUnit: boolean;
+  /**
+   * **Their rung** (P19.9-T2 AC-2; ADR-0235): the code and the company's own label — the *Group* tab's tag, in the
+   * company's short words (`RungTag`: *AB · AAB · Agent*).
+   */
+  rung: HomeRung;
   /** The day's saved total, `null` for no saved day. */
   yesterday: number | null;
   today: number | null;
 }
 
+/** A rung as `GET /home` names it: its code on the company's ladder, and the company's label for it. */
+export interface HomeRung {
+  code: string;
+  label: string;
+}
+
+/**
+ * The leader's part of Home — sent for **every leader by role**, at zero with no team yet (ADR-0189 §4, ADR-0228 §4);
+ * `null` for an Agent. *Changed 2026-11-07 (P19.8-T2): `members` and `recruitmentPipeline` left with *Tim saya*;
+ * `newHires` is the view's.*
+ */
 export interface HomeLeader {
   activeAgent: HomeSplit;
   coached7d: HomeSplit;
-  /** In UI-101's order: nobody-reported first. */
+  /** *Laporan aktivitas tim*, in UI-101's order: nobody-reported first. */
   team: HomeTeamPerson[];
 }
 
@@ -134,13 +150,26 @@ export interface HomeView {
   activity: HomeActivity;
   schedule: HomeSchedule;
   actions: HomeAction[];
+  /** *Leads* (`OWN_OPEN_LEADS`; P19.9-T1 AC-5, ADR-0232): every open lead the reader owns — what `/leads` opens on. */
+  leads: number;
+  /** *New hires*: the reader's Group's new hires before a first sale; 0 when they lead nobody. */
+  newHires: number;
   leader: HomeLeader | null;
 }
 
 export const readHome = () => api<HomeView>('/home');
 
-/** *Laporan tim* shows five, then *Semua ›* (UI-101). */
+/**
+ * *Laporan aktivitas tim* shows five, then *Semua ›* (UI-101, MOB UI-165), which **opens the rest in place** (P19.9-T2
+ * AC-1, R8; ADR-0235, OD-278 option 3) — where from P19.8-T2 it went to the Unit Dashboard's *Aktivitas* tab.
+ */
 export const HOME_TEAM_SHOWN = 5;
+
+/** Where *Tambah user* goes (P19.8-T2 AC-3; OD-277 by its default, ADR-0228 §3): the existing *Add New Agents* page. */
+export const ADD_USER_HREF = '/user-management/add';
+
+/** Where *Tambah agent pertama →* goes (P19.8-T2 AC-9; ADR-0228 §6): New Hires, where *+ Tambah agent* is. */
+export const FIRST_AGENT_HREF = '/new-hires';
 
 /** A part of the day, for the greeting: *Pagi*, *Siang*, *Sore*, *Malam*. */
 export type DayPart = 'morning' | 'midday' | 'afternoon' | 'evening';

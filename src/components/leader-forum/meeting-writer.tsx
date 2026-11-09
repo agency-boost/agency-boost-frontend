@@ -22,7 +22,7 @@ import type { MeetingView, MeetingWriter } from '@/lib/leader-meetings';
  * The lines go to the page's toast, the one live region it has (`:2023`); a failure or a conflict also stays
  * under *Save* until a later write lands (L-110), because the toast goes after 2600 ms and the change it
  * names is still not saved. **That line is held by what it says** — a conflict or a failure — and written in the
- * screen's language each time it is drawn, so a reader who switches language reads it in the new one (P18.98-T4).
+ * screen's language each time it is drawn, so a reader who switches language reads it in the new one (P18.10-T4).
  */
 
 /** What the line under *Save* says: a write was read again over somebody else's, or one failed. */

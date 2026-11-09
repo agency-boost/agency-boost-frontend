@@ -3,7 +3,7 @@ import { kept } from '@/i18n/kept';
 import type { RosterStatus } from '@/lib/coaching';
 
 /**
- * **The Unit Dashboard's words** (P18.98-T4, coaching and unit; `functional/unit-dashboard.md`, *The module's own
+ * **The Unit Dashboard's words** (P18.10-T4, coaching and unit; `functional/unit-dashboard.md`, *The module's own
  * strings*): the period switch, the four tiles, *Your team's roster* as a table and as a phone's cards — its groups,
  * totals, marks, pills and drills — a row's detail, *Update production*, and the states the prototype lacks; with the
  * sentences `lib/unit-dashboard.ts` builds from the server's figures.
@@ -37,7 +37,7 @@ const en = {
     updateProduction: 'Update production',
     yourTeam: 'Your team',
     directGroupProduction: 'Direct Group production',
-    /** The prototype's *Potential Monthly Active Agents (Group)*, in plain words since P18.95-T9 AC-4. */
+    /** The prototype's *Potential Monthly Active Agents (Group)*, in plain words since P18.7-T9 AC-4. */
     potentialActiveTile: 'On pace to be active (Group)',
     potentialRecruitsTile: 'Potential Recruits (Group)',
     yourUnitRecruits: 'Your unit',
@@ -63,7 +63,8 @@ const en = {
     ratios: 'Ratios',
     salesOnly: kept('Sales-only'),
     followUp: 'Flagged follow-up (system-detected)',
-    dialogHint: 'Enter the latest figures from the company report — month and year are updated independently.',
+    /** P19.5-T2 (R4): the year is the sum of the months, shown and not typed — the prototype's line said both were typed. */
+    dialogHint: 'Enter the latest month’s figures from the company report — the year is the sum of the months.',
     dialogName: 'Name',
     /** `unit` the money's mark in the figures' language: *Rp*, *IDR* — what the boxes beneath are prefixed with. */
     dialogMonth: ({ unit }: { unit: string }) => `Month achieved (${unit})`,
@@ -96,7 +97,7 @@ const en = {
     targetMade: 'Year’s target made',
     targetMadeNote: 'The year’s target was made before this month began — this month needs nothing more.',
     thisMonth: 'this month',
-    /** A figure standing without a target (P18.95-T3 AC-2): `sum` written by the caller. */
+    /** A figure standing without a target (P18.7-T3 AC-2): `sum` written by the caller. */
     produced: ({ sum }: { sum: string }) => `produced ${sum}`,
     proRated: 'pro-rated',
     /** ADR-0165 §2: *goal activities*, never *touches*. */
@@ -111,10 +112,12 @@ const en = {
     notFoundLine: 'They may lead nobody yet, or sit outside your team, or the address may be mistyped.',
     backToYours: 'Your Unit Dashboard',
     saving: 'Saving…',
-    /** What each row's ✓ is called, for a screen reader (P18.95-T9 AC-4). */
+    /** What each row's ✓ is called, for a screen reader (P18.7-T9 AC-4). */
     maaMark: `Potential ${kept('Monthly Active Agent')}`,
-    /** What the *New hire* tag adds for a screen reader (P18.96-T5 AC-3). */
+    /** What the *New hire* tag adds for a screen reader (P18.8-T5 AC-3). */
     newHireMark: ', no first sale yet',
+    /** P19.7-T2 AC-13 (ADR-0221 §7): a phone row's document icon and count, as a screen reader hears it. */
+    proposalsMade: ({ n }: { n: number }) => (n === 1 ? '1 proposal' : `${n} proposals`),
   },
   /** A unit below the reader (P15-T4 AC-2): titled for its head, so the reader knows whose it is. */
   titleOf: ({ name }: { name: string }) => `${name}’s Unit Dashboard`,
@@ -137,14 +140,14 @@ const en = {
   agentsOf: ({ count, of }: { count: number; of: number }) => `${count} / ${of} agents`,
   /** *Potential Recruits*'s rows (`:7266-7270`). */
   candidates: ({ n }: { n: number }) => `${n} ${n === 1 ? 'candidate' : 'candidates'}`,
-  /** *Your team*'s line (P18.95-T7 AC-1, row 19): the head's own unit, then every AAB unit with everybody in it. */
+  /** *Your team*'s line (P18.7-T7 AC-1, row 19): the head's own unit, then every AAB unit with everybody in it. */
   teamLine: ({ direct, under }: { direct: number; under: number }) => `${direct} direct · ${under} under AABs`,
   /** The toast after *Save all* (`:7554`), counting only the rows that changed. */
   productionToast: ({ n }: { n: number }) => `Production updated for ${n} ${n === 1 ? 'agent' : 'agents'}.`,
-  /** *+ Add agent*'s toasts, after the shared confirmation (P18.96-T3). */
+  /** *+ Add agent*'s toasts, after the shared confirmation (P18.8-T3). */
   addedDetail: ({ name }: { name: string }) => `${name} is in the unit now.`,
   transferDetail: ({ name }: { name: string }) => `${name} moves when the office approves it.`,
-  /** A total's count of members on pace (P18.95-T9 AC-4; UI-028). */
+  /** A total's count of members on pace (P18.7-T9 AC-4; UI-028). */
   onPace: ({ count, of }: { count: number; of: number }) => `On pace to be active: ${count}/${of}`,
   /** The goal line and its sub-line (`:7364-7367`): `pct` and `sum` written by the caller. */
   goal: {
@@ -201,14 +204,15 @@ const en = {
   /** *Overdue {n}d* (`:7292`). */
   overdue: ({ n }: { n: number }) => `Overdue ${n}d`,
   /**
-   * **UI V1** (Phase 18.99 T4; the owner's report of 2026-10-30, UI-001 to UI-012 and UI-028): the report's words where
+   * **UI V1** (Phase 18.11 T4; the owner's report of 2026-10-30, UI-001 to UI-012 and UI-028): the report's words where
    * it gives them — *Tim Anda*, *Produksi Group*, *Active Agent {Bulan}*, *Recruitment {Bulan}*, *Last updated*, *Leads
    * penjualan*, *Closing*, *Leads rekrut*, *Potensi rekrut*, *Minggu | Bulan*, *Unit | Group*, *Semua* — and the rest
-   * proposed in the glossary's §B.10 (Phase 18.99 T4). *Overview*, *Active Agent*, *Recruitment*, *Last updated*, *Unit*,
+   * proposed in the glossary's §B.10 (Phase 18.11 T4). *Overview*, *Active Agent*, *Recruitment*, *Last updated*, *Unit*,
    * *Group* and *Closing* are kept (§A; UI-006).
    */
   v1: {
-    tabs: { overview: kept('Overview'), activities: 'Activities' },
+    // UI-155 (P19.1-T6): the third tab, *Potensi*, the named metrics' word (ADR-0193), the same in both languages.
+    tabs: { overview: kept('Overview'), activities: 'Activities', potensi: kept('Potensi') },
     groupProduction: 'Group production',
     /** UI-003's labels: `month` the month's name in full, written by the caller in the figures' language. */
     activeAgent: ({ month }: { month: string }) => `${kept('Active Agent')} ${month}`,
@@ -233,6 +237,11 @@ const en = {
       closing: kept('Closing'),
       recruitLeads: 'Recruitment leads',
       potentialRecruits: 'Potential recruits',
+      /** UI-114 (P19.1-T1 AC-3): a laptop's short column names under *Sales leads* and *Recruitment leads*. */
+      leads: kept('Leads'),
+      potensi: kept('Potensi'),
+      /** P19.7-T2 AC-13 (ADR-0221 §7): `PROPOSALS_MADE`, after *Potensi rekrut* — the proposal spec's own word. */
+      proposal: 'Proposal',
     },
     /** *Minggu | Bulan*: in English by its rhythm — *Week* alone is the Calendar's kept tab (§A). */
     span: { week: 'Weekly', month: 'Monthly' },
@@ -245,6 +254,20 @@ const en = {
     showSection: ({ label }: { label: string }) => `Show ${label}`,
     hideSection: ({ label }: { label: string }) => `Hide ${label}`,
     loadingActivities: 'Loading the activities…',
+    /**
+     * **The owner's mobile review of 7 November 2026** (P19.8-T4; ADR-0229): the ratio card's picker (MOB UI-184), its
+     * *PER ORANG* label — the revision's word, in capitals as a group label — the roster's title with its count when no
+     * chip is left but *Semua* (MOB UI-177), and the count tiles' *Semua* (MOB UI-178).
+     */
+    ratioFilter: 'Ratio for',
+    perPerson: 'PER PERSON',
+    rosterCount: ({ title, n }: { title: string; n: number }) => `${title} · ${n}`,
+    allTile: 'All',
+    /** The phone's *⟳ 27 Okt 26*: the words a screen reader hears before the day. */
+    lastUpdatedLabel: kept('Last updated'),
+    /** The phone's month chip on a tile's label (the Unit mockup's *Active Agent Nov*): `month` the month short. */
+    activeAgentShort: kept('Active Agent'),
+    recruitmentShort: kept('Recruitment'),
   },
 };
 
@@ -279,7 +302,7 @@ const id: MessagesOf<typeof en> = {
     ratios: 'Rasio',
     salesOnly: kept('Sales-only'),
     followUp: `${kept('Follow-up')} yang ditandai (terdeteksi sistem)`,
-    dialogHint: 'Masukkan angka terbaru dari laporan perusahaan — bulan dan tahun diperbarui secara terpisah.',
+    dialogHint: 'Masukkan angka bulan terbaru dari laporan perusahaan — angka tahun adalah jumlah bulan-bulannya.',
     dialogName: 'Nama',
     dialogMonth: ({ unit }) => `Pencapaian bulan (${unit})`,
     dialogYear: ({ unit }) => `Pencapaian tahun (${unit})`,
@@ -321,6 +344,7 @@ const id: MessagesOf<typeof en> = {
     saving: 'Menyimpan…',
     maaMark: `${kept('Monthly Active Agent')} potensial`,
     newHireMark: ', belum ada penjualan pertama',
+    proposalsMade: ({ n }) => `${n} proposal`,
   },
   titleOf: ({ name }) => `${kept('Unit Dashboard')} ${name}`,
   unitOf: ({ name }) => `${kept('Unit')} ${name}`,
@@ -376,7 +400,7 @@ const id: MessagesOf<typeof en> = {
   locked: ({ month }) => `Produksi untuk ${month} dikunci. ${kept('Owner')} atau ${kept('Admin')} dapat membukanya kembali.`,
   overdue: ({ n }) => `Terlambat ${n} hari`,
   v1: {
-    tabs: { overview: kept('Overview'), activities: 'Aktivitas' },
+    tabs: { overview: kept('Overview'), activities: 'Aktivitas', potensi: kept('Potensi') },
     groupProduction: 'Produksi Group',
     activeAgent: ({ month }) => `${kept('Active Agent')} ${month}`,
     recruitment: ({ month }) => `${kept('Recruitment')} ${month}`,
@@ -396,6 +420,9 @@ const id: MessagesOf<typeof en> = {
       closing: kept('Closing'),
       recruitLeads: `${kept('Leads')} rekrut`,
       potentialRecruits: 'Potensi rekrut',
+      leads: kept('Leads'),
+      potensi: kept('Potensi'),
+      proposal: 'Proposal',
     },
     span: { week: 'Minggu', month: 'Bulan' },
     scope: { unit: kept('Unit'), group: kept('Group') },
@@ -407,6 +434,14 @@ const id: MessagesOf<typeof en> = {
     showSection: ({ label }) => `Tampilkan ${label}`,
     hideSection: ({ label }) => `Sembunyikan ${label}`,
     loadingActivities: 'Memuat aktivitas…',
+    ratioFilter: 'Ratio untuk',
+    // MOB UI-184, verbatim.
+    perPerson: 'PER ORANG',
+    rosterCount: ({ title, n }) => `${title} · ${n}`,
+    allTile: 'Semua',
+    lastUpdatedLabel: kept('Last updated'),
+    activeAgentShort: kept('Active Agent'),
+    recruitmentShort: kept('Recruitment'),
   },
 };
 

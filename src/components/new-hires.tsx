@@ -8,12 +8,14 @@ import {
   ProgressSummary, RowError, useWriteQueue, V1_ITEM_CHECKBOX, V1_ITEM_ROW,
 } from '@/components/activation-parts';
 import { DataItemRow } from '@/components/activation-data-item';
-import { PageHeader } from '@/components/app-shell';
+import { PageHeader } from '@/components/page-header';
 import { ActionMenu } from '@/components/ui/action-menu';
 import { AutoMarker } from '@/components/ui/auto-marker';
 import { DateField } from '@/components/ui/date-field';
+import { NoDataLine, SamplePreview, useSampleName } from '@/components/sample-preview';
 import { EmptyState } from '@/components/ui/empty-state';
-import { Button, Card, ErrorBanner, Textarea } from '@/components/ui/field';
+import { Button, ButtonLink, Card, ErrorBanner, Textarea } from '@/components/ui/field';
+import { HEADER_CONTROL } from '@/components/ui/header-control';
 import { LineIcon } from '@/components/ui/line-icon';
 import { NumberBadge } from '@/components/ui/number-badge';
 import { PersonRow, TreeIndent, TreeNode, TreeToggle } from '@/components/ui/person-row';
@@ -27,27 +29,32 @@ import type { Language } from '@/i18n/language';
 import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
 import { activationMessages } from '@/i18n/messages/activation';
 import { newHiresMessages } from '@/i18n/messages/new-hires';
+import { samplePreviewMessages } from '@/i18n/messages/sample-preview';
+import { leadsByRole } from '@/lib/field-nav';
+import { sampleNewHires } from '@/lib/sample-data';
 import {
   ACTIVATION_NOTE_MAX, aspectTitle, attributionOf, autoBadge, correctionOf, correctStartDate, earliestStart,
-  FIRST_CASE_CLOSED, inFilter, isDataBacked, isManual, isTickedByHandLink, NEW_HIRE_FILTERS, newHireCounts,
-  newHireGroups, newHireHref, readHireClosings, readNewHire, readNewHires, saveActivationNote, saveHireItem,
-  startDateAllowed, startDateRangeText, takesHandWrite, type ActivationAspectProgress, type ActivationItemProgress,
-  type ActivationRecordInput, type ActivationView, type NewHireDetail as NewHireDetailRead, type NewHireFilter,
-  type NewHireGroup, type NewHireRow, type NewHiresRoster, type NewHireStanding, type NewHireStatus,
+  FIRST_CASE_CLOSED, inFilter, isDataBacked, isEmptyActivation, isManual, isTickedByHandLink, NEW_HIRE_FILTERS,
+  NEW_HIRE_YEARS, newHireCounts, newHireGroups, newHireHref, readHireClosings, readNewHire, readNewHires,
+  saveActivationNote, saveHireItem, startDateAllowed, startDateRangeText, takesHandWrite, type ActivationAspectProgress,
+  type ActivationEmpty, type ActivationItemProgress, type ActivationRecordInput, type ActivationView,
+  type NewHireDetail as NewHireDetailRead, type NewHireFilter, type NewHireGroup, type NewHireLeader, type NewHireRow,
+  type NewHiresRoster, type NewHireStanding, type NewHireStatus, type NewHireYear,
 } from '@/lib/activation';
-import { coachingSessionHref, oneOnOneHref } from '@/lib/hrefs';
+import { oneOnOneHref } from '@/lib/hrefs';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import { formatOfficeDay, formatPercent, formatShortDay, OFFICE_TIME_ZONE } from '@/lib/format';
 import { saveMemberPhone, whatsAppHref } from '@/lib/phone-number';
 import { useCan, useSession } from '@/lib/session';
+import { useMediaQuery } from '@/lib/use-media-query';
 import { useOpenedOnce } from '@/lib/use-opened-once';
 import { usePhone } from '@/lib/use-phone';
 
-/** ***Isi nomor WhatsApp***, downloaded when it is first opened and mounted from then on (`useOpenedOnce`; P18.99-T16). */
+/** ***Isi nomor WhatsApp***, downloaded when it is first opened and mounted from then on (`useOpenedOnce`; P18.11-T16). */
 const PhoneNumberSheet = dynamic(() => import('@/components/phone-number-sheet').then((m) => m.PhoneNumberSheet), { ssr: false });
 
-/** The roster's and the detail's words (`i18n/messages/new-hires.ts`; P18.98-T4). */
+/** The roster's and the detail's words (`i18n/messages/new-hires.ts`; P18.10-T4). */
 type HiresWords = MessagesOf<typeof newHiresMessages.en>;
 
 /*
@@ -65,68 +72,95 @@ export interface WaitingSummary {
 }
 
 /**
- * **New Hires** (`/new-hires`; P13-T5, P18.96-T6 — ADR-0173; **UI V1, 2026-10-30: UI-023 to UI-026**, D-24): a year
+ * **New Hires** (`/new-hires`; P13-T5, P18.8-T6 — ADR-0173; **UI V1, 2026-10-30: UI-023 to UI-026**, D-24): a year
  * of new hires **as a tree of their leaders**.
  *
  * - **At the top, two tiles**: *Aktivasi 3M* — the server's percentage alone, never *3/4* (rule A, ADR-0180 §6) — and
  *   *Menunggu bergabung n ›*, which opens the invitations (`waiting`; only for a reader who may add agents).
  * - **The filter** *Semua · Teraktivasi · Belum*, with counts: *Teraktivasi* is a first sale, late ones included;
  *   *Belum* everybody without one. A leader with nobody left under it is hidden.
+ * - **The year** (P19.9-T3 AC-1, AC-2; ADR-0233, the owner's R2 and R3): *Tahun berjalan | Tahun lalu*, a header control
+ *   above everything it scopes — the tile, the filter's counts, the groups. *Tahun berjalan*, the year's first day to today, is the
+ *   default; the other is the address's `?year=previous`. A year with nobody says so in one line, the other year a tap
+ *   away; only when neither has anybody is the page the sample below.
  * - **Below 768px, a leader accordion** (UI-073's shared tree): the reader's own group open, the units below closed;
  *   a leader's row — avatar, NAME, *Anda · Direct Unit · 4* or *AAB · 3*, the group's *Aktivasi 3M* — and under it a
  *   row per person, newest joiner first: a status circle (green ✓ Teraktivasi, amber ✓ after day 90, empty when not
  *   yet), NAME, one line — *Pecah telor di hari ke-X* (amber after day 90) or *Hari ke-X* — and the checklist's % with
- *   a 40px bar. **The whole row opens the person**: their coaching page for a leader who coaches (UI-029), else their
- *   detail. No join date, first-sale date, agent code, status chip, *Keluar* or *terlambat* (UI-024 to UI-026).
- * - **From 768px the same tree as a table** — *Nama · Status · Checklist*, every leader open — with a right column:
+ *   a 40px bar. **The whole row opens the person's activation** — `/new-hires/{id}`, for every reader (P19.9-T3 AC-4,
+ *   the owner's R4; it was their coaching page for a leader who coaches, UI-029) — carrying the year, so its ‹ comes back
+ *   to it. No join date, first-sale date, agent code, status chip, *Keluar* or *terlambat* (UI-024 to UI-026).
+ * - **From 1024px the same tree as a table** — *Nama · Status · Checklist*, every leader open — with a right column:
  *   the *Aktivasi 3M* tile and the invitation list.
+ * - **A tablet (768–1023px) draws the phone's page** (P19.1-T5 AC-2; UI-115, D-24; `coaching-newhires-tablet` 2): the
+ *   two tiles above the list, not a 240px side column — which put *DIMAS / PRATAMA* on two lines and wrapped the
+ *   *Teraktivasi, lewat 3M* pill — the filter, and the leaders' groups with the phone's rows, **every group open** as the
+ *   table it replaces had them; *Menunggu bergabung* opens its sheet, as on a phone. A separate variant for the range,
+ *   so a phone's and a desktop's markup are what they were (`new-hires/new-hires-tablet.spec.tsx`).
  *
  * **Every figure is the server's** (invariant §7): the status, the days and each group's share; the screen groups and
  * counts rows, and computes no percentage. **Its words are the catalogue's** (`new-hires.ts`), every percentage in the
  * figures' language.
  */
-export function NewHires({ waiting }: { waiting?: WaitingSummary | null }) {
+export function NewHires({ waiting, onAdd, year = 'current', onYear }: {
+  waiting?: WaitingSummary | null;
+  /** *+ Tambah agent*, for a reader who may add one: the empty page's next step (P19-T4 AC-3). */
+  onAdd?: () => void;
+  /** The year listed (P19.9-T3 AC-2): the address's, *Tahun berjalan* when it names none. */
+  year?: NewHireYear;
+  /** Choose the other year: the page writes it to the address. */
+  onYear?: (year: NewHireYear) => void;
+}) {
   const t = useMessages(newHiresMessages);
   const { me } = useSession();
-  const mayCoach = useCan('coaching_session:create');
   const [roster, setRoster] = useState<NewHiresRoster | null>(null);
   const [empty, setEmpty] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [filter, setFilter] = useState<NewHireFilter>('all');
   const phone = usePhone();
+  // P19.1-T5 AC-2 (UI-115): a tablet reads the phone's page, the tiles on top; from 1024px the table and its column.
+  const tablet = useMediaQuery('tablet');
+  const rows = phone || tablet;
 
   useEffect(() => {
     let live = true;
     setError(null);
-    readNewHires()
+    // P18.8-T7 AC-1: only ever this year's settled read — the skeleton until it lands, never last year's figures.
+    setRoster(null);
+    readNewHires(year)
       .then((next) => { if (live) { setRoster(next); setEmpty(false); } })
       .catch((err) => {
         if (!live) return;
-        // Nobody the reader leads joined as a new hire in the year: the nav would not have offered the page.
+        // Nobody the reader leads joined as a new hire this year or last: the nav would not have offered the page.
         if (err instanceof ApiRequestError && err.status === 404) setEmpty(true);
         else setError(toDisplayError(err));
       });
     return () => { live = false; };
-  }, [attempt]);
+  }, [attempt, year]);
 
   if (empty) {
-    return <Card><EmptyState title={t.empty} boost="thinking" /></Card>;
+    // A leader by role sees the sample (ADR-0189 §3); anybody else on a typed address, Boost and the line.
+    return leadsByRole(me?.membership)
+      ? <EmptyNewHires onAdd={onAdd} />
+      : <Card><EmptyState title={t.empty} boost="thinking" /></Card>;
   }
 
-  // A leader who coaches opens the person's coaching page on its Coaching Session (UI-029), its ‹ back to here; an
-  // Agent who leads, their detail.
-  const hrefOf = (membershipId: string) =>
-    (mayCoach ? coachingSessionHref(membershipId, '/new-hires') : newHireHref(membershipId));
+  // P19.9-T3 AC-4 (the owner's R4): every reader opens the person's activation, the year riding along for its ‹.
+  const hrefOf = (membershipId: string) => newHireHref(membershipId, year);
   const readerName = me?.user.fullName ?? '';
   const groups = roster
     ? newHireGroups(roster)
       .map((group) => ({ ...group, rows: group.rows.filter((row) => inFilter(row, filter)) }))
       .filter((group) => group.rows.length > 0)
     : [];
+  // AC-2: a year with nobody in it says so once, in place of the list — not the filter's *nobody here*.
+  const emptyLine = roster && newHireCounts(roster).all === 0 ? t.list.yearEmpty[year] : t.sectionEmpty;
 
   return (
     <div className="flex flex-col gap-4">
+      {/* Above the wait as well, so choosing the other year moves nothing under the reader's finger (P18.8-T7). */}
+      <YearChoice year={year} onYear={onYear} />
       {error && (
         <div>
           <ErrorBanner {...error} />
@@ -134,31 +168,31 @@ export function NewHires({ waiting }: { waiting?: WaitingSummary | null }) {
         </div>
       )}
       {!roster && !error && <SkeletonCards count={2} label={t.loading} />}
-      {roster && phone && (
-        <div className="flex flex-col gap-2.5" data-testid="new-hires-phone">
+      {roster && rows && (
+        <div className="flex flex-col gap-2.5" data-testid={phone ? 'new-hires-phone' : 'new-hires-tablet'}>
           <div className="grid grid-cols-2 gap-2">
             <ShareTile pct={roster.activation3M.all.pct} />
             {waiting && <WaitingTile count={waiting.count} onOpen={waiting.open} />}
           </div>
           <FilterBar roster={roster} filter={filter} onFilter={setFilter} />
-          {groups.length === 0 && <p className="px-1 text-sm text-muted">{t.sectionEmpty}</p>}
+          {groups.length === 0 && <p className="px-1 text-sm text-muted">{emptyLine}</p>}
           {groups.map((group, i) => (
             <GroupCard
               key={group.key}
               group={group}
               readerName={readerName}
               hrefOf={hrefOf}
-              startOpen={group.key === 'direct' || (i === 0 && !groups.some((g) => g.key === 'direct'))}
+              startOpen={tablet || group.key === 'direct' || (i === 0 && !groups.some((g) => g.key === 'direct'))}
             />
           ))}
         </div>
       )}
-      {roster && !phone && (
+      {roster && !rows && (
         <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_15rem] lg:grid-cols-[minmax(0,1fr)_19rem]" data-testid="new-hires-wide">
           <section aria-label={t.title} className="min-w-0 rounded-lg border border-card-edge bg-card p-4">
             <FilterBar roster={roster} filter={filter} onFilter={setFilter} />
             {groups.length === 0
-              ? <p className="mt-3 text-sm text-muted">{t.sectionEmpty}</p>
+              ? <p className="mt-3 text-sm text-muted">{emptyLine}</p>
               : <RosterTable groups={groups} readerName={readerName} hrefOf={hrefOf} />}
           </section>
           <div className="flex min-w-0 flex-col gap-4">
@@ -172,6 +206,37 @@ export function NewHires({ waiting }: { waiting?: WaitingSummary | null }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * **Nobody the reader leads joined in the year** (P19-T4 AC-3; D-37, UI-159 item 3; ADR-0189 §2, §3): the page's
+ * *Aktivasi 3M* at *–*, *Belum ada data*, and the list as it will look — this page's own group card over three sample
+ * hires — greyed and labelled *Contoh*, with *Tambah agent pertama*.
+ */
+function EmptyNewHires({ onAdd }: { onAdd?: () => void }) {
+  const next = useMessages(samplePreviewMessages).next;
+  const { person, leader } = useSampleName();
+  const sample = sampleNewHires(person, '2026-01-01');
+  const [group] = newHireGroups(sample);
+  return (
+    <div className="flex flex-col">
+      <div className="grid grid-cols-2 gap-2 md:max-w-[19rem] md:grid-cols-1">
+        <ShareTile pct={null} />
+      </div>
+      <NoDataLine />
+      <SamplePreview
+        sample={(
+          <div className="flex flex-col gap-2.5">
+            <div className="grid grid-cols-2 gap-2"><ShareTile pct={sample.activation3M.all.pct} /></div>
+            <GroupCard group={group} readerName={leader} hrefOf={newHireHref} startOpen />
+          </div>
+        )}
+        action={onAdd
+          ? <Button onClick={onAdd}>{next.addFirstAgent}</Button>
+          : <ButtonLink href="/user-management/add">{next.addFirstAgent}</ButtonLink>}
+      />
     </div>
   );
 }
@@ -195,7 +260,7 @@ function ShareFigure({ pct, className }: { pct: number | null; className?: strin
 function ShareTile({ pct }: { pct: number | null }) {
   const t = useMessages(newHiresMessages);
   return (
-    <section aria-label={t.activation3M} className="flex min-h-[72px] flex-col justify-center rounded-row bg-amber px-3 py-2 text-navy">
+    <section aria-label={t.activation3M} className="flex min-h-[72px] flex-col justify-center rounded-row bg-primary px-3 py-2 text-primary-contrast">
       <h2 className="text-sm font-semibold">{t.activation3M}</h2>
       <ShareFigure pct={pct} className="text-[1.375rem] font-extrabold leading-tight" />
     </section>
@@ -222,12 +287,42 @@ function WaitingTile({ count, onOpen }: { count: number; onOpen: () => void }) {
   );
 }
 
-/** *Semua · Teraktivasi · Belum* with their counts (UI-024): a segmented choice, 40px, flex widths. */
+/**
+ * ***Tahun berjalan | Tahun lalu*** (P19.9-T3 AC-2; ADR-0233, the owner's R3): which year the page lists — two header
+ * controls (D-38: 13px, 600, 44px) in the filter's own pill track, both always in sight, the chosen one ink. Equal halves
+ * on a phone and a tablet, its words' width from 1024px. A choice goes to the address (`onYear`), so Back and a shared
+ * link keep it.
+ */
+function YearChoice({ year, onYear }: { year: NewHireYear; onYear?: (year: NewHireYear) => void }) {
+  const t = useMessages(newHiresMessages).list;
+  return (
+    <div role="group" aria-label={t.yearName} className="flex rounded-pill bg-card p-1 lg:w-fit">
+      {NEW_HIRE_YEARS.map((key) => (
+        <button
+          key={key}
+          type="button"
+          aria-pressed={year === key}
+          onClick={() => { if (key !== year) onYear?.(key); }}
+          className={cn(
+            'flex-1 whitespace-nowrap rounded-pill px-4',
+            HEADER_CONTROL,
+            year === key ? 'bg-ink text-white' : 'text-ink hover:bg-hover-row',
+          )}
+        >
+          {t.year[key]}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** *Semua · Teraktivasi · Belum* with their counts (UI-024): a segmented choice of header controls, flex widths. */
 function FilterBar({ roster, filter, onFilter }: { roster: NewHiresRoster; filter: NewHireFilter; onFilter: (f: NewHireFilter) => void }) {
   const t = useMessages(newHiresMessages).list;
   const counts = newHireCounts(roster);
   return (
-    <div role="group" aria-label={t.filterName} className="flex rounded-pill bg-card p-1 md:bg-base">
+    // On the page's grey below 1024px (a phone and, since P19.1-T5, a tablet); inside the table's white card from it.
+    <div role="group" aria-label={t.filterName} className="flex rounded-pill bg-card p-1 lg:bg-base">
       {NEW_HIRE_FILTERS.map((key) => (
         <button
           key={key}
@@ -235,7 +330,10 @@ function FilterBar({ roster, filter, onFilter }: { roster: NewHiresRoster; filte
           aria-pressed={filter === key}
           onClick={() => onFilter(key)}
           className={cn(
-            'min-h-10 flex-1 whitespace-nowrap rounded-pill px-2 text-sm font-semibold max-md:min-h-11',
+            // A header control at every size (P19.8-T1 AC-1; R6, MOB UI-171): 13px, 600, 44px. It was 12px, and 40px on a
+            // desktop.
+            'flex-1 whitespace-nowrap rounded-pill px-2',
+            HEADER_CONTROL,
             filter === key ? 'bg-ink text-white' : 'text-ink hover:bg-hover-row',
           )}
         >
@@ -291,10 +389,19 @@ function ChecklistMini({ checklist, wide = false }: { checklist: NewHireRow['che
     <span className={cn('flex shrink-0', wide ? 'items-center gap-2' : 'flex-col items-end gap-1')}>
       <span className="text-xs font-bold text-ink">{formatPercent(checklist.pct, {}, figures)}</span>
       <span aria-hidden="true" className={cn('block h-1 overflow-hidden rounded-pill bg-divider', wide ? 'w-24' : 'w-10')}>
-        <span className="block h-full rounded-pill bg-amber" style={{ width: `${width}%` }} />
+        <span className="block h-full rounded-pill bg-primary" style={{ width: `${width}%` }} />
       </span>
     </span>
   );
+}
+
+/**
+ * **Where a row opens: the person's activation, unless they have left** (the Phase 19.9 exit review, L4). A new hire who
+ * was marked as left stays on the list (ADR-0173 §2), but nobody coaches them now, so `/new-hires/{id}` answers *not
+ * found* for them: their row reads as a row and opens nothing, on the phone's tree and the table alike.
+ */
+function hrefFor(row: NewHireRow, hrefOf: (membershipId: string) => string): string | undefined {
+  return row.leftOn ? undefined : hrefOf(row.hire.membershipId);
 }
 
 /** One leader's group below 768px (UI-024, UI-073): the leader's row with its ⌄, and its people on the shared tree. */
@@ -319,7 +426,7 @@ function GroupCard({
         meta={groupMeta(group, t, group.rows.length)}
         trailing={(
           <>
-            <span className="text-md font-bold text-amber-ink" aria-label={t.list.groupShare({ name })}>
+            <span className="text-md font-bold text-primary-ink" aria-label={t.list.groupShare({ name })}>
               <ShareFigure pct={group.unit.activation3M.all.pct} />
             </span>
             <TreeToggle name={name} open={open} onToggle={() => setOpen((o) => !o)} controls={listId} />
@@ -332,10 +439,10 @@ function GroupCard({
             <TreeNode key={row.hire.membershipId}>
               <PersonRow
                 name={row.hire.name}
-                href={hrefOf(row.hire.membershipId)}
+                href={hrefFor(row, hrefOf)}
                 chevron
                 lead={<StatusCircle status={row.status} />}
-                meta={<span className={cn(row.status === 'activated_late' && 'text-amber-ink')}>{personLine(row, t)}</span>}
+                meta={<span className={cn(row.status === 'activated_late' && 'text-primary-ink')}>{personLine(row, t)}</span>}
                 trailing={<ChecklistMini checklist={row.checklist} />}
               />
             </TreeNode>
@@ -385,32 +492,39 @@ function RosterTable({
                       <span className="block truncate text-md font-bold uppercase text-ink">{name}</span>
                       <span className="block text-sm font-normal text-muted">{groupMeta(group, t, group.rows.length)}</span>
                     </span>
-                    <span className="text-md font-bold text-amber-ink" aria-label={t.list.groupShare({ name })}>
+                    <span className="text-md font-bold text-primary-ink" aria-label={t.list.groupShare({ name })}>
                       <ShareFigure pct={group.unit.activation3M.all.pct} />
                     </span>
                   </span>
                 </th>
               </tr>
-              {group.rows.map((row) => (
-                <tr key={row.hire.membershipId} className="lg:hover:bg-hover-row">
-                  <th scope="row" className={cn(TD, 'text-left')}>
-                    <Link
-                      href={hrefOf(row.hire.membershipId)}
-                      className="inline-flex min-h-11 items-center gap-1 text-md font-bold uppercase text-ink hover:underline lg:min-h-8"
-                    >
-                      {row.hire.name}
-                      <LineIcon name="chevronRight" className="h-4 w-4 text-signal-grey" />
-                    </Link>
-                  </th>
-                  <td className={TD}>
-                    <TonePill tone={STATUS_TONE[row.status]}>{t.list.status[row.status]}</TonePill>
-                    <span className={cn('mt-0.5 block text-sm text-muted', row.status === 'activated_late' && 'text-amber-ink')}>
-                      {personLine(row, t)}
-                    </span>
-                  </td>
-                  <td className={TD}><ChecklistMini checklist={row.checklist} wide /></td>
-                </tr>
-              ))}
+              {group.rows.map((row) => {
+                const href = hrefFor(row, hrefOf);
+                return (
+                  <tr key={row.hire.membershipId} className="lg:hover:bg-hover-row">
+                    <th scope="row" className={cn(TD, 'text-left')}>
+                      {href === undefined
+                        ? <span className="inline-flex min-h-11 items-center text-md font-bold uppercase text-ink lg:min-h-8">{row.hire.name}</span>
+                        : (
+                          <Link
+                            href={href}
+                            className="inline-flex min-h-11 items-center gap-1 text-md font-bold uppercase text-ink hover:underline lg:min-h-8"
+                          >
+                            {row.hire.name}
+                            <LineIcon name="chevronRight" className="h-4 w-4 text-signal-grey" />
+                          </Link>
+                        )}
+                    </th>
+                    <td className={TD}>
+                      <TonePill tone={STATUS_TONE[row.status]}>{t.list.status[row.status]}</TonePill>
+                      <span className={cn('mt-0.5 block text-sm text-muted', row.status === 'activated_late' && 'text-primary-ink')}>
+                        {personLine(row, t)}
+                      </span>
+                    </td>
+                    <td className={TD}><ChecklistMini checklist={row.checklist} wide /></td>
+                  </tr>
+                );
+              })}
             </tbody>
           );
         })}
@@ -445,17 +559,24 @@ function RosterTable({
  *   data's**: its date shows, with no ✎. A first sale only ever moves earlier (ADR-0171 §1), so with one recorded by
  *   hand the sheet offers the days up to it.
  * - **Every figure is served**, and every write answers the whole activation and the strip in place, nothing jumping
- *   (P18.96-T7). A hire outside the reader's reach is a 404, named for nobody; a read-only support session draws no
+ *   (P18.8-T7). A hire outside the reader's reach is a 404, named for nobody; a read-only support session draws no
  *   write control.
+ * - **The first year only** (P19.9-T3 AC-5; OD-289, ADR-0233, the owner's R5): from the join date plus twelve months the
+ *   server answers the activation empty, and the page is the person's header and one line — *the 90-Day Activation
+ *   covers the first year after joining only* — with nothing of the checklist; so is a new hire New Hires lists who has
+ *   no activation at all, whose line says so (`EmptyHire`), where the page said *not found*.
+ * - **Its ‹ goes back to the year it came from** (AC-4): `backHref`, the roster's address with its `?year=`.
  */
 export function NewHireDetail({
-  membershipId, embedded = false, notFound,
+  membershipId, embedded = false, notFound, backHref = '/new-hires',
 }: {
   membershipId: string;
   /** The coaching *Activation* tab (UI-029): no header and no way back — the agent's header is above it. */
   embedded?: boolean;
   /** What an embedded tab says for somebody with no activation, in its place. */
   notFound?: ReactNode;
+  /** Where ‹ and *Kembali ke New Hires* go (P19.9-T3 AC-4): New Hires on the year the row was opened from. */
+  backHref?: string;
 }) {
   const t = useMessages(newHiresMessages);
   const language = useLanguage();
@@ -464,7 +585,7 @@ export function NewHireDetail({
   const { me } = useSession();
   const readOnly = !!me?.isImpersonating && !!me.impersonationReadOnly;
   const mayTick = useCan('activation:update_manual_item') && !readOnly;
-  // P18.96-T4 AC-3: a data-backed item's hand tick carries its record, which only a leader who runs sessions writes.
+  // P18.8-T4 AC-3: a data-backed item's hand tick carries its record, which only a leader who runs sessions writes.
   const mayRecord = useCan('coaching_session:create') && mayTick;
   const mayCorrect = useCan('activation:set_start_date') && !readOnly;
   const mayNote = useCan('activation_note:write') && !readOnly;
@@ -476,6 +597,8 @@ export function NewHireDetail({
   const { save: track, statusOf } = useInlineSave();
 
   const [view, setView] = useState<NewHireDetailRead | null>(null);
+  // P19.9-T3 AC-5: past the first year, or a listed new hire with none — the person and one line.
+  const [emptyView, setEmptyView] = useState<ActivationEmpty | null>(null);
   const [missing, setMissing] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -490,14 +613,19 @@ export function NewHireDetail({
 
   useEffect(() => {
     let live = true;
-    // P18.96-T7 AC-1: only ever this hire's settled read; the skeleton until it lands, never another hire's figures.
+    // P18.8-T7 AC-1: only ever this hire's settled read; the skeleton until it lands, never another hire's figures.
     setView(null);
+    setEmptyView(null);
     setPending((p) => (Object.keys(p).length === 0 ? p : {}));
     setFailed((f) => (Object.keys(f).length === 0 ? f : {}));
     setError(null);
     setMissing(false);
     readNewHire(membershipId)
-      .then((next) => { if (live) setView(next); })
+      .then((next) => {
+        if (!live) return;
+        if (isEmptyActivation(next)) setEmptyView(next);
+        else setView(next);
+      })
       .catch((err) => {
         if (!live) return;
         if (err instanceof ApiRequestError && err.status === 404) setMissing(true);
@@ -553,8 +681,9 @@ export function NewHireDetail({
   }, [land, membershipId, queue, show, track, t]);
 
   if (missing) {
-    return embedded && notFound ? <>{notFound}</> : <HireNotFound />;
+    return embedded && notFound ? <>{notFound}</> : <HireNotFound backHref={backHref} />;
   }
+  if (emptyView) return <EmptyHire view={emptyView} embedded={embedded} backHref={backHref} />;
 
   const open = view?.state === 'open';
   const standing = view?.newHire ?? null;
@@ -623,7 +752,7 @@ export function NewHireDetail({
       {/* Below 768px (UI-027): ‹ · NAME · ⋯, and the leader and join date under the name. */}
       {view && phone && !embedded && (
         <header className="mb-3 flex items-start gap-1" data-testid="hire-header-phone">
-          <Link href="/new-hires" aria-label={t.hire.back} className="-ml-2 flex h-11 w-11 shrink-0 items-center justify-center text-navy">
+          <Link href={backHref} aria-label={t.hire.back} className="-ml-2 flex h-11 w-11 shrink-0 items-center justify-center text-navy">
             <LineIcon name="chevronLeft" className="h-6 w-6" />
           </Link>
           <div className="min-w-0 flex-1 pt-1.5">
@@ -640,8 +769,9 @@ export function NewHireDetail({
         </div>
       )}
       {/* From 768px: today's header and way back (UI-027: the subtitle goes at every size). */}
-      {view && !phone && !embedded && <PageHeader title={hireName} subtitle={closed ?? undefined} />}
-      {!phone && !embedded && <BackToRoster />}
+      {/* The closed line is the record's state, not a description: kept from 768px (P19.1-T1 AC-1; UI-112's exception). */}
+      {view && !phone && !embedded && <PageHeader title={hireName} subtitle={closed ?? undefined} keepSubtitle />}
+      {!phone && !embedded && <BackToRoster href={backHref} />}
 
       {error && (
         <div>
@@ -757,7 +887,9 @@ export function NewHireDetail({
 }
 
 /** *AAB Arief Hidayat · Bergabung 3 Agu 2026* (UI-027), or *Anda · …* when the reader is their leader. */
-function headerLine(standing: NewHireStanding, reader: string | null | undefined, t: HiresWords, figures: Language): string {
+function headerLine(
+  standing: { joinDate: string; leader: NewHireLeader | null }, reader: string | null | undefined, t: HiresWords, figures: Language,
+): string {
   const on = formatShortDay(standing.joinDate, { year: true }, figures);
   if (!standing.leader) return t.hire.joined({ on });
   if (standing.leader.membershipId === reader) return t.hire.joinedUnderYou({ on });
@@ -821,7 +953,7 @@ function ChecklistTile({ pct }: { pct: number }) {
       <div className="flex items-center gap-2">
         <span className="text-[1.375rem] font-extrabold leading-tight text-ink">{formatPercent(pct, {}, figures)}</span>
         <span aria-hidden="true" className="block h-[5px] flex-1 overflow-hidden rounded-pill bg-divider">
-          <span className="block h-full rounded-pill bg-amber" style={{ width: `${width}%` }} />
+          <span className="block h-full rounded-pill bg-primary" style={{ width: `${width}%` }} />
         </span>
       </div>
     </div>
@@ -855,7 +987,7 @@ function HireButtons({
   return (
     <div className="grid grid-cols-2 gap-2 md:flex md:flex-wrap">
       {schedule && (
-        <Link href={oneOnOneHref(membershipId)} aria-label={t.scheduleOneOnOneName({ name })} className={cn(pill, 'bg-navy text-white hover:bg-navy-soft')}>
+        <Link href={oneOnOneHref(membershipId)} aria-label={t.scheduleOneOnOneName({ name })} className={cn(pill, 'bg-secondary text-secondary-contrast hover:bg-secondary-hover')}>
           <LineIcon name="calendarPlus" className="h-[18px] w-[18px]" />
           {t.scheduleOneOnOne}
         </Link>
@@ -960,7 +1092,7 @@ function HireItemRow({
         {!manual && item.link && (
           <AutoMarker name={item.label} explanation={[autoBadge(item.link.completesWhen, language).tip, words].filter(Boolean).join(' ')} />
         )}
-        {/* D-orphan (P18.5-T3 AC-4): a link that does not complete the item now — ticked by hand, as Settings says. */}
+        {/* D-orphan (P18.2-T3 AC-4): a link that does not complete the item now — ticked by hand, as Settings says. */}
         {isTickedByHandLink(item) && <ByHandBadge />}
         {manual && <AttributionMark words={words} />}
         <InlineSaveStatus {...status} label={item.label} />
@@ -1011,10 +1143,10 @@ function FirstSaleRow({
   const pill = date
     ? <span className="inline-flex shrink-0 items-center gap-1 rounded-pill bg-base px-2.5 py-1 text-sm font-semibold text-ink">{date}{writable && <LineIcon name="pencil" className="h-3.5 w-3.5" />}</span>
     : writable
-      ? <span className="inline-flex shrink-0 items-center gap-0.5 rounded-pill bg-amber px-2.5 py-1 text-sm font-semibold text-navy">{t.addDate}<LineIcon name="chevronRight" className="h-3.5 w-3.5" /></span>
+      ? <span className="inline-flex shrink-0 items-center gap-0.5 rounded-pill bg-primary px-2.5 py-1 text-sm font-semibold text-primary-contrast">{t.addDate}<LineIcon name="chevronRight" className="h-3.5 w-3.5" /></span>
       : null;
   return (
-    <div className={cn(ITEM_ROW, V1_ITEM_ROW, !item.done && writable && '-mx-1.5 rounded-row bg-amber/[0.08] px-1.5')} data-code={item.code}>
+    <div className={cn(ITEM_ROW, V1_ITEM_ROW, !item.done && writable && '-mx-1.5 rounded-row bg-primary/[0.08] px-1.5')} data-code={item.code}>
       <div className="flex items-center gap-2.5">
         {writable ? (
           <button
@@ -1104,11 +1236,11 @@ function FirstSaleSheet({
 }
 
 /** *Back to New Hires* from 768px (UI-027: ‹ alone on a phone): the prototype's chevron and words, as a link. */
-function BackToRoster() {
+function BackToRoster({ href = '/new-hires' }: { href?: string }) {
   const t = useMessages(newHiresMessages);
   return (
     <Link
-      href="/new-hires"
+      href={href}
       className="mb-3.5 inline-flex min-h-11 items-center gap-1.5 py-1.5 text-base font-semibold text-navy-soft hover:text-navy lg:min-h-8"
     >
       <LineIcon name="chevronLeft" className="h-4 w-4" />
@@ -1118,7 +1250,7 @@ function BackToRoster() {
 }
 
 /**
- * *Join date* — the prototype's *Start date* (P18.96-T2 AC-5, ADR-0169) — which a leader may correct (OD-118): the
+ * *Join date* — the prototype's *Start date* (P18.8-T2 AC-5, ADR-0169) — which a leader may correct (OD-118): the
  * shared date field, here, written on change and audited by the server, within the contract's bounds — not after
  * the office's today and no more than a year before it. The server moves the membership's join date and the
  * activation's start together. Beside it, who last corrected it and when.
@@ -1130,7 +1262,7 @@ function JoinDateField({
   reader: string | null | undefined;
   writable: boolean;
   onCommit: (startDate: string) => void;
-  /** Its save confirmation (P18.95-T1 AC-5), under the field where the refusal is. */
+  /** Its save confirmation (P18.7-T1 AC-5), under the field where the refusal is. */
   status: InlineSaveStatusProps;
   error: string | null;
   resetKey: number;
@@ -1265,15 +1397,53 @@ function NoteCard({
 }
 
 /** Outside the reader's reach, or no activation (T5 AC-8): the same words for each, naming nobody. */
-function HireNotFound() {
+function HireNotFound({ backHref }: { backHref: string }) {
   const t = useMessages(newHiresMessages);
   return (
     <div>
-      <BackToRoster />
+      <BackToRoster href={backHref} />
       <Card>
         <h2 className="font-display text-lg font-bold text-navy">{t.detail.notFoundTitle}</h2>
         <p className="mt-1 text-md text-muted">{t.detail.notFoundLine}</p>
       </Card>
+    </div>
+  );
+}
+
+/**
+ * **An activation served empty** (P19.9-T3 AC-5; OD-289, ADR-0233, the owner's R5 — *"tetap ke activation tapi isinya
+ * kosong"*): the person's header as the full page draws it — ‹ · NAME and *AAB Arief · Bergabung 3 Agu 2025* below
+ * 768px, the title and *Kembali ke New Hires* from it — and **one line**: past the first year, that the 90-Day Activation
+ * covers the first year after joining only and the day it ended; a listed new hire with none, that they have none. On the
+ * coaching *Activation* tab, the line alone, under the agent's own header. Every date is the server's.
+ */
+function EmptyHire({ view, embedded, backHref }: { view: ActivationEmpty; embedded: boolean; backHref: string }) {
+  const t = useMessages(newHiresMessages);
+  const a = useMessages(activationMessages);
+  const figures = useFigureLanguage();
+  const phone = usePhone();
+  const { me } = useSession();
+  const name = view.hire.name;
+  const joinLine = view.joinDate ? headerLine({ joinDate: view.joinDate, leader: view.leader }, me?.membership?.membershipId, t, figures) : null;
+  const line = view.empty === 'first_year_over' && view.firstYearEndsOn
+    ? t.detail.firstYearOver({ on: formatShortDay(view.firstYearEndsOn, { year: true }, figures) })
+    : a.record.coacheeNone({ name });
+  return (
+    <div className="min-w-0" data-testid="hire-empty" data-empty={view.empty}>
+      {phone && !embedded && (
+        <header className="mb-3 flex items-start gap-1" data-testid="hire-header-phone">
+          <Link href={backHref} aria-label={t.hire.back} className="-ml-2 flex h-11 w-11 shrink-0 items-center justify-center text-navy">
+            <LineIcon name="chevronLeft" className="h-6 w-6" />
+          </Link>
+          <div className="min-w-0 flex-1 pt-1.5">
+            <h1 className="break-words text-[1.0625rem] font-extrabold uppercase leading-tight text-ink">{name}</h1>
+            {joinLine && <p className="mt-0.5 text-sm text-muted">{joinLine}</p>}
+          </div>
+        </header>
+      )}
+      {!phone && !embedded && <PageHeader title={name} subtitle={joinLine ?? undefined} keepSubtitle />}
+      {!phone && !embedded && <BackToRoster href={backHref} />}
+      <Card><p className="text-md text-muted">{line}</p></Card>
     </div>
   );
 }

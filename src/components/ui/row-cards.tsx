@@ -2,8 +2,8 @@ import type { LiHTMLAttributes, ReactNode } from 'react';
 import { cn } from '@/lib/cn';
 
 /**
- * **A wide table's rows as cards, on a phone** — the pieces every card is drawn with (ADR-0167 §6, P18.95-T3; shared
- * since P18.97-T7 AC-1, ADR-0178 §4). The Unit Dashboard's roster drew them first; the Owner's wide tables —
+ * **A wide table's rows as cards, on a phone** — the pieces every card is drawn with (ADR-0167 §6, P18.7-T3; shared
+ * since P18.9-T7 AC-1, ADR-0178 §4). The Unit Dashboard's roster drew them first; the Owner's wide tables —
  * `/kpm/analytics`' comparison, `/people/members`' directory, `/people/admins`' list and `/kpm/data-upload`'s month —
  * read them from here, so a card looks one way wherever a table becomes one.
  *
@@ -21,7 +21,7 @@ export const CARD_LABEL = 'text-xs font-semibold uppercase tracking-wide text-mu
 export function CardGroup({ label, count, children }: { label: string; count?: number; children: ReactNode }) {
   return (
     <>
-      <h3 className="border-b border-hairline bg-navy/[0.045] px-4 py-2.5 font-display text-base font-bold text-navy">
+      <h3 className="border-b border-hairline bg-secondary/[0.045] px-4 py-2.5 font-display text-base font-bold text-navy">
         {label}
         {count !== undefined && (
           <>

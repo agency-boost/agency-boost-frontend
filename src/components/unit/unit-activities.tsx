@@ -1,36 +1,48 @@
 'use client';
 
-import { useEffect, useId, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useId, useState, type ReactNode } from 'react';
 import { RatioCard } from '@/components/ratio-card';
-import { Avatar } from '@/components/ui/person-row';
+import { Avatar } from '@/components/ui/avatar';
 import { DateField } from '@/components/ui/date-field';
 import { Button, ErrorBanner } from '@/components/ui/field';
+import { HEADER_CONTROL } from '@/components/ui/header-control';
 import { LineIcon } from '@/components/ui/line-icon';
+import { PickerMenu, type PickerItem } from '@/components/ui/picker-menu';
 import { Skeleton, SkeletonBar } from '@/components/ui/skeleton';
+import { TippedGlyph } from '@/components/ui/tipped-glyph';
 import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
 import { unitDashboardMessages } from '@/i18n/messages/unit-dashboard';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import { formatMonthLong, formatNumber, formatWeekRange } from '@/lib/format';
+import { useMediaQuery } from '@/lib/use-media-query';
 import {
-  countOf, firstName, heatStep, readUnitActivities, scopePeople,
-  type ActivitiesPerson, type ActivitiesSection, type ActivitySpan, type ScopeTotals, type UnitActivitiesView,
-  type UnitScope,
+  countOf, firstName, readUnitActivities, scopePeople, sectionCount,
+  type ActivitiesPerson, type ActivitiesSection, type ActivitiesType, type ActivitySpan, type ScopeTotals,
+  type UnitActivitiesView, type UnitScope,
 } from '@/lib/unit-dashboard';
 
 /**
- * **The *Activities* tab** (UI V1, Phase 18.99 T4; UI-001, D-17; `unit-dashboard-mobile` screen 3,
- * `unit-dashboard-desktop` *Activities*): one read, `GET /unit/dashboard/activities`.
+ * **The *Aktivitas* tab** (UI V1, Phase 18.11 T4; UI-001, D-17; and the owner's mobile review of 7 November 2026, P19.8-T4:
+ * MOB UI-171, UI-180, UI-181, UI-183, UI-184, UI-185; ADR-0229 §1, §5–§7, §9; `unit-mobile-stopmotion-2026-11-07.html`
+ * `?tab=aktivitas` and `unit-aktivitas-mobile-2026-11-07.html`): one read, `GET /unit/dashboard/activities`.
  *
- * - **Controls**: `[‹] 26 Okt – 1 Nov 2026 [›]` — ‹ › one period, › disabled on the current one, the date a picker —
- *   then *Minggu | Bulan* (a Monday-to-Sunday week by default) and *Unit | Group*. The Overview's period is not here.
- * - **The table**: a sticky *Aktivitas* column (the office's own names, one line), a sticky tinted *Total*, then one
- *   column per person — avatar and FIRST NAME. **On a phone only the person columns slide sideways** (the one sideways
- *   scroll the report allows); from 1024px every column shows. Collapsible section rows, the office's (*Leads
- *   generation*, *Selling*, …), the first two open; a zero is a light *·*, anything else tinted by its size; a navy
- *   *Total* row. Counts only, never points. **The *Total* column and row are the server's sums.**
- * - **The ratio card below** (UI-053's shared card, rows, O-3): *Ratio · 30 hari terakhir* with its own *Unit | Group*,
- *   Unit first, always the last 30 days — it does not follow ‹ ›.
+ * - **Controls**, the row under the slider (ADR-0229 §1): `[‹] 2 – 8 Nov 2026 [›]` — ‹ › one period, › disabled on the
+ *   current one, the date a picker — then *Minggu | Bulan* (a Monday-to-Sunday week by default) and *Unit | Group*. Every
+ *   control 13px / 600 / 44px at every size (MOB UI-171, `HEADER_CONTROL`).
+ * - **The table**: a sticky *Aktivitas* column, a sticky *Total*, then one column per person — avatar and FIRST NAME.
+ *   **On a phone only the person columns slide sideways** (the one sideways scroll, ADR-0227 §6); from 1024px every column
+ *   shows. **On a phone a type's name is its *Nama singkat*, on one line** (MOB UI-180) — or, with none, the office's name
+ *   on up to two lines — and **a tap on it shows the name in full**; from 768px the office's name, as before. **Each
+ *   category row is a subtotal row** (MOB UI-183): its *Total* and one bold count per person (*·* for 0), open or closed;
+ *   **activity cells are plain numbers, with no tint** (the heat map, D-17, is gone); the navy *Total* row at the foot.
+ *   Counts only, never points; **every figure the server's**, a category's subtotal the sum of its types' counts.
+ * - **The ratio card below** (UI-053's shared card): *Ratio · 30 hari terakhir* at the section titles' size (MOB UI-185),
+ *   always the last 30 days, with **one picker, *Unit ⌄*** (MOB UI-184): *Unit*, *Group*, then *PER ORANG* and every
+ *   person of the Group. A person is read again with `ratioFor`, and the card shows **their own five ratios** — the table
+ *   stays as it is while it is read.
+ * - **A leader by role with nobody yet** (MOB UI-181, D-37): the normal table, *0* and *·*, no person column, and the
+ *   ratio card with *–* — never a paragraph. Anybody else on a typed address meets the screen's `empty`.
  *
  * Loaded on demand (`next/dynamic`, the screen's): a leader who never opens the tab never downloads it.
  */
@@ -40,22 +52,27 @@ export function UnitActivities({
   forId?: string;
   /** The unit's head, once read: the screen titles a unit below the reader by it. */
   onHead?: (head: UnitActivitiesView['head']) => void;
-  /** The head leads nobody: what the screen draws instead. */
-  empty: ReactNode;
+  /**
+   * What the screen draws when the head leads nobody — or `null`, for a leader by role, who sees the normal table at 0
+   * (MOB UI-181).
+   */
+  empty: ReactNode | null;
 }) {
   const t = useMessages(unitDashboardMessages);
   const [span, setSpan] = useState<ActivitySpan>('week');
   const [date, setDate] = useState<string | undefined>(undefined);
   const [scope, setScope] = useState<UnitScope>('unit');
-  const [ratioScope, setRatioScope] = useState<UnitScope>('unit');
+  /** The ratio card's choice: the *Unit*, the *Group*, or one person's membership (MOB UI-184). */
+  const [who, setWho] = useState<string>('unit');
   const [view, setView] = useState<UnitActivitiesView | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [attempt, setAttempt] = useState(0);
+  const ratioFor = who === 'unit' || who === 'group' ? undefined : who;
 
   useEffect(() => {
     let live = true;
     setError(null);
-    readUnitActivities({ span, date, for: forId })
+    readUnitActivities({ span, date, for: forId, ratioFor })
       .then((answer) => {
         if (!live) return;
         setView(answer);
@@ -63,7 +80,7 @@ export function UnitActivities({
       })
       .catch((err) => { if (live) setError(toDisplayError(err)); });
     return () => { live = false; };
-  }, [span, date, forId, attempt, onHead]);
+  }, [span, date, forId, ratioFor, attempt, onHead]);
 
   if (error) {
     return (
@@ -74,7 +91,19 @@ export function UnitActivities({
     );
   }
   if (!view) return <ActivitiesSkeleton />;
-  if (view.empty) return <>{empty}</>;
+  if (view.empty && empty !== null) return <>{empty}</>;
+
+  const personRatios = ratioFor === undefined
+    ? null
+    : view.ratios.person?.membershipId === ratioFor ? view.ratios.person.ratios : null;
+  const ratios = who === 'unit' ? view.ratios.unit : who === 'group' ? view.ratios.group : personRatios;
+  const choices: PickerItem[] = [
+    { value: 'unit', label: t.v1.scope.unit },
+    { value: 'group', label: t.v1.scope.group },
+    ...(view.people.length > 0
+      ? [{ group: t.v1.perPerson, options: view.people.map((p) => ({ value: p.membershipId, label: p.name })) }]
+      : []),
+  ];
 
   return (
     <div data-unit-activities="">
@@ -89,15 +118,17 @@ export function UnitActivities({
       <ActivityTable view={view} scope={scope} />
       <RatioCard
         className="mt-3 lg:max-w-xl"
-        ratios={view.ratios[ratioScope]}
+        ratios={ratios}
         days={view.ratios.days}
         headerRight={(
-          <Segmented
-            label={t.v1.scopeLabel}
-            value={ratioScope}
-            onChange={setRatioScope}
-            options={[{ id: 'unit', label: t.v1.scope.unit }, { id: 'group', label: t.v1.scope.group }]}
-            onNavy
+          <PickerMenu
+            label={t.v1.ratioFilter}
+            value={who}
+            options={choices}
+            onChange={setWho}
+            tone="on-secondary"
+            align="end"
+            className="ml-auto max-w-[10.5rem]"
           />
         )}
       />
@@ -105,7 +136,10 @@ export function UnitActivities({
   );
 }
 
-/** A small segmented control of toggle buttons, one pressed (UI-001): *Minggu | Bulan*, *Unit | Group*. */
+/**
+ * A small segmented control of toggle buttons, one pressed (UI-001): *Minggu | Bulan*, *Unit | Group* — a header control,
+ * 13px / 600 / 44px at every size (MOB UI-171, ADR-0227 §1).
+ */
 export function Segmented<T extends string>({
   label, value, onChange, options, onNavy = false, className,
 }: {
@@ -130,10 +164,11 @@ export function Segmented<T extends string>({
           aria-pressed={value === option.id}
           onClick={() => onChange(option.id)}
           className={cn(
-            'min-h-11 flex-1 whitespace-nowrap rounded-pill px-3 text-sm font-semibold lg:min-h-8',
+            'flex-1 whitespace-nowrap rounded-pill px-3',
+            HEADER_CONTROL,
             onNavy
-              ? value === option.id ? 'bg-white text-navy' : 'text-white'
-              : value === option.id ? 'bg-navy text-white' : 'text-muted hover:text-navy',
+              ? value === option.id ? 'bg-white text-navy' : 'text-secondary-contrast'
+              : value === option.id ? 'bg-secondary text-secondary-contrast' : 'text-muted hover:text-navy',
           )}
         >
           {option.label}
@@ -156,7 +191,7 @@ function Controls({
   const label = period.span === 'week'
     ? formatWeekRange(period.from, period.to, figures)
     : `${formatMonthLong(period.from.slice(0, 7), figures)} ${period.from.slice(0, 4)}`;
-  const round = 'flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-card text-ink disabled:text-line lg:h-9 lg:w-9';
+  const round = 'flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-hairline bg-card text-ink disabled:text-line';
   return (
     <div className="mb-2 flex flex-wrap items-center gap-2 lg:mb-3">
       <div className="flex min-w-0 flex-1 items-center gap-1.5 max-lg:basis-full lg:flex-none">
@@ -172,8 +207,8 @@ function Controls({
           glyph="none"
           format={() => label}
           aria-label={`${t.v1.pickDate}: ${label}`}
-          className="h-11 min-w-0 flex-1 rounded-pill bg-card lg:h-9 lg:w-56 lg:flex-none"
-          faceClassName="justify-center px-4 text-center font-semibold text-ink no-underline max-md:text-base"
+          className="h-11 min-w-0 flex-1 rounded-pill border border-hairline bg-card lg:w-56 lg:flex-none"
+          faceClassName="justify-center px-4 text-center text-base font-semibold text-ink no-underline"
         />
         <button
           type="button"
@@ -203,24 +238,30 @@ function Controls({
   );
 }
 
-/** The heat map's tints, by step: none, light, middle, strong — the accent, never a raw hex. */
-const HEAT = ['', 'bg-amber/10', 'bg-amber/25', 'bg-amber/45'] as const;
+/**
+ * The sticky columns: *Aktivitas* at the left edge — 132px on a phone, the mockup's, so a short name fits on its line —
+ * and *Total* right of it.
+ */
+const ACTIVITY_COL = 'sticky left-0 z-[1] w-[8.25rem] bg-card md:w-[7.5rem] lg:w-[12.5rem]';
+const TOTAL_COL = 'sticky left-[8.25rem] z-[1] w-11 bg-hover-row text-center font-semibold md:left-[7.5rem] lg:left-[12.5rem] lg:w-16';
 
-/** The sticky columns: *Aktivitas* at the left edge, *Total* right of it. */
-const ACTIVITY_COL = 'sticky left-0 z-[1] w-[7.5rem] bg-card lg:w-[12.5rem]';
-const TOTAL_COL = 'sticky left-[7.5rem] z-[1] w-11 bg-hover-row text-center font-semibold lg:left-[12.5rem] lg:w-16';
+/** A count: the number plain, or a light *·* a screen reader hears as 0. `strong` for a category's subtotal. */
+function Count({ n, strong = false }: { n: number; strong?: boolean }) {
+  const figures = useFigureLanguage();
+  if (n === 0) {
+    return <><span aria-hidden="true" className="font-normal text-line">·</span><span className="sr-only">{formatNumber(0, {}, figures)}</span></>;
+  }
+  return <span className={strong ? 'font-extrabold text-ink' : 'text-ink'}>{formatNumber(n, {}, figures)}</span>;
+}
 
 function ActivityTable({ view, scope }: { view: UnitActivitiesView; scope: UnitScope }) {
   const t = useMessages(unitDashboardMessages);
   const figures = useFigureLanguage();
   const captionId = useId();
+  const phone = useMediaQuery('phone');
   const people = scopePeople(view, scope);
   const totals: ScopeTotals = view.totals[scope];
   const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set(view.sections.slice(0, 2).map((s) => s.code)));
-  const largest = useMemo(
-    () => Math.max(0, ...people.flatMap((p) => p.counts.map((c) => c.count))),
-    [people],
-  );
   const n = (v: number) => formatNumber(v, {}, figures);
   const toggle = (code: string) => setOpen((now) => {
     const next = new Set(now);
@@ -255,16 +296,15 @@ function ActivityTable({ view, scope }: { view: UnitActivitiesView; scope: UnitS
               section={section}
               people={people}
               totals={totals}
-              largest={largest}
               open={open.has(section.code)}
               onToggle={() => toggle(section.code)}
-              span={people.length + 2}
+              phone={phone}
             />
           ))}
           <tfoot>
-            <tr className="h-10 bg-navy text-white">
-              <th scope="row" className={cn(ACTIVITY_COL, 'bg-navy px-2.5 text-left font-semibold')}>{t.v1.total}</th>
-              <td className={cn(TOTAL_COL, 'bg-navy font-semibold')}>{n(totals.total)}</td>
+            <tr className="h-10 bg-secondary text-secondary-contrast">
+              <th scope="row" className={cn(ACTIVITY_COL, 'bg-secondary px-2.5 text-left font-semibold')}>{t.v1.total}</th>
+              <td className={cn(TOTAL_COL, 'bg-secondary font-semibold')}>{n(totals.total)}</td>
               {people.map((person) => (
                 <td key={person.membershipId} className="text-center tabular-nums">{n(person.total)}</td>
               ))}
@@ -276,53 +316,80 @@ function ActivityTable({ view, scope }: { view: UnitActivitiesView; scope: UnitS
   );
 }
 
+/**
+ * **A category and its types** (MOB UI-183): the category row is a subtotal row — the button that opens and closes it,
+ * its *Total*, and each person's count of its types, bold — whether it is open or closed; its types under it when open.
+ */
 function SectionRows({
-  section, people, totals, largest, open, onToggle, span,
+  section, people, totals, open, onToggle, phone,
 }: {
-  section: ActivitiesSection; people: ActivitiesPerson[]; totals: ScopeTotals; largest: number; open: boolean;
-  onToggle: () => void; span: number;
+  section: ActivitiesSection; people: ActivitiesPerson[]; totals: ScopeTotals; open: boolean; onToggle: () => void;
+  phone: boolean;
 }) {
   const t = useMessages(unitDashboardMessages);
   const figures = useFigureLanguage();
   const bodyId = useId();
   const n = (v: number) => formatNumber(v, {}, figures);
-  const sectionTotal = section.types.reduce((sum, type) => sum + countOf(totals.counts, type.code), 0);
   return (
     <tbody id={bodyId} data-section={section.code}>
-      <tr className="h-10 bg-hover-row">
-        <th scope="rowgroup" colSpan={span} className="p-0 text-left">
+      <tr className="h-11 border-t border-divider bg-hover-row" data-subtotal={section.code}>
+        <th scope="row" className={cn(ACTIVITY_COL, 'bg-hover-row p-0 text-left')}>
           <button
             type="button"
             aria-expanded={open}
             aria-controls={bodyId}
             aria-label={open ? t.v1.hideSection({ label: section.label }) : t.v1.showSection({ label: section.label })}
             onClick={onToggle}
-            className="sticky left-0 flex min-h-10 items-center gap-1.5 px-2.5 text-sm font-semibold text-muted"
+            className="flex min-h-11 w-full items-center gap-1.5 px-2.5 text-left text-base font-bold text-ink"
           >
-            <LineIcon name={open ? 'chevronDown' : 'chevronRight'} className="h-4 w-4 shrink-0" />
-            <span aria-hidden="true">{open ? section.label : `${section.label} · ${n(sectionTotal)}`}</span>
+            <LineIcon name={open ? 'chevronDown' : 'chevronRight'} className="h-4 w-4 shrink-0 text-signal-grey" />
+            <span aria-hidden="true" className="min-w-0 [overflow-wrap:anywhere]">{section.label}</span>
           </button>
         </th>
+        <td className={cn(TOTAL_COL, 'bg-base font-bold tabular-nums')}>{n(sectionCount(totals.counts, section))}</td>
+        {people.map((person) => (
+          <td key={person.membershipId} className="text-center tabular-nums">
+            <Count n={sectionCount(person.counts, section)} strong />
+          </td>
+        ))}
       </tr>
       {open && section.types.map((type) => (
-        <tr key={type.code} className="h-10 border-t border-divider" data-type={type.code}>
-          <th scope="row" title={type.label} className={cn(ACTIVITY_COL, 'max-w-[7.5rem] truncate px-2.5 text-left font-normal text-ink lg:max-w-[12.5rem]')}>
-            {type.label}
+        <tr key={type.code} className="h-11 border-t border-divider" data-type={type.code}>
+          <th scope="row" className={cn(ACTIVITY_COL, 'px-2.5 text-left font-normal text-ink')}>
+            {phone ? <ShortName type={type} /> : (
+              <span title={type.label} className="block max-w-[7.5rem] truncate lg:max-w-[12.5rem]">{type.label}</span>
+            )}
           </th>
           <td className={cn(TOTAL_COL, 'tabular-nums')}>{n(countOf(totals.counts, type.code))}</td>
-          {people.map((person) => {
-            const count = countOf(person.counts, type.code);
-            return (
-              <td key={person.membershipId} className={cn('text-center tabular-nums', HEAT[heatStep(count, largest)])}>
-                {count === 0
-                  ? <><span aria-hidden="true" className="text-line">·</span><span className="sr-only">{n(0)}</span></>
-                  : n(count)}
-              </td>
-            );
-          })}
+          {people.map((person) => (
+            <td key={person.membershipId} className="text-center tabular-nums">
+              <Count n={countOf(person.counts, type.code)} />
+            </td>
+          ))}
         </tr>
       ))}
     </tbody>
+  );
+}
+
+/**
+ * **A type's name on a phone** (MOB UI-180; ADR-0229 §5): the office's *Nama singkat* on one line — or its name on up
+ * to two lines where it gave none — and a tap shows the name in full. A screen reader hears the full name.
+ */
+function ShortName({ type }: { type: ActivitiesType }) {
+  const short = type.shortLabel?.trim() || null;
+  return (
+    <TippedGlyph
+      glyph={short ?? type.label}
+      name={type.label}
+      tip={type.label}
+      align="fit"
+      className="max-w-full"
+      face={cn(
+        'h-auto min-h-0 w-auto min-w-0 justify-start rounded-none p-0 text-left text-base font-medium leading-snug text-ink',
+        short ? 'whitespace-nowrap' : 'line-clamp-2 whitespace-normal [overflow-wrap:anywhere]',
+      )}
+    />
   );
 }
 
@@ -331,11 +398,11 @@ function ActivitiesSkeleton() {
   const t = useMessages(unitDashboardMessages).v1;
   return (
     <Skeleton label={t.loadingActivities}>
-      <div className="mb-2 flex gap-2"><SkeletonBar className="h-11 flex-1 rounded-pill lg:h-9 lg:max-w-xs" /></div>
+      <div className="mb-2 flex gap-2"><SkeletonBar className="h-11 flex-1 rounded-pill lg:max-w-xs" /></div>
       <div className="rounded-lg bg-card p-3">
         {[0, 1, 2, 3, 4, 5].map((i) => <SkeletonBar key={i} className="mt-3 h-4 first:mt-0" />)}
       </div>
-      <div className="mt-3 h-40 rounded-lg bg-navy/20 lg:max-w-xl" />
+      <div className="mt-3 h-40 rounded-lg bg-secondary/20 lg:max-w-xl" />
     </Skeleton>
   );
 }

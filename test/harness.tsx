@@ -6,6 +6,7 @@ import { LANGUAGE_COOKIE, LANGUAGE_PENDING, LANGUAGE_UNCHOSEN, type Language } f
 import { FigureLanguageContext, LanguageContext, LanguageProvider } from '@/i18n/language-provider';
 import { setRequestLanguage } from '@/lib/api-client';
 import { SessionContext, type Me, type SessionValue } from '@/lib/session';
+import { asBeforeBranding } from './brand-aliases';
 
 /**
  * Test doubles for the things every screen depends on: who is signed in, what the API answered, and — for a
@@ -34,7 +35,7 @@ export function matchesAt(query: string, px: number): boolean {
 /**
  * **A screen of a given width, as far as a component can ask** — `matchMedia`, which jsdom does not have —
  * answering every query by `matchesAt`, so the three ranges of `useMediaQuery` (`lib/use-media-query.ts`) are each
- * the width's: 767 is a phone, 768 and 1023 a tablet, 1024 a desktop (P18.97-T6 AC-2). `resize` moves the width
+ * the width's: 767 is a phone, 768 and 1023 a tablet, 1024 a desktop (P18.9-T6 AC-2). `resize` moves the width
  * afterwards and tells whoever is listening, as a tablet turned on its side does.
  *
  * A spec about the phone alone may still stub `matches: query === PHONE_QUERY`; a spec about a tablet must use
@@ -89,17 +90,20 @@ export function wears(el: Element, px: number): string {
 }
 
 /**
- * **An element as it is printed at a width** (P18.97-T7): every element's classes those that hold there (`wears`), and
+ * **An element as it is printed at a width** (P18.9-T7): every element's classes those that hold there (`wears`), and
  * React's generated ids made one, so a screen's markup at 768px or 1280px can be pinned to a digest taken before a
  * phone-only change and compared after it — a `max-md:` class added for a phone wears nothing from 768px, and a
  * component that renders something else on a phone renders what it did.
+ *
+ * *Since P19.6-T1 AC-1:* the brand tokens are read as the colours they replaced (`asBeforeBranding`), whose values they
+ * hold by default — so a digest recorded before the sweep still pins the page.
  */
 export function drawnAt(el: Element, px: number): string {
   const copy = el.cloneNode(true) as Element;
   for (const node of [copy, ...Array.from(copy.querySelectorAll('*'))]) {
-    if (node.hasAttribute('class')) node.setAttribute('class', wears(node, px));
+    if (node.hasAttribute('class')) node.setAttribute('class', asBeforeBranding(wears(node, px)));
   }
-  return copy.outerHTML.replace(/_r_[0-9a-z]+_/g, '_id_');
+  return asBeforeBranding(copy.outerHTML.replace(/_r_[0-9a-z]+_/g, '_id_'));
 }
 
 /** `drawnAt`'s markup as a SHA-256 digest, the form a spec records it in. */
@@ -177,12 +181,12 @@ export function renderWithSession(
 }
 
 /**
- * **A screen in a language** (P18.98-T1 AC-5; ADR-0179 §9). Every spec reads **English** unless it asks — outside a
+ * **A screen in a language** (P18.10-T1 AC-5; ADR-0179 §9). Every spec reads **English** unless it asks — outside a
  * `LanguageProvider` the catalogue answers in its source language — so the suites written before the catalogue keep
  * their assertions. Wrap what a spec renders in this to read it in Indonesian: for `render`, `renderInLayout` or
  * anything `renderWithSession` does not cover.
  *
- * **Its words and its figures** (P18.98-T3): a language a spec asks for is one the reader chose, so a figure is written
+ * **Its words and its figures** (P18.10-T3): a language a spec asks for is one the reader chose, so a figure is written
  * in it too (`useFigureLanguage`) — inside the app's provider as well, where it stands for a reader's choice. To read a
  * screen as a reader who chose nothing reads it, render the app's provider instead: `renderWithLanguage`.
  */
@@ -218,8 +222,8 @@ export function renderInIndonesian(
 }
 
 /**
- * **A screen with the language switch live** (P18.98-T2): `LANGUAGE_LIVE` overridden for one render, as the release at
- * P18.98-T4's exit will turn it on for everybody. The app's own `LanguageProvider`, `live`, around `renderWithSession`'s
+ * **A screen with the language switch live** (P18.10-T2): `LANGUAGE_LIVE` overridden for one render, as the release at
+ * P18.10-T4's exit will turn it on for everybody. The app's own `LanguageProvider`, `live`, around `renderWithSession`'s
  * session: the switch and *Language* on *Your account* are drawn, a reader who has chosen nothing reads Indonesian
  * (`DEFAULT_LANGUAGE`), a choice writes the cookie and `<html lang>`, and the API client is told it.
  *
@@ -234,8 +238,8 @@ export function renderLive(
 }
 
 /**
- * **A screen as a reader reads it, under the app's own `LanguageProvider`** (P18.98-T3), with `LANGUAGE_LIVE` set for
- * the render — `live: true` as `renderLive`, `live: false` as the product is shipped until P18.98-T4's exit — around
+ * **A screen as a reader reads it, under the app's own `LanguageProvider`** (P18.10-T3), with `LANGUAGE_LIVE` set for
+ * the render — `live: true` as `renderLive`, `live: false` as the product is shipped until P18.10-T4's exit — around
  * `renderWithSession`'s session. Nothing is chosen but what the browser chose (`browserChose`, before it) or the
  * screen chooses: so not live, a reader with no choice reads **English words and Indonesian figures**
  * (`useFigureLanguage`), the product before the phase; live, Indonesian both. Pair with `resetLanguage`.

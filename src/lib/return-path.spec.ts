@@ -120,9 +120,9 @@ describe('where the person who just signed in goes (2026-10-11)', () => {
   });
 
   it('to their own landing with no next, an unsafe one, or one that is no page', () => {
-    expect(destinationAfterSignIn('', owner)).toBe('/kpm/overview');
-    expect(destinationAfterSignIn('?next=%2F', owner)).toBe('/kpm/overview');
-    expect(destinationAfterSignIn('?next=%2F%2Fevil.test%2Fkpm%2Foverview', owner)).toBe('/kpm/overview');
+    expect(destinationAfterSignIn('', owner)).toBe('/home');
+    expect(destinationAfterSignIn('?next=%2F', owner)).toBe('/home');
+    expect(destinationAfterSignIn('?next=%2F%2Fevil.test%2Fkpm%2Foverview', owner)).toBe('/home');
     expect(destinationAfterSignIn('?next=%2Fnope', agent)).toBe('/home');
   });
 
@@ -147,16 +147,16 @@ describe('where the person who just signed in goes (2026-10-11)', () => {
       expect(destinationAfterSignIn('?next=%2Fleader-meetings%2Fshared%2Fabc&reason=expired', agent)).toBe('/home');
     });
 
-    it('an Owner or an Admin lands on the office overview, a Super Admin on the console', () => {
-      expect(destinationAfterSignIn(`${COMPLIANCE}&reason=expired`, owner)).toBe('/kpm/overview');
+    it('P19.2-T1 AC-4 an Owner or an Admin lands on their own Home (the office overview until UI-169), a Super Admin on /admin', () => {
+      expect(destinationAfterSignIn(`${COMPLIANCE}&reason=expired`, owner)).toBe('/home');
       expect(destinationAfterSignIn(ended('/kpm/analytics'), member({ isKpmAdmin: true }, ['kpm_analytics:read'])))
-        .toBe('/kpm/overview');
+        .toBe('/home');
       expect(destinationAfterSignIn(ended('/admin/kpms'), superAdmin)).toBe('/admin');
     });
 
     it('the reason in either order, and with no page at all', () => {
       expect(destinationAfterSignIn('?reason=expired&next=%2Fgoals', agent)).toBe('/home');
-      expect(destinationAfterSignIn('?reason=expired', owner)).toBe('/kpm/overview');
+      expect(destinationAfterSignIn('?reason=expired', owner)).toBe('/home');
     });
 
     it('a link opened signed out, with no reason or another one, is still followed', () => {

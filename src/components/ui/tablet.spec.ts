@@ -18,7 +18,7 @@ async function compile(classes: string): Promise<string> {
 const CLASSES = Object.entries(TABLET).flatMap(([name, value]) => (typeof value === 'string' ? [[name, value] as const] : []));
 
 /**
- * **Below 1024px, and nothing at or above it** (P18.97-T6 AC-4, ADR-0178 §6). jsdom applies no stylesheet, so the
+ * **Below 1024px, and nothing at or above it** (P18.9-T6 AC-4, ADR-0178 §6). jsdom applies no stylesheet, so the
  * four widths are read from what the classes compile to: the query each sits under holds at 767, 768 and 1023px —
  * a phone and a tablet — and not at 1024px, where a desktop is drawn exactly as it was.
  */

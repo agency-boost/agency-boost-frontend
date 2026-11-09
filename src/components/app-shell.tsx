@@ -1,23 +1,29 @@
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
-import { FieldChromeContext, TabBar, TitleAvatar, TitleBell, useFieldChrome, type FieldChrome } from '@/components/field-nav';
-import { LanguageSwitch } from '@/components/language-switch';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { FieldChromeContext, type FieldChrome, type ViewSwitcher } from '@/components/field-chrome';
+import { TabBar } from '@/components/field-nav';
 import { NotificationBell } from '@/components/notification-bell';
+import { PageHeader } from '@/components/page-header';
 import { SidebarUserMenu } from '@/components/sidebar-user-menu';
+import { VerifyEmailBanner } from '@/components/verify-email-banner';
+import { KpmLogo, PoweredBy, useBranding, useOfficeName } from '@/components/kpm-brand';
 import { NavIcon, type NavIconName } from '@/components/ui/nav-icon';
-import { REMOVED_ON_PHONE } from '@/components/ui/phone';
 import { kept } from '@/i18n/kept';
-import { useLanguageChoice, useMessages } from '@/i18n/language-provider';
+import { useMessages } from '@/i18n/language-provider';
 import { shellMessages } from '@/i18n/messages/shell';
 import { cn } from '@/lib/cn';
+import { PANDUAN_GLYPH } from '@/lib/panduan';
 import { useMediaQuery } from '@/lib/use-media-query';
-import { usePhone } from '@/lib/use-phone';
-import { useScrollLock } from '@/lib/use-scroll-lock';
 
 /**
  * The layout every signed-in screen sits in: a fixed navy sidebar and a scrolling main
  * region (Overall.html:2609-2700).
+ *
+ * **One shell for every role since P19.2-T1** (UI-146, UI-147, UI-127, UI-128; ADR-0197): the field shell's chrome — no
+ * app bar, the title row, the floating bar and *Lainnya* below 1024px, the sidebar from 1024px — for the Agent, the AAB,
+ * the AB, the Owner, the Admin, the Super Admin and somebody in no office alike. The role, and for an Owner or an Admin
+ * the view, decide only which items appear (`shell.tsx`, `lib/field-nav.ts`). The consoles' dark bar, their ☰ drawer
+ * (ADR-0167 §3), their tablet rail (ADR-0178 §1) and *ID | EN* on a page (ADR-0197 §5) are gone with them.
  *
  * Nav items are grouped by section label, and a disabled item keeps an "Upcoming" pill
  * rather than disappearing — the prototype does this deliberately, so the roadmap stays
@@ -86,14 +92,14 @@ function BrandMark() {
 
 /**
  * The wordmark, and the amber line under it naming which app this is — the sidebar's and the phone's drawer's.
- * The product's name is kept English (§A.5); the shells' other words are `shellMessages` (P18.98-T1).
+ * The product's name is kept English (§A.5); the shells' other words are `shellMessages` (P18.10-T1).
  */
 function Wordmark({ brandTag, className }: { brandTag?: string; className?: string }) {
   return (
-    <span className={cn('font-display text-lg font-extrabold leading-tight tracking-tight text-white', className)}>
+    <span className={cn('font-display text-lg font-extrabold leading-tight tracking-tight text-secondary-contrast', className)}>
       {kept('AgencyBoost')}
       {brandTag && (
-        <span className="block text-2xs font-semibold uppercase tracking-wide text-amber">
+        <span className="block text-2xs font-semibold uppercase tracking-wide text-primary-on-secondary">
           {brandTag}
         </span>
       )}
@@ -101,7 +107,94 @@ function Wordmark({ brandTag, className }: { brandTag?: string; className?: stri
   );
 }
 
-function NavLink({ item, pill, rail }: { item: NavItem; pill: string; rail: boolean }) {
+/** How long a finger rests on a rail item before its name shows (P19.1-T1 AC-4), and how long the name then stays. */
+const LONG_PRESS_MS = 450;
+const TIP_HOLD_MS = 1500;
+
+/**
+ * **The field rail's names, drawn** (P19.1-T1 AC-4, ADR-0196; UI-114: *same items, icons only, name on hover/long-press*).
+ * A `title` shows to a mouse after a delay and to nobody else — not to a keyboard, and not to a finger on the iPad in
+ * landscape the 1024px rail is for. So the name is drawn beside the glyph: on hover, on focus, and after a long press,
+ * which shows it and does not follow the link. Escape puts it away (WCAG 1.4.13), and so does leaving or looking away.
+ *
+ * **Fixed to the screen, beside the item**: the nav scrolls, so anything positioned inside it is clipped at its 64px edge.
+ * A child of the item all the same, starting at its edge, so moving the pointer onto the words is still hovering the item
+ * (1.4.13: *hoverable*). Decoration to a screen reader, which already has the item's name. Every role's rail since
+ * P19.2-T1 (ADR-0197): the consoles' `title`-only rail went with them.
+ */
+function useRailTip(on: boolean, name: string) {
+  const [at, setAt] = useState<{ top: number; left: number } | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pressed = useRef(false);
+  /** A finger is on the item: its long press is ours, so the system's menu is not; a mouse's right click still is. */
+  const touching = useRef(false);
+  const clear = () => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = null;
+  };
+  useEffect(() => clear, []);
+  useEffect(() => {
+    if (!at) return;
+    const away = (event: KeyboardEvent) => { if (event.key === 'Escape') setAt(null); };
+    document.addEventListener('keydown', away);
+    return () => document.removeEventListener('keydown', away);
+  }, [at]);
+  if (!on) return { handlers: {}, tip: null };
+
+  const show = (el: HTMLElement) => {
+    const box = el.getBoundingClientRect();
+    setAt({ top: box.top + box.height / 2, left: box.right });
+  };
+  const hide = () => setAt(null);
+  const handlers = {
+    onMouseEnter: (event: React.MouseEvent<HTMLElement>) => show(event.currentTarget),
+    onMouseLeave: hide,
+    onFocus: (event: React.FocusEvent<HTMLElement>) => show(event.currentTarget),
+    onBlur: hide,
+    onTouchStart: (event: React.TouchEvent<HTMLElement>) => {
+      clear();
+      pressed.current = false;
+      touching.current = true;
+      const el = event.currentTarget;
+      timer.current = setTimeout(() => {
+        pressed.current = true;
+        show(el);
+      }, LONG_PRESS_MS);
+    },
+    onTouchMove: () => {
+      clear();
+      touching.current = false;
+    },
+    onTouchEnd: (event: React.TouchEvent<HTMLElement>) => {
+      clear();
+      touching.current = false;
+      if (!pressed.current) return;
+      // A long press asked for the name, not the page.
+      event.preventDefault();
+      pressed.current = false;
+      timer.current = setTimeout(hide, TIP_HOLD_MS);
+    },
+    // Android's own long-press menu, and iOS's link preview (`[-webkit-touch-callout:none]` on the item), stay away.
+    onContextMenu: (event: React.MouseEvent<HTMLElement>) => {
+      if (touching.current || pressed.current) event.preventDefault();
+    },
+  };
+  const tip = at && (
+    <span
+      aria-hidden="true"
+      data-rail-tip=""
+      className="pointer-events-auto fixed z-50 -translate-y-1/2 pl-2"
+      style={{ top: at.top, left: at.left }}
+    >
+      <span className="block whitespace-nowrap rounded-md bg-secondary px-2.5 py-1.5 text-md font-semibold text-secondary-contrast shadow-modal">
+        {name}
+      </span>
+    </span>
+  );
+  return { handlers, tip };
+}
+
+function NavLink({ item, pill, rail, tip = false }: { item: NavItem; pill: string; rail: boolean; tip?: boolean }) {
   /** What the amber check says to a screen reader, after the item's own name (WCAG 2.5.3: the words on screen first). */
   const { doneSuffix } = useMessages(shellMessages);
   // No hover state. There is no `.nav a:hover` rule in any of the fifteen prototype
@@ -111,8 +204,8 @@ function NavLink({ item, pill, rail }: { item: NavItem; pill: string; rail: bool
   const className = cn(
     'flex items-center rounded-md py-1.5 text-md font-medium',
     rail ? 'justify-center px-0' : 'gap-2.5 px-2',
-    item.active ? 'bg-amber/15 font-semibold text-white' : 'text-white/[0.78]',
-    item.upcoming && 'cursor-default text-white/30',
+    item.active ? 'bg-primary/15 font-semibold text-secondary-contrast' : 'text-secondary-contrast/[0.78]',
+    item.upcoming && 'cursor-default text-secondary-contrast/30',
   );
   const body = (
     <>
@@ -121,7 +214,7 @@ function NavLink({ item, pill, rail }: { item: NavItem; pill: string; rail: bool
         * one label is one too many, and the dot said only *active or not* — which the amber
         * tint behind the row already says, and which an icon can say by colour as well.
         */}
-      <span className={cn('relative shrink-0', item.active ? 'text-amber' : undefined)}>
+      <span className={cn('relative shrink-0', item.active ? 'text-primary-on-secondary' : undefined)}>
         <NavIcon name={item.icon} />
         {/*
           * Collapsed, a count has nowhere to sit at the end of a row — so it rides the glyph,
@@ -148,7 +241,7 @@ function NavLink({ item, pill, rail }: { item: NavItem; pill: string; rail: bool
             stroke="currentColor"
             strokeWidth="3"
             data-mark="done"
-            className="ml-auto shrink-0 text-amber"
+            className="ml-auto shrink-0 text-primary-on-secondary"
           >
             <path d="M5 13l4 4L19 7" />
           </svg>
@@ -156,7 +249,7 @@ function NavLink({ item, pill, rail }: { item: NavItem; pill: string; rail: bool
         </>
       )}
       {!rail && item.upcoming && (
-        <span className="ml-auto rounded-pill bg-white/[0.06] px-1.5 py-0.5 text-2xs font-bold uppercase text-white/40">
+        <span className="ml-auto rounded-pill bg-secondary-contrast/[0.06] px-1.5 py-0.5 text-2xs font-bold uppercase text-secondary-contrast/40">
           {pill}
         </span>
       )}
@@ -168,20 +261,28 @@ function NavLink({ item, pill, rail }: { item: NavItem; pill: string; rail: bool
    * without this the rail is a column of links called nothing. `title` gives the same words
    * to a pointer, which is the other half of how somebody finds their way in 56px.
    *
-   * *Fixed 2026-10-28 (P18.97-T6; parity F-253), found by axe once a tablet opened on the rail:* **a count is in the
+   * *Fixed 2026-10-28 (P18.9-T6; parity F-253), found by axe once a tablet opened on the rail:* **a count is in the
    * name** — *Leaders past the limit, 2* — as it is in the row's words wider; it rode the glyph as a dot and was in
    * no name. And **an *Upcoming* item says its name in words**, `sr-only`, not in `aria-label`: it has no `href`, so
    * no role, and ARIA allows no name on an element with none (axe's `aria-prohibited-attr`).
    */
   const count = item.badge !== undefined && item.badge > 0 ? `, ${item.badge}` : '';
   const railName = item.upcoming ? `${item.label} — ${pill}` : `${item.label}${count}${item.done ? doneSuffix : ''}`;
-  const named = rail ? { 'aria-label': railName, title: railName } : {};
+  /*
+   * **The field rail draws its names** (P19.1-T1 AC-4): the tip on hover, focus and a long press, and no `title`, which
+   * would show the same words a second time after a delay. Since P19.2-T1 every role's rail is the field's.
+   */
+  const tipped = rail && tip;
+  const railTip = useRailTip(tipped, railName);
+  const tipClass = tipped ? cn(className, 'select-none [-webkit-touch-callout:none]') : className;
+  const named = rail ? { 'aria-label': railName, ...(tipped ? {} : { title: railName }) } : {};
 
   if (item.upcoming) {
     return (
-      <a aria-disabled className={className} title={rail ? railName : undefined}>
+      <a aria-disabled className={tipClass} title={rail && !tipped ? railName : undefined} {...railTip.handlers}>
         {body}
         {rail && <span className="sr-only">{railName}</span>}
+        {railTip.tip}
       </a>
     );
   }
@@ -192,10 +293,12 @@ function NavLink({ item, pill, rail }: { item: NavItem; pill: string; rail: bool
         aria-haspopup="dialog"
         data-nav-control=""
         onClick={item.onSelect}
-        className={cn(className, 'w-full text-left')}
+        className={cn(tipClass, 'w-full text-left')}
         {...named}
+        {...railTip.handlers}
       >
         {body}
+        {railTip.tip}
       </button>
     );
   }
@@ -203,27 +306,63 @@ function NavLink({ item, pill, rail }: { item: NavItem; pill: string; rail: bool
     <Link
       href={item.href}
       aria-current={item.active ? 'page' : undefined}
-      className={className}
+      className={tipClass}
       {...named}
+      {...railTip.handlers}
     >
       {body}
+      {railTip.tip}
     </Link>
   );
 }
 
-/** What the identity chip opens: the account, signing out, and for an Owner or an Admin the view switch. */
+/**
+ * ***📘 Panduan*, the sidebar's last item** (P19.6-T5 AC-1; ADR-0219 §5; the guide spec's *Where the menu goes* 1 and 3):
+ * below the last group and above the account block, for every role and view, opening the reader's own guide **in a new
+ * tab** (`target="_blank" rel="noopener"`), so they keep their place. A nav item's look — no hover, as `NavLink` — with
+ * the spec's 📘 for its glyph; on the 64px rail the glyph alone, its name drawn as every rail item's is (`useRailTip`).
+ * A plain `<a>`, not `next/link`: it leaves the app for a static file, or opens `/admin/panduan` in a tab of its own.
+ */
+function GuideItem({ href, rail }: { href: string; rail: boolean }) {
+  const t = useMessages(shellMessages);
+  const railTip = useRailTip(rail, t.guide);
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener"
+      data-panduan=""
+      // The new tab is in the name, never in the text: a sentence in the text is read as words on the page (P19.6-T5).
+      aria-label={`${t.guide}${t.opensInNewTab}`}
+      className={cn(
+        'mb-2 hidden items-center rounded-md py-1.5 text-md font-medium text-secondary-contrast/[0.78] md:flex',
+        rail ? 'select-none justify-center px-0 [-webkit-touch-callout:none]' : 'gap-2.5 px-2',
+      )}
+      {...railTip.handlers}
+    >
+      <span aria-hidden="true" className="w-[18px] shrink-0 text-center text-base leading-none">{PANDUAN_GLYPH}</span>
+      {!rail && t.guide}
+      {railTip.tip}
+    </a>
+  );
+}
+
+/** What the identity chip opens: the account, signing out, and for a person with more than one view the switcher. */
 export interface AppShellAccount {
   href: string;
   onSignOut: () => void;
   signingOut?: boolean;
-  /** The link to the reader's other view (ADR-0114), above *Your account*; absent for one view. */
-  viewSwitch?: { href: string; label: string };
+  /**
+   * **The view switcher** (P19.2-T1 AC-5; ADR-0198 §3), above *Your account*; absent for one view. It replaced ADR-0114's
+   * link to the other view.
+   */
+  views?: ViewSwitcher;
 }
 
 export interface ShellUser {
   readonly name: string;
   /**
-   * The line under the name: the role, and since P18.8-T6 the **profile line** after it — *Core Leader*, the groups,
+   * The line under the name: the role, and since P18.5-T6 the **profile line** after it — *Core Leader*, the groups,
    * the office (`profileLine`, ADR-0159 §5). The platform shell passes the role alone.
    */
   readonly role: string;
@@ -231,180 +370,11 @@ export interface ShellUser {
   /** Shown in the account menu, so you can confirm who you are before signing out. */
   readonly email?: string;
   /**
-   * **The person's full name, for the phone's menu** (P18.95-T12 AC-3): the first of its details, where `name` is
+   * **The person's full name, for the phone's menu** (P18.7-T12 AC-3): the first of its details, where `name` is
    * the preferred name the chip greets them by. `name` stands in where it is absent or blank.
    */
   readonly fullName?: string;
 }
-
-/**
- * A page's heading block: the `<h1>`, its sub-line, and the actions beside it.
- *
- * Split out of `AppShell` on 2026-09-06 so a **group layout** can own the sidebar. A
- * layout is rendered once for every route beneath it and cannot know their titles, so
- * either the header moves out or the chrome stays duplicated in 23 pages — and duplicated
- * chrome is what let `/notifications` wear the wrong one.
- *
- * There is exactly one `<h1>` per screen either way: the shell renders this itself when a
- * page passes a `title`, and does not when a page renders it.
- *
- * **The row is top-aligned, so the title never moves** (P10.1-T8, client item 1). It was
- * `items-end`, which is what three of `Overall.html`'s four `.topbar` rules say (`:76`, `:387`,
- * `:624`) — but the fourth, `:839`, is `align-items:flex-start`, and the last declaration is the
- * one that renders. Bottom-aligned, the tallest child sets the line: on `/activity/log` the Date
- * field with its save status under it is taller than the title block, so the `<h1>` sat about
- * 25px lower than on Dashboard and Ratio, which pass no actions — and it jumped when the loading
- * state, which has no Date, was replaced. `KPM_Owner.html:72` and `Superadmin.html:72` say
- * `flex-end`, but their topbars only ever hold the title (`:930-935`, `:222-227`), so nothing in
- * those files shows the alignment; `Overall.html` is the one whose topbar carries actions.
- */
-export function PageHeader({
-  title,
-  subtitle,
-  actions,
-  control,
-  subtitleOnPhone,
-  subtitleOnTablet,
-  bell = false,
-}: {
-  title: string;
-  subtitle?: React.ReactNode;
-  actions?: React.ReactNode;
-  /**
-   * **The title row's control below 1024px** (UI V1, UI-004: *page title, then the page's main control, then the 36px
-   * avatar*): the period pill on `/unit/dashboard`, *Cari agen* on `/group-tree`, *+ Tambah agent* on `/new-hires`. Below
-   * 1024px it stands in for `actions`, which then show from 1024px only; absent, `actions` are the row's control at
-   * every width, as they always were.
-   */
-  control?: React.ReactNode;
-  /**
-   * `false`: **the sub-line is not drawn below 768px** — the client's *Remove* verdict on a page's sub-line (P18.95-T7
-   * AC-1, row 25 of the review's *Grey text* table; ADR-0167 §7). At 768px and wider it reads as before. Absent, the
-   * page that renders the shell said so through `SubtitleOnPhone` — a shell draws this header, not the page.
-   */
-  subtitleOnPhone?: boolean;
-  /**
-   * `false`: **not drawn from 768 to 1023px either** (UI V1, UI-004: *subtitle hidden on Mobile + Tablet* — `/goals`,
-   * `/training`, `/group-tree`, `/user-management/*`). Pass it with `subtitleOnPhone={false}`; from 1024px it reads.
-   */
-  subtitleOnTablet?: boolean;
-  /** **The bell, left of the avatar — on Home alone** (UI-004, the owner, 30 Oct). Below 1024px; the sidebar has its own. */
-  bell?: boolean;
-}) {
-  const fromPage = useContext(SubtitleOnPhone);
-  const onPhone = subtitleOnPhone ?? fromPage;
-  const withLanguage = usePageLanguageSwitch();
-  const field = useFieldChrome();
-  /*
-   * **The field shell's title row** (UI V1, UI-004, UI-008): 20px/800 on a phone, 22px on a tablet, 24px on a desktop
-   * (`text-title`), navy. The other two shells keep their 28px from 768px and take the 20px on a phone (UI-008: *the type
-   * scale, Mobile everywhere*).
-   */
-  const titleClass = field
-    ? 'text-title font-extrabold text-navy lg:font-bold'
-    : 'text-3xl font-bold text-navy max-md:text-title max-md:font-extrabold';
-  const heading = (
-    <div className={cn(field && 'min-w-0 max-lg:flex-1')}>
-      <h1 className={cn('font-display', titleClass)}>{title}</h1>
-      {subtitle && (
-        <p className={cn('mt-1 text-md text-muted', !onPhone && REMOVED_ON_PHONE, subtitleOnTablet === false && 'md:max-lg:hidden')}>
-          {subtitle}
-        </p>
-      )}
-    </div>
-  );
-  /*
-   * Below 1024px in the field shell `control` takes `actions`' place in the row; from 1024px `actions` are as before. With
-   * no `control`, `actions` are the row's at every width.
-   */
-  const rowControl = field && control !== undefined
-    ? <>{control !== null && <div className="shrink-0 lg:hidden">{control}</div>}{actions && <div className="max-lg:hidden">{actions}</div>}</>
-    : actions;
-
-  if (field) {
-    /*
-     * **One row: the title, the page's control, then — below 1024px — Home's bell and the avatar** (UI-004). 44px tall at
-     * least, top-aligned on a desktop as every header is (P10.1-T8) and centred below it, 12px above the content.
-     */
-    return (
-      <div className="mb-5 flex items-start gap-4 max-lg:mb-3 max-lg:min-h-11 max-lg:items-center max-lg:gap-2" data-title-row="">
-        <div className="flex min-w-0 flex-1 flex-wrap items-start justify-between gap-4 max-lg:items-center max-lg:gap-2">
-          {heading}
-          {rowControl}
-        </div>
-        {field.compact && bell && <TitleBell chrome={field} />}
-        {field.compact && <TitleAvatar chrome={field} />}
-        {withLanguage && <PageLanguageSwitch className="shrink-0" />}
-      </div>
-    );
-  }
-  if (!withLanguage) {
-    return (
-      <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
-        {heading}
-        {actions}
-      </div>
-    );
-  }
-  /*
-   * **The switch is the header's top-right corner, on every page** (P18.98-T2 AC-3; 2026-10-29, the product owner: on
-   * `/admin/tenants` and `/admin/audit` a button and a filter sat to its right, and where the actions wrapped under the
-   * title the switch went with them, to the left). It is a column of its own that never wraps; the title and the page's
-   * actions share the rest of the row and wrap within it, as they did before the switch.
-   */
-  return (
-    <div className="mb-5 flex items-start gap-4">
-      <div className="flex min-w-0 flex-1 flex-wrap items-start justify-between gap-4">
-        {heading}
-        {actions}
-      </div>
-      <PageLanguageSwitch className="shrink-0" />
-    </div>
-  );
-}
-
-/**
- * **Where a page's header draws the *ID | EN* switch** (P18.98-T2 AC-3): a shell's page, while the switch is live (as it
- * is since P18.98-T4's exit, 2026-10-29) — **from 768px** in the office console and the platform console, where a phone's
- * bar carries it; **from 1024px in the field shell** (UI V1, ADR-0180: on a phone and a tablet the switch is in the
- * *Lainnya* sheet and *Profil saya*, nowhere else — which reverses I-533's placement there). `null` outside a shell.
- * `AppShell` says which; `PageHeader` is always in a shell.
- */
-const PageHeaderLanguage = createContext<'md' | 'lg' | null>(null);
-
-/** Whether a page's own heading block should carry the switch: what `PageHeader` asks, and a page that draws its own. */
-export function usePageLanguageSwitch(): boolean {
-  const from = useContext(PageHeaderLanguage);
-  const { live } = useLanguageChoice();
-  return from !== null && live;
-}
-
-/**
- * **The *ID | EN* switch at a page header's top-right corner** (P18.98-T2 AC-3), right of the page's own actions: at the
- * head of every shell's page from 768px — **from 1024px in the field shell** (UI V1) — where the title is. Its 44px
- * targets sit centred on the title's line (`-my-[5px]`), so the header is no taller for it. Hidden by its class below
- * that width as well, so a phone's first frame — before the width is read — never shows it twice. A page that draws its
- * own heading block (*Billing*, a coachee's name) puts this in it; nothing at all outside a shell, or before the switch
- * is live.
- */
-export function PageLanguageSwitch({ className }: { className?: string }) {
-  const from = useContext(PageHeaderLanguage);
-  if (!usePageLanguageSwitch()) return null;
-  return (
-    <LanguageSwitch
-      tone="page"
-      className={cn(from === 'lg' ? 'max-lg:hidden lg:-my-[5px]' : 'max-md:hidden md:-my-[5px]', className)}
-    />
-  );
-}
-
-/**
- * **Whether a page's sub-line shows on a phone, said by a page whose shell draws its header** (`RoleShell`, which
- * takes a title and a sub-line and hands them through a shell to `PageHeader`): `/notifications` wraps its shell in
- * `false`, so the client's *Remove* reaches the header without every shell carrying one more prop (P18.95-T7 AC-1).
- * A `Page` passes `subtitleOnPhone` to its header itself.
- */
-export const SubtitleOnPhone = createContext(true);
 
 /**
  * The foot of the sidebar: who is signed in, and what is waiting for them.
@@ -419,54 +389,45 @@ export const SubtitleOnPhone = createContext(true);
  * the chip first while the eye reads the bell first, which is the kind of mismatch that only
  * shows up for the people who cannot see the discrepancy.
  *
- * **On a phone's bar, the avatar alone** (P18.95-T12, the product owner's request of 2026-10-27): at the bar's
- * right edge, with the bell's badge, and the bell itself goes into its menu as *Notifications* — one control
- * where the chip, a cut name and the bell stood. The sidebar's foot, from 768px, and the drawer's are as before.
+ * *Changed 2026-11-05 (P19.2-T1; ADR-0197):* the sidebar is a desktop's alone, for every role, so the foot has no phone
+ * bar to sit in (P18.7-T12's avatar there) and no drawer (P18.7-T2): below 1024px the title row's avatar and the
+ * *Lainnya* sheet are the account.
  */
 function SidebarFoot({
   rail,
   user,
   account,
   notifications,
-  phone = false,
-  drawer = false,
+  guideHref,
 }: {
   rail: boolean;
   user: ShellUser;
   account?: AppShellAccount;
   notifications?: { href: string; unread: number };
-  /** In the phone's bar: the chip's panel drops below it (ADR-0085). */
-  phone?: boolean;
-  /**
-   * **At the foot of the phone's drawer** (P18.95-T2 AC-2): the sidebar's foot as the sidebar draws it, the
-   * chip opening upward. **The notices are not repeated there**: they are the bar's avatar's (P18.95-T12),
-   * which a phone always shows.
-   */
-  drawer?: boolean;
+  /** *📘 Panduan* in the account menu, between *Your account* and *Sign out* (P19.6-T5 AC-1). */
+  guideHref?: string;
 }) {
   /*
    * **The chip takes the space; the bell is pinned.** The chip sized itself to its contents,
    * so a short name pulled the bell left and a long one pushed it right — a control that
    * moves with somebody's name is one nobody learns the position of. `flex-1 min-w-0` also
    * gives the name the full width to truncate against rather than only its own.
+   *
+   * **The *ID | EN* switch is in its menu** (P19.1-T1 AC-1, ADR-0196; UI-112, UI-129, D-20: *no ID | EN on pages — it
+   * lives in the account menu*), for every role since P19.2-T1. Below 1024px the *Lainnya* sheet's account row carries
+   * it (ADR-0180 §3); *Profil saya*'s *Bahasa* at every size.
    */
-  /*
-   * On a phone's bar the avatar is its own size at the bar's right edge, its circle on the bar's padding line
-   * (`-mr-1.5` takes back the 44px box's margin round the 32px circle), and holds the notices (P18.95-T12).
-   */
-  const bar = phone && !drawer;
   const chip = account ? (
     <SidebarUserMenu
       user={user}
       accountHref={account.href}
       onSignOut={account.onSignOut}
       signingOut={account.signingOut}
-      viewSwitch={account.viewSwitch}
-      className={bar ? '-mr-1.5 shrink-0' : rail ? undefined : 'min-w-0 flex-1'}
+      views={account.views}
+      className={rail ? undefined : 'min-w-0 flex-1'}
       compact={rail}
-      phone={phone}
-      panelId={drawer ? DRAWER_ACCOUNT_ID : undefined}
-      notifications={bar ? notifications : undefined}
+      languageSwitch
+      guideHref={guideHref}
     />
   ) : (
     <div
@@ -476,49 +437,32 @@ function SidebarFoot({
       )}
       title={rail ? `${user.name} — ${user.role}` : undefined}
     >
-      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber text-base font-bold text-navy">
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-base font-bold text-primary-contrast">
         {user.initials}
       </span>
       {!rail && (
         <span className="min-w-0">
-          <span className="block truncate text-md font-semibold text-white">{user.name}</span>
+          <span className="block truncate text-md font-semibold text-secondary-contrast">{user.name}</span>
           {/* One line, truncated; the whole of it on hover (the profile line, ADR-0159 §5). */}
-          <span className="block truncate text-xs text-white/55" title={user.role}>{user.role}</span>
+          <span className="block truncate text-xs text-secondary-contrast/55" title={user.role}>{user.role}</span>
         </span>
       )}
     </div>
   );
-  // The sidebar's own rule above it, unprefixed: the drawer is a phone's alone.
-  if (drawer) return <div className="mt-3 flex min-w-0 items-center border-t border-white/10 pt-3">{chip}</div>;
 
-  // On a phone's bar the avatar's menu holds the notices; with no account there is no menu, and the bell stays.
-  const bell = notifications && !(bar && account) ? <NotificationBell {...notifications} /> : null;
+  const bell = notifications ? <NotificationBell {...notifications} /> : null;
 
   /*
-   * **The *ID | EN* switch, on a phone's bar between the brand and the avatar** (P18.98-T2 AC-3; the client's
-   * *visible in the mobile header*, UI-041). Hidden by its class from 768px, as ☰ is shown by its own, so a phone's
-   * first frame already has it and nothing wider ever shows it: there the page header carries it (`PageHeader`).
-   * Drawn while the switch is live (`LANGUAGE_LIVE`, `true` since 2026-10-29); nothing at all before it went live.
-   */
-  const language = <LanguageSwitch tone="bar" className="md:hidden" />;
-
-  /*
-   * **On a phone's bar it gives way; in the sidebar it holds.** Below 768px it sits beside the brand,
-   * and `shrink-0` kept it at its contents' full width: the Super Admin's chip, *Platform Operator* over
-   * *Superadmin*, beside *AgencyBoost SUPERADMIN*, ran 23px past a 360px screen and clipped the bell
-   * (P11-T6 AC-11). `min-w-0 shrink` lets it take what the brand leaves, so the chip's name truncates,
-   * as it already does in the sidebar, and the bell stays whole. From 768px it is the sidebar's foot,
-   * which must not shrink under a long nav. Since P18.95-T12 the bar holds the 44px avatar alone, which
-   * fits beside any brand, and `ml-auto` keeps it at the bar's right edge.
+   * From 768px it is the sidebar's foot, which must not shrink under a long nav; the classes below 768px stayed from the
+   * phone's bar, where nothing draws the sidebar any more, so the foot is drawn as it always was from 1024px.
    */
   return (
     <div
       className={cn(
-        'ml-auto flex min-w-0 shrink items-center gap-1 md:ml-0 md:shrink-0 md:border-t md:border-white/10 md:pt-3',
+        'ml-auto flex min-w-0 shrink items-center gap-1 md:ml-0 md:shrink-0 md:border-t md:border-secondary-contrast/10 md:pt-3',
         rail && 'md:flex-col md:gap-1.5',
       )}
     >
-      {language}
       {rail ? <>{bell}{chip}</> : <>{chip}{bell}</>}
     </div>
   );
@@ -528,19 +472,23 @@ function SidebarFoot({
 const RAIL_KEY = 'ab.sidebar.rail';
 
 /**
- * **A tablet's choice, kept apart from the desktop's** (P18.97-T6 AC-1, ADR-0178 §1; the client's UI-033). From 768
- * to 1023px the rail is the default, and opening the sidebar full is remembered here on its own, so a reader who keeps
- * it full on a desktop is not given it on a tablet, nor the reverse. The same one character: `0` once opened full, `1`
- * once collapsed again; anything else, nothing, or storage refused is the rail.
+ * **The field shell's narrow desktop, kept apart from its wide one** (P19.1-T1 AC-4, ADR-0196; UI-114: *below 1280 the
+ * sidebar becomes a 64px icon rail, so content keeps its width at 1024–1279*). From 1024 to 1279px the field shell opens
+ * on the rail, and opening it full is remembered here on its own — `0` once opened full, `1` once collapsed again;
+ * anything else, nothing, or storage refused is the rail. From 1280px the full sidebar and `RAIL_KEY` are as they were.
+ *
+ * **The Owner's and the Admin's pages too, and not `/admin`** (P19.2-T1; ADR-0197 §4): the Super Admin keeps the
+ * labelled sidebar from 1024px (UI-127, UI-128: *from 1024 the labelled sidebar as today*), so their choice is
+ * `RAIL_KEY`'s from 1024px. ADR-0178 §1's tablet key, `ab.sidebar.rail.tablet`, went with the consoles' tablet rail.
  */
-const TABLET_RAIL_KEY = 'ab.sidebar.rail.tablet';
+const LAPTOP_RAIL_KEY = 'ab.sidebar.rail.laptop';
 
 /** Before the browser paints, with the width (`useMediaQuery`'s `beforePaint`), so a tablet's first frame is the rail. */
 const useBeforePaint = typeof window === 'undefined' ? useEffect : useLayoutEffect;
 
 /**
  * The nav's groups, each a heading that opens and closes it and the items beneath — rendered by the
- * sidebar, and on a phone by the drawer the bar's ☰ opens (P18.95-T2), so the two cannot differ in order,
+ * sidebar, and on a phone by the drawer the bar's ☰ opens (P18.7-T2), so the two cannot differ in order,
  * names or state.
  */
 function NavGroups({
@@ -550,6 +498,7 @@ function NavGroups({
   onToggle,
   pill,
   sentenceCase = false,
+  railTips = false,
 }: {
   sections: readonly NavSection[];
   rail: boolean;
@@ -557,10 +506,12 @@ function NavGroups({
   onToggle: (label: string) => void;
   pill: string;
   /**
-   * **The field shell's headings: 12px grey, sentence case** (UI V1, UI-004; D-20: *Old "UNIT TOOLS" etc. go away*) — the
-   * *Lainnya* sheet's groups, as the sheet writes them. The other two shells keep their uppercase headings.
+   * **The headings: 12px grey, sentence case** (UI V1, UI-004; D-20: *Old "UNIT TOOLS" etc. go away*) — the *Lainnya*
+   * sheet's groups, as the sheet writes them; every role's since P19.2-T1 (UI-146: *no sidebar heading is uppercase*).
    */
   sentenceCase?: boolean;
+  /** **The field rail's drawn names** (P19.1-T1 AC-4, `useRailTip`): on hover, focus and a long press. */
+  railTips?: boolean;
 }) {
   return (
     <>
@@ -596,8 +547,8 @@ function NavGroups({
                    * decides what the whole menu shows. `xs` at 65%, semibold.
                    */
                   className={sentenceCase
-                    ? 'flex w-full items-center gap-2 rounded-md px-1.5 py-1.5 text-xs font-semibold text-white/65 hover:bg-white/[0.06] hover:text-white'
-                    : 'flex w-full items-center gap-2 rounded-md px-1.5 py-1.5 text-xs font-semibold uppercase tracking-wider text-white/65 hover:bg-white/[0.06] hover:text-white'}
+                    ? 'flex w-full items-center gap-2 rounded-md px-1.5 py-1.5 text-xs font-semibold text-secondary-contrast/65 hover:bg-secondary-contrast/[0.06] hover:text-secondary-contrast'
+                    : 'flex w-full items-center gap-2 rounded-md px-1.5 py-1.5 text-xs font-semibold uppercase tracking-wider text-secondary-contrast/65 hover:bg-secondary-contrast/[0.06] hover:text-secondary-contrast'}
                 >
                   {section.label}
                   {/*
@@ -634,153 +585,17 @@ function NavGroups({
               >
                 {section.items.map((item) => (
                   <li key={item.href}>
-                    <NavLink item={item} pill={pill} rail={rail} />
+                    <NavLink item={item} pill={pill} rail={rail} tip={railTips} />
                   </li>
                 ))}
               </ul>
             )}
             {/* A `separator`, so the rule between groups is a thing a test and a screen reader can
                 both find, rather than a styled `div` only the eye can (parity I-144). */}
-            {section.divider && <div role="separator" className="mx-1 my-2 h-px bg-white/10" />}
+            {section.divider && <div role="separator" className="mx-1 my-2 h-px bg-secondary-contrast/10" />}
           </div>
         );
       })}
-    </>
-  );
-}
-
-/** The phone's drawer, as the bar's ☰ names it in `aria-controls`. */
-const DRAWER_ID = 'phone-menu';
-/** The account panel of the chip at the drawer's foot: the bar's chip keeps `sidebar-user-actions`. */
-const DRAWER_ACCOUNT_ID = 'phone-menu-account';
-
-/** What Tab can land on inside the drawer. An upcoming nav item is an `<a>` with no href, and is not. */
-const DRAWER_FOCUSABLE = 'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])';
-
-/** Three lines and a cross: the ☰ that opens the drawer and the ✕ that closes it, drawn as the rail toggle is. */
-function MenuGlyph({ close = false }: { close?: boolean }) {
-  return (
-    <svg
-      aria-hidden
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.9"
-      strokeLinecap="round"
-      className="h-5 w-5 shrink-0"
-    >
-      <path d={close ? 'M6 6l12 12M18 6 6 18' : 'M4 7h16M4 12h16M4 17h16'} />
-    </svg>
-  );
-}
-
-/**
- * **The phone's menu** (P18.95-T2, ADR-0167 §3, OD-198; the client's UI review, UI-009): the sidebar, as a
- * drawer from the left, below 768px. The same brand, the same `NavGroups` — so the groups, their order, their
- * labels, their badges, their open or closed state and the current page are the sidebar's by construction —
- * and the sidebar's foot.
- *
- * **A modal dialog**, named *Menu*. Focus moves to its ✕ as it opens and Tab and Shift+Tab go round inside
- * it; **Escape**, the scrim and ✕ close it, and the focus goes back to ☰. Following any link closes it — the
- * route moving closes it as well, for *Back* — and the page behind does not scroll while it is open. An
- * account panel opened at its foot shuts first on Escape, as it does in the sidebar, and the drawer stays.
- *
- * Rendered beside the bar, not in it: the bar is `sticky` with a `z-index`, and a drawer inside it could
- * never stand above a page's own raised layers.
- */
-function PhoneMenu({
-  onClose,
-  returnTo,
-  brandTag,
-  children,
-  foot,
-}: {
-  onClose: () => void;
-  returnTo: RefObject<HTMLButtonElement | null>;
-  brandTag?: string;
-  /** The nav. */
-  children: React.ReactNode;
-  foot: React.ReactNode;
-}) {
-  const box = useRef<HTMLDivElement>(null);
-  const closer = useRef<HTMLButtonElement>(null);
-  const t = useMessages(shellMessages);
-
-  // The page behind holds still: the one lock every dialog takes, counted, so a dialog over the drawer nests.
-  useScrollLock(true);
-
-  useEffect(() => {
-    closer.current?.focus();
-    const back = returnTo.current;
-    return () => {
-      back?.focus();
-    };
-  }, [returnTo]);
-
-  function keys(event: React.KeyboardEvent) {
-    if (event.key === 'Escape') {
-      // The foot's account panel hears Escape itself and shuts alone; the drawer waits for the next one.
-      if (box.current?.querySelector('[data-account-panel]')) return;
-      event.stopPropagation();
-      onClose();
-      return;
-    }
-    if (event.key !== 'Tab' || !box.current) return;
-    // Never empty: ✕ is always here.
-    const items = Array.from(box.current.querySelectorAll<HTMLElement>(DRAWER_FOCUSABLE));
-    const first = items[0];
-    const last = items[items.length - 1];
-    if (event.shiftKey && document.activeElement === first) {
-      event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault();
-      first.focus();
-    }
-  }
-
-  /** Following any link closes the drawer, so it is not left open over the next screen. */
-  function closeOnLink(event: React.MouseEvent) {
-    if ((event.target as Element).closest('a[href]')) onClose();
-  }
-
-  return (
-    <>
-      <div aria-hidden="true" data-scrim="" className="fixed inset-0 z-40 bg-navy/35 print:hidden md:hidden" onClick={onClose} />
-      <div
-        ref={box}
-        id={DRAWER_ID}
-        role="dialog"
-        aria-modal="true"
-        aria-label={t.menu}
-        onKeyDown={keys}
-        onClick={closeOnLink}
-        /*
-          * The sidebar's own width, and never more than 85% of the screen, so a strip of the page stays in
-          * sight and the scrim is there to tap. Its padding is the sidebar's, the top inset added to it so ✕ is never
-          * under the clock (staging review, 2026-10-31).
-          */
-        className="fixed inset-y-0 left-0 z-50 flex w-sidebar max-w-[85vw] flex-col bg-navy px-4 pb-4 pt-[calc(0.875rem+env(safe-area-inset-top))] text-sidebar-text shadow-modal print:hidden md:hidden"
-      >
-        <div className="mb-3 flex items-center gap-2 border-b border-white/10 px-1 pb-3.5">
-          <BrandMark />
-          <Wordmark brandTag={brandTag} />
-          {/* Where the rail toggle sits in the sidebar: a control on the frame. 44px, as every target on a phone. */}
-          <button
-            ref={closer}
-            type="button"
-            onClick={onClose}
-            aria-label={t.closeMenu}
-            className="-mr-2 ml-auto flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-white/[0.55] hover:bg-white/[0.06] hover:text-white"
-          >
-            <MenuGlyph close />
-          </button>
-        </div>
-        <nav id="sidebar-nav" aria-label={t.mainNav} className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-0.5">
-          {children}
-        </nav>
-        {foot}
-      </div>
     </>
   );
 }
@@ -796,19 +611,19 @@ export function AppShell({
   subtitle,
   actions,
   field,
+  officeTitle = false,
+  labelledFrom1024 = false,
+  guideHref,
   children,
 }: {
   sections: readonly NavSection[];
   user: ShellUser;
   /**
-   * The amber line under the wordmark naming which app this is — `KPM OWNER`,
-   * `SUPERADMIN`. The agent app has none (`Overall.html:2619`).
+   * The amber line under the wordmark naming which app this is: `SUPERADMIN`, which `admin-desktop` still draws in every
+   * frame. The Owner's and the field's sidebars have none (`kpm-owner-desktop`, `Overall.html:2619`).
    */
   brandTag?: string;
-  /**
-   * `Upcoming` in the KPM Owner app, `Soon` in Superadmin. The prototypes differ. The shell's own *Upcoming* when
-   * absent; both are *Segera hadir* in ID mode (`shellMessages`, the glossary's §B.3).
-   */
+  /** The pill on a nav item with nothing behind it: the shell's own *Upcoming* when absent; *Segera hadir* in ID mode. */
   upcomingLabel?: string;
   /**
    * Wires the identity chip to the actions behind it. Omitted, the chip is a plain
@@ -817,8 +632,7 @@ export function AppShell({
    */
   account?: AppShellAccount;
   /**
-   * The bell, beside the identity chip at the foot of the sidebar — and **on a phone, the avatar's**: its badge
-   * on the avatar, *Notifications* in its menu, no bell on the bar (P18.95-T12).
+   * The bell, beside the identity chip at the foot of the sidebar; below 1024px, Home's title row (`TitleBell`).
    *
    * **Not a nav item.** It was one in all three shells, sitting in a list of places to work
    * with a count beside it — so an office's notifications read as a section of the product
@@ -830,13 +644,29 @@ export function AppShell({
    */
   notifications?: { href: string; unread: number };
   /**
-   * **The field shell's chrome** (UI V1, UI-004; ADR-0180), passed by `AgentShell` alone. With it, **below 1024px** there
-   * is no sidebar, rail or dark bar: each page's title row carries the avatar (`PageHeader`), the floating tab bar sits at
-   * the foot of the screen and opens the *Lainnya* sheet; **from 1024px** the sidebar is as before, regrouped by the
-   * caller and its headings in sentence case. The whole frame is a V1 surface (`data-surface`, `globals.css`). The office
-   * console and the platform console pass nothing and are unchanged.
+   * **The shell's chrome** (UI V1, UI-004; ADR-0180; ADR-0197 for every role): **below 1024px** there is no sidebar, rail
+   * or dark bar — each page's title row carries the avatar (`PageHeader`), the floating tab bar sits at the foot of the
+   * screen and opens the *Lainnya* sheet; **from 1024px** the sidebar, regrouped by the caller, its headings in sentence
+   * case. The whole frame is a V1 surface (`data-surface`, `globals.css`): the page token `#EDEDEA` on every page.
    */
-  field?: FieldChrome;
+  field: FieldChrome;
+  /**
+   * **The title's 22px on a tablet** (P19.2-T1 AC-1; UI-146, UI-138 and the token table; ADR-0197 §2): on the `/admin`,
+   * `/kpm` and `/people` pages, where every other page keeps the field pages' 20px (UI-112, ADR-0196 §1). The frame says
+   * so (`data-title-size`), and `globals.css` sets `--text-title` from it, so `text-title` stays the one class.
+   */
+  officeTitle?: boolean;
+  /**
+   * **The labelled sidebar from 1024px** (P19.2-T1 AC-10; UI-127 *Desktop sidebar unchanged*, UI-128 *From 1024 the
+   * labelled sidebar as today*; ADR-0197 §4): the Super Admin's. Everybody else's opens on Phase 19.1's 64px rail from
+   * 1024 to 1279px (ADR-0196 §4).
+   */
+  labelledFrom1024?: boolean;
+  /**
+   * ***📘 Panduan*** (P19.6-T5 AC-1, AC-2; ADR-0219 §5): the reader's own guide, by view and role (`panduanHref`) — the
+   * sidebar's last item and the account menu's, each opening it in a new tab. Omitted outside a session: nothing drawn.
+   */
+  guideHref?: string;
   /**
    * The page's own heading, when the shell is rendered by a page.
    *
@@ -851,8 +681,9 @@ export function AppShell({
 }) {
   const t = useMessages(shellMessages);
   const pill = upcomingLabel ?? t.upcoming;
-  /** Whether the *ID | EN* switch is drawn (P18.98-T2): on a phone's bar it needs the wordmark's room below 360px. */
-  const { live } = useLanguageChoice();
+  // P19.6-T1 (ADR-0218 §2, §11): the session's KPM's logo and *Powered by*; `null` draws the shell as before.
+  const branding = useBranding();
+  const officeName = useOfficeName();
   /**
    * **Every group starts open, and each heading toggles its own** (P10.1-T3, client item 3).
    *
@@ -892,100 +723,76 @@ export function AppShell({
   };
 
   /**
-   * **The rail, remembered — one choice per size** (P18.97-T6 AC-1, ADR-0178 §1; the client's UI-033). From 1024px
-   * the full sidebar is the default and `ab.sidebar.rail` remembers the rail, as before; **from 768 to 1023px the rail
-   * is the default** and `ab.sidebar.rail.tablet` remembers opening it full. The width crossing 1024px swaps which one
-   * the sidebar shows, and each keeps its own.
+   * **The rail, remembered — one choice per size** (P18.9-T6 AC-1; P19.1-T1 AC-4). From 1280px the full sidebar is the
+   * default and `ab.sidebar.rail` remembers the rail; **from 1024 to 1279px the rail is the default** (UI-114) and
+   * `ab.sidebar.rail.laptop` remembers opening it full — except for the Super Admin's labelled sidebar
+   * (`labelledFrom1024`), whose choice is `ab.sidebar.rail`'s from 1024px. The width crossing 1280px swaps which one the
+   * sidebar shows, and each keeps its own. Below 1024px there is no sidebar to remember.
    *
    * Read in an effect rather than in the initial state: the server renders this too, and `localStorage` there is a
    * hydration mismatch rather than a preference. **Before the first paint**, with the width (`useMediaQuery`), so a
-   * tablet's first frame is the rail and a remembered choice is drawn from the start, never one frame of the other
-   * first. A browser that refuses storage gets each size's default: the full sidebar on a desktop, the rail on a
-   * tablet — the room the page needs there.
+   * remembered choice is drawn from the start, never one frame of the other first. A browser that refuses storage gets
+   * each size's default.
    */
   const [deskRail, setDeskRail] = useState(false);
-  const [tabletRail, setTabletRail] = useState(true);
+  const [laptopRail, setLaptopRail] = useState(true);
   useBeforePaint(() => {
     try {
       setDeskRail(window.localStorage.getItem(RAIL_KEY) === '1');
-      setTabletRail(window.localStorage.getItem(TABLET_RAIL_KEY) !== '0');
+      setLaptopRail(window.localStorage.getItem(LAPTOP_RAIL_KEY) !== '0');
     } catch {
       // A private window, or storage switched off. Not a reason to fail the shell.
     }
   }, []);
-  /*
-   * The field shell has no rail below 1024px — its sidebar is a desktop's alone (UI-004) — so its one choice is the
-   * desktop's, whatever the width.
-   */
-  const tablet = useMediaQuery('tablet', { beforePaint: true }) && !field;
-  const rail = tablet ? tabletRail : deskRail;
+  const laptop = useMediaQuery('laptop', { beforePaint: true }) && !labelledFrom1024;
+  const rail = laptop ? laptopRail : deskRail;
   /**
-   * Below 1024px in the field shell: the title row's avatar and the tab bar are drawn (UI-004). **Read after the paint,
+   * Below 1024px: the title row's avatar and the tab bar are drawn (UI-004). **Read after the paint,
    * as `usePhone` is, not before it**: a state change in a layout effect re-rendered the page under the shell inside
    * the commit, and a page reading its route's params through `use()` (Training's) suspended there and never came
    * back. The sidebar is `max-lg:hidden` meanwhile, so the first frame on a phone is the page without its bar.
    */
-  const compact = useMediaQuery(['phone', 'tablet']) && Boolean(field);
+  const compact = useMediaQuery(['phone', 'tablet']);
   const toggleRail = () => {
     const next = !rail;
-    if (tablet) setTabletRail(next);
+    if (laptop) setLaptopRail(next);
     else setDeskRail(next);
     try {
-      window.localStorage.setItem(tablet ? TABLET_RAIL_KEY : RAIL_KEY, next ? '1' : '0');
+      window.localStorage.setItem(laptop ? LAPTOP_RAIL_KEY : RAIL_KEY, next ? '1' : '0');
     } catch {
       // The preference is lost on reload; the sidebar still works.
     }
   };
 
-  /*
-   * **On a phone, ☰ opens the sidebar as a drawer** (P18.95-T2, ADR-0167 §3; the client's UI review, UI-009).
-   * Below 768px the sidebar is a bar and has no room for the nav, and the prototype's phone simply hides it,
-   * with *Sign out* (`Overall.html:1421-1428`). From 2026-10-02 the nav went into the account chip's panel
-   * (ADR-0085), where the client found the menu hidden behind the name; now ☰, before the brand, opens the
-   * sidebar's own content from the left, and the chip keeps the account's items. One nav at a time, never two:
-   * the sidebar renders it wider, the drawer on a phone. The rail is a wider screen's control, so a collapsed one
-   * remembered from a wider window does not shrink the chip to an avatar on a phone, nor the drawer to a rail.
-   */
-  const phone = usePhone();
   const groups = (
     <NavGroups
       sections={sections}
-      rail={rail && !phone}
+      rail={rail}
       closed={closed}
       onToggle={toggleGroup}
       pill={pill}
-      sentenceCase={Boolean(field)}
+      sentenceCase
+      railTips
     />
   );
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuButton = useRef<HTMLButtonElement>(null);
-  const pathname = usePathname();
-  /*
-   * **The route moving closes it** — a link followed inside it closes it first; this is *Back*, and any other
-   * way the page changes underneath it — and so does the width crossing 768px, where the sidebar is back.
-   */
-  useEffect(() => {
-    setMenuOpen(false);
-  }, [pathname, phone]);
 
   return (
-    <div className={cn('flex min-h-screen flex-col', field ? 'lg:flex-row' : 'md:flex-row')} data-surface={field ? 'v1' : undefined}>
-      {/* Below the prototype's 720px breakpoint the rail becomes a horizontal navy bar
-          that keeps the brand and hides the nav and footer (`Overall.html:1421-1428`).
-          It used to be `hidden md:flex`, which took the only route to sign out with it;
-          the chip in it stayed (ADR-0085), and ☰ before the brand opens the nav (P18.95-T2). Since
-          P18.95-T12 the chip and the bell there are one avatar, at the bar's right edge. */}
-      {/* The field shell below 1024px draws no sidebar at all: its title rows and the tab bar stand in (UI-004). */}
-      {!(field && compact) && (
+    <div
+      className="flex min-h-screen flex-col lg:flex-row"
+      data-surface="v1"
+      data-title-size={officeTitle ? 'office' : undefined}
+    >
+      {/* Below 1024px no sidebar at all, for any role: the title rows and the tab bar stand in (UI-004, UI-146). */}
+      {!compact && (
         <aside
           className={cn(
             // `print:hidden`: a printed page is the page, not the app around it (`Overall.html:1022`, ADR-0061).
             // Its navy runs up under the clock and its content starts below it: the top inset is added to its 14px (20px as
-            // the sidebar), so a Home Screen app's status bar never sits over ☰ or the brand (staging review, 2026-10-31).
-            'sticky top-0 z-10 flex w-full shrink-0 flex-row items-center bg-navy px-4 pb-3.5 pt-[calc(0.875rem+env(safe-area-inset-top))] text-sidebar-text print:hidden '
+            // the sidebar), so a Home Screen app's status bar never sits over the brand (staging review, 2026-10-31).
+            'sticky top-0 z-10 flex w-full shrink-0 flex-row items-center bg-secondary px-4 pb-3.5 pt-[calc(0.875rem+env(safe-area-inset-top))] text-sidebar-text print:hidden '
               + 'md:h-screen md:flex-col md:items-stretch md:pb-5 md:pt-[calc(1.25rem+env(safe-area-inset-top))]',
-            // The field shell's sidebar is a desktop's alone: below 1024px its pages' title rows and the tab bar stand in (UI-004).
-            field && 'max-lg:hidden',
+            // A desktop's alone: below 1024px the pages' title rows and the tab bar stand in (UI-004).
+            'max-lg:hidden',
             /*
              * **An arbitrary value, not a theme key.** `w-sidebar-rail` would need a new entry in
              * `tailwind.config.ts`, and Tailwind's JIT does not pick a config change up without a
@@ -996,151 +803,127 @@ export function AppShell({
             rail ? 'md:w-[var(--sidebar-rail-width)] md:px-2' : 'md:w-sidebar',
           )}
         >
-          {/*
-            * **☰, before the brand, below 768px only** (P18.95-T2 AC-1). Hidden by its class rather than by
-            * `usePhone`, so a phone's first paint already has it and the brand does not move when the page
-            * wakes; nothing wider shows it. A 44px target, as every target on a phone; the glyph keeps the
-            * brand mark's place at the bar's edge.
-            */}
-          <button
-            ref={menuButton}
-            type="button"
-            // Only on a phone: from 768px it is not shown, and an open drawer left waiting would spring open
-            // the moment the window narrowed.
-            onClick={() => { if (phone) setMenuOpen(true); }}
-            aria-label={t.openMenu}
-            aria-haspopup="dialog"
-            aria-expanded={menuOpen && phone}
-            aria-controls={DRAWER_ID}
-            className="-ml-2 mr-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-white/[0.78] hover:bg-white/[0.06] hover:text-white md:hidden"
-          >
-            <MenuGlyph />
-          </button>
           <div
             className={cn(
-              'flex items-center gap-2 px-1 md:mb-3 md:border-b md:border-white/10 md:pb-4',
+              'flex items-center gap-2 px-1 md:mb-3 md:border-b md:border-secondary-contrast/10 md:pb-4',
               rail && 'md:flex-col md:gap-2 md:px-0',
             )}
           >
-            <BrandMark />
-            {/* The wordmark goes, the mark stays: it is the thing that says which product this
-                is, and 56px has room for exactly one of them. **And below 360px, once the language switch is on the
-                bar** (P18.98-T2): ☰, the mark, the switch and the avatar fill a 320px phone, so the wordmark is said
-                rather than drawn there — the page reflows instead of scrolling sideways (WCAG 1.4.10). */}
-            <Wordmark brandTag={brandTag} className={cn(rail && 'md:hidden', live && 'max-[359.98px]:sr-only') || undefined} />
+            {/*
+              * **The KPM's logo in place of AgencyBoost's mark and wordmark** (P19.6-T1 AC-3, AC-4; ADR-0218 §2): the wide
+              * logo in the sidebar, the square one (or the wide one centred) in the rail. Without one, as before.
+              */}
+            {branding?.logo ? (
+              <KpmLogo branding={branding} rail={rail} name={officeName} />
+            ) : (
+              <>
+                <BrandMark />
+                {/* The wordmark goes, the mark stays: it is the thing that says which product this
+                    is, and the rail has room for exactly one of them. */}
+                <Wordmark brandTag={brandTag} className={cn(rail && 'md:hidden') || undefined} />
+              </>
+            )}
 
             {/*
               * **Beside the mark, not above the nav.** It was its own row under the brand, which
               * read as the first thing in the menu rather than as a control on the frame. Here it
               * is part of the chrome, where a window control belongs. Collapsed it drops beneath
-              * the mark, because 56px holds one of them at a time.
+              * the mark, because the rail holds one of them at a time.
               */}
-            {!phone && (
-              <button
-                type="button"
-                onClick={toggleRail}
-                aria-expanded={!rail}
-                aria-controls="sidebar-nav"
-                aria-label={rail ? t.expandSidebar : t.collapseSidebar}
-                title={rail ? t.expandSidebar : t.collapseSidebar}
-                className={cn(
-                  'hidden h-8 w-8 shrink-0 items-center justify-center rounded-md text-white/[0.55] hover:bg-white/[0.06] hover:text-white md:flex',
-                  !rail && 'md:ml-auto',
-                )}
+            <button
+              type="button"
+              onClick={toggleRail}
+              aria-expanded={!rail}
+              aria-controls="sidebar-nav"
+              aria-label={rail ? t.expandSidebar : t.collapseSidebar}
+              title={rail ? t.expandSidebar : t.collapseSidebar}
+              className={cn(
+                'hidden h-8 w-8 shrink-0 items-center justify-center rounded-md text-secondary-contrast/[0.55] hover:bg-secondary-contrast/[0.06] hover:text-secondary-contrast md:flex',
+                !rail && 'md:ml-auto',
+              )}
+            >
+              <svg
+                aria-hidden
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.7"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="h-[18px] w-[18px] shrink-0"
               >
-                <svg
-                  aria-hidden
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.7"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="h-[18px] w-[18px] shrink-0"
-                >
-                  <rect x="3" y="4" width="18" height="16" rx="2" />
-                  <path d="M9 4v16" />
-                  <path d={rail ? 'm13 9 3 3-3 3' : 'm17 9-3 3 3 3'} />
-                </svg>
-              </button>
-            )}
+                <rect x="3" y="4" width="18" height="16" rx="2" />
+                <path d="M9 4v16" />
+                <path d={rail ? 'm13 9 3 3-3 3' : 'm17 9-3 3 3 3'} />
+              </svg>
+            </button>
           </div>
 
-          {/* Wider than a phone, the nav is the sidebar's. On a phone it is the drawer's (below). */}
-          {!phone && (
-            <nav id="sidebar-nav" className="hidden min-h-0 flex-1 overflow-y-auto pr-0.5 md:block" aria-label={t.mainNav}>
-              {groups}
-            </nav>
-          )}
+          <nav id="sidebar-nav" className="hidden min-h-0 flex-1 overflow-y-auto pr-0.5 md:block" aria-label={t.mainNav}>
+            {groups}
+          </nav>
+
+          {/* P19.6-T5 AC-1: *📘 Panduan*, below the last group and above the account block, for every role. */}
+          {guideHref && <GuideItem href={guideHref} rail={rail} />}
 
           <SidebarFoot
-            rail={rail && !phone}
+            rail={rail}
             user={user}
             account={account}
             notifications={notifications}
-            phone={phone}
+            guideHref={guideHref}
           />
+          {/* P19.6-T1 AC-14 (ADR-0218 §11): only under a KPM's own logo; the rail has no room for the line. */}
+          {!rail && <PoweredBy branding={branding} className="mt-2 px-1 text-secondary-contrast/55" />}
         </aside>
-      )}
-
-      {menuOpen && phone && !field && (
-        <PhoneMenu
-          onClose={() => setMenuOpen(false)}
-          returnTo={menuButton}
-          brandTag={brandTag}
-          foot={<SidebarFoot rail={false} user={user} account={account} drawer />}
-        >
-          {groups}
-        </PhoneMenu>
       )}
 
       {/*
         * **The status bar's band, in the page's ground** (the product owner's staging review, 2026-10-31: the top of every
         * screen looked blurred on an iPhone). `viewport-fit=cover` (UI-103) draws the page from the very top of the screen,
-        * under the clock, where iOS frosts whatever passes beneath it. Below 1024px the field shell has no bar up there, so
-        * this strip, as tall as the top inset and the page's own colour, stands over the page as it scrolls: nothing is
-        * read under the clock. Under the tab bar, every sheet and dialog; 0px tall wherever there is no inset — Safari with
-        * its own bars, Android, a desktop. Decoration: nothing to read, nothing to reach.
+        * under the clock, where iOS frosts whatever passes beneath it. Below 1024px there is no bar up there, so this
+        * strip, as tall as the top inset and the page's own colour, stands over the page as it scrolls: nothing is read
+        * under the clock. Under the tab bar, every sheet and dialog; 0px tall wherever there is no inset — Safari with its
+        * own bars, Android, a desktop. Decoration: nothing to read, nothing to reach.
+        *
+        * *Widened 2026-11-04 (P19-T5 AC-4; UI-158, the cloud findings' R3):* **beside the sidebar too**, from 1024px, where
+        * a tablet's Home Screen app scrolled the page under its clock. There it stands under the sidebar (`z-[5]`, the
+        * sidebar's `z-10`), so the sidebar's navy still runs up under the clock and only the page's column is covered.
         */}
-      {field && (
-        <div
-          aria-hidden="true"
-          data-safe-top=""
-          className="pointer-events-none fixed inset-x-0 top-0 z-30 h-[env(safe-area-inset-top)] bg-base print:hidden lg:hidden"
-        />
-      )}
+      <div
+        aria-hidden="true"
+        data-safe-top=""
+        className="pointer-events-none fixed inset-x-0 top-0 h-[env(safe-area-inset-top)] bg-base print:hidden z-30 lg:z-[5]"
+      />
 
       <main
         className={cn(
           'min-w-0 flex-1 print:p-0',
           /*
-           * The field shell below 1024px (UI-004): the page's 16px gutter (24px on a tablet), its title row near the top
-           * with no bar above it, and room under the last line for the tab bar. From 1024px, as every shell is.
+           * Below 1024px (UI-004): the page's 16px gutter (24px on a tablet), its title row near the top with no bar above
+           * it, and room under the last line for the tab bar. From 1024px, beside the sidebar.
            *
-           * **Never under the clock** (staging review, 2026-10-31): the page starts below the top inset — 8px down where
-           * there is none, as before, and at the inset where the status bar is drawn over the page (a Home Screen app on an
-           * iPhone, UI-103). Beside the sidebar from 768px (1024px in the field) the same, for a tablet's Home Screen app.
+           * **Never under the clock** (staging review, 2026-10-31): the page starts below the top inset.
+           *
+           * *Changed 2026-11-04 (P19-T5 AC-4; UI-158, R3):* **the header starts 16px below the inset** on a phone and a
+           * tablet — `calc(1rem + env(safe-area-inset-top))`, the owner's rule. Beside the sidebar, 32px or the inset and
+           * 16px, whichever is more: a desktop keeps its 32px. `lg:px-10` is what `/leads`' list and detail are measured
+           * against (`SPLIT.gutter`, `leads-list.tsx`): change one, change both.
            */
-          field
-            ? 'px-4 pb-[calc(var(--tab-bar-space)+1.5rem)] pt-[max(0.5rem,env(safe-area-inset-top))] md:px-6 '
-              + 'md:pt-[max(0.75rem,env(safe-area-inset-top))] lg:px-10 lg:pb-14 lg:pt-[max(2rem,env(safe-area-inset-top))]'
-            : 'px-5 py-6 md:px-10 md:pb-14 md:pt-[max(2rem,env(safe-area-inset-top))]',
+          'px-4 pb-[calc(var(--tab-bar-space)+1.5rem)] pt-[calc(1rem+env(safe-area-inset-top))] md:px-6 '
+            + 'lg:px-10 lg:pb-14 lg:pt-[max(2rem,calc(1rem+env(safe-area-inset-top)))]',
         )}
       >
-        {/*
-          * Where the page's header carries the language switch: from 768px, a phone's bar carrying it below (P18.98-T2) —
-          * and in the field shell from 1024px, the *Lainnya* sheet carrying it below (UI V1, ADR-0180).
-          */}
-        <PageHeaderLanguage.Provider value={field ? (compact ? null : 'lg') : phone ? null : 'md'}>
-          <FieldChromeContext.Provider value={field ? { ...field, compact } : null}>
-            {title !== undefined && (
-              <PageHeader title={title} subtitle={subtitle} actions={actions} />
-            )}
-            {children}
-          </FieldChromeContext.Provider>
-        </PageHeaderLanguage.Provider>
+        <FieldChromeContext.Provider value={{ ...field, compact }}>
+          {/* P19-T1 AC-4 (UI-163, ADR-0190 §4): *Verifikasi email Anda · Kirim ulang* until the address is verified. */}
+          <VerifyEmailBanner />
+          {title !== undefined && (
+            <PageHeader title={title} subtitle={subtitle} actions={actions} />
+          )}
+          {children}
+        </FieldChromeContext.Provider>
       </main>
-      {field && compact && <TabBar chrome={{ ...field, compact }} />}
+      {compact && <TabBar chrome={{ ...field, compact }} />}
     </div>
   );
 }

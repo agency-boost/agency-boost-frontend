@@ -2,7 +2,7 @@ import { defineMessages, type MessagesOf } from '@/i18n/catalogue';
 import { kept } from '@/i18n/kept';
 
 /**
- * **Manage KPM Admins** — `/people/admins`, the Owner's (P18.98-T4, people and forum; `functional/org-hierarchy.md`,
+ * **Manage KPM Admins** — `/people/admins`, the Owner's (P18.10-T4, people and forum; `functional/org-hierarchy.md`,
  * *Who decides*): who administers the office, granting it, and taking it away, as a table and as a phone's cards.
  *
  * **English is the source**: the prototype draws two static rows and two `alert()`s (`KPM_Owner.html:1987-1997`), so
@@ -15,7 +15,7 @@ import { kept } from '@/i18n/kept';
  */
 const en = {
   subtitle: 'Who has delegated admin access to this KPM',
-  /** The client's one line for the paragraph it replaces (P18.97-T4 AC-5). */
+  /** The client's one line for the paragraph it replaces (P18.9-T4 AC-5). */
   line: 'Admins can do everything except manage admins.',
   columns: { name: 'Name', role: 'Role', since: 'Admin since', grantedBy: 'Granted by', actions: 'Actions' },
   grantTo: 'Grant admin access to',

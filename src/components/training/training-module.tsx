@@ -3,18 +3,21 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useId, useState } from 'react';
-import { PageLanguageSwitch } from '@/components/app-shell';
+import { PageLanguageSwitch } from '@/components/page-header';
 import { Page } from '@/components/page';
 import { NotFoundCard, ReadFailed, useTrainingCatalog } from '@/components/training/training-catalog';
+import { useSandboxedDocument } from '@/components/sandboxed-document';
 import { FormatIcon, SkillTag, TrainingStatusPill } from '@/components/training/training-parts';
 import { ErrorBanner } from '@/components/ui/field';
 import { LineIcon } from '@/components/ui/line-icon';
 import { Skeleton, SkeletonBar } from '@/components/ui/skeleton';
 import { Toast, useToast } from '@/components/ui/toast';
 import { useMessages } from '@/i18n/language-provider';
+import { sandboxedDocumentMessages } from '@/i18n/messages/sandboxed-document';
 import { trainingMessages } from '@/i18n/messages/training';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
+import { isHtmlDocument } from '@/lib/html-document';
 import { useSession } from '@/lib/session';
 import {
   TRAINING_STATUSES, linkDomain, openTrainingItem, readTrainingModule,
@@ -24,7 +27,7 @@ import {
 
 /**
  * **A module's page** (`/training/[categoryCode]/[moduleCode]`; `Overall.html:3733-3766`, logic `:7812-7856`,
- * `:7899-7914`; P18.5-T1 AC-5 to AC-7; redrawn by Phase 18.99 T10 after the UI V1 report, UI-067 to UI-069, UI-071).
+ * `:7899-7914`; P18.2-T1 AC-5 to AC-7; redrawn by Phase 18.11 T10 after the UI V1 report, UI-067 to UI-069, UI-071).
  *
  * - **No subtitle, no category row, no repeated title, no *Diunggah oleh admin*** (UI-067). Below 1024px a 48px back
  *   row, *‹ Training Modules*, then the **navy lesson card**: *Skill: {label}* and the module's place in its skill
@@ -136,6 +139,10 @@ export function TrainingModule({ categoryCode, moduleCode }: { categoryCode: str
               )}
             </div>
             <h1 id={titleId} className="mt-3 break-words text-[22px] font-bold leading-tight lg:mt-3.5 lg:text-[30px]">{page.title}</h1>
+            {/* *Deskripsi singkat* (UI-161, ADR-0220 §2): the grey line under the title — the card's own grey. */}
+            {page.description && (
+              <p className="mt-1.5 break-words text-md text-on-navy-muted lg:text-base">{page.description}</p>
+            )}
             {page.items.length === 0 ? (
               <p className="mt-4 text-md text-on-navy-muted">{t.nothingToOpen}</p>
             ) : (
@@ -168,7 +175,7 @@ export function TrainingModule({ categoryCode, moduleCode }: { categoryCode: str
 }
 
 /**
- * The way back to the list (P18.95-T9 AC-2; UI-067): *‹ Training Modules* in a 48px row below 1024px, *‹ Kembali ke
+ * The way back to the list (P18.7-T9 AC-2; UI-067): *‹ Training Modules* in a 48px row below 1024px, *‹ Kembali ke
  * Training Modules* from 1024px. Named the long way at every width, which holds the short words (WCAG 2.5.3).
  */
 function BackLink({ href }: { href: string }) {
@@ -214,6 +221,10 @@ function OpenedLine() {
  * opened — and the accent's button: full width under the row below 1024px, at the row's end from 1024px. A link is an
  * anchor to its own address, so the browser opens it as the click lands; a file is a button that opens the tab first
  * and points it at the signed address once the server answers (AC-6). A video is `VideoItem`.
+ *
+ * **An HTML lesson opens here, never in a tab** (P19.6-T2, ADR-0217 §4): the same button, without the *leaves the
+ * page* arrow, opens the window of `SandboxedDocument` titled with the item's name, records the open as a file's does,
+ * and draws the lesson in the office's colours. No tab is opened, so nothing confines it but the frame.
  */
 function Resource({
   moduleCode, item, isOpened, onOpened,
@@ -226,6 +237,8 @@ function Resource({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const t = useMessages(trainingMessages);
+  const here = useMessages(sandboxedDocumentMessages);
+  const lesson = useSandboxedDocument();
   const words = t.tile[item.kind];
 
   if (item.kind === 'video') {
@@ -237,8 +250,8 @@ function Resource({
   const domain = item.kind === 'link' ? linkDomain(item.url) : null;
   // Navy words on the accent (parity I-542): white on `#E8954A` is 2.38:1.
   const BUTTON = cn(
-    'mt-3.5 flex h-[52px] w-full shrink-0 items-center justify-center gap-2 rounded-pill bg-amber px-6 text-lg font-bold text-navy',
-    'hover:bg-amber-dark aria-disabled:opacity-60 lg:mt-0 lg:h-12 lg:w-auto lg:px-[26px] lg:text-[15px]',
+    'mt-3.5 flex h-[52px] w-full shrink-0 items-center justify-center gap-2 rounded-pill bg-primary px-6 text-lg font-bold text-primary-contrast',
+    'hover:bg-primary-hover aria-disabled:opacity-60 lg:mt-0 lg:h-12 lg:w-auto lg:px-[26px] lg:text-[15px]',
   );
 
   const record = async (tab: Window | null) => {
@@ -263,6 +276,19 @@ function Resource({
     const tab = window.open('', '_blank');
     if (tab) tab.opener = null;
     void record(tab);
+  };
+
+  // An HTML lesson: the window, never a tab (ADR-0217 §3, §4). The open is recorded as a file's is.
+  const html = item.kind === 'file' && isHtmlDocument(item.mimeType);
+  const openHere = () => {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    lesson.open(item.label, async () => {
+      const answer = await openTrainingItem(moduleCode, item.id);
+      onOpened(answer.openedItemIds, item.id);
+      return answer.url;
+    }).catch((err: unknown) => setError(toDisplayError(err))).finally(() => setBusy(false));
   };
 
   return (
@@ -290,6 +316,17 @@ function Resource({
             {words.button}
             <ExternalIcon />
           </a>
+        ) : html ? (
+          <button
+            type="button"
+            onClick={openHere}
+            aria-disabled={busy || undefined}
+            aria-label={here.openHereName({ button: words.button, label: item.label })}
+            className={BUTTON}
+            data-opens-here=""
+          >
+            {words.button}
+          </button>
         ) : (
           <button
             type="button"
@@ -303,6 +340,7 @@ function Resource({
           </button>
         )}
       </div>
+      {html && lesson.dialog}
       {error && (
         <div className="mt-2">
           <p className="mb-1.5 text-base text-on-navy-red">{t.openFailed({ label: item.label })}</p>
@@ -360,7 +398,7 @@ function VideoItem({
           aria-label={t.playName({ label: item.label })}
           className={cn(BOX, 'relative flex items-center justify-center bg-navy-soft aria-disabled:opacity-60')}
         >
-          <span aria-hidden="true" className="flex h-14 w-14 items-center justify-center rounded-full bg-amber text-navy">
+          <span aria-hidden="true" className="flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-contrast">
             <svg viewBox="0 0 24 24" width="26" height="26" fill="currentColor"><path d="M8 5.5v13l10.5-6.5z" /></svg>
           </span>
           <span aria-hidden="true" className="absolute bottom-2 right-2.5 rounded-pill bg-ink/40 px-2 py-0.5 text-xs text-white">
@@ -429,7 +467,7 @@ function StatusCard({
                 className={cn(
                   'flex h-16 min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-row border-[1.5px] px-1 text-xs font-semibold',
                   'lg:h-[60px] lg:flex-none lg:flex-row lg:justify-start lg:gap-3 lg:px-4 lg:text-md',
-                  on ? 'border-amber bg-amber text-navy' : 'border-line bg-card text-pill-grey-ink hover:border-muted',
+                  on ? 'border-primary bg-primary text-primary-contrast' : 'border-line bg-card text-pill-grey-ink hover:border-muted',
                 )}
               >
                 <StatusIcon status={s} className={cn('h-5 w-5 lg:h-[22px] lg:w-[22px]', on ? 'text-navy' : 'text-signal-grey')} />

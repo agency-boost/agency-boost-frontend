@@ -1,7 +1,7 @@
 import { keptTerms } from './kept';
 
 /**
- * **`lang="en"` on every kept-English term an Indonesian screen shows** (WCAG 3.1.2; ADR-0179 §8; P18.98-T7 AC-2).
+ * **`lang="en"` on every kept-English term an Indonesian screen shows** (WCAG 3.1.2; ADR-0179 §8; P18.10-T7 AC-2).
  *
  * In ID mode `<html lang="id">`, and *Leads management*, *KPM* or *follow up* inside *3 leads perlu di-follow up* are
  * English: a screen reader reads them in English only if they say so. `watchKeptTerms(document.body)` makes them say

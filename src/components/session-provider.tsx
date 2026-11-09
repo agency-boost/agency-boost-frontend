@@ -4,11 +4,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLanguageChoice } from '@/i18n/language-provider';
 import { endImpersonation } from '@/lib/admin';
 import {
-  api, isImpersonating, onOfficeUnavailable, onSessionLost, refreshSession, setAccessToken, setImpersonating,
-  type ApiError,
+  api, isImpersonating, isTransientFailure, onOfficeUnavailable, onSessionLost, refreshSession, retryDelayFor,
+  setAccessToken, setImpersonating, wait, type ApiError,
 } from '@/lib/api-client';
 import { Me, SessionContext } from '@/lib/session';
 import { OfficeUnavailable } from './office-unavailable';
+import { forgetView } from '@/lib/views';
+import { applySessionBranding, clearBranding } from '@/lib/branding';
 
 export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [me, setMe] = useState<Me | null>(null);
@@ -46,7 +48,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   }), []);
 
   /*
-   * **The account's language, in the same render as the account** (ADR-0179 §2; P18.98-T2 AC-5): at sign-in a saved
+   * **The account's language, in the same render as the account** (ADR-0179 §2; P18.10-T2 AC-5): at sign-in a saved
    * language wins over the browser's cookie and rewrites it, and an account with none keeps the browser's. Told here,
    * beside `setMe`, so React renders the two together and a signed-in screen's first frame is already in it.
    */
@@ -75,19 +77,34 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
 
   /** Reads the session, and says who it found: `signIn` hands that to the login page. */
   const load = useCallback(async (): Promise<Me | null> => {
-    try {
-      const found = await api<Me>('/auth/me');
-      remember(found);
-      // Somebody is signed in again, so whatever ends this session next was not them pressing Sign out, and the
-      // session that ended before it is behind them.
-      setSignedOut(false);
-      setExpired(false);
-      return found;
-    } catch {
-      // A refusal that means the office cannot be used has already replaced the app (above); any
-      // other leaves no session, and the screens send the reader to sign in.
-      remember(null);
-      return null;
+    for (let tried = 0; ; tried += 1) {
+      try {
+        const found = await api<Me>('/auth/me');
+        remember(found);
+        // Somebody is signed in again, so whatever ends this session next was not them pressing Sign out, and the
+        // session that ended before it is behind them.
+        setSignedOut(false);
+        setExpired(false);
+        return found;
+      } catch (err) {
+        /*
+         * **A busy minute is not a signed-out one** (P19-T5 AC-1; UI-125). A `429`, a server briefly unavailable or a
+         * read that never arrived is tried again with backoff (`retryDelayFor`) — the refresh a `401` asks for already
+         * was (`api-client.ts`). Still failing after every try, whoever was signed in **stays signed in**: a screen
+         * that reloads the session after a save shows its own error rather than its reader being sent to sign in.
+         */
+        const delay = retryDelayFor(err, tried);
+        if (delay !== null) {
+          await wait(delay);
+          continue;
+        }
+        const kept = signedIn.current;
+        if (kept && isTransientFailure(err)) return kept;
+        // A refusal that means the office cannot be used has already replaced the app (above); any
+        // other leaves no session, and the screens send the reader to sign in.
+        remember(null);
+        return null;
+      }
     }
   }, [remember]);
 
@@ -118,6 +135,8 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         body: { email, password },
       });
       setAccessToken(accessToken);
+      // Signing in starts on *Akun saya* (P19.2-T1 AC-4; ADR-0198 §5), whatever view this tab was last in.
+      forgetView();
       return load();
     },
     [load],
@@ -136,6 +155,10 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     await api<void>('/auth/logout', { method: 'POST' }).catch(() => undefined);
     setAccessToken(null);
     remember(null);
+    // The tab's view goes with the session (ADR-0198 §5): the next person to sign in here starts on *Akun saya*.
+    forgetView();
+    // The KPM's colours and its boot cache go too (P19.6-T1; ADR-0218 §8): the sign-in page is AgencyBoost's again.
+    clearBranding();
     setSignedOut(true);
     setExpired(false);
     setUnavailable(null);
@@ -162,6 +185,15 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     }
     setUnavailable(null);
   }, [reload, remember]);
+
+  /*
+   * **The KPM's look arrives with the session** (P19.6-T1 AC-12; ADR-0218 §8): its palette set on <html>, the favicon,
+   * touch icon and manifest pointed at its own, and the boot cache written for the next reload's first paint. Only once
+   * a session has answered: before then the boot script's cache stands, and with none the app is AgencyBoost's.
+   */
+  useEffect(() => {
+    if (me) applySessionBranding(me.branding ?? null);
+  }, [me]);
 
   const value = useMemo(
     () => ({ me, loading, signedOut, expired, signIn, signOut, reload }),

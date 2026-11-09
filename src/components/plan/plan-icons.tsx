@@ -2,7 +2,7 @@ import { LineIcon, type LineIconName } from '@/components/ui/line-icon';
 import { cn } from '@/lib/cn';
 
 /**
- * **The glyphs UI V1's selling and programme pages draw that the one line-icon set lacks** (UI-107, UI-108; Phase 18.99
+ * **The glyphs UI V1's selling and programme pages draw that the one line-icon set lacks** (UI-107, UI-108; Phase 18.11
  * T13): a clock and a video for an event's time and place, a star for *Kejar*, a file and a file with none for Pitch
  * Materials, a ticked circle for a benefit, an arrow on the plan's button, a rocket and a magnet for a campaign. Drawn in
  * `LineIcon`'s manner — the 24×24 box, the 1.7 stroke, round joins, `currentColor`, hidden from assistive technology —

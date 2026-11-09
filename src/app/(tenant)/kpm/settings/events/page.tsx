@@ -17,6 +17,7 @@ import { settingsMessages } from '@/i18n/messages/settings';
 import { settingsEventsMessages } from '@/i18n/messages/settings-events';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
 import { suggestCode } from '@/lib/config-code';
+import { cn } from '@/lib/cn';
 import { useCan } from '@/lib/session';
 import { officeInstant, officeWallClock } from '@/lib/events-admin';
 import { formatCalendarDay } from '@/lib/format';
@@ -27,6 +28,7 @@ import {
   restoreEvent, restoreEventType, updateEvent, updateEventType,
   type EventRow, type EventTypeRow,
 } from '@/lib/tenant-config';
+import { ARCHIVED_SWITCH_ROW } from '../settings-touch';
 
 /** The two tabs, by their addresses: §A.3's names, the same in both languages (`settings-events.tsx`). */
 const TABS = [
@@ -37,7 +39,7 @@ const TABS = [
 /** The issuer and the scope, which the prototype crams into one free-text string — in this order. */
 const ISSUERS = ['kpm', 'company', 'group'] as const;
 /**
- * The two `select_*` scopes carry a list of people, chosen with the picker beneath the field (P18.5-T5
+ * The two `select_*` scopes carry a list of people, chosen with the picker beneath the field (P18.2-T5
  * AC-10, D-picker). They were *coming soon* until it was built (F-44, amended as built).
  */
 const SCOPES = ['all_agents', 'leaders', 'select_agents', 'select_leaders'] as const;
@@ -56,14 +58,14 @@ type FieldRefusal = { field: 'dates' | 'audience'; message: string };
 
 /**
  * The events an office runs (P5-T6, ADR-0034). Its words are the catalogue's (`i18n/messages/settings-events.tsx`,
- * `settings.ts`; P18.98-T4), its day in the reader's figures.
+ * `settings.ts`; P18.10-T4), its day in the reader's figures.
  *
  * **Nothing per-person is edited here.** RSVP, the claim and feedback are each member's own record,
  * written on the agent's Events screen. What the office does with them is behind *View feedback* on a
- * past row (`KPM_Owner.html:1655`; P18.5-T5 AC-7, T6 AC-5): the roll call, where the Owner or an Admin
+ * past row (`KPM_Owner.html:1655`; P18.2-T5 AC-7, T6 AC-5): the roll call, where the Owner or an Admin
  * confirms who came, and the *Feedback Summary*.
  *
- * **The list is the office's administration's** (P18.5-T5 AC-2): it carries every invitee list and every
+ * **The list is the office's administration's** (P18.2-T5 AC-2): it carries every invitee list and every
  * leaders-only event, so it reads under `event_settings:read`, which no field rung holds.
  *
  * **Nothing says when an event is happening except its dates.** The phase badge is worked out on
@@ -131,7 +133,7 @@ export default function EventsSettingsPage() {
 
   /**
    * **The panel's save.** The times are the office's wall clock, read in `Asia/Jakarta` whatever the browser's
-   * zone (invariant §9). On an edit, **the audience and the times are sent only when they changed** (P18.5-T5
+   * zone (invariant §9). On an edit, **the audience and the times are sent only when they changed** (P18.2-T5
    * AC-9): an ended event people have answered keeps both, and the server refuses a change to either. That
    * refusal is said under the field it is about — the times under *Ends*, in the spec's words; the audience
    * under *Who is invited*, in the server's — and the panel stays open with what was typed.
@@ -180,7 +182,7 @@ export default function EventsSettingsPage() {
 
   function eventsTab() {
     if (events === null || types === null) return <SkeletonCards count={3} />;
-    // Upcoming, then happening now, then past — each by date (P18.97-T4 AC-8, ADR-0176 §8; UI-030).
+    // Upcoming, then happening now, then past — each by date (P18.9-T4 AC-8, ADR-0176 §8; UI-030).
     const shown = byPhaseAndDate(events.filter((e) => showArchived || e.status === 'active'));
     const active = types.filter((t) => t.status === 'active');
 
@@ -198,7 +200,7 @@ export default function EventsSettingsPage() {
 
         {/*
           * The prototype's `config-table` (`KPM_Owner.html:1651-1656`): one bordered list, a row per event, as the
-          * other settings screens draw theirs (P18.8-T13 AC-2, the tidy), where each event was a card of its own.
+          * other settings screens draw theirs (P18.5-T13 AC-2, the tidy), where each event was a card of its own.
           */}
         <Card className="p-0">
           {shown.length === 0 ? (
@@ -555,14 +557,14 @@ export default function EventsSettingsPage() {
 
   /*
    * **The toolbar** — the prototype's `config-toolbar` (`:1647-1650`, `:1659-1662`), in `SettingsScreen`'s slot as
-   * the other settings screens hold theirs (P18.8-T13 AC-2): *Show archived*, one box for both tabs, and the tab's
+   * the other settings screens hold theirs (P18.5-T13 AC-2): *Show archived*, one box for both tabs, and the tab's
    * add button on the right, once the lists it adds to are read.
    */
   const activeTypes = types?.filter((t) => t.status === 'active') ?? [];
   const toolbar = types === null || (tab !== '#types' && events === null) ? undefined : {
     actions: (
       <>
-        <label className="flex items-center gap-2 text-md text-navy">
+        <label className={cn('flex items-center gap-2 text-md text-navy', ARCHIVED_SWITCH_ROW)}>
           <input
             type="checkbox"
             checked={showArchived}
@@ -606,7 +608,7 @@ export default function EventsSettingsPage() {
       toolbar={toolbar}
     >
       {error && types !== null && (
-        <div role="alert" className="mb-4 rounded-md border border-amber bg-card p-4">
+        <div role="alert" className="mb-4 rounded-md border border-primary bg-card p-4">
           <p className="text-md text-navy">{error.message}</p>
         </div>
       )}

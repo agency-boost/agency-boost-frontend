@@ -27,7 +27,7 @@ import { PrintLayout } from './print-layout';
 import { Scorecard } from './scorecard';
 
 /**
- * **The Strategic Leader Forum in Indonesian** (P18.98-T4 AC-1 to AC-4, people and forum): every screen of it read in
+ * **The Strategic Leader Forum in Indonesian** (P18.10-T4 AC-1 to AC-4, people and forum): every screen of it read in
  * ID mode — the list, a meeting's head and its three tabs, the dialogs, the shared view and the not-found states, a
  * phone's cards and the print. Its words are the approved glossary's, each kept term English (§A), what the office typed
  * as typed, and no English message of the forum's own left on the screen (`englishShown`). English is every other
@@ -47,7 +47,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('P18.98-T4 the forum’s list in Indonesian', () => {
+describe('P18.10-T4 the forum’s list in Indonesian', () => {
   beforeEach(() => { nav.pathname = '/leader-meetings'; });
 
   it('reads the English it is looking for, so a silent zero cannot pass: the same list in English shows it', async () => {
@@ -60,7 +60,7 @@ describe('P18.98-T4 the forum’s list in Indonesian', () => {
     ]));
   });
 
-  it('P18.98-T4 AC-1, AC-2 reads the list in the glossary’s words, the name, the meetings’ titles and the tags kept', async () => {
+  it('P18.10-T4 AC-1, AC-2 reads the list in the glossary’s words, the name, the meetings’ titles and the tags kept', async () => {
     stubFetch({ ...SHELL_STUBS, 'GET /leader-meetings': { body: listView() } });
     renderInIndonesian(<LeaderMeetingsPage />, { me: OWNER_ME });
     await screen.findByText('Strategic Check-in — #14');
@@ -81,7 +81,7 @@ describe('P18.98-T4 the forum’s list in Indonesian', () => {
     noEnglishLeft();
   });
 
-  it('P18.98-T4 AC-1 an empty list, and a filter that matches nothing', async () => {
+  it('P18.10-T4 AC-1 an empty list, and a filter that matches nothing', async () => {
     stubFetch({ ...SHELL_STUBS, 'GET /leader-meetings': { body: listView({ meetings: [] }) } });
     const { unmount } = renderInIndonesian(<LeaderMeetingsPage />, { me: OWNER_ME });
     expect(await screen.findByText('Belum ada rapat.')).toBeInTheDocument();
@@ -95,7 +95,7 @@ describe('P18.98-T4 the forum’s list in Indonesian', () => {
     noEnglishLeft();
   });
 
-  it('P18.98-T4 AC-1 New meeting asks in Indonesian, a new meeting named as the programme names it', async () => {
+  it('P18.10-T4 AC-1 New meeting asks in Indonesian, a new meeting named as the programme names it', async () => {
     stubFetch({ ...SHELL_STUBS, 'GET /leader-meetings': { body: listView() } });
     renderInIndonesian(<LeaderMeetingsPage />, { me: OWNER_ME });
     await userEvent.click(await screen.findByRole('button', { name: '+ Rapat baru' }));
@@ -109,7 +109,7 @@ describe('P18.98-T4 the forum’s list in Indonesian', () => {
   });
 });
 
-describe('P18.98-T4 a forum meeting in Indonesian', () => {
+describe('P18.10-T4 a forum meeting in Indonesian', () => {
   beforeEach(() => { nav.pathname = '/leader-meetings/m-14'; });
   const page = <LeaderMeetingPage params={routeParams({ meetingId: 'm-14' })} />;
   const open = (meeting = meetingView(), routes: Record<string, unknown> = {}) => {
@@ -117,7 +117,7 @@ describe('P18.98-T4 a forum meeting in Indonesian', () => {
     return renderInIndonesian(page, { me: OWNER_ME });
   };
 
-  it('P18.98-T4 AC-1, AC-2 the head: the date’s button, the state, the cadence, the three buttons and who may edit', async () => {
+  it('P18.10-T4 AC-1, AC-2 the head: the date’s button, the state, the cadence, the three buttons and who may edit', async () => {
     open();
     const head = within(await screen.findByRole('region', { name: /Strategic Check-in/ }));
     expect(screen.getByRole('link', { name: '← Kembali ke semua rapat' })).toHaveAttribute('href', '/leader-meetings');
@@ -133,7 +133,7 @@ describe('P18.98-T4 a forum meeting in Indonesian', () => {
     noEnglishLeft();
   });
 
-  it('P18.98-T4 AC-2, AC-4 Agenda and Action Items in Indonesian; every item, PIC and remark as the office typed it', async () => {
+  it('P18.10-T4 AC-2, AC-4 Agenda and Action Items in Indonesian; every item, PIC and remark as the office typed it', async () => {
     open();
     await userEvent.click(await screen.findByRole('tab', { name: 'Agenda' }));
     const agenda = within(screen.getByRole('tabpanel', { name: 'Agenda' }));
@@ -163,7 +163,7 @@ describe('P18.98-T4 a forum meeting in Indonesian', () => {
     noEnglishLeft();
   });
 
-  it('P18.98-T4 AC-1 a write that fails says so in Indonesian, in the toast and under Save', async () => {
+  it('P18.10-T4 AC-1 a write that fails says so in Indonesian, in the toast and under Save', async () => {
     open(meetingView(), { 'PATCH /leader-meetings/m-14/agenda-items/a-1': writeFailed });
     await userEvent.click(await screen.findByRole('tab', { name: 'Agenda' }));
     const field = screen.getByRole('textbox', { name: 'Persiapan, item 1' });
@@ -174,7 +174,7 @@ describe('P18.98-T4 a forum meeting in Indonesian', () => {
     await waitFor(() => expect(screen.getAllByText(line)).toHaveLength(2));
   });
 
-  it('P18.98-T4 AC-1 Meeting details and the question before a delete', async () => {
+  it('P18.10-T4 AC-1 Meeting details and the question before a delete', async () => {
     open(meetingView({ writtenIn: false, can: { ...meetingView().can, delete: true } }));
     await userEvent.click(await screen.findByRole('button', { name: /^Ganti tanggal/ }));
     const dialog = within(await screen.findByRole('dialog', { name: 'Detail rapat' }));
@@ -186,7 +186,7 @@ describe('P18.98-T4 a forum meeting in Indonesian', () => {
     noEnglishLeft();
   });
 
-  it('P18.98-T4 AC-1 Share these minutes, its hint the branch as typed and the day in Indonesian', async () => {
+  it('P18.10-T4 AC-1 Share these minutes, its hint the branch as typed and the day in Indonesian', async () => {
     open(meetingView(), {
       'POST /leader-meetings/m-14/share-links': { status: 201, body: { token: 'tok_abc', expiresAt: '2026-10-24T03:00:00.000Z' } },
     });
@@ -199,7 +199,7 @@ describe('P18.98-T4 a forum meeting in Indonesian', () => {
     noEnglishLeft();
   });
 
-  it('P18.98-T4 AC-1 the not-found states, by the address and by a link', async () => {
+  it('P18.10-T4 AC-1 the not-found states, by the address and by a link', async () => {
     stubFetch({ ...SHELL_STUBS, 'GET /leader-meetings/m-14': notFound });
     const { unmount } = renderInIndonesian(page, { me: OWNER_ME });
     expect(await screen.findByRole('heading', { name: 'Rapat ini tidak ditemukan.' })).toBeInTheDocument();
@@ -215,7 +215,7 @@ describe('P18.98-T4 a forum meeting in Indonesian', () => {
     noEnglishLeft();
   });
 
-  it('P18.98-T4 AC-1 the shared view, read-only: nothing to write, and Save as PDF', async () => {
+  it('P18.10-T4 AC-1 the shared view, read-only: nothing to write, and Save as PDF', async () => {
     nav.pathname = '/leader-meetings/shared/tok_abc';
     stubFetch({ ...SHELL_STUBS, 'GET /leader-meetings/shared/tok_abc': { body: meetingView({ via: 'link', can: LINK_CAN }) } });
     renderInIndonesian(<SharedLeaderMeetingPage params={routeParams({ token: 'tok_abc' })} />, { me: FIELD_ME });
@@ -226,10 +226,10 @@ describe('P18.98-T4 a forum meeting in Indonesian', () => {
   });
 });
 
-describe('P18.98-T4 Overview & Stats in Indonesian: the table, a phone’s cards and the notes', () => {
+describe('P18.10-T4 Overview & Stats in Indonesian: the table, a phone’s cards and the notes', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('P18.98-T4 AC-2 keeps every KPI, column and row name; says ours in Indonesian, for the eye and for a screen reader', () => {
+  it('P18.10-T4 AC-2 keeps every KPI, column and row name; says ours in Indonesian, for the eye and for a screen reader', () => {
     renderTab(Scorecard, makeMeetingView(), {}, 'id');
     const table = screen.getByRole('table');
     expect(within(table).getAllByRole('columnheader').slice(0, 3).map((h) => h.textContent)).toEqual(
@@ -248,7 +248,7 @@ describe('P18.98-T4 Overview & Stats in Indonesian: the table, a phone’s cards
     noEnglishLeft();
   });
 
-  it('P18.98-T4 AC-2 a rate the field cannot read is refused in Indonesian, its example in the reader’s marks', async () => {
+  it('P18.10-T4 AC-2 a rate the field cannot read is refused in Indonesian, its example in the reader’s marks', async () => {
     renderTab(Scorecard, makeMeetingView(), {}, 'id');
     const field = screen.getByRole('textbox', { name: 'Monthly Target per unit, Manpower' });
     await userEvent.type(field, 'kira-kira dua');
@@ -256,7 +256,7 @@ describe('P18.98-T4 Overview & Stats in Indonesian: the table, a phone’s cards
     expect(await screen.findByText('Ketik angka mulai dari 0, misalnya 1 atau 0,5.')).toBeInTheDocument();
   });
 
-  it('P18.98-T4 AC-2 on a phone: one card a metric, its change in Indonesian — points as *poin*', async () => {
+  it('P18.10-T4 AC-2 on a phone: one card a metric, its change in Indonesian — points as *poin*', async () => {
     atWidth(375);
     renderTab(Scorecard, makeMeetingView({
       scorecard: makeScorecard({
@@ -273,7 +273,7 @@ describe('P18.98-T4 Overview & Stats in Indonesian: the table, a phone’s cards
     noEnglishLeft();
   });
 
-  it('P18.98-T4 AC-1 the print, in the screen’s language: the three parts, the minutes’ words and the statuses Indonesian', () => {
+  it('P18.10-T4 AC-1 the print, in the screen’s language: the three parts, the minutes’ words and the statuses Indonesian', () => {
     stubFetch({});
     render(<InLanguage language="id"><PrintLayout meeting={makeMeetingView()} /></InLanguage>);
     expect(screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent)).toEqual(['Overview & Stats', 'Agenda', 'Action Items']);
@@ -290,21 +290,21 @@ describe('P18.98-T4 Overview & Stats in Indonesian: the table, a phone’s cards
     noEnglishLeft();
   });
 
-  it('P18.98-T4 AC-4 the read-only tracker and agenda show the office’s words as typed, in no other language', () => {
+  it('P18.10-T4 AC-4 the read-only tracker and agenda show the office’s words as typed, in no other language', () => {
     renderTab(ActionItems, readOnlyMeeting(), {}, 'id');
     expect(screen.getByText('Ferry / Joy')).toBeInTheDocument();
     expect(screen.queryByRole('textbox')).toBeNull();
     noEnglishLeft();
   });
 
-  it('P18.98-T4 AC-1 a ticked During item is said done in Indonesian', () => {
+  it('P18.10-T4 AC-1 a ticked During item is said done in Indonesian', () => {
     renderTab(Agenda, readOnlyMeeting(), {}, 'id');
     expect(screen.getAllByText('Selesai.').length).toBeGreaterThan(0);
   });
 });
 
-describe('P18.98-T4 the forum’s sentences in each language (`lib/leader-meetings.ts`, `lib/leader-meeting-tabs.ts`)', () => {
-  it('P18.98-T4 AC-3 each sentence whole in Indonesian: its own order, no plural, a kept term English', () => {
+describe('P18.10-T4 the forum’s sentences in each language (`lib/leader-meetings.ts`, `lib/leader-meeting-tabs.ts`)', () => {
+  it('P18.10-T4 AC-3 each sentence whole in Indonesian: its own order, no plural, a kept term English', () => {
     expect(coreLeadersTagged(1, 'id')).toBe('1 Core Leader di-tag');
     expect(coreLeadersTagged(3, 'id')).toBe('3 Core Leaders di-tag');
     expect(openItemsNoun(1, 'id')).toBe('item belum selesai');
@@ -318,7 +318,7 @@ describe('P18.98-T4 the forum’s sentences in each language (`lib/leader-meetin
     expect(defaultMeetingTitle([{ number: 14 }], 'id')).toBe('Strategic Check-in — #15');
   });
 
-  it('P18.98-T4 AC-3 names joined as each language joins them, and the access note whole', () => {
+  it('P18.10-T4 AC-3 names joined as each language joins them, and the access note whole', () => {
     expect(listed(['a', 'b'], 'id')).toBe('a dan b');
     expect(listed(['a', 'b', 'c'], 'id')).toBe('a, b, dan c');
     expect(listed(['a', 'b', 'c'])).toBe('a, b and c');
@@ -328,7 +328,7 @@ describe('P18.98-T4 the forum’s sentences in each language (`lib/leader-meetin
       .toBe('🔒 Hanya Core Leader yang di-tag dapat mengubah pelacak ini.');
   });
 
-  it('P18.98-T4 AC-3 the (*) notes: the months in the figures’ language, the words in the reader’s — each pair of the two', () => {
+  it('P18.10-T4 AC-3 the (*) notes: the months in the figures’ language, the words in the reader’s — each pair of the two', () => {
     const periods = makeScorecard().periods;
     const earlier = { periods, partialPeriods: [{ column: 'fy' as const, leavesOut: ['2025-01', '2025-02', '2025-03', '2025-04', '2025-05', '2025-06', '2025-07'] }] };
     expect(partialNotes(earlier, 'id', 'id')).toEqual(['(*) Full Year 2025 hanya mencakup Agu–Des 2025; bulan-bulan sebelumnya belum diunggah']);
@@ -340,12 +340,14 @@ describe('P18.98-T4 the forum’s sentences in each language (`lib/leader-meetin
       .toEqual(['(*) YTD 2025 mencakup Jan–Sep 2025 tanpa Mar 2025 dan Apr 2025, yang belum diunggah']);
   });
 
-  it('P18.98-T4 AC-3 a change in points, and *—*’s reasons, in Indonesian', () => {
+  it('P18.10-T4 AC-3 a change in points, and *—*’s reasons, in Indonesian', () => {
     expect(changeText({ kind: 'figure', value: 15, unit: 'points' }, 'id', 'id')).toBe('+15 poin');
     expect(changeText({ kind: 'figure', value: -1, unit: 'points' }, 'id', 'id')).toBe('-1 poin');
     expect(changeText({ kind: 'figure', value: -1, unit: 'points' }, 'en', 'en')).toBe('-1 point');
     expect(noneWords({ key: 'average_case_size' }, { kind: 'none' }, 'id')).toBe('Tidak ada polis dalam periode ini.');
-    expect(noneWords({ key: 'cases_per_producing_agent' }, { kind: 'none' }, 'id')).toBe('Tidak ada Annual Active Agents dalam periode ini.');
+    expect(noneWords({ key: 'cases_per_producing_agent' }, { kind: 'none' }, 'id')).toBe('Tidak ada Active Agent dalam periode ini.');
+    // P19.3-T1 AC-15: a column of last year with no month uploaded.
+    expect(noneWords({ key: 'flc' }, { kind: 'not_uploaded' }, 'id')).toBe('Belum diunggah');
     expect(noneWords({ key: 'manpower' }, { kind: 'unrecorded' }, 'id')).toBe('Tidak tercatat untuk rapat ini.');
   });
 });

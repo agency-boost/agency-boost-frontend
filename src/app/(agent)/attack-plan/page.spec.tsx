@@ -77,13 +77,15 @@ describe('/attack-plan, the Sales Attack Plan (P14-T8)', () => {
       expect(within(item).queryByText('Upcoming')).not.toBeInTheDocument();
     });
 
-    it('P18.8-T12 AC-2 the tabs Sales Attack Plan | Product Catalog under the title, this one current', async () => {
+    it('P18.5-T12 AC-2 the tabs Sales Attack Plan | Product Catalog under the title, this one current', async () => {
       show();
       await screen.findByRole('heading', { level: 2, name: 'Who are we talking to?' });
       const tabs = screen.getByRole('navigation', { name: 'Sales tools' });
       const links = within(tabs).getAllByRole('link');
       expect(links.map((l) => [l.textContent, l.getAttribute('href'), l.getAttribute('aria-current')])).toEqual([
         ['Sales Attack Plan', '/attack-plan', 'page'], ['Product Catalog', '/product-catalog', null],
+        // P19.7-T2 AC-1 (ADR-0221 §8): the third tab, *Riwayat*.
+        ['Proposal', '/proposal', null],
       ]);
       // Beneath the page's own title and sub-line, as `/activity/*`'s strip is.
       expect(screen.getByRole('heading', { level: 1 }).compareDocumentPosition(tabs) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -91,7 +93,7 @@ describe('/attack-plan, the Sales Attack Plan (P14-T8)', () => {
       expect(within(tabs).queryByRole('tab')).not.toBeInTheDocument();
     });
 
-    it('P14-T8 AC-2, P18.95-T7 AC-1 the title, one line for the brief, the step pills and the card; no plan read yet, the shelf read once', async () => {
+    it('P14-T8 AC-2, P18.7-T7 AC-1 the title, one line for the brief, the step pills and the card; no plan read yet, the shelf read once', async () => {
       const { calls } = show();
       await screen.findByRole('heading', { level: 2, name: 'Who are we talking to?' });
       expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Sales Attack Plan$/);
@@ -118,7 +120,7 @@ describe('/attack-plan, the Sales Attack Plan (P14-T8)', () => {
         'Legacy / inheritance',
       ]);
       expect(chips('Age band').map(([t]) => t)).toEqual(['< 25', '25–34', '35–49', '50–64', '65+']);
-      // P18.95-T6 AC-3: six monthly bands, and *Lump-sum* as an option of its own after them.
+      // P18.7-T6 AC-3: six monthly bands, and *Lump-sum* as an option of its own after them.
       expect(chips('Monthly premium budget').map(([t]) => t)).toEqual([
         '< IDR 500K', 'IDR 500K–IDR 2M', 'IDR 2M–IDR 5M', 'IDR 5M–IDR 10M', 'IDR 10M–IDR 20M', '> IDR 20M',
       ]);
@@ -153,7 +155,7 @@ describe('/attack-plan, the Sales Attack Plan (P14-T8)', () => {
       expect(nav.push).toHaveBeenCalledWith('/attack-plan?need=health&age=5&budget=7', { scroll: false });
     });
 
-    it('P18.95-T6 AC-3 the lump-sum option and its encoding: its own group, one answer across the two, band 7', async () => {
+    it('P18.7-T6 AC-3 the lump-sum option and its encoding: its own group, one answer across the two, band 7', async () => {
       show();
       await screen.findByRole('heading', { level: 2, name: 'Who are we talking to?' });
       const lumpSum = () => within(group('Or pay once')).getByRole('button', { name: 'Lump-sum' });
@@ -174,7 +176,7 @@ describe('/attack-plan, the Sales Attack Plan (P14-T8)', () => {
       expect(nav.push).toHaveBeenCalledWith('/attack-plan?need=investment&age=3&budget=7', { scroll: false });
     });
 
-    it('P18.95-T6 AC-3 a saved address with budget=7 still resolves: Lump-sum chosen on the brief, and named in the summary', async () => {
+    it('P18.7-T6 AC-3 a saved address with budget=7 still resolves: Lump-sum chosen on the brief, and named in the summary', async () => {
       const view = show({ need: 'investment', age: '3', budget: '7' });
       expect(await screen.findByText('Lump-sum')).toBeInTheDocument();
       await result();
@@ -231,7 +233,7 @@ describe('/attack-plan, the Sales Attack Plan (P14-T8)', () => {
       delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
     });
 
-    it('P18.95-T6 AC-1 no bar on the plan, nor beside the empty shelf', async () => {
+    it('P18.7-T6 AC-1 no bar on the plan, nor beside the empty shelf', async () => {
       const view = show(BRIEF);
       await result();
       expect(document.querySelector('.max-md\\:fixed')).toBeNull();
@@ -394,7 +396,7 @@ describe('/attack-plan, the Sales Attack Plan (P14-T8)', () => {
             product: product({
               script: {
                 goodFit: marked, opening: marked, benefits: [marked], fullScript: marked,
-                objectionTheySay: marked, objectionYouSay: marked, nextAction: marked,
+                objections: [{ objection: marked, answer: marked }], nextAction: marked,
               },
             }),
           }),
@@ -602,7 +604,7 @@ describe('UI-107 /attack-plan on a phone', () => {
     expect(tabs).toHaveClass('max-md:rounded-pill', 'max-md:bg-card');
     const current = within(tabs).getByRole('link', { name: 'Sales Attack Plan' });
     expect(current).toHaveClass('max-md:flex-1', 'max-md:min-h-11');
-    expect(current.firstElementChild).toHaveClass('max-md:bg-navy', 'max-md:text-white');
+    expect(current.firstElementChild).toHaveClass('max-md:bg-secondary', 'max-md:text-secondary-contrast');
   });
 
   it('UI-107 the step line never wraps on a phone, and a step done is a ✓', async () => {

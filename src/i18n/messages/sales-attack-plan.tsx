@@ -3,7 +3,7 @@ import { defineMessages, type MessagesOf } from '@/i18n/catalogue';
 import { kept } from '@/i18n/kept';
 
 /**
- * **The Sales Attack Plan** (P18.98-T4, field selling; `functional/sales-tools.md`, *The module's own strings*):
+ * **The Sales Attack Plan** (P18.10-T4, field selling; `functional/sales-tools.md`, *The module's own strings*):
  * `/attack-plan` — the customer brief's three questions and their chips, the plan's summary, its pill, the notes on a
  * product outside the brief's bands or in run-off, the alternatives' line, the catalog's deep link's banner, and the
  * states the prototype lacks; `lib/product-catalog.ts`' words for a brief (`needLabel`, `budgetLabel`, `resultTag`,
@@ -18,7 +18,7 @@ import { kept } from '@/i18n/kept';
  * Plan* (the plan's step and its button name it, in ID mode as the tab spells it), *Product Catalog*, *Script*. **Content
  * stays as typed** (ADR-0179 §5; §C3): the product's name, tagline and script, an alternative's name.
  *
- * **A message never writes a figure** (P18.98-T3): a budget band's sums are written by `budgetLabel` in the figures'
+ * **A message never writes a figure** (P18.10-T3): a budget band's sums are written by `budgetLabel` in the figures'
  * language (*Rp 500 rb–Rp 2 jt*, *IDR 500K–IDR 2M*), and a count is passed in.
  *
  * @moved components/attack-plan.tsx
@@ -36,7 +36,7 @@ const en = {
   /** The step pills (`:3788-3792`); the first also names the brief's summary for a screen reader. */
   stepBrief: 'Customer brief',
   stepPlan: 'Attack plan',
-  /** The brief's three questions (`:3801-3836`), and *Lump-sum*'s own group after them (P18.95-T6 AC-3; UI-030). */
+  /** The brief's three questions (`:3801-3836`), and *Lump-sum*'s own group after them (P18.7-T6 AC-3; UI-030). */
   primaryNeed: 'Primary need',
   ageBand: 'Age band',
   budget: 'Monthly premium budget',

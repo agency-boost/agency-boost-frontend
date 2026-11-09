@@ -15,13 +15,13 @@ import {
 import { ApiRequestError } from '@/lib/api-client';
 
 /**
- * **The events screens' own words** (P18.5-T5, T6; the build contract's *Module strings*): none of OD-39's six
+ * **The events screens' own words** (P18.2-T5, T6; the build contract's *Module strings*): none of OD-39's six
  * words — *office*, *KPM*, *reports to*, *tagged to*, *untagged*, *unassigned* — no phase, and no internal id
  * or permission code.
  *
  * **Two of the prototype's verbatim strings carry *KPM*** and are allowed by name: the title's sub-line
  * (`Overall.html:10413`) and the audience line's issuer *KPM* (`:8532`, the event's data). The title was the
- * third, *KPM Events*, until P18.95-T9 AC-2 gave the page its nav item's words, *Event List*.
+ * third, *KPM Events*, until P18.7-T9 AC-2 gave the page its nav item's words, *Event List*.
  * They go to the client with OD-39, as every such string has since ADR-0084. Anything else that says one
  * fails here.
  *
@@ -56,7 +56,7 @@ function renderedStrings(file: string): string[] {
 /** A literal with no space in it is a code, a path or a class, not copy — unless it is one of the verbatim ones. */
 const offends = (text: string) => !VERBATIM_KPM.has(text) && SIX_WORDS.test(text) && (/\s/.test(text) || /\bKPM\b/.test(text));
 
-describe('the events screens’ own copy (P18.5-T5, T6)', () => {
+describe('the events screens’ own copy (P18.2-T5, T6)', () => {
   const files = sourceFiles().filter((f) => MINE.some((m) => f.startsWith(m)));
 
   it('finds the module’s files, so a silent zero cannot pass', () => {
@@ -83,7 +83,7 @@ describe('the events screens’ own copy (P18.5-T5, T6)', () => {
     expect(offends('Events from your KPM')).toBe(true);
     expect(offends('Arrives in phase 18')).toBe(true);
     expect(offends('/kpm/settings/events')).toBe(false);
-    // The title is the nav item's *Event List* since P18.95-T9 AC-2, so the prototype's *KPM Events* is no longer allowed.
+    // The title is the nav item's *Event List* since P18.7-T9 AC-2, so the prototype's *KPM Events* is no longer allowed.
     expect(offends('KPM Events')).toBe(true);
     expect(offends(PROTOTYPE_COPY.title)).toBe(false);
   });
@@ -112,11 +112,11 @@ describe('the events screens’ own copy (P18.5-T5, T6)', () => {
 });
 
 /**
- * **P18.98-T4: the events' words are the catalogue's now** (`i18n/messages/events.ts`, `events-office.ts`), so the rule is
- * held there too, language by language (P18.98-T1 AC-6, `catalogueTexts`): in English none of the six words beyond the
+ * **P18.10-T4: the events' words are the catalogue's now** (`i18n/messages/events.ts`, `events-office.ts`), so the rule is
+ * held there too, language by language (P18.10-T1 AC-6, `catalogueTexts`): in English none of the six words beyond the
  * prototype's verbatim *KPM*; in Indonesian *KPM* is ID mode's word for *office* (§B.9), so only *kantor* is held.
  */
-describe('P18.98-T4 the events’ catalogue, language by language', () => {
+describe('P18.10-T4 the events’ catalogue, language by language', () => {
   const AREAS = ['i18n/messages/events.ts', 'i18n/messages/events-office.ts'];
   const texts = AREAS.map((area) => catalogueTexts(area, readFileSync(join(SRC, area), 'utf8')));
   const all = (language: 'en' | 'id') => texts.flatMap((t) => t[language].map((x) => x.text));

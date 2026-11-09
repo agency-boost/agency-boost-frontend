@@ -1,0 +1,349 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Panduan Agent &amp; Leader</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#1B2B4B; --ink-2:#3A4A6B; --muted:#5E6B82; --amber:#F2994A; --amber-soft:#FDEBD9;
+  --bg:#FAF9F7; --card:#FFFFFF; --line:#E4E1DB; --green:#3B6D11; --red:#A32D2D;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 18px/1.6 Inter,system-ui,sans-serif}
+h1,h2,h3{font-family:Manrope,Inter,sans-serif;margin:0;line-height:1.25}
+.wrap{max-width:1120px;margin:0 auto;padding:0 16px}
+b,strong{font-weight:700}
+
+.top{background:var(--ink);color:#fff;padding:36px 0 28px}
+.brand{display:flex;align-items:center;gap:10px;font:800 20px Manrope,sans-serif}
+.brand i{width:30px;height:30px;border-radius:8px;background:var(--amber);display:inline-block}
+.top h1{font-size:40px;margin:22px 0 8px}
+.top p{margin:0;color:#C9D1E0;font-size:19px;max-width:760px}
+.meta{margin-top:16px;display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.pill{border:1px solid #42557A;border-radius:999px;padding:4px 14px;font-size:15px;color:#DCE2EC}
+.btn-print{margin-left:auto;background:var(--amber);color:var(--ink);border:0;border-radius:10px;padding:10px 18px;font:700 16px Inter,sans-serif;cursor:pointer}
+
+.picker{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+.picker .wrap{display:flex;gap:8px;padding-top:12px;padding-bottom:12px;overflow-x:auto}
+.picker button{flex:0 0 auto;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:999px;padding:10px 18px;font:600 17px Inter,sans-serif;cursor:pointer}
+.picker button[aria-pressed=true]{background:var(--ink);color:#fff;border-color:var(--ink)}
+
+.intro{padding:32px 0 8px}
+.intro h2{font-size:28px;margin:0 0 14px}
+.intro h2+p{margin:-6px 0 16px;color:var(--ink-2)}
+.who{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.who th,.who td{text-align:left;padding:14px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+.who th{background:#F3F1EC;font-size:15px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted)}
+.who tr:last-child td{border-bottom:0}
+.who td:first-child{font-weight:700;white-space:nowrap}
+.basics{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:18px 0 0}
+.basic{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+.basic .ic{font-size:28px;line-height:1;margin-bottom:8px}
+.basic h3{font-size:18px;margin-bottom:4px}
+.basic p{margin:0;color:var(--ink-2);font-size:17px}
+
+.role{padding:40px 0 8px}
+.role-head{display:flex;gap:16px;align-items:flex-start;margin-bottom:16px}
+.badge{flex:0 0 56px;height:56px;border-radius:14px;background:var(--amber);color:var(--ink);display:grid;place-items:center;font:800 22px Manrope,sans-serif}
+.role-head h2{font-size:32px}
+.role-head p{margin:4px 0 0;color:var(--ink-2);font-size:19px}
+.menu-strip{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 18px;margin-bottom:14px}
+.menu-strip h3{font-size:15px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:8px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{background:#F3F1EC;border-radius:8px;padding:4px 10px;font-size:16px}
+.rules{border-left:5px solid var(--amber);background:var(--card);border-radius:0 12px 12px 0;padding:14px 18px;margin-bottom:20px}
+.rules h3{font-size:18px;margin-bottom:6px}
+.rules ul{margin:0;padding-left:22px}
+.also{background:#EEF1F6;border-radius:12px;padding:14px 18px;margin-bottom:20px}
+
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px 22px;break-inside:avoid;page-break-inside:avoid}
+.path{display:inline-block;font-size:15px;font-weight:700;color:var(--ink-2);background:#F3F1EC;border-radius:6px;padding:2px 10px;margin-bottom:10px}
+.card h3{font-size:22px;margin-bottom:6px}
+.why{margin:0 0 12px;color:var(--ink-2)}
+.steps{list-style:none;margin:0;padding:0;counter-reset:s}
+.steps li{counter-increment:s;position:relative;padding:3px 6px 3px 44px;margin:0 0 8px}
+.steps li::before{content:counter(s);position:absolute;left:6px;top:4px;width:28px;height:28px;border-radius:50%;background:var(--ink);color:#fff;font:700 15px/28px Manrope,sans-serif;text-align:center}
+.tip{margin:12px 0 0;padding-top:12px;border-top:1px dashed var(--line);font-size:17px;color:var(--ink-2)}
+.tip b{color:var(--ink)}
+.soon{margin:16px 0 0;color:var(--muted);font-size:17px}
+footer{padding:40px 0 60px;color:var(--muted);font-size:16px}
+
+@media (max-width:900px){.basics{grid-template-columns:1fr 1fr}}
+@media (max-width:820px){
+  .grid{grid-template-columns:1fr}
+  .top h1{font-size:32px}
+  .role-head h2{font-size:27px}
+  .btn-print{margin-left:0}
+  .who td:first-child{white-space:normal}
+}
+@media (max-width:480px){.basics{grid-template-columns:1fr}}
+@media print{
+  @page{size:A4;margin:14mm}
+  body{font-size:13pt;background:#fff}
+  .picker,.btn-print{display:none!important}
+  .top{background:#fff;color:var(--ink);padding:0 0 10px;border-bottom:3px solid var(--amber)}
+  .top p,.pill{color:var(--ink-2)}
+  .pill{border-color:var(--line)}
+  .role{display:block!important;break-before:page;page-break-before:always;padding-top:0}
+  .grid{grid-template-columns:1fr 1fr;gap:10px}
+  .card{padding:12px 14px}
+  .card h3{font-size:15pt}
+  .badge,.chip,.path,.rules,.also,.steps li::before{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
+</style>
+
+<style>
+.demo{position:relative;height:250px;margin:-4px -6px 16px;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#F6F4F0;display:flex;font:500 11px/1.35 Inter,sans-serif;color:var(--ink)}
+.demo .sb{flex:0 0 32%;background:var(--ink);color:#C9D1E0;padding:8px 0;overflow:hidden}
+.demo .sb .lg{display:flex;align-items:center;gap:5px;color:#fff;font:800 11px Manrope,sans-serif;padding:0 8px 6px}
+.demo .sb .lg i{width:10px;height:10px;border-radius:3px;background:var(--amber)}
+.demo .sb div.it{padding:2px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:background .25s,color .25s}
+.demo .sb div.it.on{background:var(--amber);color:var(--ink);font-weight:700}
+.demo .pg{flex:1;padding:10px 10px;display:flex;flex-direction:column;gap:6px;min-width:0;opacity:.35;transition:opacity .35s}
+.demo.open .pg{opacity:1}
+.demo .pg h4{margin:0 0 2px;font:800 14px Manrope,sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.demo .tabs{display:flex;gap:4px;flex-wrap:wrap}
+.demo .tab{background:#fff;border:1px solid var(--line);border-radius:999px;padding:2px 7px;transition:all .25s}
+.demo .tab.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.demo .row{background:#fff;border:1px solid var(--line);border-radius:7px;padding:6px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:all .25s}
+.demo .row.on{border-color:var(--amber);box-shadow:0 0 0 2px var(--amber-soft)}
+.demo .btn{align-self:flex-start;background:var(--amber);color:var(--ink);border-radius:7px;padding:5px 10px;font-weight:700;margin-top:auto;transition:transform .15s}
+.demo .btn.on{transform:scale(.94)}
+.demo .toast{position:absolute;right:10px;bottom:10px;background:var(--green);color:#fff;border-radius:7px;padding:5px 10px;font-weight:700;opacity:0;transform:translateY(6px);transition:all .3s}
+.demo .toast.on{opacity:1;transform:none}
+.demo .finger{position:absolute;left:0;top:0;width:22px;height:22px;margin:-11px 0 0 -11px;border-radius:50%;background:rgba(242,153,74,.55);border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.25);transition:transform .7s cubic-bezier(.4,0,.2,1),opacity .3s;pointer-events:none;opacity:0}
+.demo .finger.show{opacity:1}
+.demo .finger.tap::after{content:"";position:absolute;inset:-8px;border-radius:50%;border:2px solid var(--amber);animation:tapring .6s ease-out}
+@keyframes tapring{from{opacity:1;transform:scale(.4)}to{opacity:0;transform:scale(1.5)}}
+.demo .lbl{position:absolute;left:8px;bottom:6px;color:#8E98AA;font-size:9px;letter-spacing:.3px}
+.steps li{transition:background .25s;border-radius:8px}
+.steps li.now{background:var(--amber-soft)}
+@media (max-width:820px){.demo{height:240px}}
+@media (prefers-reduced-motion:reduce){.demo .finger{display:none}}
+@media print{.demo{height:190px;margin:0 0 10px}.demo .finger,.demo .toast{display:none}.demo .pg{opacity:1}.steps li.now{background:none}.demo,.demo *{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+</style>
+
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <div class="brand"><i></i>AgencyBoost</div>
+    <h1>Panduan Agent &amp; Leader</h1>
+    <p>Langkah gampang untuk semua fitur yang dipakai Agent dan Leader. Cari menunya, ikuti langkahnya, lihat contoh animasinya.</p>
+    <div class="meta">
+      <span class="pill">Versi 1 · 3 Nov 2026</span>
+      <span class="pill">agencyboost.id</span>
+      <button class="btn-print" onclick="window.print()">Simpan PDF / Cetak</button>
+    </div>
+  </div>
+</header>
+
+<nav class="picker" aria-label="Pilih peran">
+  <div class="wrap" id="picker"></div>
+</nav>
+
+<main class="wrap">
+  <section class="intro" id="intro">
+    <h2>Cara pakai aplikasinya (santai, gampang kok)</h2>
+    <p>Baca ini dulu sekali. Setelah itu tinggal cari fitur yang Bapak/Ibu butuhkan di bawah.</p>
+    <div class="basics" id="basics"></div>
+    <h2 style="margin-top:28px">Siapa pakai apa</h2>
+    <table class="who"><thead><tr><th>Peran</th><th>Siapa</th><th>Halaman pertama</th></tr></thead><tbody id="who"></tbody></table>
+  </section>
+  <div id="roles"></div>
+</main>
+
+<footer class="wrap">Panduan Agent &amp; Leader · Versi 1 · 3 Nov 2026. Tampilan aplikasi bisa sedikit berubah. Nama menu dan tombol yang <b>tebal</b> sama persis dengan yang ada di aplikasi.</footer>
+
+<script>
+const BASICS = [
+  {ic:"👆", t:"Ketuk = klik", p:"Sentuh layar <b>sekali</b> pakai ujung jari. Di laptop: klik kiri mouse sekali. Nggak perlu ditekan lama, nggak perlu dobel."},
+  {ic:"☰", t:"Semua menu ada di kiri", p:"Daftar fitur ada di sebelah <b>kiri</b> layar. Di HP: ketuk ikon menu di pojok atas dulu, nanti menunya muncul."},
+  {ic:"🟧", t:"Tombol oranye = tombol utama", p:"Biasanya untuk <b>Simpan</b>. Kalau sudah muncul tulisan <b>Tersimpan ✓</b>, berarti aman, data sudah masuk."},
+  {ic:"ⓘ", t:"Ada kata yang asing?", p:"Ketuk tanda <b>ⓘ</b> di sampingnya, penjelasan langsung muncul. Mau ganti bahasa? Ketuk <b>ID</b> atau <b>EN</b> di kanan atas."}
+];
+const GUIDE = {
+  basics: BASICS,
+  who: [
+    ["Agent","Yang jualan dan rekrut. Tiap hari catat aktivitas dan follow up leads.","Home"],
+    ["Leader (AB / AAB)","Agent yang juga punya tim. Fiturnya sama dengan Agent, ditambah fitur tim.","Home"]
+  ],
+  sb: {
+    agent:["Home","Activity","Calendar","Your 90-day activation","Leads","Goal Setting","Personal Summary","Training","Sales","Recruitment","User Management","Campaign","Event"],
+    leader:["Home","Activity","Calendar","Unit Dashboard","Leads","Goal Setting","Personal Summary","Coaching","New Hires","Group Tree","User Management","Strategic Leader Forum","KPM Analytics"]
+  },
+  vis: {
+    "Home":{m:"Home",h:"Selamat pagi 👋",rows:["Jadwal hari ini","Aksi hari ini","Aktivitas 7 hari terakhir"],btn:"Log",seq:["m","row:0","row:2"]},
+    "Catat aktivitas harian":{m:"Activity",h:"Activity Management",tabs:["Log Activity","Dashboard","Ratio"],rows:["Set Appointment  –  2  +","Presentasi penjualan  –  1  +","Submission polis  –  0  +"],btn:"Simpan aktivitas",seq:["m","tab:0","row:0","btn!"]},
+    "Lihat riwayat aktivitas":{m:"Activity",h:"Activity Management",tabs:["Log Activity","Dashboard","Ratio"],rows:["7 hari · 30 hari · Pilih tanggal","Leads Generation · 12","Selling · 5"],seq:["m","tab:1","row:0","tab:2"]},
+    "Calendar":{m:"Calendar",h:"Calendar",tabs:["Agenda","3 Hari","Week","Month"],rows:["10.00 · Ketemu nasabah","14.00 · Coaching 1:1"],btn:"+ Event baru",seq:["m","tab:2","btn","row:0"]},
+    "90 hari pertama Anda":{m:"Your 90-day activation",h:"Your 90-Day Activation",rows:["Hari 65/90 · 11 dari 16 selesai","☐ Learn company profile","☑ Goal setting · OTOMATIS"],seq:["m","row:0","row:1","row:2"]},
+    "Leads":{m:"Leads",h:"Leads Management",tabs:["Semua jenis","Sales","Recruit"],rows:["Pak Budi · Follow-up · 📞","Ibu Sari · Meeting scheduled"],btn:"+ Tambah lead",toast:"Lead tersimpan ✓",seq:["m","btn","row:0","row:0","row:0"]},
+    "Goal Setting":{m:"Goal Setting",h:"Goal Settings",rows:["1 · Target APE tahunan: Rp 500 jt","2–4 · Progres · case size · konversi","Target bulan ini: 124 appointment"],btn:"Simpan goal",seq:["m","row:0","row:1","row:2","btn!"]},
+    "Personal Summary":{m:"Personal Summary",h:"Personal Summary",tabs:["Bulanan","Tahunan"],rows:["Target vs realisasi (APE)","Aktivitas vs goal","Leads yang perlu perhatian Anda"],btn:"Unduh",seq:["m","tab:0","row:0","row:2"]},
+    "Training":{m:"Training",h:"Training Modules",tabs:["Sales","Recruitment","Leadership"],rows:["Prospecting · Selesai","Needs Analysis · Berjalan"],seq:["m","tab:0","row:1","row:1"]},
+    "Sales Attack Plan & Product Catalog":{m:"Sales",h:"Sales Attack Plan",tabs:["Sales Attack Plan","Product Catalog"],rows:["Kebutuhan: Kesehatan","Usia: 35–49","Anggaran: Rp 500 rb–2 jt"],btn:"Susun Attack Plan",toast:"Pitch siap ✓",seq:["m","row:0","btn!","tab:1"]},
+    "Recruitment":{m:"Recruitment",h:"Recruitment",tabs:["Attack Plan","Pitch Materials"],rows:["Jenis: Pindah karier","Pendorong: Fleksibilitas","Keraguan: Tidak punya jaringan"],btn:"Susun rencana recruitment",seq:["m","row:0","btn","tab:1"]},
+    "Gabung KPM & cari leader":{m:"User Management",h:"User Management",tabs:["Find Your Leader","Register KPM"],rows:["🔍 Cari nama leader…","Leader A · AB   Kirim"],toast:"Permintaan terkirim ✓",seq:["m","tab:1","tab:0","row:1"]},
+    "Campaign":{m:"Campaign",h:"Campaign List",tabs:["Berjalan","Akan datang","Berakhir"],rows:["Year-End Star Club   ☆ Kejar","Q1 APE Challenge   ☆ Kejar"],btn:"Lihat detail",seq:["m","tab:0","btn","row:0"]},
+    "Event":{m:"Event",h:"Event List",tabs:["Akan datang","Sudah lewat"],rows:["Kickoff · 11 Nov   Ikut","Sales clinic · Kirim feedback"],toast:"Anda ikut ✓",seq:["m","row:0","row:1"]},
+    "Unit Dashboard":{m:"Unit Dashboard",h:"Unit Dashboard",tabs:["7 hari","Bulan ini","Tahun ini"],rows:["Tim 12 · Aktif 8 · Rekrut 2","Perlu perhatian (3)","Agent A · Perlu perhatian"],seq:["m","tab:1","row:0","row:1","row:2"]},
+    "Coaching":{m:"Coaching",h:"Coaching Session",rows:["Agent A · 1:1 terakhir 5 hari lalu","Agent B · terlambat","+ Action item · tenggat 10 Nov"],btn:"Selesai",seq:["m","row:0","row:1","row:2","btn!"]},
+    "New Hires":{m:"New Hires",h:"New Hires",tabs:["Semua","Teraktivasi","Belum"],rows:["Agent C · Hari ke-47 · 19%","Agent D · Teraktivasi · 63%"],seq:["m","tab:2","row:0","row:0"]},
+    "Group Tree":{m:"Group Tree",h:"Group Tree",rows:["Leader Anda","└ Anda · AB","   └ AAB · 3 agent"],seq:["m","row:1","row:2"]},
+    "Tambah agent & setujui permintaan":{m:"User Management",h:"User Management",tabs:["Add New Agents","Pending Requests"],rows:["Tautan undangan   Salin tautan","Agent tanpa leader   Tambahkan"],toast:"Tersalin ✓",seq:["m","tab:0","row:0","row:1","tab:1"]},
+    "Strategic Leader Forum":{m:"Strategic Leader Forum",h:"Strategic Leader Forum",rows:["31 Okt · Check-in #14   Buka","4 item belum selesai"],seq:["m","row:0","row:1"]},
+    "KPM Analytics":{m:"KPM Analytics",h:"KPM Analytics",tabs:["Overview","Compliance","Unit comparison"],rows:["AB 1 · 62% dari target","AB 2 · 81% dari target"],seq:["m","tab:2","row:0"]}
+  },
+  roles: [
+{
+  id:"agent", badge:"A", name:"Agent",
+  lead:"Buat semua agent. Ini alat harian Bapak/Ibu: catat aktivitas, follow up leads, pantau target.",
+  menu:["Home","Activity","Calendar","Saya: Your 90-day activation · Leads · Goal Setting · Personal Summary","Aktivitas: Training · Sales · Recruitment","Tim saya: User Management","Program: Campaign · Event"],
+  rules:["Yang Bapak/Ibu lihat hanya angka dan leads milik sendiri. Aman, orang lain tidak bisa ubah.","Mau pindah KPM? Minta ke kantor KPM, tidak bisa dilakukan sendiri."],
+  cards:[
+    {path:"Home", t:"Home", why:"Ringkasan hari ini dalam satu layar. Ini halaman pertama yang muncul.", s:["Buka aplikasi. Halaman <b>Home</b> langsung muncul.","Lihat kotak <b>Jadwal hari ini</b> dan <b>Aksi hari ini</b> — ini yang perlu dikerjakan hari ini.","Geser layar ke bawah, lihat grafik 7 hari. Ada hari yang kosong? Berarti belum dicatat."], tip:"Ketuk tombol <b>Log</b> di Home untuk langsung catat aktivitas."},
+    {path:"Activity → Log Activity", t:"Catat aktivitas harian", why:"Catat apa saja yang Bapak/Ibu kerjakan hari ini. Cukup 1 menit.", s:["Ketuk <b>Activity</b> di menu kiri.","Pastikan tab <b>Log Activity</b> yang aktif (warnanya gelap) dan tanggalnya hari ini.","Ketuk tombol <b>+</b> di samping aktivitas yang sudah dilakukan. Satu ketukan = satu kali. Salah? Ketuk <b>–</b>.","Ketuk tombol oranye <b>Simpan aktivitas</b> di paling bawah. Tunggu tulisan <b>Tersimpan ✓</b>."], tip:"Catat setiap hari ya. Target, Personal Summary, dan dashboard leader semua ambil angka dari sini."},
+    {path:"Activity → Dashboard / Ratio", t:"Lihat riwayat aktivitas", why:"Lihat total aktivitas Bapak/Ibu dari waktu ke waktu.", s:["Ketuk <b>Activity</b> di menu kiri.","Ketuk tab <b>Dashboard</b> di bagian atas.","Ketuk pilihan waktu: 7 hari, 30 hari, atau pilih tanggal sendiri.","Ketuk tab <b>Ratio</b> untuk lihat apakah aktivitas sudah jadi hasil (dibanding target)."]},
+    {path:"Calendar", t:"Calendar", why:"Atur jadwal: ketemu nasabah, coaching, tugas, dan event.", s:["Ketuk <b>Calendar</b> di menu kiri.","Ketuk pilihan tampilan di atas: <b>Agenda</b>, <b>3 Hari</b>, <b>Week</b>, atau <b>Month</b>.","Mau tambah jadwal? Ketuk <b>+ Event baru</b>, pilih jenisnya, isi jam, lalu simpan.","Ketuk jadwal yang sudah ada untuk lihat detailnya."], tip:"Event KPM dan jadwal follow-up leads otomatis muncul di sini juga."},
+    {path:"Saya → Your 90-day activation", t:"90 hari pertama Anda", why:"Khusus agent baru: daftar tugas untuk 90 hari pertama.", s:["Ketuk <b>Your 90-day activation</b> di menu kiri.","Lihat di atas: sudah hari ke berapa, dan berapa tugas yang selesai.","Sudah mengerjakan satu tugas? Ketuk kotaknya sampai tercentang ☑.","Tugas bertanda <b>OTOMATIS</b> tidak perlu dicentang — tercentang sendiri, misalnya waktu Anda simpan goal atau tambah lead pertama."], tip:"Semua tugas selesai = Bapak/Ibu resmi teraktivasi. 🎉"},
+    {path:"Saya → Leads", t:"Leads", why:"Catat semua calon nasabah dan calon rekrut, plus langkah berikutnya untuk masing-masing.", s:["Ketuk <b>Leads</b> di menu kiri.","Ketuk tombol oranye <b>+ Tambah lead</b>, lalu ketik namanya.","Ketuk <b>Pilih jenis</b> → pilih <b>Sales</b> atau <b>Recruit</b>. Lalu ketuk <b>Pilih status</b>.","Tulis langkah berikutnya di <b>Tindakan berikutnya</b> dan pilih tanggalnya.","Mau hubungi? Ketuk tombol WhatsApp atau 📞 di baris lead itu."], tip:"Pakai filter di atas (<b>Sales</b> / <b>Recruit</b> / status) supaya daftarnya tidak kepanjangan."},
+    {path:"Saya → Goal Setting", t:"Goal Setting", why:"Ubah target tahunan jadi angka harian yang jelas: berapa janji temu dan presentasi bulan ini.", s:["Ketuk <b>Goal Setting</b> di menu kiri.","Di nomor 1, ketuk kolom target dan ketik target APE setahun.","Geser ke bawah. Nomor 2 terisi sendiri. Nomor 3–4, cek angkanya, ubah kalau perlu.","Lihat kotak paling bawah: itu target aktivitas bulan ini.","Ketuk tombol oranye <b>Simpan goal</b>."], tip:"APE = total premi setahun dari polis baru Bapak/Ibu. Ketuk ⓘ di sampingnya kalau lupa."},
+    {path:"Saya → Personal Summary", t:"Personal Summary", why:"Rapor Bapak/Ibu: target vs hasil, aktivitas, dan leads yang perlu dikejar.", s:["Ketuk <b>Personal Summary</b> di menu kiri.","Ketuk <b>Bulanan</b> atau <b>Tahunan</b> di atas, lalu pilih bulannya.","Baca kotak <b>Target vs realisasi</b> — sudah sampai mana?","Geser ke bawah ke <b>Leads yang perlu perhatian Anda</b>. Yang bertulisan <b>TERLAMBAT</b>, follow up hari ini."], tip:"Ketuk <b>Unduh</b> di kanan atas untuk simpan. Bawa ke sesi 1-on-1 dengan leader."},
+    {path:"Aktivitas → Training", t:"Training", why:"Belajar cara jualan, rekrut, dan memimpin tim.", s:["Ketuk <b>Training</b> di menu kiri.","Ketuk kategori di atas (misalnya <b>Sales</b>).","Ketuk judul modul untuk membukanya, lalu pelajari.","Sudah selesai? Ubah statusnya jadi <b>Selesai</b>."], tip:"Status: <b>Belum dimulai</b> → <b>Berjalan</b> → <b>Selesai</b>."},
+    {path:"Aktivitas → Sales", t:"Sales Attack Plan & Product Catalog", why:"Dapat bahan omongan (pitch) dan produk yang cocok untuk nasabah, dalam 3 ketukan.", s:["Ketuk <b>Sales</b> di menu kiri.","Ketuk 3 hal tentang nasabah: kebutuhan utama, rentang usia, dan anggaran per bulan.","Ketuk tombol <b>Susun Attack Plan</b>. Pitch Anda langsung muncul.","Mau lihat semua produk? Ketuk tab <b>Product Catalog</b>."]},
+    {path:"Aktivitas → Recruitment", t:"Recruitment", why:"Siap-siap sebelum ngobrol dengan calon agent.", s:["Ketuk <b>Recruitment</b> di menu kiri.","Ketuk 3 hal tentang kandidat: jenis kandidat, apa yang mendorongnya, dan keraguan terbesarnya.","Ketuk tombol <b>Susun rencana recruitment</b>.","Butuh materi untuk ditunjukkan? Ketuk tab <b>Pitch Materials</b>."]},
+    {path:"Tim saya → User Management", t:"Gabung KPM & cari leader", why:"Daftar ke kantor cabang (KPM) dan sambungkan akun ke leader Anda.", s:["Ketuk <b>User Management</b> di menu kiri.","Belum terdaftar di KPM? Ketuk tab <b>Register KPM</b>, cari nama cabang, lalu daftar.","Lalu ketuk tab <b>Find Your Leader</b>, ketik nama leader Anda.","Ketuk nama leader yang benar, kirim permintaan, tunggu leader menyetujui."], tip:"Punya tautan undangan atau kode leader? Pakai itu saja — langsung masuk tim, tanpa menunggu persetujuan."},
+    {path:"Program → Campaign", t:"Campaign", why:"Lihat kontes dari perusahaan dan KPM: syaratnya apa, hadiahnya apa.", s:["Ketuk <b>Campaign</b> di menu kiri.","Ketuk <b>Berjalan</b> di atas untuk lihat kontes yang sedang jalan.","Ketuk <b>Lihat detail</b> di kartu kontes untuk baca syarat lengkapnya.","Mau ikut kejar? Ketuk <b>☆ Kejar</b> — bintangnya jadi penuh."]},
+    {path:"Program → Event", t:"Event", why:"Event dari KPM dan perusahaan: daftar ikut, lalu beri feedback setelahnya.", s:["Ketuk <b>Event</b> di menu kiri.","Di event yang <b>Akan datang</b>, ketuk tombol <b>Ikut</b>.","Setelah event selesai, ketuk <b>Lihat event</b> lalu kirim feedback Anda."]}
+  ]
+},
+{
+  id:"leader", badge:"L", name:"Leader (AB / AAB)",
+  lead:"Buat agent yang punya tim. Semua fitur Agent tetap ada, ditambah alat untuk memimpin tim.",
+  also:"Semua fitur <b>Agent</b> (Home, Activity, Leads, Goal Setting, Personal Summary, dll.) tetap Bapak/Ibu pakai. Caranya lihat bagian <b>Agent</b> di atas.",
+  menu:["Unit Dashboard","Tim saya: Coaching · New Hires · Group Tree · User Management","KPM: Strategic Leader Forum · KPM Analytics (Core Leader)"],
+  rules:["Yang terlihat: tim Anda sendiri — agent langsung dan unit di bawah AAB Anda.","Peran seseorang hanya bisa diubah oleh leader langsungnya.","Menu tim baru muncul setelah ada orang yang melapor ke Anda."],
+  cards:[
+    {path:"Unit Dashboard", t:"Unit Dashboard", why:"Seluruh tim dalam satu layar: produksi, agent aktif, rekrutmen, dan siapa yang butuh bantuan.", s:["Ketuk <b>Unit Dashboard</b> di menu kiri.","Ketuk periode di atas: <b>7 hari terakhir</b>, <b>Bulan ini</b>, atau <b>Tahun ini</b>.","Baca angka besar di atas: jumlah tim, produksi, agent aktif, rekrutmen.","Geser ke daftar tim. Ketuk <b>Perlu perhatian</b> untuk lihat siapa yang perlu dibantu.","Ketuk nama seseorang untuk buka ringkasannya."], tip:"Cari orang dengan cepat: ketuk <b>Search agent</b> di menu kiri, ketik namanya."},
+    {path:"Tim saya → Coaching", t:"Coaching", why:"Jalankan sesi 1-on-1 dan simpan action item tiap agent.", s:["Ketuk <b>Coaching</b> di menu kiri.","Lihat daftar semua yang Anda coach, kapan 1:1 terakhir, dan statusnya.","Ketuk nama agent untuk buka sesi coaching-nya.","Cek action item minggu lalu, lalu tambah yang baru beserta tanggal tenggatnya.","Selesai ngobrol? Tutup sesinya."], tip:"Usahakan 1:1 tiap minggu. Yang sudah lewat waktunya ditandai <b>terlambat</b>."},
+    {path:"Tim saya → New Hires", t:"New Hires", why:"Pantau agent baru selama 90 hari pertama mereka.", s:["Ketuk <b>New Hires</b> di menu kiri.","Ketuk <b>Belum</b> di atas untuk lihat siapa yang belum teraktivasi.","Lihat persentase checklist di samping tiap nama.","Ketuk nama agent untuk mencentang tugas yang Anda kerjakan bersama (misalnya role play, joint field work)."], tip:"Bagian <b>Menunggu bergabung</b> = orang yang sudah Anda undang tapi belum masuk."},
+    {path:"Tim saya → Group Tree", t:"Group Tree", why:"Lihat susunan tim: leader Anda, Anda, dan seluruh downline.", s:["Ketuk <b>Group Tree</b> di menu kiri.","Geser ke bawah untuk lihat tiap lapisan, atau ketik nama di <b>Cari agen</b>.","Ketuk siapa saja untuk buka Unit Dashboard-nya."]},
+    {path:"Tim saya → User Management", t:"Tambah agent & setujui permintaan", why:"Masukkan orang baru ke tim Anda.", s:["Ketuk <b>User Management</b> di menu kiri, lalu tab <b>Add New Agents</b>.","Ketuk <b>Salin tautan</b> (atau <b>Salin kode</b>), lalu kirim lewat WhatsApp ke agent baru.","Ada agent yang belum punya leader? Ketuk <b>Tambahkan ke unit saya</b> di samping namanya.","Ketuk tab <b>Pending Requests</b> untuk menyetujui orang yang minta masuk tim Anda."], tip:"Mau ubah peran seseorang? Ketuk <b>⋮</b> di samping namanya di daftar <b>Tim Anda</b>."},
+    {path:"KPM → Strategic Leader Forum", t:"Strategic Leader Forum", why:"Khusus Core Leader: rapat leader dua mingguan — agenda, catatan, dan tindakan.", s:["Ketuk <b>Strategic Leader Forum</b> di menu kiri.","Ketuk <b>Buka</b> di rapat paling atas (yang terbaru).","Baca agenda dan catatan, lalu cek item yang <b>belum selesai</b>."]},
+    {path:"KPM → KPM Analytics", t:"KPM Analytics", why:"Khusus Core Leader: bandingkan unit, cek kualifikasi klub, dan tren di KPM.", s:["Ketuk <b>KPM Analytics</b> di menu kiri.","Ketuk tab di atas: <b>Overview</b>, <b>Compliance</b>, atau <b>Unit comparison</b>.","Ketuk <b>Bulan ini</b> atau <b>Bulan lalu</b> untuk membandingkan."]}
+  ],
+  soon:"Segera hadir: Advanced analytics."
+}
+  ]
+};
+
+</script>
+<script>
+const ROLES = GUIDE.roles;
+document.getElementById('basics').innerHTML = GUIDE.basics.map(b=>`<div class="basic"><div class="ic">${b.ic}</div><h3>${b.t}</h3><p>${b.p}</p></div>`).join('');
+document.getElementById('who').innerHTML = GUIDE.who.map(w=>`<tr><td>${w[0]}</td><td>${w[1]}</td><td>${w[2]}</td></tr>`).join('');
+const picker = document.getElementById('picker'), rolesEl = document.getElementById('roles');
+const allBtn = document.createElement('button'); allBtn.textContent = 'Semua peran'; picker.appendChild(allBtn);
+ROLES.forEach(r => {
+  const b = document.createElement('button'); b.textContent = r.name; b.dataset.role = r.id; picker.appendChild(b);
+  const sec = document.createElement('section'); sec.className = 'role'; sec.id = r.id;
+  sec.innerHTML = `
+    <div class="role-head"><div class="badge">${r.badge}</div><div><h2>${r.name}</h2><p>${r.lead}</p></div></div>
+    <div class="menu-strip"><h3>Menu Anda</h3><div class="chips">${r.menu.map(m=>`<span class="chip">${m}</span>`).join('')}</div></div>
+    ${r.also?`<div class="also">${r.also}</div>`:''}
+    <div class="rules"><h3>Perlu diketahui</h3><ul>${r.rules.map(x=>`<li>${x}</li>`).join('')}</ul></div>
+    <div class="grid">${r.cards.map((c,ci)=>`
+      <article class="card">
+        <div class="demo" data-k="${r.id}|${ci}"></div>
+        <span class="path">${c.path}</span>
+        <h3>${c.t}</h3>
+        <p class="why">${c.why}</p>
+        <ol class="steps">${c.s.map(x=>`<li>${x}</li>`).join('')}</ol>
+        ${c.tip?`<p class="tip"><b>Tips:</b> ${c.tip}</p>`:''}
+      </article>`).join('')}</div>
+    ${r.soon?`<p class="soon">${r.soon}</p>`:''}`;
+  rolesEl.appendChild(sec);
+});
+function show(id){
+  [...picker.children].forEach(b => b.setAttribute('aria-pressed', String((b.dataset.role||'all') === (id||'all'))));
+  document.querySelectorAll('.role').forEach(s => s.style.display = (!id || s.id === id) ? '' : 'none');
+  try { history.replaceState(null,'', id ? '#'+id : location.pathname); } catch(e){}
+}
+picker.addEventListener('click', e => {
+  const b = e.target.closest('button'); if(!b) return;
+  show(b.dataset.role);
+  (b.dataset.role ? document.getElementById(b.dataset.role) : document.getElementById('intro')).scrollIntoView({behavior:'smooth', block:'start'});
+});
+show(ROLES.some(r => '#'+r.id === location.hash) ? location.hash.slice(1) : null);
+</script>
+
+<script>
+/* Demo engine: every card with a VIS entry gets an animated mini screen.
+   VIS["Card title"] = {m: sidebar item to tap, h: page heading, tabs:[], rows:[], btn:"", toast:"", seq:[...]}
+   seq has one target per step: "m" | "tab:N" | "row:N" | "btn" | "btn!" (tap + toast). */
+function initDemos(SB, VIS){
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  document.querySelectorAll('.demo[data-k]').forEach(el => {
+    const [rid, ci] = el.dataset.k.split('|');
+    const card = ROLES.find(r => r.id === rid).cards[+ci];
+    const v = VIS[card.t]; if (!v) { el.remove(); return; }
+    const items = SB[rid] || [];
+    el.innerHTML = `<div class="sb"><div class="lg"><i></i>AgencyBoost</div>${items.map(x=>`<div class="it">${x}</div>`).join('')}</div>
+      <div class="pg"><h4>${v.h || v.m}</h4>
+        ${v.tabs?`<div class="tabs">${v.tabs.map(t=>`<span class="tab">${t}</span>`).join('')}</div>`:''}
+        ${(v.rows||[]).map(r=>`<div class="row">${r}</div>`).join('')}
+        ${v.btn?`<span class="btn">${v.btn}</span>`:''}</div>
+      <div class="toast">${v.toast || 'Tersimpan ✓'}</div><div class="finger"></div>`;
+    const menuEl = [...el.querySelectorAll('.sb .it')].find(x => x.textContent === v.m);
+    if (menuEl) menuEl.classList.add('on');
+    el.classList.add('open');
+    const lis = [...el.closest('.card').querySelectorAll('.steps li')];
+    const finger = el.querySelector('.finger'), toast = el.querySelector('.toast');
+    const seq = v.seq || ['m'];
+    let step = 0, timer = null;
+    function target(s){
+      if (s === 'm') return menuEl;
+      if (s.startsWith('tab:')) return el.querySelectorAll('.tab')[+s.slice(4)];
+      if (s.startsWith('row:')) return el.querySelectorAll('.row')[+s.slice(4)];
+      if (s.startsWith('btn')) return el.querySelector('.btn');
+    }
+    function frame(){
+      const n = Math.max(lis.length, seq.length);
+      const i = step % (n + 1);
+      el.querySelectorAll('.on').forEach(x => { if (x !== menuEl || i === 0) x.classList.remove('on'); });
+      toast.classList.remove('on'); lis.forEach(l => l.classList.remove('now'));
+      if (i === n) { el.classList.remove('open'); finger.classList.remove('show'); step++; return; }
+      finger.classList.add('show');
+      if (i === 0) el.classList.remove('open'); else el.classList.add('open');
+      if (lis[i]) lis[i].classList.add('now');
+      const s = seq[Math.min(i, seq.length - 1)], t = target(s);
+      if (t) {
+        const a = el.getBoundingClientRect(), b = t.getBoundingClientRect();
+        finger.style.transform = `translate(${b.left - a.left + Math.min(b.width/2, 40)}px,${b.top - a.top + b.height/2}px)`;
+        setTimeout(() => {
+          finger.classList.remove('tap'); void finger.offsetWidth; finger.classList.add('tap');
+          t.classList.add('on'); if (s === 'm') el.classList.add('open');
+          if (s === 'btn!') setTimeout(() => toast.classList.add('on'), 300);
+        }, 700);
+      }
+      step++;
+    }
+    if (reduce) return;
+    new IntersectionObserver(es => es.forEach(e => {
+      if (e.isIntersecting && !timer) { frame(); timer = setInterval(frame, 2200); }
+      else if (!e.isIntersecting && timer) { clearInterval(timer); timer = null; }
+    }), {threshold: .4}).observe(el);
+  });
+}
+</script>
+
+<script>initDemos(GUIDE.sb, GUIDE.vis);</script>
+</body>
+</html>

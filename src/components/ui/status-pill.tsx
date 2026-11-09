@@ -30,7 +30,7 @@ export type PillTone = Status | 'watch';
 
 /**
  * The three states' words in English, the catalogue's source (`uiMessages.status`); a pill writes them in the reader's
- * language, and a screen that names a state outside a pill reads `useMessages(uiMessages).status` (P18.98-T4).
+ * language, and a screen that names a state outside a pill reads `useMessages(uiMessages).status` (P18.10-T4).
  */
 export const STATUS_LABEL: Readonly<Record<Status, string>> = uiMessages.en.status;
 

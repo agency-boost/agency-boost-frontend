@@ -16,7 +16,7 @@ export const HOLE = '{…}';
 
 /**
  * `src/lib` is in the scan too: its error messages and labels are rendered by the screens that import them. So is
- * **the catalogue's messages**, `src/i18n/messages` (P18.98-T1 AC-6): a module's words move there, in both languages,
+ * **the catalogue's messages**, `src/i18n/messages` (P18.10-T1 AC-6): a module's words move there, in both languages,
  * and every scan reads them where they now are. The glossary's lists beside it (`i18n/glossary.ts`) are not copy.
  */
 const ROOTS = ['app', 'components', 'lib', 'i18n/messages'] as const;
@@ -88,7 +88,7 @@ export interface CatalogueText {
 }
 
 /**
- * **A catalogue area's words, language by language** (P18.98-T1 AC-6): every text the `en` and the `id` messages of
+ * **A catalogue area's words, language by language** (P18.10-T1 AC-6): every text the `en` and the `id` messages of
  * a file under `src/i18n/messages/` can render — words, a function's sentence with `{…}` where a value goes, and a
  * kept term written into a sentence through `kept()`. A held-word spec reads its module's area with this, holding
  * the English to its English words and the Indonesian to the Indonesian forms the glossary sets: *KPM* is ID mode's

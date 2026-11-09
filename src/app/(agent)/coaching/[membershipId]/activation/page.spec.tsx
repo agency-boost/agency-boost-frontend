@@ -56,6 +56,22 @@ describe('/coaching/[membershipId]/activation — their new-hire detail (UI-029,
     expect(screen.queryByText('This person isn’t one of your new hires.')).toBeNull();
   });
 
+  it('P19.9-T3 AC-5 past their first year the tab is the one line, under the coaching page’s header — no name twice, no way back', async () => {
+    atWidth(375);
+    show({
+      'GET /new-hires/mem-rina': {
+        body: {
+          empty: 'first_year_over', hire: { membershipId: 'mem-rina', name: 'Rina Wijaya' }, today: '2026-11-08',
+          joinDate: '2025-08-06', firstYearEndsOn: '2026-08-06', leader: { ...SARI, role: 'aab' },
+        },
+      },
+    });
+    expect(await screen.findByText(/^The 90-Day Activation covers the first year after joining only — it ended on 6 Aug 2026\.$/)).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { level: 1 })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Back to New Hires' })).toBeNull();
+    expect(screen.queryByTestId('first-sale-strip')).toBeNull();
+  });
+
   it('a read-only support session reads it as the coach does, and writes nothing', async () => {
     atWidth(375);
     show({}, readOnlySession(SARI_ME));

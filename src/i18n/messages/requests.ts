@@ -2,7 +2,7 @@ import { defineMessages, type MessagesOf } from '@/i18n/catalogue';
 import { kept } from '@/i18n/kept';
 
 /**
- * **Deciding who joins and who moves** (P18.98-T4, people and forum; `functional/org-hierarchy.md`, *Deciding*,
+ * **Deciding who joins and who moves** (P18.10-T4, people and forum; `functional/org-hierarchy.md`, *Deciding*,
  * *Transfers*, *The request inbox on `/new-hires`*): the request inbox (`components/request-inbox.tsx` — *Pending
  * Requests*, *Review requests* on `/new-hires`), the join date an approval asks for, which *All members* › *Pending*
  * asks for too, and the office's transfer requests (`components/transfer-requests.tsx`).

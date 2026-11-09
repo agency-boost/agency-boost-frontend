@@ -21,7 +21,7 @@ import { Toast, useToast } from '@/components/ui/toast';
  * Here the value shown is the value copied, and a failure says so and leaves the text
  * selectable so it can be copied by hand.
  *
- * **A copy that worked also toasts** — *Link copied ✓* or *Code copied ✓*, the caller's `copied` (P18.95-T1
+ * **A copy that worked also toasts** — *Link copied ✓* or *Code copied ✓*, the caller's `copied` (P18.7-T1
  * AC-6, ADR-0167 §5; UI-008) — through the shell's toast, beside the *Copied.* it has always said under the
  * button. **A copy that failed toasts nothing**: its sentence stays under the button, where the text to
  * select by hand is.

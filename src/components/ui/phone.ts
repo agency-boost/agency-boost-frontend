@@ -1,6 +1,6 @@
 /**
  * **What a phone changes** — below 768px, Tailwind's `md`, and nothing at or above it (ADR-0167, the
- * client's UI review of 2026-10-26: UI-013, UI-014, UI-029; P18.95-T1 AC-8 to AC-10).
+ * client's UI review of 2026-10-26: UI-013, UI-014, UI-029; P18.7-T1 AC-8 to AC-10).
  *
  * **Strings only, and nothing else in this file.** `field.tsx` reads them, and it is reached from the
  * server's graph as well as the client's: a hook here, or `'use client'`, would make every server
@@ -48,7 +48,7 @@ export const SEGMENTS_PHONE = 'max-md:overflow-x-auto max-md:overflow-y-hidden';
 export const SEGMENT_PHONE = 'max-md:min-w-max';
 
 /**
- * A segment of a **two-option** `Segmented` on a phone (`phoneLayout="wrap"`; P18.95-T5 AC-7): the segments keep
+ * A segment of a **two-option** `Segmented` on a phone (`phoneLayout="wrap"`; P18.7-T5 AC-7): the segments keep
  * sharing the track in equal halves and a label that does not fit **wraps inside its own half**, so both options
  * are always in sight. *Set APE target directly* / *Calculate from savings target* on `/goals` scrolled the second
  * half out of a 375px screen. The track does not scroll; the two segments stand as tall as each other.
@@ -93,7 +93,7 @@ export const TAP_AREA = 'max-md:after:absolute max-md:after:left-1/2 max-md:afte
   + "max-md:after:-translate-x-1/2 max-md:after:-translate-y-1/2 max-md:after:content-['']";
 
 /**
- * **A 40px control, 44px tall on a phone** (P18.97-T7 AC-6, ADR-0178 §5; the client's UI-040 of 2026-10-27: 48 controls
+ * **A 40px control, 44px tall on a phone** (P18.9-T7 AC-6, ADR-0178 §5; the client's UI-040 of 2026-10-27: 48 controls
  * under 44px on `/kpm/settings/activation-checklist`, 33 on `/kpm/settings/products`, Data upload's buttons among its
  * 340): a `Button` of a box variant, a `TextInput`, a `Select`, a link wearing `buttonClass`. Height only — each is wider
  * than 44px already. **Opt-in, on the screens UI-040 names**: the shared controls stay 40px everywhere else, where no
@@ -102,13 +102,13 @@ export const TAP_AREA = 'max-md:after:absolute max-md:after:left-1/2 max-md:afte
 export const CONTROL_PHONE = 'max-md:h-11';
 
 /**
- * **A box to tick on a phone: its line 44px tall** (P18.97-T7 AC-6). On the `<label>` that holds the checkbox and its
+ * **A box to tick on a phone: its line 44px tall** (P18.9-T7 AC-6). On the `<label>` that holds the checkbox and its
  * words, which is the target a finger aims at; the box itself stays as the browser draws it.
  */
 export const CHECK_LINE_PHONE = 'max-md:min-h-11';
 
 /**
- * **A switch on a phone: a 44 × 44px target** (P18.97-T7 AC-6; UI-040: *Agents sell it*, 38 × 22px on every product).
+ * **A switch on a phone: a 44 × 44px target** (P18.9-T7 AC-6; UI-040: *Agents sell it*, 38 × 22px on every product).
  * The track stays as drawn (`Switch`, `field.tsx`); its transparent input — the control a finger and a screen reader
  * both meet — becomes a 44px square centred on the track, and the switch's line 44px tall, so the square reaches over
  * nothing above or below it. `Switch phoneTarget` puts them on.
@@ -118,7 +118,7 @@ export const SWITCH_TAP_PHONE = 'max-md:left-1/2 max-md:top-1/2 max-md:h-11 max-
   + 'max-md:-translate-x-1/2 max-md:-translate-y-1/2';
 
 /**
- * **A question's chips on a phone: two to a row** (P18.95-T6 AC-1; UI-015: *Primary need*'s eight chips on five
+ * **A question's chips on a phone: two to a row** (P18.7-T6 AC-1; UI-015: *Primary need*'s eight chips on five
  * lines, *Their biggest hesitation*'s five on five). A grid of two equal columns in place of the wrapping row,
  * so every chip is half the card and the question is half as tall. Put it on the chips' own box.
  */
@@ -137,7 +137,7 @@ export const CHIP_PHONE = 'max-md:w-full max-md:min-h-11 max-md:px-2.5 max-md:le
  */
 
 /**
- * **The client's *Remove* verdict on a grey sentence: not drawn on a phone** (P18.95-T7 AC-1; ADR-0167 §7, OD-202 —
+ * **The client's *Remove* verdict on a grey sentence: not drawn on a phone** (P18.7-T7 AC-1; ADR-0167 §7, OD-202 —
  * the review's *Grey text* table). The sentence keeps its words at 768px and wider, where the client has not reviewed
  * it yet (§12, OD-207), and below 768px it is not there. Put it on the sentence's own element, never on a box that
  * holds anything else.

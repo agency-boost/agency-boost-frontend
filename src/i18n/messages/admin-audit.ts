@@ -2,7 +2,7 @@ import { defineMessages, type MessagesOf } from '@/i18n/catalogue';
 import { kept } from '@/i18n/kept';
 
 /**
- * **The audit log** — `/admin/audit`, *Audit / Role Change Log* (P18.98-T6; `nfr/security-and-privacy.md`, *Audit*;
+ * **The audit log** — `/admin/audit`, *Audit / Role Change Log* (P18.10-T6; `nfr/security-and-privacy.md`, *Audit*;
  * `functional/tenant-provisioning.md`, *The module's own strings*): its line, the scope, the table's frame and its empty
  * states.
  *
@@ -16,7 +16,6 @@ import { kept } from '@/i18n/kept';
  */
 const en = {
   title: kept('Audit / Role Change Log'),
-  subtitle: 'Append-only. Provisioning, ownership changes and impersonation are recorded without exception.',
   scope: 'Scope',
   platformLevel: 'Platform level (no KPM)',
   columns: { when: 'When', action: 'Action', target: kept('Target'), actor: 'Actor' },
@@ -26,11 +25,33 @@ const en = {
   showPlatform: 'Show platform level',
   /** Under impersonation, the member the action was taken as (`name` as stored, or their id). */
   actingAs: ({ name }: { name: string }) => `as ${name}`,
+
+  /*
+   * The page's filters, paging and groups (P19.2-T2 AC-6; UI-132, `admin-mobile` screen 5 and `admin-desktop` screen
+   * 3): the chips *Cakupan · Perusahaan · Tindakan · Pelaku · Tanggal*, *Muat lagi*, and the count pill (*×28*).
+   */
+  company: 'Company',
+  date: 'Date',
+  filters: 'Filter the log',
+  /** The date chip's sheet: two office days, both inclusive. */
+  from: 'From',
+  to: 'To',
+  apply: 'Apply',
+  anyDate: 'Any date',
+  /** An actor whose account is gone, in the Pelaku list. */
+  unknownActor: ({ id }: { id: string }) => `Unknown account (${id})`,
+  loadMore: 'Load more',
+  loadingMore: 'Loading…',
+  /** The count pill: what it draws, and what a screen reader hears. */
+  count: ({ n }: { n: number }) => `×${n}`,
+  countSaid: ({ n }: { n: number }) => `${n} times`,
+  timesSince: ({ n, oldest }: { n: number; oldest: string }) => `${n} times since ${oldest}`,
+  emptyFiltered: 'Nothing recorded matches these filters.',
+  clearFilters: 'Clear filters',
 };
 
 const id: MessagesOf<typeof en> = {
   title: kept('Audit / Role Change Log'),
-  subtitle: `Hanya bisa ditambah. Penyiapan ${kept('KPM')}, perubahan kepemilikan, dan sesi dukungan dicatat tanpa kecuali.`,
   scope: 'Cakupan',
   platformLevel: `Tingkat platform (tanpa ${kept('KPM')})`,
   columns: { when: 'Kapan', action: 'Tindakan', target: kept('Target'), actor: 'Pelaku' },
@@ -39,6 +60,22 @@ const id: MessagesOf<typeof en> = {
   emptyPlatform: `Belum ada yang dicatat di tingkat platform — buat ${kept('KPM')} dan catatannya akan muncul di sini.`,
   showPlatform: 'Tampilkan tingkat platform',
   actingAs: ({ name }) => `sebagai ${name}`,
+
+  company: 'Perusahaan',
+  date: 'Tanggal',
+  filters: 'Saring catatan',
+  from: 'Dari',
+  to: 'Sampai',
+  apply: 'Terapkan',
+  anyDate: 'Semua tanggal',
+  unknownActor: ({ id }) => `Akun tidak dikenal (${id})`,
+  loadMore: 'Muat lagi',
+  loadingMore: 'Memuat…',
+  count: ({ n }) => `×${n}`,
+  countSaid: ({ n }) => `${n} kali`,
+  timesSince: ({ n, oldest }) => `${n} kali sejak ${oldest}`,
+  emptyFiltered: 'Tidak ada catatan yang cocok dengan saringan ini.',
+  clearFilters: 'Hapus saringan',
 };
 
 export const adminAuditMessages = defineMessages({ en, id });

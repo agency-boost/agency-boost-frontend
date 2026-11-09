@@ -1,5 +1,5 @@
 /**
- * **The failures this app detects itself, which no server answered** (P18.97-T4 AC-10, ADR-0176 §10; the client's
+ * **The failures this app detects itself, which no server answered** (P18.9-T4 AC-10, ADR-0176 §10; the client's
  * UI-032: *"Could not reach the server. Check your connection and try again."* followed by a raw *NETWORK*): the
  * request never arrived (`NETWORK`), the app is misconfigured (`CONFIG`), or the screen broke (`UNEXPECTED`) —
  * `toDisplayError`'s three outcomes that are not the server's — and the roster import's file the browser could not

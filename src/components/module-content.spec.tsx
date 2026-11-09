@@ -52,7 +52,8 @@ describe('a training module’s content', () => {
 
     expect(await screen.findByText('This is your company’s material.')).toBeInTheDocument();
     // Nothing to put back yet, so the control that would do it is absent.
-    expect(screen.queryByRole('button', { name: /company’s material again/ })).not.toBeInTheDocument();
+    // *Amended 2026-11-05 (P19.4-T1 AC-4, ADR-0208 §3):* §B6's words, *Undo my changes* (*Urungkan perubahan saya*).
+    expect(screen.queryByRole('button', { name: 'Undo my changes' })).not.toBeInTheDocument();
   });
 
   it('says the material is the office’s own once it is, and offers the way back', async () => {
@@ -64,7 +65,7 @@ describe('a training module’s content', () => {
 
     expect(await screen.findByText('This office has its own material for this module.'))
       .toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /company’s material again/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Undo my changes' })).toBeInTheDocument();
   });
 
   it('holds an edit until Save, and Undo throws it away (AC-6)', async () => {
@@ -185,5 +186,77 @@ describe('a training module’s content', () => {
       'https://cdn.test/x?sig=abc', '_blank', 'noopener,noreferrer',
     ));
     expect(stub.calls.some((c) => c.url.includes('/content/url?storageKey='))).toBe(true);
+  });
+});
+
+/**
+ * **An HTML lesson in a module's *File*** (P19.6-T2, ADR-0217 §1, §4): offered by the picker, signed as `text/html`,
+ * refused in *Video*, and previewed in the sandboxed window — never a tab — by the Owner or Admin who uploads it.
+ */
+describe('P19.6-T2 an HTML lesson in the module’s files', () => {
+  const SIGNED = 'https://storage.googleapis.com/test-bucket/dev/kpm-a/training/0002?X-Goog-Signature=abc';
+  const lesson = file({ id: 'f2', label: 'Pelajaran 01', storageKey: 'dev/kpm-a/training/0002', mimeType: 'text/html', bytes: 48_000 });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('P19.6-T2 AC-1 offers .html and .htm in Files, and not in Video', async () => {
+    render();
+    await screen.findByRole('heading', { name: 'Files' });
+    expect(screen.getByLabelText('Add to Files').getAttribute('accept')).toBe('.pdf,.png,.jpg,.jpeg,.webp,.csv,.xlsx,text/html,.html,.htm');
+    expect(screen.getByLabelText('Add to Videos').getAttribute('accept')).toBe('.mp4');
+  });
+
+  it('P19.6-T2 AC-1 signs an HTML lesson as text/html, then confirms it', async () => {
+    const stub = render(view(), {
+      'POST /kpm/settings/training/uploads/confirm': { body: { storageKey: 'dev/kpm-a/training/0002', mimeType: 'text/html', bytes: 48_000 } },
+      'POST /kpm/settings/training/uploads': {
+        body: { uploadUrl: 'https://storage.googleapis.com/test-bucket/', storageKey: 'dev/kpm-a/training/0002', signature: 's', expiresAt: '2026-11-06T03:10:00Z', fields: { key: 'dev/kpm-a/training/0002' } },
+      },
+      'https://storage.googleapis.com/test-bucket/': { status: 204, body: null },
+    });
+    await screen.findByRole('heading', { name: 'Files' });
+    await userEvent.upload(screen.getByLabelText('Add to Files'), new File(['<!doctype html>'], 'Pelajaran 01.html', { type: 'text/html' }));
+    await screen.findByDisplayValue('Pelajaran 01.html');
+    const signed = stub.calls.find((c) => c.url.endsWith('/kpm/settings/training/uploads'))!;
+    expect(JSON.parse(String(signed.init.body))).toEqual({ filename: 'Pelajaran 01.html', mimeType: 'text/html', bytes: 15 });
+  });
+
+  it('P19.6-T2 AC-1 refuses an HTML file in Video before anything is signed', async () => {
+    const stub = render();
+    await screen.findByRole('heading', { name: 'Videos' });
+    await userEvent.setup({ applyAccept: false })
+      .upload(screen.getByLabelText('Add to Videos'), new File(['<html>'], 'lesson.html', { type: 'text/html' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/lesson\.html/);
+    expect(stub.calls.some((c) => c.url.includes('/uploads'))).toBe(false);
+  });
+
+  it('P19.6-T2 AC-2 previews an HTML lesson in the sandboxed window, never a tab; a PDF still opens in a tab', async () => {
+    const open = vi.spyOn(window, 'open').mockReturnValue(null);
+    render(view({ content: { files: [lesson, file()], videos: [], links: [] } }), {
+      [`${CONTENT_URL}/url?storageKey=dev%2Fkpm-a%2Ftraining%2F0002`]: { body: { url: SIGNED } },
+      [`${CONTENT_URL}/url?storageKey=dev%2Fkpm-a%2Ftraining%2F0001`]: { body: { url: 'https://cdn.example/deck.pdf' } },
+    });
+    await screen.findByDisplayValue('Pelajaran 01');
+    await userEvent.click(screen.getAllByRole('button', { name: 'Open' })[0]);
+    const frame = await screen.findByTitle('Pelajaran 01');
+    expect(frame.getAttribute('sandbox')).toBe('allow-scripts');
+    expect(open).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('button', { name: 'Close' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await userEvent.click(screen.getAllByRole('button', { name: 'Open' })[1]);
+    await waitFor(() => expect(open).toHaveBeenCalledWith('https://cdn.example/deck.pdf', '_blank', 'noopener,noreferrer'));
+  });
+
+  it('P19.6-T2 AC-2 a reader who cannot write still previews the lesson', async () => {
+    stubFetch({
+      [CONTENT_URL]: { body: view({ content: { files: [lesson], videos: [], links: [] } }) },
+      [`${CONTENT_URL}/url`]: { body: { url: SIGNED } },
+    });
+    renderWithSession(<ModuleContentEditor moduleCode={CODE} canWrite={false} />, { me: OWNER });
+    await screen.findByDisplayValue('Pelajaran 01');
+    await userEvent.click(screen.getByRole('button', { name: 'Open' }));
+    expect(await screen.findByTitle('Pelajaran 01')).toBeInTheDocument();
   });
 });

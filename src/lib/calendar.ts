@@ -27,11 +27,11 @@ export const ENTRY_TYPES: readonly EntryType[] = ['meeting', 'coaching', 'client
 
 /**
  * **The types' one set of names** (`:310-314`, `:370-374`): the legend's and the type toggle's words,
- * verbatim — and, since P18.95-T8 AC-2, the detail's badge, every entry's accessible name and the
+ * verbatim — and, since P18.7-T8 AC-2, the detail's badge, every entry's accessible name and the
  * agenda's line too. The prototype's badge capitalised the code instead (*Meeting*, *Coaching*,
  * *Client*, `:824`), so the legend said *Internal meeting* and the popup *Meeting* for one entry (the
  * client's UI review, UI-020; ADR-0167). The legend's are the ones the reader chooses from, so they won.
- * **In the catalogue** (`i18n/messages/calendar.tsx`, `types`; P18.98-T4): a screen reads the reader's language; this
+ * **In the catalogue** (`i18n/messages/calendar.tsx`, `types`; P18.10-T4): a screen reads the reader's language; this
  * is its English.
  */
 export const TYPE_LABEL: Record<EntryType, string> = calendarMessages.en.types;
@@ -300,14 +300,8 @@ export interface CalendarDownline {
   people: CalendarDownlinePerson[];
 }
 
-/**
- * `GET` and `PUT /calendar/settings`: the reader's own (ADR-0110). *Hide my personal activities*: on, a
- * leader comparing the reader's week is answered each entry the reader organised as a busy block, unless
- * that leader is on it. Off until the reader turns it on.
- */
-export interface CalendarSettings {
-  hideDetails: boolean;
-}
+/** The reader's own calendar settings (ADR-0110), in a module of their own that *Profil saya* reads (`calendar-settings.ts`). */
+export { readCalendarSettings, saveCalendarSettings, type CalendarSettings } from './calendar-settings';
 
 /** What a save sends, for either kind of timing. */
 export interface EntryInput {
@@ -342,7 +336,7 @@ const query = (params: Record<string, string | number | undefined>) => {
 
 /**
  * One person's week or month. Without `forId`, the reader's own calendar; with it, a member they
- * coach — a week or, since P18.95-T8 AC-2, a month — which the server audits, one entry per read
+ * coach — a week or, since P18.7-T8 AC-2, a month — which the server audits, one entry per read
  * (D-audit). Outside `COACH` it is 404.
  */
 export const readCalendar = (q: { view: CalendarView; date?: string; forId?: string }) =>
@@ -404,13 +398,6 @@ export const readDownline = () => api<CalendarDownline>('/calendar/downline');
 export const placeBlock = (input: EntryInput & { membershipId: string }) =>
   api<CalendarEntry>('/calendar/blocks', { method: 'POST', body: input });
 
-/** The reader's own calendar settings. Nobody reads anybody else's. */
-export const readCalendarSettings = () => api<CalendarSettings>('/calendar/settings');
-
-/** *Hide my personal activities*, sent whole; the answer is the setting as it is now stored. */
-export const saveCalendarSettings = (settings: CalendarSettings) =>
-  api<CalendarSettings>('/calendar/settings', { method: 'PUT', body: settings });
-
 /*
  * ── Limits ───────────────────────────────────────────────────────────────────────────────────────
  *
@@ -430,7 +417,7 @@ export const PEOPLE_PAGE = 50;
 /*
  * ── Words ────────────────────────────────────────────────────────────────────────────────────────
  *
- * **In the catalogue** (`i18n/messages/calendar.tsx`; P18.98-T4): a screen reads the reader's language,
+ * **In the catalogue** (`i18n/messages/calendar.tsx`; P18.10-T4): a screen reads the reader's language,
  * `useMessages(calendarMessages)`; a function here takes the words' language (English when none is passed) and then
  * the figures' (Indonesian when none is passed, as before), and its caller passes `useLanguage()` and
  * `useFigureLanguage()`. The objects below are the catalogue's English in the shapes this module has always handed its
@@ -493,7 +480,7 @@ export const PROTOTYPE_COPY = {
   today: EN.today,
   week: EN.week,
   month: EN.month,
-  // The month's column heads are the formatter's (`weekdayHeadings`, `lib/format.ts`; P18.98-T3 AC-5): the prototype's
+  // The month's column heads are the formatter's (`weekdayHeadings`, `lib/format.ts`; P18.10-T3 AC-5): the prototype's
   // *Mon … Sun*, Monday first in both languages — *Sen … Min* in Indonesian.
   type: EN.type,
   title: EN.fieldTitle,
@@ -524,7 +511,7 @@ export const DOWNLINE_GROUP_LABEL: Record<DownlineGroup, string> = EN.downlineGr
  * every one of them to that.
  */
 export const OWN_COPY = {
-  /** A 1:1 opened from `/new-hires` (P18.96-T6 AC-4): the title *Block time* gives one too, with the full name (L-65). */
+  /** A 1:1 opened from `/new-hires` (P18.8-T6 AC-4): the title *Block time* gives one too, with the full name (L-65). */
   oneOnOneWith: (name: string) => EN.oneOnOneWith({ name }),
   accept: EN.accept,
   decline: EN.decline,
@@ -555,8 +542,12 @@ export const OWN_COPY = {
   comparedRegion: (name: string, range: string) => EN.comparedRegion({ name, range }),
   busy: EN.busy,
   view: EN.view,
-  /** The prototype's question less its second sentence, which a soft delete makes false (H-06, I-101). */
-  deleteQuestion: (title: string) => EN.deleteQuestion({ title }),
+  /**
+   * The question *Hapus* asks first (P19.8-T3 AC-7; MOB UI-169), and the title and day under it — never the prototype's
+   * second sentence, which a soft delete makes false (H-06, I-101).
+   */
+  deleteQuestion: EN.deleteQuestion,
+  deleteWhat: (title: string, day: string) => EN.deleteWhat({ title, day }),
   chooseDate: EN.chooseDate,
   endAfterStart: EN.endAfterStart,
   returnAfterDeparture: EN.returnAfterDeparture,
@@ -619,7 +610,7 @@ export function initialsOf(name: string): string {
 
 /**
  * A person's tag in the picker and the compare popover: the rung by its badge's name (*AB*, *AAB*, *Agent*;
- * P18.95-T9 AC-1, ADR-0167 §10 — the ladder's label, whole, until then), then *" · under {full name}"* for
+ * P18.7-T9 AC-1, ADR-0167 §10 — the ladder's label, whole, until then), then *" · under {full name}"* for
  * anybody who is not the reader's direct report. No first name and no *"KPM Manager"*, which is no rung
  * (contradiction 17).
  *
@@ -701,7 +692,7 @@ export function hhmm(minutes: number): string {
 }
 
 /*
- * ── Meeting links in *Location / notes* (P18.95-T8 AC-2; the client's UI review, UI-020) ─────────
+ * ── Meeting links in *Location / notes* (P18.7-T8 AC-2; the client's UI review, UI-020) ─────────
  */
 
 /** A run of the notes as written, or a link found in them and the words it is drawn with. */
@@ -747,7 +738,7 @@ export function meetingUrl(raw: string): URL | null {
 }
 
 /**
- * ***Location / notes*, with each meeting link made a link** (P18.95-T8 AC-2): *Join Zoom* on a Zoom
+ * ***Location / notes*, with each meeting link made a link** (P18.7-T8 AC-2): *Join Zoom* on a Zoom
  * host, *Join meeting* on any other, everything else the organiser wrote kept as they wrote it. The
  * address itself stays the link's `title` and its `href`, so it is never hidden from whoever wants to
  * see where it goes.

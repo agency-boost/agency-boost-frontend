@@ -2,7 +2,7 @@ import { defineMessages, type MessagesOf } from '@/i18n/catalogue';
 import { kept } from '@/i18n/kept';
 
 /**
- * **Recruitment, and its Attack Plan** (P18.98-T4, field selling; `functional/recruitment.md`, *The module's own
+ * **Recruitment, and its Attack Plan** (P18.10-T4, field selling; `functional/recruitment.md`, *The module's own
  * strings*): the section's title, line and tabs (`/recruitment/*`), the hand-off at `/recruitment`, and
  * `/recruitment/attack-plan` — the candidate brief's three questions, the plan's summary and head, and the states the
  * prototype lacks; `lib/recruitment.ts`' words. The blocks' labels, the brief card and *Back* are the two plans' own,

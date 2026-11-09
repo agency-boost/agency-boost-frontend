@@ -30,7 +30,7 @@ export function ConfigBadge({
         'inline-flex whitespace-nowrap rounded-pill px-2 py-0.5 text-2xs font-bold uppercase tracking-wide',
         tone === 'won' && 'bg-success/10 text-success',
         tone === 'open' && 'border border-hairline bg-base text-muted',
-        tone === 'navy' && 'bg-navy/[0.06] text-navy',
+        tone === 'navy' && 'bg-secondary/[0.06] text-navy',
         className,
       )}
     >

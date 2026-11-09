@@ -12,6 +12,10 @@ import { cn } from '@/lib/cn';
  * **Authored words are rendered as text**: children are React nodes, never HTML. The prototype pours each
  * script through `innerHTML` (F-34, F-54); a `<b>` or a `<script>` here prints as the characters it is.
  *
+ * **And with the line breaks their author typed** (P19-T6 AC-1, B1-2): every block that draws a paragraph of authored
+ * words — the plain text, the opening line, the full script, the next action — is `whitespace-pre-line`, so a reply
+ * written as *1. … 2. …* on two lines reads on two lines. A run of spaces still collapses, as it always did.
+ *
  * `size` is the prototype's two scales: the page's (`page`) and the drawer's, a step smaller (`drawer`).
  */
 export type ScriptSize = 'page' | 'drawer';
@@ -46,14 +50,14 @@ export function ScriptBlock({
       <h3
         className={cn(
           'mb-2.5 flex items-center gap-2 text-xs font-bold uppercase tracking-wide',
-          lead ? 'text-amber-ink' : 'text-muted',
+          lead ? 'text-primary-ink' : 'text-muted',
         )}
       >
         <span
           aria-hidden="true"
           className={cn(
             'flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border text-2xs font-bold',
-            lead ? 'border-amber-ink text-amber-ink' : 'border-navy text-navy',
+            lead ? 'border-primary-ink text-primary-ink' : 'border-secondary text-navy',
           )}
         >
           {n}
@@ -70,13 +74,13 @@ export function ScriptBlock({
 
 /** Plain words under a block's label (`.d-text`). */
 export function ScriptText({ children }: { children: ReactNode }) {
-  return <p className="m-0 text-base leading-relaxed text-navy">{children}</p>;
+  return <p className="m-0 whitespace-pre-line text-base leading-relaxed text-navy">{children}</p>;
 }
 
 /** The line to open with, in the display face and in quotation marks (`.opening-line`). */
 export function OpeningLine({ text, size = 'page' }: { text: string; size?: ScriptSize }) {
   return (
-    <p className={cn('m-0 font-display font-bold leading-snug text-navy', size === 'page' ? 'text-lg' : 'text-md')}>
+    <p className={cn('m-0 whitespace-pre-line font-display font-bold leading-snug text-navy', size === 'page' ? 'text-lg' : 'text-md')}>
       “{text}”
     </p>
   );
@@ -88,7 +92,7 @@ export function BulletList({ items }: { items: readonly string[] }) {
     <ul className="m-0 flex list-none flex-col gap-[9px] p-0">
       {items.map((item, i) => (
         <li key={`${i}-${item}`} className="flex items-start gap-[9px] text-base text-navy">
-          <span aria-hidden="true" className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber" />
+          <span aria-hidden="true" className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
           <span className="min-w-0">{item}</span>
         </li>
       ))}
@@ -111,8 +115,8 @@ export function SayBox({ text, size = 'page' }: { text: string; size?: ScriptSiz
 export function NextAction({ children }: { children: ReactNode }) {
   return (
     <div className="flex items-start gap-2.5 text-base text-navy">
-      <span aria-hidden="true" className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-navy" />
-      <span className="min-w-0">{children}</span>
+      <span aria-hidden="true" className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-secondary" />
+      <span className="min-w-0 whitespace-pre-line">{children}</span>
     </div>
   );
 }

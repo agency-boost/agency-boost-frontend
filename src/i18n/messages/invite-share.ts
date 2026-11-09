@@ -2,7 +2,7 @@ import { defineMessages, type MessagesOf } from '@/i18n/catalogue';
 import { kept } from '@/i18n/kept';
 
 /**
- * **The invite's share block** (UI V1, Phase 18.99 T9; UI-084, UI-090 — and UI-024's *+ Tambah agent* modal on New
+ * **The invite's share block** (UI V1, Phase 18.11 T9; UI-084, UI-090 — and UI-024's *+ Tambah agent* modal on New
  * Hires, T6, which reuses it): a leader's code, *Salin tautan*, *Salin kode*, the QR and WhatsApp
  * (`components/invite-share-block.tsx`).
  *

@@ -5,8 +5,9 @@ import { axe } from 'vitest-axe';
 import { atWidth, makeMe, renderLive, renderWithSession, resetLanguage, wears } from '@test/harness';
 import type { Me } from '@/lib/session';
 import { AgentShell } from './agent-shell';
+import { PageHeader } from './page-header';
 import { Page } from './page';
-import { TenantShell } from './tenant-shell';
+import { Shell } from './shell';
 
 const route = vi.hoisted(() => ({ path: '/goals' }));
 vi.mock('next/navigation', () => ({
@@ -83,8 +84,8 @@ describe('UI-004 the field shell below 1024px: no app bar, the title row, the fl
     expect(bar.getByRole('link', { name: 'Unit' })).toHaveAttribute('href', '/unit/dashboard');
     const calendar = bar.getByRole('link', { name: 'Calendar' });
     expect(calendar).toHaveAttribute('aria-current', 'page');
-    expect(calendar.querySelector('[data-tab-face]')).toHaveClass('bg-navy', 'text-white');
-    expect(bar.getByRole('link', { name: 'Home' }).querySelector('[data-tab-face]')).not.toHaveClass('bg-navy');
+    expect(calendar.querySelector('[data-tab-face]')).toHaveClass('bg-secondary', 'text-secondary-contrast');
+    expect(bar.getByRole('link', { name: 'Home' }).querySelector('[data-tab-face]')).not.toHaveClass('bg-secondary');
   });
 
   it('O-10 gives an Agent Summary in the fourth slot, to their Personal Summary', () => {
@@ -94,7 +95,7 @@ describe('UI-004 the field shell below 1024px: no app bar, the title row, the fl
     expect(within(tabBar()!).getByRole('link', { name: 'Summary' })).toHaveAttribute('href', '/summary');
   });
 
-  it('UI-004 the title row: the title at 20px/800 (22px tablet), the page’s control, the 36px avatar to Profil saya', () => {
+  it('UI-004 the title row: the title at 20px/800 (20px tablet since P19.1-T1), the page’s control, the 36px avatar to Profil saya', () => {
     atWidth(375);
     renderWithSession(
       screenWith({ actions: <button type="button">Wide desktop action</button>, control: <button type="button">Bulan ini</button> }),
@@ -130,13 +131,34 @@ describe('UI-004 the field shell below 1024px: no app bar, the title row, the fl
     expect(bell.compareDocumentPosition(avatar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it('UI-004 hides a page’s sub-line on a phone and a tablet when the page says so, and keeps it from 1024px', () => {
-    atWidth(768);
+  it('UI-004 hides a page’s sub-line on a phone when the page says so', () => {
+    atWidth(375);
     renderWithSession(screenWith({ subtitleOnPhone: false, subtitleOnTablet: false }), { me: AB });
     const line = screen.getByText('Turn your annual target into this month’s activity.');
     expect(wears(line, 375).split(' ')).toContain('hidden');
-    expect(wears(line, 768).split(' ')).toContain('hidden');
-    expect(wears(line, 1024).split(' ')).not.toContain('hidden');
+  });
+
+  /*
+   * *Changed 2026-11-04 (P19.1-T1 AC-1, ADR-0196; UI-112, Conflicts row 150):* **no grey sub-line at 768px and wider**,
+   * whatever the page says; it showed from 1024px. A phone keeps each page's own rule.
+   */
+  it.each([768, 1024, 1280])('P19.1-T1 AC-1 draws no sub-line at %ipx, whatever the page says', (px) => {
+    atWidth(px);
+    renderWithSession(screenWith({ subtitleOnPhone: true }), { me: AB });
+    const line = screen.getByText('Turn your annual target into this month’s activity.');
+    expect(wears(line, px).split(' ')).toContain('hidden');
+    // The phone is out of UI-112's scope: a page that keeps its sub-line there still does.
+    expect(wears(line, 375).split(' ')).not.toContain('hidden');
+  });
+
+  it('P19.1-T1 AC-1 keeps a sub-line that prevents a mistake (a record’s state) at every size', () => {
+    atWidth(1280);
+    renderWithSession(
+      <AgentShell><PageHeader title="DIMAS PRATAMA" subtitle="Closed on 3 Nov 2026" keepSubtitle /></AgentShell>,
+      { me: AB },
+    );
+    const line = screen.getByText('Closed on 3 Nov 2026');
+    for (const px of [375, 768, 1280]) expect(wears(line, px).split(' ')).not.toContain('hidden');
   });
 
   it('UI-004 leaves room under the content for the bar, the home indicator included (no content behind it)', () => {
@@ -155,13 +177,18 @@ describe('UI-004 the field shell below 1024px: no app bar, the title row, the fl
    * and a strip as tall as the inset, in the page's ground, stands over the page as it scrolls. jsdom computes no `env()`:
    * what is pinned is what each element asks for — 0px wherever there is no inset.
    */
-  it('starts the page below the top inset: 8px where there is none, the inset where the status bar is drawn over it', () => {
+  /*
+   * *Changed 2026-11-04 (P19-T5 AC-4; UI-158, the cloud findings' R3):* the header starts **16px below the inset** on a
+   * phone and a tablet — it started at the inset itself, inside the band iOS blurs (8px, 12px on a tablet, with none).
+   */
+  it('P19-T5 AC-4 starts the page header 16px below the top inset on a phone and a tablet; beside the sidebar 32px or that, the more', () => {
     atWidth(375);
     renderWithSession(screenWith(), { me: AB });
     const main = screen.getByRole('main');
-    expect(wears(main, 375).split(' ')).toContain('pt-[max(0.5rem,env(safe-area-inset-top))]');
-    expect(wears(main, 768).split(' ')).toContain('pt-[max(0.75rem,env(safe-area-inset-top))]');
-    expect(wears(main, 1280).split(' ')).toContain('pt-[max(2rem,env(safe-area-inset-top))]');
+    expect(wears(main, 375).split(' ')).toContain('pt-[calc(1rem+env(safe-area-inset-top))]');
+    expect(wears(main, 768).split(' ')).toContain('pt-[calc(1rem+env(safe-area-inset-top))]');
+    expect(wears(main, 1280).split(' ')).toContain('pt-[max(2rem,calc(1rem+env(safe-area-inset-top)))]');
+    expect(main.className).not.toMatch(/pt-\[max\(0\.5rem|pt-\[max\(0\.75rem/);
     expect(main.className.split(/\s+/)).not.toContain('pt-2');
   });
 
@@ -179,42 +206,65 @@ describe('UI-004 the field shell below 1024px: no app bar, the title row, the fl
     expect(band.textContent).toBe('');
   });
 
-  it('has no band from 1024px, where the sidebar stands at the top', () => {
+  /*
+   * *Changed 2026-11-04 (P19-T5 AC-4; UI-158):* from 1024px the band stays, **under the sidebar** — a tablet's Home Screen
+   * app in landscape scrolled the page's column under its clock. Below the sidebar's `z-10`, so its navy still runs up.
+   */
+  it('P19-T5 AC-4 keeps the band from 1024px, under the sidebar, over the page’s column', () => {
     atWidth(1280);
     renderWithSession(screenWith(), { me: AB });
     const band = document.querySelector('[data-safe-top]') as HTMLElement;
-    expect(wears(band, 1280).split(' ')).toContain('hidden');
+    const worn = wears(band, 1280).split(' ');
+    expect(worn).not.toContain('hidden');
+    // `lg:z-[5]` over the phone's `z-30`: under the sidebar's `z-10`.
+    expect(band.className.split(' ')).toContain('lg:z-[5]');
+    expect(worn).toContain('z-[5]');
   });
 
-  it('UI-008 marks the field shell a V1 surface at every width; the office console is not', () => {
+  it('UI-008, P19.2-T1 AC-1 marks the field shell a V1 surface at every width — and the office’s pages now too (UI-146)', () => {
     atWidth(1280);
     const field = renderWithSession(screenWith(), { me: AB });
     expect(document.querySelector('[data-surface="v1"]')).not.toBeNull();
     field.unmount();
     route.path = '/people/members';
-    renderWithSession(<TenantShell title="All Members">x</TenantShell>, {
+    renderWithSession(<Shell family="tenant" title="All Members">x</Shell>, {
       me: member({ isKpmOwner: true }, { permissions: ['member:read_profile'] }),
     });
-    expect(document.querySelector('[data-surface]')).toBeNull();
+    // The office console was not a V1 surface until P19.2-T1; the one shell is, for every role (ADR-0197 §2).
+    expect(document.querySelector('[data-surface="v1"]')).not.toBeNull();
   });
 });
 
 describe('UI-004 the field shell from 1024px: the sidebar, regrouped as the sheet', () => {
-  it.each([1024, 1280])('UI-004 at %ipx draws the sidebar and no tab bar, and no avatar on the title row', (px) => {
+  /*
+   * *Changed 2026-11-04 (P19.1-T1 AC-1, ADR-0196; UI-112: one title row at every size, the avatar on its right):* the
+   * title row carries the avatar from 1024px too; it was the sidebar's foot alone there, which keeps the account menu.
+   */
+  it.each([1024, 1280])('UI-004, P19.1-T1 AC-1 at %ipx draws the sidebar and no tab bar, and the avatar on the title row', (px) => {
     atWidth(px);
     renderWithSession(screenWith(), { me: CORE_LEADER });
     expect(tabBar()).toBeNull();
-    expect(screen.queryByRole('link', { name: 'Your profile' })).not.toBeInTheDocument();
+    const row = screen.getByRole('heading', { level: 1, name: 'Goal Setting' }).closest('[data-title-row]') as HTMLElement;
+    const avatar = within(row).getByRole('link', { name: 'Your profile' });
+    expect(avatar).toHaveAttribute('href', '/profile');
+    expect(wears(avatar, px).split(' ')).not.toContain('hidden');
+    expect(screen.getByRole('navigation', { name: 'Main' })).toBeInTheDocument();
+  });
+
+  it('UI-004 at 1280px lists the sidebar regrouped as the sheet, in its order', () => {
+    atWidth(1280);
+    renderWithSession(screenWith(), { me: CORE_LEADER });
     const nav = screen.getByRole('navigation', { name: 'Main' });
     const order = Array.from(nav.querySelectorAll('[aria-controls^="nav-group"], li > a, li > button'))
       .map((el) => (el.textContent ?? '').trim());
+    // P19-T4 AC-1 (UI-159 item 1, *same order in the desktop sidebar*): Unit Dashboard heads My team, listed once.
     expect(order).toEqual([
-      'Home', 'Activity', 'Calendar', 'Unit Dashboard', 'Search agent',
-      'Me', 'Leads', 'Goal Setting', 'Personal Summary', 'Training',
+      'Home', 'Activity', 'Calendar', 'Search agent',
+      'Me', 'Leads', 'Goal Setting', 'Personal Summary', 'Training', 'Surveys',
       'Activities', 'Sales', 'Recruitment',
-      'My team', 'Coaching', 'New Hires', 'Group Tree', 'User Management',
+      'My team', 'Unit Dashboard', 'Coaching', 'New Hires', 'User Management', 'Group Tree',
       'Programs', 'Campaign', 'Event',
-      'KPM', 'Strategic Leader Forum', 'KPM Analytics', 'Advanced analyticsSoon',
+      'KPM', 'Strategic Leader Forum', 'KPM Analytics', 'Advanced analytics',
     ]);
   });
 
@@ -222,7 +272,7 @@ describe('UI-004 the field shell from 1024px: the sidebar, regrouped as the shee
     atWidth(1280);
     renderWithSession(screenWith(), { me: AB });
     const heading = screen.getByRole('button', { name: 'My team' });
-    expect(heading).toHaveClass('text-xs', 'text-white/65');
+    expect(heading).toHaveClass('text-xs', 'text-secondary-contrast/65');
     expect(heading).not.toHaveClass('uppercase');
     expect(screen.queryByText(/unit tools/i)).not.toBeInTheDocument();
   });
@@ -273,21 +323,19 @@ describe('UI-004 the Lainnya sheet', () => {
     expect(within(sheet).getByText('Rina')).toBeInTheDocument();
     expect(within(sheet).getByText('AB · 0417 · Cempaka Putih')).toBeInTheDocument();
     expect(groupsOf(sheet)).toEqual(['Me', 'Activities', 'My team', 'Programs']);
-    expect(tilesOf(sheet, 'Me')).toEqual(['Leads', 'Goal Setting', 'Personal Summary', 'Training']);
-    expect(tilesOf(sheet, 'My team')).toEqual(['Coaching', 'New Hires', 'Group Tree', 'User Mgmt']);
+    expect(tilesOf(sheet, 'Me')).toEqual(['Leads', 'Goal Setting', 'Personal Summary', 'Training', 'Surveys']);
+    expect(tilesOf(sheet, 'My team')).toEqual(['Unit Dashboard', 'Coaching', 'New Hires', 'User Mgmt', 'Group Tree']);
     for (const grid of sheet.querySelectorAll('ul')) expect(grid).toHaveClass('grid-cols-4');
     const buttons = within(sheet).getAllByRole('button');
     expect(buttons[buttons.length - 1]).toHaveAccessibleName('Sign out');
     expect(buttons[buttons.length - 1]).toHaveClass('text-pill-red-ink');
   });
 
-  it('UI-004 gives a Core Leader the KPM group, Advanced analytics greyed, Coming soon, and no link', async () => {
+  it('UI-004, P19.5-T3 AC-1 gives a Core Leader the KPM group, Advanced analytics a link to the page', async () => {
     const sheet = await openSheet(CORE_LEADER);
     expect(groupsOf(sheet)).toEqual(['Me', 'Activities', 'My team', 'Programs', 'KPM']);
-    expect(tilesOf(sheet, 'KPM')).toEqual(['Leader Forum', 'KPM Analytics', 'Advanced analyticsSoon']);
-    const soon = sheet.querySelector('[data-tile="advancedAnalytics"]')!;
-    expect(soon.tagName).toBe('SPAN');
-    expect(soon).toHaveAttribute('aria-disabled', 'true');
+    expect(tilesOf(sheet, 'KPM')).toEqual(['Leader Forum', 'KPM Analytics', 'Advanced analytics']);
+    expect(within(sheet).getByRole('link', { name: 'Advanced analytics' })).toHaveAttribute('href', '/kpm/advanced-analytics');
     expect(within(sheet).getByRole('link', { name: 'Leader Forum' })).toHaveAttribute('href', '/leader-meetings');
   });
 
@@ -388,15 +436,32 @@ describe('UI-004 the Lainnya sheet', () => {
     expect(within(sheet).getByRole('link', { name: /Ubah foto/ })).toBeInTheDocument();
     expect(within(sheet).getByRole('group', { name: 'Bahasa' })).toBeInTheDocument();
     expect(within(sheet).getByRole('button', { name: 'Keluar' })).toBeInTheDocument();
-    expect(within(sheet).getByText('Segera hadir')).toBeInTheDocument();
+    // *Survei* is the reader's word (P19.5-T4, C-R2); no item is *Segera hadir* any more.
+    expect(within(sheet).getByRole('link', { name: 'Survei' })).toHaveAttribute('href', '/surveys');
     // The destinations stay as the report writes them, in both languages.
     expect(within(sheet).getByRole('link', { name: 'Goal Setting' })).toBeInTheDocument();
   });
 
-  it('ADR-0180 keeps the page header’s ID | EN switch on a desktop', () => {
+  /*
+   * *Changed 2026-11-04 (P19.1-T1 AC-1, ADR-0196; UI-112, Conflicts row 145):* **no *ID | EN* on any page at any size**
+   * — ADR-0180 §3 kept it in a desktop's page header. It lives in the account menu: the sidebar foot's, from 1024px.
+   */
+  it.each([768, 1024, 1280])('P19.1-T1 AC-1 draws no ID | EN on the page at %ipx', (px) => {
+    atWidth(px);
+    renderLive(screenWith(), { me: AB });
+    expect(screen.getByRole('main').querySelector('[data-language-switch]')).toBeNull();
+  });
+
+  it('P19.1-T1 AC-1 puts ID | EN in the account menu from 1024px, under who is signed in', async () => {
     atWidth(1280);
     renderLive(screenWith(), { me: AB });
-    expect(screen.getByRole('main').querySelector('[data-language-switch]')).toHaveClass('max-lg:hidden');
+    expect(screen.getByRole('main').querySelector('[data-language-switch]')).toBeNull();
+    expect(document.querySelector('[data-account-language]')).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: /Rina/ }));
+    const panel = document.querySelector('[data-account-panel]') as HTMLElement;
+    const language = within(panel).getByRole('group', { name: 'Bahasa' });
+    expect(language).toHaveAttribute('data-language-switch', 'bar');
+    expect(within(language).getByRole('button', { name: 'ID' })).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('UI-004 passes axe with the sheet open, and with the tab bar alone', async () => {

@@ -11,25 +11,27 @@ import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client
 import { formatDayLong, formatDecimalInput, formatNumber, formatPercent, moneyPrefix, parseDecimal } from '@/lib/format';
 import { formatRupiah, groupDigits, parseDigits, toMajor, toMinor } from '@/lib/goals';
 import {
-  correctCell, figureLabel, MONEY_METRICS, type Cadence, type CorrectionResult, type MetricCell,
-  type ProductionMetric,
+  correctCell, figureLabel, isMoney, type CorrectionResult, type MetricCell, type MonthColumn, type UploadUnit,
 } from '@/lib/production';
 import { monthLabel } from './month-label';
 
-/** The figure somebody chose to correct, and what it reads now. */
+/**
+ * The figure somebody chose to correct, and what it reads now — by its column of the KPM's template (P19.5-T2): this
+ * month's figure, or the year to date of a column whose year to date is uploaded (a summed one is never corrected, R4).
+ */
 export interface Editing {
   membershipId: string;
   name: string;
   agentCode: string;
-  metric: ProductionMetric;
-  cadence: Cadence;
+  column: MonthColumn;
+  ytd: boolean;
   current: MetricCell;
 }
 
 /**
  * `corrected by hand by Maya Halim on 26 Sep 2026 — “Carrier restated it”` — whose a figure is, as the table's ✎ says it
- * and, on a phone, the edit sheet's field (P18.97-T7 AC-2). Its day in `figures`, its words in `language` (English when
- * passed none, P18.98-T4); the name and the reason as typed.
+ * and, on a phone, the edit sheet's field (P18.9-T7 AC-2). Its day in `figures`, its words in `language` (English when
+ * passed none, P18.10-T4); the name and the reason as typed.
  */
 export function correctedNote(cell: MetricCell, figures: Language, language: Language = SOURCE_LANGUAGE): string {
   const c = cell.correction;
@@ -45,17 +47,17 @@ export function correctedNote(cell: MetricCell, figures: Language, language: Lan
  * A figure in the table's own format, or *nothing reported*: money in full, as Data upload's cells write it
  * (ADR-0174 §4), a persistency with **every decimal it was filed with** and no *,0* (§3) — a figure checked against
  * the carrier's file is never rounded on its way to the reader — and a count as it is. The figure in `figures`, the
- * words for none in `language` (English when passed none, P18.98-T4).
+ * words for none in `language` (English when passed none, P18.10-T4).
  */
 export function showFigure(
-  metric: ProductionMetric,
+  unit: UploadUnit,
   value: number | null,
   figures: Language,
   language: Language = SOURCE_LANGUAGE,
 ): string {
   if (value === null) return messagesIn(dataUploadMessages, language).nothingReported;
-  if (MONEY_METRICS.includes(metric)) return formatRupiah(value, figures);
-  if (metric === 'persistency') return formatPercent(value, { lossless: true }, figures);
+  if (unit === 'rp_million') return formatRupiah(value, figures);
+  if (unit === 'percent') return formatPercent(value, { lossless: true }, figures);
   return formatNumber(value, { maxDecimals: 4 }, figures);
 }
 
@@ -84,10 +86,11 @@ export function CorrectionPanel({
   const t = useMessages(dataUploadMessages);
   const language = useLanguage();
   const figures = useFigureLanguage();
-  const { metric, cadence, current, name } = editing;
-  const money = MONEY_METRICS.includes(metric);
-  const percent = metric === 'persistency';
-  const label = figureLabel(metric, cadence, language);
+  const { column, ytd, current, name } = editing;
+  const { unit } = column;
+  const money = isMoney(unit);
+  const percent = unit === 'percent';
+  const label = figureLabel(column, ytd, language);
   const headingId = useId();
   const figureId = useId();
   const reasonId = useId();
@@ -118,7 +121,7 @@ export function CorrectionPanel({
     setRefused(null);
     try {
       onDone(await correctCell({
-        month, membershipId: editing.membershipId, metric, cadence, value, revision, reason,
+        month, membershipId: editing.membershipId, kode: column.kode, ytd, value, revision, reason,
       }));
     } catch (err) {
       const shown = toDisplayError(err);
@@ -148,7 +151,7 @@ export function CorrectionPanel({
     <Card className="mb-5" role="region" aria-labelledby={headingId}>
       <h2 id={headingId} className="text-md font-semibold text-navy">{t.correctHeading({ label, name })}</h2>
       <p className="mt-1 text-sm text-muted">
-        {editing.agentCode} · {monthLabel(month, figures)} · {t.now({ figure: showFigure(metric, current.value, figures, language) })}
+        {editing.agentCode} · {monthLabel(month, figures)} · {t.now({ figure: showFigure(unit, current.value, figures, language) })}
         {current.provenance ? t.sourceNote({
           source: t.source[current.provenance],
           by: current.correction?.by ?? null,

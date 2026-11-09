@@ -7,11 +7,11 @@ import { KEPT_ELSEWHERE, KEPT_ENGLISH, SAME_IN_INDONESIAN } from './glossary';
 import { kept } from './kept';
 
 /**
- * **P18.98-T1 AC-1: a typed catalogue of our own.** English is the source of a module's keys; its Indonesian is typed
+ * **P18.10-T1 AC-1: a typed catalogue of our own.** English is the source of a module's keys; its Indonesian is typed
  * against them. These are `tsc`'s to fail — each `@ts-expect-error` below is a mistake the type must refuse, and
  * `pnpm typecheck` fails the day one of them stops being refused.
  */
-describe('P18.98-T1 AC-1 the Indonesian is typed against the English', () => {
+describe('P18.10-T1 AC-1 the Indonesian is typed against the English', () => {
   const en = {
     save: 'Save',
     saved: ({ n }: { n: number }) => (n === 1 ? '1 lead saved' : `${n} leads saved`),
@@ -134,7 +134,7 @@ function untranslated(en: MessageTree, id: MessageTree, path = ''): string[] {
  * `tsc` holds an area's Indonesian to its English where the Indonesian is annotated; this holds every area, however
  * it was written, and catches what types cannot: an Indonesian left in English.
  */
-describe('P18.98-T1 the catalogue’s areas', () => {
+describe('P18.10-T1 the catalogue’s areas', () => {
   it('finds the areas at all, so a silent zero cannot pass', () => {
     expect(AREA_FILES).toContain('shell.ts');
     expect(AREAS.map(([name]) => name)).toContain('shell.ts › shellMessages');
@@ -165,19 +165,21 @@ describe('P18.98-T1 the catalogue’s areas', () => {
  * **AC-6: OD-39's held-word specs read both languages' messages.** A module's spec reads its area with
  * `catalogueTexts` (`@test/copy-scan`) and holds each language to its own words — shown here on the first area.
  */
-describe('P18.98-T1 AC-6 an area’s words, language by language', () => {
+describe('P18.10-T1 AC-6 an area’s words, language by language', () => {
   const texts = catalogueTexts('shell.ts', readFileSync(join(DIR, 'shell.ts'), 'utf8'));
   const words = (language: 'en' | 'id') => texts[language].map((t) => t.text);
 
   it('reads the English and the Indonesian apart, a sentence with its value left as {…}', () => {
-    expect(words('en')).toEqual(expect.arrayContaining(['Sign out', 'Open menu', '{…}, {…} unread']));
-    expect(words('id')).toEqual(expect.arrayContaining(['Keluar', 'Buka menu', '{…}, {…} belum dibaca']));
+    // *Open menu* / *Buka menu* were the examples until P19.2-T1 removed the consoles' ☰; *Collapse the sidebar* is one.
+    expect(words('en')).toEqual(expect.arrayContaining(['Sign out', 'Collapse the sidebar', '{…}, {…} unread']));
+    expect(words('id')).toEqual(expect.arrayContaining(['Keluar', 'Ciutkan menu samping', '{…}, {…} belum dibaca']));
     expect(words('en')).not.toContain('Keluar');
     expect(words('id')).not.toContain('Sign out');
   });
 
   it('reads a kept term written into an Indonesian sentence as its own text', () => {
-    expect(words('id')).toEqual(expect.arrayContaining(['Buka tampilan {…}', 'Agent']));
+    // *Buka tampilan Agent* was the example until P19.2-T1 removed it (UI-147, UI-169 item 3); *Belum punya KPM* is one.
+    expect(words('id')).toEqual(expect.arrayContaining(['Belum punya {…}', 'KPM']));
   });
 
   it('holds each language to its own words, as a module’s held-word spec does (OD-39: KPM is ID mode’s word, §B.9)', () => {

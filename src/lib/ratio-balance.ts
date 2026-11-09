@@ -34,7 +34,7 @@ export function balanceBand(benchmark: number): { low: number; high: number } {
 /**
  * The band's edges as written, **as the benchmark was typed** (ADR-0174 §2): `{ low: '35%', high: '65%' }`, `37,5%`
  * for a ±25 band, `37,25%` for ±25.5 — the places the benchmark gives them, and no *,0*. In the reader's `language`
- * (P18.98-T3): `37.5%` in English.
+ * (P18.10-T3): `37.5%` in English.
  */
 export function formatBalanceBand(benchmark: number, language: Language = DEFAULT_LANGUAGE): { low: string; high: string } {
   const { low, high } = balanceBand(benchmark);
@@ -54,7 +54,7 @@ export function formatBalanceBand(benchmark: number, language: Language = DEFAUL
  * was added here where the rounding met the band's edge, and a side with any activity never read 0; UI-080's
  * *0,4% → 0%* settles both.
  *
- * The figures are the same in both languages (P18.98-T3 AC-2): `65% · 35%` in English too.
+ * The figures are the same in both languages (P18.10-T3 AC-2): `65% · 35%` in English too.
  */
 export function formatBalanceSplit(
   share: number, _benchmark: number, _status: Status, language: Language = DEFAULT_LANGUAGE,
@@ -67,7 +67,7 @@ export function formatBalanceSplit(
 }
 
 /**
- * **What an off-balance reading tells the reader to do** (P18.95-T5 AC-6; the client's UI review, UI-030:
+ * **What an off-balance reading tells the reader to do** (P18.7-T5 AC-6; the client's UI review, UI-030:
  * *67% Selling · 33% Recruitment · Below benchmark* said that something was wrong and not what): the side
  * there is too much of, and the band to come back into — *Too much selling — aim for 35%–65%*.
  *
@@ -77,7 +77,7 @@ export function formatBalanceSplit(
  *   says *aim for 40%–60%*. Nothing here is a literal (invariant §7).
  * - **The side is named as the track's ends are** (`balanceSideNames`), lower-cased in the sentence where it is
  *   a section's name — *too much selling* — and as it is where it is *Side A* or *Side B*. In Indonesian a section's
- *   name is written as the office typed it (P18.98-T4; ADR-0179 §5).
+ *   name is written as the office typed it (P18.10-T4; ADR-0179 §5).
  * - **Its words are the catalogue's** (`messages/ratio-words.ts`), in `words`' language — English when none is passed —
  *   and the band's figures in `language`'s.
  */
@@ -113,7 +113,7 @@ export function balanceAdvice(
  * both ends, and *40% Selling · 60% Selling* says nothing. A snapshot with no `sides` at all is the
  * caller's to handle — it never held names, and inventing them would be today's words on a past record.
  *
- * *Side A* and *Side B* are the catalogue's, in `words`' language (P18.98-T4), English when none is passed; a section's
+ * *Side A* and *Side B* are the catalogue's, in `words`' language (P18.10-T4), English when none is passed; a section's
  * name is the office's, as typed.
  */
 export function balanceSideNames(

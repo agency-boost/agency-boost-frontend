@@ -12,7 +12,7 @@ import { formatCalendarDay, formatCalendarDayLong, formatShortDay } from '@/lib/
 import { formatRupiahCompact } from '@/lib/goals';
 
 /*
- * **The session's paper, in a module of its own** (P18.99-T16, the bundle): *Download as PDF* (`coaching-print.tsx`)
+ * **The session's paper, in a module of its own** (P18.11-T16, the bundle): *Download as PDF* (`coaching-print.tsx`)
  * fetches it with the print's read, so a screen that only offers the button does not carry the paper in its first load.
  */
 
@@ -35,11 +35,11 @@ export function SessionPrintView({ print, showCoach }: { print: SessionPrint; sh
   const figures = useFigureLanguage();
   const language = useLanguage();
   const { agreement, goal, print: t } = useMessages(coachingSessionMessages);
-  // The paper's figures in the reader's language, as the screen beside it writes them (P18.98-T3).
+  // The paper's figures in the reader's language, as the screen beside it writes them (P18.10-T3).
   const money = (minor: number) => formatRupiahCompact(minor, {}, figures);
   const day = (date: string) => formatShortDay(date, {}, figures);
   const meta = [formatCalendarDayLong(print.date, figures), ...(showCoach ? [t.coachedBy({ name: print.coach.name })] : []), t.finalized];
-  const h2 = 'mt-4 text-lg font-bold text-amber-ink';
+  const h2 = 'mt-4 text-lg font-bold text-primary-ink';
   const line = 'text-md text-navy';
   const actionItems = [...print.actionItems].sort(byDueDate);
   return (

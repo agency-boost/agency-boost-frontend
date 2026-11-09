@@ -62,10 +62,10 @@ afterEach(() => {
 });
 
 /**
- * **P18.98-T7 AC-2: in ID mode every kept-English term carries `lang="en"`** (WCAG 3.1.2; `kept-lang.ts`). The app's
+ * **P18.10-T7 AC-2: in ID mode every kept-English term carries `lang="en"`** (WCAG 3.1.2; `kept-lang.ts`). The app's
  * provider, live, with nothing chosen: Indonesian, as the product opens.
  */
-describe('P18.98-T7 AC-2 kept terms say they are English', () => {
+describe('P18.10-T7 AC-2 kept terms say they are English', () => {
   it('marks a kept term inside an Indonesian sentence, and only the term', async () => {
     renderLive();
     const sentence = screen.getByTestId('sentence');

@@ -195,7 +195,7 @@ function Item({
           aria-label={item.text}
           checked={done}
           onChange={(e) => onTick(e.target.checked)}
-          className="mt-[5px] h-[15px] w-[15px] shrink-0 accent-amber"
+          className="mt-[5px] h-[15px] w-[15px] shrink-0 accent-primary"
         />
       )}
       <div className="min-w-0 flex-1">
@@ -213,7 +213,7 @@ function Item({
           <TextInput
             density="cell"
             aria-label={t.agendaPic({ section: sectionName, n })}
-            // P18.97-T2 AC-5 (I-500; the client's UI-015, every PIC *—*): an empty PIC prompts its editor, and saves
+            // P18.9-T2 AC-5 (I-500; the client's UI-015, every PIC *—*): an empty PIC prompts its editor, and saves
             // nothing — a placeholder is no value. Anybody else reads *—*, above.
             placeholder={t.addPic}
             value={pic.value}

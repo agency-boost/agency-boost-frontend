@@ -7,11 +7,11 @@ import { recruitmentPlanMessages } from '@/i18n/messages/recruitment-plan';
 import { OWN_COPY, PROTOTYPE_COPY } from './recruitment';
 
 /**
- * **P18.98-T4, Recruitment's words in both languages** (field selling): `lib/recruitment.ts`' copy objects are the
+ * **P18.10-T4, Recruitment's words in both languages** (field selling): `lib/recruitment.ts`' copy objects are the
  * catalogue's English, so the English reads as before (`recruitment.spec.ts`), and the area holds OD-39's six words and
  * *kantor* to each language. The playbook's words are the company's, never a message.
  */
-describe('P18.98-T4 Recruitment’s words, language by language', () => {
+describe('P18.10-T4 Recruitment’s words, language by language', () => {
   it('AC-1 the English is the source, unchanged: the views the specs read are the catalogue’s English', () => {
     expect(PROTOTYPE_COPY.title).toBe(recruitmentPlanMessages.en.title);
     expect(PROTOTYPE_COPY.goodFitFor).toBe(planMessages.en.goodFitFor);
@@ -26,7 +26,7 @@ describe('P18.98-T4 Recruitment’s words, language by language', () => {
     expect([id.stepPlan, id.build, id.toPitchMaterials]).toEqual(['Rencana recruitment', 'Susun rencana recruitment', 'Buka Pitch Materials']);
   });
 
-  describe('OD-39’s six words, held in each language’s messages (ADR-0084’s rule; P18.98-T1 AC-6)', () => {
+  describe('OD-39’s six words, held in each language’s messages (ADR-0084’s rule; P18.10-T1 AC-6)', () => {
     const SIX_WORDS = /\boffice\b|\bKPM\b|reports? to|tagged to|untagged|unassigned/i;
     const AREA = 'i18n/messages/recruitment-plan.ts';
     const texts = catalogueTexts(AREA, readFileSync(join(SRC, AREA), 'utf8'));

@@ -2,7 +2,7 @@ import { defineMessages, type MessagesOf } from '@/i18n/catalogue';
 import { kept } from '@/i18n/kept';
 
 /**
- * **The membership's own words** (`lib/org.ts`; P18.98-T4, people and forum; `functional/org-hierarchy.md`): a member's
+ * **The membership's own words** (`lib/org.ts`; P18.10-T4, people and forum; `functional/org-hierarchy.md`): a member's
  * status as its pill says it, and what a role change means, the prototype's sentence (`Overall.html:9043-9045`).
  * Read by the office's *All members* and a member's page, and by a leader's *Add New Agents*, each in its reader's
  * language (`roleChangeExplanation(…, language)`).

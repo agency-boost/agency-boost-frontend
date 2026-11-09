@@ -26,7 +26,7 @@ export interface TreeContext {
 }
 
 /**
- * **The tree** (`KPM_Owner.html:4017-4118`, `:3725-3750`, `:3906-3930`, CSS `:142-171`; P18.6-T1 AC-8): one
+ * **The tree** (`KPM_Owner.html:4017-4118`, `:3725-3750`, `:3906-3930`, CSS `:142-171`; P18.3-T1 AC-8): one
  * section per AB's agency, A to Z as the server sends them, each headed by the AB's name and *"{n} / {m} done
  * overall"*; inside it a card per unit — the AB's own first, then each AAB's — headed *"{name}'s Unit"* with its
  * tag and *"{done} / {total} done"*; each card's rows the head's own first, tagged *Personal*, then the rest in
@@ -34,17 +34,30 @@ export interface TreeContext {
  *
  * Each section is a `section` named by its heading and each card's title a heading under it, so a screen reader
  * can move between agencies and units; every name is a link (D-drill, `PersonLink`). Its words are the reader's
- * (P18.98-T4; `kpmComplianceMessages`), its days the figures' language; every name is as the office has it.
+ * (P18.10-T4; `kpmComplianceMessages`), its days the figures' language; every name is as the office has it.
  */
-export function ComplianceTree({ sections, direction, context }: {
+export function ComplianceTree({ sections, direction, context, open, onToggle }: {
   sections: readonly ComplianceSection[];
   direction: SortDirection;
   context: TreeContext;
+  /**
+   * **The AB rows open** (UI-098; P19.3-T3 AC-14): each AB is a collapsed row — its name, *"x / y selesai"* and a bar —
+   * opening to its units side by side. The screen holds which are open, so a re-read and *Back* keep them.
+   */
+  open?: ReadonlySet<string>;
+  onToggle?: (membershipId: string) => void;
 }) {
   return (
     <div>
       {sections.map((section) => (
-        <AgencySection key={section.head.membershipId} section={section} direction={direction} context={context} />
+        <AgencySection
+          key={section.head.membershipId}
+          section={section}
+          direction={direction}
+          context={context}
+          open={open?.has(section.head.membershipId) ?? true}
+          onToggle={onToggle}
+        />
       ))}
     </div>
   );
@@ -69,22 +82,51 @@ function Total({ done, of, verb, className }: { done: number; of: number; verb: 
   );
 }
 
-function AgencySection({ section, direction, context }: { section: ComplianceSection; direction: SortDirection; context: TreeContext }) {
+function AgencySection({ section, direction, context, open, onToggle }: {
+  section: ComplianceSection;
+  direction: SortDirection;
+  context: TreeContext;
+  open: boolean;
+  onToggle?: (membershipId: string) => void;
+}) {
   const t = useMessages(kpmComplianceMessages);
   const headingId = useId();
+  const share = section.of === 0 ? null : Math.round((section.done / section.of) * 100);
   return (
-    <section aria-labelledby={headingId} className="mb-6 last:mb-0" data-section={section.head.membershipId}>
-      {/* `.ab-section-header` (`:144`): the name, its AB tag, the agency's total, on the navy rule. */}
-      <div className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 border-b-2 border-navy pb-[9px]">
-        <h3 id={headingId} className="min-w-0 break-words font-display text-md font-bold text-navy">
-          <PersonLink person={section.head} />
-        </h3>
-        <RoleTag kind="AB">{t.tagAb}</RoleTag>
-        <Total done={section.done} of={section.of} verb={t.verbOverall({ kind: context.kind })} />
-      </div>
-      {section.units.map((unit) => (
-        <UnitCard key={unit.head.membershipId} unit={unit} direction={direction} context={context} />
-      ))}
+    <section aria-labelledby={headingId} className="mb-2.5 last:mb-0" data-section={section.head.membershipId}>
+      {/*
+        * A collapsed 56px row until opened (UI-098), the native disclosure: `<summary>` is the row's control — so the
+        * name in it is words, not a link (a control inside a control); the AB's own card below links to their Unit
+        * Dashboard (UI-095). Its total and bar beside it. The open state is the screen's.
+        */}
+      <details
+        open={open}
+        onToggle={(e) => {
+          const now = (e.currentTarget as HTMLDetailsElement).open;
+          if (now !== open) onToggle?.(section.head.membershipId);
+        }}
+        className="group rounded-lg bg-card"
+      >
+        <summary className="flex min-h-14 cursor-pointer list-none flex-wrap items-center gap-x-2 gap-y-1 rounded-lg px-4 py-2 [&::-webkit-details-marker]:hidden">
+          <h3 id={headingId} className="min-w-0 break-words font-display text-md font-bold text-navy">{section.head.name}</h3>
+          <RoleTag kind="AB">{t.tagAb}</RoleTag>
+          {share !== null && (
+            <span aria-hidden="true" className="ml-auto block h-1.5 w-16 overflow-hidden rounded-sm bg-base" data-section-bar="">
+              <span className="block h-full bg-secondary" style={{ width: `${share}%` }} />
+            </span>
+          )}
+          <Total done={section.done} of={section.of} verb={t.verbOverall({ kind: context.kind })} className={share !== null ? 'ml-0' : undefined} />
+          <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-signal-grey group-open:rotate-180" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="m6 9 6 6 6-6" />
+          </svg>
+        </summary>
+        {/* Opened, its units side by side from 1024px (the desktop mockup's three columns). */}
+        <div className="px-1 pb-2.5 lg:grid lg:grid-cols-3 lg:gap-2.5 lg:px-2.5">
+          {section.units.map((unit) => (
+            <UnitCard key={unit.head.membershipId} unit={unit} direction={direction} context={context} />
+          ))}
+        </div>
+      </details>
     </section>
   );
 }
@@ -97,7 +139,7 @@ function UnitCard({ unit, direction, context }: { unit: ComplianceUnit; directio
     // No `overflow-hidden` (the prototype's `.unit-card`, `:153`): it would clip a tooltip's bubble opened from a cell —
     // the override's marker, an expired activation's end — so the header rounds its own top corners instead, and no
     // row below it paints a background that could cross the card's rounded bottom.
-    <div className="mb-2.5 ml-4 rounded-[10px] border border-hairline bg-card last:mb-0" data-unit={unit.head.membershipId}>
+    <div className="mb-2.5 ml-4 rounded-[10px] border border-hairline bg-card last:mb-0 lg:mb-0 lg:ml-0" data-unit={unit.head.membershipId}>
       {/* `.unit-card-header` (`:155-158`). */}
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-t-[9px] border-b border-hairline bg-base px-4 py-2.5">
         {/* The link holds *'s Unit* too, so its new-tab hint follows the whole title rather than splitting it. */}

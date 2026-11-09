@@ -28,7 +28,7 @@ import { formatPercent } from '@/lib/format';
  * **Every figure here is served** (P13-T2 AC-5): the day, the window, the counts, the percentage and
  * each aspect's verdict are the read's, printed, never worked out.
  *
- * **Their words are the catalogue's** (`i18n/messages/activation.ts`; P18.98-T4), in the reader's language, and the
+ * **Their words are the catalogue's** (`i18n/messages/activation.ts`; P18.10-T4), in the reader's language, and the
  * percentage is written in the figures' (`useFigureLanguage()`).
  */
 
@@ -37,7 +37,7 @@ export function BoltBadge() {
   return (
     <span
       aria-hidden="true"
-      className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-[1.5px] border-navy text-navy"
+      className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-[1.5px] border-secondary text-navy"
     >
       <NavIcon name="bolt" className="h-3.5 w-3.5" />
     </span>
@@ -60,7 +60,7 @@ const PILL_TONE = { done: 'success', in_progress: 'watch', not_started: 'alert' 
 /** `.aspect-progress-table tr.status-*` (`:1516-1517`): the row's tint. */
 const ROW_TINT: Record<AspectStatus, string | undefined> = {
   done: 'bg-success/[0.07]',
-  in_progress: 'bg-amber/[0.07]',
+  in_progress: 'bg-primary/[0.07]',
   not_started: undefined,
 };
 
@@ -129,7 +129,7 @@ export function ProgressSummary({
             aria-valuetext={pctComplete}
             className="h-2 overflow-hidden rounded-md border border-hairline bg-base"
           >
-            <div className="h-full rounded-md bg-gradient-to-r from-amber to-amber-dark" style={{ width: `${width}%` }} />
+            <div className="h-full rounded-md bg-gradient-to-r from-primary to-primary-hover" style={{ width: `${width}%` }} />
           </div>
           <p className="mt-1.5 text-xs font-bold text-navy">{pctComplete}</p>
         </div>
@@ -220,13 +220,13 @@ export function AutoBadge({ link }: { link: ActivationItemLink }) {
       tip={words.tip}
       align="fit"
       className="-my-1"
-      face="h-auto w-auto rounded-pill bg-navy/[0.06] px-[7px] py-0.5 text-2xs font-bold uppercase tracking-wide text-muted hover:bg-navy/[0.1]"
+      face="h-auto w-auto rounded-pill bg-secondary/[0.06] px-[7px] py-0.5 text-2xs font-bold uppercase tracking-wide text-muted hover:bg-secondary/[0.1]"
     />
   );
 }
 
 /**
- * *Ticked by hand* (D-orphan, P18.5-T3 AC-4): a linked item whose link does not complete it now — its training
+ * *Ticked by hand* (D-orphan, P18.2-T3 AC-4): a linked item whose link does not complete it now — its training
  * module is not offered — so the hire or a leader ticks it. The office's Settings badge, its words and its
  * tooltip (`byHandBadge`), in this row's pill.
  */
@@ -252,7 +252,7 @@ export function GoToLink({ link }: { link: ActivationItemLink }) {
   return (
     <Link
       href={link.route}
-      className="inline-flex items-center whitespace-nowrap rounded-pill border border-hairline px-[11px] py-[5px] text-sm font-semibold text-navy-soft hover:bg-navy-soft/[0.08]"
+      className="inline-flex items-center whitespace-nowrap rounded-pill border border-hairline px-[11px] py-[5px] text-sm font-semibold text-navy-soft hover:bg-secondary-hover/[0.08]"
     >
       {t.goTo({ label: link.label })}
     </Link>
@@ -284,7 +284,7 @@ export const DATE_SETTLE_MS = 600;
 
 /**
  * A date written as the prototype writes its inputs, **on change, with no save button** (`:6662-6668`), through the
- * shared {@link DateField} (P18.96-T2 AC-4): the date is shown as the app writes it, and the device's picker chooses
+ * shared {@link DateField} (P18.8-T2 AC-4): the date is shown as the app writes it, and the device's picker chooses
  * it.
  *
  * A date can still be typed a digit at a time where a browser lets the field take keys, and every partial value but

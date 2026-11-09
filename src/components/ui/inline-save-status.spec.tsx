@@ -49,19 +49,19 @@ const leave = (text: string) => {
 };
 
 /**
- * **A field that saves itself says so** (P18.95-T1 AC-5, AC-12; ADR-0167 §5; the client's UI review of 2026-10-26,
+ * **A field that saves itself says so** (P18.7-T1 AC-5, AC-12; ADR-0167 §5; the client's UI review of 2026-10-26,
  * UI-007): idle, *Saving…*, *Saved ✓* for two seconds, *Couldn't save — retry*.
  */
-describe('the inline save confirmation (P18.95-T1 AC-5)', () => {
+describe('the inline save confirmation (P18.7-T1 AC-5)', () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
 
-  it('P18.95-T1 AC-5: draws nothing, and no live region, while the field is idle', () => {
+  it('P18.7-T1 AC-5: draws nothing, and no live region, while the field is idle', () => {
     render(<Remark write={controlled()} />);
     expect(status()).toBeNull();
   });
 
-  it('P18.95-T1 AC-5: says Saving… as the field is left, then Saved ✓ for two seconds, then nothing', async () => {
+  it('P18.7-T1 AC-5: says Saving… as the field is left, then Saved ✓ for two seconds, then nothing', async () => {
     const write = controlled();
     render(<Remark write={write} />);
 
@@ -82,7 +82,7 @@ describe('the inline save confirmation (P18.95-T1 AC-5)', () => {
     expect(INLINE_SAVED_MS).toBe(2000);
   });
 
-  it('P18.95-T1 AC-5: says Couldn’t save — retry on a failure, which stays, and whose retry sends the same value again', async () => {
+  it('P18.7-T1 AC-5: says Couldn’t save — retry on a failure, which stays, and whose retry sends the same value again', async () => {
     const write = controlled();
     render(<Remark write={write} />);
 
@@ -106,7 +106,7 @@ describe('the inline save confirmation (P18.95-T1 AC-5)', () => {
     expect(status()).toHaveTextContent('Saved ✓');
   });
 
-  it('P18.95-T1 AC-5: a thrown write is a failure like a refused one', async () => {
+  it('P18.7-T1 AC-5: a thrown write is a failure like a refused one', async () => {
     const write = controlled();
     render(<Remark write={write} />);
     leave('x');
@@ -114,7 +114,7 @@ describe('the inline save confirmation (P18.95-T1 AC-5)', () => {
     expect(screen.getByRole('button', { name: /^Couldn't save — retry/ })).toBeInTheDocument();
   });
 
-  it('P18.95-T1 AC-5: goes back to nothing when there is nothing left to retry', async () => {
+  it('P18.7-T1 AC-5: goes back to nothing when there is nothing left to retry', async () => {
     const write = controlled();
     render(<Remark write={write} />);
     leave('x');
@@ -122,7 +122,7 @@ describe('the inline save confirmation (P18.95-T1 AC-5)', () => {
     expect(status()).toBeNull();
   });
 
-  it('P18.95-T1 AC-5: shows the latest save of a field, and drops an earlier one’s late answer', async () => {
+  it('P18.7-T1 AC-5: shows the latest save of a field, and drops an earlier one’s late answer', async () => {
     const answers: ((outcome: InlineSaveOutcome) => void)[] = [];
     function Twice() {
       const inline = useInlineSave();
@@ -143,7 +143,7 @@ describe('the inline save confirmation (P18.95-T1 AC-5)', () => {
     expect(status()).toHaveTextContent('Saved ✓');
   });
 
-  it('P18.95-T1 AC-5: a cleared field drops its status and an answer still on its way', async () => {
+  it('P18.7-T1 AC-5: a cleared field drops its status and an answer still on its way', async () => {
     let answer!: (outcome: InlineSaveOutcome) => void;
     function Cleared() {
       const inline = useInlineSave();
@@ -163,13 +163,13 @@ describe('the inline save confirmation (P18.95-T1 AC-5)', () => {
     expect(status()).toBeNull();
   });
 
-  it('P18.95-T1 AC-5: a failure with no retry says Couldn’t save, with nothing to press', () => {
+  it('P18.7-T1 AC-5: a failure with no retry says Couldn’t save, with nothing to press', () => {
     render(<InlineSaveStatus state="failed" />);
     expect(status()).toHaveTextContent("Couldn't save");
     expect(screen.queryByRole('button')).toBeNull();
   });
 
-  it('P18.95-T1 AC-5: mounts its polite region before its words, so the first state is announced', () => {
+  it('P18.7-T1 AC-5: mounts its polite region before its words, so the first state is announced', () => {
     const { rerender } = render(<InlineSaveStatus state="idle" />);
     rerender(<InlineSaveStatus state="saving" />);
     // `render` flushes the effect that puts the words in; the region and its words are one node.
@@ -177,7 +177,7 @@ describe('the inline save confirmation (P18.95-T1 AC-5)', () => {
     expect(status()!.getAttribute('role')).toBe('status');
   });
 
-  it('P18.95-T1 AC-5: stops its clock when the screen goes', async () => {
+  it('P18.7-T1 AC-5: stops its clock when the screen goes', async () => {
     const write = controlled();
     const { unmount } = render(<Remark write={write} />);
     leave('x');
@@ -186,7 +186,7 @@ describe('the inline save confirmation (P18.95-T1 AC-5)', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it('P18.95-T1 AC-5: passes axe in each state', async () => {
+  it('P18.7-T1 AC-5: passes axe in each state', async () => {
     vi.useRealTimers();
     for (const state of ['saving', 'saved', 'failed'] as const) {
       const { container, unmount } = render(
@@ -202,11 +202,11 @@ describe('the inline save confirmation (P18.95-T1 AC-5)', () => {
 });
 
 /**
- * **P18.98-T2: its words are the catalogue's** (`messages/inline-save.ts`, the approved glossary's §B.2), moved with
+ * **P18.10-T2: its words are the catalogue's** (`messages/inline-save.ts`, the approved glossary's §B.2), moved with
  * *Language* on *Your account*, which saves itself this way and changes the language as it does. English is unchanged;
  * in Indonesian, *Menyimpan…*, *Tersimpan ✓* and *Gagal menyimpan — coba lagi*.
  */
-describe('P18.98-T2 the inline save in each language', () => {
+describe('P18.10-T2 the inline save in each language', () => {
   it('AC-4 keeps its English as it was', () => {
     expect(INLINE_SAVE_COPY).toMatchObject({
       saving: 'Saving…', saved: 'Saved ✓', failed: "Couldn't save — retry", failedFinal: "Couldn't save",

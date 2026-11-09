@@ -43,7 +43,7 @@ export function ActivityPill({
         data-logged="true"
         aria-label={short ? t.activities({ count }) : undefined}
         className={cn(
-          'inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-pill bg-amber px-2.5 py-0.5 text-xs font-bold leading-5 text-navy',
+          'inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-pill bg-primary px-2.5 py-0.5 text-xs font-bold leading-5 text-primary-contrast',
           short && 'min-w-8',
           className,
         )}

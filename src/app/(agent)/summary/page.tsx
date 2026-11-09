@@ -47,19 +47,19 @@ import { useQuery } from '@/lib/use-query';
  * **What to do next, and how to improve** (P10-T7, ADR-0060): fixed rules over your own numbers, at most
  * four, under the prototype's *AI-powered* badge (ADR-0069, at the client's request).
  *
- * **Campaigns you're chasing** (P18.5-T7 AC-6, replacing the sign of ADR-0070): the campaigns you chase
+ * **Campaigns you're chasing** (P18.2-T7 AC-6, replacing the sign of ADR-0070): the campaigns you chase
  * from the Campaign list that have not ended, each opening its dialog in place. Its own read, failing in
  * its own card.
  *
  * **The cards are `SummaryCards`** (P11-T7): the same cards draw a coachee's *Personal Summary* tab in
  * that person's pronoun. This page is the reader's own: its title, its Download, and its two reads.
  *
- * **An earlier month or year** (P18.8-T11, ADR-0161 §4): a month select under *Monthly*, a year select under
+ * **An earlier month or year** (P18.5-T11, ADR-0161 §4): a month select under *Monthly*, a year select under
  * *Yearly*, from the office's first month to this one, the choice in the address (`?month=`, `?year=`). A closed
  * period shows its final figures, with no pace sentence and no *The gap*. While the next one is read the selects
  * stay and the cards wait as a skeleton: the old month's figures under the new month's name would lie.
  *
- * **Its words are the catalogue's** (P18.98-T4; `i18n/messages/summary.tsx`): the title, kept English (§A.2),
+ * **Its words are the catalogue's** (P18.10-T4; `i18n/messages/summary.tsx`): the title, kept English (§A.2),
  * *Download*, the switch's *Monthly · Yearly* (`useSummaryViews`) and the wait, in the reader's language; the PDF's
  * month in the reader's figures'.
  *
@@ -76,7 +76,7 @@ type View = SummaryView;
  */
 /**
  * The PDF's name: the page's title and the period on it — the month on *Monthly*, the year on *Yearly*. The title is
- * kept English (§A.2), and the month is written in the reader's figures' language (P18.98-T4).
+ * kept English (§A.2), and the month is written in the reader's figures' language (P18.10-T4).
  */
 const downloadTitle = (title: string, summary: Summary, view: View, figures: Language) =>
   `${title} – ${view === 'month' ? formatMonth(summary.month, figures) : summary.year}`;
@@ -106,7 +106,8 @@ function PersonalSummary() {
   useEffect(() => restorePrintTitle, []);
   const [pulseError, setPulseError] = useState<ApiError | null>(null);
 
-  // The period's Summary: read again whenever the period changes.
+  // The period's Summary: read again whenever the period changes — and after the reader's estimate is saved (UI-157).
+  const [round, setRound] = useState(0);
   useEffect(() => {
     let live = true;
     setError(null);
@@ -116,7 +117,7 @@ function PersonalSummary() {
     return () => { live = false; };
     // `key` is the period, said once.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key]);
+  }, [key, round]);
 
   useEffect(() => {
     let live = true;
@@ -138,7 +139,7 @@ function PersonalSummary() {
       control={null}
       actions={download && (
         // From 1024px, today's place — the title row's end — as a secondary, outlined button (UI-051), its glyph a line icon (UI-057).
-        <Button variant="secondary" onClick={download} className="gap-1.5 rounded-pill border-[1.5px] border-navy print:hidden">
+        <Button variant="secondary" onClick={download} className="gap-1.5 rounded-pill border-[1.5px] border-secondary print:hidden">
           <LineIcon name="download" className="h-[18px] w-[18px]" />{t.download}
         </Button>
       )}
@@ -169,7 +170,15 @@ function PersonalSummary() {
               )}
             />
             {summary
-              ? <SummaryCards summary={summary} view={view} pulse={{ ratios: pulse, error: pulseError }} />
+              ? (
+                <SummaryCards
+                  summary={summary}
+                  view={view}
+                  pulse={{ ratios: pulse, error: pulseError }}
+                  // P19.1-T4 (UI-157 item 4): the card's estimate, saved or deleted, is read back with the rest.
+                  onChanged={() => setRound((n) => n + 1)}
+                />
+              )
               : !error && <SkeletonCards count={2} label={t.loading} />}
           </>
         )}

@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { makeMe, renderLive, renderWithSession, resetLanguage, stubFetch } from '@test/harness';
-import { FieldAvatar } from '@/components/field-nav';
+import { FieldAvatar } from '@/components/field-chrome';
 import ProfilePage from './page';
 
 vi.mock('next/navigation', () => ({

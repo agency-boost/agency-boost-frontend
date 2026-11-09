@@ -47,20 +47,12 @@ export function ImpersonationBanner() {
       <span>
         {t.actingAs({ name: displayName(me.user) })}{' '}
         {/*
-          * The half that matters most to the operator (P4-T10, §3.13). Discovering the
-          * session is read-only from a 403 halfway through a fix is the worst moment to
-          * find out — and a session that *can* write is the one worth saying so about
-          * loudly, because a second person approved it and somebody is accountable.
+          * The half that matters most to the operator (P4-T10, §3.13): discovering the session is
+          * read-only from a 403 halfway through is the worst moment to find out. **Every session only
+          * looks** (P19.4-T2; ADR-0206), so there is one sentence — the setup session's and the elevated
+          * one's are retired with them.
           */}
-        {/*
-          * And a setup session says what it may change (ADR-0162): it is read-only for everything
-          * else, so neither of the other two sentences is true of it.
-          */}
-        {!me.impersonationReadOnly
-          ? t.canWrite
-          : me.impersonationPurpose === 'setup'
-            ? t.setup
-            : t.lookOnly}{' '}
+        {t.lookOnly}{' '}
         {t.recorded}
       </span>
       <button

@@ -19,7 +19,7 @@ import type { ActivityRatio, RatioTerm } from '@/lib/activity';
  * O-3 *rows*): *Ratio · 30 hari terakhir*, the Selling vs Recruitment bar, then each ratio as a row — its name, *Target
  * X* under it, its value on the right, green when it meets its benchmark and red when not, a whole percentage (UI-080).
  * **Every ratio always shows** (the owner): a ratio with too little data reads *–*, where until 2026-10-30 it was left
- * off the page (P18.95-T5 AC-6, reversed). No per-ratio cards, pills or benchmark sentence. **What a ratio is sits
+ * off the page (P18.7-T5 AC-6, reversed). No per-ratio cards, pills or benchmark sentence. **What a ratio is sits
  * behind a tap on its row**: what it measures, where the office says, and its formula in the office's own words.
  *
  * **A ratio that is not a question about your rung is not here at all** (ADR-0020) — the server leaves
@@ -36,7 +36,7 @@ export default function ActivityRatioPage() {
   );
 }
 
-/** The module's words, in the reader's language (`messages/activity.tsx`; P18.98-T4). */
+/** The module's words, in the reader's language (`messages/activity.tsx`; P18.10-T4). */
 type ActivityWords = MessagesOf<typeof activityMessages.en>;
 
 /**

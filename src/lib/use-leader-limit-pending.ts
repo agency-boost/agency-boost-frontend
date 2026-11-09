@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { LEADER_LIMIT_QUEUE_CHANGED, readLeaderLimitQueue } from './leader-limit-requests';
+import { LEADER_LIMIT_QUEUE_CHANGED, readLeaderLimitQueue } from './leader-limit-queue';
 import { useSession } from './session';
 
 /**

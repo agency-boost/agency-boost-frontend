@@ -18,10 +18,10 @@ import {
 import { usePhone } from '@/lib/use-phone';
 
 /**
- * **Waiting to join** on `/new-hires` (P18.96-T3 AC-2, AC-3; ADR-0170 §2, §4; **UI V1, UI-024**, D-24): the people a
+ * **Waiting to join** on `/new-hires` (P18.8-T3 AC-2, AC-3; ADR-0170 §2, §4; **UI V1, UI-024**, D-24): the people a
  * leader has added who are not in the unit yet — each invite, *Diundang, menunggu bergabung* or *Undangan kedaluwarsa*,
  * and each transfer the leader asked for, *Pemindahan diajukan*, which the office decides — by the name and code the
- * leader typed, and nothing of the unit the person is in now, which the server does not send (the P18.96 exit review,
+ * leader typed, and nothing of the unit the person is in now, which the server does not send (the P18.8 exit review,
  * M3). Nothing here counts anywhere: an invite is no membership, and a transfer moves nobody until it is approved.
  *
  * **A list, not a card** (UI-024): behind the *Menunggu bergabung n ›* tile in a bottom sheet below 768px, in the
@@ -29,7 +29,7 @@ import { usePhone } from '@/lib/use-phone';
  * asked about first (`useDestructiveAction`, D-06). *Kirim ulang* gives a new link and 14 days more and shows the share
  * step again — the link is never kept, so it cannot be shown otherwise.
  *
- * **Its words are the catalogue's** (`new-hires.ts`' `waiting`; P18.98-T4), a join date written in the figures' language.
+ * **Its words are the catalogue's** (`new-hires.ts`' `waiting`; P18.10-T4), a join date written in the figures' language.
  */
 export function WaitingToJoin({
   invites, transfers, reader, onInvites, onToast,

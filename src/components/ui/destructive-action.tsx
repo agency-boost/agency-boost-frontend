@@ -30,7 +30,7 @@ export function useDestructiveAction({
   confirmLabel: string;
   /**
    * What the button that backs out says, where the dialog's own *Cancel* would read like the action — *Batalkan
-   * undangan* beside *Batal* (New Hires' *Jangan batalkan*; added by Phase 18.99 T6). The dialog's default when absent.
+   * undangan* beside *Batal* (New Hires' *Jangan batalkan*; added by Phase 18.11 T6). The dialog's default when absent.
    */
   cancelLabel?: string;
   onConfirm: () => void;

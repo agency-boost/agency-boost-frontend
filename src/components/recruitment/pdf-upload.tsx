@@ -6,13 +6,17 @@ import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
 import { recruitmentPitchMessages } from '@/i18n/messages/recruitment-pitch';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { formatNumber } from '@/lib/format';
+import { HTML_ACCEPT, HTML_MIME_TYPE, isHtmlFile } from '@/lib/html-document';
 import { formatFileSize, PDF_MAX_BYTES } from '@/lib/recruitment-pitch';
-import { signedUploadForm, type SignedUpload } from '@/lib/tenant-config';
+import { signedUploadForm, type SignedUpload } from '@/lib/signed-upload';
 
 const PDF = 'application/pdf';
 
+/** A PDF, by its type, or — where a desktop reports none — by its name. */
+const isPdfFile = (file: File) => file.type === PDF || (file.type === '' && /\.pdf$/i.test(file.name));
+
 /*
- * The control's own words (D-copy): none of OD-39's six words — the catalogue's since P18.98-T4
+ * The control's own words (D-copy): none of OD-39's six words — the catalogue's since P18.10-T4
  * (`messages/recruitment-pitch.ts`: `uploading`, `tooLarge`, `notPdf`, `sendFailed`), the sizes in the reader's figures.
  */
 
@@ -34,7 +38,9 @@ export interface PdfUploadState {
 }
 
 /**
- * One PDF, from the picker to the record that holds it: **check → sign → send → attach**.
+ * One PDF **or HTML page** (P19.6-T2, ADR-0217 §1: `DOCUMENT_MIME_TYPES`), from the picker to the record that holds it:
+ * **check → sign → send → attach**. The name stays the hook's since Phase 17; a page is sent as `text/html` and the
+ * server confirms its first bytes as it confirms a PDF's (ADR-0040).
  *
  * The same three steps the training upload takes (`module-content.tsx`): the size and the type are
  * refused here, in the reader's own words, **before anything is sent**; the API signs an upload into
@@ -67,9 +73,10 @@ export function usePdfUpload<T>({
     if (!file) return;
     setError(null);
 
-    // Some desktops report no type at all for a PDF: its name decides then, and storage still checks
+    // Some desktops report no type at all for a PDF or a page: its name decides then, and storage still checks
     // what actually arrived before anything is attached (ADR-0040).
-    if (file.type !== PDF && !(file.type === '' && /\.pdf$/i.test(file.name))) {
+    const html = isHtmlFile(file);
+    if (!html && !isPdfFile(file)) {
       setError(refusal('ASSET_TYPE_NOT_ALLOWED', t.notPdf({ name: file.name })));
       return;
     }
@@ -84,7 +91,7 @@ export function usePdfUpload<T>({
 
     setUploading(file.name);
     try {
-      const signed = await sign({ filename: file.name, mimeType: PDF, bytes: file.size });
+      const signed = await sign({ filename: file.name, mimeType: html ? HTML_MIME_TYPE : PDF, bytes: file.size });
       let sent: Response;
       try {
         sent = await fetch(signed.uploadUrl, { method: 'POST', body: signedUploadForm(signed, file) });
@@ -112,7 +119,7 @@ export function usePdfUpload<T>({
       <input
         ref={input}
         type="file"
-        accept={`${PDF},.pdf`}
+        accept={`${PDF},.pdf,${HTML_ACCEPT}`}
         hidden
         tabIndex={-1}
         data-pdf-picker=""

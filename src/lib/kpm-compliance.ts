@@ -3,11 +3,12 @@ import { messagesIn } from '@/i18n/catalogue';
 import { SOURCE_LANGUAGE, type Language } from '@/i18n/language';
 import { kpmComplianceMessages } from '@/i18n/messages/kpm-compliance';
 import { api } from './api-client';
+import type { AnalyticsGroup } from './kpm-analytics';
 import { officeDay } from './campaigns';
 import { formatShortDay } from './format';
 
 /**
- * The Owner's *Compliance, Events, and Campaigns* (Phase 18.6, P18.6-T1 and T2; `KPM_Owner.html:1262-1286`,
+ * The Owner's *Compliance, Events, and Campaigns* (Phase 18.3, P18.3-T1 and T2; `KPM_Owner.html:1262-1286`,
  * `:2912-3087`, `:3449-4118`; `docs/02-specs/functional/kpm-analytics.md`, *Compliance*): six chips, the
  * selected category's tabs or picker, and a tree of every AB's agency with a status per person — over one read,
  * `GET /kpm/analytics/compliance?category=&item=`, the selection in the address.
@@ -23,7 +24,7 @@ import { formatShortDay } from './format';
  * fields against `backend/openapi.json`: it reads an interface's body up to the first closing brace, so no
  * comment inside one may hold a brace.
  *
- * **Its words are the catalogue's** (P18.98-T4; `i18n/messages/kpm-compliance.ts`): a function that writes words takes
+ * **Its words are the catalogue's** (P18.10-T4; `i18n/messages/kpm-compliance.ts`): a function that writes words takes
  * the reader's `language`, English when passed none, and one that writes a date takes the figures' language after it
  * (`figures`; Indonesian when passed none). Its caller passes `useLanguage()` and `useFigureLanguage()`.
  */
@@ -297,12 +298,16 @@ export interface ComplianceView {
   can: ComplianceCan;
   /** UI V1 (UI-109): a bar is red below `lowBelowPct` done and green from `highFromPct` — the server's, never ours. */
   thresholds: { lowBelowPct: number; highFromPct: number };
+  /** The office's custom groups, for *Lihat untuk* (P19.3-T3 AC-15, OD-258). */
+  groups: AnalyticsGroup[];
+  /** The group the tree and the six counts are over, or `null` for the whole KPM. */
+  group: AnalyticsGroup | null;
 }
 
-/** The address's `?category=&item=`, as the read takes it. */
-export function complianceQuery(selection: ComplianceSelection): string {
+/** The address's `?category=&item=`, as the read takes it — and the custom group, `&group=`, when one is chosen. */
+export function complianceQuery(selection: ComplianceSelection, group: string | null = null): string {
   const item = selection.item && !SINGLE_ITEM.has(selection.category) ? `&item=${encodeURIComponent(selection.item)}` : '';
-  return `?category=${selection.category}${item}`;
+  return `?category=${selection.category}${item}${group ? `&group=${encodeURIComponent(group)}` : ''}`;
 }
 
 /**
@@ -311,8 +316,16 @@ export function complianceQuery(selection: ComplianceSelection): string {
  * the office does not list is 404. Appended with `+`, never interpolated: the API-consumer gate reads path
  * **literals** out of each call.
  */
-export const readCompliance = (selection: ComplianceSelection) =>
-  api<ComplianceView>('/kpm/analytics/compliance' + complianceQuery(selection));
+export const readCompliance = (selection: ComplianceSelection, group: string | null = null) =>
+  api<ComplianceView>('/kpm/analytics/compliance' + complianceQuery(selection, group));
+
+/**
+ * ***Lihat sebagai KPM*'s *Compliance*** (ADR-0207; P19.4-T3), through the Super Admin's platform read: here beside the
+ * Owner's own (the bundle, 2026-11-06; `platform-reads.ts`). The query's `?` is written literally
+ * (`check-api-consumers.py`).
+ */
+export const readComplianceAsPlatform = (kpmId: string, selection: ComplianceSelection, group: string | null) =>
+  api<ComplianceView>(`/admin/tenants/${encodeURIComponent(kpmId)}/analytics/compliance?${complianceQuery(selection, group).replace(/^\?/, '')}`);
 
 /** One value of a query parameter, as `searchParams` may hold several. */
 const one = (value: string | string[] | null | undefined) => (Array.isArray(value) ? value[0] : value) ?? null;
@@ -340,7 +353,7 @@ const arrowed = (sort: { worst: string; best: string }) => ({ worst: ['↓', sor
 
 /**
  * **The strings `KPM_Owner.html` draws, in English** (ADR-0062), its literal counts computed (contradiction 1) — the
- * catalogue's source (`i18n/messages/kpm-compliance.ts`, P18.98-T4), in the shapes this module has always handed its
+ * catalogue's source (`i18n/messages/kpm-compliance.ts`, P18.10-T4), in the shapes this module has always handed its
  * callers and its spec. **A screen reads the reader's language instead**: `useMessages(kpmComplianceMessages)`.
  *
  * `sub` is `:3457`, *"in this KPM"* on the client's list with OD-39, both counts the read's; `chips` the six

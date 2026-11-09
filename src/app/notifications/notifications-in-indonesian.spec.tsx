@@ -8,10 +8,10 @@ import { makeMe, renderInIndonesian, renderWithSession, stubFetch } from '@test/
 import NotificationsPage from './page';
 
 /**
- * **`/notifications` in Indonesian** (P18.98-T4 AC-1, AC-2, AC-4; the shared pieces): the inbox's own words — its line,
+ * **`/notifications` in Indonesian** (P18.10-T4 AC-1, AC-2, AC-4; the shared pieces): the inbox's own words — its line,
  * *Mark all read*, a row's toggle and *Unread:*, a repeated notice, the modal's *Close*, the pager, the wait and the
  * empty state — are the approved glossary's, its title kept (§A.2), and **a notice's own words are the API's**, shown
- * as they come (P18.98-T5 AC-4). English is every other spec's, unchanged.
+ * as they come (P18.10-T5 AC-4). English is every other spec's, unchanged.
  */
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
@@ -32,7 +32,7 @@ const pageOf = (items: ReturnType<typeof item>[], over: Record<string, unknown> 
 const ENGLISH = englishOnly(notificationMessages, uiMessages);
 const noEnglishLeft = () => expect(englishShown(document.body, ENGLISH)).toEqual([]);
 
-describe('P18.98-T4 /notifications in Indonesian', () => {
+describe('P18.10-T4 /notifications in Indonesian', () => {
   const swallow = (event: Event) => event.preventDefault();
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-03T03:00:00Z') });

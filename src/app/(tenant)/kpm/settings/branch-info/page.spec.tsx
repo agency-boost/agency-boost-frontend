@@ -1,7 +1,8 @@
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { makeMe, renderWithSession, stubFetch } from '@test/harness';
+import { atWidth, makeMe, renderWithSession, stubFetch } from '@test/harness';
+import { smallTargets } from '@test/touch-audit';
 import BranchInfoPage from './page';
 
 vi.mock('next/navigation', () => ({
@@ -110,15 +111,15 @@ describe('branch info (P4-T5)', () => {
     expect(JSON.parse(call.init.body as string)).toMatchObject({ branchName: 'Serpong Branch' });
   });
 
-  it('P18.9-T1 AC-5: opens for editing in a setup session, whose session carries the write (ADR-0162)', async () => {
-    // The settings screens read `tenant_config:write` and nothing else; `/auth/me` lists it in a setup session.
+  it('P19.4-T2 AC-7 stays read-only in a session as the Owner: /auth/me lists no write there (ADR-0206)', async () => {
+    // It opened for editing in a setup session until P19.4-T2 (ADR-0162, superseded). The server lists no write grant in
+    // any session now, and refuses the save regardless (`403 IMPERSONATION_READ_ONLY`).
     render(makeMe({
-      membership, permissions: ['kpm:read_profile', 'tenant_config:write'],
+      membership: { ...membership, isKpmOwner: true }, permissions: ['kpm:read_profile'],
       isImpersonating: true, impersonatedBy: 'u-root', impersonationReadOnly: true,
-      impersonationPurpose: 'setup', impersonationWriteScope: ['tenant_config:write', 'kpm:import_roster'],
     }));
-    expect(await screen.findByDisplayValue('BSD City Branch')).toBeEnabled();
-    expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument();
+    expect(await screen.findByDisplayValue('BSD City Branch')).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Save' })).toBeNull();
   });
 
   it('shows somebody without the write the office and no way to change it', async () => {
@@ -127,5 +128,23 @@ describe('branch info (P4-T5)', () => {
     render(READ_ONLY);
     expect(await screen.findByDisplayValue('BSD City Branch')).toBeDisabled();
     expect(screen.queryByRole('button', { name: 'Save' })).toBeNull();
+  });
+});
+
+/**
+ * **No target under 44px on a phone or a tablet** (P19.2-T3 AC-4; UI-142: text links 17px tall, *Tampilkan yang
+ * diarsipkan* 13px, tab rows 38px, ⠿ 20px), inside the field shell's frame the Owner's pages wear (ADR-0197), which
+ * `data-surface` stands for here.
+ */
+describe('P19.2-T3 AC-4 the branch info’s targets (UI-142)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it.each([375, 768])('P19.2-T3 AC-4 at %ipx finds no target under 44px', async (px) => {
+    atWidth(px);
+    render();
+    const frame = document.body.firstElementChild!;
+    frame.setAttribute('data-surface', 'v1');
+    await screen.findByDisplayValue('BSD City Branch');
+    expect(smallTargets(frame, px)).toEqual([]);
   });
 });

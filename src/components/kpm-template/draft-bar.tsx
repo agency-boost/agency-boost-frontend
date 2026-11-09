@@ -27,6 +27,10 @@ export function useVersionWords(view: CompanyTemplate | undefined, companyKind =
  * disimpan*, UI-019), what the draft stands at, and *Terbitkan* — held, saying why, while nothing has changed since the
  * last publish. A save the server refused is said here in its words, with *Coba lagi*; the editor keeps the reader's.
  * An archived template has no *Terbitkan*: it is read only.
+ *
+ * **Somebody else saved first** (`409 VERSION_CONFLICT`, P19-T6 AC-2): trying again would be refused the same, so the
+ * bar says so in its own words and offers *Muat ulang* (`onReload`) — the section read again as it is now stored, the
+ * reader's unsaved words given up for it — in the place of *Coba lagi*.
  */
 export function DraftBar({
   state,
@@ -37,6 +41,7 @@ export function DraftBar({
   saveError,
   publishError,
   onRetry,
+  onReload,
   onPublish,
 }: {
   state: SaveState;
@@ -47,9 +52,12 @@ export function DraftBar({
   saveError: ApiError | null;
   publishError: ApiError | null;
   onRetry: () => void;
+  /** The section read again from the server, for a save refused because somebody else saved first. */
+  onReload: () => void;
   onPublish: () => void;
 }) {
   const t = useMessages(adminTemplateMessages).editor;
+  const stale = saveError?.code === 'VERSION_CONFLICT';
   return (
     <div className="mb-4 flex flex-col gap-2">
       <Card density="compact" className="flex flex-wrap items-center justify-between gap-3">
@@ -69,8 +77,10 @@ export function DraftBar({
       </Card>
       {saveError && (
         <div className="flex flex-col gap-2">
-          <ErrorBanner {...saveError} />
-          <Button variant="secondary" className="self-start" onClick={onRetry}>{t.retry}</Button>
+          <ErrorBanner {...saveError} message={stale ? t.savedElsewhere : saveError.message} />
+          {stale
+            ? <Button variant="secondary" className="self-start" onClick={onReload}>{t.reload}</Button>
+            : <Button variant="secondary" className="self-start" onClick={onRetry}>{t.retry}</Button>}
         </div>
       )}
       {publishError && <ErrorBanner {...publishError} />}

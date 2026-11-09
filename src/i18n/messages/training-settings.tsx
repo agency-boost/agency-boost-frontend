@@ -9,7 +9,7 @@ const words = (...parts: ReactNode[]) => createElement(Fragment, null, ...parts)
 type Level = 'category' | 'skill' | 'module';
 
 /**
- * **Settings › Training** (`/kpm/settings/training`, P5-T1; P18.98-T4, training): the office's categories, skills and
+ * **Settings › Training** (`/kpm/settings/training`, P5-T1; P18.10-T4, training): the office's categories, skills and
  * modules, each staged until saved; **a module's page** (`/kpm/settings/training/[moduleId]`) with its title, skill and
  * *Published* switch; and **its Files, Videos and Links** (`components/module-content.tsx`, P5-T2). The frame, the bars
  * and the controls every settings screen shares — *Save*, *Edit*, *Archive*, *Restore*, *Undo*, *Show archived*, *Code*,
@@ -32,6 +32,8 @@ const en = {
   title: kept('Training'),
   tabs: { categories: kept('Categories'), skills: kept('Skills'), modules: kept('Modules') },
   subtitle: 'Categories, skills, and modules available to this KPM',
+  /** UI-162 (ADR-0208 §1): the active modules, and how many of them hold a file, a video or a link. */
+  materialCount: ({ x, y }: { x: number; y: number }) => `${x} / ${y} modules have material`,
 
   /** A category's badge: what it holds that agents are offered, or *Empty* (`:1576-1581`). */
   categoryBadge: ({ skills, modules }: { skills: number; modules: number }) =>
@@ -74,6 +76,44 @@ const en = {
   movesWithIt: 'Its modules move with it.',
   published: 'Published',
 
+  /**
+   * *Nama* and *Deskripsi singkat* (UI-161, ADR-0220 §1): a skill's and a module's two fields — the name one short line,
+   * the description the grey line under it on every learner's screen.
+   */
+  shortDescription: 'Short description',
+  shortDescriptionHint: ({ max }: { max: number }) =>
+    `Optional, at most ${max} characters. Shown in grey under the name on the agent\u2019s training screens.`,
+
+  /**
+   * ***Sinkron dari template*** (OD-270, ADR-0220 §4): the KPM takes its template's names and descriptions, by code, after
+   * seeing each one. The glossary's *Sync from template*, *Sinkron dari template* in Bahasa (§B.10).
+   */
+  sync: {
+    button: 'Sync from template',
+    title: 'Sync from template',
+    lead: ({ template }: { template: string }) =>
+      `These names and descriptions differ from ${template}\u2019s. Applying takes the template\u2019s. Nothing else `
+      + 'changes: not files, order, archived state, or anyone\u2019s progress.',
+    leadNoName: 'These names and descriptions differ from your template\u2019s. Applying takes the template\u2019s. '
+      + 'Nothing else changes: not files, order, archived state, or anyone\u2019s progress.',
+    level: {
+      category: 'Category', skill: kept('Skill'), module: kept('Module'), capability_item: 'Capability item',
+    } satisfies Record<'category' | 'skill' | 'module' | 'capability_item', string>,
+    field: { name: 'Name', description: 'Short description' } satisfies Record<'name' | 'description', string>,
+    now: 'Now',
+    fromTemplate: 'In the template',
+    none: 'none',
+    apply: 'Apply',
+    applying: 'Applying\u2026',
+    cancel: 'Cancel',
+    readOnly: 'Only the Owner or an Admin of this KPM can apply these.',
+    done: {
+      published: 'Done. Agents see the template\u2019s names now.',
+      awaiting_publish: 'Done. The names wait with your other changes until you publish them to agents.',
+      unchanged: 'Nothing to change: this KPM already uses the template\u2019s names.',
+    } satisfies Record<'published' | 'awaiting_publish' | 'unchanged', string>,
+  },
+
   /** Opening a module while edits are staged, which leaving would lose. */
   unsaved: 'You have changes here that are not saved.',
   openingDiscards: ({ title }: { title: string }) =>
@@ -115,7 +155,8 @@ const en = {
     files: 'Files',
     videos: 'Videos',
     links: 'Links',
-    filesHint: 'Up to 25 MB each. PDFs, images and spreadsheets.',
+    // P19.6-T2 (ADR-0217 §1): a lesson as an HTML page, which opens inside the app.
+    filesHint: 'Up to 25 MB each. PDFs, images, spreadsheets and HTML lessons.',
     videosHint: 'Up to 25 MB each, mp4. Anything longer belongs under Links — a long video is a download an agent on '
       + 'mobile data cannot afford.',
     linkCount: ({ n }: { n: number }) => `${n} ${n === 1 ? 'link' : 'links'}`,
@@ -127,7 +168,8 @@ const en = {
       + 'company is affected.',
     putsBack: ({ files, links }: { files: number; links: number }) =>
       `Puts back your company’s ${files} file(s) and ${links} link(s).`,
-    useCompanyAgain: 'Use my company’s material again',
+    /** §B6's words (ADR-0208 §3): the control that read *Use my company's material again*. */
+    useCompanyAgain: 'Undo my changes',
     companyMaterial: 'This is your company’s material.',
     companyMaterialLine: 'Every office of your company starts with it. The moment you add or remove something here, this '
       + 'module becomes your office’s own — and you can always go back.',
@@ -146,6 +188,7 @@ const id: MessagesOf<typeof en> = {
   title: kept('Training'),
   tabs: { categories: kept('Categories'), skills: kept('Skills'), modules: kept('Modules') },
   subtitle: `Kategori, ${kept('skill')}, dan modul yang tersedia untuk ${kept('KPM')} ini`,
+  materialCount: ({ x, y }) => `${x} / ${y} modul punya materi`,
 
   // A kept noun keeps its English plural, an Indonesian one has one form (§B.0 rule 8).
   categoryBadge: ({ skills, modules }) =>
@@ -188,6 +231,34 @@ const id: MessagesOf<typeof en> = {
   movesWithIt: 'Modulnya ikut pindah.',
   published: 'Diterbitkan',
 
+  shortDescription: 'Deskripsi singkat',
+  shortDescriptionHint: ({ max }) =>
+    `Opsional, maksimal ${max} karakter. Ditampilkan abu-abu di bawah nama di layar pelatihan agent.`,
+
+  sync: {
+    button: 'Sinkron dari template',
+    title: 'Sinkron dari template',
+    lead: ({ template }) =>
+      `Nama dan deskripsi ini berbeda dari milik ${template}. Menerapkan berarti memakai milik template. Tidak ada `
+      + 'yang lain berubah: file, urutan, status arsip, maupun progres siapa pun.',
+    leadNoName: 'Nama dan deskripsi ini berbeda dari milik template Anda. Menerapkan berarti memakai milik template. '
+      + 'Tidak ada yang lain berubah: file, urutan, status arsip, maupun progres siapa pun.',
+    level: { category: 'Kategori', skill: kept('Skill'), module: kept('Module'), capability_item: 'Item kapabilitas' },
+    field: { name: 'Nama', description: 'Deskripsi singkat' },
+    now: 'Sekarang',
+    fromTemplate: 'Di template',
+    none: 'kosong',
+    apply: 'Terapkan',
+    applying: 'Menerapkan\u2026',
+    cancel: 'Batal',
+    readOnly: `Hanya Owner atau Admin ${kept('KPM')} ini yang dapat menerapkannya.`,
+    done: {
+      published: 'Selesai. Agent sekarang melihat nama dari template.',
+      awaiting_publish: 'Selesai. Nama-nama ini menunggu bersama perubahan Anda yang lain sampai Anda menerbitkannya ke agent.',
+      unchanged: `Tidak ada yang perlu diubah: ${kept('KPM')} ini sudah memakai nama dari template.`,
+    },
+  },
+
   unsaved: 'Ada perubahan di sini yang belum disimpan.',
   openingDiscards: ({ title }) =>
     `Membuka ${title} akan membuang perubahan itu. Simpan perubahan itu terlebih dahulu, atau buang lalu buka modulnya.`,
@@ -224,7 +295,7 @@ const id: MessagesOf<typeof en> = {
     files: 'File',
     videos: 'Video',
     links: 'Tautan',
-    filesHint: 'Maksimal 25 MB per file. PDF, gambar, dan spreadsheet.',
+    filesHint: 'Maksimal 25 MB per file. PDF, gambar, spreadsheet, dan pelajaran HTML.',
     videosHint: 'Maksimal 25 MB per file, mp4. Yang lebih panjang letakkan di Tautan — video panjang adalah unduhan yang '
       + 'terlalu mahal bagi agent yang memakai data seluler.',
     linkCount: ({ n }) => `${n} tautan`,
@@ -235,7 +306,7 @@ const id: MessagesOf<typeof en> = {
     ownMaterialLine: 'Agent Anda melihat yang ada di bawah. Materi perusahaan Anda tidak berubah, dan tidak ada '
       + `${kept('KPM')} lain di perusahaan Anda yang terdampak.`,
     putsBack: ({ files, links }) => `Mengembalikan ${files} file dan ${links} tautan milik perusahaan Anda.`,
-    useCompanyAgain: 'Gunakan lagi materi perusahaan saya',
+    useCompanyAgain: 'Urungkan perubahan saya',
     companyMaterial: 'Ini materi perusahaan Anda.',
     companyMaterialLine: `Setiap ${kept('KPM')} di perusahaan Anda memulai dengan materi ini. Begitu Anda menambah atau `
       + `menghapus sesuatu di sini, modul ini menjadi milik ${kept('KPM')} Anda sendiri — dan Anda selalu bisa kembali.`,
@@ -245,7 +316,8 @@ const id: MessagesOf<typeof en> = {
     addressHint: 'Harus diawali https://',
     addLink: 'Tambah tautan',
     saveContent: 'Simpan konten',
-    undoEdits: 'Urungkan perubahan saya',
+    /* Not *Urungkan perubahan saya* since ADR-0208 §3: those are §B6's words for going back to the company's material. */
+    undoEdits: 'Buang suntingan saya',
     notSavedYet: 'Belum disimpan — file yang Anda tambahkan sudah diunggah, tetapi modul ini belum memakainya sampai '
       + 'Anda menyimpan.',
   },

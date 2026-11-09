@@ -4,16 +4,20 @@ import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useId, useState } from 'react';
-import { PageHeader } from '@/components/app-shell';
+import { PageHeader } from '@/components/page-header';
+import { SamplePreview, useSampleName } from '@/components/sample-preview';
 import { EmptyState } from '@/components/ui/empty-state';
-import { Button, buttonClass, Card, ErrorBanner } from '@/components/ui/field';
+import { Button, ButtonLink, buttonClass, Card, ErrorBanner } from '@/components/ui/field';
+import { HEADER_CONTROL } from '@/components/ui/header-control';
 import { LineIcon } from '@/components/ui/line-icon';
+import { PickerMenu } from '@/components/ui/picker-menu';
 import { TEXT_TAP } from '@/components/ui/phone';
 import { Skeleton, SkeletonBar } from '@/components/ui/skeleton';
 import { Toast, useToast } from '@/components/ui/toast';
 import { TippedGlyph } from '@/components/ui/tipped-glyph';
 import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
 import { addAgentMessages } from '@/i18n/messages/add-agent';
+import { samplePreviewMessages } from '@/i18n/messages/sample-preview';
 import { unitDashboardMessages } from '@/i18n/messages/unit-dashboard';
 import { uiV1Messages } from '@/i18n/messages/ui-v1';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
@@ -25,6 +29,8 @@ import { askedFor, type AddAgentResult } from '@/lib/invites';
 import { useCan, useSession } from '@/lib/session';
 import { useMediaQuery } from '@/lib/use-media-query';
 import { useOpenedOnce } from '@/lib/use-opened-once';
+import { leadsByRole } from '@/lib/field-nav';
+import { sampleUnitView } from '@/lib/sample-data';
 import {
   lockedWords, productionToast, readUnitDashboard, unitPeriods,
   type UnitDashboardView, type UnitPeriod, type UnitTab,
@@ -38,22 +44,31 @@ const UnitActivities = dynamic(() => import('./unit-activities').then((m) => m.U
   ssr: false,
   loading: () => <TabSkeleton />,
 });
+/** The *Potensi* tab (P19.1-T6, UI-155), downloaded when it is first opened (the bundle's budget). */
+const UnitPotensi = dynamic(() => import('./unit-potensi').then((m) => m.UnitPotensi), {
+  ssr: false,
+  loading: () => <TabSkeleton />,
+});
 /** The title row's *Search agent* sheet, downloaded when the pill is first pressed. */
 const UnitSearchSheet = dynamic(() => import('./unit-search-sheet'), { ssr: false });
-/** *+ Tambah agent*'s form, downloaded when it is first opened and mounted from then on (`useOpenedOnce`; P18.99-T16). */
+/** *+ Tambah agent*'s form, downloaded when it is first opened and mounted from then on (`useOpenedOnce`; P18.11-T16). */
 const AddAgentDialog = dynamic(() => import('@/components/add-agent-form').then((m) => m.AddAgentDialog), { ssr: false });
 
 /**
- * **The Unit Dashboard** (UI V1, Phase 18.99 T4; the owner's report of 2026-10-30, UI-001 to UI-012 and UI-028;
+ * **The Unit Dashboard** (UI V1, Phase 18.11 T4; the owner's report of 2026-10-30, UI-001 to UI-012 and UI-028;
  * `unit-dashboard-mobile`, `unit-dashboard-desktop`; before it P15-T2 to T4).
  *
  * - **The title row** (UI-004's): *Unit Dashboard* — or *Unit Dashboard {name}* for a unit below the reader — and,
  *   below 1024px, **the *Search agent* pill** (O-13; UI-012), which opens the shared picker in a sheet. From 1024px the
  *   sidebar's *Search agent* does it.
- * - **Overview | Activities** (UI-001): a pill segmented control under the title, the tab in the address
- *   (`?tab=activities`), switching without a reload. *Overview* reads `GET /unit/dashboard` for its period — the period
- *   pill beside the tabs, *Bulan ini* first, in the address (`?period=`) — and draws the tiles (UI-003) and the roster
- *   (UI-002, UI-005, UI-007, UI-009, UI-011, UI-028). *Activities* reads its own (`unit-activities.tsx`).
+ * - **Overview | Activities | Potensi** (UI-001, UI-155): a pill segmented control under the title, the tab in the
+ *   address (`?tab=activities`, `?tab=potensi`), switching without a reload. **On a phone the slider runs the full width
+ *   on its own row, in the same place on every tab, and the row below holds that tab's controls** (P19.8-T4 AC-1, MOB
+ *   UI-176; ADR-0229 §1) — 3 × 114px at 375px, 44px; from 768px the tabs and the period sit on one row, as before. Every
+ *   control 13px / 600 / 44px at every size (MOB UI-171). *Overview* reads `GET /unit/dashboard` for its period — **the
+ *   period picker**, *Bulan ini ⌄*, a menu under its button (`PickerMenu`, ADR-0227 §2; never a native select), in the
+ *   address (`?period=`) — and draws the tiles (UI-003) and the roster (UI-002, UI-005, UI-007, UI-009, UI-011, UI-028).
+ *   *Activities* and *Potensi* read their own (`unit-activities.tsx`, `unit-potensi.tsx`).
  * - **A row opens the person** (UI-011): the scroll is kept, so the person page's ‹ comes back to the same place.
  * - ***+ Tambah agent*** and ***Perbarui produksi*** on a tablet and a desktop, in the roster's header; **not on a
  *   phone** (the owner, 30 Oct: adding people lives in User Management).
@@ -96,9 +111,17 @@ export function UnitDashboard({ forId, period, tab = 'overview' }: { forId?: str
   /** The head's name, from whichever tab read it: the title of a unit below the reader. */
   const [headName, setHeadName] = useState<string | null>(null);
   const mayInvite = useCan('member:invite');
+  /*
+   * **The *Potensi* tab is the role's** (P19.1-T6 AC-1; UI-155, UI-159 item 4; ADR-0189): an AB and an AAB see it
+   * whatever their downline, the Owner and an Admin in their field view; **an Agent never does** — the API refuses their
+   * read too (`unit_dashboard:read_potensi`). On a typed `?tab=potensi` an Agent lands on *Overview*.
+   */
+  const mayPotensi = useCan('unit_dashboard:read_potensi');
+  const tabs = mayPotensi ? (['overview', 'activities', 'potensi'] as const) : (['overview', 'activities'] as const);
+  const activeTab: UnitTab = shownTab === 'potensi' && !mayPotensi ? 'overview' : shownTab;
 
   useEffect(() => {
-    if (shownTab !== 'overview') return;
+    if (activeTab !== 'overview') return;
     let live = true;
     setError(null);
     setMissing(false);
@@ -114,7 +137,7 @@ export function UnitDashboard({ forId, period, tab = 'overview' }: { forId?: str
         else setError(toDisplayError(err));
       });
     return () => { live = false; };
-  }, [key, forId, attempt, shownTab]);
+  }, [key, forId, attempt, activeTab]);
 
   // A save's read keeps the roster on screen until the new one arrives; a new period starts from the skeleton.
   const view = held?.key === key ? held.view : null;
@@ -143,13 +166,19 @@ export function UnitDashboard({ forId, period, tab = 'overview' }: { forId?: str
   if (missing) return <UnitNotFound />;
 
   const title = forId && headName ? t.titleOf({ name: headName }) : t.prototype.title;
-  const canUpdate = !!view && view.production.canUpdate && !me?.impersonationReadOnly;
   /*
-   * **+ Tambah agent** (P18.96-T3 AC-1, ADR-0170 §1): into the unit on screen — the reader's own, or for the Owner and an
-   * Admin any leader's. A leader opening a unit below their own is not offered it. Not on a phone (UI-002, the owner).
+   * **The office's read-only view** (P19.3-T3 AC-3; UI-152's Appendix D row): the Owner or an Admin on another leader's
+   * unit — from KPM Analytics' leader sheet, the member page or the org tree — reads it as that leader sees it, with no
+   * write control. The server says so (`readOnly`) and refuses the save; before it answers, the address says so.
    */
   const office = Boolean(me?.membership?.isKpmOwner || me?.membership?.isKpmAdmin);
-  const canAdd = !!view && mayInvite && !me?.impersonationReadOnly && (view.head.isReader || office) && size !== 'phone';
+  const readOnly = view ? view.readOnly : Boolean(forId) && office;
+  const canUpdate = !!view && view.production.canUpdate && !me?.impersonationReadOnly && !readOnly;
+  /*
+   * **+ Tambah agent** (P18.8-T3 AC-1, ADR-0170 §1): into the unit on screen — the reader's own, or for the Owner and an
+   * Admin any leader's. A leader opening a unit below their own is not offered it. Not on a phone (UI-002, the owner).
+   */
+  const canAdd = !!view && mayInvite && !me?.impersonationReadOnly && !readOnly && (view.head.isReader || office) && size !== 'phone';
   const addLeader = view && !view.head.isReader ? { membershipId: view.head.membershipId, name: view.head.name } : null;
   const addButton = canAdd ? (
     <Button variant="secondary" className="h-auto rounded-pill px-3.5 py-1.5 text-sm" onClick={() => setAdding(true)}>
@@ -197,32 +226,36 @@ export function UnitDashboard({ forId, period, tab = 'overview' }: { forId?: str
     <div className="min-w-0">
       <PageHeader title={title} control={searchPill} />
 
-      <div className="mb-3 flex items-center gap-2">
-        <div role="tablist" aria-label={t.prototype.title} className="flex min-w-0 flex-1 rounded-pill bg-card p-[3px] lg:flex-none">
-          {(['overview', 'activities'] as const).map((id) => (
+      <div className="mb-3 flex items-center gap-2 max-md:flex-wrap">
+        <div role="tablist" aria-label={t.prototype.title} className="flex min-w-0 flex-1 rounded-pill bg-card p-[3px] max-md:basis-full max-md:p-0 lg:flex-none">
+          {tabs.map((id) => (
             <button
               key={id}
               type="button"
               role="tab"
               id={`${tabsId}-${id}`}
-              aria-selected={shownTab === id}
+              aria-selected={activeTab === id}
               aria-controls={`${tabsId}-panel`}
               onClick={() => chooseTab(id)}
               className={cn(
-                'min-h-11 flex-1 whitespace-nowrap rounded-pill px-4 text-base font-semibold lg:min-h-9 lg:flex-none',
-                shownTab === id ? 'bg-navy text-white' : 'text-muted hover:text-navy',
+                'flex-1 whitespace-nowrap rounded-pill px-4 lg:flex-none',
+                HEADER_CONTROL,
+                activeTab === id ? 'bg-secondary text-secondary-contrast' : 'text-muted hover:text-navy',
               )}
             >
               {t.v1.tabs[id]}
             </button>
           ))}
         </div>
-        {shownTab === 'overview' && !view?.empty && <PeriodPill period={shown} onChoose={choosePeriod} />}
+        {activeTab === 'overview' && <PeriodPill period={shown} onChoose={choosePeriod} />}
       </div>
 
-      <div role="tabpanel" id={`${tabsId}-panel`} aria-labelledby={`${tabsId}-${shownTab}`}>
-        {shownTab === 'activities' ? (
-          <UnitActivities forId={forId} onHead={onActivitiesHead} empty={nobody} />
+      <div role="tabpanel" id={`${tabsId}-panel`} aria-labelledby={`${tabsId}-${activeTab}`}>
+        {activeTab === 'potensi' ? (
+          <UnitPotensi forId={forId} onHead={onActivitiesHead} readOnly={readOnly} />
+        ) : activeTab === 'activities' ? (
+          // A leader by role with nobody yet sees the normal table at 0 (MOB UI-181, D-37); anybody else, the empty unit.
+          <UnitActivities forId={forId} onHead={onActivitiesHead} empty={leadsByRole(me?.membership) ? null : nobody} />
         ) : (
           <>
             {error && (
@@ -232,7 +265,8 @@ export function UnitDashboard({ forId, period, tab = 'overview' }: { forId?: str
               </div>
             )}
             {!view && !error && <UnitSkeleton />}
-            {view?.empty && nobody}
+            {/* A leader by role sees the sample (ADR-0189 §3); anybody else on a typed address, the plain empty unit. */}
+            {view?.empty && (leadsByRole(me?.membership) ? <EmptyUnit view={view} size={size} action={addButton} /> : nobody)}
             {view && !view.empty && (
               <>
                 <UnitTiles view={view} period={shown} />
@@ -307,25 +341,22 @@ function returnToScroll(at: string) {
 }
 
 /**
- * **The period pill** (UI-002, `unit-dashboard-mobile` screen 1, `unit-dashboard-desktop`): *Bulan ini ⌄*, navy, a
- * native select — the phone's own picker — of *7 hari terakhir · Bulan ini · Tahun ini*, 16px on a phone so it does not
- * zoom. Hidden on *Activities*, whose own controls set its period (UI-001).
+ * **The period picker** (UI-002; and P19.8-T4 AC-12, MOB UI-171, ADR-0227 §2): *Bulan ini ⌄*, a header button that opens a
+ * small menu right under it — *7 hari terakhir · Bulan ini · Tahun ini* — the shared `PickerMenu`, at every size; it
+ * was a native select, 16px on a phone. On a phone it sits on the row under the slider (MOB UI-176). Hidden on
+ * *Activities* and *Potensi*, whose own controls set their period (UI-001).
  */
 function PeriodPill({ period, onChoose }: { period: UnitPeriod; onChoose: (p: UnitPeriod) => void }) {
   const language = useLanguage();
   const t = useMessages(unitDashboardMessages);
   return (
-    <label className="relative inline-flex shrink-0 items-center">
-      <span className="sr-only">{t.period}</span>
-      <select
-        value={period}
-        onChange={(e) => onChoose(e.target.value as UnitPeriod)}
-        className="h-11 cursor-pointer appearance-none rounded-pill border-0 bg-navy py-0 pl-4 pr-9 text-lg font-semibold text-white md:text-base lg:h-9"
-      >
-        {unitPeriods(language).map(({ id, label }) => <option key={id} value={id}>{label}</option>)}
-      </select>
-      <LineIcon name="chevronDown" className="pointer-events-none absolute right-3 h-4 w-4 text-white" />
-    </label>
+    <PickerMenu
+      label={t.period}
+      value={period}
+      options={unitPeriods(language).map(({ id, label }) => ({ value: id, label }))}
+      onChange={onChoose}
+      className="shrink-0"
+    />
   );
 }
 
@@ -368,7 +399,7 @@ function TabSkeleton() {
 
 /**
  * Somebody who leads nobody (D-reach): an empty unit, never a refusal. Ours to word (L-01), pointing to the reader's own
- * screens. On a tablet and a desktop a leader who leads nobody yet adds their first agent here (P18.96-T3).
+ * screens. On a tablet and a desktop a leader who leads nobody yet adds their first agent here (P18.8-T3).
  */
 function NobodyYet({ action }: { action?: React.ReactNode }) {
   const t = useMessages(unitDashboardMessages).own;
@@ -389,6 +420,30 @@ function NobodyYet({ action }: { action?: React.ReactNode }) {
         )}
       />
     </Card>
+  );
+}
+
+/**
+ * **A leader's unit with nobody in it yet** (P19-T4 AC-3; D-37, UI-159 item 3; ADR-0189 §3; P19.8-T4 AC-11, MOB UI-181,
+ * ADR-0229 §9): the page's normal layout — its four tiles at *0*, *Active Agent* *0 dari –* with *–* in its ring and its
+ * chips, from the server's empty view — and under it the roster as it will look, greyed and labelled *Contoh*
+ * (`UnitTiles`' and `UnitRoster`'s own drawing of `sampleUnitView`), its chips on one row, with one next step: *+ Tambah
+ * agent* where the screen offers it, else *Tambah agent pertama* in User Management. **No *Belum ada data* line** (OD-280's
+ * default, amending ADR-0189 §2 for this page).
+ */
+function EmptyUnit({ view, size, action }: { view: UnitDashboardView; size: 'phone' | 'tablet' | 'desktop'; action: React.ReactNode }) {
+  const t = useMessages(samplePreviewMessages);
+  const { person } = useSampleName();
+  const sample = sampleUnitView(view, person);
+  return (
+    <>
+      <UnitTiles view={view} period={view.period} />
+      <SamplePreview
+        sample={<UnitRoster view={sample} period="month" from="/unit/dashboard" size={size} />}
+        // Not on a phone, where adding people lives in User Management (UI-002, the owner, 30 Oct).
+        action={action ?? <ButtonLink href="/user-management/add">{t.next.addFirstAgent}</ButtonLink>}
+      />
+    </>
   );
 }
 

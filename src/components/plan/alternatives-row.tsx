@@ -28,7 +28,7 @@ export function AlternativesRow({
             key={item.key}
             type="button"
             onClick={() => onPick(item.key)}
-            className="mb-2 mr-2 inline-flex items-center gap-2 rounded-pill border border-hairline bg-card px-3.5 py-[7px] text-base font-semibold text-navy hover:border-navy"
+            className="mb-2 mr-2 inline-flex items-center gap-2 rounded-pill border border-hairline bg-card px-3.5 py-[7px] text-base font-semibold text-navy hover:border-secondary"
           >
             {item.label}
           </button>

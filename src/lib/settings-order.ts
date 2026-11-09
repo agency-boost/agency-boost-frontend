@@ -1,5 +1,5 @@
 /**
- * **A settings list of dated things, in the order it is read** (P18.97-T4 AC-8, ADR-0176 §8; the client's KPM Owner
+ * **A settings list of dated things, in the order it is read** (P18.9-T4 AC-8, ADR-0176 §8; the client's KPM Owner
  * review of 2026-10-27, UI-030: *"past events first, upcoming at the bottom"* on `/kpm/settings/events`, *"UPCOMING,
  * RUNNING, ENDED mixed"* on `/kpm/settings/campaigns`). **Upcoming, then running, then ended**, each group by date:
  * upcoming and running soonest first, ended latest first — the order the agents' own Events list reads its sections

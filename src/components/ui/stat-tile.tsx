@@ -16,7 +16,7 @@ export interface StatChip {
 
 /**
  * **The stat tile** (UI V1, UI-003 — the Unit Dashboard's four, and Home's, UI-100): a white tile of ~90px with no
- * border — a 12px label, **one number** of 26px with its unit small and grey beside it, and one row of small chips
+ * border — a 12px label (13px on a phone, P19.8-T1 AC-4, MOB UI-168), its chips 12px, **one number** of 26px with its unit small and grey beside it, and one row of small chips
  * (*Unit* first, then *AAB*). Optional, each where a tile in the report has it:
  *
  * - **`badge`**, a corner figure (*54%*, *Produksi Group*) with **`bar`**, the share under the number, and **`sub`**, the
@@ -38,6 +38,7 @@ export function StatTile({
   sub,
   ring,
   href,
+  fill = false,
   className,
 }: {
   label: ReactNode;
@@ -55,6 +56,12 @@ export function StatTile({
   /** A ring of 38px with its whole percentage inside; `null` draws the empty ring and *–*. */
   ring?: { percent: number | null };
   href?: string;
+  /**
+   * **The value takes the number row's free width** (P19.8-T2 AC-4; MOB UI-166: Home's *+ Log* across the tile, the
+   * mockup's `.log{display:flex;justify-content:center}`): the value's box grows (`min-w-0 flex-1`), so a block child in
+   * it — the *+ Log* pill — can be `w-full`. Off by default, and a tile without it is drawn as before.
+   */
+  fill?: boolean;
   className?: string;
 }) {
   const t = useMessages(uiV1Messages);
@@ -62,14 +69,15 @@ export function StatTile({
   const body = (
     <>
       <div className="flex items-start gap-2">
-        <p className="min-w-0 flex-1 text-sm leading-snug text-muted">{label}</p>
+        {/* 13px on a phone (P19.8-T1 AC-4; MOB UI-168: *tile labels 13px*), 12px from 768px as before. */}
+        <p data-stat-label="" className="min-w-0 flex-1 text-sm leading-snug text-muted max-md:text-base">{label}</p>
         {badge !== undefined && (
-          <span className="shrink-0 rounded-pill bg-navy/[0.08] px-2 text-sm font-semibold text-navy">{badge}</span>
+          <span className="shrink-0 rounded-pill bg-secondary/[0.08] px-2 text-sm font-semibold text-navy">{badge}</span>
         )}
         {href !== undefined && <LineIcon name="chevronRight" className="-mr-1 h-4 w-4 text-signal-grey" />}
       </div>
       <div className="mt-0.5 flex min-h-[2.375rem] items-center gap-1.5">
-        <span className="whitespace-nowrap text-[1.625rem] font-semibold leading-none tabular-nums text-ink">{value}</span>
+        <span className={cn('whitespace-nowrap text-[1.625rem] font-semibold leading-none tabular-nums text-ink', fill && 'min-w-0 flex-1')}>{value}</span>
         {unit !== undefined && <span className="min-w-0 truncate text-base text-signal-grey">{unit}</span>}
         {ring && (
           <span className="ml-auto shrink-0">
@@ -79,7 +87,7 @@ export function StatTile({
       </div>
       {bar !== undefined && bar !== null && (
         <div className="mb-1 mt-0.5 h-1.5 overflow-hidden rounded-sm bg-base" aria-hidden="true">
-          <div className="h-full rounded-sm bg-navy" style={{ width: `${Math.min(100, Math.max(0, bar))}%` }} />
+          <div className="h-full rounded-sm bg-secondary" style={{ width: `${Math.min(100, Math.max(0, bar))}%` }} />
         </div>
       )}
       {sub !== undefined && <p className="text-sm text-signal-grey">{sub}</p>}
@@ -111,7 +119,7 @@ function Ring({ percent, label, said }: { percent: number | null; label: string;
       {filled > 0 && (
         <circle
           cx="19" cy="19" r={r} fill="none" strokeWidth="4" strokeLinecap="round"
-          strokeDasharray={`${filled} ${length}`} transform="rotate(-90 19 19)" className="stroke-amber"
+          strokeDasharray={`${filled} ${length}`} transform="rotate(-90 19 19)" className="stroke-primary"
         />
       )}
       <text x="19" y="23" textAnchor="middle" className="fill-ink text-[0.75rem] font-semibold">{label}</text>

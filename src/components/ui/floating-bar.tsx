@@ -19,8 +19,8 @@ export const FLOATING_BAR_PILL = 'flex items-center gap-3 rounded-pill bg-card p
 const NOTE = 'flex flex-col gap-2 rounded-lg bg-card px-4 py-3 shadow-modal';
 
 /** **The pill's button**: the accent, 44px, round-ended, its words navy and bold (I-542). */
-export const FLOATING_BAR_BUTTON = 'min-h-11 shrink-0 rounded-pill bg-amber px-5 text-md font-bold text-navy '
-  + 'hover:bg-amber-dark disabled:cursor-not-allowed disabled:opacity-40';
+export const FLOATING_BAR_BUTTON = 'min-h-11 shrink-0 rounded-pill bg-primary px-5 text-md font-bold text-primary-contrast '
+  + 'hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-40';
 
 /**
  * **The room a page leaves under its last line while a floating bar stands over its foot** (below 1024px): 96px, more
@@ -28,7 +28,11 @@ export const FLOATING_BAR_BUTTON = 'min-h-11 shrink-0 rounded-pill bg-amber px-5
  */
 export const FLOATING_BAR_ROOM = 'max-lg:pb-24';
 
-/** **From 1024px**: the bar goes (the page has its own place for the same controls), or stands in the page as a card. */
+/**
+ * **From 1024px**: the bar goes (the page has its own place for the same controls), stands in the page as a card, or —
+ * `pill` — stands in the page as the same pill, under what it saves (P19.1-T1 AC-2; `activity-tablet-desktop`: *save bar
+ * always visible — tablet floating above the tab bar, laptop under the lists*).
+ */
 const WIDE = {
   hidden: { bar: 'lg:hidden', note: '', pill: '' },
   card: {
@@ -36,6 +40,7 @@ const WIDE = {
     note: 'lg:mb-2 lg:rounded-none lg:bg-transparent lg:p-0 lg:shadow-none',
     pill: 'lg:flex-wrap lg:gap-y-2.5 lg:rounded-none lg:bg-transparent lg:p-0 lg:shadow-none',
   },
+  pill: { bar: 'lg:static lg:z-auto', note: '', pill: '' },
 } as const;
 
 /**
@@ -48,7 +53,8 @@ const WIDE = {
  *   on the right (`FLOATING_BAR_BUTTON` for the accent one).
  * - **`note`**, when there is something to say above it, is a card of its own over the pill. The pill keeps its place
  *   in the tree whether a note is there or not, so a button pressed never loses the focus to a note appearing.
- * - **`wide`**: from 1024px the bar is `hidden` (the default) or a `card` standing where the page puts it.
+ * - **`wide`**: from 1024px the bar is `hidden` (the default), a `card` standing where the page puts it, or the same
+ *   `pill` standing there.
  *
  * `data-floating-bar` marks it, and lifts the shell's toast above it (`toast.tsx`). A page that draws one leaves
  * `FLOATING_BAR_ROOM` under its last line. Any other attribute (a `data-*` of the page's own) lands on the bar.

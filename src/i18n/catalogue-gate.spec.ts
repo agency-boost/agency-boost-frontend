@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { parse, sourceFiles, SRC, startOf } from '@test/copy-scan';
 
 /**
- * **The registry of moved modules, kept by the areas themselves** (P18.98-T1 AC-6). An area's header names each module
+ * **The registry of moved modules, kept by the areas themselves** (P18.10-T1 AC-6). An area's header names each module
  * whose words are all in it, one `@moved <path>` line per file or directory (`components/training/`), relative to
  * `src/` and added in the change that moves it. From then on a word written into that module fails here, and goes into
  * the area instead. Nothing central is edited: two agents moving two modules touch two areas.
@@ -159,7 +159,7 @@ describe('the gate itself', () => {
   });
 });
 
-describe('P18.98-T1 AC-6 a module already moved keeps its words in the catalogue', () => {
+describe('P18.10-T1 AC-6 a module already moved keeps its words in the catalogue', () => {
   const files = sourceFiles();
   const covered = (entry: string) => files.filter((f) => (entry.endsWith('/') ? f.startsWith(entry) : f === entry));
   const paths = MOVED.map((m) => m.path);
@@ -167,10 +167,14 @@ describe('P18.98-T1 AC-6 a module already moved keeps its words in the catalogue
   it('reads the registry off the areas, the first one’s eight modules among it', () => {
     expect(MOVED.filter((m) => m.area === 'shell.ts').map((m) => m.path)).toEqual([
       'components/app-shell.tsx', 'components/sidebar-user-menu.tsx', 'components/notification-bell.tsx',
-      'components/agent-shell.tsx', 'components/tenant-shell.tsx', 'components/admin-shell.tsx',
-      'lib/landing.ts', 'lib/profile-line.ts',
+      // P19.2-T1 (ADR-0197): the one shell for every role, and the views (ADR-0198); the two consoles' shells are gone.
+      'components/agent-shell.tsx', 'components/shell.tsx',
+      'lib/landing.ts', 'lib/views.ts', 'lib/profile-line.ts',
       // UI V1 (UI-004): the field shell's tab bar, its *Lainnya* sheet and the model both draw.
       'components/field-nav.tsx', 'components/field-more-sheet.tsx', 'lib/field-nav.ts',
+      // The bundle, 2026-11-06: the title row's parts, the page header and the bell's popover, each a module of its own.
+      'components/field-chrome.tsx', 'components/page-header.tsx', 'components/unread-badge.tsx',
+      'components/notification-popover.tsx',
     ]);
   });
 

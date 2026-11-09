@@ -12,12 +12,12 @@ import { blankForm, formWords, validateForm, violationsToErrors } from '@/lib/ca
 import CalendarPage from './page';
 
 /**
- * **The calendar in Indonesian** (P18.98-T4 AC-1 to AC-4, events, campaigns and the calendar): the toolbar, the legend,
+ * **The calendar in Indonesian** (P18.10-T4 AC-1 to AC-4, events, campaigns and the calendar): the toolbar, the legend,
  * the week's entries by name, the compare bar and its popover, the month with its lines and *+{n} lainnya…*, a phone's
  * agenda and *Filter*, the detail dialog — the organiser's and an invitee's — the entry dialog with its rules, *Block
  * time*, the invite field and *Hide my personal activities*. The approved glossary's words, the kept terms English (§A:
  * *Calendar*, *Week · Month*, *Agenda*, *event*, *1:1*, *coaching*, *KPM*, *downline*), the weekday and month names the
- * formatters' (P18.98-T3), what the organiser typed as typed, and none of the module's English left.
+ * formatters' (P18.10-T3), what the organiser typed as typed, and none of the module's English left.
  */
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
@@ -44,8 +44,8 @@ const grid = () => screen.findByRole('region', { name: `Kalender, ${RANGE}` });
 
 afterEach(() => vi.unstubAllGlobals());
 
-describe('P18.98-T4 the calendar in Indonesian', () => {
-  it('P18.98-T4 AC-1, AC-2 the week: title kept, toolbar, legend and entries by name, a trip’s name', async () => {
+describe('P18.10-T4 the calendar in Indonesian', () => {
+  it('P18.10-T4 AC-1, AC-2 the week: title kept, toolbar, legend and entries by name, a trip’s name', async () => {
     show();
     const region = await grid();
     expect(screen.getByRole('heading', { level: 1, name: 'Calendar' })).toBeInTheDocument();
@@ -71,7 +71,7 @@ describe('P18.98-T4 the calendar in Indonesian', () => {
     noEnglishLeft();
   });
 
-  it('P18.98-T4 AC-1 the compare popover: its search, groups, tags and a person added', async () => {
+  it('P18.10-T4 AC-1 the compare popover: its search, groups, tags and a person added', async () => {
     show({ '/calendar/downline': { body: DOWNLINE } });
     await grid();
     await userEvent.click(screen.getByRole('button', { name: '+ Bandingkan dengan downline' }));
@@ -81,23 +81,26 @@ describe('P18.98-T4 the calendar in Indonesian', () => {
     noEnglishLeft();
   });
 
-  it('P18.98-T4 AC-1 the month: its heads the formatter’s, Month kept, a line named with its time first', async () => {
+  it('P18.10-T4 AC-1, P19.1-T3 AC-9 the month: its heads the formatter’s, Month kept, a line named with its title first', async () => {
     show({ [MONTH_READ]: { body: monthRead() } });
     await grid();
     await userEvent.click(screen.getByRole('button', { name: 'Month' }));
     expect(await screen.findByText('Sep 2026')).toBeInTheDocument();
     expect(screen.getByText('Sen')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Bulan sebelumnya' })).toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: 'Rapat internal: 9-9.30 Weekly unit standup' }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('button', { name: 'Rapat internal: Weekly unit standup, 9-9.30' }).length).toBeGreaterThan(0);
     noEnglishLeft();
   });
 
-  it('P18.98-T4 AC-1 a phone: the agenda by day, Filter, Agenda kept, a day with nothing on it', async () => {
+  it('P18.10-T4 AC-1, P19.8-T3 AC-1 a phone: the agenda by day, Filter, Agenda kept in the view menu, a day with nothing on it', async () => {
     atWidth(375);
     show();
     const region = await screen.findByRole('region', { name: `Kalender, ${RANGE}` });
-    expect(within(screen.getByRole('combobox', { name: 'Tampilan' })).getAllByRole('option').map((o) => o.textContent))
-      .toEqual(['Agenda', '3 Hari', 'Week', 'Month']);
+    // P19.8-T3 AC-1 (MOB UI-171): the picker's button, *Tampilan Agenda*, opens the menu under it.
+    await userEvent.click(screen.getByRole('button', { name: 'Tampilan Agenda' }));
+    const menu = await screen.findByRole('listbox', { name: 'Tampilan' });
+    expect(within(menu).getAllByRole('option').map((o) => o.textContent)).toEqual(['Agenda', '3 Hari', 'Week', 'Month']);
+    await userEvent.keyboard('{Escape}');
     expect(screen.getByRole('button', { name: 'Filter' })).toHaveAttribute('aria-expanded', 'false');
     expect(within(region).getByRole('heading', { level: 2, name: 'Senin, 28 Sep 2026 · Hari ini' })).toBeInTheDocument();
     expect(within(region).getAllByText('Tidak ada event').length).toBeGreaterThan(0);
@@ -117,20 +120,24 @@ describe('P18.98-T4 the calendar in Indonesian', () => {
     noEnglishLeft();
   });
 
-  it('P18.98-T4 AC-1 to AC-4 the organiser’s detail: labels, a meeting link, the notes as typed, Delete asks first', async () => {
+  it('P18.10-T4 AC-1 to AC-4, P19.8-T3 AC-7 MOB UI-169 the organiser’s detail: labels, a meeting link, the notes as typed, Hapus asks first', async () => {
     show();
     await userEvent.click(within(await grid()).getByRole('button', { name: /^Rapat internal: Weekly unit standup/ }));
     const box = await screen.findByRole('dialog', { name: 'Weekly unit standup' });
     for (const label of ['Kapan', 'Lokasi / catatan', 'Yang diundang']) expect(within(box).getByText(label)).toBeInTheDocument();
     expect(within(box).getByRole('link', { name: /^Gabung Zoom ?, terbuka di tab baru$/ })).toBeInTheDocument();
     expect(within(box).getByText('Tidak ada orang lain yang diundang')).toBeInTheDocument();
-    expect(within(box).getByRole('button', { name: 'Ubah' })).toBeInTheDocument();
+    // P19.8-T3 AC-7 (MOB UI-169): red-outline *Hapus*, then white *Ubah* and orange *Tutup*.
+    expect(within(box).getAllByRole('button').filter((b) => !b.closest('a')).map((b) => b.textContent).slice(-3)).toEqual(['Hapus', 'Ubah', 'Tutup']);
     await userEvent.click(within(box).getByRole('button', { name: 'Hapus' }));
-    expect(await screen.findByText('Hapus "Weekly unit standup"?')).toBeInTheDocument();
+    // *Hapus event ini?*, bold, over the title and the day; *Batal* · *Hapus*.
+    const question = await screen.findByRole('dialog', { name: 'Hapus event ini?' });
+    expect(question).toHaveAccessibleDescription('Weekly unit standup · Senin, 28 Sep 2026');
+    expect(within(question).getAllByRole('button').map((b) => b.textContent)).toEqual(['Batal', 'Hapus']);
     noEnglishLeft();
   });
 
-  it('P18.98-T4 AC-1 an invitee’s detail: Terima and Tolak, the organiser’s chip, and the entry’s name says it waits', async () => {
+  it('P18.10-T4 AC-1 an invitee’s detail: Terima and Tolak, the organiser’s chip, and the entry’s name says it waits', async () => {
     const invited = entry({
       entryId: 'e-invite', title: 'Coaching review', readerIs: 'invitee', myAnswer: 'pending',
       organiser: { membershipId: 'mem-hendra', name: 'Hendra Kusnadi' },
@@ -146,12 +153,13 @@ describe('P18.98-T4 the calendar in Indonesian', () => {
     noEnglishLeft();
   });
 
-  it('P18.98-T4 AC-1 the entry dialog: its fields, the invite field, the rules under their fields', async () => {
+  it('P18.10-T4 AC-1 the entry dialog: its fields, the invite field, the rules under their fields', async () => {
     show({ '/calendar/people': { body: peoplePage() } });
     await grid();
     await userEvent.click(screen.getByRole('button', { name: '+ Event baru' }));
     const box = await screen.findByRole('dialog', { name: 'Event baru' });
-    expect(within(box).getByText('Tambahkan rapat, tugas, atau sesi coaching ke kalender Anda.')).toBeInTheDocument();
+    // P19.1-T3 AC-10 (UI-120): no sub-line from 768px; a phone keeps it (`page.spec.tsx`, *P19.1-T3*).
+    expect(within(box).queryByText('Tambahkan rapat, tugas, atau sesi coaching ke kalender Anda.')).not.toBeInTheDocument();
     expect(within(box).getByRole('group', { name: 'Jenis' })).toBeInTheDocument();
     expect(within(box).getByLabelText('Judul')).toHaveAttribute('placeholder', 'mis. Standup unit mingguan');
     expect(within(box).getByLabelText('Undang (opsional) — siapa pun di KPM Anda')).toHaveAttribute('placeholder', 'Cari nama di KPM Anda…');
@@ -170,7 +178,7 @@ describe('P18.98-T4 the calendar in Indonesian', () => {
     noEnglishLeft();
   });
 
-  it('P18.98-T4 AC-1 a saved new entry says the shared confirmation in Indonesian', async () => {
+  it('P18.10-T4 AC-1 a saved new entry says the shared confirmation in Indonesian', async () => {
     show({ 'POST /calendar/entries': { body: entry({ entryId: 'e-new', title: 'Baru' }) } });
     await grid();
     await userEvent.click(screen.getByRole('button', { name: '+ Event baru' }));
@@ -180,7 +188,7 @@ describe('P18.98-T4 the calendar in Indonesian', () => {
   });
 });
 
-describe('P18.98-T4 the calendar’s own functions in each language', () => {
+describe('P18.10-T4 the calendar’s own functions in each language', () => {
   it('writes the rules, a tag and a meeting link’s words in the language passed', () => {
     expect(limitWords('id', 'id')).toEqual({
       tripTooLong: 'Perjalanan paling lama 31 hari.',
@@ -196,7 +204,7 @@ describe('P18.98-T4 the calendar’s own functions in each language', () => {
     expect(notesParts('Zoom: https://zoom.us/j/1', 'id')).toEqual([{ text: 'Zoom: ' }, { href: 'https://zoom.us/j/1', label: 'Gabung Zoom' }]);
   });
 
-  it('P18.98-T4 places the API’s Indonesian violations under their fields, a trip too long among them (P18.98-T5)', () => {
+  it('P18.10-T4 places the API’s Indonesian violations under their fields, a trip too long among them (P18.10-T5)', () => {
     const words = formWords('id', 'id');
     expect(violationsToErrors({
       violations: [

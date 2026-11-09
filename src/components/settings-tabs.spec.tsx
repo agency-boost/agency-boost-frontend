@@ -36,7 +36,7 @@ describe('Settings sub-tabs', () => {
   it('paints the chosen pill navy, never the amber of an action button (ADR-0137)', () => {
     render(<SettingsTabs tabs={ACTIVITY_SETTINGS_TABS} variant="subtabs" />);
     const chosen = screen.getByRole('link', { name: 'Activity types' });
-    expect(chosen).toHaveClass('bg-navy', 'text-white');
+    expect(chosen).toHaveClass('bg-secondary', 'text-secondary-contrast');
     expect(chosen.className).not.toMatch(/bg-amber/);
     expect(screen.getByRole('link', { name: 'Ratio benchmarks' }).className).not.toMatch(/bg-navy|bg-amber/);
   });

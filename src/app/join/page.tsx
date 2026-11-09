@@ -15,6 +15,7 @@ import { landingFor } from '@/lib/landing';
 import { RoleShell } from '@/components/role-shell';
 import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
 import { joinMessages } from '@/i18n/messages/join';
+import { LinkBranding } from '@/components/branding/link-branding';
 
 /**
  * Opening a leader's invite link, or typing their code.
@@ -29,6 +30,8 @@ export default function JoinPage() {
     // `useSearchParams` needs a boundary, and the link somebody opens carries the code
     // in the query string.
     <Suspense fallback={<Waiting />}>
+      {/* P19.6-T1 AC-13 (ADR-0218 §9): an invitation's KPM — its logo and colours; AgencyBoost's without one. */}
+      <LinkBranding />
       <Join />
     </Suspense>
   );
@@ -46,14 +49,14 @@ function Waiting() {
 
 function Join() {
   const params = useSearchParams();
-  // A leader's invite to one person (P18.96-T3 AC-4): its own page, not the leader-code check below.
+  // A leader's invite to one person (P18.8-T3 AC-4): its own page, not the leader-code check below.
   const inviteToken = inviteTokenOf(params);
   if (inviteToken) return <InviteJoin token={inviteToken} />;
   return <CodeJoin />;
 }
 
 /**
- * **A leader's invite, for an account that exists** (P18.96-T3 AC-4, ADR-0170 §4, case d): the banner, read before
+ * **A leader's invite, for an account that exists** (P18.8-T3 AC-4, ADR-0170 §4, case d): the banner, read before
  * anybody signs in, and — signed in as the account the code belongs to — *Accept and join*, which places them under
  * the leader at once and sends them to their landing: their activation, for a new hire. Signed out, it says to sign
  * in and comes back here after. The server refuses an account the code is not theirs (404) and one already in an
@@ -97,7 +100,7 @@ function InviteJoin({ token }: { token: string }) {
         {!banner && !error && <Skeleton label={t.checking}><SkeletonText lines={3} /></Skeleton>}
         {banner && (
           <div>
-            <div className="rounded-md border-l-4 border-l-amber bg-base p-3">
+            <div className="rounded-md border-l-4 border-l-primary bg-base p-3">
               <p className="font-display text-lg font-bold text-navy">{t.banner({ leader: banner.leaderName, kpm: banner.kpm.code })}</p>
               <p className="mt-1 text-md text-muted">{banner.kpm.branchName} · {banner.companyName}</p>
               <p className="mt-1 text-md text-navy">{t.details({ code: banner.agentCode, date: formatCalendarDay(banner.joinDate, figures) })}</p>
@@ -216,7 +219,7 @@ function CodeJoin() {
           </div>
         )}
 
-        {/* UI-086 (Phase 18.99 T9): somebody already in an office is told so and given the way back — no field, no
+        {/* UI-086 (Phase 18.11 T9): somebody already in an office is told so and given the way back — no field, no
             button they cannot use; the server refuses them a code whatever they type (`POST /join/redeem`). */}
         {!alreadyIn && !preview && (
           <form onSubmit={check} className="flex flex-col gap-4" noValidate>

@@ -18,7 +18,7 @@ describe('the script blocks (D-components)', () => {
 
   it('the lead block is amber-ink, where the prototype’s amber-dark misses on a card', () => {
     const { container } = render(<ScriptBlock n={0} label="Good fit for" lead>x</ScriptBlock>);
-    expect(container.querySelector('h3')).toHaveClass('text-amber-ink');
+    expect(container.querySelector('h3')).toHaveClass('text-primary-ink');
     expect(container.innerHTML).not.toMatch(/amber-dark/);
   });
 

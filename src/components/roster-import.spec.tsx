@@ -19,12 +19,13 @@ const SUPER_ADMIN = makeMe({
   permissions: ['kpm:import_roster'],
 });
 
-const HEADER = 'fullName,email,agentCode,role,leaderAgentCode,dateOfBirth,companyJoinMonth,workStatus,gender';
-/** The same three rows the template carries, as cells — what the paste box shows (P18.8-T4: nine columns). */
+const HEADER = 'Kode agen,Nama,Peran,Kode upline,No. WhatsApp,Email,Tanggal bergabung,Waktu,Tanggal lahir,Jenis kelamin,'
+  + 'Bulan bergabung di perusahaan';
+/** The same three rows the template carries, as cells — what the paste box shows (A3's eleven columns). */
 const EXAMPLES = [
-  ['Agus Prasetyo', 'agus@example.test', '88001', 'AB', '', '1984-05-12', '2012-03', 'full-time', 'male'],
-  ['Puspita, Sari', 'sari@example.test', '88002', 'AAB', '88001', '1990-11-02', '2016-08', 'full-time', 'female'],
-  ['Rina Wijaya', 'rina@example.test', '88003', 'Agent', '88002', '1998-07-21', '2024-01', 'part-time', 'female'],
+  ['88001', 'Agus Prasetyo', 'AB', '', '0812 1100 8801', 'agus@example.test', '02/03/2015', 'Full-time', '12/05/1984', 'male', '2012-03'],
+  ['88002', 'Puspita, Sari', 'AAB', '88001', '0812 1100 8802', 'sari@example.test', '01/07/2019', 'Full-time', '02/11/1990', 'female', '2016-08'],
+  ['88003', 'Rina Wijaya', 'Agent', '88002', '', 'rina@example.test', '15/01/2026', 'Part-time', '21/07/1998', 'female', '2024-01'],
 ];
 const XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 const TEMPLATE = {
@@ -76,27 +77,35 @@ function watchSaves() {
   return saved;
 }
 
-describe('importing a roster (P3.6-T4)', () => {
+/** A row of the server's preview, as `GET …/roster/preview` answers it (A3). */
+const result = (agentCode: string, fullName: string, outcome: 'imported' | 'updated' | 'skipped', messages: string[] = [], over: Record<string, unknown> = {}) => ({
+  line: 2, agentCode, fullName, role: 'Agent', leaderAgentCode: '70045001', email: '', outcome, messages, ...over,
+});
+const SKIPPED_CSV = `${HEADER},Alasan\n70045005,Fikri Ramadhan,Agent,70049999,,,,,,,,Kode upline 70049999 tidak ada di file atau di KPM ini.\n`;
+/** A3's sample, as the server would answer it: three rows imported, one updated, two skipped. */
+const PREVIEW = {
+  issues: [], header: HEADER.split(','),
+  counts: { imported: 3, updated: 1, skipped: 2 },
+  rows: [
+    result('70045001', 'Rahmat Hidayat', 'imported', [], { line: 2, role: 'AB', leaderAgentCode: '' }),
+    result('70045002', 'Sari Wulandari', 'imported', [], { line: 3, role: 'AAB' }),
+    result('70045009', 'Nadia Kusuma', 'imported', ['No WhatsApp number: imported, but cannot be reminded on WhatsApp yet.'], { line: 4 }),
+    result('70013099', 'Indah Permatasari', 'updated', ['Already here; details updated.'], { line: 5 }),
+    result('70045005', 'Fikri Ramadhan', 'skipped', ['Upline code 70049999 is in neither the file nor this KPM.'], { line: 6, leaderAgentCode: '70049999' }),
+    result('70045006', 'Desi Anggraeni', 'skipped', ['Role "Agen Senior" does not exist. Use: Agent, AAB, AB.'], { line: 7, role: 'Agen Senior' }),
+  ],
+  skippedCsv: SKIPPED_CSV,
+};
+const DONE = { ...PREVIEW, invited: 3 };
+
+describe('P19.3-T4 importing members under A3', () => {
   afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
-  it('shows the worked examples in the box, tab-separated and three deep', async () => {
-    /*
-     * The placeholder is the only instruction most people will read, and one row can only
-     * ever demonstrate an *empty* leader column — the case nobody gets wrong. Three rows
-     * show a code in it, and show it blank only at the top of the office.
-     *
-     * They come from the API rather than being written here: an example that drifted from
-     * the parser would teach a shape the server refuses.
-     */
+  it('shows the worked examples in the box, tab-separated and three deep, in A3’s columns', async () => {
     render();
     await userEvent.click(screen.getByLabelText('Paste from a spreadsheet'));
     const box = screen.getByLabelText('Rows from your spreadsheet');
-    await vi.waitFor(() => expect(box).toHaveAttribute(
-      'placeholder',
-      'Agus Prasetyo\tagus@example.test\t88001\tAB\t\t1984-05-12\t2012-03\tfull-time\tmale\n'
-      + 'Puspita, Sari\tsari@example.test\t88002\tAAB\t88001\t1990-11-02\t2016-08\tfull-time\tfemale\n'
-      + 'Rina Wijaya\trina@example.test\t88003\tAgent\t88002\t1998-07-21\t2024-01\tpart-time\tfemale',
-    ));
+    await vi.waitFor(() => expect(box).toHaveAttribute('placeholder', EXAMPLES.map((cells) => cells.join('\t')).join('\n')));
   });
 
   it('leaves the box without examples when they cannot be read — a placeholder is all they are', async () => {
@@ -107,152 +116,183 @@ describe('importing a roster (P3.6-T4)', () => {
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
-  // *Amended 2026-10-28 (P18.97-T4 AC-4; UI-025):* said in the columns' table, a row each, where it was a paragraph.
-  it('P18.8-T4 AC-2: says what each of the nine columns takes, the rungs written AB, AAB and Agent', async () => {
+  it('P19.3-T4 AC-7 lists A3’s columns in the file’s order, by the file’s own header names', async () => {
     render();
-    const said = within(await screen.findByRole('table', { name: /The file’s columns, in order/ })).getAllByRole('row')
-      .map((row) => row.textContent).join(' | ');
-    expect(said).toContain('digits only');
-    expect(said).toContain('AB, AAB or Agent');
-    expect(said).toContain('YYYY-MM-DD');
-    expect(said).toContain('at least 18');
-    expect(said).toContain('YYYY-MM');
-    expect(said).toContain('full-time or part-time');
-    expect(said).toContain('male or female');
-    expect(said).toContain('Leader’s agent code (optional)');
-    expect(said).not.toMatch(/\bab, aab or agent\b/);
+    const table = await screen.findByRole('table', { name: /The file’s columns, in order/ });
+    const [, ...rows] = within(table).getAllByRole('row');
+    expect(rows.map((row) => within(row).getAllByRole('cell')[0].textContent)).toEqual([
+      'Kode agen', 'Nama', 'Peran', 'Kode upline', 'No. WhatsApp', 'Email', 'Tanggal bergabung', 'Waktu', 'Tanggal lahir',
+      'Jenis kelamin', 'Bulan bergabung di perusahaan',
+    ]);
+    const said = rows.map((row) => row.textContent).join(' | ');
+    expect(said).toContain('Agent, AAB or AB. Agen is read as Agent.');
+    expect(said).toContain('Needed for somebody new: the invitation goes there');
+    expect(said).toContain('cannot be reminded on WhatsApp yet');
+    expect(said).toContain('DD/MM/YYYY, at least 18 years ago');
+    expect(said).toContain('Full-time or Part-time');
   });
 
   it('sends pasted rows exactly as they were pasted, as JSON', async () => {
-    const { calls } = render({
-      '/admin/tenants/kpm-1/roster/preview': { body: { issues: [], willCreate: 1, rows: [] } },
-    });
-
-    await paste('Rina Wijaya\trina@k.test\t881\tagent\t');
+    const { calls } = render({ '/admin/tenants/kpm-1/roster/preview': { body: PREVIEW } });
+    await paste('70045001\tRahmat\tAB');
     await userEvent.click(screen.getByRole('button', { name: 'Check the file' }));
-
-    const call = await screen.findByText(/1 person ready to import/).then(
-      () => calls.find((c) => c.url.includes('/roster/preview'))!,
-    );
-    // Untouched: the server decides the delimiter, and a screen that reformatted the text
-    // would be a second parser disagreeing with the first.
-    expect(JSON.parse(call.init.body as string)).toEqual({
-      rows: 'Rina Wijaya\trina@k.test\t881\tagent\t',
-    });
+    await screen.findByText('3 new people ready to import, 1 updated, 2 rows skipped.');
+    // Untouched: the server decides the delimiter, and a screen that reformatted the text would be a second parser.
+    expect(JSON.parse(calls.find((c) => c.url.includes('/roster/preview'))!.init.body as string)).toEqual({ rows: '70045001\tRahmat\tAB' });
   });
 
   it('clears what was there when the two ways are swapped', async () => {
-    // Checking a paste and then importing a file chosen earlier is not a thing anybody
-    // means to do.
     render();
     await upload();
     expect(screen.getByRole('button', { name: 'Check the file' })).toBeEnabled();
-    await paste('Rina\trina@k.test\t881\tagent\t');
+    await paste('70045001\tRahmat\tAB');
     expect(screen.getByRole('button', { name: 'Check the file' })).toBeEnabled();
-
     await userEvent.click(screen.getByLabelText('Upload the filled file (.xlsx or .csv)'));
     expect(screen.getByRole('button', { name: 'Check the file' })).toBeDisabled();
     expect(screen.queryByText('roster.xlsx')).toBeNull();
   });
 
-  it('checks the file without creating anybody', async () => {
-    const { calls } = render({
-      '/admin/tenants/kpm-1/roster/file/preview': {
-        body: { issues: [], willCreate: 2, rows: [] },
-      },
-    });
-
+  it.each([[375], [1280]])('P19.3-T4 AC-10 at %ipx: the preview’s line, a result per row, and nothing written yet', async (width) => {
+    atWidth(width);
+    const { calls } = render({ '/admin/tenants/kpm-1/roster/file/preview': { body: PREVIEW } });
     await upload();
+    expect(screen.queryByRole('button', { name: /^Import/ })).toBeNull();
     await userEvent.click(screen.getByRole('button', { name: 'Check the file' }));
 
-    expect(await screen.findByText(/2 people ready to import/)).toBeInTheDocument();
-    expect(screen.getByText(/Nothing has been created yet/)).toBeInTheDocument();
+    expect(await screen.findByText('3 new people ready to import, 1 updated, 2 rows skipped.')).toHaveAttribute('role', 'status');
+    const table = screen.getByRole('table', { name: 'Each row of the file, and what it comes to' });
+    expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['Agent code', 'Name', 'Role', 'Upline code', 'Result']);
+    const [, ...rows] = within(table).getAllByRole('row');
+    expect(rows.map((r) => within(r).getAllByRole('cell')[4].textContent)).toEqual([
+      'Imported', 'Imported', 'ImportedNo WhatsApp number: imported, but cannot be reminded on WhatsApp yet.',
+      'UpdatedAlready here; details updated.', 'SkippedUpline code 70049999 is in neither the file nor this KPM.',
+      'SkippedRole "Agen Senior" does not exist. Use: Agent, AAB, AB.',
+    ]);
+    // The top of the office has no upline, said in words.
+    expect(within(rows[0]).getAllByRole('cell')[3]).toHaveTextContent('None');
+    expect(screen.getByRole('button', { name: 'Import 4 people' })).toBeEnabled();
     expect(calls.some((c) => c.url.endsWith('/roster/file') || c.url.endsWith('/roster'))).toBe(false);
   });
 
-  it('will not let the import be clicked before the file has been checked', async () => {
-    render();
+  it('P19.3-T4 AC-10 downloads the skipped rows as the server wrote them, the file’s columns and Alasan', async () => {
+    const saved = watchSaves();
+    render({ '/admin/tenants/kpm-1/roster/file/preview': { body: PREVIEW } });
     await upload();
-    expect(screen.getByRole('button', { name: 'Import 0' })).toBeDisabled();
+    await userEvent.click(screen.getByRole('button', { name: 'Check the file' }));
+    await userEvent.click(await screen.findByRole('button', { name: '⬇ Download the skipped rows' }));
+    expect(saved.map((s) => s.name)).toEqual(['baris-dilewati.csv']);
+    expect(await textOf(saved[0].blob)).toBe(SKIPPED_CSV);
   });
 
-  it('lists every problem, and says plainly that nothing will be created', async () => {
-    // The import is all or nothing, so "9 of 10 will import" would describe something the
-    // server cannot do.
+  it('P19.3-T4 AC-10 offers no download when nothing is skipped, and no import when nothing can be written', async () => {
+    render({
+      '/admin/tenants/kpm-1/roster/file/preview': {
+        body: { ...PREVIEW, counts: { imported: 0, updated: 0, skipped: 1 }, rows: [PREVIEW.rows[4]] },
+      },
+    });
+    await upload();
+    await userEvent.click(screen.getByRole('button', { name: 'Check the file' }));
+    expect(await screen.findByText('0 new people ready to import, 1 row skipped.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Import 0 people' })).toBeDisabled();
+    // Nobody new, so no invitation to offer.
+    expect(screen.queryByRole('checkbox')).toBeNull();
+  });
+
+  it('P19.3-T4 AC-11 offers the invitation by email, ticked, and sends what the box says', async () => {
+    const { calls } = render({
+      '/admin/tenants/kpm-1/roster/file/preview': { body: PREVIEW },
+      '/admin/tenants/kpm-1/roster/file': { body: { ...DONE, invited: 0 } },
+    });
+    await upload();
+    await userEvent.click(screen.getByRole('button', { name: 'Check the file' }));
+    const box = await screen.findByRole('checkbox', { name: 'Send an email invitation to 3 new people' });
+    expect(box).toBeChecked();
+    expect(box).toHaveAccessibleDescription('Each gets a one-time link to choose their password. Nothing is sent by WhatsApp.');
+    await userEvent.click(box);
+    await userEvent.click(screen.getByRole('button', { name: 'Import 4 people' }));
+    await screen.findByRole('heading', { name: '3 members imported, 1 updated' });
+    const sent = calls.find((c) => c.url.endsWith('/roster/file'))!;
+    expect((sent.init.body as FormData).get('invite')).toBe('false');
+  });
+
+  it.each([[375], [1280]])('P19.3-T4 AC-11 at %ipx: imports, says so in A3’s toast naming email, and shows no password', async (width) => {
+    atWidth(width);
+    const { calls } = render({
+      '/admin/tenants/kpm-1/roster/preview': { body: PREVIEW },
+      '/admin/tenants/kpm-1/roster': { body: DONE },
+    });
+    await paste('70045001\tRahmat\tAB');
+    await userEvent.click(screen.getByRole('button', { name: 'Check the file' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Import 4 people' }));
+
+    expect(await screen.findByRole('heading', { name: '3 members imported, 1 updated' })).toBeInTheDocument();
+    expect(screen.getByText('3 members imported, 1 updated. Invitations sent by email.')).toBeInTheDocument();
+    expect(screen.getByText('An invitation went by email to 3 new people, with a link to choose their password.')).toBeInTheDocument();
+    expect(screen.getByText('2 rows were skipped. Download them, fix them and upload them again.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '⬇ Download the skipped rows' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Back' })).toHaveAttribute('href', '/admin/tenants/kpm-1');
+    expect(document.body.textContent).not.toMatch(/password it starts on|Temporary password/i);
+    expect(JSON.parse(calls.find((c) => c.url.endsWith('/roster'))!.init.body as string)).toEqual({ rows: '70045001\tRahmat\tAB', invite: true });
+  });
+
+  it('P19.3-T4 AC-11 says nobody was mailed when the box was unticked', async () => {
+    render({
+      '/admin/tenants/kpm-1/roster/file/preview': { body: PREVIEW },
+      '/admin/tenants/kpm-1/roster/file': { body: { ...DONE, invited: 0 } },
+    });
+    await upload();
+    await userEvent.click(screen.getByRole('button', { name: 'Check the file' }));
+    await userEvent.click(await screen.findByRole('checkbox'));
+    await userEvent.click(screen.getByRole('button', { name: 'Import 4 people' }));
+    expect(await screen.findByText('Nobody was emailed. Each new person can sign in with Forgot your password? and their email.')).toBeInTheDocument();
+    expect(screen.getByText('3 members imported, 1 updated.')).toBeInTheDocument();
+  });
+
+  it('Cancel puts the preview away, and the file can be checked again', async () => {
+    render({ '/admin/tenants/kpm-1/roster/file/preview': { body: PREVIEW } });
+    await upload();
+    await userEvent.click(screen.getByRole('button', { name: 'Check the file' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('table', { name: 'Each row of the file, and what it comes to' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Check the file' })).toBeEnabled();
+  });
+
+  it.each([[375], [1280]])('P19.3-T4 AC-10 at %ipx: a file that cannot be read says so whole, with its problems', async (width) => {
+    atWidth(width);
     render({
       '/admin/tenants/kpm-1/roster/file/preview': {
         body: {
-          willCreate: 0,
-          rows: [],
-          issues: [
-            { line: 2, column: 'email', message: '"nope" is not an email address.' },
-            { line: 3, column: 'agentCode', message: 'Already on line 2.' },
-          ],
+          issues: [{ line: 1, column: 'file', message: 'The file has no Kode agen, Peran column. Download the template and use its header.' }],
+          header: [], counts: { imported: 0, updated: 0, skipped: 0 }, rows: [], skippedCsv: null,
         },
       },
     });
-
     await upload();
     await userEvent.click(screen.getByRole('button', { name: 'Check the file' }));
-
-    expect(await screen.findByText(/2 problems — nothing will be created/)).toBeInTheDocument();
-    expect(screen.getByText('"nope" is not an email address.')).toBeInTheDocument();
-    expect(screen.getByText('Already on line 2.')).toBeInTheDocument();
-    // And the import stays shut.
-    expect(screen.getByRole('button', { name: 'Import 0' })).toBeDisabled();
+    expect(await screen.findByRole('heading', { name: 'The file could not be read: 1 problem' })).toBeInTheDocument();
+    const problems = screen.getByRole('table', { name: 'What is wrong with the file' });
+    expect(within(problems).getByText('The file has no Kode agen, Peran column. Download the template and use its header.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Import/ })).toBeNull();
   });
 
-  it('shows every password once, and says that is the only time', async () => {
+  it('brings the file’s problems back when the server refuses the import', async () => {
     render({
-      '/admin/tenants/kpm-1/roster/file/preview': { body: { issues: [], willCreate: 1, rows: [] } },
-      '/admin/tenants/kpm-1/roster/file': {
-        body: {
-          created: [{
-            fullName: 'Rina Wijaya',
-            email: 'rina@k.test',
-            agentCode: '881',
-            temporaryPassword: 'kfmp-3xqz-7bdn-r4vw',
-          }],
-        },
-      },
-    });
-
-    await upload();
-    await userEvent.click(screen.getByRole('button', { name: 'Check the file' }));
-    await userEvent.click(await screen.findByRole('button', { name: 'Import 1' }));
-
-    expect(await screen.findByText('kfmp-3xqz-7bdn-r4vw')).toBeInTheDocument();
-    expect(screen.getByText(/This is the only time it is shown/)).toBeInTheDocument();
-    // And what the recipient will be asked to do with it.
-    expect(screen.getByText(/asked to choose their own password/)).toBeInTheDocument();
-  });
-
-  it('brings the row list back when the server refuses the commit', async () => {
-    // The refusal carries the issues, so the operator is not told "something was wrong"
-    // and left to guess which row.
-    render({
-      '/admin/tenants/kpm-1/roster/file/preview': { body: { issues: [], willCreate: 1, rows: [] } },
+      '/admin/tenants/kpm-1/roster/file/preview': { body: PREVIEW },
       '/admin/tenants/kpm-1/roster/file': {
         status: 400,
         body: {
           error: {
-            code: 'VALIDATION_FAILED',
-            message: '1 row would not import.',
-            requestId: 'r-4',
-            details: {
-              issues: [{ line: 2, column: 'agentCode', message: 'Already registered.' }],
-            },
+            code: 'VALIDATION_FAILED', message: 'The file could not be read, so nothing was imported.', requestId: 'r-4',
+            details: { issues: [{ line: 1, column: 'file', message: 'The file is empty.' }] },
           },
         },
       },
     });
-
     await upload();
     await userEvent.click(screen.getByRole('button', { name: 'Check the file' }));
-    await userEvent.click(await screen.findByRole('button', { name: 'Import 1' }));
-
-    expect(await screen.findByRole('alert')).toHaveTextContent('1 row would not import');
-    expect(screen.getByText('Already registered.')).toBeInTheDocument();
+    await userEvent.click(await screen.findByRole('button', { name: 'Import 4 people' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('nothing was imported');
+    expect(screen.getByText('The file is empty.')).toBeInTheDocument();
   });
 
   it('answers a file the server cannot read with what it said', async () => {
@@ -267,43 +307,36 @@ describe('importing a roster (P3.6-T4)', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('The workbook unpacks to more than 25 MB.');
   });
 
-  describe('the leader limit (P13.2-T4 AC-4, AC-5)', () => {
+  describe('the leader limit (P13.2-T4 AC-4, AC-5): the office filled while the import was written', () => {
     const LIMIT = {
-      '/admin/tenants/kpm-1/roster/file/preview': { body: { issues: [], willCreate: 1, rows: [] } },
+      '/admin/tenants/kpm-1/roster/file/preview': { body: PREVIEW },
       '/admin/tenants/kpm-1/roster/file': {
         status: 409,
         body: { error: { code: 'LEADER_LIMIT_REACHED', message: 'x', details: { maxLeaders: 10, leadersUsed: 10 }, requestId: 'r-5' } },
       },
     };
 
-    async function importOne() {
+    async function importAll() {
       await upload();
       await userEvent.click(screen.getByRole('button', { name: 'Check the file' }));
-      await userEvent.click(await screen.findByRole('button', { name: 'Import 1' }));
+      await userEvent.click(await screen.findByRole('button', { name: 'Import 4 people' }));
     }
 
     it('tells the Super Admin, in plain words, to raise the limit on the offices list', async () => {
       render(LIMIT);
-      await importOne();
+      await importAll();
       const alert = await screen.findByRole('alert');
       expect(alert).toHaveTextContent('This office has reached its limit of 10 leaders, so the ABs and AABs in this file cannot be added.');
-      expect(alert).toHaveTextContent('Raise it with Edit subscription on the offices list first, or import them as Agents.');
       expect(within(alert).getByRole('link', { name: 'offices list' })).toHaveAttribute('href', '/admin/tenants');
       expect(alert).not.toHaveTextContent('LEADER_LIMIT_REACHED');
     });
 
-    it('P18.8-T2 AC-9: tells an Owner to import them as Agents and promote them, which asks AgencyBoost', async () => {
+    it('P18.5-T2 AC-9: tells an Owner to import them as Agents and promote them, which asks AgencyBoost', async () => {
       stubFetch({ ...TEMPLATE, ...LIMIT });
-      renderWithSession(<RosterImport kpmId="kpm-1" backHref="/people/members" />, {
-        me: makeMe({ permissions: ['kpm:import_roster'] }),
-      });
-      await importOne();
+      renderWithSession(<RosterImport kpmId="kpm-1" backHref="/people/members" />, { me: makeMe({ permissions: ['kpm:import_roster'] }) });
+      await importAll();
       const alert = await screen.findByRole('alert');
-      expect(alert).toHaveTextContent(
-        'Import them as Agents, then promote them on their page: past the limit, that asks AgencyBoost to approve it.',
-      );
-      expect(within(alert).queryByRole('link')).not.toBeInTheDocument();
-      // A roster row cannot wait: no ask is offered (ADR-0157 §5).
+      expect(alert).toHaveTextContent('Import them as Agents, then promote them on their page: past the limit, that asks AgencyBoost to approve it.');
       expect(within(alert).queryByRole('button')).not.toBeInTheDocument();
     });
   });
@@ -367,21 +400,22 @@ describe('ADR-0184 Excel beside CSV', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Download Excel (.xlsx)' }));
     const failed = await screen.findByRole('alert');
     expect(failed).toHaveTextContent('The template could not be prepared. Something went wrong on our side.');
-    // The server's code and request id, for support (P18.97-T4 AC-10).
+    // The server's code and request id, for support (P18.9-T4 AC-10).
     expect(failed).toHaveTextContent('INTERNAL_ERROR · r-1');
     await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
     await vi.waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
   });
 
-  it('keeps the guide apart from the data: the columns and three rules, open on a desktop', async () => {
+  it('keeps the guide apart from the data: the columns and four rules, open on a desktop', async () => {
     render();
     const guide = screen.getByRole('group', { name: 'How to fill it in' });
     expect(guide).toHaveAttribute('open');
     expect(within(guide).getByRole('table', { name: /The file’s columns, in order/ })).toBeInTheDocument();
     expect(within(guide).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
+      'Kode agen, Nama and Peran are required. Leave any other cell empty when you do not know it.',
       'One person per row.',
-      'Rows can come in any order, and the leader’s code is empty for somebody who reports to nobody.',
-      'Dates are written YYYY-MM-DD, and months YYYY-MM.',
+      'Rows can come in any order: an upline is matched in the file and among the people already in the KPM.',
+      'A row with a problem is skipped with its reason, and the rest are imported together.',
     ]);
     // Nothing to fill in is inside it.
     expect(within(guide).queryByRole('textbox')).toBeNull();
@@ -406,13 +440,13 @@ describe('ADR-0184 Excel beside CSV', () => {
 
   it('sends a chosen file as it is, in a form — never read in the browser — to the file routes', async () => {
     const { calls } = render({
-      '/admin/tenants/kpm-1/roster/file/preview': { body: { issues: [], willCreate: 1, rows: [] } },
-      '/admin/tenants/kpm-1/roster/file': { body: { created: [] } },
+      '/admin/tenants/kpm-1/roster/file/preview': { body: PREVIEW },
+      '/admin/tenants/kpm-1/roster/file': { body: DONE },
     });
     const file = await upload('roster.csv');
     expect(screen.getByText('roster.csv')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Check the file' }));
-    await userEvent.click(await screen.findByRole('button', { name: 'Import 1' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Import 4 people' }));
 
     const sent = calls.filter((c) => c.url.includes('/roster/file'));
     expect(sent.map((c) => [c.init.method, c.url.replace(/^.*\/admin/, '/admin')])).toEqual([
@@ -430,11 +464,11 @@ describe('ADR-0184 Excel beside CSV', () => {
 });
 
 /**
- * **The import's instructions as a table of its columns** (P18.97-T4 AC-4, ADR-0176 §6; the client's KPM Owner review
+ * **The import's instructions as a table of its columns** (P18.9-T4 AC-4, ADR-0176 §6; the client's KPM Owner review
  * of 2026-10-27, UI-025 — 120 words, *Remove* at every size). `/people/import` (the Owner, the Admin) and
  * `/admin/tenants/[kpmId]/roster` (the Super Admin) draw this one component, so they read the same.
  */
-describe('P18.97-T4 AC-4 the import’s columns and its template', () => {
+describe('P18.9-T4 AC-4 the import’s columns and its template', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   const OWNER = makeMe({
@@ -445,12 +479,12 @@ describe('P18.97-T4 AC-4 the import’s columns and its template', () => {
     permissions: ['kpm:import_roster'],
   });
   const CLIENTS_COLUMNS = [
-    'Name', 'Email', 'Agent code', 'Role', 'Leader’s agent code (optional)', 'Date of birth', 'Join month',
-    'Full/part-time', 'Gender',
+    'Kode agen', 'Nama', 'Peran', 'Kode upline', 'No. WhatsApp', 'Email', 'Tanggal bergabung', 'Waktu', 'Tanggal lahir',
+    'Jenis kelamin', 'Bulan bergabung di perusahaan',
   ];
 
   it.each([['the Super Admin', SUPER_ADMIN], ['an Owner', OWNER]])(
-    'P18.97-T4 AC-4 lists the nine columns in the file’s order, in the client’s words, for %s', async (_who, me) => {
+    'P18.9-T4 AC-4 lists the columns in the file’s order, in A3’s words (P19.3-T4 AC-7), for %s', async (_who, me) => {
       stubFetch(TEMPLATE);
       renderWithSession(<RosterImport kpmId="kpm-1" backHref="/back" />, { me });
       const table = await screen.findByRole('table', { name: /The file’s columns, in order/ });
@@ -460,7 +494,7 @@ describe('P18.97-T4 AC-4 the import’s columns and its template', () => {
     },
   );
 
-  it('P18.97-T4 AC-4 has no paragraph of instructions left', async () => {
+  it('P18.9-T4 AC-4 has no paragraph of instructions left', async () => {
     render();
     await screen.findByRole('button', { name: 'Download Excel (.xlsx)' });
     for (const gone of [/One row per person:/, /order does not matter/, /Pasting works from Excel/, /Every column but the leader/]) {
@@ -468,7 +502,7 @@ describe('P18.97-T4 AC-4 the import’s columns and its template', () => {
     }
   });
 
-  it('P18.97-T4 AC-4 keeps the template in view whichever way in is chosen, above the choice', async () => {
+  it('P18.9-T4 AC-4 keeps the template in view whichever way in is chosen, above the choice', async () => {
     render();
     const excel = screen.getByRole('button', { name: 'Download Excel (.xlsx)' });
     const choice = screen.getByRole('group', { name: 'How are you adding them?' });

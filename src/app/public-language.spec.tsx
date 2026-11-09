@@ -20,7 +20,7 @@ vi.mock('next/navigation', () => ({
 
 /**
  * The six public pages, as somebody meets them before they are anybody (the route registry's *public* family): each
- * title in English, and in Indonesian — what a reader who has chosen nothing reads once the switch is live (P18.98-T4,
+ * title in English, and in Indonesian — what a reader who has chosen nothing reads once the switch is live (P18.10-T4,
  * the approved §A.2; *AgencyBoost* kept).
  */
 const TITLED: [string, () => React.ReactElement, string, string][] = [
@@ -45,10 +45,10 @@ afterEach(() => {
 });
 
 /**
- * **P18.98-T2 AC-3: the switch on the six public pages' card** (ADR-0179 §2). No shell, no bar: it sits on the
+ * **P18.10-T2 AC-3: the switch on the six public pages' card** (ADR-0179 §2). No shell, no bar: it sits on the
  * page's own column, on the title's line, at every size. Drawn while `LANGUAGE_LIVE` (live since 2026-10-29).
  */
-describe('P18.98-T2 the switch on the public pages', () => {
+describe('P18.10-T2 the switch on the public pages', () => {
   it.each(TITLED)('AC-3 draws nothing on %s while it is not live: the title is the page’s, as it was', async (_, page, title) => {
     stubFetch(PUBLIC_READS);
     renderWithSession(page(), { me: null });

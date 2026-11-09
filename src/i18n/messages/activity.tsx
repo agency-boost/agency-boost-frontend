@@ -3,7 +3,7 @@ import { defineMessages, type MessagesOf } from '@/i18n/catalogue';
 import { kept } from '@/i18n/kept';
 
 /**
- * **Activity Management's own words** (P18.98-T4, field selling; `functional/activity.md`,
+ * **Activity Management's own words** (P18.10-T4, field selling; `functional/activity.md`,
  * `functional/activity-dashboard.md`, `functional/ratios.md`): *Log Activity* (`/activity/log`), the *Dashboard*
  * (`/activity/dashboard`, and its body `components/activity-dashboard.tsx`, which a coachee's *Activity* tab draws
  * too), the *Ratio* tab (`/activity/ratio`), and `/activity`'s hand-off.
@@ -26,7 +26,7 @@ import { kept } from '@/i18n/kept';
  * @moved app/(agent)/activity/
  */
 const en = {
-  /** The heading above all three tabs: the nav item's words (P18.95-T9 AC-2), and the hand-off's wait. */
+  /** The heading above all three tabs: the nav item's words (P18.7-T9 AC-2), and the hand-off's wait. */
   title: kept('Activity Management'),
   takingYou: ({ tab }: { tab: string }) => `Taking you to ${tab}…`,
 
@@ -39,7 +39,7 @@ const en = {
     notSaved: 'Not yet saved',
     date: 'Date',
     totalToday: 'Total activities today',
-    /** A phone's one line (P18.95-T5 AC-1): *Today: 3 activities*, the count written by the caller in bold. */
+    /** A phone's one line (P18.7-T5 AC-1): *Today: 3 activities*, the count written by the caller in bold. */
     today: 'Today',
     dayLine: ({ day, count, n }: { day: string; count: ReactNode; n: number }) =>
       <>{day}: {count} {n === 1 ? 'activity' : 'activities'}</>,

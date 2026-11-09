@@ -2,6 +2,7 @@
 
 import { useId, useState } from 'react';
 import { PdfUploadNotice, usePdfUpload } from '@/components/recruitment/pdf-upload';
+import { useSandboxedDocument } from '@/components/sandboxed-document';
 import { ConfigBadge } from '@/components/ui/config-badge';
 import { Button, ErrorBanner } from '@/components/ui/field';
 import { InlineSaveStatus, useInlineSave, type InlineSaveOutcome } from '@/components/ui/inline-save-status';
@@ -11,6 +12,7 @@ import { recruitmentPitchMessages } from '@/i18n/messages/recruitment-pitch';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import { formatShortDay } from '@/lib/format';
+import { isHtmlDocument } from '@/lib/html-document';
 import {
   attachPitchDocument, formatFileSize, pitchDocumentUrl,
   requestPitchUpload, setPitchConfirmation, type PitchSlot,
@@ -44,7 +46,7 @@ const BADGE: Record<Tone, { pill: string; dot: string }> = {
  *
  * - **No file**: *Missing* on a required document; no badge on an optional one.
  * - **A file whose checklist is not finished** (`partial`): ***Uploaded · needs confirmation***, amber, to the
- *   office and to agents alike (ADR-0177 §1; P18.97-T5 AC-1) — where the office read *"{n}/{m} confirmed"*
+ *   office and to agents alike (ADR-0177 §1; P18.9-T5 AC-1) — where the office read *"{n}/{m} confirmed"*
  *   (`:688`) and agents *Uploaded* (`:696`). It still opens for every member (ADR-0126).
  * - **A file with every item ticked** (`complete`): *Complete* to the office, *Uploaded* to agents, as the
  *   prototype's agent view draws it (`:696`).
@@ -110,6 +112,9 @@ type Notice =
  * *View PDF* asks for a link signed for 300 seconds when it is pressed and opens it in a new tab
  * (contradiction 6). The tab is opened as the click lands, so a browser that blocks windows opened
  * later lets it through, and it is cut from this page before it navigates.
+ *
+ * **An HTML page is *View page*, and opens in the window, never a tab** (P19.6-T2, ADR-0217 §4): its icon reads *HTML*,
+ * and the button opens `SandboxedDocument`'s window titled with the slot, on the agents' tab and the office's page.
  */
 export function PitchCard({
   slot,
@@ -135,6 +140,8 @@ export function PitchCard({
   const [pending, setPending] = useState<Record<string, boolean>>({});
   const [notice, setNotice] = useState<Notice | null>(null);
   const [said, setSaid] = useState('');
+  const page = useSandboxedDocument();
+  const html = isHtmlDocument(slot.file?.mimeType);
 
   const office = audience === 'office';
   const writes = office && canWrite;
@@ -158,6 +165,13 @@ export function PitchCard({
     if (opening) return;
     setOpening(true);
     setNotice(null);
+    if (html) {
+      // An HTML page: the window, never a tab (ADR-0217 §3, §4).
+      await page.open(slot.title, async () => (await pitchDocumentUrl(slot.slot)).url)
+        .catch((err: unknown) => setNotice({ kind: 'link', error: toDisplayError(err) }))
+        .finally(() => setOpening(false));
+      return;
+    }
     const tab = window.open('', '_blank');
     if (tab) tab.opener = null;
     try {
@@ -174,7 +188,7 @@ export function PitchCard({
     }
   };
 
-  /** Each box's *Saving… → Saved ✓*, or *Couldn't save — retry* (P18.95-T1 AC-5). */
+  /** Each box's *Saving… → Saved ✓*, or *Couldn't save — retry* (P18.7-T1 AC-5). */
   const inline = useInlineSave();
   const saveKey = (item: string) => `${slot.slot}\n${item}`;
 
@@ -235,7 +249,7 @@ export function PitchCard({
             aria-hidden="true"
             className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-md bg-alert/10 text-xs font-extrabold text-alert"
           >
-            {t.fileIcon}
+            {html ? t.fileIconPage : t.fileIcon}
           </span>
           <div className="min-w-0">
             <p className="m-0 break-all text-base font-semibold text-navy">{slot.file.name}</p>
@@ -268,6 +282,9 @@ export function PitchCard({
                   htmlFor={id}
                   className={cn(
                     'flex min-w-0 flex-1 items-center gap-2.5 py-1.5',
+                    // The office's tick is a 44px line on a phone and a tablet (P19.2-T3 AC-4; UI-142); the agents' page
+                    // reads it unchanged.
+                    audience === 'office' && 'max-lg:min-h-11',
                     writes ? 'cursor-pointer' : 'cursor-not-allowed',
                   )}
                 >
@@ -287,7 +304,7 @@ export function PitchCard({
                         'flex h-[18px] w-[18px] items-center justify-center rounded-sm border-[1.5px] transition-colors',
                         checked ? 'border-success bg-success' : 'border-hairline bg-card',
                         // The amber ring the project keeps, on the visible box: the input is transparent.
-                        'peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-1 peer-focus-visible:outline-amber',
+                        'peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-1 peer-focus-visible:outline-focus-ring',
                         'peer-disabled:opacity-40',
                       )}
                     >
@@ -324,12 +341,12 @@ export function PitchCard({
         <div className="mt-auto flex flex-wrap items-center gap-2.5">
           {slot.file && (
             <Button
-              aria-label={t.viewName({ title: slot.title })}
+              aria-label={html ? t.viewPageName({ title: slot.title }) : t.viewName({ title: slot.title })}
               aria-disabled={opening || undefined}
               className="aria-disabled:opacity-60"
               onClick={() => void open()}
             >
-              {opening ? t.opening : t.viewPdf}
+              {opening ? t.opening : html ? t.viewPage : t.viewPdf}
             </Button>
           )}
           {writes && (
@@ -356,13 +373,14 @@ export function PitchCard({
       {(notice?.kind === 'link' || notice?.kind === 'tick') && (
         <div className="flex flex-col gap-1.5">
           <p className="m-0 text-base text-alert">
-            {notice.kind === 'link' ? t.linkFailed : t.tickFailed}
+            {notice.kind === 'link' ? (html ? t.pageLinkFailed : t.linkFailed) : t.tickFailed}
           </p>
           <ErrorBanner {...notice.error} />
         </div>
       )}
 
       <p role="status" className="sr-only">{said}</p>
+      {html && page.dialog}
     </article>
   );
 }

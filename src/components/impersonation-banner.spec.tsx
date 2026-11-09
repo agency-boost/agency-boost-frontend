@@ -27,30 +27,19 @@ describe('impersonation banner', () => {
   });
 
   /*
-   * ADR-0162 (P18.9-T1 AC-5): **which kind of session**, and for a setup one what it may change — it is
-   * read-only for everything else, so neither of the other two sentences is true of it.
+   * **P19.4-T2 AC-5 (UI-151; ADR-0206 §3): the banner says the session only looks** — the one sentence there is now.
+   * The setup session's and the elevated one's are retired with them; the red, the name and the end stay.
    */
-  it.each([
-    ['a support session', { impersonationReadOnly: true, impersonationPurpose: 'support' as const },
-      'You can look but not change anything — a second Super Admin has to approve that.'],
-    ['a setup session', { impersonationReadOnly: true, impersonationPurpose: 'setup' as const },
-      'This is a setup session: you can change the office’s settings, import people and upload production files, and nothing else.'],
-    ['an elevated session', { impersonationReadOnly: false, impersonationPurpose: 'setup' as const },
-      'This session can make changes. It was approved by a second Super Admin.'],
-  ])('AC-5 says which kind of session it is: %s', (_kind, session, sentence) => {
-    renderWithSession(<ImpersonationBanner />, {
-      me: makeMe({ isImpersonating: true, impersonatedBy: 'u-root', ...session }),
-    });
-    const banner = screen.getByRole('status');
-    expect(banner).toHaveTextContent(sentence);
-    expect(banner).toHaveTextContent('recorded against you as well');
-  });
-
-  it('reads a session from before the purpose existed as a support session', () => {
+  it('P19.4-T2 AC-5 says the session only looks, and nothing about a setup or an approval', () => {
     renderWithSession(<ImpersonationBanner />, {
       me: makeMe({ isImpersonating: true, impersonatedBy: 'u-root', impersonationReadOnly: true }),
     });
-    expect(screen.getByRole('status')).toHaveTextContent('You can look but not change anything');
+    const banner = screen.getByRole('status');
+    expect(banner).toHaveTextContent('This is a view-only session: you can look, and nothing can be changed.');
+    expect(banner).toHaveTextContent('recorded against you as well');
+    expect(banner).not.toHaveTextContent(/setup|second Super Admin|can make changes/i);
+    expect(banner).toHaveClass('bg-alert');
+    expect(screen.getByRole('button', { name: 'Stop acting as them' })).toBeInTheDocument();
   });
 
   it('records the end before dropping the token, then restores the Super Admin', async () => {

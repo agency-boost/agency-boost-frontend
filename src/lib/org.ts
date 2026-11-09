@@ -38,27 +38,27 @@ export interface Member {
    */
   isCoreLeader?: boolean;
   /**
-   * This viewer may tag or untag them *Core Leader* from the row (P18.8-T5 AC-3): they hold the permission, and the
+   * This viewer may tag or untag them *Core Leader* from the row (P18.5-T5 AC-3): they hold the permission, and the
    * member leads by rung and has not left. An offer — `PUT /members/:id/core-leader` refuses regardless.
    */
   canTagCoreLeader?: boolean;
   /** The system's stamp: when the membership was made active. Not the join date. */
   joinedAt: string | null;
   /**
-   * The person's **join date** here, an office date their leader gave (ADR-0169; P18.96-T2): what *Join date*
+   * The person's **join date** here, an office date their leader gave (ADR-0169; P18.8-T2): what *Join date*
    * prints. `null` while pending. Optional, for a read older than it.
    */
   joinDate?: string | null;
   /** Set only on a removed row. */
   removedAt: string | null;
   /**
-   * **The office date the person came back, if they did** (P18.97-T4 AC-3, ADR-0176 §5), the server's: on a live
+   * **The office date the person came back, if they did** (P18.9-T4 AC-3, ADR-0176 §5), the server's: on a live
    * membership that follows a removed one, its own join date — *Rejoined* beside the status; on the removed one, the
    * later membership's — *Rejoined {date}* under *Removed*. Optional, for a read older than it; absent is *never left*.
    */
   rejoinedOn?: string | null;
   /**
-   * What **this viewer** may do to this person, decided by the server (P3.5-T13).
+   * What **this viewer** may do to this person, decided by the server (P3.1-T13).
    *
    * Three flags because the permission matrix has three rows: Agent⇄AAB is a direct
    * leader's call, anything involving AB is the office's, and removal has refusals of its
@@ -78,11 +78,17 @@ export interface Member {
   lastActivityOn?: string | null;
   lastActivityDays?: number | null;
   /**
-   * What the person records (ADR-0158 §6, P18.8-T4): on one member's read only, and only to the office's
+   * What the person records (ADR-0158 §6, P18.5-T4): on one member's read only, and only to the office's
    * Owner, an Admin or the person themselves — absent on the roster and on a leader's read. A `null`
    * inside is *Not recorded*.
    */
-  personal?: PersonalDetails;
+  personal?: PersonalDetails & {
+    /**
+     * **The office's company, by name** (ADR-0205 §4, OWN UI-025): what *Bergabung di <company>* names beside the company
+     * join month. Optional for a read older than it; `null` for an office with no company.
+     */
+    companyName?: string | null;
+  };
   /** The directory's *Last coached*: `DAYS_SINCE_LAST_COACHING`, `null` without a session. */
   lastCoachedDays?: number | null;
 }
@@ -112,6 +118,40 @@ export function listMembers(filters: DirectoryFilters = {}): Promise<MemberPage>
 }
 
 export const readMember = (membershipId: string) => api<Member>(`/members/${membershipId}`);
+
+/**
+ * **A member's four tiles** (ADR-0205 §1; OWN UI-020, OWN R4) — `GET /members/:membershipId/performance`, mirroring
+ * `MemberPerformanceView` in the backend. Each figure is the one another screen shows for the same person: the coaching
+ * session's Activity card, the Unit Dashboard's goal cell for the year — **the office's figure only, never an estimate**
+ * — and its *Leads penjualan* and *Closing* for the month. Money in IDR sen.
+ */
+export interface MemberPerformance {
+  membershipId: string;
+  today: string;
+  /** *Aktivitas 7 hari*: every count logged over the 7 days to `to`, the office's today. */
+  activity: { from: string; to: string; count: number };
+  /**
+   * *Produksi tahun ini*: `actualMinor` `null` is *Belum diunggah*; `goalSet` false is *no goal*, and then the target
+   * and the percentage are `null`.
+   */
+  production: { year: string; actualMinor: number | null; targetMinor: number | null; attainmentPct: number | null; goalSet: boolean };
+  /** *1:1 terakhir*; `null` is *Belum pernah*. */
+  lastOneOnOne: { date: string } | null;
+  /** *Leads* (open sales leads) and *n closing* (reached *Paid and issued* this month). */
+  leads: { month: string; open: number; closing: number };
+}
+
+export const readMemberPerformance = (membershipId: string) =>
+  api<MemberPerformance>(`/members/${encodeURIComponent(membershipId)}/performance`);
+
+/**
+ * **Where *Lihat dashboard ›* goes** (ADR-0205 §3; OWN R4): the page Group Tree opens for that person — somebody who
+ * leads (a direct report, OD-23) their Unit Dashboard, anybody else their Personal Summary in the coaching shell.
+ */
+export function memberDashboardHref(member: Pick<Member, 'membershipId' | 'isLeader'>): string {
+  const id = encodeURIComponent(member.membershipId);
+  return member.isLeader ? `/unit/dashboard/${id}` : `/coaching/${id}/summary`;
+}
 
 export const listReports = (membershipId: string) =>
   api<Member[]>(`/members/${membershipId}/reports`);
@@ -203,7 +243,12 @@ export interface OrgTree {
   counts: { ab: number; aab: number; agent: number; total: number };
 }
 
-export const readOrgTree = () => api<OrgTree>('/members/tree');
+/**
+ * The tree: the reader's own, or with `forId` **a leader's, read-only, as that leader sees it** (P19.3-T3;
+ * `/group-tree/[membershipId]`) — 404 outside the reader's reach or in another office, 403 for an Agent.
+ */
+export const readOrgTree = (forId?: string) =>
+  api<OrgTree>('/members/tree' + (forId ? `?for=${encodeURIComponent(forId)}` : ''));
 
 /** An informal group. A label the office defines — never hierarchy, never access. */
 export interface GroupSummary {
@@ -274,7 +319,7 @@ export const setTags = (membershipId: string, groupIds: string[], isCoreLeader: 
   });
 
 /**
- * **Tag or untag one member *Core Leader* from the directory row** (ADR-0159 §1, P18.8-T5 AC-3): the flag alone,
+ * **Tag or untag one member *Core Leader* from the directory row** (ADR-0159 §1, P18.5-T5 AC-3): the flag alone,
  * their groups untouched. A non-leader is refused `400 CORE_LEADER_NOT_A_LEADER`.
  */
 export const setCoreLeader = (membershipId: string, isCoreLeader: boolean) =>
@@ -329,11 +374,11 @@ export function roleChangeExplanation(
   to: string,
   viewer: 'their-leader' | 'the-office',
   /**
-   * The company's ladder, for a rung it added (OD-50). Each rung by its badge's name, *AAB* (P18.95-T9 AC-1;
+   * The company's ladder, for a rung it added (OD-50). Each rung by its badge's name, *AAB* (P18.7-T9 AC-1;
    * *Associate Agency Builder* until then). The seeded one by default.
    */
   ladder?: OrgLevel[],
-  /** The reader's language (P18.98-T4; `useLanguage()`): English, the source, when given none. */
+  /** The reader's language (P18.10-T4; `useLanguage()`): English, the source, when given none. */
   language: Language = SOURCE_LANGUAGE,
 ): string {
   const [f, t] = [from.toLowerCase(), to.toLowerCase()];

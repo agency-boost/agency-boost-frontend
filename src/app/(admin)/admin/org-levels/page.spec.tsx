@@ -2,7 +2,9 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import AdminLayout from '@/app/(admin)/layout';
-import { makeMe, renderInLayout, stubFetch } from '@test/harness';
+import { axe } from 'vitest-axe';
+import { atWidth, makeMe, renderInLayout, renderWithSession, stubFetch, wears } from '@test/harness';
+import { smallTargets } from '@test/touch-audit';
 import OrgLevelsPage from './page';
 
 vi.mock('next/navigation', () => ({
@@ -17,7 +19,7 @@ const SUPER_ADMIN = makeMe({
   },
   membership: null,
   // `kpm:list_all` is the **layout's** gate, not this screen's: being in the platform
-  // console at all is checked once, above every route in the group (P3.5-T14 Stage 2).
+  // console at all is checked once, above every route in the group (P3.1-T14 Stage 2).
   permissions: ['kpm:list_all', 'org_level:read', 'org_level:crud', 'company:crud'],
 });
 
@@ -36,7 +38,16 @@ const LADDER = [
   rung({ orgLevelId: 'lvl-3', code: 'AB', label: 'AB', displayOrder: 3, leaderTier: 'senior' }),
 ];
 
-describe('org role ladder (P3.5-T7)', () => {
+/**
+ * ***+ Tambah jenjang* on the title row, and the sheet it opens** (P19.2-T2 AC-3; UI-133): the add form is a sheet at
+ * every size since 2026-11-06, where it was a card beside the table. Its fields are found inside it.
+ */
+async function openAdd() {
+  await userEvent.click(await screen.findByRole('button', { name: 'Add rung' }));
+  return screen.findByRole('dialog', { name: 'Add a rung' });
+}
+
+describe('org role ladder (P3.1-T7)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it('AC-1: reads junior first, by the name of each rung', async () => {
@@ -46,11 +57,8 @@ describe('org role ladder (P3.5-T7)', () => {
     renderInLayout(AdminLayout, <OrgLevelsPage />, { me: SUPER_ADMIN });
 
     const rows = within(await screen.findByRole('table')).getAllByRole('row').slice(1);
-    expect(rows.map((r) => r.textContent)).toEqual([
-      expect.stringContaining('Agent'),
-      expect.stringContaining('AAB'),
-      expect.stringContaining('AB'),
-    ]);
+    // Each label in its own field since P19.4-T5 (ADR-0213 §1): edited where it is read.
+    expect(rows.map((r) => (within(r).getByRole('textbox') as HTMLInputElement).value)).toEqual(['Agent', 'AAB', 'AB']);
     expect(screen.getByText('Agent → AAB → AB')).toBeInTheDocument();
   });
 
@@ -82,18 +90,25 @@ describe('org role ladder (P3.5-T7)', () => {
     const patch = calls.find((c) => c.init.method === 'PATCH');
     expect(patch?.url).toContain('/admin/org-levels/lvl-2');
     expect(JSON.parse(String(patch?.init.body))).toEqual({ status: 'archived' });
-    // No delete anywhere on this screen — there is no such affordance to find.
-    expect(screen.queryByRole('button', { name: /Delete|Remove/ })).not.toBeInTheDocument();
     expect(await screen.findByRole('button', { name: 'Restore' })).toBeInTheDocument();
+    // Delete is offered on an archived rung only (P19.4-T5, ADR-0213 §2): the one just archived, and no other.
+    expect(screen.getAllByRole('button', { name: 'Delete' })).toHaveLength(1);
+    expect(within(within(screen.getByRole('table')).getByRole('row', { name: /AAB/ })).getByRole('button', { name: 'Delete' }))
+      .toBeInTheDocument();
   });
 
+  // In the add sheet since P19.2-T2 AC-3 (UI-133), whose main button is enabled: the shape is said as it is typed, and
+  // pressing sends nothing — where it was a disabled button.
   it('AC-1: refuses a code the API would refuse, before the round trip', async () => {
-    stubFetch({ '/admin/org-levels': { body: [] }, '/admin/companies': { body: COMPANIES } });
+    const { calls } = stubFetch({ '/admin/org-levels': { body: [] }, '/admin/companies': { body: COMPANIES } });
     renderInLayout(AdminLayout, <OrgLevelsPage />, { me: SUPER_ADMIN });
 
-    await userEvent.type(await screen.findByLabelText('Code'), '9LEVEL');
-    expect(screen.getByText('Letters, digits and underscores, starting with a letter.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Add rung' })).toBeDisabled();
+    const sheet = await openAdd();
+    await userEvent.type(within(sheet).getByLabelText('Code'), '9LEVEL');
+    await userEvent.type(within(sheet).getByLabelText('Label'), 'Level');
+    expect(within(sheet).getByText('Letters, digits and underscores, starting with a letter.')).toBeInTheDocument();
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Add rung' }));
+    expect(calls.filter((c) => c.init.method === 'POST')).toEqual([]);
   });
 
   it('AC-1: adds to the end of the ladder, because a rung is appended not inserted', async () => {
@@ -103,14 +118,20 @@ describe('org role ladder (P3.5-T7)', () => {
     });
     renderInLayout(AdminLayout, <OrgLevelsPage />, { me: SUPER_ADMIN });
 
-    await userEvent.type(await screen.findByLabelText('Code'), 'SAB');
-    await userEvent.type(screen.getByLabelText('Label'), 'Senior AB');
-    await userEvent.click(screen.getByRole('button', { name: 'Add rung' }));
+    await screen.findByRole('table');
+    const sheet = await openAdd();
+    expect(within(sheet).getByText('It goes on the end of the ladder, at position 4.')).toBeInTheDocument();
+    await userEvent.type(within(sheet).getByLabelText('Code'), 'SAB');
+    await userEvent.type(within(sheet).getByLabelText('Label'), 'Senior AB');
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Add rung' }));
 
+    await waitFor(() => expect(calls.find((c) => c.init.method === 'POST')).toBeDefined());
     const post = calls.find((c) => c.init.method === 'POST');
     expect(JSON.parse(String(post?.init.body))).toEqual({
       companyId: 'co-1', code: 'SAB', label: 'Senior AB', displayOrder: 4, leaderTier: null,
     });
+    // The sheet closes on the ladder the write answers.
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
   it('AC-1: a taken code lands on the Code field, saying it may be archived', async () => {
@@ -132,12 +153,15 @@ describe('org role ladder (P3.5-T7)', () => {
     });
     renderInLayout(AdminLayout, <OrgLevelsPage />, { me: SUPER_ADMIN });
 
-    await userEvent.type(await screen.findByLabelText('Code'), 'AAB');
-    await userEvent.type(screen.getByLabelText('Label'), 'AAB');
-    await userEvent.click(screen.getByRole('button', { name: 'Add rung' }));
+    const sheet = await openAdd();
+    await userEvent.type(within(sheet).getByLabelText('Code'), 'AAB');
+    await userEvent.type(within(sheet).getByLabelText('Label'), 'AAB');
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Add rung' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('An archived code is never reused');
-    expect(screen.getByLabelText('Code')).toHaveAttribute('aria-invalid', 'true');
+    expect(await within(sheet).findByRole('alert')).toHaveTextContent('An archived code is never reused');
+    expect(within(sheet).getByLabelText('Code')).toHaveAttribute('aria-invalid', 'true');
+    // The sheet stays open on the refusal, with what was typed.
+    expect(within(sheet).getByLabelText('Label')).toHaveValue('AAB');
   });
 
   it('AC-2: never renders for somebody without the permission', () => {
@@ -162,7 +186,7 @@ describe('org role ladder (P3.5-T7)', () => {
     expect(screen.getByRole('alert')).toHaveAttribute('data-permission', 'org_level:crud');
   });
 
-  describe('P18.8-T1 the leader tier (ADR-0156)', () => {
+  describe('P18.5-T1 the leader tier (ADR-0156)', () => {
     const tierOf = async (label: string) => screen.findByRole('combobox', { name: `Leader tier of ${label}` });
 
     it('AC-6 shows each rung’s tier in its own column, in the client’s words', async () => {
@@ -248,19 +272,28 @@ describe('org role ladder (P3.5-T7)', () => {
       });
       renderInLayout(AdminLayout, <OrgLevelsPage />, { me: SUPER_ADMIN });
 
-      expect(await screen.findByLabelText('Leader tier')).toHaveDisplayValue('Not a leader');
-      await userEvent.type(screen.getByLabelText('Code'), 'UM');
-      await userEvent.type(screen.getByLabelText('Label'), 'Unit Manager');
-      await userEvent.selectOptions(screen.getByLabelText('Leader tier'), 'Associate Leader');
-      await userEvent.click(screen.getByRole('button', { name: 'Add rung' }));
+      // Three choice rows in the sheet since P19.2-T2 AC-4 (UI-134: *choice rows … for 2–5 options*, the leader tier).
+      await screen.findByRole('table');
+      let sheet = await openAdd();
+      const tier = () => within(sheet).getByRole('radiogroup', { name: 'Leader tier' });
+      expect(within(tier()).getAllByRole('radio').map((r) => r.textContent))
+        .toEqual(['Senior Leader', 'Associate Leader', 'Not a leader']);
+      expect(within(tier()).getByRole('radio', { name: 'Not a leader' })).toHaveAttribute('aria-checked', 'true');
+      await userEvent.type(within(sheet).getByLabelText('Code'), 'UM');
+      await userEvent.type(within(sheet).getByLabelText('Label'), 'Unit Manager');
+      await userEvent.click(within(tier()).getByRole('radio', { name: 'Associate Leader' }));
+      await userEvent.click(within(sheet).getByRole('button', { name: 'Add rung' }));
 
+      await waitFor(() => expect(calls.find((c) => c.init.method === 'POST')).toBeDefined());
       const post = calls.find((c) => c.init.method === 'POST');
       expect(JSON.parse(String(post?.init.body))).toMatchObject({ code: 'UM', leaderTier: 'associate' });
-      // The form resets to the default, so the next rung is not marked a leader by accident.
-      expect(await screen.findByLabelText('Leader tier')).toHaveDisplayValue('Not a leader');
+      // The sheet opens on the default again, so the next rung is not marked a leader by accident.
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+      sheet = await openAdd();
+      expect(within(tier()).getByRole('radio', { name: 'Not a leader' })).toHaveAttribute('aria-checked', 'true');
     });
 
-    describe('P18.95-T1 AC-5 — the tier says it is saved, beside its select', () => {
+    describe('P18.7-T1 AC-5 — the tier says it is saved, beside its select', () => {
       /** The save confirmation in the select's own cell: the nearest ancestor with a status for a child. */
       const besides = (el: HTMLElement) => {
         for (let box = el.parentElement; box; box = box.parentElement) {
@@ -274,7 +307,7 @@ describe('org role ladder (P3.5-T7)', () => {
       const patches = (calls: { url: string; init: RequestInit }[]) =>
         calls.filter((c) => c.init.method === 'PATCH').map((c) => [c.url.split('/admin/org-levels/')[1], JSON.parse(String(c.init.body))]);
 
-      it('P18.95-T1 AC-5: says Saved ✓ under the select once the tier is kept, inside its own cell', async () => {
+      it('P18.7-T1 AC-5: says Saved ✓ under the select once the tier is kept, inside its own cell', async () => {
         stubFetch({
           '/admin/org-levels/lvl-3': { body: RETAGGED },
           '/admin/org-levels': { body: LADDER },
@@ -291,7 +324,7 @@ describe('org role ladder (P3.5-T7)', () => {
         expect(screen.getAllByText('Saved ✓')).toHaveLength(1);
       });
 
-      it('P18.95-T1 AC-5: a failed tier says Couldn’t save — retry, and the retry sends the same tier again', async () => {
+      it('P18.7-T1 AC-5: a failed tier says Couldn’t save — retry, and the retry sends the same tier again', async () => {
         const { calls } = stubFetch({
           '/admin/org-levels/lvl-3': [
             { status: 500, body: { error: { code: 'INTERNAL_ERROR', message: 'Something went wrong.', requestId: 'req-9' } } },
@@ -321,7 +354,7 @@ describe('org role ladder (P3.5-T7)', () => {
         expect(screen.queryByRole('button', { name: /^Couldn't save/ })).not.toBeInTheDocument();
       });
 
-      it('P18.95-T1 AC-5: a tier refused while people stand on the rung (409) leaves no retry, the banner saying why', async () => {
+      it('P18.7-T1 AC-5: a tier refused while people stand on the rung (409) leaves no retry, the banner saying why', async () => {
         const { calls } = stubFetch({
           '/admin/org-levels/lvl-3': {
             status: 409,
@@ -355,7 +388,7 @@ describe('org role ladder (P3.5-T7)', () => {
   });
 
   /*
-   * **ADR-0168 §3 — the Template library's ladder is edited here** (amending P18.9-T3 AC-3, which left it out): it
+   * **ADR-0168 §3 — the Template library's ladder is edited here** (amending P18.6-T3 AC-3, which left it out): it
    * is listed under *Company* by its name, an insurer still chosen first, and while it is chosen the *Template
    * library* badge of `/admin/companies` sits beside the select; its rungs take every write the insurers' do.
    */
@@ -416,9 +449,11 @@ describe('org role ladder (P3.5-T7)', () => {
       expect(JSON.parse(String(patch?.init.body))).toEqual({ leaderTier: null });
       expect(await screen.findByRole('combobox', { name: 'Leader tier of AAB' })).toHaveDisplayValue('Not a leader');
 
-      await userEvent.type(screen.getByLabelText('Code'), 'SM');
-      await userEvent.type(screen.getByLabelText('Label'), 'Senior Manager');
-      await userEvent.click(screen.getByRole('button', { name: 'Add rung' }));
+      const sheet = await openAdd();
+      await userEvent.type(within(sheet).getByLabelText('Code'), 'SM');
+      await userEvent.type(within(sheet).getByLabelText('Label'), 'Senior Manager');
+      await userEvent.click(within(sheet).getByRole('button', { name: 'Add rung' }));
+      await waitFor(() => expect(calls.find((c) => c.init.method === 'POST')).toBeDefined());
       const post = calls.find((c) => c.init.method === 'POST');
       expect(JSON.parse(String(post?.init.body))).toMatchObject({ companyId: 'co-lib', code: 'SM', displayOrder: 4 });
     });
@@ -431,5 +466,287 @@ describe('org role ladder (P3.5-T7)', () => {
       expect(await screen.findByText('Agent → AAB → Agency Builder')).toBeInTheDocument();
       expect(screen.getByText('AgencyBoost built-in templates')).toBeInTheDocument();
     });
+  });
+});
+
+describe('P19.2-T2 AC-7 the ladder’s two explanations (UI-136, Appendix A)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  // Waits for the ladder as the width draws it: rows below 1024px, the table from it (P19.2-T2 AC-1).
+  const show = async (px: number) => {
+    atWidth(px);
+    stubFetch({ '/admin/org-levels': { body: LADDER }, '/admin/companies': { body: COMPANIES } });
+    renderWithSession(<OrgLevelsPage />, { me: SUPER_ADMIN });
+    await screen.findByRole(px < 1024 ? 'list' : 'table', { name: 'Role ladder, junior first' });
+  };
+
+  it('P19.2-T2 AC-7 the reading order: not drawn on a phone', async () => {
+    await show(375);
+    expect(wears(document.querySelector('[data-explains="reading-order"]')!, 375)).toContain('hidden');
+    expect(document.querySelector('[data-explains="reading-order-tip"]')).toBeNull();
+  });
+
+  it('P19.2-T2 AC-7 the reading order behind an ⓘ on a tablet, its words unchanged', async () => {
+    await show(768);
+    expect(wears(document.querySelector('[data-explains="reading-order"]')!, 768)).toContain('hidden');
+    const tip = document.querySelector('[data-explains="reading-order-tip"]') as HTMLElement;
+    await userEvent.click(within(tip).getByRole('button', { name: 'About Role ladder' }));
+    expect(within(tip).getByRole('tooltip')).toHaveTextContent(/^Reading order is junior first: Agent → AAB → AB\. Archiving/);
+  });
+
+  // The code's rule is the add sheet's since P19.2-T2 AC-3: read with the sheet open.
+  it('P19.2-T2 AC-7 both written out on a laptop', async () => {
+    await show(1280);
+    expect(wears(document.querySelector('[data-explains="reading-order"]')!, 1280)).not.toContain('hidden');
+    const sheet = await openAdd();
+    expect(within(sheet).getByLabelText('Code')).toHaveAccessibleDescription(/^Stable and semantic/);
+    expect(within(sheet).queryByRole('button', { name: 'About Code' })).toBeNull();
+  });
+
+  it.each([375, 768])('P19.2-T2 AC-7 at %ipx the code’s rule is behind an ⓘ beside the field', async (px) => {
+    await show(px);
+    const sheet = await openAdd();
+    expect(within(sheet).getByLabelText('Code')).not.toHaveAccessibleDescription(/^Stable and semantic/);
+    const glyph = within(sheet).getByRole('button', { name: 'About Code' });
+    await userEvent.click(glyph);
+    expect(glyph).toHaveAccessibleDescription(/^Stable and semantic — AGENT, AAB, AB\./);
+  });
+});
+
+/**
+ * **P19.2-T2 — the ladder's layout** (UI-126, UI-133, UI-134, UI-135; `admin-mobile` screen 4): below 1024px one 56px
+ * row per rung — its order in a circle, its label, its code, its tier a pill, ⋯ — and the company a pill; the table kept
+ * from 1024px at the content's width; *Tambah jenjang* a sheet at every size; no native select at 375 or 768; 44px.
+ */
+describe('P19.2-T2 the org role ladder (UI-126, UI-133, UI-134, UI-135)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const VERSIONED = LADDER.map((l, i) => ({ ...l, version: i }));
+  const ARCHIVED = [...VERSIONED, rung({ orgLevelId: 'lvl-4', code: 'OLD', label: 'Penasihat', displayOrder: 4, status: 'archived', version: 5 })];
+  const TWO = [...COMPANIES, { ...COMPANIES[0], _id: 'co-2', name: 'Manulife', slug: 'manulife' }];
+  const MANULIFE = [rung({ orgLevelId: 'm-1', companyId: 'co-2', code: 'AGENT', label: 'Agent' }),
+    rung({ orgLevelId: 'm-2', companyId: 'co-2', code: 'BP', label: 'BP', displayOrder: 2, leaderTier: 'associate' })];
+
+  const show = (levels: unknown[] = ARCHIVED, extra: Parameters<typeof stubFetch>[0] = {}) => {
+    const stub = stubFetch({ ...extra, '/admin/org-levels': { body: levels }, '/admin/companies': { body: TWO } });
+    renderInLayout(AdminLayout, <OrgLevelsPage />, { me: SUPER_ADMIN });
+    return stub;
+  };
+  const rowOf = (label: string) => screen.getByText(label, { selector: '[data-list-row] span' }).closest('[data-list-row]') as HTMLElement;
+
+  it.each([375, 768])('P19.2-T2 AC-1 at %ipx draws no table: one 56px row per rung — order, label, code, tier pill, ⋯', async (px) => {
+    atWidth(px);
+    show();
+    const list = await screen.findByRole('list', { name: 'Role ladder, junior first' });
+    expect(screen.queryByRole('table')).toBeNull();
+    const rows = within(list).getAllByRole('listitem');
+    expect(rows).toHaveLength(4);
+    expect(wears(rows[0], px)).toContain('min-h-14');
+    expect(rows[1]).toHaveTextContent(/^2AABAAB/);
+    expect(within(rows[1]).getByRole('button', { name: 'Leader tier of AAB: Associate Leader' })).toHaveTextContent('Associate Leader');
+    expect(within(rows[0]).getByRole('button', { name: 'Leader tier of Agent: Not a leader' })).toBeInTheDocument();
+    expect(within(rows[1]).getByRole('button', { name: 'Actions for AAB' })).toHaveTextContent('⋯');
+    // An archived rung says so on its line; the rows have no ›: a rung opens nothing.
+    expect(rows[3]).toHaveTextContent('OLD · Archived');
+    expect(list.querySelectorAll('[data-row-main]')).toHaveLength(0);
+    // The company a pill (UI-134), the active ladder beside it as `admin-mobile` screen 4 draws it.
+    expect(screen.getByRole('button', { name: 'Company: Prudential' })).toBeInTheDocument();
+    expect(document.querySelector('[data-ladder-line]')).toHaveTextContent('Agent → AAB → AB');
+  });
+
+  it.each([375, 768])('P19.2-T2 AC-1 at %ipx ⋯ holds Rename and Archive on a live rung, Rename, Restore and Delete on an archived one', async (px) => {
+    atWidth(px);
+    show();
+    await screen.findByRole('list', { name: 'Role ladder, junior first' });
+    await userEvent.click(within(rowOf('AAB')).getByRole('button', { name: 'Actions for AAB' }));
+    expect(screen.getAllByRole('menuitem').map((m) => m.textContent)).toEqual(['Rename', 'Archive']);
+    await userEvent.keyboard('{Escape}');
+    await userEvent.click(within(rowOf('Penasihat')).getByRole('button', { name: 'Actions for Penasihat' }));
+    expect(screen.getAllByRole('menuitem').map((m) => m.textContent)).toEqual(['Rename', 'Restore', 'Delete']);
+  });
+
+  it('P19.2-T2 AC-1 at 375px Archive from ⋯ sends the version read, and the row says Archived from the answer', async () => {
+    atWidth(375);
+    const { calls } = show(VERSIONED, {
+      'PATCH /admin/org-levels/lvl-2': { body: [VERSIONED[0], { ...VERSIONED[1], status: 'archived', version: 2 }, VERSIONED[2]] },
+    });
+    await screen.findByRole('list', { name: 'Role ladder, junior first' });
+    await userEvent.click(within(rowOf('AAB')).getByRole('button', { name: 'Actions for AAB' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Archive' }));
+    await waitFor(() => expect(rowOf('AAB')).toHaveTextContent('AAB · Archived'));
+    const patch = calls.find((c) => c.init.method === 'PATCH');
+    expect(JSON.parse(String(patch?.init.body))).toEqual({ status: 'archived', expectedVersion: 1 });
+  });
+
+  it('P19.2-T2 AC-1 at 375px Delete from ⋯ asks first, then deletes the archived rung', async () => {
+    atWidth(375);
+    const { calls } = show(ARCHIVED, { 'DELETE /admin/org-levels/lvl-4': { body: VERSIONED } });
+    await screen.findByRole('list', { name: 'Role ladder, junior first' });
+    await userEvent.click(within(rowOf('Penasihat')).getByRole('button', { name: 'Actions for Penasihat' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Delete' }));
+    const ask = await screen.findByRole('dialog', { name: /^Delete Penasihat\?/ });
+    expect(calls.filter((c) => c.init.method === 'DELETE')).toEqual([]);
+    await userEvent.click(within(ask).getByRole('button', { name: 'Delete' }));
+    await waitFor(() => expect(screen.queryByText('Penasihat')).toBeNull());
+    expect(calls.find((c) => c.init.method === 'DELETE')?.url).toContain('/admin/org-levels/lvl-4?expectedVersion=5');
+  });
+
+  it('P19.2-T2 AC-1 at 375px Rename from ⋯ saves the label alone, pinned to its version, and closes', async () => {
+    atWidth(375);
+    const { calls } = show(VERSIONED, {
+      'PATCH /admin/org-levels/lvl-2': { body: [VERSIONED[0], { ...VERSIONED[1], label: 'Associate Agency Builder', version: 2 }, VERSIONED[2]] },
+    });
+    await screen.findByRole('list', { name: 'Role ladder, junior first' });
+    await userEvent.click(within(rowOf('AAB')).getByRole('button', { name: 'Actions for AAB' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Rename' }));
+    const sheet = await screen.findByRole('dialog', { name: 'Label of AAB' });
+    const field = within(sheet).getByLabelText('Label');
+    expect(field).toHaveValue('AAB');
+    await userEvent.clear(field);
+    await userEvent.type(field, 'Associate Agency Builder');
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    const patch = calls.find((c) => c.init.method === 'PATCH');
+    expect(JSON.parse(String(patch?.init.body))).toEqual({ label: 'Associate Agency Builder', expectedVersion: 1 });
+    expect(screen.getByText('Associate Agency Builder')).toBeInTheDocument();
+  });
+
+  it('P19.2-T2 AC-1 at 375px Rename sends nothing for a label left as it was, and says Required on an empty one', async () => {
+    atWidth(375);
+    const { calls } = show(VERSIONED);
+    await screen.findByRole('list', { name: 'Role ladder, junior first' });
+    await userEvent.click(within(rowOf('AAB')).getByRole('button', { name: 'Actions for AAB' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Rename' }));
+    const sheet = await screen.findByRole('dialog', { name: 'Label of AAB' });
+    await userEvent.clear(within(sheet).getByLabelText('Label'));
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Save' }));
+    expect(within(sheet).getByLabelText('Label')).toHaveAccessibleDescription(expect.stringContaining('Required.'));
+    await userEvent.type(within(sheet).getByLabelText('Label'), 'AAB');
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(calls.filter((c) => c.init.method === 'PATCH')).toEqual([]);
+  });
+
+  it('P19.2-T2 AC-1 AC-4 at 375px the tier pill opens three choice rows; a choice saves at once and says Saved ✓ under it', async () => {
+    atWidth(375);
+    const { calls } = show(VERSIONED, {
+      'PATCH /admin/org-levels/lvl-3': { body: [VERSIONED[0], VERSIONED[1], { ...VERSIONED[2], leaderTier: 'associate', version: 3 }] },
+    });
+    await screen.findByRole('list', { name: 'Role ladder, junior first' });
+    await userEvent.click(within(rowOf('AB')).getByRole('button', { name: 'Leader tier of AB: Senior Leader' }));
+    const sheet = await screen.findByRole('dialog', { name: 'Choose leader tier of ab' });
+    expect(within(sheet).getAllByRole('radio').map((r) => r.textContent)).toEqual(['Senior Leader', 'Associate Leader', 'Not a leader']);
+    await userEvent.click(within(sheet).getByRole('radio', { name: 'Associate Leader' }));
+    await waitFor(() => expect(within(rowOf('AB')).getByRole('button', { name: 'Leader tier of AB: Associate Leader' })).toBeInTheDocument());
+    expect(await within(rowOf('AB')).findByText('Saved ✓')).toBeInTheDocument();
+    const patch = calls.find((c) => c.init.method === 'PATCH');
+    expect(JSON.parse(String(patch?.init.body))).toEqual({ leaderTier: 'associate', expectedVersion: 2 });
+  });
+
+  it('P19.2-T2 AC-1 at 375px a tier refused while people stand on the rung keeps the stored tier, the banner saying how many', async () => {
+    atWidth(375);
+    show(VERSIONED, {
+      'PATCH /admin/org-levels/lvl-3': {
+        status: 409,
+        body: { error: { code: 'ORG_LEVEL_TIER_IN_USE', message: 'x', details: { members: 12 }, requestId: 'r' } },
+      },
+    });
+    await screen.findByRole('list', { name: 'Role ladder, junior first' });
+    await userEvent.click(within(rowOf('AB')).getByRole('button', { name: 'Leader tier of AB: Senior Leader' }));
+    await userEvent.click(within(await screen.findByRole('dialog')).getByRole('radio', { name: 'Not a leader' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('12 people stand on AB, so its leader tier cannot change.');
+    expect(within(rowOf('AB')).getByRole('button', { name: 'Leader tier of AB: Senior Leader' })).toBeInTheDocument();
+  });
+
+  it.each([375, 768])('P19.2-T2 AC-4 at %ipx the company is a pill opening the companies; a choice shows its ladder', async (px) => {
+    atWidth(px);
+    show([...VERSIONED, ...MANULIFE]);
+    await screen.findByRole('list', { name: 'Role ladder, junior first' });
+    await userEvent.click(screen.getByRole('button', { name: 'Company: Prudential' }));
+    const sheet = await screen.findByRole('dialog', { name: 'Choose company' });
+    expect(within(sheet).getAllByRole('radio').map((r) => r.textContent)).toEqual(['Prudential', 'Manulife']);
+    await userEvent.click(within(sheet).getByRole('radio', { name: 'Manulife' }));
+    expect(await screen.findByRole('button', { name: 'Company: Manulife' })).toBeInTheDocument();
+    expect(document.querySelector('[data-ladder-line]')).toHaveTextContent('Agent → BP');
+    expect(screen.getByRole('button', { name: 'Leader tier of BP: Associate Leader' })).toBeInTheDocument();
+  });
+
+  it.each([1024, 1280])('P19.2-T2 AC-1 at %ipx keeps the table at the content’s width, and no add form beside it', async (px) => {
+    atWidth(px);
+    show();
+    const table = await screen.findByRole('table', { name: 'Role ladder, junior first' });
+    expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['Order', 'Rung', 'Leader tier', 'Status', 'Actions']);
+    expect(screen.queryByRole('heading', { name: 'Add a rung' })).toBeNull();
+    expect(screen.queryByLabelText('Code')).toBeNull();
+    expect(table.closest('.lg\\:grid-cols-\\[minmax\\(0\\,1fr\\)_20rem\\]')).toBeNull();
+    // A laptop may keep its selects (UI-134): the tier's and the company's.
+    expect(within(table).getByRole('combobox', { name: 'Leader tier of AB' })).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Company' })).toBeInTheDocument();
+  });
+
+  it.each([375, 768, 1024, 1280])('P19.2-T2 AC-3 at %ipx shows no form until + is pressed; the sheet’s main button is enabled and says what is missing', async (px) => {
+    atWidth(px);
+    const { calls } = show();
+    await screen.findByRole(px < 1024 ? 'list' : 'table', { name: 'Role ladder, junior first' });
+    expect(screen.queryByRole('textbox', { name: 'Code' })).toBeNull();
+    const add = screen.getByRole('button', { name: 'Add rung' });
+    expect(add).toHaveAttribute('aria-haspopup', 'dialog');
+    if (px < 768) expect(add).toHaveTextContent(/^$/);
+    else expect(add).toHaveTextContent('Add rung');
+    const sheet = await openAdd();
+    expect(sheet.closest('[data-placement]')).toHaveAttribute('data-placement', px < 768 ? 'sheet' : 'center');
+    const main = within(sheet).getByRole('button', { name: 'Add rung' });
+    expect(main).toBeEnabled();
+    await userEvent.click(main);
+    expect(within(sheet).getByLabelText('Code')).toHaveAccessibleDescription(expect.stringContaining('Required.'));
+    expect(within(sheet).getByLabelText('Label')).toHaveAccessibleDescription(expect.stringContaining('Required.'));
+    expect(calls.filter((c) => c.init.method === 'POST')).toEqual([]);
+    expect(within(sheet).getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
+  });
+
+  it.each(['Escape', 'close', 'cancel'] as const)('P19.2-T2 AC-3 %s closes the sheet without saving', async (how) => {
+    const { calls } = show();
+    await screen.findByRole('table');
+    const sheet = await openAdd();
+    await userEvent.type(within(sheet).getByLabelText('Code'), 'SM');
+    if (how === 'Escape') await userEvent.keyboard('{Escape}');
+    else if (how === 'close') await userEvent.click(within(sheet).getByRole('button', { name: 'Close' }));
+    else await userEvent.click(within(sheet).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(calls.filter((c) => c.init.method === 'POST')).toEqual([]);
+    expect(within(await openAdd()).getByLabelText('Code')).toHaveValue('');
+  });
+
+  it.each([375, 768])('P19.2-T2 AC-4 at %ipx draws no native select, on the page or in the add sheet', async (px) => {
+    atWidth(px);
+    show();
+    await screen.findByRole('list', { name: 'Role ladder, junior first' });
+    expect(document.querySelector('select')).toBeNull();
+    await openAdd();
+    expect(document.querySelector('select')).toBeNull();
+  });
+
+  it.each([375, 768])('P19.2-T2 AC-5 at %ipx finds no target under 44px in main, in the add sheet or in a tier’s choices', async (px) => {
+    atWidth(px);
+    show();
+    await screen.findByRole('list', { name: 'Role ladder, junior first' });
+    expect(smallTargets(document.querySelector('main')!, px)).toEqual([]);
+    const sheet = await openAdd();
+    expect(smallTargets(sheet, px)).toEqual([]);
+    await userEvent.keyboard('{Escape}');
+    await userEvent.click(within(rowOf('AB')).getByRole('button', { name: 'Leader tier of AB: Senior Leader' }));
+    expect(smallTargets(await screen.findByRole('dialog'), px)).toEqual([]);
+  });
+
+  it.each([375, 1280])('P19.2-T2 AC-1 AC-3 at %ipx has no axe violations: the ladder, then the add sheet open', async (px) => {
+    atWidth(px);
+    show();
+    await screen.findByRole(px < 1024 ? 'list' : 'table', { name: 'Role ladder, junior first' });
+    const clean = async () => expect(
+      (await axe(document.body, { rules: { 'color-contrast': { enabled: false }, region: { enabled: false } } })).violations,
+    ).toEqual([]);
+    await clean();
+    await openAdd();
+    await clean();
   });
 });

@@ -163,6 +163,7 @@ export const scorecard = (overrides: Partial<Scorecard> = {}): Scorecard => ({
   asOf: { kind: 'date', date: '2026-10-26' },
   partialPeriods: [],
   frozenAt: null,
+  definitions: 'data_sources',
   ...overrides,
 });
 

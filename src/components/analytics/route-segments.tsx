@@ -24,7 +24,8 @@ export function RouteSegments({
   return (
     <nav aria-label={label} className={cn('mb-3 flex h-11 rounded-pill bg-card p-[3px]', className)} data-route-segments="">
       {segments.map((segment) => {
-        const on = pathname === segment.href;
+        // The segment's path, its query aside: a tab carries the custom group across (`?group=`, P19.3-T3 AC-15).
+        const on = pathname === segment.href.split('?')[0];
         return (
           <Link
             key={segment.href}
@@ -32,7 +33,7 @@ export function RouteSegments({
             aria-current={on ? 'page' : undefined}
             className={cn(
               'flex min-w-0 flex-1 items-center justify-center whitespace-nowrap rounded-pill px-2.5 text-base font-semibold',
-              on ? 'bg-navy text-white' : 'text-muted hover:text-navy',
+              on ? 'bg-secondary text-secondary-contrast' : 'text-muted hover:text-navy',
             )}
           >
             {segment.label}

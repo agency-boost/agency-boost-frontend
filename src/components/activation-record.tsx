@@ -10,11 +10,11 @@ import { Skeleton, SkeletonBar, SkeletonText } from '@/components/ui/skeleton';
 import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
 import { activationMessages } from '@/i18n/messages/activation';
 import {
-  FIRST_CASE_CLOSED, readMyActivation, type ActivationItemProgress, type ActivationView,
+  FIRST_CASE_CLOSED, isEmptyActivation, readMyActivation, type ActivationEmpty, type ActivationItemProgress, type ActivationView,
 } from '@/lib/activation';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
-import { formatPercent } from '@/lib/format';
+import { formatPercent, formatShortDay } from '@/lib/format';
 
 /**
  * **The coaching *Activation* tab** (`renderPersonActivationStatus`, `Overall.html:6464-6489`; P13-T9):
@@ -31,7 +31,7 @@ import { formatPercent } from '@/lib/format';
  * reader's own — so the four readers are served one computation, and the prototype's constants, which
  * drew every item done for both people (`:6490-6493`), are gone.
  *
- * **Its words are the activation's catalogue** (`messages/activation.ts`, its `record`; P18.98-T4), in the reader's
+ * **Its words are the activation's catalogue** (`messages/activation.ts`, its `record`; P18.10-T4), in the reader's
  * language, and its percentage in `useFigureLanguage()`'s.
  */
 export function ActivationRecord({ view }: { view: ActivationView }) {
@@ -49,9 +49,9 @@ export function ActivationRecord({ view }: { view: ActivationView }) {
           aria-valuemax={100}
           aria-valuenow={width}
           aria-valuetext={complete}
-          className="h-1.5 overflow-hidden rounded-sm bg-navy/[0.08]"
+          className="h-1.5 overflow-hidden rounded-sm bg-secondary/[0.08]"
         >
-          <div className="h-full rounded-sm bg-navy-soft" style={{ width: `${width}%` }} />
+          <div className="h-full rounded-sm bg-secondary-hover" style={{ width: `${width}%` }} />
         </div>
       </SummaryCard>
       {view.aspects.map((aspect, i) => (
@@ -80,9 +80,10 @@ function RecordRow({ item }: { item: ActivationItemProgress }) {
   );
 }
 
-/** One read for the tab: the view, nobody's (a 404), a failure, or still waiting. */
-function useActivationRead(read: () => Promise<ActivationView>, key: string) {
+/** One read for the tab: the view, empty past the first year (P19.9-T3 AC-5), nobody's (a 404), a failure, or waiting. */
+function useActivationRead(read: () => Promise<ActivationView | ActivationEmpty>, key: string) {
   const [view, setView] = useState<ActivationView | null>(null);
+  const [empty, setEmpty] = useState<ActivationEmpty | null>(null);
   const [none, setNone] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -90,10 +91,15 @@ function useActivationRead(read: () => Promise<ActivationView>, key: string) {
   useEffect(() => {
     let live = true;
     setView(null);
+    setEmpty(null);
     setNone(false);
     setError(null);
     read()
-      .then((next) => { if (live) setView(next); })
+      .then((next) => {
+        if (!live) return;
+        if (isEmptyActivation(next)) setEmpty(next);
+        else setView(next);
+      })
       .catch((err) => {
         if (!live) return;
         if (err instanceof ApiRequestError && err.status === 404) setNone(true);
@@ -104,16 +110,28 @@ function useActivationRead(read: () => Promise<ActivationView>, key: string) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, attempt]);
 
-  return { view, none, error, retry: () => setAttempt((n) => n + 1) };
+  return { view, empty, none, error, retry: () => setAttempt((n) => n + 1) };
 }
 
 function RecordState({
   read, empty,
 }: { read: ReturnType<typeof useActivationRead>; empty: string }) {
   const t = useMessages(activationMessages);
+  const figures = useFigureLanguage();
   if (read.none) {
     // A Fill (T9 AC-3): somebody with no activation opens on this, not on a disabled tab.
     return <Card><p className="text-center text-md text-muted">{empty}</p></Card>;
+  }
+  if (read.empty) {
+    // P19.9-T3 AC-5 (OD-289): past the first year, the tab is one line — the checklist is no longer read.
+    const ended = read.empty.firstYearEndsOn;
+    return (
+      <Card>
+        <p className="text-center text-md text-muted">
+          {ended ? t.record.meFirstYear({ on: formatShortDay(ended, { year: true }, figures) }) : empty}
+        </p>
+      </Card>
+    );
   }
   if (read.error) {
     return (

@@ -8,7 +8,7 @@ function Layer({ active = true }: { active?: boolean }) {
 }
 
 /**
- * **One lock for every layer** (P18.96-T1 AC-2): a dialog, a sheet, a drawer or the phone's menu holds the page
+ * **One lock for every layer** (P18.8-T1 AC-2): a dialog, a sheet, a drawer or the phone's menu holds the page
  * behind still while it is open, and gives `body` back as it was.
  */
 describe('useScrollLock', () => {
@@ -16,7 +16,7 @@ describe('useScrollLock', () => {
     document.body.style.overflow = '';
   });
 
-  it('P18.96-T1 AC-2 holds the page still while a layer is open, and puts back what body said before', () => {
+  it('P18.8-T1 AC-2 holds the page still while a layer is open, and puts back what body said before', () => {
     document.body.style.overflow = 'auto';
     const { unmount } = render(<Layer />);
     expect(document.body.style.overflow).toBe('hidden');
@@ -24,7 +24,7 @@ describe('useScrollLock', () => {
     expect(document.body.style.overflow).toBe('auto');
   });
 
-  it('P18.96-T1 AC-2 a layer that is not open locks nothing, and opening it locks', () => {
+  it('P18.8-T1 AC-2 a layer that is not open locks nothing, and opening it locks', () => {
     const { rerender } = render(<Layer active={false} />);
     expect(document.body.style.overflow).toBe('');
     rerender(<Layer active />);
@@ -33,7 +33,7 @@ describe('useScrollLock', () => {
     expect(document.body.style.overflow).toBe('');
   });
 
-  it('P18.96-T1 AC-2 nested locks nest: closing a dialog over the drawer leaves the page held until the drawer closes', () => {
+  it('P18.8-T1 AC-2 nested locks nest: closing a dialog over the drawer leaves the page held until the drawer closes', () => {
     document.body.style.overflow = 'scroll';
     function Stack({ drawer, dialog }: { drawer: boolean; dialog: boolean }) {
       return (
@@ -57,7 +57,7 @@ describe('useScrollLock', () => {
     expect(document.body.style.overflow).toBe('scroll');
   });
 
-  it('P18.96-T1 AC-2 the outer layer closing first still frees the page only when the last one goes', () => {
+  it('P18.8-T1 AC-2 the outer layer closing first still frees the page only when the last one goes', () => {
     function Stack({ outer, inner }: { outer: boolean; inner: boolean }) {
       return (
         <>

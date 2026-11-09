@@ -2,7 +2,7 @@ import { defineMessages, type MessagesOf } from '@/i18n/catalogue';
 import { kept } from '@/i18n/kept';
 
 /**
- * **The Product Catalog and its drawer** (P18.98-T4, field selling; `functional/sales-tools.md`, *The module's own
+ * **The Product Catalog and its drawer** (P18.10-T4, field selling; `functional/sales-tools.md`, *The module's own
  * strings*): `/product-catalog` — its line, the search, the category pills and the channel toggle, a section's count, a
  * card's tags, the empty and failing states — and a product's drawer, `/product-catalog/[productCode]`, with its
  * *Details*, *Attack Plan* and *Documents*; the words a product's script is framed with on both Sales tools screens
@@ -16,8 +16,8 @@ import { kept } from '@/i18n/kept';
  * *Attack Plan*, *Documents*), *Script* (§A.6), *KPM*. *Changed 2026-10-30 (UI V1, UI-107):* the categories are
  * Indonesian in ID mode, in the report's words. *Syariah* is Indonesian already (`SAME_IN_INDONESIAN`). **Content stays as typed** (ADR-0179 §5; §C3):
  * a product's name (*PRUMapan*), its tagline, benefits, what stands out and its best fit, its script. The server's own
- * words — a product's run-off note, a document slot's label — are shown as served (P18.98-T5's). **A message never writes
- * a figure** (P18.98-T3): a commission rate is written by the caller in the figures' language (`formatRate(rate, figures)`).
+ * words — a product's run-off note, a document slot's label — are shown as served (P18.10-T5's). **A message never writes
+ * a figure** (P18.10-T3): a commission rate is written by the caller in the figures' language (`formatRate(rate, figures)`).
  *
  * @moved components/product-catalog.tsx
  * @moved components/product-drawer.tsx
@@ -27,17 +27,19 @@ import { kept } from '@/i18n/kept';
  * @moved app/(agent)/product-catalog/
  */
 const en = {
-  /** The tab row over both screens (P18.8-T12, ADR-0161 §5): named by the nav's group, each tab a page's title (§A.1–§A.3). */
+  /** The tab row over both screens (P18.5-T12, ADR-0161 §5): named by the nav's group, each tab a page's title (§A.1–§A.3). */
   tabs: {
     label: kept('Sales tools'),
     plan: kept('Sales Attack Plan'),
     catalog: kept('Product Catalog'),
+    /** P19.7-T2 AC-1 (ADR-0221 §8): the third tab, *Proposal* — the spec's own word, the same in both (`SAME_IN_INDONESIAN`). */
+    proposal: 'Proposal',
   },
 
   /** The page (`:3872-3883`, title `:10416`). */
   title: kept('Product Catalog'),
   subtitle: 'The full individual shelf — conventional and syariah. Tap any product for benefits, positioning, and its sales script.',
-  /** The catalog's search (P18.95-T6 AC-4; UI-023): its name, its placeholder, and what a search that finds nothing says. */
+  /** The catalog's search (P18.7-T6 AC-4; UI-023): its name, its placeholder, and what a search that finds nothing says. */
   searchName: 'Search products by name',
   searchPlaceholder: 'Search products…',
   /** `term` as typed, trimmed. */
@@ -70,6 +72,13 @@ const en = {
   /** A product closed to new business: the card's tag, the result's pill (`.tag.runoff`). */
   runOff: 'In run-off',
   viewDetail: 'View detail →',
+  /**
+   * *"Bisa ditambah: <rider names>"* (P19.4-T4 AC-5; the riders spec's rule 3; ADR-0209 §3): the riders a base offers,
+   * in its detail and in the Sales Attack Plan — the one place an agent meets a rider. The names are the company's.
+   */
+  canBeAdded: 'Can be added:',
+  /** The currencies on a card (P19.4-T4 AC-12): a screen reader hears what the codes are. */
+  currenciesLabel: ({ codes }: { codes: string }) => `Sold in ${codes}`,
   noFilterMatch: 'No products match this filter.',
   /** A section's count (`:10170`). */
   productCount: ({ n }: { n: number }) => (n === 1 ? '1 product' : `${n} products`),
@@ -113,6 +122,8 @@ const en = {
     notUploaded: 'Not uploaded by KPM yet.',
     /** A document's link, described by its slot's label (the server's). */
     opensInNewTab: ({ label }: { label: string }) => `${label} — opens in a new tab`,
+    /** An HTML page's (P19.6-T2, ADR-0217 §4): it opens in the window, never a tab. */
+    opensHere: ({ label }: { label: string }) => `${label} — opens in this window`,
     documentFailed: 'Could not open this document.',
     opening: 'Opening…',
   },
@@ -134,6 +145,7 @@ const id: MessagesOf<typeof en> = {
     label: kept('Sales tools'),
     plan: kept('Sales Attack Plan'),
     catalog: kept('Product Catalog'),
+    proposal: 'Proposal',
   },
 
   title: kept('Product Catalog'),
@@ -163,6 +175,9 @@ const id: MessagesOf<typeof en> = {
   },
   runOff: 'Tidak dijual lagi',
   viewDetail: 'Lihat detail →',
+  // The riders spec's own words, verbatim.
+  canBeAdded: 'Bisa ditambah:',
+  currenciesLabel: ({ codes }) => `Dijual dalam ${codes}`,
   noFilterMatch: 'Tidak ada produk yang cocok dengan filter ini.',
   // One form for one and many (§B.0 rule 8).
   productCount: ({ n }) => `${n} produk`,
@@ -197,6 +212,7 @@ const id: MessagesOf<typeof en> = {
     openLink: 'Buka tautan →',
     notUploaded: `Belum diunggah oleh ${kept('KPM')}.`,
     opensInNewTab: ({ label }) => `${label} — terbuka di tab baru`,
+    opensHere: ({ label }) => `${label} — terbuka di jendela ini`,
     documentFailed: 'Tidak dapat membuka dokumen ini.',
     opening: 'Membuka…',
   },

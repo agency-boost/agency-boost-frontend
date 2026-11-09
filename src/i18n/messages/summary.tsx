@@ -4,7 +4,7 @@ import { kept } from '@/i18n/kept';
 import type { Voice } from './goal-words';
 
 /**
- * **Personal Summary's own words** (P18.98-T4, field selling; `functional/summary.md`): `/summary` — its title, line,
+ * **Personal Summary's own words** (P18.10-T4, field selling; `functional/summary.md`): `/summary` — its title, line,
  * *⬇ Download* and the period switch with its month and year selects (`components/summary-period.tsx`) — and the cards
  * a coachee's *Personal Summary* tab draws too (`components/personal-summary.tsx`): *Goal vs. actual (APE)*, the gap and
  * its pace sentence, the sales activity targets with their section chips, *Activity pulse*, the leads that need the
@@ -50,7 +50,7 @@ const en = {
   title: kept('Personal Summary'),
   /** *Unduh* (ADR-0068; UI-051, UI-057): the button's name, beside a line download icon — the 44px icon button's too. */
   download: 'Download',
-  /** The period switch (P18.8-T11): its name, its two views, the selects' names, and the wait. */
+  /** The period switch (P18.5-T11): its name, its two views, the selects' names, and the wait. */
   period: 'Period',
   views: { month: 'Monthly', year: 'Yearly' },
   month: 'Month',
@@ -58,7 +58,7 @@ const en = {
   loading: 'Putting your summary together…',
 
   /**
-   * **How the page names its period** (P18.8-T11, ADR-0161 §4): the current one in the prototype's words — *This
+   * **How the page names its period** (P18.5-T11, ADR-0161 §4): the current one in the prototype's words — *This
    * month* on a card's tag, *this month* in a sentence — and a closed one by its name, written by the caller.
    */
   when: {
@@ -84,12 +84,12 @@ const en = {
   noGoal: {
     notYet: ({ who, year }: { who: Voice; year: string }) =>
       `${cap(who.subject)} ${who.have}n’t set a goal for ${year} yet, so there is nothing to measure against.`,
-    /** A year that has ended can no longer be given a goal (P18.8-T11). */
+    /** A year that has ended can no longer be given a goal (P18.5-T11). */
     didNot: ({ who, year }: { who: Voice; year: string }) =>
       `${cap(who.subject)} didn’t set a goal for ${year}, so there is nothing to measure against.`,
     set: ({ who }: { who: Voice }) => `Set ${who.possessive} goal`,
   },
-  /** A goal saved with no APE target to measure against; `tip` the ⓘ that follows *APE* (P18.95-T9 AC-3). */
+  /** A goal saved with no APE target to measure against; `tip` the ⓘ that follows *APE* (P18.7-T9 AC-3). */
   noTarget: {
     notYet: ({ who, year, tip }: { who: Voice; year: string; tip: ReactNode }) => (
       <>{cap(who.possessive)} goal for {year} has no APE {tip} target to measure against yet.</>
@@ -104,6 +104,29 @@ const en = {
   goal: {
     title: 'Goal vs. actual (APE)',
     notUploaded: 'Not uploaded yet',
+    /**
+     * **UI-157** (the 6 November handover, improvement 5; ADR-0195; rule R2): who fills the APE produced and what to do
+     * meanwhile. The Indonesian is the handover's own; `source` is the line that moved here, into the card's ⓘ, from
+     * the sales targets' heading (item 1).
+     */
+    source: 'APE comes from the production upload.',
+    whoUploads: 'Production is uploaded by your KPM admin, usually every month. Not there yet? Contact your KPM admin.',
+    /** Item 2: beside a helper counted with nothing produced. */
+    noProduction: '(no production data yet)',
+    /** Item 3: the Owner's and an Admin's way to the upload, in their field view. */
+    upload: 'Upload production →',
+    /** Item 4: the member's own estimate — the year to date (OD-250), one value with Goal Settings. */
+    estimate: {
+      add: 'Enter interim production',
+      label: 'APE already produced this year',
+      yours: 'your estimate',
+      edit: 'Edit',
+      remove: 'Delete',
+      save: 'Save',
+      cancel: 'Cancel',
+      /** *Diganti data produksi resmi (diunggah 5 Des)*: `date` written by the caller. */
+      replaced: ({ date }: { date: string }) => `Replaced by official production data (uploaded ${date})`,
+    },
     ofTarget: ({ sum }: { sum: string }) => `of ${sum} target`,
     /** The bar's end, and its name: the current period's, or a closed one's by its name. */
     target: { month: 'This month’s target', year: 'This year’s target' },
@@ -149,23 +172,13 @@ const en = {
   /** *Your sales activity targets* (`:3139-3182`), and the section chips under them (ADR-0064). */
   targets: {
     title: ({ who }: { who: Voice }) => `${cap(who.possessive)} sales activity targets`,
-    /** Where the targets come from; `link` opens *Goal Settings*, or a coachee's *Goal Setting* tab. */
-    from: ({ who, link }: { who: Voice; link: LinkTo }) => (
-      <>
-        From {link('Goal Settings')} — appointments and closings are {who.possessive} {who.self ? 'Sales' : 'sales'} pipeline
-        targets.
-      </>
-    ),
-    /** `from` as plain words, for the heading's ⓘ on a tablet (UI V1, Appendix A: *ⓘ* there, a line on a desktop). */
-    fromTip: ({ who }: { who: Voice }) =>
-      `From Goal Settings — appointments and closings are ${who.possessive} ${who.self ? 'Sales' : 'sales'} pipeline targets.`,
     /**
      * **Where the policies come from** (UI-052: *the UI says which*), behind the heading's ⓘ at every size: *Submission
      * polis* is what the member logged, APE the production upload — two sources, each named. No word naming the office,
      * so a coachee's page can say it too (ADR-0084).
      */
     source: ({ who }: { who: Voice }) =>
-      `Submission polis counts the policies ${who.subject} log${who.s} in Log Activity; APE comes from the production upload.`,
+      `Submission polis counts the policies ${who.subject} log${who.s} in Log Activity.`,
     /** *5 activities this month* (grey text row 22): `count` written by the caller, `n` for the plural. */
     total: ({ strong, count, n, when }: { strong: Strong; count: string; n: number; when: string }) => (
       <>{strong(count)} {n === 1 ? 'activity' : 'activities'} {when}</>
@@ -198,7 +211,7 @@ const en = {
     title: ({ who }: { who: Voice }) => `Leads that need ${who.object}`,
     tagOwn: 'Your open leads, nearest date first',
     tagTheirs: 'All active leads, nearest date first',
-    /** P18.8-T15 AC-4: a leader whose own card is empty, with their unit's open leads in Leads Management. */
+    /** P18.5-T15 AC-4: a leader whose own card is empty, with their unit's open leads in Leads Management. */
     unitHasSome: ({ link }: { link: LinkTo }) => <>No open leads of your own — your unit’s are in {link('Leads Management')}.</>,
     noneYet: ({ link }: { link: LinkTo }) => <>No active leads yet — add some in {link('Leads Management')}.</>,
     /** The prototype's own empty line on a coachee's card (`Overall.html:10498`). */
@@ -309,7 +322,7 @@ const id: MessagesOf<typeof en> = {
     inNamed: ({ named }) => `pada ${named}`,
   },
 
-  // UI-054's own words (*sisa 1 hari bulan ini*); *hari terakhir* is new, proposed in §B.10 (P18.99).
+  // UI-054's own words (*sisa 1 hari bulan ini*); *hari terakhir* is new, proposed in §B.10 (P18.11).
   dateHeader: {
     daysLeft: {
       month: ({ n }) => `sisa ${n} hari bulan ini`,
@@ -336,6 +349,21 @@ const id: MessagesOf<typeof en> = {
   goal: {
     title: `${kept('Target')} vs. realisasi (${kept('APE')})`,
     notUploaded: 'Belum diunggah',
+    // UI-157, verbatim (the 6 November handover, improvement 5).
+    source: `${kept('APE')} berasal dari unggahan produksi.`,
+    whoUploads: `Produksi diunggah oleh admin ${kept('KPM')} Anda, biasanya setiap bulan. Belum muncul? Hubungi admin ${kept('KPM')}.`,
+    noProduction: '(belum ada data produksi)',
+    upload: 'Unggah produksi →',
+    estimate: {
+      add: 'Isi produksi sementara',
+      label: `${kept('APE')} yang sudah dicapai tahun ini`,
+      yours: 'perkiraan Anda',
+      edit: 'Ubah',
+      remove: 'Hapus',
+      save: 'Simpan',
+      cancel: 'Batal',
+      replaced: ({ date }) => `Diganti data produksi resmi (diunggah ${date})`,
+    },
     ofTarget: ({ sum }) => `dari ${kept('target')} ${sum}`,
     target: { month: `${kept('Target')} bulan ini`, year: `${kept('Target')} tahun ini` },
     namedTarget: ({ named }) => `${kept('Target')} ${named}`,
@@ -345,7 +373,7 @@ const id: MessagesOf<typeof en> = {
       `${kept('Target')} ${own(who, 'tahunan')} sudah tercapai sebelum ${named} dimulai — bulan itu tidak memerlukan apa-apa lagi.`,
   },
 
-  // *Gap* is translated since UI V1 (UI-006): *Selisih*, the alternative §B.10 named; proposed in §B.10, P18.99.
+  // *Gap* is translated since UI V1 (UI-006): *Selisih*, the alternative §B.10 named; proposed in §B.10, P18.11.
   gap: {
     title: 'Selisih',
     remaining: ({ when }) => `Sisa ${when}`,
@@ -372,19 +400,9 @@ const id: MessagesOf<typeof en> = {
 
   targets: {
     title: ({ who }) => `${kept('Target')} aktivitas ${own(who, 'penjualan')}`,
-    from: ({ who, link }) => (
-      <>
-        Dari {link(kept('Goal Settings'))} — janji temu dan {kept('closings')} adalah {kept('target')} {kept('pipeline')}{' '}
-        {own(who, 'penjualan')}.
-      </>
-    ),
-    fromTip: ({ who }) =>
-      `Dari ${kept('Goal Settings')} — janji temu dan ${kept('closings')} adalah ${kept('target')} ${kept('pipeline')} `
-      + `${own(who, 'penjualan')}.`,
-    // Proposed in §B.10 (P18.99, UI-052).
-    source: ({ who }) =>
-      `${kept('Submission polis')} adalah polis yang ${subject(who)} catat di ${kept('Log Activity')}; ${kept('APE')} berasal `
-      + 'dari unggahan produksi.',
+    // Proposed in §B.10 (P18.11, UI-052).
+    // UI-157 item 1: *APE berasal dari unggahan produksi* moved into the goal card's ⓘ (`goal.source`).
+    source: ({ who }) => `${kept('Submission polis')} adalah polis yang ${subject(who)} catat di ${kept('Log Activity')}.`,
     total: ({ strong, count, when }) => <>{strong(count)} aktivitas {when}</>,
     noTarget: `Belum ada ${kept('target')}`,
     nothingMore: ({ when }) => `Tidak perlu apa-apa lagi ${when}`,

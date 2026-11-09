@@ -11,7 +11,8 @@ import { Button, buttonClass, Select, Textarea, TextInput } from './field';
 import { Stepper } from './stepper';
 import { TippedGlyph } from './tipped-glyph';
 import { wears as wearsAt } from '@test/harness';
-import { SEGMENT_TOUCH, TAB_TOUCH } from './touch';
+import { SEGMENT_TOUCH } from './touch';
+import { HEADER_CONTROL } from './header-control';
 import { ActionMenu } from './action-menu';
 import { TrainingSubtabs } from '@/components/training/training-catalog';
 import { CoachingTabBar } from '@/components/coaching-person';
@@ -25,7 +26,7 @@ vi.mock('next/navigation', () => ({
 }));
 
 /**
- * **A phone's sizes** (P18.95-T1 AC-8 to AC-10, AC-12; ADR-0167; the client's UI review of 2026-10-26:
+ * **A phone's sizes** (P18.7-T1 AC-8 to AC-10, AC-12; ADR-0167; the client's UI review of 2026-10-26:
  * UI-013, UI-014, UI-029).
  *
  * jsdom applies no stylesheet and lays nothing out, so what can be pinned here is what each component
@@ -99,8 +100,10 @@ describe('AC-8 one tab row on a phone', () => {
       render(<RouteTabs label="User Management" tabs={UM} />);
       const [on, off] = screen.getAllByRole('link');
       // UI V1 (UI-010): 44px tall below 1024px in the field shell (`TAB_TOUCH`), and unchanged elsewhere.
-      expect(wider(on)).toBe(`-mb-px border-b-2 px-0.5 pb-3 text-md font-semibold ${TAB_TOUCH} border-amber text-navy`);
-      expect(wider(off)).toBe(`-mb-px border-b-2 px-0.5 pb-3 text-md font-semibold ${TAB_TOUCH} border-transparent text-muted`);
+      // *Changed 2026-11-07 (P19.8-T1 AC-1; R6, MOB UI-171):* a header control at every size — 13px, 600, 44px tall
+      // (`HEADER_CONTROL`), its words at the foot — where it was 14px and 44px below 1024px alone.
+      expect(wider(on)).toBe(`-mb-px inline-flex items-end border-b-2 px-0.5 pb-3 ${HEADER_CONTROL} border-primary text-navy`);
+      expect(wider(off)).toBe(`-mb-px inline-flex items-end border-b-2 px-0.5 pb-3 ${HEADER_CONTROL} border-transparent text-muted`);
       for (const tab of [on, off]) expect(phone(tab)).toEqual(tokens(TAB_PHONE));
     });
 
@@ -170,11 +173,12 @@ describe('AC-8 one tab row on a phone', () => {
       expect(phone(list)).toEqual(tokens(SEGMENTS_PHONE));
       const [on] = screen.getAllByRole('tab');
       // UI V1 (UI-010): 44px tall below 1024px in the field shell (`SEGMENT_TOUCH`).
-      expect(wider(on)).toBe(`flex-1 rounded-md px-2.5 py-2 text-base font-semibold transition-colors ${SEGMENT_TOUCH} bg-navy text-card`);
+      // *Changed 2026-11-07 (P19.8-T1 AC-1; R6, MOB UI-171):* and 44px at every size, a header control (`HEADER_CONTROL`).
+      expect(wider(on)).toBe(`flex-1 rounded-md px-2.5 py-2 transition-colors ${HEADER_CONTROL} ${SEGMENT_TOUCH} bg-secondary text-secondary-contrast`);
       expect(phone(on)).toEqual(tokens(SEGMENT_PHONE));
     });
 
-    it('P18.95-T5 AC-7: with phoneLayout="wrap", two options keep equal halves and wrap their words — below 768px only', () => {
+    it('P18.7-T5 AC-7: with phoneLayout="wrap", two options keep equal halves and wrap their words — below 768px only', () => {
       const TWO = [{ id: 'direct', label: 'Set APE target directly' }, { id: 'savings', label: 'Calculate from savings target' }];
       render(
         <Segmented label="How" tabs={TWO} active="direct" onSelect={() => {}} phoneLayout="wrap">
@@ -185,7 +189,7 @@ describe('AC-8 one tab row on a phone', () => {
       expect(wider(list)).toBe('flex w-full rounded-lg border border-hairline bg-base p-[3px]');
       expect(phone(list)).toEqual([]);
       for (const tab of screen.getAllByRole('tab')) {
-        expect(wider(tab)).toMatch(/^flex-1 rounded-md px-2\.5 py-2 text-base font-semibold transition-colors /);
+        expect(wider(tab)).toMatch(/^flex-1 rounded-md px-2\.5 py-2 transition-colors min-h-11 text-base font-semibold /);
         expect(phone(tab)).toEqual(tokens(PHONE.SEGMENT_WRAP_PHONE));
       }
     });
@@ -292,7 +296,7 @@ describe('AC-8 one tab row on a phone', () => {
       for (const tab of screen.getAllByRole('link')) expect(phone(tab)).toEqual(tokens(TAB_PHONE));
     });
 
-    it('P18.95-T6 AC-4 the scrollable filter row: a row of toggle buttons brings the pressed one into view', () => {
+    it('P18.7-T6 AC-4 the scrollable filter row: a row of toggle buttons brings the pressed one into view', () => {
       // The catalog's category pills (`product-catalog.tsx`): buttons with `aria-pressed`, not links or tabs.
       const PILLS = ['All products', 'Life', 'Health', 'Critical illness', 'Education', 'Investment-linked'];
       function Pills({ on }: { on: string }) {
@@ -501,7 +505,9 @@ describe('UI-010 tap targets on a phone and a tablet, fixed in the primitives �
       </>,
     );
     expect(at(screen.getByRole('tab', { name: 'Bulanan' }), px)).toContain('min-h-11');
-    expect(at(screen.getByRole('link', { name: 'Find Your Leader' }), px)).toContain('pt-3');
+    // *Changed 2026-11-07 (P19.8-T1 AC-1; R6):* the tab is 44px by its own height at every size, no longer by `TAB_TOUCH`'s
+    // 12px above its words below 1024px.
+    expect(at(screen.getByRole('link', { name: 'Find Your Leader' }), px)).toContain('min-h-11');
   });
 
   it('UI-010 leaves the two consoles’ controls as they were: outside the field shell nothing here holds', () => {

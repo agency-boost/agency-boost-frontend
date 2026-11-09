@@ -4,11 +4,13 @@ import {
   COLUMN_GAP,
   defaultCollapsed,
   defaultOpenInList,
+  everyUnit,
   GROUP_GAP,
   layoutTree,
   NODE_HEIGHT,
   NODE_WIDTH,
   ROW_GAP,
+  searchTree,
 } from './layout';
 
 const node = (over: Partial<OrgTreeNode> & { membershipId: string; layer: number }): OrgTreeNode => ({
@@ -224,7 +226,7 @@ describe('tree layout (P3-T8)', () => {
   });
 });
 
-describe('P18.95-T8 AC-3 what the phone’s list opens on', () => {
+describe('P18.7-T8 AC-3 what the phone’s list opens on', () => {
   const office = () => [
     node({ membershipId: 'root', layer: 1, isLeader: true, directCount: 2 }),
     node({ membershipId: 'me', layer: 2, leaderId: 'root', isLeader: true, directCount: 1, isSelf: true }),
@@ -234,30 +236,60 @@ describe('P18.95-T8 AC-3 what the phone’s list opens on', () => {
     node({ membershipId: 'theirs', layer: 3, leaderId: 'peer' }),
   ];
 
-  it('P18.95-T8 AC-3 opens the reader’s own line one level down, and every line above them, nothing else', () => {
+  it('P18.7-T8 AC-3 opens the reader’s own line one level down, and every line above them, nothing else', () => {
     expect([...defaultOpenInList(tree(office(), { selfId: 'me' }))].sort()).toEqual(['me', 'root']);
   });
 
-  it('P18.95-T8 AC-3 finds the reader by selfId when no node says isSelf', () => {
+  it('P18.7-T8 AC-3 finds the reader by selfId when no node says isSelf', () => {
     const nodes = office().map((n) => ({ ...n, isSelf: false }));
     expect([...defaultOpenInList(tree(nodes, { selfId: 'mine' }))].sort()).toEqual(['me', 'mine', 'root']);
   });
 
-  it('P18.95-T8 AC-3 opens nothing for a reader who leads nobody but their way up', () => {
+  it('P18.7-T8 AC-3 opens nothing for a reader who leads nobody but their way up', () => {
     const nodes = office().map((n) => ({ ...n, isSelf: n.membershipId === 'deep' }));
     expect([...defaultOpenInList(tree(nodes))].sort()).toEqual(['me', 'mine', 'root']);
   });
 
-  it('P18.95-T8 AC-3 with no reader in the tree, opens each root that leads, one level', () => {
+  it('P18.7-T8 AC-3 with no reader in the tree, opens each root that leads, one level', () => {
     const nodes = [...office().map((n) => ({ ...n, isSelf: false })), node({ membershipId: 'orphan', layer: 1 })];
     expect([...defaultOpenInList(tree(nodes))]).toEqual(['root']);
   });
 
-  it('P18.95-T8 AC-3 stops on a loop in bad data rather than hanging', () => {
+  it('P18.7-T8 AC-3 stops on a loop in bad data rather than hanging', () => {
     const nodes = [
       node({ membershipId: 'a', layer: 1, leaderId: 'b', isLeader: true, directCount: 1, isSelf: true }),
       node({ membershipId: 'b', layer: 2, leaderId: 'a', isLeader: true, directCount: 1 }),
     ];
     expect([...defaultOpenInList(tree(nodes, { rootIds: [] }))].sort()).toEqual(['a', 'b']);
+  });
+});
+
+/** P19.3-T4 AC-6 (OWN UI-026): what the Org tree's search finds, and what *Buka semua* opens. */
+describe('P19.3-T4 AC-6 searchTree and everyUnit', () => {
+  const n = (membershipId: string, leaderId: string | null, over: Record<string, unknown> = {}) => ({
+    membershipId, leaderId, fullName: membershipId, preferredName: null, initials: 'XX', agentCode: `C-${membershipId}`,
+    role: 'agent', depth: 0, layer: 1, directCount: 0, directCounts: { total: 0 }, subtreeCount: 0, isLeader: false,
+    isSelf: false, ...over,
+  });
+  const tree = {
+    nodes: [
+      n('wilson', null, { isLeader: true }), n('agus', 'wilson', { isLeader: true }), n('sari', 'agus', { isLeader: true }),
+      n('lukman', 'sari', { fullName: 'Lukman Hakim', agentCode: '80117' }), n('dimas', 'wilson'),
+    ],
+    leader: null, rootIds: ['wilson'], selfId: 'wilson', counts: { ab: 0, aab: 0, agent: 0, total: 4 },
+  } as never;
+
+  it('P19.3-T4 AC-6 finds by name or agent code, case-insensitive, with every leader above as the path', () => {
+    expect(searchTree(tree, 'lukman')).toEqual({ matches: new Set(['lukman']), path: new Set(['sari', 'agus', 'wilson']) });
+    expect(searchTree(tree, '80117')!.matches).toEqual(new Set(['lukman']));
+  });
+
+  it('P19.3-T4 AC-6 nothing typed is no search; nobody found opens nothing', () => {
+    expect(searchTree(tree, '   ')).toBeNull();
+    expect(searchTree(tree, 'zzz')).toEqual({ matches: new Set(), path: new Set() });
+  });
+
+  it('P19.3-T4 AC-6 Buka semua opens every leader’s unit', () => {
+    expect(everyUnit(tree)).toEqual(new Set(['wilson', 'agus', 'sari']));
   });
 });

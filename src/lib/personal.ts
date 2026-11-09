@@ -4,14 +4,14 @@ import { personalMessages } from '@/i18n/messages/personal';
 import { formatCalendarDay, formatMonth } from './format';
 
 /**
- * What a person records (ADR-0158, P18.8-T4): a birth date, a gender, the month they joined their
+ * What a person records (ADR-0158, P18.5-T4): a birth date, a gender, the month they joined their
  * insurer, and how they work in their office.
  *
  * **The words, not the rules.** Whether a birth date is 18 years ago or a join month still to come is the
  * server's to decide (`POST /auth/register`, `PATCH /auth/me`), and its sentence is what a screen shows;
  * nothing here re-declares the age or the codes' meaning beyond the label each is printed with.
  *
- * **Its words are the catalogue's** (`i18n/messages/personal.ts`, P18.98-T4): each function takes the reader's
+ * **Its words are the catalogue's** (`i18n/messages/personal.ts`, P18.10-T4): each function takes the reader's
  * `language` — English, the source, when passed none — and `personalLines` the figures' after it, Indonesian when passed
  * none. A screen passes `useLanguage()` and `useFigureLanguage()`.
  */

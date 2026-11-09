@@ -2,12 +2,13 @@
 
 import { Suspense } from 'react';
 import { ComplianceScreen } from '@/components/analytics/compliance-screen';
+import { analyticsGroupFrom } from '@/lib/kpm-analytics';
 import { complianceSelectionFrom } from '@/lib/kpm-compliance';
 import { useQuery } from '@/lib/use-query';
 
 /**
- * KPM analytics' *Compliance, Events, and Campaigns* (`KPM_Owner.html:1262-1286`, `:3449-4118`; P18.6-T1,
- * P18.6-T2; `kpm-analytics.md`, *Compliance*): six chips, the chosen category's tabs or picker, and every AB's
+ * KPM analytics' *Compliance* (the content *Compliance, Events, and Campaigns*) (`KPM_Owner.html:1262-1286`, `:3449-4118`; P18.3-T1,
+ * P18.3-T2; `kpm-analytics.md`, *Compliance*): six chips, the chosen category's tabs or picker, and every AB's
  * agency with a status per person, over one read of the server's. The title, the sub-line and the tabs are the
  * layout's, which also refuses a reader without `kpm_analytics:read` (*Not available to you*).
  *
@@ -24,5 +25,7 @@ export default function KpmAnalyticsCompliancePage() {
 }
 
 function Compliance() {
-  return <ComplianceScreen selection={complianceSelectionFrom(useQuery())} />;
+  const query = useQuery();
+  // The custom group, `?group=` (P19.3-T3 AC-15, OD-258): the tree and the six counts over that group's people.
+  return <ComplianceScreen selection={complianceSelectionFrom(query)} group={analyticsGroupFrom(query.group)} />;
 }

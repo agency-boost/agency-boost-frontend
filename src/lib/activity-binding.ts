@@ -13,7 +13,7 @@ export type BindingRole = (typeof BINDING_ROLES)[number];
 
 /**
  * The cascade's words (ADR-0160 §4) — the same three stages `/goals` and the Summary name: the client's own, and kept
- * English in both languages (the approved glossary's §A.6; P18.98-T4).
+ * English in both languages (the approved glossary's §A.6; P18.10-T4).
  */
 export const BINDING_ROLE_LABEL: Record<BindingRole, string> = {
   leads: kept('Set appointment'),

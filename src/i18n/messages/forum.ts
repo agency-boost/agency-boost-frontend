@@ -3,7 +3,7 @@ import { kept } from '@/i18n/kept';
 
 /**
  * **The Strategic Leader Forum's own words** — the list, a meeting's head, its tab strip, the two dialogs, the states
- * and how a write is said (P18.98-T4, people and forum; `functional/leader-forum.md`, *The module's own strings*).
+ * and how a write is said (P18.10-T4, people and forum; `functional/leader-forum.md`, *The module's own strings*).
  *
  * **English is the source** of the keys: the prototype's strings as built and the module's own (D-copy), **none of the
  * six words in either language** — no *office*, no *KPM*. The Indonesian is the approved glossary's (OD-237; §B.0's
@@ -31,7 +31,7 @@ import { kept } from '@/i18n/kept';
  * @moved app/leader-meetings/shared/[token]/page.tsx
  */
 const en = {
-  /** The page's one subtitle (P18.97-T2 AC-1). */
+  /** The page's one subtitle (P18.9-T2 AC-1). */
   sub: 'Biweekly check-ins with your core leaders — agenda, notes, and action items',
   /** The filter, over the one read (`:2614-2616`): a filter naming a status follows the status words (§A.3). */
   filters: { all: 'All', upcoming: 'Upcoming', past: 'Past' },
@@ -47,7 +47,7 @@ const en = {
   share: 'Share',
   savePdf: 'Save as PDF',
   save: 'Save',
-  /** *Can edit this MOM* (`:2723`) in the client's words (P18.97-T2 AC-3): *MOM* is in no string of the module. */
+  /** *Can edit this MOM* (`:2723`) in the client's words (P18.9-T2 AC-3): *MOM* is in no string of the module. */
   canEdit: 'Can edit these minutes',
   manageTags: 'Manage tags →',
   /** After the reader's own name on a chip. */
@@ -81,7 +81,7 @@ const en = {
     completed: 'This meeting has already taken place, so its date stays.',
     hasMinutes: "Something has been written in this meeting, so it can't be deleted.",
   },
-  /** *Share these minutes* (`:2735-2745`; P18.97-T2 AC-3; OD-146). */
+  /** *Share these minutes* (`:2735-2745`; P18.9-T2 AC-3; OD-146). */
   shareDialog: {
     title: 'Share these minutes',
     copy: 'Copy link',

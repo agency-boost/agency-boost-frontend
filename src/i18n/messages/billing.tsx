@@ -3,7 +3,7 @@ import { defineMessages, type MessagesOf } from '@/i18n/catalogue';
 import { kept } from '@/i18n/kept';
 
 /**
- * ***Billing & subscription*** — the quote tool at `/admin/billing` (P18.98-T6; ADR-0111; `functional/billing.md`, *The
+ * ***Billing & subscription*** — the quote tool at `/admin/billing` (P18.10-T6; ADR-0111; `functional/billing.md`, *The
  * strings*): the tier cards, *Estimate your price*, the *Send quote* dialog, the quote and its paper, and the states.
  *
  * **English is the source**, byte for byte: `prototype` the prototype's own strings, verbatim
@@ -123,6 +123,37 @@ const en = {
     retry: 'Try again',
     printTitle: ({ kpm }: { kpm: string }) => `Subscription quote – ${kpm}`,
   },
+
+  /**
+   * **Billing per KPM** (P19.4-T3 AC-10; ADR-0211; SA UI-015): `/admin/billing`'s list of KPMs and the KPM's *Billing*
+   * tab, where the calculator moved. The columns are SA UI-015's: *KPM · Perusahaan · Leader · Tingkat · Paket ·
+   * Perpanjangan · Status*.
+   */
+  perKpm: {
+    caption: 'Every KPM, its leaders, tier, plan and renewal',
+    tiers: 'Price tiers',
+    columns: {
+      kpm: kept('KPM'), company: 'Company', leaders: 'Leaders', tier: 'Tier', plan: 'Plan', renewal: 'Renewal',
+      status: 'Status',
+    },
+    plan: { six_months: '6 months', annual: 'Annual' },
+    status: {
+      active: 'Active', ended: 'Ended', ended_kept_active: 'Ended — kept active', none: 'No subscription yet',
+    },
+    company: 'Company',
+    allCompanies: 'All companies',
+    /** A row's link, said whole: *KPM 0417 · BSD City, billing*. */
+    openRow: ({ code, branch }: { code: string; branch: string }) => `KPM ${code} · ${branch}, billing`,
+    /** The sort pill below 1024px (P19.2-T2 AC-4; UI-134), where the headings cannot be pressed. */
+    sort: 'Sort order',
+    empty: 'No KPM on the platform yet.',
+    loading: 'Loading the KPMs…',
+    failed: "The KPMs couldn't be loaded.",
+    /** On the quote, the Owner named (ADR-0211 §5). */
+    sendToOwner: ({ name }: { name: string }) => `Send to ${name}`,
+    sending: 'Sending…',
+    sent: ({ name }: { name: string }) => `Quote sent to ${name}, by email and in the app.`,
+  },
 };
 
 const id: MessagesOf<typeof en> = {
@@ -213,6 +244,29 @@ const id: MessagesOf<typeof en> = {
     failed: 'Harga tidak dapat dimuat, jadi belum ada yang dapat dihitung.',
     retry: 'Coba lagi',
     printTitle: ({ kpm }) => `Penawaran langganan – ${kpm}`,
+  },
+
+  perKpm: {
+    caption: `Setiap ${kept('KPM')}, ${kept('leader')}, tingkat, paket, dan perpanjangannya`,
+    tiers: 'Tingkat harga',
+    columns: {
+      kpm: kept('KPM'), company: 'Perusahaan', leaders: kept('Leader'), tier: 'Tingkat', plan: 'Paket',
+      renewal: 'Perpanjangan', status: 'Status',
+    },
+    plan: { six_months: '6 bulan', annual: 'Tahunan' },
+    status: {
+      active: 'Aktif', ended: 'Berakhir', ended_kept_active: 'Berakhir — tetap aktif', none: 'Belum ada langganan',
+    },
+    company: 'Perusahaan',
+    allCompanies: 'Semua perusahaan',
+    openRow: ({ code, branch }) => `${kept('KPM')} ${code} · ${branch}, tagihan`,
+    sort: 'Urutan',
+    empty: `Belum ada ${kept('KPM')} di platform.`,
+    loading: `Memuat ${kept('KPM')}…`,
+    failed: `${kept('KPM')} tidak dapat dimuat.`,
+    sendToOwner: ({ name }) => `Kirim ke ${name}`,
+    sending: 'Mengirim…',
+    sent: ({ name }) => `Penawaran dikirim ke ${name}, lewat email dan di aplikasi.`,
   },
 };
 

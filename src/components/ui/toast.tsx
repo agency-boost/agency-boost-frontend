@@ -44,7 +44,7 @@ export interface ToastMessage {
  * **A later toast replaces an earlier one** and restarts the clock, as the prototype's single element
  * does: two saves in a row leave the second on screen for its full time, not the first's remainder.
  *
- * **Inside a shell, the shell's** (P18.95-T1 AC-6): within a `ToastHost`, `show` is the host's and
+ * **Inside a shell, the shell's** (P18.7-T1 AC-6): within a `ToastHost`, `show` is the host's and
  * `toast` stays `null`, and the screen's own `<Toast>` draws nothing — so a shell has **one** toast
  * region, whichever screen or component beneath it speaks, and two toasts never stack. Outside one (a
  * component's own spec) the screen keeps a slot of its own, as before.
@@ -128,7 +128,7 @@ function CircleCheck() {
  * it takes no pointer, so it never stands between a finger and the dialog. **A toast with an action takes the pointer
  * on itself alone**, so *Urungkan* can be pressed and nothing around it is covered.
  *
- * **Above the tab bar, and above a floating bar** (P18.95-T5 AC-1, AC-4; UI-070): below 1024px it stands 12px over
+ * **Above the tab bar, and above a floating bar** (P18.7-T5 AC-1, AC-4; UI-070): below 1024px it stands 12px over
  * `--tab-bar-space` — the floating tab bar's room in the field shell, nothing elsewhere. **A screen that floats a bar
  * over its foot** (`FloatingBar`, marked `data-floating-bar`: Goal Setting's save pill, Activity's save on a phone, the
  * coaching session's *Finalkan*) puts it 64px higher below 1024px, over the pill, which stands where the toast would:
@@ -191,7 +191,7 @@ function ToastRegion({ toast }: { toast: ToastMessage | null }) {
  * render later, so even that first toast is announced (`Toast`, above, says why that matters).
  */
 export function ToastHost({ children }: { children: ReactNode }) {
-  // A host inside a host is the outer one's: one region per shell (P18.95-T1 AC-6).
+  // A host inside a host is the outer one's: one region per shell (P18.7-T1 AC-6).
   if (useContext(HostContext)) return <>{children}</>;
   return <RootToastHost>{children}</RootToastHost>;
 }

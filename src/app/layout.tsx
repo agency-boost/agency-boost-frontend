@@ -22,7 +22,7 @@ export const metadata: Metadata = {
   title: META.title,
   description: META.description,
   /*
-   * **An installed app, not a bookmark** (UI V1, UI-103; D-02, D-15): the manifest (`app/manifest.ts`), and the metas
+   * **An installed app, not a bookmark** (UI V1, UI-103; D-02, D-15): the manifest (`app/manifest.webmanifest/route.ts`, `lib/manifest.ts`), and the metas
    * a Home Screen reads before it — both *capable* flags, written out because Next writes only one of them for
    * `appleWebApp.capable`, the default status bar, and the 180px icon iOS takes (`lib/pwa.ts`).
    */
@@ -46,7 +46,7 @@ export const viewport: Viewport = {
 };
 
 /**
- * **`<html lang>` is the reader's language, never a fixed one** (P18.98-T1 AC-4; WCAG 3.1.1; parity F-258). It was
+ * **`<html lang>` is the reader's language, never a fixed one** (P18.10-T1 AC-4; WCAG 3.1.1; parity F-258). It was
  * `id` over screens that are mostly English, so a screen reader read English in Indonesian.
  *
  * - The prerender writes the language its pages are built in, `LANGUAGE_UNCHOSEN`.
@@ -63,6 +63,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: PRE_PAINT_SCRIPT }} />
         {/* The one font file every screen needs, fetched with the page rather than after its CSS (UI-008; `globals.css`). */}
         <link rel="preload" href={INTER_FONT} as="font" type="font/woff2" crossOrigin="anonymous" />
+        {/*
+          * **The KPM's colours before the first paint** (P19.6-T1 AC-12; ADR-0218 §8): a blocking same-origin file, so a
+          * reload paints the colours this browser last saw and never AgencyBoost's orange first. Blocking on purpose.
+          */}
+        {/* eslint-disable-next-line @next/next/no-sync-scripts */}
+        <script src="/branding-boot.js" />
       </head>
       <body>
         <LanguageProvider>

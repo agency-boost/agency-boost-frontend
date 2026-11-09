@@ -3,9 +3,9 @@ import type { GuestEvent, GuestEventList, NpsConstants } from '@/lib/events';
 import type { EventInvitee, FeedbackRow, FeedbackSummary, RollCall, RollCallRow } from '@/lib/events-admin';
 
 /**
- * **Events, as the reads answer them** (P18.5-T5, T6): shaped as `scratchpad/p185/contract-events.md` and
+ * **Events, as the reads answer them** (P18.2-T5, T6): shaped as `scratchpad/p185/contract-events.md` and
  * the events module's response DTOs give them, with the seed's names (`seed/events-fixture.ts`, *Seed* in
- * `phase-18.5-agent-enablement.md`).
+ * `phase-18.2-agent-enablement.md`).
  */
 
 export const FIELD_PERMISSIONS = [

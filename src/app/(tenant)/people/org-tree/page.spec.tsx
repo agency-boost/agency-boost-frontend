@@ -2,8 +2,7 @@ import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import TenantLayout from '@/app/(tenant)/layout';
-import { createHash } from 'node:crypto';
-import { atWidth, drawnAt, makeMe, renderInLayout, stubFetch, wears } from '@test/harness';
+import { atWidth, digestAt, makeMe, renderInLayout, stubFetch, wears } from '@test/harness';
 import OrgTreePage from './page';
 
 vi.mock('next/navigation', () => ({
@@ -159,12 +158,12 @@ describe('org tree (P3-T8)', () => {
 });
 
 /**
- * **The office's tree on a phone** (P18.97-T7 AC-4, ADR-0178 §5; the client's KPM Owner review of 2026-10-27, UI-036:
+ * **The office's tree on a phone** (P18.9-T7 AC-4, ADR-0178 §5; the client's KPM Owner review of 2026-10-27, UI-036:
  * only Wilson Tanoto, layer 1, in view, the connectors running off to the right). Below 768px the indented list that
- * opens and closes (`OrgTree asList`), as `/group-tree` has drawn since P18.95-T8; at 768px and wider the canvas it
+ * opens and closes (`OrgTree asList`), as `/group-tree` has drawn since P18.7-T8; at 768px and wider the canvas it
  * was — the client's *Don't change* for a desktop.
  */
-describe('P18.97-T7 AC-4 the office’s tree on a phone (UI-036)', () => {
+describe('P18.9-T7 AC-4 the office’s tree on a phone (UI-036)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   /** Wilson leads Agus, who leads Sari, who leads Dimas; and Rina, placed under nobody. */
@@ -185,33 +184,27 @@ describe('P18.97-T7 AC-4 the office’s tree on a phone (UI-036)', () => {
     counts: { ab: 1, aab: 1, agent: 2, total: 4 },
   };
 
-  /** The page's markup on the build before P18.97-T7, rendered from this fixture on 2026-10-28. */
-  const BEFORE_T7: Record<768 | 1280, string> = {
-    // Re-recorded 2026-10-30 (UI V1): UI-008's card edge (`border-card-edge`) and UI-010's 44px/48px targets below 1024px.
-    768: '27a100e172092353f88f741b5359f30575e17de6c4deb374e814977db9528d2f',
-    1280: '27a100e172092353f88f741b5359f30575e17de6c4deb374e814977db9528d2f',
-  };
-
   /*
-   * *2026-11-01 (the product owner's staging review: the top of every screen blurred on an iPhone):* the console's
-   * `main` beside the sidebar starts at the top inset where that is more than its 32px —
-   * `md:pt-[max(2rem,env(safe-area-inset-top))]` in place of `md:pt-8`, the same 32px wherever there is no inset. The
-   * digest reads that one class back as the one it replaces, so it still proves the canvas is drawn as it was, to the byte.
+   * **The canvas from 1024px, to the byte** (P18.9-T7 AC-4 kept it from 768px; P19.2-T3 AC-4 moves the tablet to the
+   * list). *Re-recorded 2026-11-05 (P19.2-T3):* the digest is the tree's own markup (`OrgTree`'s root), no longer the
+   * shell's `main`, which P19.2-T1 replaces (ADR-0197); taken from the canvas as P19.2-T3 leaves it, which changes only the
+   * list (`OrgList`). It was the same at 768 and 1280, and the canvas carries no class that differs from 1024.
    */
-  const asBefore = (main: HTMLElement, px: number) => createHash('sha256')
-    .update(drawnAt(main, px).replace('pt-[max(2rem,env(safe-area-inset-top))]', 'pt-8')).digest('hex');
+  const CANVAS = 'd851451bc8a2397bccb70f687502c4c63643e1b29d1f58133ecc533a7814bb45';
+  const treeRoot = () => screen.getByTestId('tree-canvas').parentElement!.parentElement!;
 
-  it.each([768, 1280] as const)('P18.97-T7 AC-4 at %ipx draws the canvas it drew, to the byte', async (px) => {
+  it.each([1024, 1280] as const)('P19.2-T3 AC-4 at %ipx draws the canvas it drew, to the byte', async (px) => {
     atWidth(px);
     open(FOREST);
     await screen.findByText('Layer 1');
     expect(screen.getByTestId('tree-canvas')).toBeInTheDocument();
-    expect(asBefore(screen.getByRole('main'), px)).toBe(BEFORE_T7[px]);
+    expect(digestAt(treeRoot(), px)).toBe(CANVAS);
   });
   const line = (id: string) => document.querySelector<HTMLElement>(`[data-node="${id}"]`);
   const row = (id: string) => line(id)!.firstElementChild as HTMLElement;
 
-  it.each([375, 767])('P18.97-T7 AC-4 at %ipx draws the indented list, not the canvas, opened on the reader one level down', async (px) => {
+  // *Changed 2026-11-05 (P19.2-T3 AC-4; UI-142):* a tablet draws the list too, below 1024px.
+  it.each([375, 767, 768, 1023])('P18.9-T7 AC-4, P19.2-T3 AC-4 at %ipx draws the indented list, not the canvas, opened on the reader one level down', async (px) => {
     atWidth(px);
     open(FOREST);
     await screen.findByText('YOU');
@@ -227,7 +220,7 @@ describe('P18.97-T7 AC-4 the office’s tree on a phone (UI-036)', () => {
     expect(screen.getByText(/2 people report to nobody/)).toBeInTheDocument();
   });
 
-  it('P18.97-T7 AC-4 opens a unit and closes it, each line linking as its card does', async () => {
+  it('P18.9-T7 AC-4 opens a unit and closes it, each line linking as its card does', async () => {
     atWidth(375);
     open(FOREST);
     const show = await screen.findByRole('button', { name: 'Show who reports to Agus Prasetyo' });
@@ -243,7 +236,24 @@ describe('P18.97-T7 AC-4 the office’s tree on a phone (UI-036)', () => {
     expect(line('mem-sari')).toBeNull();
   });
 
-  it('P18.97-T7 AC-4 never draws the canvas first on a phone: the width is asked before the tree answers', async () => {
+  it.each([375, 768])('P19.2-T3 AC-4 at %ipx every line is a 44px target: the whole line the person’s link, its + or − 44 × 44px', async (px) => {
+    atWidth(px);
+    open(FOREST);
+    const show = await screen.findByRole('button', { name: 'Show who reports to Agus Prasetyo' });
+    expect(wears(show, px).split(' ')).toEqual(expect.arrayContaining(['min-h-11', 'min-w-11']));
+    // Above the line's stretched link, so a tap on it opens the unit and never the person.
+    expect(show.className).toContain('z-[1]');
+    for (const id of ['mem-owner', 'mem-ab', 'mem-rina']) {
+      expect(wears(row(id), px).split(' ')).toEqual(expect.arrayContaining(['relative', 'min-h-11']));
+      const link = within(row(id)).getByRole('link');
+      // The name stretched over the line, as the shared person row does it: the line is the target.
+      expect(link.className).toContain('after:inset-0');
+    }
+    // A line with no + keeps its column, so the names stand in one line.
+    expect(wears(row('mem-rina').firstElementChild as HTMLElement, px).split(' ')).toContain('w-11');
+  });
+
+  it('P18.9-T7 AC-4 never draws the canvas first on a phone: the width is asked before the tree answers', async () => {
     atWidth(375);
     let drew = false;
     const observer = new MutationObserver((records) => {
@@ -258,5 +268,97 @@ describe('P18.97-T7 AC-4 the office’s tree on a phone (UI-036)', () => {
     await screen.findByText('YOU');
     observer.disconnect();
     expect(drew).toBe(false);
+  });
+});
+
+/**
+ * **P19.3-T4 AC-6 — the Org tree's search and *Buka semua*** (OWN UI-026, OWN case 8; ADR-0205): Group Tree's *Cari agen*
+ * pill (D-05) finds by name or agent code, opens the path down to the person and highlights them, hiding nobody; *Open
+ * all* opens every unit. On the canvas at 1280px and in the list at 375px.
+ */
+describe('P19.3-T4 AC-6 the Org tree’s search and Open all (OWN UI-026)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  /** Wilson › Agus › Sari › Nina › Lukman Hakim, four units deep; and Dimas beside Agus. */
+  const DEEP = {
+    nodes: [
+      node({ membershipId: 'mem-owner', fullName: 'Wilson Tanoto', initials: 'WT', role: 'ab', layer: 1, isLeader: true,
+        directCount: 2, directCounts: { ab: 1, aab: 0, agent: 1, total: 2 }, isSelf: true }),
+      node({ membershipId: 'mem-ab', fullName: 'Agus Prasetyo', initials: 'AP', role: 'ab', layer: 2, leaderId: 'mem-owner',
+        isLeader: true, directCount: 1, directCounts: { ab: 0, aab: 1, agent: 0, total: 1 } }),
+      node({ membershipId: 'mem-sari', fullName: 'Sari Puspita', initials: 'SP', role: 'aab', layer: 3, leaderId: 'mem-ab',
+        isLeader: true, directCount: 1, directCounts: { ab: 0, aab: 1, agent: 0, total: 1 } }),
+      node({ membershipId: 'mem-nina', fullName: 'Nina Lestari', initials: 'NL', role: 'aab', layer: 4, leaderId: 'mem-sari',
+        isLeader: true, directCount: 1, directCounts: { ab: 0, aab: 0, agent: 1, total: 1 } }),
+      node({ membershipId: 'mem-lukman', fullName: 'Lukman Hakim', initials: 'LH', role: 'agent', layer: 5, leaderId: 'mem-nina',
+        agentCode: '80117' }),
+      node({ membershipId: 'mem-dimas', fullName: 'Dimas Pratama', initials: 'DP', role: 'agent', layer: 2, leaderId: 'mem-owner' }),
+    ],
+    leader: null,
+    rootIds: ['mem-owner'],
+    selfId: 'mem-owner',
+    counts: { ab: 1, aab: 2, agent: 2, total: 5 },
+  };
+  const line = (id: string) => document.querySelector<HTMLElement>(`[data-node="${id}"]`);
+  const searchBox = () => screen.getAllByRole('searchbox', { name: 'Find an agent' });
+
+  it('P19.3-T4 AC-6 at 1280px: Lukman, four units down and closed, is found by name, the path opened and him highlighted', async () => {
+    atWidth(1280);
+    open(DEEP);
+    await screen.findByText('Layer 1');
+    // Units below layer 2 start closed: Lukman is not drawn.
+    expect(line('mem-lukman')).toBeNull();
+    // From 1024px the pill sits over the tree (the title row's is for below 1024px).
+    const [pill] = searchBox().filter((box) => box.closest('[data-org-tree-tools]'));
+    await userEvent.type(pill, 'Lukman');
+    expect(line('mem-lukman')).not.toBeNull();
+    expect(line('mem-lukman')).toHaveAttribute('data-match');
+    expect(line('mem-lukman')!.className).toContain('ring-primary');
+    // Nobody is hidden: Dimas, who does not match, is still drawn.
+    expect(line('mem-dimas')).not.toBeNull();
+    expect(line('mem-dimas')).not.toHaveAttribute('data-match');
+    expect(screen.getByText('1 person matches your search, highlighted in the tree.')).toBeInTheDocument();
+  });
+
+  it('P19.3-T4 AC-6 at 375px: found by agent code in the list, the lines down to him opened, the line highlighted', async () => {
+    atWidth(375);
+    open(DEEP);
+    await screen.findByText('YOU');
+    expect(line('mem-lukman')).toBeNull();
+    // Below 1024px the pill is on the title row (Group Tree's place, D-05).
+    expect(searchBox().filter((box) => box.closest('[data-org-tree-tools]'))).toHaveLength(0);
+    const [pill] = searchBox();
+    await userEvent.type(pill, '80117');
+    expect(line('mem-lukman')).toHaveAttribute('data-match');
+    expect((line('mem-lukman')!.firstElementChild as HTMLElement).className).toContain('bg-primary/[0.16]');
+    for (const id of ['mem-ab', 'mem-sari', 'mem-nina']) {
+      expect(within(line(id)!).getAllByRole('button')[0]).toHaveAttribute('aria-expanded', 'true');
+    }
+    expect(within(line('mem-lukman')!).getByText('(matches your search)')).toHaveClass('sr-only');
+  });
+
+  it('P19.3-T4 AC-6 says so when nobody matches, and hides nobody', async () => {
+    atWidth(1280);
+    open(DEEP);
+    await screen.findByText('Layer 1');
+    const [pill] = searchBox().filter((box) => box.closest('[data-org-tree-tools]'));
+    await userEvent.type(pill, 'zzz');
+    expect(screen.getByText('Nobody in this office matches that search.')).toHaveAttribute('role', 'status');
+    expect(line('mem-owner')).not.toBeNull();
+  });
+
+  it.each([375, 1280])('P19.3-T4 AC-6 at %ipx Open all opens every unit', async (px) => {
+    atWidth(px);
+    open(DEEP);
+    await screen.findByText('YOU');
+    expect(line('mem-lukman')).toBeNull();
+    const button = screen.getByRole('button', { name: 'Open all' });
+    if (px === 375) expect(button.className).toContain('max-lg:min-h-11');
+    await userEvent.click(button);
+    for (const id of ['mem-ab', 'mem-sari', 'mem-nina', 'mem-lukman', 'mem-dimas']) expect(line(id)).not.toBeNull();
+    // A unit opened by it closes again on its own control.
+    const hide = screen.getByRole('button', { name: 'Hide who reports to Nina Lestari' });
+    await userEvent.click(hide);
+    expect(line('mem-lukman')).toBeNull();
   });
 });

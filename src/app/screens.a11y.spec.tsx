@@ -47,7 +47,8 @@ import AdminsPage from './(tenant)/people/admins/page';
 import RegisterKpmPage from './(agent)/user-management/kpm/page';
 import KpmOverviewPage from './(tenant)/kpm/overview/page';
 import {
-  EMPTY as OVERVIEW_EMPTY, NOBODY as OVERVIEW_NOBODY, NOT_LOGGED as OVERVIEW_NOT_LOGGED, noTeam as overviewNoTeam,
+  EMPTY as OVERVIEW_EMPTY, KAIZEN as OVERVIEW_KAIZEN, NOBODY as OVERVIEW_NOBODY, NOT_LOGGED as OVERVIEW_NOT_LOGGED,
+  noTeam as overviewNoTeam,
   overviewView as overviewFixture,
 } from './(tenant)/kpm/overview/overview-fixtures';
 import DataUploadPage from './(tenant)/kpm/data-upload/page';
@@ -72,15 +73,16 @@ import PersonalSummaryPage from './(agent)/summary/page';
 import ActivityRatioPage from './(agent)/activity/ratio/page';
 import LogActivityPage from './(agent)/activity/log/page';
 import LeadsPage from './(agent)/leads/page';
+import { LeadsTable } from '@/components/leads-table';
 import GoalSettingsPage from './(agent)/goals/page';
 import FindLeaderPage from './(agent)/user-management/leader/page';
 import AddAgentsPage from './(agent)/user-management/add/page';
 import PendingPage from './(agent)/user-management/pending/page';
 import GroupTreePage from './(agent)/group-tree/page';
+import LeaderGroupTreePage from './(agent)/group-tree/[membershipId]/page';
 import OrgTreePage from './(tenant)/people/org-tree/page';
 import PeopleImportPage from './(tenant)/people/import/page';
 import OrgLevelsPage from './(admin)/admin/org-levels/page';
-import TenantRosterImportPage from './(admin)/admin/tenants/[kpmId]/roster/page';
 import ChooseAPasswordPage from './choose-a-password/page';
 import JoinPage from './join/page';
 import CalendarPage from './(agent)/calendar/page';
@@ -155,7 +157,7 @@ import {
   KICKOFF as EVENT_KICKOFF, PRULINK as EVENT_PRULINK, RINA_ME as EVENTS_ME, rollCall as eventRollCall,
   SHELL_STUBS as EVENTS_SHELL, TOWN_HALL as EVENT_TOWN_HALL,
 } from '@test/events-fixtures';
-// UI V1 (Phase 18.99 T2): the shared components, before the pages adopt them.
+// UI V1 (Phase 18.11 T2): the shared components, before the pages adopt them.
 import { AgentSearch } from '@/components/agent-search';
 import { ContactButtons } from '@/components/contact-buttons';
 import { GoalHeroCard } from '@/components/goal-hero-card';
@@ -170,18 +172,23 @@ import { SliderWithValue } from '@/components/ui/slider-with-value';
 import { StatTile } from '@/components/ui/stat-tile';
 import { StepperRow } from '@/components/ui/stepper-row';
 import { TonePill } from '@/components/ui/tone-pill';
+import { cellsOf, configOf, statusOf, V1_COLUMNS, V1_FILE_COLUMNS, viewOf } from '@test/data-upload-fixtures';
 
 /**
  * Where the screen is, for the one shell that reads it: the coaching person shell's archive (P11-T10),
  * and the address the archive's page reads its ids from (`useParams()`, F5 of P11's final walk).
  */
+/** A month read in the shape Data upload's tests describe it, as the server answers it since P19.5-T2 (`viewOf`). */
+const asView = (v: { month: string; withData: number; state: unknown; rows: Parameters<typeof viewOf>[0] }) =>
+  viewOf(v.rows, v.withData, v.month, v.state);
+
 const nav = vi.hoisted(() => ({ pathname: '/admin', params: {} as Record<string, string>, search: '' }));
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), back: vi.fn() }),
   usePathname: () => nav.pathname,
   useParams: () => nav.params,
   // The Product Catalog reads its filters from the address (Phase 14, D-urls).
-  // And an invite's link its token (P18.96-T3): `?invite=…` on `/register` and `/join`.
+  // And an invite's link its token (P18.8-T3): `?invite=…` on `/register` and `/join`.
   useSearchParams: () => new URLSearchParams(nav.search),
 }));
 
@@ -190,10 +197,9 @@ vi.mock('next/navigation', () => ({
  * empty table has no header/cell relationships to get wrong, so testing only the loading
  * state would pass while the real screen failed.
  *
- * **Not yet every screen.** Five are still absent: `/`, `/join`,
- * `/admin/tenants/[kpmId]`, `/admin/tenants/[kpmId]/owner` and
- * `/admin/impersonate/[userId]`. `/people/import` renders the same `RosterImport` as
- * `/admin/tenants/[kpmId]/roster`, which is here, so it is covered in substance.
+ * **Not yet every screen.** Four are still absent: `/`, `/join`,
+ * `/admin/tenants/[kpmId]` and `/admin/tenants/[kpmId]/owner`. The member import is `/people/import`'s, the Owner's
+ * and the Admin's: `/admin/tenants/[kpmId]/roster` is a redirect since P19.4-T2 (ADR-0206 §6).
  */
 const SUPER_ADMIN = makeMe({
   user: {
@@ -224,6 +230,21 @@ const AUDIT = {
   _id: 'a-1', kpmId: null, actorUserId: 'u-root', effectiveUserId: 'u-owner',
   action: 'kpm.created', targetCollection: 'kpms', targetId: 'kpm-1',
   onBehalfOf: true, createdAt: '2026-09-04T02:00:00.000Z',
+  // A group of the audit page (P19.2-T2 AC-6): the newest row and its count, ×3 drawn.
+  count: 3, oldestAt: '2026-09-04T01:55:00.000Z',
+};
+/** `GET /admin/audit`'s page around it: a cursor, so *Muat lagi* is drawn, and the chips' options. */
+const AUDIT_PAGE = {
+  items: [AUDIT],
+  page: { cursor: null, nextCursor: 'cur-2', limit: 50, hasMore: true },
+  facets: { actions: ['kpm.created'], actors: [{ userId: 'u-root', name: 'Root Operator' }] },
+};
+
+/** A member's four tiles (P19.3-T4, ADR-0205 §1): what `GET /members/:membershipId/performance` answers. */
+const MEMBER_PERFORMANCE = {
+  membershipId: 'mem-1', today: '2026-11-05', activity: { from: '2026-10-30', to: '2026-11-05', count: 14 },
+  production: { year: '2026', actualMinor: 310_000_000_000, targetMinor: 500_000_000_000, attainmentPct: 62, goalSet: true },
+  lastOneOnOne: { date: '2026-10-21' }, leads: { month: '2026-11', open: 9, closing: 2 },
 };
 
 const treeNode = (over: Record<string, unknown>) => ({
@@ -235,11 +256,13 @@ const treeNode = (over: Record<string, unknown>) => ({
 /**
  * What these fixtures type that a message also writes in English: an office's or a company's words, shown as typed in
  * both languages — the library company named *Template*, a request's branch *Surabaya Branch* (the register form's
- * English example) — and the roster file's month column, `YYYY-MM`, a machine format and not a word.
+ * English example), the training category an office named *Product* (`test/training-fixtures.ts`; the Super Admin's
+ * product list writes *Product* as its column since P19.2-T2) — and the roster file's month column, `YYYY-MM`, a
+ * machine format and not a word.
  */
-const TYPED_LIKE_A_MESSAGE = new Set(['Template', 'Surabaya Branch', 'YYYY-MM']);
+const TYPED_LIKE_A_MESSAGE = new Set(['Template', 'Surabaya Branch', 'Product', 'YYYY-MM']);
 
-/** Every area's English-only words: what no screen in ID mode may show (P18.98-T7 AC-1). */
+/** Every area's English-only words: what no screen in ID mode may show (P18.10-T7 AC-1). */
 const EVERY_ENGLISH = (await everyAreasEnglish()).filter((word) => !TYPED_LIKE_A_MESSAGE.has(word));
 
 /** A case that renders its screen in ID mode says so in its name: `(id)`, `(id, …)`, `(…, id)` or *in Indonesian*. */
@@ -250,7 +273,7 @@ let keptTermsMarked = 0;
 afterAll(() => expect(keptTermsMarked).toBeGreaterThan(0));
 
 /**
- * axe over the screen as rendered. **In ID mode** (P18.98-T7 AC-1, AC-2) the screen is also read for a message
+ * axe over the screen as rendered. **In ID mode** (P18.10-T7 AC-1, AC-2) the screen is also read for a message
  * missing or an English word the glossary does not keep — every area's, not only the screen's own — and axe runs
  * with the kept terms marked `lang="en"`, as the app's provider marks them (`watchKeptTerms`).
  */
@@ -303,6 +326,15 @@ const OVERVIEW = {
   ],
 };
 
+/**
+ * *Agenda* and *Action Items* load after the first paint (`meeting-tabs.tsx`; the bundle, 2026-11-06): axe reads a
+ * panel once it is drawn, not its placeholder.
+ */
+const meetingPanel = async (tab: 'Agenda' | 'Action Items') => {
+  const panel = within(screen.getByRole('tabpanel', { name: tab }));
+  await (tab === 'Agenda' ? panel.findAllByRole('heading', { level: 3 }) : panel.findByRole('table'));
+};
+
 describe('screens have no axe violations', () => {
   afterEach(() => {
     cleanup();
@@ -333,7 +365,7 @@ describe('screens have no axe violations', () => {
     await expectClean('register');
   });
 
-  it('register, on a leader’s invite: the banner, and the code and join date read-only (P18.96-T3 AC-4)', async () => {
+  it('register, on a leader’s invite: the banner, and the code and join date read-only (P18.8-T3 AC-4)', async () => {
     nav.search = 'invite=kpm-1.secret';
     try {
       stubFetch({
@@ -366,6 +398,9 @@ describe('screens have no axe violations', () => {
   it('verify email', async () => {
     stubFetch({ '/auth/verify-email': { body: {} } });
     renderWithSession(<VerifyEmailPage params={routeParams({ token: 't' })} />, { me: null });
+    // P19-T1 AC-1: nothing is sent until its one button is pressed — the button, then what it says.
+    await expectClean('verify-email, the button');
+    await userEvent.click(screen.getByRole('button', { name: 'Verify my email' }));
     await screen.findByText(/verified/);
     await expectClean('verify-email');
   });
@@ -406,11 +441,16 @@ describe('screens have no axe violations', () => {
     await expectClean('admin/tenants/new');
   });
 
-  it('companies, list and form together', async () => {
+  // *Changed 2026-11-06 (P19.2-T2 AC-3; UI-133):* no form until *+* is pressed — the list, then its add sheet open.
+  it('companies, the list and then the add sheet open', async () => {
+    atWidth(1280);
     stubFetch({ '/admin/companies': { body: [COMPANY] } });
     renderInLayout(AdminLayout, <CompaniesPage />, { me: SUPER_ADMIN });
     await screen.findByRole('table');
     await expectClean('admin/companies');
+    await userEvent.click(screen.getByRole('button', { name: 'Add company' }));
+    await screen.findByRole('dialog', { name: 'Add a company' });
+    await expectClean('admin/companies (add sheet)');
   });
 
   it('the office roster, populated', async () => {
@@ -442,7 +482,11 @@ describe('screens have no axe violations', () => {
     await expectClean('people/members');
   });
 
-  it('the office roster on a tablet: the shell on its rail, the tabs one row (P18.97-T6 AC-1, AC-4)', async () => {
+  /*
+   * *Changed 2026-11-05 (P19.2-T1; ADR-0197 §3, §4):* the office's tablet is the one shell's — no rail below 1024px, the
+   * floating bar and *Lainnya* instead — so the screen is checked with the bar it has, and on the 64px rail at 1024px.
+   */
+  it('P19.2-T1 the office roster on a tablet: the bar, not a rail, the tabs one row (P18.9-T6 AC-4)', async () => {
     const owner = makeMe({
       membership: {
         membershipId: 'mem-owner', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab',
@@ -455,8 +499,9 @@ describe('screens have no axe violations', () => {
     stubFetch({ '/members': { body: { members: [], nextCursor: null, counts: { directory: 28, pending: 2, removed: 2 } } } });
     renderInLayout(TenantLayout, <MembersPage />, { me: owner });
     await screen.findByRole('button', { name: 'Directory (28)' });
-    expect(screen.getByRole('button', { name: 'Expand the sidebar' })).toBeInTheDocument();
-    await expectClean('people/members (tablet, the rail)');
+    expect(screen.queryByRole('button', { name: 'Expand the sidebar' })).not.toBeInTheDocument();
+    expect(document.querySelector('[data-tab-bar]')).not.toBeNull();
+    await expectClean('people/members (tablet, the bar)');
   });
 
   it('register KPM, with the directory listed and the leader tab locked', async () => {
@@ -474,6 +519,7 @@ describe('screens have no axe violations', () => {
         }],
       },
     });
+    nav.pathname = '/user-management/kpm';
     renderInLayout(AgentLayout, <RegisterKpmPage />, { me: makeMe({ membership: null }) });
     await screen.findByText('Prudential — KPM 0417');
     await expectClean('user-management/kpm');
@@ -522,7 +568,7 @@ describe('screens have no axe violations', () => {
     );
     stubFetch({
       '/kpm/data-upload/': {
-        body: {
+        body: asView({
           month: '2026-09', withData: 1,
           state: { month: '2026-09', revision: 3, locked: false, reason: 'open', editableUntil: '2026-10-07', changedAt: null, changedBy: null },
           rows: [
@@ -534,7 +580,7 @@ describe('screens have no axe violations', () => {
               metrics: { ...metrics, ape: { monthly: { value: 0, provenance: 'imported' }, ytd: empty },
                 policyCount: { monthly: { value: 0, provenance: 'imported' }, ytd: empty } } },
           ],
-        },
+        }),
       },
       // The download link is a control axe should see, so the template arrives too (P9-T2).
       '/kpm/data-upload/template': {
@@ -550,7 +596,7 @@ describe('screens have no axe violations', () => {
     await expectClean('kpm/data-upload');
   });
 
-  it('P18.98-T4 the month table in Indonesian: its lock, legend, marks and history, the headings kept', async () => {
+  it('P18.10-T4 the month table in Indonesian: its lock, legend, marks and history, the headings kept', async () => {
     const owner = makeMe({
       membership: {
         membershipId: 'mem-owner', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab', status: 'active',
@@ -567,7 +613,7 @@ describe('screens have no axe violations', () => {
     );
     stubFetch({
       '/kpm/data-upload/': {
-        body: {
+        body: asView({
           month: '2026-09', withData: 1,
           state: { month: '2026-09', revision: 3, locked: false, reason: 'open', editableUntil: '2026-10-07', changedAt: null, changedBy: null },
           rows: [
@@ -575,7 +621,7 @@ describe('screens have no axe violations', () => {
               metrics: { ...metrics, ape: { monthly: { value: 15000000000, provenance: 'imported' }, ytd: empty } } },
             { membershipId: 'mem-budi', agentCode: 'PRU-002', name: 'Budi Santoso', metrics, monthlyActiveAgent: null },
           ],
-        },
+        }),
       },
       '/kpm/data-upload/template': {
         body: {
@@ -602,6 +648,89 @@ describe('screens have no axe violations', () => {
     await expectClean('kpm/data-upload, in Indonesian');
   });
 
+  /*
+   * **P19.5-T2 — Data upload from the template** (ADR-0214 §5, §8, §10 to §12): every new state at once — a column before
+   * its start, a year to date *Belum lengkap* and its banner, a value *Di luar batas sejak v2*, a *Belum terdaftar* row,
+   * the month grid open, and a preview with its column notes, a held row and the current month's *as of* day — at a
+   * phone's width and a laptop's, in Indonesian, as the Owner reads it.
+   */
+  it.each([375, 1280])('P19.5-T2 AC-1, AC-3, AC-5, AC-7, AC-8, AC-9, AC-11 kpm/data-upload from the template at %ipx, in Indonesian', async (px) => {
+    atWidth(px);
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-05T03:00:00Z'));
+    try {
+      const owner = makeMe({
+        membership: {
+          membershipId: 'mem-owner', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab', status: 'active',
+          isKpmOwner: true, isKpmAdmin: false, directCount: 2,
+        },
+        permissions: [
+          'member:read_profile', 'data_upload:read', 'data_upload:download_template', 'data_upload:upload_and_preview',
+          'data_upload:commit_import', 'data_upload:correct_cell', 'data_upload:read_history', 'data_upload:lock_month',
+        ],
+      });
+      const fyc = { ...V1_COLUMNS[4], kode: 'FYC', label: { id: 'Komisi tahun pertama', en: 'First-year commission' }, effectiveFrom: '2026-12', inForce: false };
+      const columns = [...V1_COLUMNS.map((c) => (c.ytd === 'sum' ? { ...c, ytdMissingMonths: ['2026-03'] } : c)), fyc];
+      const imported = (value: number) => ({ value, provenance: 'imported' as const, correction: null });
+      const view = viewOf([
+        { membershipId: 'mem-rina', agentCode: 'PRU-001', name: 'Rina Wijaya', monthlyActiveAgent: true,
+          metrics: { ape: { monthly: imported(150_000_000), ytd: imported(900_000_000) } } },
+        { membershipId: 'mem-agus', agentCode: 'PRU-010', name: 'Agus Prasetyo', leader: true, monthlyActiveAgent: null,
+          unitPersistency: { ...imported(105), outOfBounds: { sinceVersion: 2 } } },
+      ], 2, '2026-11', {
+        month: '2026-11', revision: 3, locked: false, reason: 'open', editableUntil: '2026-12-07', changedAt: null, changedBy: null, asOf: '2026-11-03',
+      }, {
+        config: configOf({ columns, historyFrom: '2026-03' }),
+        ytdMissingMonths: ['2026-03'],
+        months: [statusOf('2026-03', 'missing'), statusOf('2026-04', 'incomplete'), statusOf('2026-10'), statusOf('2026-11', 'missing')],
+        unregistered: [{ agentCode: '70019999', fileName: 'Calon Baru', values: { APE: imported(50_000_000) }, ytd: {} }],
+      });
+      stubFetch({
+        '/kpm/data-upload/': { body: view },
+        '/kpm/data-upload/template': {
+          body: { month: '2026-11', version: 1, filename: '0417-agent-data-2026-11.csv', header: ['Agent Code'], file: 'Agent Code', rowCount: 0 },
+        },
+        '/kpm/data-upload/history': { body: { month: '2026-11', batches: [] } },
+        '/kpm/data-upload/preview': {
+          body: {
+            month: '2026-11', filename: 'filled.csv', templateVersion: 1, encoding: 'utf-8', delimiter: ',', revision: 3,
+            columns: V1_FILE_COLUMNS,
+            notes: [
+              { code: 'column_missing', kode: 'UNIT_PERSISTENCY', header: null, message: 'Kolom Unit persistency kosong di file ini. Baris tetap diimpor.' },
+              { code: 'column_retired', kode: 'APE', header: 'APE (Rp M) — YTD', message: 'Kolom APE YTD tidak dipakai lagi' },
+            ],
+            summary: { rows: 2, ready: 1, refused: 0, held: 1, newCells: 2, changedCells: 0, unchangedCells: 0, notProvidedCells: 10, refusedCells: 0, correctionCells: 0, notInFile: 1 },
+            rows: [
+              {
+                line: 2, agentCode: 'PRU-001', membershipId: 'mem-rina', resolvedAgentCode: 'PRU-001', name: 'Rina Wijaya', fileName: 'Rina Wijaya',
+                nameDiffers: false, codeRecovered: false, status: 'ready', issues: [], cells: cellsOf({ ape: { status: 'new', after: 160_000_000, raw: '1.6' } }),
+              },
+              {
+                line: 3, agentCode: '70019999', membershipId: null, resolvedAgentCode: null, name: null, fileName: 'Calon Baru',
+                nameDiffers: false, codeRecovered: false, status: 'held', issues: [], cells: cellsOf({ ape: { status: 'new', after: 50_000_000, raw: '0.5' } }),
+              },
+            ],
+          },
+        },
+      });
+      renderWithSession(<InLanguage language="id"><TenantLayout><DataUploadPage /></TenantLayout></InLanguage>, { me: owner });
+      await screen.findByText('YTD belum lengkap: Mar 2026 belum diunggah.');
+      await screen.findByRole('button', { name: 'Unduh template' });
+      // The month grid open, so its pills are read too.
+      (document.querySelector('[data-month-status]') as HTMLDetailsElement).open = true;
+      await expectClean(`kpm/data-upload from the template at ${px}px, in Indonesian`);
+      if (px >= 1024) {
+        await userEvent.click(screen.getByRole('button', { name: 'YTD' }));
+        await expectClean(`kpm/data-upload, its YTD side Belum lengkap at ${px}px, in Indonesian`);
+      }
+      await userEvent.upload(screen.getByLabelText('+ Unggah template yang sudah diisi'), new File(['x'], 'filled.csv', { type: 'text/csv' }));
+      await screen.findByLabelText('Data per tanggal');
+      await expectClean(`kpm/data-upload, a preview with notes, a held row and its as of day at ${px}px, in Indonesian`);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('the month with a figure being corrected, and a refusal on it (P9-T5)', async () => {
     const owner = makeMe({
       membership: {
@@ -620,11 +749,11 @@ describe('screens have no axe violations', () => {
     };
     stubFetch({
       '/kpm/data-upload/': {
-        body: {
+        body: asView({
           month: '2026-09', withData: 1,
           state: { month: '2026-09', revision: 3, locked: false, reason: 'open', editableUntil: '2026-10-07', changedAt: null, changedBy: null },
           rows: [{ membershipId: 'mem-rina', agentCode: 'PRU-001', name: 'Rina Wijaya', metrics }],
-        },
+        }),
       },
       '/kpm/data-upload/cell': {
         status: 422,
@@ -662,11 +791,11 @@ describe('screens have no axe violations', () => {
     };
     stubFetch({
       '/kpm/data-upload/': {
-        body: {
+        body: asView({
           month: '2026-09', withData: 0,
           state: { month: '2026-09', revision: 3, locked: false, reason: 'reopened', editableUntil: '2026-10-07', changedAt: '2026-09-21T03:00:00.000Z', changedBy: 'Maya Halim' },
           rows: [{ membershipId: 'mem-rina', agentCode: 'PRU-001', name: 'Rina Wijaya', metrics }],
-        },
+        }),
       },
       '/kpm/data-upload/history': {
         body: {
@@ -693,36 +822,40 @@ describe('screens have no axe violations', () => {
     const metrics = Object.fromEntries(
       ['ape', 'persistency', 'recruitment', 'newActiveAgents', 'fyp', 'policyCount'].map((m) => [m, { monthly: empty, ytd: empty }]),
     );
-    const cells = (['monthly', 'ytd'] as const).flatMap((cadence) =>
-      ['ape', 'persistency', 'recruitment', 'newActiveAgents', 'fyp', 'policyCount'].map((metric) => ({
-        metric, cadence, status: 'not_provided',
-        before: null as number | null, after: null as number | null, raw: null as string | null,
-      })));
-    cells[0] = { ...cells[0], status: 'new', after: 150000000, raw: '1.5' };
-    cells[1] = { ...cells[1], status: 'refused', raw: '140' };
-    // A correction the file would change, with its choice (ADR-0053).
-    cells[4] = {
-      ...cells[4], status: 'changed', before: 70000000, after: 60000000, raw: '0.6',
-      correction: { by: 'Maya Halim', at: '2026-09-26T03:00:00.000Z', reason: 'Carrier restated it', replacedValue: 60000000 },
-    } as never;
+    // P19.5-T2: the cells by kode, one per column a version 1 file is read for (`cellsOf`).
+    const cells = cellsOf({
+      ape: { status: 'new', after: 150000000, raw: '1.5' },
+      persistency: { status: 'refused', raw: '140' },
+      // A correction the file would change, with its choice (ADR-0053).
+      fyp: {
+        status: 'changed', before: 70000000, after: 60000000, raw: '0.6',
+        correction: { by: 'Maya Halim', at: '2026-09-26T03:00:00.000Z', reason: 'Carrier restated it', replacedValue: 60000000 },
+      },
+    });
     stubFetch({
       '/kpm/data-upload/': {
-        body: { month: '2026-09', withData: 0, state: { month: '2026-09', revision: 3, locked: false, reason: 'open', editableUntil: '2026-10-07', changedAt: null, changedBy: null }, rows: [{ membershipId: 'mem-rina', agentCode: 'PRU-001', name: 'Rina Wijaya', metrics }] },
+        body: asView({ month: '2026-09', withData: 0, state: { month: '2026-09', revision: 3, locked: false, reason: 'open', editableUntil: '2026-10-07', changedAt: null, changedBy: null }, rows: [{ membershipId: 'mem-rina', agentCode: 'PRU-001', name: 'Rina Wijaya', metrics }] }),
       },
       '/kpm/data-upload/preview': {
         body: {
           month: '2026-09', filename: 'filled.csv', templateVersion: 1, encoding: 'utf-8', delimiter: ',',
-          summary: { rows: 2, ready: 1, refused: 1, newCells: 1, changedCells: 0, unchangedCells: 0, notProvidedCells: 10, refusedCells: 1, notInFile: 0 },
+          columns: V1_FILE_COLUMNS,
+          // P19.5-T2 (AA UI-013): what the header says about the file's columns.
+          notes: [
+            { code: 'column_missing', kode: 'UNIT_PERSISTENCY', header: null, message: 'Column Unit persistency is empty in this file. The rows still import.' },
+            { code: 'column_retired', kode: 'APE', header: 'APE (Rp M) — YTD', message: 'Column APE YTD is no longer used. It is not stored.' },
+          ],
+          summary: { rows: 2, ready: 1, refused: 1, held: 0, newCells: 1, changedCells: 0, unchangedCells: 0, notProvidedCells: 10, refusedCells: 1, notInFile: 0 },
           rows: [
             {
               line: 2, agentCode: 'PRU-001', membershipId: 'mem-rina', resolvedAgentCode: 'PRU-001', name: 'Rina Wijaya',
               fileName: 'Rina Wijaya', nameDiffers: false, codeRecovered: false, status: 'ready', cells,
-              issues: [{ code: 'UPLOAD_VALUE_OUT_OF_RANGE', metric: 'persistency', cadence: 'monthly', message: 'Rolling Persistency (%) — This Month: “140” is above 100.' }],
+              issues: [{ code: 'UPLOAD_VALUE_OUT_OF_RANGE', kode: 'PERSISTENCY', ytd: false, message: 'Rolling persistency (%) [PERSISTENCY]: “140” is above 100.' }],
             },
             {
               line: 3, agentCode: 'PRU-999', membershipId: null, resolvedAgentCode: null, name: null, fileName: 'X',
               nameDiffers: false, codeRecovered: false, status: 'refused', cells: [],
-              issues: [{ code: 'UPLOAD_UNKNOWN_AGENT_CODE', metric: null, cadence: null, message: 'No active member of this office has this code.' }],
+              issues: [{ code: 'UPLOAD_UNKNOWN_AGENT_CODE', kode: null, ytd: null, message: 'No active member of this office has this code.' }],
             },
           ],
         },
@@ -745,62 +878,89 @@ describe('screens have no axe violations', () => {
       },
       permissions: ['member:read_profile', 'kpm_overview:read', 'kpm_overview:set_recruit_target'],
     });
-    const overviewRegion = () => within(screen.getByRole('main')).findByRole('region', { name: 'Team composition' });
+    // Four tiles, the lists and the cards since P19.2-T3 (UI-143) and P19.3-T2 (UI-148): the first list stands for the page.
+    const overviewRegion = () => within(screen.getByRole('main')).findByRole('region', { name: 'AB coaching frequency' });
+    /** A page with nothing to rank (P19.3-T2 AC-6): its tiles stand for it. */
+    const overviewTiles = () => within(screen.getByRole('main')).findByText('Total members');
+    const overviewRoutes = (view: unknown) => ({ '/kpm/overview/not-logged': { body: OVERVIEW_NOT_LOGGED }, '/kpm/overview': { body: view } });
 
-    it('filled, the Target a value with Edit (P18.97-T3 AC-7)', async () => {
-      stubFetch({ '/kpm/overview': { body: overviewFixture() } });
+    it('filled, the Target a value with Edit (P18.9-T3 AC-7), Belum mencatat the third card (P19.3-T2)', async () => {
+      stubFetch(overviewRoutes(overviewFixture()));
       renderInLayout(TenantLayout, <KpmOverviewPage />, { me: owner });
       await overviewRegion();
+      await screen.findByText('69 of 187');
       await expectClean('kpm/overview');
     });
 
-    it('P18.98-T4 filled, in Indonesian, the not-logged list and the full ranking open', async () => {
-      stubFetch({ '/kpm/overview/not-logged': { body: OVERVIEW_NOT_LOGGED }, '/kpm/overview': { body: overviewFixture() } });
+    it('P18.10-T4, P19.3-T2 filled, in Indonesian, the not-logged card read and the full ranking open', async () => {
+      stubFetch(overviewRoutes(overviewFixture()));
       renderWithSession(<InLanguage language="id"><TenantLayout><KpmOverviewPage /></TenantLayout></InLanguage>, { me: owner });
       await overviewRegion();
-      await userEvent.click(screen.getByRole('button', { name: 'Lihat siapa yang belum mencatat →' }));
-      await within(screen.getByRole('region', { name: 'Engagement' })).findAllByRole('listitem');
-      await userEvent.click(screen.getAllByRole('button', { name: 'lihat peringkat lengkap →' })[0]);
+      await within(screen.getByRole('region', { name: 'Belum mencatat · 7 hari' })).findAllByRole('listitem');
+      await userEvent.click(screen.getAllByRole('button', { name: /^Semua \d+ ›$/ })[0]);
       await expectClean('kpm/overview, in Indonesian');
     });
 
-    it('P18.97-T3 AC-5, AC-7: an AB who leads nobody on the full board, No team, and the Target’s box open', async () => {
+    it('P18.9-T3 AC-5, AC-7, P19.3-T2: an AB who leads nobody on the full board, No team, and the Target’s box open', async () => {
       const view = overviewFixture();
       const leaderboard = [...view.coaching.leaderboard, overviewNoTeam('mem-maya-h', 'Maya Halim')];
-      stubFetch({ '/kpm/overview': { body: { ...view, coaching: { ...view.coaching, leaderboard } } } });
+      stubFetch(overviewRoutes({ ...view, coaching: { ...view.coaching, leaderboard } }));
       renderInLayout(TenantLayout, <KpmOverviewPage />, { me: owner });
       await overviewRegion();
-      await userEvent.click(screen.getAllByRole('button', { name: 'view full ranking →' })[0]);
+      await userEvent.click(screen.getAllByRole('button', { name: /^All \d+ ›$/ })[0]);
       await screen.findByText('No team');
       await userEvent.click(screen.getByRole('button', { name: 'Edit target' }));
       await screen.findByRole('spinbutton', { name: 'Target' });
       await expectClean('kpm/overview (No team, the Target open)');
     });
 
-    it('expanded: the not-logged list, the full ranking and a unit’s AABs open', async () => {
-      stubFetch({ '/kpm/overview/not-logged': { body: OVERVIEW_NOT_LOGGED }, '/kpm/overview': { body: overviewFixture() } });
+    it('P19.3-T2: the settings list open, its amber pills and Ratio benchmarks under Activity types', async () => {
+      stubFetch(overviewRoutes(overviewFixture()));
       renderInLayout(TenantLayout, <KpmOverviewPage />, { me: owner });
       await overviewRegion();
-      await userEvent.click(screen.getByRole('button', { name: "View who hasn't logged →" }));
-      await screen.findByText('Sinta Halim — Agent');
-      for (const more of screen.getAllByRole('button', { name: 'view full ranking →' })) await userEvent.click(more);
-      await userEvent.click(screen.getByRole('button', { name: /^Hendra Wibowo/ }));
-      await userEvent.click(screen.getByRole('button', { name: /^Lina Chandra/ }));
-      await expectClean('kpm/overview (expanded)');
+      for (const more of screen.getAllByRole('button', { name: /^All \d+ ›$/ })) await userEvent.click(more);
+      await userEvent.click(screen.getByRole('button', { name: 'KPM settings' }));
+      await screen.findByRole('dialog', { name: 'KPM settings' });
+      await expectClean('kpm/overview (the settings list)');
     });
 
-    it('empty: 0701, with no file, no session, no lead and no target', async () => {
-      stubFetch({ '/kpm/overview': { body: OVERVIEW_EMPTY } });
+    it('P19.3-T2: the target sheet open, from the pipeline’s ›', async () => {
+      stubFetch(overviewRoutes(overviewFixture()));
       renderInLayout(TenantLayout, <KpmOverviewPage />, { me: owner });
       await overviewRegion();
-      await userEvent.click(screen.getByRole('button', { name: /^Hadi Gunawan/ }));
+      await userEvent.click(screen.getByRole('button', { name: 'Recruitment target this month' }));
+      await screen.findByRole('dialog', { name: 'Recruitment target this month' });
+      await expectClean('kpm/overview (the target sheet)');
+    });
+
+    it('P19.3-T2 Overview case 1: KaiZen, a new KPM — Siapkan KPM, four tiles and Pengaturan KPM', async () => {
+      stubFetch(overviewRoutes(OVERVIEW_KAIZEN));
+      renderInLayout(TenantLayout, <KpmOverviewPage />, { me: owner });
+      await within(screen.getByRole('main')).findByRole('region', { name: 'Set up your KPM' });
+      await expectClean('kpm/overview (setting up)');
+    });
+
+    it('P19.3-T2 at 375px: the not-logged sheet open, its WhatsApp reminders', async () => {
+      atWidth(375);
+      stubFetch(overviewRoutes(overviewFixture()));
+      renderInLayout(TenantLayout, <KpmOverviewPage />, { me: owner });
+      await overviewRegion();
+      await userEvent.click(screen.getByRole('button', { name: /^App users/ }));
+      await within(await screen.findByRole('dialog', { name: 'Not logged · 7 days' })).findAllByRole('listitem');
+      await expectClean('kpm/overview (the not-logged sheet)');
+    });
+
+    it('empty: 0701, with no file, no session, no lead and no target — nothing to rank', async () => {
+      stubFetch(overviewRoutes(OVERVIEW_EMPTY));
+      renderInLayout(TenantLayout, <KpmOverviewPage />, { me: owner });
+      await overviewTiles();
       await expectClean('kpm/overview (empty)');
     });
 
     it('an office with nobody in it, every rate a dash', async () => {
-      stubFetch({ '/kpm/overview': { body: OVERVIEW_NOBODY } });
+      stubFetch(overviewRoutes(OVERVIEW_NOBODY));
       renderInLayout(TenantLayout, <KpmOverviewPage />, { me: owner });
-      await overviewRegion();
+      await overviewTiles();
       await expectClean('kpm/overview (nobody)');
     });
 
@@ -853,24 +1013,78 @@ describe('screens have no axe violations', () => {
       await expectClean('unit/dashboard');
     });
 
-    it('a new hire before a first sale: the New hire tag, and the ⓘ of the totals and tiles that leave her out (P18.96-T5)', async () => {
+    it('a new hire before a first sale: the New hire tag, and the ⓘ of the totals and tiles that leave her out (P18.8-T5)', async () => {
       stubFetch({ ...shell, 'GET /unit/dashboard': { body: UNIT_NEW_HIRE } });
       renderInLayout(AgentLayout, page(), { me: UNIT_READER });
       await screen.findByRole('table', { name: 'Your team’s roster' });
       await expectClean('unit/dashboard with a new hire');
     });
 
-    it('UI V1 (Phase 18.99 T4): the Activities tab — its controls, the table, a section opened, the ratio card on Group', async () => {
+    it('UI V1 (Phase 18.11 T4): the Activities tab — its controls, the table, a section opened, the ratio card on Group', async () => {
       stubFetch({ ...shell, 'GET /unit/dashboard/activities': { body: unitActivities() } });
       renderInLayout(AgentLayout, <UnitDashboardPage />, { me: UNIT_READER });
       await userEvent.click(await screen.findByRole('tab', { name: 'Activities' }));
       await screen.findByRole('table', { name: 'Activities · Unit' });
       await userEvent.click(screen.getByRole('button', { name: 'Show Recruitment' }));
-      await userEvent.click(within(screen.getByRole('region', { name: 'Ratio · last 30 days' })).getByRole('button', { name: 'Group' }));
+      // The card's *Unit ⌄* picker since P19.8-T4 (AC-7, MOB UI-184): its menu open, then Group chosen.
+      await userEvent.click(within(screen.getByRole('region', { name: 'Ratio · last 30 days' })).getByRole('button', { name: 'Ratio for Unit' }));
+      await expectClean('unit/dashboard activities (ratio picker open)');
+      await userEvent.click(screen.getByRole('option', { name: 'Group' }));
       await expectClean('unit/dashboard activities');
     });
 
-    it('UI V1 (Phase 18.99 T4, UI-002): on a phone, the accordion — Your Unit open, a unit opened, the chips filtering', async () => {
+    it('P19.1-T6 (UI-155): the Potensi tab — the month picker, the tiles that are the switch, a unit card, and a sheet', async () => {
+      const cell = (potensi: number, aa: boolean, rekrut = 0) => ({
+        aa: { potensi, aa, switched: potensi }, rekrut: { potensi: 0, rekrut, switched: rekrut },
+      });
+      const who = (membershipId: string, name: string, code: string, isLeader: boolean, figures: ReturnType<typeof cell>) => ({
+        membershipId, name, photoUrl: null, rung: { code, label: code }, isLeader, isReader: false, opens: true, ...figures,
+      });
+      const people = [
+        who('m-sari', 'Sari Puspita', 'AAB', true, cell(1, true)),
+        who('m-rina', 'Rina Wijaya', 'AGENT', false, cell(2, false, 1)),
+        who('m-andi', 'Andi Nugroho', 'AGENT', false, cell(0, false)),
+      ];
+      const totals = {
+        aa: { potensi: 3, aa: 1, switchedPeople: 2, switchedPeopleAa: 1 },
+        rekrut: { potensi: 0, rekrut: 1, switchedPeople: 1, switchedPeopleRekrut: 1 },
+      };
+      stubFetch({
+        ...shell,
+        'GET /unit/dashboard/potensi': {
+          body: {
+            month: '2026-11', currentMonth: '2026-11', today: '2026-11-04',
+            head: { membershipId: 'mem-agus', name: 'Agus Prasetyo', isReader: true },
+            tiles: { aa: 1, rekrut: 1, potensi: { aa: 2, rekrut: 1 } },
+            units: [{ kind: 'unit', leader: { membershipId: 'm-sari', name: 'Sari Puspita', rung: { code: 'AAB', label: 'AAB' } }, people, totals }],
+          },
+        },
+        'GET /unit/dashboard/potensi/m-rina': {
+          body: {
+            month: '2026-11', currentMonth: '2026-11',
+            person: { membershipId: 'm-rina', name: 'Rina Wijaya', rung: { code: 'AGENT', label: 'Agent' }, phone: '+6281211002201', isReader: false },
+            unit: { name: 'Sari Puspita', rung: { code: 'AAB', label: 'AAB' } },
+            sales: [{ id: 'l1', name: 'Ibu Kartika Dewanti', statusCode: 'FOLLOW_UP', nextActionDate: '2026-11-04', nextActionNote: 'Coffee.' }],
+            kandidat: [],
+          },
+        },
+      });
+      renderInLayout(AgentLayout, <UnitDashboardPage />, {
+        me: { ...UNIT_READER, permissions: [...UNIT_READER.permissions, 'unit_dashboard:read_potensi'] },
+      });
+      await userEvent.click(await screen.findByRole('tab', { name: 'Potensi' }));
+      await screen.findByRole('radiogroup', { name: 'Active Agent or Rekrut' });
+      await expectClean('unit/dashboard potensi');
+      // The month picker's menu open (P19.8-T4 AC-12, MOB UI-171).
+      await userEvent.click(screen.getByRole('button', { name: 'Month November 2026' }));
+      await expectClean('unit/dashboard potensi (month menu open)');
+      await userEvent.keyboard('{Escape}');
+      await userEvent.click(screen.getByRole('button', { name: /^Open Rina Wijaya/ }));
+      await screen.findByText('Ibu Kartika Dewanti');
+      await expectClean('unit/dashboard potensi sheet');
+    });
+
+    it('UI V1 (Phase 18.11 T4, UI-002): on a phone, the accordion — Your Unit open, a unit opened, the chips filtering', async () => {
       vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
         media: query, matches: query === PHONE_QUERY, addEventListener: vi.fn(), removeEventListener: vi.fn(),
       })));
@@ -879,7 +1093,8 @@ describe('screens have no axe violations', () => {
       await screen.findByRole('button', { name: /^Your Unit · 4/ });
       await expectClean('unit/dashboard (phone)');
       await userEvent.click(screen.getByRole('button', { name: /^Sari Wulandari’s Unit/ }));
-      await userEvent.click(screen.getByRole('button', { name: 'Needs attention 4' }));
+      // The count tiles since P19.8-T4 (AC-3, MOB UI-178); Siti's month not uploaded, in no status (AC-2).
+      await userEvent.click(screen.getByRole('button', { name: '3 Needs attention' }));
       await expectClean('unit/dashboard (phone, opened and filtered)');
     });
 
@@ -905,7 +1120,8 @@ describe('screens have no axe violations', () => {
     it('empty: somebody who leads nobody', async () => {
       stubFetch({ ...shell, 'GET /unit/dashboard': { body: UNIT_EMPTY } });
       renderInLayout(AgentLayout, page(), { me: UNIT_READER });
-      await screen.findByText('Nobody is in your unit yet.');
+      // P19-T4 AC-3: the tiles at zero and the roster's greyed Example — no *No data yet* since P19.8-T4 AC-11 (OD-280).
+      await screen.findByText('Example');
       await expectClean('unit/dashboard (empty)');
     });
 
@@ -994,7 +1210,7 @@ describe('screens have no axe violations', () => {
     it('the roster with nobody to coach', async () => {
       stubFetch({ ...shell, '/coaching/coachees': { body: { ...roster, directAgents: [], units: [] } } });
       renderInLayout(AgentLayout, <CoachingRosterPage />, { me: leader });
-      await screen.findByText('No one to coach yet.');
+      await screen.findByText('No data yet');
       await expectClean('coaching (empty)');
     });
 
@@ -1095,7 +1311,7 @@ describe('screens have no axe violations', () => {
       <CoachingPersonLayout params={routeParams({ membershipId })}>{tab}</CoachingPersonLayout>,
       { me: coachLeader },
     );
-    /** A person's tab in ID mode (P18.98-T7 AC-1): the shell, the person's shell and the tab, in Indonesian. */
+    /** A person's tab in ID mode (P18.10-T7 AC-1): the shell, the person's shell and the tab, in Indonesian. */
     const inShellInIndonesian = (tab: React.ReactNode, me = coachLeader) => renderWithSession(
       <InLanguage language="id">
         <AgentLayout><CoachingPersonLayout params={routeParams({ membershipId: 'mem-rina' })}>{tab}</CoachingPersonLayout></AgentLayout>
@@ -1133,7 +1349,7 @@ describe('screens have no axe violations', () => {
           },
         },
         '/activity/ratios': { body: sessionRatios },
-        // P18.5-T9: *Campaigns she's chasing*, as chips.
+        // P18.2-T9: *Campaigns she's chasing*, as chips.
         'GET /campaigns/chasing': { body: CAMPAIGNS_RINA_CHASING },
       };
     };
@@ -1177,7 +1393,7 @@ describe('screens have no axe violations', () => {
       await expectClean('coaching/[membershipId]/goal-setting');
     });
 
-    it('a person’s Training tab, populated: every category with its counts, the skill cards, an archived row (P18.5-T4)', async () => {
+    it('a person’s Training tab, populated: every category with its counts, the skill cards, an archived row (P18.2-T4)', async () => {
       const retention = trainingSkill('RETENTION', 'Retention', [], {
         offered: false,
         archived: [{ code: 'CLIENT_RETENTION', title: 'Client Retention Best Practices', status: 'done', completedAt: '2026-08-01T03:00:00.000Z', formats: ['file'] }],
@@ -1190,11 +1406,11 @@ describe('screens have no axe violations', () => {
     });
 
     /**
-     * **P18.98-T7 AC-1: the person's tabs no Indonesian case rendered** — *Personal Summary*, *Goal Setting*, *Activity*
+     * **P18.10-T7 AC-1: the person's tabs no Indonesian case rendered** — *Personal Summary*, *Goal Setting*, *Activity*
      * and *Training*, each populated as above, read in ID mode by `expectClean`: no message missing, no English the
      * glossary does not keep, axe with the kept terms marked.
      */
-    it('P18.98-T7 a person’s Personal Summary tab, in Indonesian', async () => {
+    it('P18.10-T7 a person’s Personal Summary tab, in Indonesian', async () => {
       stubFetch(summaryTabRoutes());
       inShellInIndonesian(<CoacheeSummaryTab />);
       await screen.findAllByText('Desi Pratama');
@@ -1202,14 +1418,14 @@ describe('screens have no axe violations', () => {
       await expectClean('coaching/[membershipId]/summary (id)');
     });
 
-    it('P18.98-T7 a person’s Goal Setting tab, in Indonesian', async () => {
+    it('P18.10-T7 a person’s Goal Setting tab, in Indonesian', async () => {
       stubFetch(goalTabRoutes());
       inShellInIndonesian(<CoacheeGoalSettingTab />);
       await screen.findByRole('button', { name: 'Simpan goal' });
       await expectClean('coaching/[membershipId]/goal-setting (id)');
     });
 
-    it('P18.98-T7 a person’s Activity tab, populated, in Indonesian', async () => {
+    it('P18.10-T7 a person’s Activity tab, populated, in Indonesian', async () => {
       const counts = [3, 0, 1, 0, 2, 0, 0];
       stubFetch({
         ...shell,
@@ -1231,7 +1447,7 @@ describe('screens have no axe violations', () => {
       await expectClean('coaching/[membershipId]/activity (id)');
     });
 
-    it('P18.98-T7 a person’s Training tab, in Indonesian', async () => {
+    it('P18.10-T7 a person’s Training tab, in Indonesian', async () => {
       stubFetch({ ...shell, '/coaching/coachees/': { body: rina }, 'GET /training/progress': { body: trainingProgressView([TRAINING_SALES, TRAINING_PRODUCT]) } });
       inShellInIndonesian(<CoacheeTrainingTab />);
       await screen.findByText(TRAINING_SALES.skills[0].modules[0].title);
@@ -1463,7 +1679,7 @@ describe('screens have no axe violations', () => {
       await screen.findByRole('region', { name: 'Personal notes from Wilson Tanoto' });
       await screen.findByRole('checkbox', { name: 'Cold calling Archived' });
       await expectClean('coaching/[membershipId]/leader-notes');
-      // UI-035 (UI V1, Phase 18.99 T10): the ladder's sheet, opened from the tile.
+      // UI-035 (UI V1, Phase 18.11 T10): the ladder's sheet, opened from the tile.
       await userEvent.click(await screen.findByRole('button', { name: /^Capability mapping: / }));
       await screen.findByRole('dialog', { name: 'Capability mapping' });
       await expectClean('coaching/[membershipId]/leader-notes (ladder sheet, UI V1)');
@@ -1488,7 +1704,7 @@ describe('screens have no axe violations', () => {
       })));
       stubFetch({ ...shell, '/coaching/coachees': { body: roster } });
       renderInLayout(AgentLayout, <CoachingRosterPage />, { me: leader });
-      // A phone draws the roster as cards (P18.95-T3 AC-3), headed by the table's caption.
+      // A phone draws the roster as cards (P18.7-T3 AC-3), headed by the table's caption.
       await screen.findByRole('heading', { name: 'Everyone you coach' });
       expect(document.querySelector('[data-tab-bar]')).not.toBeNull();
       expect(screen.getByRole('link', { name: 'Your profile' })).toHaveAttribute('href', '/profile');
@@ -1539,7 +1755,7 @@ describe('screens have no axe violations', () => {
     await screen.findByText('Total activities');
     await expectClean('activity/dashboard');
 
-    // On a phone: each item's total, and two of them opened on their days (P18.95-T3 AC-6).
+    // On a phone: each item's total, and two of them opened on their days (P18.7-T3 AC-6).
     cleanup();
     vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
       media: query, matches: query === PHONE_QUERY, addEventListener: vi.fn(), removeEventListener: vi.fn(),
@@ -1583,7 +1799,7 @@ describe('screens have no axe violations', () => {
       numeratorCount: 1, denominatorCount: 10, status,
     });
     stubFetch({
-      // P18.5-T7 AC-6: *Campaigns you're chasing*, with its rows.
+      // P18.2-T7 AC-6: *Campaigns you're chasing*, with its rows.
       'GET /campaigns/chasing': { body: CAMPAIGNS_RINA_CHASING },
       '/activity/ratios': {
         body: { membershipId: 'm-1', from: '2026-08-16', to: '2026-09-14', days: 30, ratios: [rate('SSR', 0.1, 'alert'), rate('LPA', null, 'neutral')] },
@@ -1624,11 +1840,11 @@ describe('screens have no axe violations', () => {
       },
     });
     renderInLayout(AgentLayout, <PersonalSummaryPage />, {});
-    // UI V1 (P18.99-T7): the date header and the goal card with its gap inside it, the one Target aktivitas card, the
+    // UI V1 (P18.11-T7): the date header and the goal card with its gap inside it, the one Target aktivitas card, the
     // shared ratio card, the sections' headings outside their cards.
     await screen.findByRole('region', { name: 'Goal vs. actual (APE)' });
     await screen.findByText('SSR');
-    // Card 6, *Campaigns you're chasing*, with its rows (P18.5-T7 AC-6).
+    // Card 6, *Campaigns you're chasing*, with its rows (P18.2-T7 AC-6).
     await within(await screen.findByRole('region', { name: "Campaigns you're chasing" })).findByText('Q4 APE Sprint');
     await expectClean('summary');
     // UI-051: the month pill's sheet, and UI-050: a tile's activities behind a tap on a phone.
@@ -1636,9 +1852,46 @@ describe('screens have no axe violations', () => {
     await screen.findByRole('dialog', { name: 'Month' });
     await expectClean('summary (the month sheet)');
     await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Sep 2026' }));
-    await userEvent.click(document.querySelector('[data-breakdown="phone"] button') as HTMLElement);
+    await userEvent.click(document.querySelector('[data-breakdown="collapsed"] button') as HTMLElement);
     await screen.findByRole('dialog', { name: 'Recruitment activities' });
     await expectClean('summary (a tile’s activities)');
+  });
+
+  it('Personal Summary, P19.1-T4 not uploaded: who uploads, the helpers marked, Upload production →, the estimate field open', async () => {
+    const M = 1_000_000 * 100;
+    const nothing = { targetMinor: 75 * M, actualMinor: null, attainmentPct: null, gapMinor: null, overMinor: null, policiesNeeded: null, targetMet: false };
+    const activity = { from: '2026-09-01', to: '2026-09-14', total: 0, targets: [], sections: [] };
+    stubFetch({
+      'GET /campaigns/chasing': { body: CAMPAIGNS_RINA_CHASING },
+      '/activity/ratios': { body: { membershipId: 'm-1', from: '2026-08-16', to: '2026-09-14', days: 30, ratios: [] } },
+      '/kpm/config': { body: { activity: [], ratios: [], leadPipelines: [], version: 1 } },
+      '/summary': {
+        body: {
+          year: '2026', month: '2026-09', today: '2026-09-14', goal: { set: true, savedAt: '2026-09-01T02:00:00.000Z' },
+          period: { firstMonth: '2026-01', thisMonth: '2026-09', currentMonth: true, currentYear: true },
+          caseSizeMinor: 18 * M,
+          monthly: { ...nothing, source: null, production: 'none', withoutProduction: { gapMinor: 75 * M, policiesNeeded: 5 } },
+          yearly: {
+            ...nothing, targetMinor: 500 * M, actualMinor: 0, source: { provenance: 'self_reported', month: null }, production: 'none',
+            withoutProduction: { gapMinor: 500 * M, policiesNeeded: 28 },
+          },
+          uploadedOn: { month: null, year: null },
+          pace: null,
+          activity: { monthly: activity, yearly: activity },
+          leads: { total: 0, rows: [] },
+          insights: [],
+        },
+      },
+    });
+    renderInLayout(AgentLayout, <PersonalSummaryPage />, {
+      me: makeMe({ permissions: ['personal_summary:read', 'data_upload:upload_and_preview'] }),
+    });
+    const goal = await screen.findByRole('region', { name: 'Goal vs. actual (APE)' });
+    await within(goal).findByRole('link', { name: 'Upload production →' });
+    await expectClean('summary (not uploaded)');
+    await userEvent.click(within(goal).getByRole('button', { name: 'Enter interim production' }));
+    await within(goal).findByRole('textbox', { name: 'APE already produced this year' });
+    await expectClean('summary (the estimate field)');
   });
 
   it('Activity Ratios, populated: a rate, one with not enough data, and the balance, explained (P10-T2)', async () => {
@@ -1715,8 +1968,9 @@ describe('screens have no axe violations', () => {
     renderInLayout(AgentLayout, <LogActivityPage />, { me: makeMe() });
 
     await screen.findByLabelText('Why is this being corrected?');
-    // A tile per section since P18.95-T5 AC-2: the section's own name, not its summary tile's.
-    expect(screen.getByText('Total activities today').closest('[data-total]')!.parentElement).toHaveTextContent('Leads');
+    // From 768px the phone's log in two columns since P19.1-T1 (UI-113): the control row and the cards, no strip.
+    expect(document.querySelector('[data-control-row]')).not.toBeNull();
+    expect(document.querySelector('[data-column-flow]')).toHaveTextContent('Leads');
     await expectClean('activity/log');
   });
 
@@ -1812,7 +2066,9 @@ describe('screens have no axe violations', () => {
       },
       'outcome=lost': { body: { rows: [], total: 0, page: 1, pageSize: 200 } },
     });
-    renderInLayout(AgentLayout, <LeadsPage />, {
+    // *Changed 2026-11-05 (P19.1-T2, UI-116):* `/leads` draws the list beside the lead's pane from 1024px (walked below);
+    // the table itself is walked here until it is retired.
+    renderInLayout(AgentLayout, <LeadsTable />, {
       me: makeMe({ permissions: ['lead:read', 'lead:update', 'lead:mark_outcome'] }),
     });
 
@@ -1828,10 +2084,42 @@ describe('screens have no axe violations', () => {
     await expectClean('leads');
   });
 
+  it('P19.1-T2 AC-3 /leads at 1280: the list beside the lead’s pane, the handles, the closed lists and who last changed it', async () => {
+    atWidth(1280);
+    const sales = [
+      { id: 's1', code: 'FOLLOW_UP', label: 'Follow-up', rank: 1, isTerminal: false },
+      { id: 's2', code: 'PAID_AND_ISSUED', label: 'Paid and issued', rank: 2, isTerminal: true },
+    ].map((s) => ({ ...s, pipeline: 'sales', isLateStage: false, version: 1, status: 'active' }));
+    const row = (over: Record<string, unknown>) => ({
+      id: 'l1', ownerMembershipId: 'mem-1', type: 'sales', name: 'Pak Budi', contact: { phone: '0812-1100-2200', email: null },
+      statusCode: 'FOLLOW_UP', thisMonth: true, closedThisMonth: false, remarks: 'Hobi golf',
+      nextActionDate: '2099-10-02', nextActionNote: 'Ketemu di kantor', outcome: null, source: null,
+      dateRegistered: '2026-09-04T03:00:00.000Z', version: 2, flags: [], overdueDays: null, committedMonths: [],
+      lastEditedBy: { membershipId: 'mem-aab', name: 'Ibu Sari' }, ...over,
+    });
+    const rows = [row({}), row({ id: 'l2', name: 'Bu Rina', ownerMembershipId: 'mem-7', thisMonth: false, lastEditedBy: null })];
+    stubFetch({
+      '/kpm/config': { body: { activity: [], ratios: [], leadPipelines: [{ pipeline: 'sales', statuses: sales }], version: 1 } },
+      '/kpm/org-levels': { body: [] },
+      'outcome=open': { body: { rows, total: 2, page: 1, pageSize: 200 } },
+      'outcome=won': { body: { rows: [row({ id: 'w1', name: 'Ibu Wulan Sari', statusCode: 'PAID_AND_ISSUED', outcome: 'won' })], total: 1, page: 1, pageSize: 200 } },
+      'outcome=lost': { body: { rows: [], total: 0, page: 1, pageSize: 200 } },
+      '/leads/l1': { body: { ...rows[0], history: [{ at: '2026-10-28T03:00:00.000Z', fromStatusCode: null, toStatusCode: 'FOLLOW_UP' }] } },
+    });
+    renderInLayout(AgentLayout, <LeadsPage />, {
+      me: makeMe({ permissions: ['lead:read', 'lead:create', 'lead:update', 'lead:delete', 'lead:mark_outcome'] }),
+    });
+
+    const pane = await screen.findByRole('region', { name: 'Pak Budi' });
+    await within(pane).findByText('Last changed by Ibu Sari');
+    await screen.findByText('Ibu Wulan Sari');
+    await expectClean('leads (list + detail, 1280)');
+  });
+
   it('goal settings: five numbered cards, two entry modes and a live cascade', async () => {
     const period = String(new Date().getFullYear());
     stubFetch({
-      // The cascade's three types, so each column carries its activity's chip (P10.1-T6; by name since P18.95-T5).
+      // The cascade's three types, so each column carries its activity's chip (P10.1-T6; by name since P18.7-T5).
       '/kpm/config': { body: { activity: GOAL_CASCADE_CONFIG, ratios: [], leadPipelines: [], version: 1 } },
       '/kpm/org-levels': { body: [] },
       '/goals': {
@@ -1929,7 +2217,7 @@ describe('screens have no axe violations', () => {
     await expectClean('goals');
   });
 
-  it('goal settings on a phone: the result card first, the floating save pill, both options in sight (P18.95-T5, P18.99-T5)', async () => {
+  it('goal settings on a phone: the result card first, the floating save pill, both options in sight (P18.7-T5, P18.11-T5)', async () => {
     vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
       media: query, matches: query === PHONE_QUERY, addEventListener: vi.fn(), removeEventListener: vi.fn(),
     })));
@@ -1961,7 +2249,7 @@ describe('screens have no axe violations', () => {
       me: makeMe({ permissions: ['goal:read', 'goal:update'] }),
     });
 
-    // UI V1 (P18.99-T5): the result card first, the floating save pill above the tab bar, the report's sentence.
+    // UI V1 (P18.11-T5): the result card first, the floating save pill above the tab bar, the report's sentence.
     const save = await screen.findByRole('button', { name: 'Save goal' });
     expect(save.closest('[data-floating-save]')).not.toBeNull();
     expect(screen.getByRole('region', { name: 'Monthly activity target' })).toBeInTheDocument();
@@ -1969,7 +2257,43 @@ describe('screens have no axe violations', () => {
     await expectClean('goals (phone)');
   });
 
-  it('P18.99-T5 goal settings on a tablet: the phone’s layout, the floating save, the disclaimer behind an ⓘ (UI-015, UI-018)', async () => {
+  it.each([375, 360])('P19.8-T5 AC-9 goal settings at %ipx: the APE typed over the office’s figure — Diubah oleh Anda, Pakai otomatis (MOB UI-190)', async (px) => {
+    atWidth(px);
+    const period = String(new Date().getFullYear());
+    stubFetch({
+      '/kpm/config': { body: { activity: GOAL_CASCADE_CONFIG, ratios: [], leadPipelines: [], version: 1 } },
+      '/kpm/org-levels': { body: [] },
+      '/goals': {
+        body: {
+          period, mode: 'direct', annualApeTargetMinor: 500_000_000_00, savingsTargetMinor: 50_000_000_00,
+          commissionRatePct: 10, monthsLeft: 1.8, monthsLeftIsOverride: false, apeAchievedMinor: 120_000_000_00,
+          achieved: { minor: 120_000_000_00, provenance: 'self_reported', month: null },
+          official: { minor: 67_000_000_00, provenance: 'imported', month: '2026-10' },
+          caseSizeMinor: 18_000_000_00, leadsToApptPct: 50, closingRatePct: 30,
+          snapshot: { monthlyApeTargetMinor: 211_111_111_11, policiesPerMonth: 12, appointmentsPerMonth: 40, leadsPerMonth: 80 },
+          projected: {
+            annualApeTargetMinor: 500_000_000_00, apeAchievedMinor: 120_000_000_00, remainingApeMinor: 380_000_000_00,
+            monthlyApeTargetMinor: 211_111_111_11, policiesPerMonth: 12, policiesPerWeek: 2.8, appointmentsPerMonth: 40,
+            appointmentsPerWeek: 9, leadsPerMonth: 80, leadsPerWeek: 18, targetMet: false,
+          },
+          cascadeMapping: { leadsCode: 'LEADS_CONTACTED', appointmentsCode: 'SELL_PRESENTATION', closingsCode: 'SELL_SUBMISSION' },
+          cascadeBinding: { leads: ['LEADS_CONTACTED'], appointments: ['SELL_PRESENTATION'], closings: ['SELL_SUBMISSION'] },
+          measured: null, savedAt: '2026-11-07T04:00:00.000Z', savedByMembershipId: 'mem-1',
+        },
+      },
+    });
+    renderWithSession(
+      <InLanguage language="id"><AgentLayout><GoalSettingsPage /></AgentLayout></InLanguage>,
+      { me: makeMe({ permissions: ['goal:read', 'goal:update'] }) },
+    );
+
+    const produced = await screen.findByRole('textbox', { name: 'APE yang sudah dicapai tahun ini' });
+    expect(produced).toHaveAccessibleDescription('Diubah oleh Anda');
+    expect(screen.getByRole('button', { name: 'Pakai otomatis (Rp 67 jt)' })).toBeInTheDocument();
+    await expectClean(`goals typed over the office’s figure (${px})`);
+  });
+
+  it('P18.11-T5 goal settings on a tablet: the phone’s layout, the floating save, the disclaimer behind an ⓘ (UI-015, UI-018)', async () => {
     atWidth(768);
     const period = String(new Date().getFullYear());
     stubFetch({
@@ -2008,7 +2332,7 @@ describe('screens have no axe violations', () => {
         isKpmOwner: false, isKpmAdmin: false, directCount: 2,
       },
       permissions: [
-        // The screen itself is gated on the pool (P3.6-T2); without it the sweep would
+        // The screen itself is gated on the pool (P3.2-T2); without it the sweep would
         // scan the denial panel and pass, having looked at nothing.
         'member:invite', 'member:revoke_invite', 'member:search_untagged_pool',
         // The team card is gated on being able to act on a team, so the axe sweep needs
@@ -2033,7 +2357,7 @@ describe('screens have no axe violations', () => {
     });
     renderInLayout(AgentLayout, <AddAgentsPage />, { me: leader });
     // The code, not a table: the list of issued invites went with the lifecycle
-    // (P3.6-T1), and axe must scan the panel in its loaded state rather than its skeleton.
+    // (P3.2-T1), and axe must scan the panel in its loaded state rather than its skeleton.
     await screen.findAllByText('JOR417');
     await screen.findAllByText('Rina Wijaya');
     await expectClean('user-management/add');
@@ -2048,7 +2372,7 @@ describe('screens have no axe violations', () => {
         isKpmOwner: false, isKpmAdmin: false, directCount: 1,
       },
       // The team card is gated on being able to act on a team, and the screen itself on
-      // the pool (P3.6-T2) — without both the sweep scans something other than the
+      // the pool (P3.2-T2) — without both the sweep scans something other than the
       // screen and passes anyway.
       permissions: [
         'member:invite', 'member:search_untagged_pool',
@@ -2082,7 +2406,7 @@ describe('screens have no axe violations', () => {
         isKpmOwner: false, isKpmAdmin: false, directCount: 1,
       },
       // The team card is gated on being able to act on a team, and the screen itself on
-      // the pool (P3.6-T2) — without both the sweep scans something other than the
+      // the pool (P3.2-T2) — without both the sweep scans something other than the
       // screen and passes anyway.
       permissions: [
         'member:invite', 'member:search_untagged_pool',
@@ -2136,7 +2460,7 @@ describe('screens have no axe violations', () => {
     await expectClean('people/members (removed)');
   });
 
-  it('the Pending tab’s transfer requests, populated (P18.96-T3 AC-3)', async () => {
+  it('the Pending tab’s transfer requests, populated (P18.8-T3 AC-3)', async () => {
     const owner = makeMe({
       membership: {
         membershipId: 'mem-owner', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab',
@@ -2190,7 +2514,7 @@ describe('screens have no axe violations', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Pending (1)' }));
     await screen.findByRole('table');
     await expectClean('people/members (pending)');
-    // P18.96-T7 G1: *Approve* opens the row's *Join date*, the shared field, before it sends.
+    // P18.8-T7 G1: *Approve* opens the row's *Join date*, the shared field, before it sends.
     await userEvent.click(screen.getByRole('button', { name: 'Approve' }));
     await screen.findByLabelText('Join date');
     await expectClean('people/members (pending, the join date asked)');
@@ -2353,6 +2677,7 @@ describe('screens have no axe violations', () => {
     });
     stubFetch({
       '/members/mem-1/reports': { body: [] },
+      '/members/mem-1/performance': { body: MEMBER_PERFORMANCE },
       '/members/mem-1/tags': {
         body: { membershipId: 'mem-1', fullName: 'Rina Wijaya', groupIds: ['grp-1'], isCoreLeader: true },
       },
@@ -2370,7 +2695,7 @@ describe('screens have no axe violations', () => {
           directCount: 0, directCounts: { ab: 0, aab: 0, agent: 0, total: 0 }, subtreeCount: 0, isLeader: false, isKpmOwner: false,
           isKpmAdmin: false, joinedAt: '2026-03-01T00:00:00.000Z', removedAt: null,
           canChangeRole: true, canPromoteToAb: true, canRemove: true,
-          // P18.8-T4: what the person records, one of them not recorded.
+          // P18.5-T4: what the person records, one of them not recorded.
           personal: { dateOfBirth: '1990-03-15', gender: 'female', companyJoinMonth: null, workStatus: 'full_time' },
         },
       },
@@ -2381,7 +2706,7 @@ describe('screens have no axe violations', () => {
     await expectClean('people/members/[id] (tags)');
   });
 
-  it('the person page with its role change and removal open (P3.5-T13)', async () => {
+  it('the person page with its role change and removal open (P3.1-T13)', async () => {
     // Both controls are new states, and the removal one is a `fieldset` of radios that
     // only appears for a leader with reports — the shape most likely to be got wrong.
     const owner = makeMe({
@@ -2393,6 +2718,7 @@ describe('screens have no axe violations', () => {
     });
     stubFetch({
       '/members/mem-1/reports': { body: [] },
+      '/members/mem-1/performance': { body: MEMBER_PERFORMANCE },
       '/members/mem-1/tags': { body: { groupIds: [], isCoreLeader: false } },
       '/members/groups': { body: [] },
       '/members/mem-1': {
@@ -2498,7 +2824,7 @@ describe('screens have no axe violations', () => {
   });
 
   it('audit log', async () => {
-    stubFetch({ '/admin/audit': { body: [AUDIT] }, '/admin/tenants': { body: [KPM] } });
+    stubFetch({ '/admin/audit': { body: AUDIT_PAGE }, '/admin/tenants': { body: [KPM] } });
     renderInLayout(AdminLayout, <AuditPage />, { me: SUPER_ADMIN });
     await screen.findByRole('table');
     await expectClean('admin/audit');
@@ -2527,7 +2853,7 @@ describe('screens have no axe violations', () => {
       nav.pathname = '/admin/analytics';
       stubFetch({ '/admin/analytics': { body: VIEW } });
       renderInLayout(AdminLayout, <PlatformAnalyticsPage />, { me: ANALYST });
-      await screen.findByRole('table', { name: 'Adoption by branch and company' });
+      await screen.findByRole('table', { name: 'Adoption by KPM and company' });
       await expectClean('admin/analytics');
     });
 
@@ -2535,7 +2861,7 @@ describe('screens have no axe violations', () => {
       nav.pathname = '/admin/analytics';
       stubFetch({ '/admin/analytics': { body: { ...VIEW, offices: [], companies: [] } } });
       renderInLayout(AdminLayout, <PlatformAnalyticsPage />, { me: ANALYST });
-      await screen.findByText('No branches on the platform yet.');
+      await screen.findByText('No KPMs on the platform yet.');
       await expectClean('admin/analytics (empty)');
       cleanup();
       stubFetch({
@@ -2567,7 +2893,7 @@ describe('screens have no axe violations', () => {
     await expectClean('admin/kpm-requests');
   });
 
-  it('P18.8-T2: leaders past the limit, one waiting and one decided', async () => {
+  it('P18.5-T2: leaders past the limit, one waiting and one decided', async () => {
     const row = {
       requestId: 'llr-1', kpmId: 'kpm-1', kpmCode: '0603', kpmBranchName: 'Tangerang Branch',
       subjectMembershipId: 'mem-1', subjectName: 'Rizky Ramadhan', subjectAgentCode: '86114', action: 'promote',
@@ -2602,34 +2928,53 @@ describe('screens have no axe violations', () => {
     await expectClean('admin/tenant-admins');
   });
 
-  it('the roster import, with the paste box and its worked examples', async () => {
+  it('the roster import, the Owner’s, with the paste box and its worked examples (P19.4-T2: not the console’s)', async () => {
     // The placeholder is three lines of tab-separated text in a `font-mono` box — worth
     // running axe over precisely because it is doing more than a placeholder usually does.
     stubFetch({
       '/admin/tenants/roster-template': {
         body: {
-          header: 'fullName,email,agentCode,role,leaderAgentCode',
+          header: 'Kode agen,Nama,Peran,Kode upline,No. WhatsApp,Email',
           columns: [],
-          template: '# example\nfullName,email,agentCode,role,leaderAgentCode\n',
+          template: 'Kode agen,Nama,Peran,Kode upline,No. WhatsApp,Email\n',
           examples: [
-            ['Agus Prasetyo', 'agus@example.test', 'PRU-88001', 'ab', ''],
-            ['Puspita, Sari', 'sari@example.test', 'PRU-88002', 'aab', 'PRU-88001'],
-            ['Rina Wijaya', 'rina@example.test', 'PRU-88003', 'agent', 'PRU-88002'],
+            ['88001', 'Agus Prasetyo', 'AB', '', '0812 1100 8801', 'agus@example.test'],
+            ['88002', 'Puspita, Sari', 'AAB', '88001', '', 'sari@example.test'],
+            ['88003', 'Rina Wijaya', 'Agent', '88002', '', 'rina@example.test'],
           ],
         },
       },
+      // P19.3-T4: the check's result per row (A3), the invitation, the skipped rows' download.
+      '/admin/tenants/kpm-1/roster/preview': {
+        body: {
+          issues: [], header: ['Kode agen', 'Nama', 'Peran'], counts: { imported: 1, updated: 1, skipped: 1 },
+          rows: [
+            { line: 2, agentCode: '88001', fullName: 'Agus Prasetyo', role: 'AB', leaderAgentCode: '', email: 'agus@example.test', outcome: 'imported', messages: [] },
+            { line: 3, agentCode: '88002', fullName: 'Sari', role: 'AAB', leaderAgentCode: '88001', email: '', outcome: 'updated', messages: ['Already here; details updated.'] },
+            { line: 4, agentCode: '88003', fullName: 'Rina', role: 'Agen Senior', leaderAgentCode: '88002', email: '', outcome: 'skipped', messages: ['Role "Agen Senior" does not exist. Use: Agent, AAB, AB.'] },
+          ],
+          skippedCsv: 'Kode agen,Nama,Peran,Alasan\n',
+        },
+      },
     });
-    renderInLayout(
-      AdminLayout,
-      <TenantRosterImportPage params={routeParams({ kpmId: 'kpm-1' })} />,
-      { me: makeMe({ ...SUPER_ADMIN, permissions: [...SUPER_ADMIN.permissions, 'kpm:import_roster'] }) },
-    );
+    const owner = makeMe({
+      membership: {
+        membershipId: 'mem-owner', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab',
+        isKpmOwner: true, isKpmAdmin: false, status: 'active', directCount: 0,
+      },
+      permissions: ['member:read_profile', 'kpm:import_roster'],
+    });
+    renderInLayout(TenantLayout, <PeopleImportPage />, { me: owner });
     // ADR-0184: the three parts, the filled file first; then the paste, whose box shows the worked examples.
     await screen.findByRole('button', { name: 'Download Excel (.xlsx)' });
-    await expectClean('admin/tenants/[kpmId]/roster');
+    await expectClean('people/import');
     await userEvent.click(screen.getByLabelText('Paste from a spreadsheet'));
     await screen.findByLabelText('Rows from your spreadsheet');
-    await expectClean('admin/tenants/[kpmId]/roster (paste)');
+    await expectClean('people/import (paste)');
+    await userEvent.type(screen.getByLabelText('Rows from your spreadsheet'), '88001,Agus,AB');
+    await userEvent.click(screen.getByRole('button', { name: 'Check the file' }));
+    await screen.findByRole('table', { name: 'Each row of the file, and what it comes to' });
+    await expectClean('people/import (checked)');
   });
 
   it('choosing your own password, which wears no chrome at all', async () => {
@@ -2695,7 +3040,8 @@ describe('screens have no axe violations', () => {
       renderInLayout(AdminLayout, <AdminOverviewPage />, { me: SUPER_ADMIN });
       await screen.findByText('2 offices have no Owner');
       await userEvent.click(screen.getByRole('button', { name: 'Notifications, 1 unread' }));
-      const popover = screen.getByRole('dialog', { name: 'Notifications' });
+      // The popover's module loads on the bell's first tap (`notification-popover.tsx`, the bundle).
+      const popover = await screen.findByRole('dialog', { name: 'Notifications' });
       await within(popover).findByRole('button', { name: 'Unread: You are in' });
       noNesting();
       await expectClean('the bell’s popover');
@@ -2710,7 +3056,7 @@ describe('screens have no axe violations', () => {
       renderInLayout(AdminLayout, <AdminOverviewPage />, { me: SUPER_ADMIN });
       await screen.findByText('2 offices have no Owner');
       await userEvent.click(screen.getByRole('button', { name: 'Notifications, 1 unread' }));
-      await userEvent.click(await within(screen.getByRole('dialog', { name: 'Notifications' }))
+      await userEvent.click(await within(await screen.findByRole('dialog', { name: 'Notifications' }))
         .findByRole('button', { name: 'Unread: You are in' }));
       expect(screen.getByRole('dialog', { name: 'You are in' })).toBeInTheDocument();
       await expectClean('the bell’s popover (modal open)');
@@ -2786,7 +3132,7 @@ describe('screens have no axe violations', () => {
     it('the entry dialog with the people list open and a chip chosen', async () => {
       await open();
       await userEvent.click(screen.getByRole('button', { name: '+ New event' }));
-      // The form's module is fetched on its first opening (P18.99-T16).
+      // The form's module is fetched on its first opening (P18.11-T16).
       const dialog = await screen.findByRole('dialog', { name: 'New event' });
       await userEvent.click(within(dialog).getByLabelText('Invite (optional) — anyone in your KPM'));
       await userEvent.click(await within(dialog).findByRole('option', { name: /^Indah Permata/ }));
@@ -2804,7 +3150,7 @@ describe('screens have no axe violations', () => {
       renderInLayout(AgentLayout, <CalendarPage />, { me: AGUS });
       await screen.findByRole('region', { name: 'Calendar, 28 Sep – 4 Oct 2026' });
       await userEvent.click(screen.getByRole('button', { name: '+ New event' }));
-      // The dialog's module is fetched on its first opening (P18.99-T16).
+      // The dialog's module is fetched on its first opening (P18.11-T16).
       const dialog = await screen.findByRole('dialog', { name: 'New event' });
       const field = within(dialog).getByRole('combobox', { name: 'Invite (optional) — anyone in your KPM' });
       await expectClean('calendar (people combobox, collapsed)');
@@ -2821,7 +3167,7 @@ describe('screens have no axe violations', () => {
     it('the entry dialog with every rule broken, and Travel chosen', async () => {
       await open();
       await userEvent.click(screen.getByRole('button', { name: '+ New event' }));
-      // The dialog's module is fetched on its first opening (P18.99-T16).
+      // The dialog's module is fetched on its first opening (P18.11-T16).
       await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Travel' }));
       await userEvent.clear(screen.getByLabelText('Departure date'));
       await userEvent.click(screen.getByRole('button', { name: 'Save event' }));
@@ -2847,7 +3193,7 @@ describe('screens have no axe violations', () => {
       await open();
       await userEvent.click(screen.getByRole('button', { name: /^Internal meeting: Weekly unit standup/ }));
       await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
-      await screen.findByRole('dialog', { name: 'Delete "Weekly unit standup"?' });
+      await screen.findByRole('dialog', { name: 'Delete this event?' });
       await expectClean('calendar (delete question)');
     });
 
@@ -2892,7 +3238,7 @@ describe('screens have no axe violations', () => {
       await expectClean('activation');
     });
 
-    it('the hire’s page with Which case? open, a source line and a tick waiting for data (P18.96-T4)', async () => {
+    it('the hire’s page with Which case? open, a source line and a tick waiting for data (P18.8-T4)', async () => {
       nav.pathname = '/activation';
       stubFetch({
         ...SHELL,
@@ -2908,7 +3254,7 @@ describe('screens have no axe violations', () => {
       await expectClean('activation (which case)');
     });
 
-    it('a hire’s detail with Log 1:1 open (P18.96-T4)', async () => {
+    it('a hire’s detail with Log 1:1 open (P18.8-T4)', async () => {
       nav.pathname = '/new-hires/mem-rina';
       stubFetch({ ...SHELL, '/new-hires/mem-rina': { body: leaderView() } });
       renderInLayout(AgentLayout, <NewHireDetailPage params={routeParams({ membershipId: 'mem-rina' })} />, { me: SARI_ME });
@@ -3003,7 +3349,7 @@ describe('screens have no axe violations', () => {
       await expectClean('new-hire detail (pecah telor sheet)');
     });
 
-    it('the roster’s header and Waiting to join: + Add agent, Review requests, an invite and a transfer (P18.96-T3)', async () => {
+    it('the roster’s header and Waiting to join: + Add agent, Review requests, an invite and a transfer (P18.8-T3)', async () => {
       nav.pathname = '/new-hires';
       stubFetch({
         ...SHELL,
@@ -3019,7 +3365,7 @@ describe('screens have no axe violations', () => {
       await expectClean('new-hires (waiting to join)');
     });
 
-    it('+ Add agent, the form and its share step (P18.96-T3 AC-1, AC-2)', async () => {
+    it('+ Add agent, the form and its share step (P18.8-T3 AC-1, AC-2)', async () => {
       nav.pathname = '/new-hires';
       stubFetch({
         ...SHELL,
@@ -3047,7 +3393,7 @@ describe('screens have no axe violations', () => {
       nav.pathname = '/new-hires';
       stubFetch({ ...SHELL, '/new-hires': { status: 404, body: { error: { code: 'NOT_FOUND', message: 'Not found', requestId: 'r-1' } } } });
       renderInLayout(AgentLayout, <NewHiresPage />, { me: SARI_ME });
-      await screen.findByText('No one you lead joined as a new hire in the last 12 months.');
+      await screen.findByText('No data yet');
       await expectClean('new-hires (empty)');
     });
 
@@ -3117,11 +3463,11 @@ describe('screens have no axe violations', () => {
    * Plan's two steps — a plan with its alternatives, a Check fit, and the catalog's run-off deep link.
    */
   /*
-   * Training (P18.5-T1, T4): the learner's list filled and with a category offering nothing, a module's page
+   * Training (P18.2-T1, T4): the learner's list filled and with a category offering nothing, a module's page
    * with its tiles and the status toggle, the same page in a support session, and the reader's own coaching
    * tab. The coach's tab is with coaching, above.
    */
-  describe('training (P18.5-T1, P18.5-T4)', () => {
+  describe('training (P18.2-T1, P18.2-T4)', () => {
     const SHELL = {
       '/kpm/config': { body: { activity: [], ratios: [], leadPipelines: [], version: 1 } },
       '/kpm/org-levels': { body: [] },
@@ -3153,17 +3499,17 @@ describe('screens have no axe violations', () => {
       await expectClean('training/[categoryCode] (phone)');
     });
 
-    it('a category offering nothing yet: the prototype’s empty card (P18.5-T1 AC-4)', async () => {
+    it('a category offering nothing yet: the prototype’s empty card (P18.2-T1 AC-4)', async () => {
       nav.pathname = '/training/PRODUCT';
       stubFetch(SHELL);
       renderInLayout(AgentLayout, list('PRODUCT'), { me: TRAINING_LEARNER });
-      // The heading is the nav item's words (P18.95-T9 AC-2); the empty card keeps the category's own title.
+      // The heading is the nav item's words (P18.7-T9 AC-2); the empty card keeps the category's own title.
       await screen.findByRole('heading', { level: 1, name: 'Training Modules' });
       expect(screen.getByText('Product Training')).toBeInTheDocument();
       await expectClean('training/[categoryCode] (empty)');
     });
 
-    it('a module’s page with its tiles and the status toggle, a status set (P18.5-T1 AC-5, AC-7)', async () => {
+    it('a module’s page with its tiles and the status toggle, a status set (P18.2-T1 AC-5, AC-7)', async () => {
       nav.pathname = '/training/SALES/CLOSING_TECHNIQUES';
       stubFetch({
         ...SHELL,
@@ -3174,7 +3520,7 @@ describe('screens have no axe violations', () => {
       await expectClean('training/[categoryCode]/[moduleCode]');
     });
 
-    it('a module’s page in a read-only support session: no toggle (P18.5-T1 AC-7)', async () => {
+    it('a module’s page in a read-only support session: no toggle (P18.2-T1 AC-7)', async () => {
       nav.pathname = '/training/SALES/CLOSING_TECHNIQUES';
       stubFetch({
         ...SHELL,
@@ -3204,7 +3550,7 @@ describe('screens have no axe violations', () => {
       await expectClean('training/[categoryCode]/[moduleCode] (phone, UI V1)');
     });
 
-    it('a module holding nothing yet (P18.5-T1 AC-5)', async () => {
+    it('a module holding nothing yet (P18.2-T1 AC-5)', async () => {
       nav.pathname = '/training/SALES/CLOSING_TECHNIQUES';
       stubFetch({
         ...SHELL,
@@ -3215,7 +3561,7 @@ describe('screens have no axe violations', () => {
       await expectClean('training/[categoryCode]/[moduleCode] (empty)');
     });
 
-    it('the reader’s own Training tab on their coaching (P18.5-T4 AC-3)', async () => {
+    it('the reader’s own Training tab on their coaching (P18.2-T4 AC-3)', async () => {
       nav.pathname = '/coaching/me/training';
       stubFetch(SHELL);
       renderInLayout(AgentLayout, <MyCoachingTrainingPage />, { me: TRAINING_LEARNER });
@@ -3224,8 +3570,8 @@ describe('screens have no axe violations', () => {
     });
   });
 
-  describe('KPM Events (P18.5-T5, P18.5-T6)', () => {
-    it('the list, every card state (P18.5-T5 AC-4)', async () => {
+  describe('KPM Events (P18.2-T5, P18.2-T6)', () => {
+    it('the list, every card state (P18.2-T5 AC-4)', async () => {
       nav.pathname = '/events';
       stubFetch({ ...EVENTS_SHELL, 'GET /events': { body: eventsList() } });
       renderInLayout(AgentLayout, <EventsLayout><EventsPage /></EventsLayout>, { me: EVENTS_ME });
@@ -3233,19 +3579,20 @@ describe('screens have no axe violations', () => {
       await expectClean('events');
     });
 
-    it('the list with nothing in it: the three empty rows (P18.5-T5 AC-4)', async () => {
+    // One line since P19.1-T5 AC-5 (UI-123, D-08): the empty groups are hidden at every size, where three rows stood.
+    it('the list with nothing in it: its one empty line (P18.2-T5 AC-4, P19.1-T5 AC-5)', async () => {
       nav.pathname = '/events';
       stubFetch({ ...EVENTS_SHELL, 'GET /events': { body: eventsList([]) } });
       renderInLayout(AgentLayout, <EventsLayout><EventsPage /></EventsLayout>, { me: EVENTS_ME });
-      await screen.findByText('No past events yet.');
+      await screen.findByText('No upcoming events right now.');
       await expectClean('events (empty)');
     });
 
     it.each([
-      ['an upcoming event, Join event (P18.5-T5 AC-5)', EVENT_KICKOFF],
-      ['a past event, the feedback form (P18.5-T6 AC-2)', EVENT_PRULINK],
-      ['a past event not joined, the claim (P18.5-T5 AC-6)', EVENT_TOWN_HALL],
-      ['a past event answered, the thanks (P18.5-T6 AC-4)', EVENT_BOOTCAMP],
+      ['an upcoming event, Join event (P18.2-T5 AC-5)', EVENT_KICKOFF],
+      ['a past event, the feedback form (P18.2-T6 AC-2)', EVENT_PRULINK],
+      ['a past event not joined, the claim (P18.2-T5 AC-6)', EVENT_TOWN_HALL],
+      ['a past event answered, the thanks (P18.2-T6 AC-4)', EVENT_BOOTCAMP],
     ])('the modal over the list: %s', async (_state, event) => {
       nav.pathname = `/events/${event.id}`;
       stubFetch({ ...EVENTS_SHELL, 'GET /events': { body: eventsList() }, [`GET /events/${event.id}`]: { body: event } });
@@ -3286,7 +3633,7 @@ describe('screens have no axe violations', () => {
       await expectClean('product-catalog (empty)');
     });
 
-    it('the Product Catalog, a search that finds nothing (P18.95-T6 AC-4)', async () => {
+    it('the Product Catalog, a search that finds nothing (P18.7-T6 AC-4)', async () => {
       nav.pathname = '/product-catalog';
       stubFetch({ ...SHELL, 'GET /product-catalog': { body: { products: SHELF } } });
       renderInLayout(AgentLayout, <ProductCatalogLayout><ProductCatalogPage /></ProductCatalogLayout>, { me: SALES_ME });
@@ -3401,10 +3748,10 @@ describe('screens have no axe violations', () => {
   });
 
   /*
-   * Campaigns (P18.5-T7, T8): the list on both tabs, empty, a read-only support session's, and the dialog with
+   * Campaigns (P18.2-T7, T8): the list on both tabs, empty, a read-only support session's, and the dialog with
    * its progress rows and its not-found state. The Summary's card and the coachee's chips are with their pages.
    */
-  describe('campaigns (P18.5-T7)', () => {
+  describe('campaigns (P18.2-T7)', () => {
     const SHELL = {
       '/kpm/config': { body: { activity: [], ratios: [], leadPipelines: [], version: 1 } },
       '/kpm/org-levels': { body: [] },
@@ -3415,13 +3762,13 @@ describe('screens have no axe violations', () => {
       renderInLayout(AgentLayout, <CampaignsLayout><CampaignsPage /></CampaignsLayout>, { me });
     };
 
-    it('the list, seasonal, every section and card state (P18.5-T7 AC-2, AC-3)', async () => {
+    it('the list, seasonal, every section and card state (P18.2-T7 AC-2, AC-3)', async () => {
       renderList();
       await screen.findByRole('region', { name: 'Running' });
       await expectClean('campaigns (seasonal)');
     });
 
-    it('the list, structural: promotions with a chase not open to the rung, and MDRT (P18.5-T7 AC-3)', async () => {
+    it('the list, structural: promotions with a chase not open to the rung, and MDRT (P18.2-T7 AC-3)', async () => {
       renderList();
       await screen.findByRole('region', { name: 'Running' });
       await userEvent.click(screen.getByRole('tab', { name: 'Structural' }));
@@ -3429,19 +3776,19 @@ describe('screens have no axe violations', () => {
       await expectClean('campaigns (structural)');
     });
 
-    it('the list, empty: the five empty lines (P18.5-T7 AC-2)', async () => {
+    it('the list, empty: the five empty lines (P18.2-T7 AC-2)', async () => {
       renderList({ campaigns: [], can: { chase: true } });
       await screen.findByText('No running campaigns right now.');
       await expectClean('campaigns (empty)');
     });
 
-    it('the list in a read-only support session: no chase (P18.5-T7 AC-1)', async () => {
+    it('the list in a read-only support session: no chase (P18.2-T7 AC-1)', async () => {
       renderList({ ...CAMPAIGN_LIST, can: { chase: false } }, { ...CAMPAIGNS_RINA, isImpersonating: true, impersonationReadOnly: true, impersonatedBy: 'u-root' });
       await screen.findByRole('region', { name: 'Running' });
       await expectClean('campaigns (read-only session)');
     });
 
-    it('the dialog, its requirement rows with progress (P18.5-T7 AC-4, P18.5-T8 AC-6)', async () => {
+    it('the dialog, its requirement rows with progress (P18.2-T7 AC-4, P18.2-T8 AC-6)', async () => {
       nav.pathname = '/campaigns/APE_SPRINT';
       stubFetch({ ...SHELL, 'GET /campaigns': { body: CAMPAIGN_LIST }, 'GET /campaigns/APE_SPRINT': { body: campaignDetail() } });
       renderInLayout(
@@ -3454,7 +3801,7 @@ describe('screens have no axe violations', () => {
       await expectClean('campaigns/[campaignCode]');
     });
 
-    it('the dialog of a code not on the list (P18.5-T7 AC-1)', async () => {
+    it('the dialog of a code not on the list (P18.2-T7 AC-1)', async () => {
       nav.pathname = '/campaigns/GADING_PUSH';
       stubFetch({
         ...SHELL, 'GET /campaigns': { body: CAMPAIGN_LIST },
@@ -3470,7 +3817,7 @@ describe('screens have no axe violations', () => {
     });
   });
 
-  describe('the recruitment pitch (P17-T5 AC-7, P17-T6 AC-6; P18.97-T5 — six cards, the amber badge, the Optional tag)', () => {
+  describe('the recruitment pitch (P17-T5 AC-7, P17-T6 AC-6; P18.9-T5 — six cards, the amber badge, the Optional tag)', () => {
     const PITCH_SHELL = {
       '/kpm/config': { body: { activity: [], ratios: [], leadPipelines: [], version: 1 } },
       '/kpm/org-levels': { body: [] },
@@ -3584,7 +3931,7 @@ describe('screens have no axe violations', () => {
       await expectClean(`recruitment/pitch-materials (${state})`);
     });
 
-    it.each(Object.keys(PITCH) as (keyof typeof PITCH)[])('P18.98-T7 Recruitment › Pitch Materials in Indonesian, %s', async (state) => {
+    it.each(Object.keys(PITCH) as (keyof typeof PITCH)[])('P18.10-T7 Recruitment › Pitch Materials in Indonesian, %s', async (state) => {
       nav.pathname = '/recruitment/pitch-materials';
       stubFetch({ ...PITCH_SHELL, 'GET /recruitment/pitch-materials': { body: PITCH[state] } });
       renderWithSession(
@@ -3619,11 +3966,11 @@ describe('screens have no axe violations', () => {
       // configuration — and writes under `tenant_config:write` like the rest (ADR-0027), so
       // its form is checked here with Save on screen.
       // `product_settings:read` is the Products screen's own (the Phase 14 exit review); Training's, Events'
-      // and Campaigns' reads are theirs since Phase 18.5 (the settings-read leaks it closed).
+      // and Campaigns' reads are theirs since Phase 18.2 (the settings-read leaks it closed).
       permissions: [
         'member:read_profile', 'tenant_config:read', 'tenant_config:write', 'kpm:read_profile',
         'product_settings:read', 'training_settings:read', 'event_settings:read', 'campaign_settings:read',
-        // Settings › Activation checklist reads under its own grant since P18.5-T3.
+        // Settings › Activation checklist reads under its own grant since P18.2-T3.
         'activation_settings:read',
       ],
     });
@@ -3695,7 +4042,7 @@ describe('screens have no axe violations', () => {
       await expectClean('kpm/settings/activity-types, section edit');
     });
 
-    it('activity types on a tablet, a section’s ⋮ open (P18.97-T6 AC-3)', async () => {
+    it('activity types on a tablet, a section’s ⋮ open (P18.9-T6 AC-3)', async () => {
       window.localStorage.clear();
       atWidth(1023);
       stubFetch({ ...configStubs, '/kpm/settings/activity-types': { body: TAXONOMY } });
@@ -3865,12 +4212,12 @@ describe('screens have no axe violations', () => {
       await expectClean('kpm/settings/campaigns');
     });
 
-    it('the office’s Campaigns, the form open on a structural campaign with every D-field (P18.5-T7 AC-9)', async () => {
+    it('the office’s Campaigns, the form open on a structural campaign with every D-field (P18.2-T7 AC-9)', async () => {
       stubFetch({
         ...configStubs,
         '/kpm/settings/campaigns/rules': { body: [] },
         '/kpm/settings/campaigns': { body: [] },
-        '/metrics': { body: [{ key: 'APE_ACHIEVED', name: 'APE achieved', unit: 'idr_minor', phase: 9, computed: true, campaign: true }] },
+        '/metrics': { body: [{ key: 'APE_ACHIEVED', name: 'APE achieved', unit: 'idr_minor', phase: '9', computed: true, campaign: true }] },
       });
       renderInLayout(TenantLayout, <CampaignsSettingsPage />, { me: settingsOwner });
       await userEvent.click(await screen.findByRole('button', { name: 'Add a campaign' }));
@@ -3901,13 +4248,13 @@ describe('screens have no axe violations', () => {
           }],
         },
       });
-      // The list reads under `event_settings:read` since P18.5-T5 AC-2.
+      // The list reads under `event_settings:read` since P18.2-T5 AC-2.
       renderInLayout(TenantLayout, <EventsSettingsPage />, { me: eventsOwner });
       await userEvent.click(await screen.findByRole('button', { name: 'Add an event' }));
       await expectClean('kpm/settings/events');
     });
 
-    /** The Owner as Settings › Events reads them since Phase 18.5: the list's own read, the roll call, the feedback. */
+    /** The Owner as Settings › Events reads them since Phase 18.2: the list's own read, the roll call, the feedback. */
     const eventsOwner = {
       ...settingsOwner,
       permissions: [...settingsOwner.permissions, 'event_settings:read', 'event_attendance:confirm', 'event_feedback:read'],
@@ -3933,19 +4280,19 @@ describe('screens have no axe violations', () => {
       'GET /kpm/settings/events/ev-prulink/feedback': { body: eventFeedbackSummary() },
     };
 
-    it('the office’s Events, View feedback open: the roll call and the Feedback Summary (P18.5-T5 AC-7, T6 AC-5)', async () => {
+    it('the office’s Events, View feedback open: the roll call and the Feedback Summary (P18.2-T5 AC-7, T6 AC-5)', async () => {
       stubFetch(eventsStubs);
       renderInLayout(TenantLayout, <EventsSettingsPage />, { me: eventsOwner });
       await userEvent.click(await screen.findByRole('button', { name: 'View feedback' }));
       await screen.findByRole('table');
       await expectClean('kpm/settings/events (View feedback, Roll call)');
-      // Tabs since P18.8-T13 (ADR-0161 §6): each part is checked in its own panel.
+      // Tabs since P18.5-T13 (ADR-0161 §6): each part is checked in its own panel.
       await userEvent.click(screen.getByRole('tab', { name: 'Feedback summary' }));
       await screen.findByRole('heading', { name: 'PRULink briefing — Feedback Summary' });
       await expectClean('kpm/settings/events (View feedback, Feedback summary)');
     });
 
-    it('the office’s Events, editing a chosen audience with the picker (P18.5-T5 AC-10)', async () => {
+    it('the office’s Events, editing a chosen audience with the picker (P18.2-T5 AC-10)', async () => {
       stubFetch(eventsStubs);
       renderInLayout(TenantLayout, <EventsSettingsPage />, { me: eventsOwner });
       await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
@@ -3969,8 +4316,8 @@ describe('screens have no axe violations', () => {
             description: f('Endowment-style life with guaranteed retirement payouts.'),
             script: {
               goodFit: f('Young families'), opening: f('Halo?'), benefits: f(['Proteksi']),
-              fullScript: f('Halo.'), objectionTheySay: f('Mahal.'),
-              objectionYouSay: f('Bisa disesuaikan.'), nextAction: f('Ilustrasi?'),
+              fullScript: f('Halo.'), objections: f([{ objection: 'Mahal.', answer: 'Bisa disesuaikan.' }]),
+              nextAction: f('Ilustrasi?'),
             },
             reviewState: 'pending', rejectionReason: null,
             documents: [
@@ -4005,8 +4352,8 @@ describe('screens have no axe violations', () => {
             description: f('Pensiun tenang dari usia 55.', true),
             script: {
               goodFit: f('Young families'), opening: f('Halo dari kami!', true),
-              benefits: f(['Proteksi']), fullScript: f('Halo.'), objectionTheySay: f('Mahal.'),
-              objectionYouSay: f('Bisa disesuaikan.'), nextAction: f('Ilustrasi?'),
+              benefits: f(['Proteksi']), fullScript: f('Halo.'),
+              objections: f([{ objection: 'Mahal.', answer: 'Bisa disesuaikan.' }], true), nextAction: f('Ilustrasi?'),
             },
             reviewState: 'pending', rejectionReason: null,
             documents: [
@@ -4095,7 +4442,7 @@ describe('screens have no axe violations', () => {
                       completesWhen: 'the hire has completed that training module', live: false,
                     },
                   },
-                  // P18.96-T7 G2: a data-backed item, bound by its code — *Auto*, and its select holding *From Sales data*.
+                  // P18.8-T7 G2: a data-backed item, bound by its code — *Auto*, and its select holding *From Sales data*.
                   {
                     code: 'FIRST_CASE_CLOSED', label: 'Close first case independently', displayOrder: 4, autoLink: null,
                     link: {
@@ -4178,9 +4525,12 @@ describe('screens have no axe violations', () => {
       await screen.findByRole('list', { name: 'Template sections' });
       await expectClean('admin/companies/[companyId]/templates/[templateId]');
       await userEvent.click(screen.getByRole('button', { name: 'Publish all (1)' }));
+      // Each dialog loads on its first opening (the bundle, 2026-11-06): axe reads it once it is drawn.
+      await screen.findByRole('dialog', { name: 'Publish all changes?' });
       await expectClean('admin/companies/[companyId]/templates/[templateId] (Publish all)');
       await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
       await userEvent.click(await screen.findByRole('button', { name: '1 office is on an older version' }));
+      await screen.findByRole('dialog', { name: 'Apply to existing offices too?' });
       await expectClean('admin/companies/[companyId]/templates/[templateId] (offices behind)');
     });
 
@@ -4245,20 +4595,20 @@ describe('screens have no axe violations', () => {
             templateId: null,
           },
         },
-        '/metrics': { body: [{ key: 'APE_ACHIEVED', name: 'APE achieved', unit: 'idr_minor', phase: 9, computed: true }] },
+        '/metrics': { body: [{ key: 'APE_ACHIEVED', name: 'APE achieved', unit: 'idr_minor', phase: '9', computed: true }] },
         '/admin/companies/c1/products': {
           body: [{
             id: 'p1', companyId: 'c1', code: 'PRUMAPAN', name: 'PRUMapan',
             tagline: 'Proteksi jiwa dengan manfaat pensiun', channel: 'conventional',
-            category: 'life', primaryNeeds: ['retirement'], eligibleAgeBands: [1, 2, 3],
+            category: 'life', kind: 'base', attachesTo: [], currencies: ['IDR'],
+            primaryNeeds: ['retirement'], eligibleAgeBands: [1, 2, 3],
             eligibleBudgetBands: [1, 2, 3], benefits: ['Dana Mapan tiap tahun dari usia 55'],
             differentiator: 'Pilihan pensiun paling terjangkau.',
             bestFor: 'Sandwich-generation professionals',
             defaultAttackPlan: {
               goodFit: 'Sandwich-generation professionals', opening: 'Halo.',
               benefits: ['Dana Mapan'], fullScript: 'Halo. Boleh saya siapkan ilustrasinya?',
-              objectionTheySay: 'Pensiun masih lama.',
-              objectionYouSay: 'Pilihan pensiun paling terjangkau.',
+              objections: [{ objection: 'Pensiun masih lama.', answer: 'Pilihan pensiun paling terjangkau.' }],
               nextAction: 'Boleh saya siapkan ilustrasinya?',
             },
             commissionSchedule: [], lifecycle: 'active', replacedByProductId: null,
@@ -4268,8 +4618,11 @@ describe('screens have no axe violations', () => {
       });
       nav.pathname = '/admin/companies/c1/settings';
       renderInLayout(AdminLayout, <CompanySettingsPage params={routeParams({ companyId: 'c1' })} />, { me: ROOT });
-      await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+      // The product opened from its row, in its side panel (P19.2-T2 AC-2; UI-131); Escape closes it.
+      await userEvent.click(await screen.findByRole('button', { name: 'PRUMapan' }));
+      await screen.findByRole('dialog', { name: 'PRUMapan' });
       await expectClean('admin/companies/[companyId]/settings#products');
+      await userEvent.keyboard('{Escape}');
       await userEvent.click(screen.getByRole('link', { name: 'Campaigns' }));
       await screen.findByText('Star Club');
       await expectClean('admin/companies/[companyId]/settings#campaigns');
@@ -4277,11 +4630,11 @@ describe('screens have no axe violations', () => {
   });
 
   /**
-   * **P18.98-T4: the office's settings in ID mode, each in its main state** — axe in Indonesian, as the block above runs
+   * **P18.10-T4: the office's settings in ID mode, each in its main state** — axe in Indonesian, as the block above runs
    * them in English (ADR-0179 §9). The shell's words are the catalogue's since T1, so the page reads in Indonesian but
    * for what is kept English (§A) and what the office typed (ADR-0179 §5); `lang` on kept terms is T7's.
    */
-  describe('P18.98-T4 the office’s settings in Indonesian', () => {
+  describe('P18.10-T4 the office’s settings in Indonesian', () => {
     const owner = makeMe({
       membership: {
         membershipId: 'mem-owner', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab',
@@ -4451,8 +4804,8 @@ describe('screens have no axe violations', () => {
     });
   });
 
-  /** P17-T8: the company's recruitment playbook — *Company settings › Recruitment* since ADR-0185 — a card open. */
-  describe('the company’s Recruitment playbook (P17-T8)', () => {
+  /** P17-T8: the recruitment playbook — a template's *Rekrutmen* section since ADR-0210 (P19.4-T5) — a card open. */
+  describe('the template’s Rekrutmen section (P17-T8, P19.4-T5)', () => {
     const PLAYBOOK_TEMPLATES = [{
       id: 't-default', companyId: 'c1', name: 'Prudential template', isDefault: true, status: 'active',
       archivedAt: null, origin: { kind: 'migration' }, officeCount: 1, publishedVersions: { activity_taxonomy: 1 },
@@ -4483,92 +4836,99 @@ describe('screens have no axe violations', () => {
             publishedAt: null, publishedVersion: 0, officesBehind: 0, officesUnrecorded: 0,
           },
         },
-        '/admin/companies/c1/recruitment-playbook': {
+        // P19.4-T5 (ADR-0210): the playbook is a template's Rekrutmen section, through the kind route.
+        '/admin/companies/c1/template/recruitment_playbook': {
           body: {
-            playbook: { companyId: 'c1', version: 2, body, updatedAt: '2026-10-09T07:05:00.000Z', updatedBy: { name: 'Root' } },
-            defaults: body,
-            vocabulary: {
-              types: [{ code: 'retiree', label: 'Retiree' }],
-              motivations: [{ code: 'flexibility', label: 'Flexibility / time freedom' }],
-              hesitations: [{ code: 'time', label: 'Worried about time commitment' }],
+            id: 'tpl-pb', companyId: 'c1', templateId: 't-default', kind: 'recruitment_playbook', version: 2, revision: 2,
+            status: 'published', payload: body, publishedAt: '2026-10-09T07:05:00.000Z', publishedVersion: 2,
+            officesBehind: 0, officesUnrecorded: 0,
+            playbook: {
+              defaults: body,
+              vocabulary: {
+                types: [{ code: 'retiree', label: 'Retiree' }],
+                motivations: [{ code: 'flexibility', label: 'Flexibility / time freedom' }],
+                hesitations: [{ code: 'time', label: 'Worried about time commitment' }],
+              },
+              limits: { textMax: 600, benefitsMax: 6 },
             },
-            limits: { textMax: 600, benefitsMax: 6 },
           },
         },
       });
-      nav.pathname = '/admin/companies/c1/settings';
+      nav.pathname = '/admin/companies/c1/templates/t-default/recruitment';
       renderInLayout(
         AdminLayout,
-        <CompanySettingsPage params={routeParams({ companyId: 'c1' })} />,
-        { me: makeMe({ ...SUPER_ADMIN, permissions: [...SUPER_ADMIN.permissions, 'company_template:read', 'recruitment_playbook:write'] }) },
+        <TemplateSectionPage params={routeParams({ companyId: 'c1', templateId: 't-default', section: 'recruitment' })} />,
+        { me: makeMe({ ...SUPER_ADMIN, permissions: [...SUPER_ADMIN.permissions, 'company_template:read', 'company_template:write'] }) },
       );
-      const parts = within(await screen.findByRole('navigation', { name: 'Company settings' }));
-      await userEvent.click(parts.getByRole('link', { name: 'Recruitment' }));
-      await screen.findByText('This playbook is live.');
+      await screen.findByRole('group', { name: 'Retiree' });
       for (const name of ['Retiree', 'Objections']) {
         await userEvent.click(within(screen.getByRole('group', { name })).getByRole('button', { name: 'Edit' }));
       }
-      await expectClean('admin/companies/[companyId]/settings#recruitment');
+      await expectClean('admin/companies/[companyId]/templates/[templateId]/recruitment');
     });
   });
 
-  describe('KPM analytics (P18-T2 AC-10)', () => {
-    // The layout wears the reader's own shell (`RoleShell`, P18.8-T5), so it is the layout a page renders in.
-    const analyticsPage = (period?: string) => {
-      nav.search = new URLSearchParams(period ? { period } : {}).toString();
+  describe('KPM analytics (P18-T2 AC-10; P19.3-T3, every leader)', () => {
+    // The layout wears the reader's own shell (`RoleShell`, P18.5-T5), so it is the layout a page renders in.
+    const analyticsPage = (query: Record<string, string> = {}) => {
+      nav.search = new URLSearchParams(query).toString();
       return <KpmAnalyticsPage />;
     };
 
-    it('filled: the comparison with an agency open, its people listed, every MOC state and badge, the chart', async () => {
+    it.each([375, 768, 1280])('P19.3-T3 filled at %ipx: the totals, every leader, the chart', async (width) => {
+      atWidth(width);
       nav.pathname = '/kpm/analytics';
       stubFetch({ ...ANALYTICS_SHELL, 'GET /kpm/analytics': { body: analyticsView() } });
       renderInLayout(KpmAnalyticsLayout, analyticsPage(), { me: ANALYTICS_OWNER });
-      await screen.findByRole('table', { name: 'Unit comparison' });
-      await userEvent.click(screen.getByRole('button', { name: 'Units in Hendra Wibowo’s agency' }));
-      await userEvent.click(screen.getByRole('button', { name: '31 people in Hendra Wibowo’s agency' }));
-      await expectClean('kpm/analytics');
+      await screen.findByRole('region', { name: 'Leader' });
+      await expectClean(`kpm/analytics (${width}px)`);
     });
 
-    it('P18.98-T4 filled, in Indonesian: an agency open, its people listed, and the MOC dialog', async () => {
+    it('P19.3-T3 the leader sheet, the side panel, the group filter and the MOC dialog', async () => {
+      atWidth(1280);
+      nav.pathname = '/kpm/analytics';
+      stubFetch({ ...ANALYTICS_SHELL, 'GET /kpm/analytics': { body: analyticsView() } });
+      renderInLayout(KpmAnalyticsLayout, analyticsPage(), { me: ANALYTICS_OWNER });
+      await screen.findByRole('region', { name: 'Leader' });
+      await userEvent.click(screen.getAllByRole('button', { name: 'Hendra Wibowo' })[0]);
+      await screen.findByRole('dialog', { name: 'HENDRA WIBOWO' });
+      await expectClean('kpm/analytics (the leader’s side panel)');
+      await userEvent.click(screen.getByRole('button', { name: 'Close' }));
+      await userEvent.click(screen.getByRole('button', { name: 'View for: Whole KPM' }));
+      await screen.findByRole('dialog', { name: 'View for' });
+      await expectClean('kpm/analytics (Lihat untuk)');
+      await userEvent.click(screen.getByRole('button', { name: 'Close' }));
+      await userEvent.click(screen.getByRole('button', { name: 'MOC requirements met for Hendra Wibowo' }));
+      await screen.findByRole('dialog', { name: 'Hendra Wibowo — Maintenance of Contract' });
+      await expectClean('kpm/analytics (MOC dialog)');
+    });
+
+    it('P19.3-T3 filled, in Indonesian: the list, and a leader’s sheet on a phone', async () => {
+      atWidth(375);
       nav.pathname = '/kpm/analytics';
       stubFetch({ ...ANALYTICS_SHELL, 'GET /kpm/analytics': { body: analyticsView() } });
       renderWithSession(
         <InLanguage language="id"><KpmAnalyticsLayout>{analyticsPage()}</KpmAnalyticsLayout></InLanguage>,
         { me: ANALYTICS_OWNER },
       );
-      await screen.findByRole('table', { name: 'Unit comparison' });
-      await userEvent.click(screen.getByRole('button', { name: 'Unit di agensi Hendra Wibowo' }));
-      await userEvent.click(screen.getByRole('button', { name: '31 orang di agensi Hendra Wibowo' }));
+      await screen.findByRole('region', { name: 'Leader' });
       await expectClean('kpm/analytics, in Indonesian');
-      await userEvent.click(screen.getByRole('button', { name: 'Syarat MOC terpenuhi untuk Hendra Wibowo' }));
-      await screen.findByRole('dialog', { name: 'Hendra Wibowo — Maintenance of Contract' });
-      await expectClean('kpm/analytics (MOC dialog), in Indonesian');
+      await userEvent.click(screen.getByRole('button', { name: 'Hendra Wibowo' }));
+      await screen.findByRole('dialog', { name: 'HENDRA WIBOWO' });
+      await expectClean('kpm/analytics (the leader’s sheet), in Indonesian');
     });
 
-    it('the MOC dialog, met and with an input not uploaded', async () => {
-      nav.pathname = '/kpm/analytics';
-      stubFetch({ ...ANALYTICS_SHELL, 'GET /kpm/analytics': { body: analyticsView('previous_month') } });
-      renderInLayout(KpmAnalyticsLayout, analyticsPage('previous_month'), { me: ANALYTICS_OWNER });
-      await screen.findByRole('table', { name: 'Unit comparison' });
-      await userEvent.click(screen.getByRole('button', { name: 'MOC requirements met for Hendra Wibowo' }));
-      await screen.findByRole('dialog', { name: 'Hendra Wibowo — Maintenance of Contract' });
-      await expectClean('kpm/analytics (MOC dialog)');
-
-      await userEvent.click(screen.getByRole('button', { name: 'Close' }));
-      await userEvent.click(screen.getByRole('button', { name: /^MOC for Wilson Tanoto — / }));
-      await screen.findByRole('dialog', { name: 'Wilson Tanoto — Maintenance of Contract' });
-      await expectClean('kpm/analytics (MOC dialog, unknown)');
-    });
-
-    it('no AB yet, and the error with its retry', async () => {
+    it('no leader yet, and the error with its retry', async () => {
+      atWidth(1280);
       nav.pathname = '/kpm/analytics';
       stubFetch({ ...ANALYTICS_SHELL, 'GET /kpm/analytics': { body: ANALYTICS_NO_AB } });
       renderInLayout(KpmAnalyticsLayout, analyticsPage(), { me: ANALYTICS_OWNER });
-      await screen.findByText('There are no ABs to compare yet.');
-      await expectClean('kpm/analytics (no AB)');
+      await screen.findByText('No AB or AAB yet.');
+      await expectClean('kpm/analytics (no leader)');
 
       cleanup();
       vi.unstubAllGlobals();
+      atWidth(1280);
       stubFetch({
         ...ANALYTICS_SHELL,
         'GET /kpm/analytics': { status: 500, body: { error: { code: 'INTERNAL', message: 'Something went wrong.', requestId: 'r-1' } } },
@@ -4578,22 +4938,57 @@ describe('screens have no axe violations', () => {
       await expectClean('kpm/analytics (error)');
     });
 
-    it('P18.8-T5 a Core Leader’s: the office’s comparison in the field shell, its Core leader group open', async () => {
+    it('P18.5-T5 a Core Leader’s: the office’s leaders in the field shell, its Core leader group open', async () => {
+      atWidth(1280);
       nav.pathname = '/kpm/analytics';
       stubFetch({ ...ANALYTICS_SHELL, 'GET /kpm/analytics': { body: analyticsView() } });
       renderInLayout(KpmAnalyticsLayout, analyticsPage(), { me: ANALYTICS_CORE_LEADER });
-      await screen.findByRole('table', { name: 'Unit comparison' });
+      await screen.findByRole('region', { name: 'Leader' });
       await expectClean('kpm/analytics (a Core Leader)');
     });
-
   });
 
-  describe('KPM analytics › Compliance, Events, and Campaigns (P18.6-T1 AC-10, P18.6-T2)', () => {
+  describe('a leader’s Group Tree, read-only (P19.3-T3)', () => {
+    const leaderTree = {
+      nodes: [
+        treeNode({ membershipId: 'mem-sari', fullName: 'Sari Puspita', initials: 'SP', role: 'aab', layer: 1, leaderId: 'mem-agus',
+                   isLeader: true, directCount: 1, isSelf: true }),
+        treeNode({ membershipId: 'mem-rina', fullName: 'Rina Wijaya', initials: 'RW', layer: 2, leaderId: 'mem-sari' }),
+      ],
+      leader: { membershipId: 'mem-agus', fullName: 'Agus Prasetyo', initials: 'AP', role: 'ab' },
+      rootIds: ['mem-sari'],
+      selfId: 'mem-sari',
+      counts: { ab: 0, aab: 0, agent: 1, total: 1 },
+    };
+
+    it.each(['en', 'id'] as const)('P19.3-T3 group-tree/[membershipId] (%s), as the Owner reads it', async (language) => {
+      stubFetch({ ...ANALYTICS_SHELL, 'GET /members/tree': { body: leaderTree } });
+      const page = <LeaderGroupTreePage params={routeParams({ membershipId: 'mem-sari' })} />;
+      if (language === 'id') {
+        renderWithSession(<InLanguage language="id"><AgentLayout>{page}</AgentLayout></InLanguage>, { me: ANALYTICS_OWNER });
+      } else {
+        renderInLayout(AgentLayout, page, { me: ANALYTICS_OWNER });
+      }
+      await screen.findByTestId('group-tree-list');
+      await expectClean(language === 'id' ? 'group-tree/[membershipId], in Indonesian' : 'group-tree/[membershipId]');
+    });
+
+    it('P19.3-T3 group-tree/[membershipId] (not found)', async () => {
+      stubFetch({ ...ANALYTICS_SHELL, 'GET /members/tree': { status: 404, body: { error: { code: 'NOT_FOUND', message: 'Member not found.', requestId: 'r' } } } });
+      renderInLayout(AgentLayout, <LeaderGroupTreePage params={routeParams({ membershipId: 'mem-gone' })} />, { me: ANALYTICS_OWNER });
+      await screen.findByText('This Group Tree is not one you can open.');
+      await expectClean('group-tree/[membershipId] (not found)');
+    });
+  });
+
+  describe('KPM analytics › Compliance, Events, and Campaigns (P18.3-T1 AC-10, P18.3-T2)', () => {
     const compliancePage = (query: Record<string, string> = {}) => {
       nav.search = new URLSearchParams(query).toString();
       return <KpmAnalyticsCompliancePage />;
     };
     const openCompliance = async (body: unknown, query: Record<string, string> = {}) => {
+      // The laptop's tree (P19.3-T3: below 1024px every reader reads UI-109's layout, checked in its own cases).
+      atWidth(1280);
       nav.pathname = '/kpm/analytics/compliance';
       stubFetch({
         ...ANALYTICS_SHELL,
@@ -4603,7 +4998,7 @@ describe('screens have no axe violations', () => {
       renderInLayout(KpmAnalyticsLayout, compliancePage(query), { me: ANALYTICS_OWNER });
     };
 
-    it('filled: Training’s three rows of tabs and the tree, the chips above', async () => {
+    it('filled: Training’s module picker and the tree, the chips above (UI-098)', async () => {
       await openCompliance(complianceView('training'));
       await screen.findAllByRole('region');
       await expectClean('kpm/analytics/compliance');
@@ -4638,7 +5033,8 @@ describe('screens have no axe violations', () => {
       await expectClean('kpm/analytics/compliance (searched to nothing)');
     });
 
-    it('P18.98-T4 in Indonesian: Training’s tree, and a campaign’s with its override controls', async () => {
+    it('P18.10-T4 in Indonesian: Training’s tree, and a campaign’s with its override controls', async () => {
+      atWidth(1280);
       nav.pathname = '/kpm/analytics/compliance';
       stubFetch({
         ...ANALYTICS_SHELL,
@@ -4649,10 +5045,11 @@ describe('screens have no axe violations', () => {
         <InLanguage language="id"><KpmAnalyticsLayout>{compliancePage()}</KpmAnalyticsLayout></InLanguage>,
         { me: ANALYTICS_OWNER },
       );
-      await screen.findByRole('group', { name: 'Kategori Training' });
+      await screen.findByRole('button', { name: /^Modul Training/ });
       await expectClean('kpm/analytics/compliance, in Indonesian');
       unmount();
       vi.unstubAllGlobals();
+      atWidth(1280);
 
       stubFetch({
         ...ANALYTICS_SHELL,
@@ -4707,7 +5104,7 @@ describe('screens have no axe violations', () => {
       stubFetch({ ...FORUM_SHELL, 'GET /leader-meetings': { body: forumList() } });
       renderWithSession(<LeaderMeetingsPage />, { me: FORUM_OWNER });
       await userEvent.click(await screen.findByRole('button', { name: '+ New meeting' }));
-      // The dialog's module is fetched on its first opening (P18.99-T16).
+      // The dialog's module is fetched on its first opening (P18.11-T16).
       await userEvent.click(await screen.findByRole('button', { name: 'Create meeting' }));
       await screen.findByText('Pick a date.');
       await expectClean('leader-meetings (New meeting)');
@@ -4720,8 +5117,10 @@ describe('screens have no axe violations', () => {
       await meetingTitle();
       await expectClean('leader-meetings/[meetingId] (Overview & Stats)');
       await userEvent.click(screen.getByRole('tab', { name: 'Agenda' }));
+      await meetingPanel('Agenda');
       await expectClean('leader-meetings/[meetingId] (Agenda)');
       await userEvent.click(screen.getByRole('tab', { name: 'Action Items' }));
+      await meetingPanel('Action Items');
       await expectClean('leader-meetings/[meetingId] (Action Items)');
     });
 
@@ -4750,7 +5149,7 @@ describe('screens have no axe violations', () => {
       await expectClean('leader-meetings/[meetingId] (Share these minutes)');
     });
 
-    it('P18.97-T1 AC-17, AC-19, P18.97-T8 F1, F2 the stats on a phone, one card per metric; and a scorecard kept before the reference slide', async () => {
+    it('P18.9-T1 AC-17, AC-19, P18.9-T8 F1, F2 the stats on a phone, one card per metric; and a scorecard kept before the reference slide', async () => {
       atWidth(375);
       nav.pathname = '/leader-meetings/m-14';
       stubFetch({ ...FORUM_SHELL, 'GET /leader-meetings/m-14': { body: forumMeeting() } });
@@ -4813,12 +5212,12 @@ describe('screens have no axe violations', () => {
 });
 
 /**
- * **The Owner's screens on a phone** (P18.97-T7, ADR-0178 §4, §5; the client's KPM Owner review of 2026-10-27, UI-034
+ * **The Owner's screens on a phone** (P18.9-T7, ADR-0178 §4, §5; the client's KPM Owner review of 2026-10-27, UI-034
  * to UI-036, UI-039, UI-040): each new phone state through axe at 375px — the wide tables as cards, Data upload's edit
  * sheet open, a lead status's ⋮ open, the office's tree as a list, and the checklist's and the shelf's 44px controls
  * with ↑ ↓.
  */
-describe('P18.97-T7 the Owner’s screens on a phone have no axe violations', () => {
+describe('P18.9-T7 the Owner’s screens on a phone have no axe violations', () => {
   afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
@@ -4845,18 +5244,18 @@ describe('P18.97-T7 the Owner’s screens on a phone have no axe violations', ()
     lastActivityOn: '2026-10-26', lastCoachedDays: null, ...over,
   });
 
-  it('P18.97-T7 AC-1 kpm/analytics: the comparison as cards, an agency opened, its people listed', async () => {
+  it('P18.9-T7 AC-1, P19.3-T3 kpm/analytics on a phone: the Leader list as rows, a leader’s sheet open', async () => {
     atWidth(375);
     nav.pathname = '/kpm/analytics';
     stubFetch({ ...ANALYTICS_SHELL, 'GET /kpm/analytics': { body: analyticsView() } });
     renderInLayout(KpmAnalyticsLayout, <KpmAnalyticsPage />, { me: ANALYTICS_OWNER });
-    await screen.findByRole('list', { name: 'Unit comparison' });
-    await userEvent.click(screen.getByRole('button', { name: 'Units in Hendra Wibowo’s agency' }));
-    await userEvent.click(screen.getByRole('button', { name: '31 people in Hendra Wibowo’s agency' }));
+    await screen.findByRole('region', { name: 'Leader' });
+    await userEvent.click(screen.getByRole('button', { name: 'Hendra Wibowo' }));
+    await screen.findByRole('dialog', { name: 'HENDRA WIBOWO' });
     await expectClean('kpm/analytics (phone)');
   });
 
-  it('P18.97-T7 AC-1 people/members: the directory and Removed as cards', async () => {
+  it('P18.9-T7 AC-1 people/members: the directory and Removed as cards', async () => {
     atWidth(375);
     const counts = { directory: 3, pending: 0, removed: 1 };
     stubFetch({
@@ -4891,7 +5290,7 @@ describe('P18.97-T7 the Owner’s screens on a phone have no axe violations', ()
     await expectClean('people/members, Removed (phone)');
   });
 
-  it('P18.97-T7 AC-1 people/admins: the admins as cards, a revoke waiting', async () => {
+  it('P18.9-T7 AC-1 people/admins: the admins as cards, a revoke waiting', async () => {
     atWidth(375);
     stubFetch({
       '/members/admins': {
@@ -4917,14 +5316,14 @@ describe('P18.97-T7 the Owner’s screens on a phone have no axe violations', ()
     await expectClean('people/admins (phone, revoke waiting)');
   });
 
-  it('P18.97-T7 AC-2 kpm/data-upload: a card per agent, then an agent’s sheet open with a refusal on a figure', async () => {
+  it('P18.9-T7 AC-2 kpm/data-upload: a card per agent, then an agent’s sheet open with a refusal on a figure', async () => {
     atWidth(375);
     const empty = { value: null, provenance: null };
     const metrics = Object.fromEntries(['ape', 'persistency', 'recruitment', 'newActiveAgents', 'fyp', 'policyCount']
       .map((m) => [m, { monthly: empty, ytd: empty }]));
     stubFetch({
       '/kpm/data-upload/': {
-        body: {
+        body: asView({
           month: '2026-09', withData: 1,
           state: { month: '2026-09', revision: 3, locked: false, reason: 'open', editableUntil: '2026-10-07', changedAt: null, changedBy: null },
           rows: [
@@ -4935,7 +5334,7 @@ describe('P18.97-T7 the Owner’s screens on a phone have no axe violations', ()
                   correction: { by: 'Maya Halim', at: '2026-09-18T03:00:00Z', reason: 'Carrier restated it' } } } } },
             { membershipId: 'mem-budi', agentCode: 'PRU-002', name: 'Budi Santoso', metrics, monthlyActiveAgent: null },
           ],
-        },
+        }),
       },
       '/kpm/data-upload/template': {
         body: { month: '2026-09', version: 1, filename: 'KPM0417-agent-data-Sep-2026.csv', header: ['Agent Code'], file: 'Agent Code', rowCount: 0 },
@@ -4960,7 +5359,7 @@ describe('P18.97-T7 the Owner’s screens on a phone have no axe violations', ()
     await expectClean('kpm/data-upload (phone, sheet with a refusal)');
   });
 
-  it('P18.97-T7 AC-3 kpm/settings/lead-statuses: a stage’s ⋮ open, the switch on its own line', async () => {
+  it('P18.9-T7 AC-3 kpm/settings/lead-statuses: a stage’s ⋮ open, the switch on its own line', async () => {
     atWidth(375);
     stubFetch({
       '/kpm/settings/lead-statuses': {
@@ -4981,12 +5380,12 @@ describe('P18.97-T7 the Owner’s screens on a phone have no axe violations', ()
     await expectClean('kpm/settings/lead-statuses (phone)');
     await userEvent.click(screen.getByRole('button', { name: 'Actions for Paid and issued' }));
     await screen.findByRole('menu');
-    // P18.97-T8 F3: Move up and Move down first, the last stage's Move down held.
+    // P18.9-T8 F3: Move up and Move down first, the last stage's Move down held.
     expect(screen.getByRole('menuitem', { name: 'Move down' })).toHaveAttribute('aria-disabled', 'true');
     await expectClean('kpm/settings/lead-statuses (phone, ⋮ open)');
   });
 
-  it('P18.97-T7 AC-4 people/org-tree: the indented list, a unit opened', async () => {
+  it('P18.9-T7 AC-4 people/org-tree: the indented list, a unit opened', async () => {
     atWidth(375);
     stubFetch({
       '/members/tree': {
@@ -5007,7 +5406,7 @@ describe('P18.97-T7 the Owner’s screens on a phone have no axe violations', ()
     await expectClean('people/org-tree (phone)');
   });
 
-  it('P18.97-T7 AC-6 kpm/settings/activation-checklist: 44px controls and ↑ ↓, an item moved', async () => {
+  it('P18.9-T7 AC-6 kpm/settings/activation-checklist: 44px controls and ↑ ↓, an item moved', async () => {
     atWidth(375);
     stubFetch({
       '/kpm/settings/activation-checklist': {
@@ -5033,11 +5432,14 @@ describe('P18.97-T7 the Owner’s screens on a phone have no axe violations', ()
     });
     renderInLayout(TenantLayout, <ActivationChecklistPage />, { me: owner });
     await screen.findByText('Learn insurance basics');
-    await userEvent.click(screen.getByRole('button', { name: 'Move Learn insurance basics down' }));
-    await expectClean('kpm/settings/activation-checklist (phone)');
+    // *Changed 2026-11-05 (P19.2-T3 AC-3; UI-141):* an accordion of one-line items, an item moved from its sheet.
+    await expectClean('kpm/settings/activation-checklist (phone, the accordion)');
+    await userEvent.click(screen.getByRole('button', { name: 'Learn insurance basics' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Move Learn insurance basics down' }));
+    await expectClean('kpm/settings/activation-checklist (phone, an item’s sheet)');
   });
 
-  it('P18.97-T7 AC-6 kpm/settings/products: the shelf’s 44px switch, a product open', async () => {
+  it('P18.9-T7 AC-6 kpm/settings/products: the shelf’s 44px switch, a product open', async () => {
     atWidth(375);
     const f = <T,>(value: T, overridden = false) => ({ value, overridden });
     stubFetch({
@@ -5050,7 +5452,7 @@ describe('P18.97-T7 the Owner’s screens on a phone have no axe violations', ()
           lifecycle: 'active', sellable: true, active: f(true), displayName: f('PRUMapan'), description: f('Endowment.'),
           script: {
             goodFit: f('Young families'), opening: f('Halo?'), benefits: f(['Proteksi']), fullScript: f('Halo.'),
-            objectionTheySay: f('Mahal.'), objectionYouSay: f('Bisa disesuaikan.'), nextAction: f('Ilustrasi?'),
+            objections: f([{ objection: 'Mahal.', answer: 'Bisa disesuaikan.' }]), nextAction: f('Ilustrasi?'),
           },
           reviewState: 'none', rejectionReason: null,
           documents: [{ slot: 'brochure', label: 'Brochure', storageKey: null, filename: null, source: 'none' }],
@@ -5058,19 +5460,22 @@ describe('P18.97-T7 the Owner’s screens on a phone have no axe violations', ()
       },
     });
     renderInLayout(TenantLayout, <KpmProductsPage />, { me: owner });
+    // *Changed 2026-11-05 (P19.2-T3 AC-3; UI-141):* one row per product, its switch and *Customize* in its sheet.
+    await expectClean('kpm/settings/products (phone, the rows)');
+    await userEvent.click(await screen.findByRole('button', { name: 'PRUMapan' }));
     await userEvent.click(await screen.findByRole('button', { name: 'Customize' }));
-    await expectClean('kpm/settings/products (phone)');
+    await expectClean('kpm/settings/products (phone, a product’s sheet)');
   });
 });
 
 /**
- * **P18.98-T4: the forum and the office's people screens in ID mode, each in its main state** — axe in Indonesian, as
+ * **P18.10-T4: the forum and the office's people screens in ID mode, each in its main state** — axe in Indonesian, as
  * the blocks above run them in English (ADR-0179 §9): the forum's list, a meeting on its three tabs and its dialogs, a
  * phone's cards; *All Members* on its tabs, a member's page, *Manage KPM Admins*, *Org Tree* and *Import people*. The
  * words are the catalogue's (`messages/forum*.ts`, `members.tsx`, `member.tsx`, `admins.ts`, `org-tree.ts`,
  * `roster-import.tsx`, `requests.ts`, `leader-limit.tsx`); `lang` on kept terms is T7's.
  */
-describe('P18.98-T4 the forum and the people screens in Indonesian', () => {
+describe('P18.10-T4 the forum and the people screens in Indonesian', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   const owner = makeMe({
@@ -5116,8 +5521,10 @@ describe('P18.98-T4 the forum and the people screens in Indonesian', () => {
     await screen.findByText('Dapat mengubah notulen ini');
     await expectClean('leader-meetings/[meetingId] (id, Overview & Stats)');
     await userEvent.click(screen.getByRole('tab', { name: 'Agenda' }));
+    await meetingPanel('Agenda');
     await expectClean('leader-meetings/[meetingId] (id, Agenda)');
     await userEvent.click(screen.getByRole('tab', { name: 'Action Items' }));
+    await meetingPanel('Action Items');
     await expectClean('leader-meetings/[meetingId] (id, Action Items)');
     await userEvent.click(screen.getByRole('button', { name: 'Bagikan' }));
     await screen.findByRole('button', { name: 'Salin tautan' });
@@ -5166,6 +5573,7 @@ describe('P18.98-T4 the forum and the people screens in Indonesian', () => {
   it('people/members/[membershipId]: the details, a role change explained and a removal asked', async () => {
     stubFetch({
       '/members/mem-1/reports': { body: [] },
+      '/members/mem-1/performance': { body: MEMBER_PERFORMANCE },
       '/members/mem-1/tags': { body: { membershipId: 'mem-1', fullName: 'Rina Wijaya', groupIds: [], isCoreLeader: false, canBeCoreLeader: false } },
       '/members/groups': { body: [] },
       '/members/leader-limit-requests': { body: [] },
@@ -5213,7 +5621,13 @@ describe('P18.98-T4 the forum and the people screens in Indonesian', () => {
     const HEADER = 'fullName,email,agentCode,role,leaderAgentCode,dateOfBirth,companyJoinMonth,workStatus,gender';
     stubFetch({
       '/admin/tenants/roster-template': { body: { header: HEADER, columns: [], template: `${HEADER}\n`, examples: [] } },
-      '/admin/tenants/kpm-1/roster/preview': { body: { willCreate: 0, rows: [], issues: [{ line: 2, column: 'email', message: '"x" is not an email address.' }] } },
+      // P19.3-T4 (ADR-0205): the preview's shape under A3 — counts, rows with an outcome, the skipped rows' file.
+      '/admin/tenants/kpm-1/roster/preview': {
+        body: {
+          issues: [{ line: 2, column: 'email', message: '"x" is not an email address.' }], header: HEADER.split(','),
+          counts: { imported: 0, updated: 0, skipped: 0 }, rows: [], skippedCsv: null,
+        },
+      },
     });
     inIndonesian('/people/import', <TenantLayout><PeopleImportPage /></TenantLayout>);
     await screen.findByRole('button', { name: 'Unduh Excel (.xlsx)' });
@@ -5226,13 +5640,13 @@ describe('P18.98-T4 the forum and the people screens in Indonesian', () => {
 });
 
 /**
- * **P18.98-T4: the field's selling screens in ID mode, each in its main state** — axe in Indonesian, as the blocks above
+ * **P18.10-T4: the field's selling screens in ID mode, each in its main state** — axe in Indonesian, as the blocks above
  * run them in English (ADR-0179 §9): *Leads Management* with its ⋮ menu and the lead's details open; *Log Activity* on a
  * closed, corrected day and on a phone; the *Dashboard*, and on a phone with an item opened; the *Ratio* tab with its
  * formula open. The words are the catalogue's (`messages/leads.tsx`, `messages/activity.tsx`); `lang` on kept terms is
  * T7's.
  */
-describe('P18.98-T4 the field’s selling screens in Indonesian', () => {
+describe('P18.10-T4 the field’s selling screens in Indonesian', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     nav.search = '';
@@ -5283,7 +5697,8 @@ describe('P18.98-T4 the field’s selling screens in Indonesian', () => {
       'outcome=won': leadsPage([lead({ id: 'w1', name: 'Ibu Wulan Sari', outcome: 'won', thisMonth: false })]),
       'outcome=lost': leadsPage([]),
     });
-    inIndonesian('/leads', <LeadsPage />, makeMe({ permissions: ['lead:read', 'lead:update', 'lead:mark_outcome'] }));
+    // *Changed 2026-11-05 (P19.1-T2, UI-116):* the table itself; `/leads` from 1024px is walked in the next test.
+    inIndonesian('/leads', <LeadsTable />, makeMe({ permissions: ['lead:read', 'lead:update', 'lead:mark_outcome'] }));
 
     await screen.findByText('Ibu Wulan Sari');
     expect(screen.getByRole('table', { name: 'Leads Anda' })).toBeInTheDocument();
@@ -5294,6 +5709,38 @@ describe('P18.98-T4 the field’s selling screens in Indonesian', () => {
     const details = await screen.findByRole('dialog', { name: 'Detail lead untuk Pak Budi' });
     await within(details).findByText('Terakhir diubah oleh Ibu Sari');
     await expectClean('leads (id)');
+  });
+
+  it('P19.1-T2 AC-3 leads at 1280: the list beside the lead’s pane, in Indonesian', async () => {
+    atWidth(1280);
+    const budi = lead({ nextActionDate: '2099-10-02', lastEditedBy: { membershipId: 'mem-aab', name: 'Ibu Sari' } });
+    stubFetch({
+      '/kpm/config': {
+        body: {
+          activity: [], ratios: [], version: 1,
+          leadPipelines: [{
+            pipeline: 'sales',
+            statuses: [{
+              id: 's1', pipeline: 'sales', code: 'FOLLOW_UP', label: 'Sudah di-follow up', rank: 1, isTerminal: false,
+              isLateStage: false, version: 1, status: 'active',
+            }],
+          }],
+        },
+      },
+      '/kpm/org-levels': { body: [] },
+      'outcome=open': leadsPage([budi]),
+      'outcome=won': leadsPage([]),
+      'outcome=lost': leadsPage([]),
+      '/leads/l1': { body: { ...budi, history: [] } },
+    });
+    inIndonesian('/leads', <LeadsPage />, makeMe({
+      permissions: ['lead:read', 'lead:create', 'lead:update', 'lead:delete', 'lead:mark_outcome'],
+    }));
+
+    const pane = await screen.findByRole('region', { name: 'Pak Budi' });
+    await within(pane).findByText('Terakhir diubah oleh Ibu Sari');
+    expect(screen.getByRole('button', { name: 'Tambah lead' })).toBeInTheDocument();
+    await expectClean('leads (id, list + detail)');
   });
 
   // UI V1 (UI-105): the compact list — chips, the pipeline strip, the cards, the + — and the lead sheet.
@@ -5312,11 +5759,25 @@ describe('P18.98-T4 the field’s selling screens in Indonesian', () => {
       'outcome=won': leadsPage([]),
       'outcome=lost': leadsPage([]),
     });
-    inIndonesian('/leads', <LeadsPage />, makeMe({ permissions: ['lead:read', 'lead:create', 'lead:update', 'lead:delete', 'lead:mark_outcome'] }));
+    // An AB since P19.9-T1, so the filter sheet draws *Leads milik* too.
+    inIndonesian('/leads', <LeadsPage />, makeMe({
+      membership: { ...makeMe().membership!, orgLevelCode: 'AB', hierarchyRole: 'ab' },
+      permissions: ['lead:read', 'lead:create', 'lead:update', 'lead:delete', 'lead:mark_outcome'],
+    }));
 
     const list = await screen.findByRole('list', { name: 'Leads Anda' });
+    await expectClean('leads (id, phone, Semua)');
+    // It opens on *Semua* since P19.9-T1 AC-1; *Sales* draws the strip.
+    await userEvent.click(screen.getByRole('button', { name: /^Sales, / }));
     expect(screen.getByRole('group', { name: 'Pipeline Sales' })).toBeInTheDocument();
     await expectClean('leads (id, phone)');
+    // P19.9-T1 AC-3: the filter sheet, *Leads milik: Saya · Tim* first.
+    await userEvent.click(screen.getByRole('button', { name: 'Filter dan urutan' }));
+    const filters = await screen.findByRole('dialog', { name: 'Filter dan urutan' });
+    expect(within(filters).getByRole('group', { name: 'Leads milik' })).toBeInTheDocument();
+    await expectClean('leads (id, phone, the filter sheet)');
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Filter dan urutan' })).not.toBeInTheDocument());
     await userEvent.click(within(list).getByRole('button', { name: 'Pak Budi' }));
     const sheet = await screen.findByRole('dialog', { name: 'Pak Budi' });
     await within(sheet).findByText(/Status → Belum didekati/);
@@ -5337,7 +5798,8 @@ describe('P18.98-T4 the field’s selling screens in Indonesian', () => {
     inIndonesian('/activity/log', <LogActivityPage />);
 
     await screen.findByLabelText('Mengapa catatan ini dikoreksi?');
-    expect(screen.getByText(/^Total aktivitas hari ini/)).toBeInTheDocument();
+    // The day's count beside the date pill, in Indonesian (P19.1-T1: no strip from 768px).
+    expect(document.querySelector('[data-control-row]')).toHaveTextContent(/Hari ini|Mar 2026/);
     await expectClean('activity/log (id)');
   });
 
@@ -5532,7 +5994,7 @@ describe('P18.98-T4 the field’s selling screens in Indonesian', () => {
   it('goal settings: five numbered cards, two entry modes and a live cascade', async () => {
     const period = String(new Date().getFullYear());
     stubFetch({
-      // The cascade's three types, so each column carries its activity's chip (P10.1-T6; by name since P18.95-T5).
+      // The cascade's three types, so each column carries its activity's chip (P10.1-T6; by name since P18.7-T5).
       '/kpm/config': { body: { activity: GOAL_CASCADE_CONFIG, ratios: [], leadPipelines: [], version: 1 } },
       '/kpm/org-levels': { body: [] },
       '/goals': {
@@ -5578,7 +6040,7 @@ describe('P18.98-T4 the field’s selling screens in Indonesian', () => {
     await expectClean('goals (id)');
   });
 
-  it('goal settings on a phone: the floating save pill, the commitment in the report’s sentence (P18.99-T5)', async () => {
+  it('goal settings on a phone: the floating save pill, the commitment in the report’s sentence (P18.11-T5)', async () => {
     vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
       media: query, matches: query === PHONE_QUERY, addEventListener: vi.fn(), removeEventListener: vi.fn(),
     })));
@@ -5608,7 +6070,7 @@ describe('P18.98-T4 the field’s selling screens in Indonesian', () => {
     });
     inIndonesian('/goals', <GoalSettingsPage />, makeMe({ permissions: ['goal:read', 'goal:update'] }));
 
-    // UI V1 (P18.99-T5): the floating save pill, and the report's sentence (UI-017).
+    // UI V1 (P18.11-T5): the floating save pill, and the report's sentence (UI-017).
     const save = await screen.findByRole('button', { name: 'Simpan goal' });
     expect(save.closest('[data-floating-save]')).not.toBeNull();
     expect(screen.getByText(/^Bulan ini/).closest('p')).toHaveTextContent('36 Set appointment, 18 Sales meeting, 6 Submission polis.');
@@ -5645,7 +6107,7 @@ describe('P18.98-T4 the field’s selling screens in Indonesian', () => {
       numeratorCount: 1, denominatorCount: 10, status,
     });
     stubFetch({
-      // P18.5-T7 AC-6: *Campaigns you're chasing*, with its rows.
+      // P18.2-T7 AC-6: *Campaigns you're chasing*, with its rows.
       'GET /campaigns/chasing': { body: CAMPAIGNS_RINA_CHASING },
       '/activity/ratios': {
         body: { membershipId: 'm-1', from: '2026-08-16', to: '2026-09-14', days: 30, ratios: [rate('SSR', 0.1, 'alert'), rate('LPA', null, 'neutral')] },
@@ -5697,14 +6159,14 @@ describe('P18.98-T4 the field’s selling screens in Indonesian', () => {
 });
 
 /**
- * **P18.98-T4: new hires, the 90-day activation and User Management in ID mode, each in its main state** — axe in
+ * **P18.10-T4: new hires, the 90-day activation and User Management in ID mode, each in its main state** — axe in
  * Indonesian, as *the 90-day activation (P13)* block and the User Management tests above run them in English (ADR-0179
  * §9): the hire's `/activation` with a row's note and date open and *Which case?* open; `/new-hires` with its sections,
  * *Tandai keluar*'s confirmation, a phone's cards, *Menunggu bergabung* and *+ Tambah agent* with its share step; a
  * hire's detail; and the four User Management screens. The words are the catalogue's (`messages/activation.ts`,
  * `new-hires.ts`, `add-agent.ts`, `user-management.ts`); `lang` on kept terms is T7's.
  */
-describe('P18.98-T4 new hires, activation and User Management in Indonesian', () => {
+describe('P18.10-T4 new hires, activation and User Management in Indonesian', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   const SHELL = {
@@ -5861,7 +6323,7 @@ describe('P18.98-T4 new hires, activation and User Management in Indonesian', ()
 });
 
 /**
- * **P18.98-T4: coaching and the Unit Dashboard in ID mode, each in its main state** — axe in Indonesian, as the blocks
+ * **P18.10-T4: coaching and the Unit Dashboard in ID mode, each in its main state** — axe in Indonesian, as the blocks
  * above run them in English (ADR-0179 §9): the coaching roster as a table and as a phone's cards, a session as a draft
  * with its Activity drill open and finalized with *Edit again* asked, a past session's archive, the reader's own
  * coaching, *Leader Notes*, a coachee's *Activation*; the Unit Dashboard filled, opened, on a phone, with *Update
@@ -5869,7 +6331,7 @@ describe('P18.98-T4 new hires, activation and User Management in Indonesian', ()
  * (`messages/coaching*.ts(x)`, `unit-dashboard.ts`, `group-tree.ts`, `activation.ts`'s `record`); `lang` on kept terms
  * is T7's.
  */
-describe('P18.98-T4 coaching and the Unit Dashboard in Indonesian', () => {
+describe('P18.10-T4 coaching and the Unit Dashboard in Indonesian', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     nav.params = {};
@@ -6092,7 +6554,7 @@ describe('P18.98-T4 coaching and the Unit Dashboard in Indonesian', () => {
     await screen.findByRole('table', { name: 'Roster tim Anda' });
     await expectClean('unit/dashboard (id)');
     await userEvent.click(screen.getByRole('button', { name: 'Unit Anda · 4' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Perlu perhatian 4' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Perlu perhatian 3' }));
     await expectClean('unit/dashboard (id, closed and filtered)');
     await userEvent.click(screen.getByRole('button', { name: 'Perbarui produksi' }));
     await screen.findByRole('dialog', { name: 'Perbarui produksi' });
@@ -6109,7 +6571,7 @@ describe('P18.98-T4 coaching and the Unit Dashboard in Indonesian', () => {
 
   it('unit/dashboard: empty, and a unit below the reader', async () => {
     const { unmount } = unitShow(UNIT_EMPTY);
-    await screen.findByText('Belum ada siapa pun di unit Anda.');
+    await screen.findByText('Contoh');
     await expectClean('unit/dashboard (id, empty)');
     unmount();
     vi.unstubAllGlobals();
@@ -6122,12 +6584,12 @@ describe('P18.98-T4 coaching and the Unit Dashboard in Indonesian', () => {
   it('group-tree: its line, and its empty state', async () => {
     stubFetch({ ...shell, '/members/tree': { body: { nodes: [], leader: null, rootIds: [], selfId: 'mem-agus', counts: { ab: 0, aab: 0, agent: 0, total: 0 } } } });
     inIndonesian('/group-tree', <GroupTreePage />, makeMe({ ...coachMe, permissions: ['org_tree:read'] }));
-    await screen.findByText(/^Belum ada yang melapor kepada Anda\./);
+    await screen.findByText('Belum ada data');
     await expectClean('group-tree (id, empty)');
   });
 });
 
-describe('P18.98-T4 the shared pieces in Indonesian', () => {
+describe('P18.10-T4 the shared pieces in Indonesian', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   const notice = (over: Record<string, unknown> = {}) => ({
@@ -6201,13 +6663,13 @@ describe('P18.98-T4 the shared pieces in Indonesian', () => {
 });
 
 /**
- * **P18.98-T4: the pages before a session and *Your account* in ID mode, each in its main state** — axe in Indonesian,
+ * **P18.10-T4: the pages before a session and *Your account* in ID mode, each in its main state** — axe in Indonesian,
  * as the blocks above run them in English (ADR-0179 §9): sign-in with the development accounts panel open, registration
  * on a leader's invite, *Reset your password* sent, *Choose a new password* with its two messages, *Verify your email*
  * verified, *Choose your own password*, `/join` signed out and with a code checked, and *Your account* with its sessions.
  * The words are the catalogue's (`messages/auth.tsx`, `join.tsx`, `account.ts`); `lang` on kept terms is T7's.
  */
-describe('P18.98-T4 the public and account pages in Indonesian', () => {
+describe('P18.10-T4 the public and account pages in Indonesian', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     nav.search = '';
@@ -6265,6 +6727,8 @@ describe('P18.98-T4 the public and account pages in Indonesian', () => {
   it('verify email, verified', async () => {
     stubFetch({ '/auth/verify-email': { body: {} } });
     inIndonesian(<VerifyEmailPage params={routeParams({ token: 't' })} />);
+    // P19-T1 AC-1: verified on the press of its one button, never on the page's load.
+    await userEvent.click(screen.getByRole('button', { name: 'Verifikasi email saya' }));
     await screen.findByText(/sudah terverifikasi/);
     await expectClean('verify-email (id)');
   });
@@ -6278,6 +6742,7 @@ describe('P18.98-T4 the public and account pages in Indonesian', () => {
   // *region* refuses in both languages — a page structure, not its words, and why the English block above lists `/join`
   // as not yet covered. Signed in, the shell's `<main>` holds it.
   it('join: a code checked', async () => {
+    nav.pathname = '/join';
     nav.search = 'code=JOR417';
     stubFetch({
       '/join/invite': { body: { code: 'JOR417', kpmLabel: 'Prudential — KPM 0417 · BSD City Branch', leaderName: 'Wilson Tanoto' } },
@@ -6309,14 +6774,14 @@ describe('P18.98-T4 the public and account pages in Indonesian', () => {
 });
 
 /**
- * **P18.98-T4: training and the office's products in ID mode, each in its main state** — axe in Indonesian, as the
+ * **P18.10-T4: training and the office's products in ID mode, each in its main state** — axe in Indonesian, as the
  * blocks above run them in English (ADR-0179 §9): the learner's list, on a desktop and on a phone, a module's page with
  * its toggle and in a support session, the reader's own coaching *Training* tab; Settings › Training on Modules with the
  * add panel open, a module's page with its Files, Videos and Links; Settings › Products with a product opened, and *Script
  * approvals* with a send-back asked. The words are the catalogue's (`messages/training.ts`, `training-settings.tsx`,
  * `settings-products.tsx`); `lang` on kept terms is T7's.
  */
-describe('P18.98-T4 training and the office’s products in Indonesian', () => {
+describe('P18.10-T4 training and the office’s products in Indonesian', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     window.history.replaceState(null, '', '/');
@@ -6442,7 +6907,7 @@ describe('P18.98-T4 training and the office’s products in Indonesian', () => {
     const f = <T,>(value: T, overridden = false) => ({ value, overridden });
     const script = {
       goodFit: f('Keluarga muda'), opening: f('Halo dari kami.', true), benefits: f(['Proteksi jiwa']), fullScript: f('Halo.'),
-      objectionTheySay: f('Terlalu mahal.'), objectionYouSay: f('Bisa disesuaikan.'), nextAction: f('Siapkan ilustrasi.'),
+      objections: f([{ objection: 'Terlalu mahal.', answer: 'Bisa disesuaikan.' }]), nextAction: f('Siapkan ilustrasi.'),
     };
     const row = {
       productId: 'p1', code: 'PRUMAPAN', companyName: 'PRUMapan', channel: 'conventional', category: 'life',
@@ -6468,14 +6933,14 @@ describe('P18.98-T4 training and the office’s products in Indonesian', () => {
 });
 
 /**
- * **P18.98-T6: the Super Admin's console in ID mode, each screen in its main state** — axe in Indonesian, as the blocks
+ * **P18.10-T6: the Super Admin's console in ID mode, each screen in its main state** — axe in Indonesian, as the blocks
  * above run them in English (ADR-0179 §9): the Overview, *All KPMs* with *Edit subscription* open, *New office*, an
  * office's page, *Transfer owner*, *KPM Owners & Admins*, *Billing & subscription* (the editor, the dialog refused, the
  * quote), *Cross-platform analytics*, the audit log, the two queues, and a support session's two pages. The words are
  * the catalogue's (`messages/admin-*.ts(x)`, `billing.tsx`, `support-session.tsx`, `office-subscription.ts`); `lang` on
  * kept terms is T7's. The pages are imported where they are run, so this block adds nothing to the file's head.
  */
-describe('P18.98-T6 the Super Admin’s console in Indonesian', () => {
+describe('P18.10-T6 the Super Admin’s console in Indonesian', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.useRealTimers();
@@ -6487,7 +6952,7 @@ describe('P18.98-T6 the Super Admin’s console in Indonesian', () => {
     permissions: [
       ...SUPER_ADMIN.permissions, 'kpm:read_profile', 'kpm:suspend', 'kpm:assign_owner', 'platform_metrics:read',
       'platform_analytics:read', 'billing:read_prices', 'kpm_request:read', 'kpm_request:decide', 'leader_limit_request:read',
-      'leader_limit_request:decide', 'kpm_admin:list_platform', 'impersonation:start', 'impersonation:elevate_to_write',
+      'leader_limit_request:decide', 'kpm_admin:list_platform', 'impersonation:start',
     ],
   });
   const INBOX = { '/notifications': { body: { items: [], total: 0, page: 1, pageSize: 1, unread: 0 } } };
@@ -6502,7 +6967,8 @@ describe('P18.98-T6 the Super Admin’s console in Indonesian', () => {
   };
 
   it('admin: the Overview, filled', async () => {
-    stubFetch({ ...INBOX, '/admin/overview': { body: OVERVIEW } });
+    // The server writes the queue's words in the reader's language (ADR-0179 §7): the tag as an Indonesian reader gets it.
+    stubFetch({ ...INBOX, '/admin/overview': { body: { ...OVERVIEW, attention: [{ ...OVERVIEW.attention[0], tag: 'KPM Owner' }] } } });
     inIndonesian('/admin', <AdminOverviewPage />);
     await screen.findByRole('heading', { name: 'Perlu perhatian Anda' });
     await expectClean('admin (id)');
@@ -6536,7 +7002,8 @@ describe('P18.98-T6 the Super Admin’s console in Indonesian', () => {
     const { default: AssignOwnerPage } = await import('./(admin)/admin/tenants/[kpmId]/owner/page');
     stubFetch({ ...INBOX, '/admin/tenants/kpm-1': { body: SUBSCRIBED } });
     inIndonesian('/admin/tenants/kpm-1/owner', <AssignOwnerPage params={routeParams({ kpmId: 'kpm-1' })} />);
-    await screen.findByRole('heading', { level: 1, name: 'Pindahkan Owner' });
+    // P19-T3 (UI-168 point 4): *Ganti Owner*.
+    await screen.findByRole('heading', { level: 1, name: 'Ganti Owner' });
     await expectClean('admin/tenants/[kpmId]/owner (id)');
   });
 
@@ -6552,9 +7019,7 @@ describe('P18.98-T6 the Super Admin’s console in Indonesian', () => {
     await expectClean('admin/tenant-admins (id)');
   });
 
-  it('admin/billing: the editor with its override open, the dialog refused, and the quote', async () => {
-    vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(new Date('2026-10-07T18:30:00Z'));
+  it('admin/billing: the tiers strip and the KPMs (P19.4-T3 AC-10)', async () => {
     const { default: BillingPage } = await import('./(admin)/admin/billing/page');
     const tier = (code: string, min: number, max: number | null, s: number, six: number, annual: number) => ({
       code, minLeaders: min, maxLeaders: max, standardMinor: s * 100, sixMonthMinor: six * 100, annualMinor: annual * 100, customPricing: max === null,
@@ -6564,16 +7029,41 @@ describe('P18.98-T6 the Super Admin’s console in Indonesian', () => {
       '/admin/billing/prices': {
         body: { currency: 'IDR', annualDiscountPct: 5, tiers: [tier('T1', 1, 10, 500_000, 400_000, 380_000), tier('T2', 11, null, 375_000, 250_000, 237_500)] },
       },
+      '/admin/billing/kpms': {
+        body: [{ kpmId: 'kpm-1', code: '0417', branch: 'BSD City Branch', company: { id: 'co-1', name: 'Prudential' }, leadersUsed: 9, tier: { code: 'T1', minLeaders: 1, maxLeaders: 10 }, plan: 'annual', renewalDate: '2027-01-05', status: 'active' }],
+      },
     });
     inIndonesian('/admin/billing', <BillingPage />);
+    await screen.findByRole('table');
+    await expectClean('admin/billing (id)');
+  });
+
+  it('a KPM’s Billing tab: the editor with its override open, the dialog refused, and the quote (P19.4-T3 AC-10)', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-07T18:30:00Z'));
+    const { KpmBillingTab } = await import('@/components/admin/kpm-billing-tab');
+    const kpm = {
+      _id: 'kpm-1', code: '0417', branchName: 'BSD City Branch', ownerUserId: 'u-owner', ownerName: 'Rina Wijaya',
+      leadersUsed: 8, subscription: null,
+    } as never;
+    const tier = (code: string, min: number, max: number | null, s: number, six: number, annual: number) => ({
+      code, minLeaders: min, maxLeaders: max, standardMinor: s * 100, sixMonthMinor: six * 100, annualMinor: annual * 100, customPricing: max === null,
+    });
+    stubFetch({
+      ...INBOX,
+      '/admin/billing/prices': {
+        body: { currency: 'IDR', annualDiscountPct: 5, tiers: [tier('T1', 1, 10, 500_000, 400_000, 380_000), tier('T2', 11, null, 375_000, 250_000, 237_500)] },
+      },
+    });
+    inIndonesian('/admin/tenants/kpm-1', <KpmBillingTab kpm={kpm} />);
     await screen.findByText('Perkirakan harga Anda');
     await userEvent.click(screen.getByText('Penyesuaian manual'));
     await expectClean('admin/billing (id)');
     await userEvent.click(screen.getByRole('button', { name: 'Kirim penawaran' }));
+    await userEvent.clear(screen.getByLabelText('Nama PIC'));
     await userEvent.click(screen.getByRole('button', { name: 'Buat penawaran' }));
-    await screen.findByText('Isi nama KPM.');
+    await screen.findByText('Isi nama PIC.');
     await expectClean('admin/billing, the dialog refused (id)');
-    await userEvent.type(screen.getByLabelText('Nama KPM'), 'Jakarta Selatan');
     await userEvent.type(screen.getByLabelText('Nama PIC'), 'Andi Wijaya');
     await userEvent.type(screen.getByLabelText('Diisi oleh sales'), 'Maya');
     await userEvent.click(screen.getByRole('button', { name: 'Buat penawaran' }));
@@ -6595,11 +7085,11 @@ describe('P18.98-T6 the Super Admin’s console in Indonesian', () => {
       },
     });
     const { unmount } = inIndonesian('/admin/analytics', <PlatformAnalyticsPage />);
-    await screen.findByRole('table', { name: 'Adopsi per cabang dan perusahaan' });
+    await screen.findByRole('table', { name: 'Adopsi per KPM dan perusahaan' });
     await expectClean('admin/analytics (id)');
     unmount();
     vi.unstubAllGlobals();
-    stubFetch({ ...INBOX, '/admin/audit': { body: [AUDIT] }, '/admin/tenants': { body: [KPM] } });
+    stubFetch({ ...INBOX, '/admin/audit': { body: AUDIT_PAGE }, '/admin/tenants': { body: [KPM] } });
     inIndonesian('/admin/audit', <AuditPage />);
     await screen.findByRole('table', { name: 'Entri audit, terbaru lebih dulu' });
     await expectClean('admin/audit (id)');
@@ -6632,29 +7122,25 @@ describe('P18.98-T6 the Super Admin’s console in Indonesian', () => {
     await expectClean('admin/leader-limit-requests (id)');
   });
 
-  it('admin/impersonate/[userId] from Open as Owner, and admin/impersonation/[sessionId]', async () => {
+  it('admin/impersonate/[userId] from Open as Owner: Hanya melihat, with no choice (P19.4-T2)', async () => {
     const { default: ImpersonatePage } = await import('./(admin)/admin/impersonate/[userId]/page');
-    const { default: ElevateSessionPage } = await import('./(admin)/admin/impersonation/[sessionId]/page');
+    // An old address's `purpose=setup` is ignored; the approval page is a redirect now, with nothing to check.
     nav.search = 'purpose=setup&kpmId=kpm-1';
     stubFetch({ ...INBOX, '/admin/tenants/kpm-1': { body: SUBSCRIBED } });
-    const { unmount } = inIndonesian('/admin/impersonate/u-owner', <ImpersonatePage params={routeParams({ userId: 'u-owner' })} />);
+    inIndonesian('/admin/impersonate/u-owner', <ImpersonatePage params={routeParams({ userId: 'u-owner' })} />);
     await screen.findByText('Rina Wijaya');
+    expect(screen.getByText('Hanya melihat')).toBeInTheDocument();
     await expectClean('admin/impersonate/[userId] (id)');
-    unmount();
-    inIndonesian('/admin/impersonation/s1', <ElevateSessionPage params={routeParams({ sessionId: 's1' })} />);
-    await userEvent.type(screen.getByLabelText('Mengapa melihat saja tidak cukup?'), 'pendek');
-    await screen.findByText('Minimal 10 karakter.');
-    await expectClean('admin/impersonation/[sessionId] (id)');
   });
 });
 
 /**
- * **P18.98-T4, events, campaigns and the calendar, in Indonesian** — each screen's main state through axe with its
+ * **P18.10-T4, events, campaigns and the calendar, in Indonesian** — each screen's main state through axe with its
  * words in the reader's language: the agents' *Event List* and an event's modal, Settings › Events with *View feedback*
  * and the picker, the *Campaign List* and a campaign's dialog, Settings › Campaigns with its form, and the calendar's
  * week, month, phone agenda and dialogs. Longer Indonesian names must still name every control once.
  */
-describe('P18.98-T4 events, campaigns and the calendar in Indonesian', () => {
+describe('P18.10-T4 events, campaigns and the calendar in Indonesian', () => {
   const shell = {
     '/kpm/config': { body: { activity: [], ratios: [], leadPipelines: [], version: 1 } },
     '/kpm/org-levels': { body: [] },
@@ -6749,7 +7235,7 @@ describe('P18.98-T4 events, campaigns and the calendar in Indonesian', () => {
       ...shell,
       '/kpm/settings/campaigns/rules': { body: [] },
       '/kpm/settings/campaigns': { body: [] },
-      '/metrics': { body: [{ key: 'APE_ACHIEVED', name: 'APE achieved', unit: 'idr_minor', phase: 9, computed: true, campaign: true }] },
+      '/metrics': { body: [{ key: 'APE_ACHIEVED', name: 'APE achieved', unit: 'idr_minor', phase: '9', computed: true, campaign: true }] },
     });
     nav.pathname = '/kpm/settings/campaigns';
     tenant(<CampaignsSettingsPage />);
@@ -6803,12 +7289,12 @@ describe('P18.98-T4 events, campaigns and the calendar in Indonesian', () => {
 });
 
 /**
- * **P18.98-T6: the Super Admin's company templates in ID mode, each in its main state** — axe in Indonesian, as the
+ * **P18.10-T6: the Super Admin's company templates in ID mode, each in its main state** — axe in Indonesian, as the
  * blocks above run them in English (ADR-0179 §9): *Manage Companies*, a company's *Template KPM* — its cards, a
  * template's checklist, its sections — and *Pengaturan perusahaan* (ADR-0185), and the *Org role ladder*
  * (`admin-template*.ts(x)`). What a company typed is as typed; `lang` on kept terms is T7's.
  */
-describe('P18.98-T6 the company templates in Indonesian', () => {
+describe('P18.10-T6 the company templates in Indonesian', () => {
   afterEach(() => {
     window.location.hash = '';
     vi.unstubAllGlobals();
@@ -6877,6 +7363,8 @@ describe('P18.98-T6 the company templates in Indonesian', () => {
   const settings = () => inIndonesian('/admin/companies/c1/settings', <CompanySettingsPage params={routeParams({ companyId: 'c1' })} />);
 
   it('admin/companies: the list, a row being renamed, and Add a company', async () => {
+    // The laptop's table, whatever width an earlier case left stubbed: below 1024px the list is rows (P19.2-T2 AC-1).
+    atWidth(1280);
     stubFetch({
       '/admin/companies': {
         body: [
@@ -6889,8 +7377,16 @@ describe('P18.98-T6 the company templates in Indonesian', () => {
     inIndonesian('/admin/companies', <CompaniesPage />);
     const table = await screen.findByRole('table', { name: 'Perusahaan' });
     await expectClean('admin/companies (id)');
-    await userEvent.click(within(table).getAllByRole('button', { name: 'Ubah' })[0]);
+    // *Changed 2026-11-06 (P19.2-T2 AC-1, AC-3; UI-126, UI-133):* *Ubah* is in the row's ⋯ and opens the company sheet;
+    // *Tambah perusahaan* opens the same sheet from the title row.
+    await userEvent.click(within(table).getAllByRole('button', { name: /^Tindakan untuk / })[0]);
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Ubah' }));
+    await screen.findByRole('dialog', { name: 'Ubah perusahaan' });
     await expectClean('admin/companies (id, renaming)');
+    await userEvent.keyboard('{Escape}');
+    await userEvent.click(screen.getByRole('button', { name: 'Tambah perusahaan' }));
+    await screen.findByRole('dialog', { name: 'Tambah perusahaan' });
+    await expectClean('admin/companies (id, adding)');
   });
 
   it('admin/companies/[companyId]: the cards, and Template baru copying (id)', async () => {
@@ -6971,7 +7467,7 @@ describe('P18.98-T6 the company templates in Indonesian', () => {
     await expectClean('admin/companies/[companyId]/templates/[templateId]/capability (id)');
   });
 
-  it('admin/companies/[companyId]/settings: Produk with a product open, Campaign, and Rekrutmen with a type open (id)', async () => {
+  it('admin/companies/[companyId]/settings: Produk with a product open, Campaign; the template’s Rekrutmen, a type open (id)', async () => {
     const body = {
       profiles: {
         'fresh-grad': {
@@ -6987,26 +7483,29 @@ describe('P18.98-T6 the company templates in Indonesian', () => {
       '/admin/companies/c1/products': {
         body: [{
           id: 'p1', companyId: 'c1', code: 'PRUMAPAN', name: 'PRUMapan', tagline: 'Proteksi jiwa dengan manfaat pensiun',
-          channel: 'conventional', category: 'life', primaryNeeds: ['retirement'], eligibleAgeBands: [1],
+          channel: 'conventional', category: 'life', kind: 'base', attachesTo: [], currencies: ['IDR', 'USD'],
+          primaryNeeds: ['retirement'], eligibleAgeBands: [1],
           eligibleBudgetBands: [1, 7], benefits: ['Dana Mapan'], differentiator: 'Terjangkau.', bestFor: 'Profesional',
           defaultAttackPlan: {
             goodFit: 'Profesional', opening: 'Halo.', benefits: ['Dana Mapan'], fullScript: 'Halo.',
-            objectionTheySay: 'Nanti saja.', objectionYouSay: 'Lebih ringan sekarang.', nextAction: 'Siapkan ilustrasi.',
+            objections: [{ objection: 'Nanti saja.', answer: 'Lebih ringan sekarang.' }], nextAction: 'Siapkan ilustrasi.',
           },
           commissionSchedule: [{ year: 1, rate: 0.125 }], lifecycle: 'active', replacedByProductId: null,
           activeByDefault: true, sortOrder: 1, version: 1,
         }],
       },
-      '/admin/companies/c1/recruitment-playbook': {
+      '/admin/companies/c1/template/recruitment_playbook': {
         body: {
-          playbook: { companyId: 'c1', version: 2, body, updatedAt: '2026-10-09T07:05:00.000Z', updatedBy: { name: 'Root' } },
-          defaults: body,
-          vocabulary: {
-            types: [{ code: 'fresh-grad', label: 'Lulusan baru' }],
-            motivations: [{ code: 'side-income', label: 'Penghasilan tambahan' }],
-            hesitations: [{ code: 'time', label: 'Khawatir soal waktu' }],
+          ...draft('recruitment_playbook', body),
+          playbook: {
+            defaults: body,
+            vocabulary: {
+              types: [{ code: 'fresh-grad', label: 'Lulusan baru' }],
+              motivations: [{ code: 'side-income', label: 'Penghasilan tambahan' }],
+              hesitations: [{ code: 'time', label: 'Khawatir soal waktu' }],
+            },
+            limits: { textMax: 600, benefitsMax: 6 },
           },
-          limits: { textMax: 600, benefitsMax: 6 },
         },
       },
       '/admin/companies/c1/template/campaign_kinds': {
@@ -7020,19 +7519,23 @@ describe('P18.98-T6 the company templates in Indonesian', () => {
           templateId: null,
         },
       },
-      '/metrics': { body: [{ key: 'APE_ACHIEVED', name: 'APE achieved', unit: 'idr_minor', phase: 9, computed: true }] },
+      '/metrics': { body: [{ key: 'APE_ACHIEVED', name: 'APE achieved', unit: 'idr_minor', phase: '9', computed: true }] },
     });
     settings();
-    await userEvent.click(await screen.findByRole('button', { name: 'Ubah' }));
+    // The product opened from its row (P19.2-T2 AC-2; UI-131); Escape closes its panel.
+    await userEvent.click(await screen.findByRole('button', { name: 'PRUMapan' }));
     await screen.findByRole('table', { name: 'Persentase komisi' });
     await expectClean('admin/companies/[companyId]/settings#products (id, a product open)');
+    await userEvent.keyboard('{Escape}');
     await userEvent.click(screen.getByRole('link', { name: 'Campaign' }));
     await screen.findByText('Bonus promosi');
     await expectClean('admin/companies/[companyId]/settings#campaigns (id)');
-    await userEvent.click(screen.getByRole('link', { name: 'Rekrutmen' }));
-    await screen.findByText('Playbook ini langsung berlaku.');
-    await userEvent.click(within(screen.getByRole('group', { name: 'Lulusan baru' })).getByRole('button', { name: 'Ubah' }));
-    await expectClean('admin/companies/[companyId]/settings#recruitment (id, a type open)');
+    // P19.4-T5 (ADR-0210 §3): Pengaturan perusahaan keeps Produk · Campaign; Rekrutmen is the template's section.
+    expect(screen.queryByRole('link', { name: 'Rekrutmen' })).not.toBeInTheDocument();
+    cleanup();
+    section('recruitment');
+    await userEvent.click(within(await screen.findByRole('group', { name: 'Lulusan baru' })).getByRole('button', { name: 'Ubah' }));
+    await expectClean('admin/companies/[companyId]/templates/[templateId]/recruitment (id, a type open)');
   });
 
   it('admin/companies/[companyId]/template: the old address while it sends the reader on (id)', async () => {
@@ -7058,12 +7561,12 @@ describe('P18.98-T6 the company templates in Indonesian', () => {
 });
 
 /**
- * **P18.98-T7 AC-1: every page in ID mode.** The cases above render every screen populated, and `expectClean` reads
+ * **P18.10-T7 AC-1: every page in ID mode.** The cases above render every screen populated, and `expectClean` reads
  * each one in Indonesian for a message missing or English the glossary does not keep. These are the pages no case
  * rendered in Indonesian yet: the two that only send the reader on, shown while they do.
  * `every-page-in-indonesian.spec.ts` holds the list to every route.
  */
-describe('P18.98-T7 the pages that only send the reader on, in Indonesian', () => {
+describe('P18.10-T7 the pages that only send the reader on, in Indonesian', () => {
   afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
@@ -7084,12 +7587,12 @@ describe('P18.98-T7 the pages that only send the reader on, in Indonesian', () =
 });
 
 /**
- * **UI V1's shared components** (Phase 18.99 T2; the report's *Shared components*), through axe in both languages
+ * **UI V1's shared components** (Phase 18.11 T2; the report's *Shared components*), through axe in both languages
  * before the pages adopt them: one panel holding each, populated — the ratio card, the person rows and the tree, the
  * pills, the tiles, the action rows, the slider and the stepper, the save state, the ⚡, WhatsApp and Call, the agent
  * picker open, Boost's empty state — then the number sheet open over it.
  */
-describe('UI V1 the shared components (Phase 18.99 T2)', () => {
+describe('UI V1 the shared components (Phase 18.11 T2)', () => {
   afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
@@ -7182,12 +7685,12 @@ describe('UI V1 the shared components (Phase 18.99 T2)', () => {
 });
 
 /**
- * **UI V1's Group Tree and User Management** (Phase 18.99 T9): the states the rows, the sheets and the share block add,
+ * **UI V1's Group Tree and User Management** (Phase 18.11 T9): the states the rows, the sheets and the share block add,
  * through axe in both languages — the tree searched and a unit opened (UI-058, UI-059, UI-073), the role sheet with
  * *Keluarkan* (UI-083), the invite's QR sheet (UI-084), the empty Pending Requests with Boost (UI-089), and `/join` for
  * somebody already in an office (UI-086).
  */
-describe('UI V1 Group Tree and User Management (Phase 18.99 T9)', () => {
+describe('UI V1 Group Tree and User Management (Phase 18.11 T9)', () => {
   afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
@@ -7280,11 +7783,11 @@ describe('UI V1 Group Tree and User Management (Phase 18.99 T9)', () => {
 });
 
 /*
- * ── UI V1, Phase 18.99 T8: coaching ─────────────────────────────────────────────────────────────────────────────────
+ * ── UI V1, Phase 18.11 T8: coaching ─────────────────────────────────────────────────────────────────────────────────
  * The coachee's new *Leads* tab, the *Activity* tab's Log, and the session's refused *Finalkan* with its outlined rows
  * and the *Isi nomor WhatsApp* sheet — in English and in Indonesian.
  */
-describe('P18.99-T8 coaching (UI V1) has no axe violations', () => {
+describe('P18.11-T8 coaching (UI V1) has no axe violations', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   const t8Leader = makeMe({
@@ -7391,16 +7894,16 @@ describe('P18.99-T8 coaching (UI V1) has no axe violations', () => {
 });
 
 /*
- * ── UI V1, Phase 18.99 T13: Sales, Recruitment, Campaign and Event on a phone ─────────────────────────────────────────
+ * ── UI V1, Phase 18.11 T13: Sales, Recruitment, Campaign and Event on a phone ─────────────────────────────────────────
  */
 
 /**
- * **UI V1's selling and programme pages on a phone** (Phase 18.99 T13; UI-107, UI-108), through axe in both languages at
+ * **UI V1's selling and programme pages on a phone** (Phase 18.11 T13; UI-107, UI-108), through axe in both languages at
  * 375px: the Sales Attack Plan's brief and plan, the Product Catalog's rows, the Recruitment plan, Pitch Materials'
  * rows, the campaign cards and the event cards with *Ikut* / *Tidak ikut*. From 768px each page is the one the blocks
  * above already run.
  */
-describe('P18.99-T13 selling and programmes on a phone (UI V1) have no axe violations', () => {
+describe('P18.11-T13 selling and programmes on a phone (UI V1) have no axe violations', () => {
   const SHELL = {
     '/kpm/config': { body: { activity: [], ratios: [], leadPipelines: [], version: 1 } },
     '/kpm/org-levels': { body: [] },
@@ -7487,7 +7990,7 @@ describe('P18.99-T13 selling and programmes on a phone (UI V1) have no axe viola
 });
 
 /*
- * UI V1, Phase 18.99 T14 (UI-109, UI-110, UI-111): Profil saya with its sheets, KPM Analytics' Overview and Compliance
+ * UI V1, Phase 18.11 T14 (UI-109, UI-110, UI-111): Profil saya with its sheets, KPM Analytics' Overview and Compliance
  * and the Strategic Leader Forum's list and meeting on a phone in the field shell, in both languages. The screens and
  * their fixtures are imported here, inside the block, so the file's head stays as it is for the tasks beside this one.
  */
@@ -7533,7 +8036,8 @@ describe('UI V1 T14 KPM Analytics, the Leader Forum and Profil saya through axe'
     nav.search = '';
     stubFetch({ ...analytics.SHELL_STUBS, 'GET /kpm/analytics/compliance': { body: compliance.complianceView('training') }, 'GET /kpm/analytics': { body: analytics.analyticsView() } });
     const { unmount } = render(language, <Layout><Overview /></Layout>, analytics.CORE_LEADER_ME);
-    await waitFor(() => expect(document.querySelector('[data-v1-overview]')).not.toBeNull());
+    // P19.3-T3: the Leader list at every size, where UI V1 drew a phone's own Overview.
+    await waitFor(() => expect(document.querySelector('[data-leaders]')).not.toBeNull());
     await expectClean(named(language, 'kpm/analytics (UI V1, phone)'));
     unmount();
     nav.pathname = '/kpm/analytics/compliance';
@@ -7566,7 +8070,7 @@ describe('UI V1 T14 KPM Analytics, the Leader Forum and Profil saya through axe'
 });
 
 /**
- * **Home and the sign-in through axe** (Phase 18.99 T11; UI-100, UI-101, UI-102): a leader's Home in the field shell on a
+ * **Home and the sign-in through axe** (Phase 18.11 T11; UI-100, UI-101, UI-102): a leader's Home in the field shell on a
  * phone (the title row's bell, the tiles, *Aksi hari ini*, *Laporan tim* opened to *Group*, the chart) and on a desktop,
  * the *Isi nomor WhatsApp* sheet from the team list, an agent's Home with nothing in seven days (Boost sleeping), in
  * both languages; the sign-in's welcome is the `login` case above.
@@ -7617,6 +8121,35 @@ describe('UI V1 T11 Home through axe', () => {
     await expectClean(named(language, 'home (UI V1, agent, nothing logged)'));
   });
 
+  it.each(['en', 'id'] as const)('P19.8-T2 the AAB who leads nobody, and an entry’s detail over Home with its question (%s)', async (language) => {
+    const { default: HomePage } = await import('./(agent)/home/page');
+    const home = await import('@test/home-fixtures');
+    nav.pathname = '/home';
+    atWidth(375);
+    stubFetch({ '/home': { body: home.NEW_LEADER }, '/notifications': { body: { items: [], unread: 0 } } });
+    const empty = <AgentLayout><HomePage /></AgentLayout>;
+    const first = renderWithSession(language === 'id' ? <InLanguage language="id">{empty}</InLanguage> : empty, { me: home.DEWI_AAB });
+    await waitFor(() => expect(document.querySelector('[data-home-team] [data-first-agent]')).not.toBeNull());
+    await expectClean(named(language, 'home (P19.8-T2, the AAB who leads nobody)'));
+    first.unmount();
+    vi.unstubAllGlobals();
+
+    stubFetch({
+      '/home': { body: home.LEADER },
+      '/notifications': { body: { items: [], unread: 0 } },
+      'GET /calendar/entries/e-1': { body: home.HUDDLE_ENTRY },
+    });
+    const ui = <AgentLayout><HomePage /></AgentLayout>;
+    renderWithSession(language === 'id' ? <InLanguage language="id">{ui}</InLanguage> : ui, { me: home.AGUS_AB });
+    await waitFor(() => expect(document.querySelector('[data-home-actions]')).not.toBeNull());
+    await userEvent.click(within(document.querySelector('[data-home-actions]') as HTMLElement).getByRole('button', { name: /Weekly unit huddle/ }));
+    await screen.findByRole('dialog', { name: 'Weekly unit huddle' });
+    await expectClean(named(language, 'home (P19.8-T2, the entry’s detail over Home)'));
+    await userEvent.click(screen.getByRole('button', { name: language === 'id' ? 'Hapus' : 'Delete' }));
+    await screen.findByRole('dialog', { name: language === 'id' ? 'Hapus event ini?' : 'Delete this event?' });
+    await expectClean(named(language, 'home (P19.8-T2, Hapus event ini?)'));
+  });
+
   it.each(['en', 'id'] as const)('UI-104 the Calendar: the Agenda’s Tugas and the popup, 3 Hari, the Week’s Tugas row and the 1:1’s coaching button (%s)', async (language) => {
     const tasks = [coachingTask(), leadTask()];
     const oneToOne = entry({
@@ -7649,7 +8182,11 @@ describe('UI V1 T11 Home through axe', () => {
         await expectClean(named(language, 'calendar (UI V1, 1:1 with Start coaching session)'));
         await userEvent.keyboard('{Escape}');
       } else {
-        await userEvent.selectOptions(screen.getByRole('combobox', { name: language === 'id' ? 'Tampilan' : 'View' }), 'three_days');
+        // P19.8-T3 AC-1 (MOB UI-171): the view picker is a button that opens a small menu under it, not a native select.
+        await userEvent.click(screen.getByRole('button', { name: /^(Tampilan|View) / }));
+        await screen.findByRole('listbox', { name: language === 'id' ? 'Tampilan' : 'View' });
+        await expectClean(named(language, 'calendar (P19.8-T3, the view menu open)'));
+        await userEvent.click(screen.getByRole('option', { name: language === 'id' ? '3 Hari' : '3 Days' }));
         await waitFor(() => expect(document.querySelector('[data-three-days]')).not.toBeNull());
         await expectClean(named(language, 'calendar (UI V1, 3 Hari)'));
       }
@@ -7660,7 +8197,7 @@ describe('UI V1 T11 Home through axe', () => {
 });
 
 /*
- * UI V1, Phase 18.99 T16 (UI-111, ADR-0181): Profil saya's email as a field — its hint, the password sheet a changed
+ * UI V1, Phase 18.11 T16 (UI-111, ADR-0181): Profil saya's email as a field — its hint, the password sheet a changed
  * email opens and the line once the link is sent — and `/verify-email-change/[token]`, the page that link opens, in both
  * languages. Imported inside the block, as T14's are, so the file's head stays as it is.
  */
@@ -7715,5 +8252,49 @@ describe('UI V1 T16 the email change through axe', () => {
     render(language, <VerifyEmailChange params={routeParams({ token: 'old' })} />, null);
     await screen.findByRole('alert');
     await expectClean(named(language, 'verify-email-change (refused)'));
+  });
+});
+
+/*
+ * P19.2-T1 AC-8 (UI-169 item 5; ADR-0199 §2, §5): a linked login's link page, `/link-account/[token]` — the form, and the
+ * linked line — and *Profil saya*'s *Akun tertaut* line with *Hapus tautan*, in both languages. Imported inside the
+ * block, as T16's are, so the file's head stays as it is.
+ */
+describe('P19.2-T1 AC-8 linked logins through axe', () => {
+  const named = (language: 'en' | 'id', what: string) => (language === 'id' ? `${what} (id)` : what);
+  const render = (language: 'en' | 'id', ui: React.ReactElement, me: ReturnType<typeof makeMe> | null) =>
+    renderWithSession(language === 'id' ? <InLanguage language="id">{ui}</InLanguage> : ui, { me });
+
+  it.each(['en', 'id'] as const)('P19.2-T1 AC-8 /link-account/[token], the form and linked (%s)', async (language) => {
+    const { default: LinkAccount } = await import('./(auth)/link-account/[token]/page');
+    nav.pathname = '/link-account/t';
+    stubFetch({ '/auth/links/confirm': { body: { status: 'linked' } } });
+    render(language, <LinkAccount params={routeParams({ token: 't' })} />, null);
+    await expectClean(named(language, 'link-account'));
+    await userEvent.type(screen.getByLabelText(language === 'id' ? 'Kata sandi akun ini' : 'Password of this login'), 'pw');
+    await userEvent.click(screen.getByRole('button', { name: language === 'id' ? 'Tautkan akun' : 'Link the logins' }));
+    await screen.findByRole('status');
+    await expectClean(named(language, 'link-account (linked)'));
+  });
+
+  it.each(['en', 'id'] as const)('P19.2-T1 AC-8 Profil saya with a linked login (%s)', async (language) => {
+    const { default: Profile } = await import('./profile/page');
+    nav.pathname = '/profile';
+    atWidth(375);
+    stubFetch({
+      '/auth/me/profile': { body: { companyName: 'Prudential Indonesia', agentCode: '70012345', leader: null, group: null } },
+      '/auth/sessions': { body: [] },
+      '/notifications': { body: { items: [], unread: 0 } },
+    });
+    render(language, <Profile />, makeMe({
+      user: { ...makeMe().user, fullName: 'Wilson Tanoto', email: 'owner@kpm0417.test', workStatus: 'full_time', gender: 'male' },
+      permissions: ['profile:read_self', 'account_link:manage_self'],
+      linkedLogin: {
+        linkId: 'link-1', userId: 'u-sa', email: 'wilson@agencyboost.test', fullName: 'Wilson Tanoto',
+        views: [{ kind: 'super_admin', officeName: null }],
+      },
+    }));
+    await screen.findByText('wilson@agencyboost.test');
+    await expectClean(named(language, 'profile (a linked login)'));
   });
 });

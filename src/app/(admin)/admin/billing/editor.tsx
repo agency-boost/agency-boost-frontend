@@ -10,6 +10,8 @@ import {
 } from '@/lib/billing';
 import { moneyPrefix } from '@/lib/format';
 import { cn } from '@/lib/cn';
+import { useMediaQuery } from '@/lib/use-media-query';
+import { ChoicePill } from '@/components/ui/rows-and-sheets';
 
 /**
  * The editor (`#editor-view`, `Billing_Subscription.html:234-306`): the five tier cards and *Estimate
@@ -17,23 +19,31 @@ import { cn } from '@/lib/cn';
  */
 
 /** The page's amber words, in the one amber that clears 4.5:1 as small text (a Fix, ADR-0111 §5). */
-const AMBER_TEXT = 'text-amber-ink';
+const AMBER_TEXT = 'text-primary-ink';
 
-/** The cards (`renderTierGrid`, `:436-468`): **the six-month rate on every card, whichever period is chosen** (`:456`). */
+/**
+ * The cards (`renderTierGrid`, `:436-468`): **the six-month rate on every card, whichever period is chosen** (`:456`).
+ *
+ * *Since P19.4-T3 (ADR-0211 §3; SA UI-015):* on `/admin/billing` they are **a reference strip** — no `current`, so no
+ * *"Your tier"* (*"TINGKAT ANDA"*), and no *Talk to us*, since the page holds no calculator for it to open. On a KPM's
+ * *Billing* tab they are the calculator's, as drawn.
+ */
 export function TierCards({
-  tiers, current, onTalkToUs,
+  tiers, current = null, onTalkToUs, label,
 }: {
   tiers: readonly BillingTier[];
-  current: BillingTier;
-  onTalkToUs: () => void;
+  current?: BillingTier | null;
+  onTalkToUs?: () => void;
+  /** The strip's accessible name, where it stands alone. */
+  label?: string;
 }) {
   const COPY = useMessages(billingMessages).prototype;
   const language = useLanguage();
   const figures = useFigureLanguage();
   return (
-    <ul className="mb-8 grid grid-cols-[repeat(auto-fit,minmax(170px,1fr))] gap-3">
+    <ul aria-label={label} className="mb-8 grid grid-cols-[repeat(auto-fit,minmax(170px,1fr))] gap-3">
       {tiers.map((tier) => {
-        const isCurrent = tier.code === current.code;
+        const isCurrent = current !== null && tier.code === current.code;
         const range = <span className="text-sm font-bold uppercase tracking-[0.03em] text-navy">{COPY.tierLeaders({ range: tierLabel(tier) })}</span>;
         const flag = isCurrent && (
           <span className={cn('text-2xs font-bold uppercase tracking-[0.04em]', AMBER_TEXT)}>{COPY.yourTier}</span>
@@ -43,7 +53,7 @@ export function TierCards({
             key={tier.code}
             className={cn(
               'flex flex-col gap-2 rounded-lg bg-card p-4',
-              isCurrent ? 'border-[1.5px] border-amber' : 'border border-hairline',
+              isCurrent ? 'border-[1.5px] border-primary' : 'border border-hairline',
               // The 101+ card (`.custom-card`, `:84-86`): no rate, a sentence and *Talk to us*.
               tier.customPricing && 'min-h-[150px] items-start justify-center',
             )}
@@ -52,10 +62,12 @@ export function TierCards({
             {tier.customPricing ? (
               <>
                 <p className="mb-2.5 mt-1.5 text-base text-muted">{COPY.customPricing}</p>
-                {/* A Fix: the prototype's button has no handler (`:449`). It opens the dialog. */}
-                <Button variant="secondary" onClick={onTalkToUs} className="h-auto px-4 py-2 text-base">
-                  {COPY.talkToUs}
-                </Button>
+                {/* A Fix: the prototype's button has no handler (`:449`). It opens the dialog — where there is one. */}
+                {onTalkToUs && (
+                  <Button variant="secondary" onClick={onTalkToUs} className="h-auto px-4 py-2 text-base">
+                    {COPY.talkToUs}
+                  </Button>
+                )}
               </>
             ) : (
               <>
@@ -114,6 +126,7 @@ export function Estimate({
     if (focusDiscount > 0) document.getElementById(ids.discount)?.focus();
   }, [focusDiscount, ids.discount]);
   const set = (patch: Partial<CalculatorInput>) => onInput({ ...input, ...patch });
+  const belowLaptop = useMediaQuery(['phone', 'tablet']);
   const { tier } = pricing;
   const furtherDiscount = pricing.finalMinor < pricing.offerMinor;
 
@@ -124,7 +137,7 @@ export function Estimate({
       onClick={() => set({ period })}
       className={cn(
         'rounded-[7px] px-4 py-2 text-base font-semibold',
-        input.period === period ? 'bg-navy text-white' : 'text-muted hover:text-navy',
+        input.period === period ? 'bg-secondary text-secondary-contrast' : 'text-muted hover:text-navy',
       )}
     >
       {label}
@@ -226,16 +239,32 @@ export function Estimate({
                 })}
                 className="w-[7.5rem] bg-base text-lg"
               />
-              {/* A Fix: changing the type sets the value to 0, where the prototype kept the number (`:565-570`). */}
-              <Select
-                aria-label={OWN.discountType}
-                value={input.discountType}
-                onChange={(e) => set({ discountType: e.target.value as DiscountType, discount: '0' })}
-                className="w-[9.375rem] bg-base text-lg"
-              >
-                <option value="percent">%</option>
-                <option value="flat">{COPY.flatOption({ mark: moneyPrefix(figures) })}</option>
-              </Select>
+              {/* A Fix: changing the type sets the value to 0, where the prototype kept the number (`:565-570`).
+                  **No native select below 1024px** (P19.2-T2 AC-4; UI-134: *Desktop may keep selects*): a pill saying the
+                  type, opening its two choices; a laptop keeps the select. */}
+              {belowLaptop ? (
+                <ChoicePill
+                  name={OWN.discountType}
+                  options={[
+                    { key: 'percent', label: '%' },
+                    { key: 'flat', label: COPY.flatOption({ mark: moneyPrefix(figures) }) },
+                  ]}
+                  value={input.discountType}
+                  onChange={(key) => { if (key !== input.discountType) set({ discountType: key as DiscountType, discount: '0' }); }}
+                  narrows={false}
+                  shows="value"
+                />
+              ) : (
+                <Select
+                  aria-label={OWN.discountType}
+                  value={input.discountType}
+                  onChange={(e) => set({ discountType: e.target.value as DiscountType, discount: '0' })}
+                  className="w-[9.375rem] bg-base text-lg"
+                >
+                  <option value="percent">%</option>
+                  <option value="flat">{COPY.flatOption({ mark: moneyPrefix(figures) })}</option>
+                </Select>
+              )}
             </div>
           </div>
           {pricing.discountError && (

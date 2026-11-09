@@ -4,7 +4,7 @@ import { kept } from '@/i18n/kept';
 import { SOURCE_LANGUAGE, type Language } from '@/i18n/language';
 import { kpmOverviewMessages } from '@/i18n/messages/kpm-overview';
 import { api } from './api-client';
-import { formatMonth, formatPercent, formatRupiahCompact, formatRupiahCompactPair, percentOf } from './format';
+import { formatMonth, formatPercent, formatRupiahCompact, formatRupiahCompactPair } from './format';
 
 /**
  * The KPM Overview (P18-T1, `KPM_Owner.html:936-1222`): the whole office in one scroll — Team composition,
@@ -25,7 +25,7 @@ import { formatMonth, formatPercent, formatRupiahCompact, formatRupiahCompactPai
  * Each interface is spelled out with named nested types, so `contract.spec.ts` can read its fields against
  * `backend/openapi.json`: it reads an interface's body up to the first `}`.
  *
- * **Its words are the catalogue's** (P18.98-T4; `i18n/messages/kpm-overview.ts`): each function that writes words takes
+ * **Its words are the catalogue's** (P18.10-T4; `i18n/messages/kpm-overview.ts`): each function that writes words takes
  * the reader's `language` — English, the source, when passed none, which its spec reads — and one that writes a figure
  * takes the figures' language after it (`figures`; Indonesian when passed none). Its caller passes `useLanguage()` and
  * `useFigureLanguage()`.
@@ -73,17 +73,24 @@ export interface OverviewComposition {
 }
 
 /**
- * OD-142's card, *Agents who logged activity this month*: who logged at least one activity this month,
- * and how many had by the same day last month (`null` when there is nothing to compare against).
+ * ***Aktif bulan ini*** (P19.3-T1 AC-1, P19.3-T2; ADR-0200 §2, the data sources' D1): the members whose upload for the
+ * month shows APE or a policy, over today's headcount. `count` and `pct` are `null` while the month is not uploaded —
+ * *"–"* and *Belum diunggah*, never *0 / 28* — and `asOf` names the day its rows were written (*"per 3 Nov"*, D8).
+ * Logging changes nothing in it.
  */
-export interface LoggedThisMonth {
-  count: number;
+export interface ActiveThisMonth {
+  count: number | null;
   of: number;
   pct: number | null;
-  lastMonthToDate: number | null;
+  month: string;
+  asOf: string | null;
 }
 
-/** *Activity logging — this week*: `ACTIVITY_COMPLIANCE_RATE` over the last 7 days. */
+/**
+ * ***Pengguna aktif* over the rolling 7 days** (ADR-0200 §3): who has logged and who has not — the first tile's
+ * *"7 hari: n belum ›"*, which opens *Belum mencatat · 7 hari*. *Since P19.3-T2* the only logging figure served: the
+ * month's, and its trend against last month, are gone (OWN R3 holds by there being none).
+ */
 export interface LoggedThisWeek {
   logged: number;
   notLogged: number;
@@ -91,12 +98,12 @@ export interface LoggedThisWeek {
 }
 
 export interface OverviewEngagement {
-  loggedThisMonth: LoggedThisMonth;
+  activeThisMonth: ActiveThisMonth;
   loggedThisWeek: LoggedThisWeek;
 }
 
 /**
- * One AB on *AB coaching frequency*: `LEADER_COACHING_FREQUENCY`, the last 7 days. **Every AB is listed** (P18.97-T3
+ * One AB on *AB coaching frequency*: `LEADER_COACHING_FREQUENCY`, the last 7 days. **Every AB is listed** (P18.9-T3
  * AC-5, UI-017): one who leads nobody comes last, `leads: false`, its team 0 and its rate `null` — *No team*.
  */
 export interface LeaderboardRow {
@@ -122,7 +129,11 @@ export interface OverviewCoaching {
 export interface OverviewRecruitment {
   expectedToClose: number;
   pipelineNow: number;
-  closedLastMonth: number;
+  /**
+   * *Recruitment last month* (P19.3-T1 AC-3; ADR-0200 §5, D2): the office's upload's `RECRUITMENT` for last month —
+   * `null` while it is not uploaded, which a screen draws *"–"*. Never a count of leads closed.
+   */
+  closedLastMonth: number | null;
   target: number | null;
   targetMonth: string;
 }
@@ -135,7 +146,14 @@ export interface OverviewYtd {
   achievedMinor: number | null;
   targetMinor: number | null;
   pct: number | null;
+  /**
+   * *Since P19.3-T2 (UI-150, Overview R3)*: the months the year waits on **that are still open for upload**, from the
+   * KPM's first month, this month included while it is not uploaded — each a *"<Bulan> belum diunggah ›"* opening
+   * `/kpm/data-upload?month=` on itself.
+   */
   missingMonths: string[];
+  /** The first month *"this year"* counts: January, or the KPM's first month when it began this year. */
+  from: string;
   membersWithoutGoal: number;
 }
 
@@ -162,7 +180,54 @@ export interface OverviewAgency {
 export interface OverviewProduction {
   ytd: OverviewYtd;
   projectionMinor: number | null;
+  /** The month the projection runs from (P19.3-T1 AC-12): the latest ended month held; `null` with the projection. */
+  projectionThrough: string | null;
   agencies: OverviewAgency[];
+}
+
+/**
+ * **The seven steps of *Siapkan KPM*, in the card's order** (P19.3-T2 AC-4; UI-149): the four settings pages — each the
+ * path segment of its page and of `PUT /kpm/settings/:page/reviewed` — then *Impor anggota*, *Unggah produksi*, *Atur
+ * target rekrutmen*. The server's `SETUP_STEPS`; `kpm-overview.spec.ts` holds the two together.
+ */
+export const REVIEWED_PAGES = ['branch-info', 'activity-types', 'activation-checklist', 'products'] as const;
+export type ReviewedPage = (typeof REVIEWED_PAGES)[number];
+export const SETUP_STEPS = [...REVIEWED_PAGES, 'import', 'upload', 'recruit-target'] as const;
+export type SetupStep = (typeof SETUP_STEPS)[number];
+
+/** One step and whether it is done. */
+export interface SetupStepState {
+  key: SetupStep;
+  done: boolean;
+}
+
+/** A month the office may still upload, and the last day it may. */
+export interface OverviewOpenMonth {
+  month: string;
+  closesOn: string;
+}
+
+/**
+ * ***Siapkan KPM*** (P19.3-T2 AC-4, AC-5; UI-149): served while any step is open, `null` once all seven are done — stored
+ * by the server, so the card never comes back.
+ */
+export interface OverviewSetup {
+  done: number;
+  steps: SetupStepState[];
+  /** The office's address and contact phone are both filled: step 1's meta. */
+  branchFilled: boolean;
+  /** Today's headcount: step 5's meta, *"Baru 1 anggota: Anda"*. */
+  members: number;
+  /** Step 6: the month to upload and its closing day, *"Terbuka sampai 7 Des 2026"*; `null` with none open. */
+  openMonth: OverviewOpenMonth | null;
+  /** The target standing for this month: step 7's meta. */
+  target: number | null;
+}
+
+/** What waits for the Owner on the settings pages (P19.3-T2 AC-3; UI-148, Appendix D): *Pengaturan KPM ›*'s line. */
+export interface SettingsWaiting {
+  productsAwaiting: number;
+  checklistDraftVersion: number | null;
 }
 
 /** `GET /kpm/overview`: one read for the whole screen. */
@@ -182,6 +247,8 @@ export interface KpmOverviewView {
   coaching: OverviewCoaching;
   recruitment: OverviewRecruitment;
   production: OverviewProduction;
+  setup: OverviewSetup | null;
+  settings: SettingsWaiting;
 }
 
 /** A rung as the not-logged list names it. */
@@ -190,16 +257,21 @@ export interface NotLoggedRung {
   label: string;
 }
 
-/** Somebody who has not logged in the last 7 days. `daysSince` `null` is *Never logged*. */
+/**
+ * Somebody who has not logged in the last 7 days. `daysSince` `null` is *Never logged*. *Since P19.3-T2 (AC-2)* with
+ * their leader (*"Agent · ke Sari"*) and their WhatsApp number for the D-22 reminder (UI-101).
+ */
 export interface NotLoggedMember {
   membershipId: string;
   name: string;
   rung: NotLoggedRung;
   lastLoggedOn: string | null;
   daysSince: number | null;
+  leader: OverviewPerson | null;
+  phone: string | null;
 }
 
-/** `GET /kpm/overview/not-logged`: everybody silent for 7 days, longest silent first, and how many. */
+/** `GET /kpm/overview/not-logged`: everybody silent for 7 days, the first five longest silent, and how many. */
 export interface NotLoggedList {
   total: number;
   members: NotLoggedMember[];
@@ -227,6 +299,21 @@ export const readNotLogged = () => api<NotLoggedList>('/kpm/overview/not-logged'
 export const saveRecruitTarget = (body: RecruitTarget) =>
   api<RecruitTarget>('/kpm/overview/recruit-target', { method: 'PUT', body });
 
+/** What `PUT /kpm/settings/:page/reviewed` answers: the page's step, ticked, and how it first ticked. */
+export interface SettingsReviewed {
+  page: ReviewedPage;
+  reviewed: true;
+  at: string;
+  via: 'reviewed' | 'saved' | 'derived' | 'migration';
+}
+
+/**
+ * ***Sudah sesuai*** (P19.3-T2 AC-5; UI-149): marks a settings page reviewed, which ticks its step of *Siapkan KPM* and
+ * changes nothing of the page. The Owner's and an Admin's (`tenant_config:mark_reviewed`); refused in a support session.
+ */
+export const markSettingsReviewed = (page: ReviewedPage) =>
+  api<SettingsReviewed>(`/kpm/settings/${page}/reviewed`, { method: 'PUT' });
+
 /*
  * ── The prototype's words ───────────────────────────────────────────────────────────────────────
  */
@@ -239,12 +326,12 @@ const wordsIn = (language: Language) => messagesIn(kpmOverviewMessages, language
 
 /**
  * **The strings `KPM_Owner.html` draws, in English** (D-copy), with OD-142's title for the first card — the catalogue's
- * source (`i18n/messages/kpm-overview.ts`, P18.98-T4), in the shapes this module has always handed its callers and its
+ * source (`i18n/messages/kpm-overview.ts`, P18.10-T4), in the shapes this module has always handed its callers and its
  * spec. **A screen reads the reader's language instead**: `useMessages(kpmOverviewMessages)`.
  *
- * `title` is the prototype's *KPM Overview* (`:2027`), **the nav item's word since P18.95-T9 AC-2** (ADR-0167 §10,
+ * `title` is the prototype's *KPM Overview* (`:2027`), **the nav item's word since P18.7-T9 AC-2** (ADR-0167 §10,
  * OD-205; UI-027, *menu labels = page titles*). `engagementSub` is the prototype's *Last 7 days* (`:965`), over a first
- * card that counts the month: **the two periods its cards read** since P18.97-T3 AC-6 (ADR-0176 §3, UI-020; parity
+ * card that counts the month: **the two periods its cards read** since P18.9-T3 AC-6 (ADR-0176 §3, UI-020; parity
  * I-505). `legendZero` is the bar's start, a figure in no language.
  */
 export const PROTOTYPE_COPY = {
@@ -256,11 +343,8 @@ export const PROTOTYPE_COPY = {
   recruitment: EN.recruitment,
   production: EN.production,
   totalMembers: EN.totalMembers,
-  loggedMonthTitle: EN.loggedMonthTitle,
-  loggedMonthDesc: EN.loggedMonthDesc,
-  weekTitle: EN.weekTitle,
-  weekDesc: EN.weekDesc,
-  reveal: EN.reveal,
+  activeMonth: EN.activeMonth,
+  notLoggedTitle: EN.notLoggedTitle,
   neverLogged: EN.neverLogged,
   coached7d: EN.coached7d,
   coached30d: EN.coached30d,
@@ -272,7 +356,6 @@ export const PROTOTYPE_COPY = {
   pipelineNow: EN.pipelineNow,
   unitsTitle: EN.unitsTitle,
   unitsSub: EN.unitsSub,
-  noAab: EN.noAab,
   legendZero: '0',
 } as const;
 
@@ -289,13 +372,13 @@ export const OWN_COPY = {
   noTarget: EN.noTarget,
   everybodyLogged: EN.everybodyLogged,
   noLeaders: EN.noLeaders,
-  /** Where an AB who leads nobody's rate would be (P18.97-T3 AC-5; ADR-0176 §2, the glossary's *No team*). */
+  /** Where an AB who leads nobody's rate would be (P18.9-T3 AC-5; ADR-0176 §2, the glossary's *No team*). */
   noTeam: EN.noTeam,
   noUnits: EN.noUnits,
   showFewer: EN.showFewer,
   targetInvalid: EN.targetInvalid,
   targetNotSaved: EN.targetNotSaved,
-  /** The *Target*'s control and its toast (P18.97-T3 AC-7; ADR-0176 §4, OD-200, UI-020; parity I-506). */
+  /** The *Target*'s control and its toast (P18.9-T3 AC-7; ADR-0176 §4, OD-200, UI-020; parity I-506). */
   edit: EN.edit,
   editTarget: EN.editTarget,
   targetSaved: EN.targetSaved,
@@ -332,36 +415,6 @@ export function toneOf(pct: number | null, split: number): Tone {
   return pct >= split ? 'success' : 'alert';
 }
 
-/** The trend under OD-142's card, against last month **to the same day** (D-figures). */
-export interface TrendWords {
-  direction: 'up' | 'down' | 'same';
-  lead: string;
-  change: string | null;
-}
-
-/**
- * *"Up from 138 last month (+3%)"* (`:977`) or *"Down from …"*; the change is relative to last month's
- * figure, rounded half up in integers — 142 against 138 is +3%, 23 more on 40 is +58% (`percentOf`; P18.97-T3, parity
- * F-254) — and written whole (ADR-0174 §1). With nothing logged by this day last month there is no percentage to give,
- * so the line stops at the figure. `null` — nothing to compare against — draws no line. Its words in `language`, its
- * change in `figures`.
- */
-export function trendWords(
-  now: number,
-  lastMonthToDate: number | null,
-  language: Language = SOURCE_LANGUAGE,
-  figures?: Language,
-): TrendWords | null {
-  if (lastMonthToDate === null) return null;
-  const t = wordsIn(language);
-  if (now === lastMonthToDate) return { direction: 'same', lead: t.trendSame({ now }), change: null };
-  const direction = now > lastMonthToDate ? 'up' : 'down';
-  const lead = direction === 'up' ? t.trendUp({ last: lastMonthToDate }) : t.trendDown({ last: lastMonthToDate });
-  const pct = percentOf(Math.abs(now - lastMonthToDate), lastMonthToDate);
-  if (pct === null) return { direction, lead, change: null };
-  return { direction, lead, change: `${direction === 'up' ? '+' : '−'}${formatPercent(pct, {}, figures)}` };
-}
-
 /**
  * A rung as the not-logged list writes it after a name — *"Rina Agustina — AAB"*, *"Dedy Pranata — Agent"*
  * (`:991`, `:995`): the code where it reads as an acronym, the ladder's label where it would be shouted.
@@ -369,20 +422,29 @@ export function trendWords(
  */
 export const rungShort = (rung: NotLoggedRung) => shortOfRung(rung);
 
-/** *"Last logged 9 days ago"* or *"Never logged"* (`:991-999`). */
-export function lastLoggedWords(daysSince: number | null, language: Language = SOURCE_LANGUAGE): string {
+/**
+ * **A silent member's meta line** (P19.3-T2 AC-2; UI-148, `kpm-overview-mobile` 3): *"Agent · ke Sari · 14 hari lalu"*,
+ * *"AB · Anda · 16 hari lalu"* on the reader's own row, *"Agent · ke Agus · Belum pernah"*. The rung's short form, the
+ * leader's first name, the days since the last log — or never.
+ */
+export function silentMeta(
+  member: Pick<NotLoggedMember, 'rung' | 'leader' | 'daysSince'>,
+  self: boolean,
+  language: Language = SOURCE_LANGUAGE,
+): string {
   const t = wordsIn(language);
-  return daysSince === null ? t.neverLogged : t.lastLogged({ days: daysSince });
+  const parts: string[] = [rungShort(member.rung)];
+  if (self) parts.push(t.you);
+  else if (member.leader) parts.push(t.toLeader({ name: member.leader.name.trim().split(/\s+/)[0] ?? member.leader.name }));
+  parts.push(member.daysSince === null ? t.neverLogged : t.daysAgo({ days: member.daysSince }));
+  return parts.join(' · ');
 }
-
-/** *"+ 66 more — full list on the People screen"* (`:1001`). */
-export const moreWords = (n: number, language: Language = SOURCE_LANGUAGE) => wordsIn(language).more({ n });
 
 /** *"· 31 in team"* (`:1027`). */
 export const inTeam = (n: number, language: Language = SOURCE_LANGUAGE) => wordsIn(language).inTeam({ n });
 
 /**
- * *"6/31 · 19%"* (`:1029`); ***No team*** for an AB who leads nobody (P18.97-T3 AC-5), where the figure would be — never
+ * *"6/31 · 19%"* (`:1029`); ***No team*** for an AB who leads nobody (P18.9-T3 AC-5), where the figure would be — never
  * *"0/0 · —"*, which reads as a team nobody coached. Its words in `language`, its percentage in `figures`.
  */
 export const coachedWords = (
@@ -395,11 +457,68 @@ export const coachedWords = (
 export const showingWords = (shown: number, of: number, language: Language = SOURCE_LANGUAGE) =>
   wordsIn(language).showing({ shown, of });
 
-/** How many rows a truncated list shows before *view full ranking →* (`:1024-1044`, `:1096-1218`). */
-export const RANKING_SHOWN = 4;
+/**
+ * How many rows a truncated list shows before *view full ranking →* (`:1024-1044`, `:1096-1218`). *Changed 2026-11-05
+ * (P19.2-T3 AC-5; UI-143: "3 rows each + 'Semua ›'"):* three, where the prototype showed four; *Semua n ›* opens the rest.
+ */
+export const RANKING_SHOWN = 3;
 
-/** How many silent members the reveal names before pointing to the People screen (`:986-1000`). */
+/**
+ * How many silent members the desktop's *Belum mencatat · 7 hari* card names before *Semua n ›* (`kpm-overview-desktop`
+ * 2: three rows, the lists' own count); the sheet below 1024px names every one the server sent — five
+ * (`KPM_REPORTING.NOT_LOGGED_SHOWN`, `kpm-overview-mobile` 3).
+ */
 export const SILENT_SHOWN = 3;
+
+/**
+ * **Data upload on a month** (P19.3-T2 AC-7; UI-150, the route registry's `?month=YYYY-MM`): where a *"<Bulan> belum
+ * diunggah ›"* and the setup card's step 6 go.
+ */
+export const uploadHref = (month: string) => `/kpm/data-upload?month=${encodeURIComponent(month)}`;
+
+/**
+ * **The settings pages, in the menu's order** (P19.3-T2 AC-3; UI-148, Overview R1b; `kpm-overview-mobile` 4): the
+ * Pengaturan group of the sidebar and *Lainnya* (`field-nav.ts`), which `kpm-overview.spec.ts` holds this list to.
+ * *Activity types* carries *Ratio benchmarks* under it, a page of its own — so the count says eleven.
+ */
+export const SETTINGS_PAGES = [
+  { key: 'activity-types', href: '/kpm/settings/activity-types', name: kept('Activity types') },
+  { key: 'lead-statuses', href: '/kpm/settings/lead-statuses', name: kept('Lead statuses') },
+  { key: 'activation-checklist', href: '/kpm/settings/activation-checklist', name: kept('Activation checklist') },
+  { key: 'training', href: '/kpm/settings/training', name: kept('Training') },
+  { key: 'capability-mapping', href: '/kpm/settings/capability-mapping', name: kept('Capability Mapping') },
+  { key: 'events', href: '/kpm/settings/events', name: kept('Events') },
+  { key: 'campaigns', href: '/kpm/settings/campaigns', name: kept('Campaigns') },
+  { key: 'products', href: '/kpm/settings/products', name: kept('Products') },
+  { key: 'recruitment-pitch', href: '/kpm/settings/recruitment-pitch', name: kept('Recruitment pitch') },
+  { key: 'branch-info', href: '/kpm/settings/branch-info', name: kept('Branch info') },
+] as const;
+
+/** *Ratio benchmarks*, under *Activity types*: two taps from the Overview, as every settings page is (AC-3). */
+export const RATIO_BENCHMARKS_HREF = '/kpm/settings/ratio-benchmarks';
+
+/** *"11 pengaturan"*: the ten rows and *Ratio benchmarks*. */
+export const SETTINGS_PAGE_COUNT = SETTINGS_PAGES.length + 1;
+
+/**
+ * **"Pengaturan KPM ›"'s line** (P19.3-T2 AC-3; UI-148): *"11 pengaturan · 2 produk menunggu Anda · checklist draf versi
+ * 2"* — the count, then what waits for the Owner, each part only when there is something.
+ */
+export function settingsLine(settings: SettingsWaiting, language: Language = SOURCE_LANGUAGE): string {
+  const t = wordsIn(language);
+  const parts = [t.settingsCount({ n: SETTINGS_PAGE_COUNT })];
+  if (settings.productsAwaiting > 0) parts.push(t.productsAwaiting({ n: settings.productsAwaiting }));
+  if (settings.checklistDraftVersion !== null) parts.push(t.checklistDraft({ version: settings.checklistDraftVersion }));
+  return parts.join(' · ');
+}
+
+/** Each settings page's step on the card, by the server's key (`REVIEWED_PAGES`): its page. */
+export const STEP_HREF: Record<ReviewedPage, string> = {
+  'branch-info': '/kpm/settings/branch-info',
+  'activity-types': '/kpm/settings/activity-types',
+  'activation-checklist': '/kpm/settings/activation-checklist',
+  products: '/kpm/settings/products',
+};
 
 /** The recruitment pill's paint and words, or `null` without a target: no pill is judged against nothing. */
 export interface PillWords {
@@ -418,7 +537,7 @@ export function recruitPill(expected: number, target: number | null, language: L
 }
 
 /**
- * The *Target* tile's value, read as a value (P18.97-T3 AC-7; ADR-0176 §4, UI-020): the number, or ***No target set***
+ * The *Target* tile's value, read as a value (P18.9-T3 AC-7; ADR-0176 §4, UI-020): the number, or ***No target set***
  * where the office never set one — the tile's own *Target* label above it, so it reads *Target: 15*.
  */
 export const targetValueWords = (target: number | null, language: Language = SOURCE_LANGUAGE) =>
@@ -504,7 +623,7 @@ export function leftOutWords(
 /**
  * *Last activity* and *Last coached* (`:1834`, `:4490-4519`): *Today*, *"{n} days ago"* (*"1 day ago"* at
  * one, as `ORG_STATS` writes it), or *Never*. The days are the server's, counted in the office's calendar. In the
- * reader's `language` (P18.98-T4): its caller passes `useLanguage()`; English when passed none.
+ * reader's `language` (P18.10-T4): its caller passes `useLanguage()`; English when passed none.
  */
 export function daysAgoWords(days: number | null, language: Language = SOURCE_LANGUAGE): string {
   const t = wordsIn(language);

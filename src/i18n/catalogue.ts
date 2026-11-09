@@ -3,7 +3,7 @@ import type { Kept, KeptTermOf } from './kept';
 import type { Language } from './language';
 
 /**
- * **The catalogue: every word the app writes, per module, in both languages** (ADR-0179 §4; P18.98-T1 AC-1). Our own,
+ * **The catalogue: every word the app writes, per module, in both languages** (ADR-0179 §4; P18.10-T1 AC-1). Our own,
  * with no i18n library: no runtime parser, and a message format TypeScript checks key by key.
  *
  * A module's words are one **area**, one file under `src/i18n/messages/`: its English, `en`, is the source of its
@@ -53,7 +53,7 @@ export interface MessageArea<E extends MessageTree> {
 
 /**
  * **An area**: `export const shellMessages = defineMessages({ en, id })`, at the foot of the module's file. Both
- * languages are in the module's chunk. **Where that would take a route past the 200 kB budget** (P18.98-T1 AC-2), the
+ * languages are in the module's chunk. **Where that would take a route past the 200 kB budget** (P18.10-T1 AC-2), the
  * area's languages go into two files and only the reader's is loaded — behind the same `useMessages`, so no screen
  * changes. Not built: no module needs it yet, and the first that does builds it.
  */
@@ -65,7 +65,7 @@ export function defineMessages<E extends MessageTree>(area: MessageArea<E>): Mes
  * **An area's messages in a language**, for a function outside React that writes words: it takes the reader's
  * `language` as its last parameter, defaulting to the source (`SOURCE_LANGUAGE`), which its spec reads, and its
  * caller passes `useLanguage()` — **never `useFigureLanguage()`**, which differs from it for a reader with no choice
- * whenever the switch is not live, as it was not until 2026-10-29 (P18.98-T3). A figure inside a message is written by its caller, in the figures' language,
+ * whenever the switch is not live, as it was not until 2026-10-29 (P18.10-T3). A figure inside a message is written by its caller, in the figures' language,
  * and passed in as a value.
  */
 export function messagesIn<E extends MessageTree>(area: MessageArea<E>, language: Language): MessagesOf<E> {

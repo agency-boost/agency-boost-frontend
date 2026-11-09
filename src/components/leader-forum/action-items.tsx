@@ -183,14 +183,14 @@ export function ActionItems({ meeting }: { meeting: MeetingView }) {
             ref={addButton}
             type="button"
             onClick={add}
-            className="block w-full border-t border-hairline px-3.5 py-3 text-left text-base font-semibold text-navy-soft hover:bg-navy/[0.02]"
+            className="block w-full border-t border-hairline px-3.5 py-3 text-left text-base font-semibold text-navy-soft hover:bg-secondary/[0.02]"
           >
             {t.addAction}
           </button>
         )}
       </div>
       {/* `.access-note` (`:722`, `:2842`): who may edit now (F-188). */}
-      <p className="mt-4 flex items-center gap-2 rounded-md bg-navy/[0.04] px-3.5 py-2 text-sm text-muted">
+      <p className="mt-4 flex items-center gap-2 rounded-md bg-secondary/[0.04] px-3.5 py-2 text-sm text-muted">
         {accessNoteText(meeting.accessNote, words)}
       </p>
     </div>
@@ -204,7 +204,7 @@ function arranged(items: ActionItem[], order: string[]): ActionItem[] {
   return [...placed, ...items.filter((a) => !order.includes(a.id))];
 }
 
-export const TH = 'whitespace-nowrap border-b border-hairline bg-navy/[0.02] px-3 py-2.5 text-xs font-bold uppercase tracking-[0.03em] text-muted';
+export const TH = 'whitespace-nowrap border-b border-hairline bg-secondary/[0.02] px-3 py-2.5 text-xs font-bold uppercase tracking-[0.03em] text-muted';
 export const TD = 'border-b border-hairline px-3 py-2.5 align-top text-navy';
 
 /** The six named headers (`:2838`), the print's too. */
@@ -277,7 +277,7 @@ function Row({
         'group [&:last-child>td]:border-b-0',
         dragging && 'opacity-40',
         // `tr.drag-over` (`:722`): the drop target ruled in amber along its top.
-        over && 'shadow-[inset_0_2px_0_var(--color-amber)]',
+        over && 'shadow-[inset_0_2px_0_var(--color-primary)]',
       )}
     >
       <td className={cn(cell, 'w-[26px] px-1 text-center')}>

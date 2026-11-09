@@ -24,8 +24,9 @@ import AdminOverviewPage from './page';
 import PlatformAnalyticsPage from './analytics/page';
 import AuditPage from './audit/page';
 import BillingPage from './billing/page';
+import { KpmBillingTab } from '@/components/admin/kpm-billing-tab';
 import ImpersonatePage from './impersonate/[userId]/page';
-import ElevateSessionPage from './impersonation/[sessionId]/page';
+import RetiredApprovalAddress from './impersonation/[sessionId]/page';
 import KpmRequestsPage from './kpm-requests/page';
 import LeaderLimitRequestsPage from './leader-limit-requests/page';
 import TenantAdminsPage from './tenant-admins/page';
@@ -33,13 +34,14 @@ import TenantsPage from './tenants/page';
 import NewTenantPage from './tenants/new/page';
 import TenantDetailPage from './tenants/[kpmId]/page';
 import AssignOwnerPage from './tenants/[kpmId]/owner/page';
-import TenantRosterImportPage from './tenants/[kpmId]/roster/page';
+import RetiredRosterAddress from './tenants/[kpmId]/roster/page';
 
 /**
- * **The Super Admin's console in Indonesian** (P18.98-T6 AC-1, as T4's AC-1 to AC-4): every screen of the console this
+ * **The Super Admin's console in Indonesian** (P18.10-T6 AC-1, as T4's AC-1 to AC-4): every screen of the console this
  * area moved — the Overview, *All KPMs* with *Edit subscription*, *New office*, an office's page, *Assign owner* ·
- * *Transfer owner*, *Import a roster*'s heading, *KPM Owners & Admins*, *Billing & subscription* with its dialog and
- * quote, *Cross-platform analytics*, the audit log, the two queues, a support session's two pages and its banner.
+ * *Transfer owner*, *KPM Owners & Admins*, *Billing & subscription* with its dialog and quote, *Cross-platform
+ * analytics*, the audit log, the two queues, a support session's start page and its banner. (*Import a roster* and
+ * *Approve a support session to write* are retired by P19.4-T2, ADR-0206: their addresses redirect.)
  *
  * Each in its main state: the approved glossary's words (`i18n/messages/admin-*.ts(x)`, `billing.tsx`,
  * `support-*.ts(x)`, `office-subscription.ts`), the kept terms English (§A), what an office or a person typed as typed,
@@ -67,10 +69,10 @@ const SUPER_ADMIN = makeMe({
   },
   membership: null,
   permissions: [
-    'kpm:list_all', 'kpm:create', 'kpm:read_profile', 'kpm:suspend', 'kpm:assign_owner', 'kpm:import_roster',
+    'kpm:list_all', 'kpm:create', 'kpm:read_profile', 'kpm:suspend', 'kpm:assign_owner',
     'company:crud', 'audit_log:read', 'platform_metrics:read', 'platform_analytics:read', 'billing:read_prices',
     'kpm_request:read', 'kpm_request:decide', 'leader_limit_request:read', 'leader_limit_request:decide',
-    'kpm_admin:list_platform', 'impersonation:start', 'impersonation:elevate_to_write',
+    'kpm_admin:list_platform', 'impersonation:start',
   ],
 });
 const SHELL = { '/notifications': { body: { items: [], total: 0, page: 1, pageSize: 1, unread: 0 } } };
@@ -108,7 +110,7 @@ afterEach(() => {
   resetLanguage();
 });
 
-describe('P18.98-T6 the Super Admin’s console in Indonesian', () => {
+describe('P18.10-T6 the Super Admin’s console in Indonesian', () => {
   it('reads the English it is looking for, so a silent zero cannot pass: the same page in English shows it', async () => {
     expect(ENGLISH.length).toBeGreaterThan(250);
     stubFetch({ ...SHELL, '/admin/tenants': { body: [KPM] } });
@@ -160,7 +162,9 @@ describe('P18.98-T6 the Super Admin’s console in Indonesian', () => {
     inIndonesian('/admin/tenants', <TenantsPage />);
     const table = await screen.findByRole('table', { name: 'KPM di platform' });
     expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual([
-      'Kode', 'Cabang', 'Perusahaan', 'Owner', 'Status', 'Tanggal berakhir', 'Jumlah leader', 'Langganan',
+      // P19.4-T3 AC-8 (A2): *KPM · Pemilik · Anggota · Data terakhir · Perlu tindakan*, beside the client's earlier columns.
+      'KPM', 'Perusahaan', 'Owner', 'Anggota', 'Data terakhir', 'Perlu tindakan', 'Status', 'Tanggal berakhir', 'Jumlah leader',
+      'Langganan',
     ]);
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^All KPMs$/);
     expect(screen.getByRole('link', { name: 'KPM baru' })).toHaveAttribute('href', '/admin/tenants/new');
@@ -230,7 +234,11 @@ describe('P18.98-T6 the Super Admin’s console in Indonesian', () => {
     expect(screen.getByText('2–16 karakter: huruf, angka, dan tanda hubung.')).toBeInTheDocument();
     expect(screen.getByLabelText('Nama cabang')).toBeInTheDocument();
     expect(screen.getByText('Asia/Jakarta')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Buat KPM' })).toBeDisabled();
+    // *Changed 2026-11-06 (P19.2-T2 AC-3; UI-133):* the main button is enabled; pressed, each field says what it needs
+    // in Indonesian and nothing is sent, where the button was disabled.
+    expect(screen.getByRole('button', { name: 'Buat KPM' })).toBeEnabled();
+    await userEvent.click(screen.getByRole('button', { name: 'Buat KPM' }));
+    expect(screen.getByLabelText('Nama cabang')).toHaveAccessibleDescription(expect.stringContaining('Wajib diisi.'));
     await userEvent.selectOptions(select, 'empty');
     // ADR-0185 §5: Kosong says, once, that it cannot be filled later.
     expect(screen.getByText('Hanya tiga jenis aktivitas yang dihitung rencana goal. Tidak dapat diisi dari template nanti.'))
@@ -242,42 +250,55 @@ describe('P18.98-T6 the Super Admin’s console in Indonesian', () => {
     stubFetch({ ...SHELL, '/admin/tenants/kpm-1': { body: { ...KPM, subscriptionState: 'ended_kept_active', subscription: { ...SUBSCRIPTION, endDate: '2026-10-02', keepActiveAfterEnd: true }, suspendedReason: 'tagihan belum dibayar' } } });
     inIndonesian('/admin/tenants/kpm-1', <TenantDetailPage params={routeParams({ kpmId: 'kpm-1' })} />);
     expect(await screen.findByText('Berakhir 2 Okt 2026 — tetap aktif')).toBeInTheDocument();
-    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['Profil', 'Owner', 'People', 'Siklus hidup']);
+    // P19.4-T3 AC-9: *Ringkasan*'s cards — the Owner, the Admins, the members — then the KPM's profile and lifecycle.
+    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['Owner', 'Admin', 'Anggota', 'Profil', 'Siklus hidup']);
     expect(screen.getByText('ID KPM')).toBeInTheDocument();
     expect(screen.getByText('Mata uang')).toBeInTheDocument();
     expect(screen.getByText('Ditangguhkan: tagihan belum dibayar')).toBeInTheDocument();
     expect([...(screen.getByLabelText('Status') as HTMLSelectElement).options].map((o) => o.textContent))
       .toEqual(['Aktif', 'Ditangguhkan', 'Diarsipkan']);
-    expect(screen.getByRole('link', { name: 'Pindahkan Owner' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Buka sebagai Owner' })).toHaveAttribute('href', '/admin/impersonate/u-owner?purpose=setup&kpmId=kpm-1');
-    expect(screen.getByRole('link', { name: 'Impor roster' })).toBeInTheDocument();
+    // P19-T3 (UI-168 point 4), P19.4-T3 AC-9: the Owner's card's *Ganti pemilik*; and *Buka sebagai Owner*, which only
+    // looks (P19.4-T2 AC-1) — for a reader whose grants open them.
+    expect(screen.queryByRole('link', { name: 'Impor roster' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Terapkan' })).toBeInTheDocument();
     noEnglishLeft();
   });
 
-  it('AC-1, AC-4 Transfer owner: the current Owner as stored, the refusal under the field, the way to make an account', async () => {
+  it('AC-1, AC-4 P19-T3 AC-5 Ganti Owner: the current Owner as stored, the picker, and an invitation to an address with no account', async () => {
     stubFetch({
       ...SHELL,
-      '/admin/tenants/kpm-1/owner': { status: 404, body: { error: { code: 'NOT_FOUND', message: 'Pengguna tidak ditemukan.', requestId: 'r' } } },
+      '/admin/accounts': { body: [] },
       '/admin/tenants/kpm-1': { body: KPM },
     });
     inIndonesian('/admin/tenants/kpm-1/owner', <AssignOwnerPage params={routeParams({ kpmId: 'kpm-1' })} />);
-    expect(await screen.findByRole('heading', { level: 1, name: 'Pindahkan Owner' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Ganti Owner' })).toBeInTheDocument();
     expect(screen.getByText(/^Owner saat ini adalah/)).toHaveTextContent(
       'Owner saat ini adalah Rina Wijaya (rina@kpm0417.test). Pemindahan dicatat di audit',
     );
-    expect(screen.getByRole('link', { name: 'Buat akun' })).toHaveAttribute('href', '/register');
-    await userEvent.type(screen.getByLabelText('Email'), 'nobody@nowhere.test');
-    await userEvent.click(screen.getByRole('button', { name: 'Pindahkan' }));
+    expect(screen.getByRole('button', { name: 'Ganti' })).toBeDisabled();
+    await userEvent.type(screen.getByLabelText('Cari akun'), 'nobody@nowhere.test');
     expect(await screen.findByText('Tidak ada akun yang memakai alamat itu.')).toBeInTheDocument();
+    // P19.4-T3 AC-6 (ADR-0212 §3): the person is named and invited by the API — no `mailto:` asking them to register.
+    expect(screen.getByRole('heading', { name: 'Jadikan pemilik dan undang' })).toBeInTheDocument();
+    for (const label of ['Nama', 'No. WhatsApp', 'Kode agen pemilik']) expect(screen.getByLabelText(label)).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: 'Kirim undangan lewat email' })).toBeChecked();
+    expect(screen.getByRole('button', { name: 'Jadikan pemilik dan undang' })).toBeDisabled();
+    expect(screen.queryByRole('link', { name: 'Kirim undangan' })).toBeNull();
     noEnglishLeft();
   });
 
-  it('AC-1 Import a roster: its heading (the import itself is the people module’s)', async () => {
-    stubFetch({ ...SHELL, '/admin/tenants/roster-template': { body: { header: 'fullName,email', columns: [], template: 'fullName,email\n', examples: [] } } });
-    inIndonesian('/admin/tenants/kpm-1/roster', <TenantRosterImportPage params={routeParams({ kpmId: 'kpm-1' })} />);
-    expect(await screen.findByRole('heading', { level: 1, name: 'Impor roster' })).toBeInTheDocument();
-    expect(screen.getByText('Buat semua orang di KPM ini dari spreadsheet.')).toBeInTheDocument();
+  /*
+   * **P19.4-T2 AC-1, AC-3: the two retired addresses** (ADR-0206 §3, §6) redirect, and say nothing in either language
+   * while they do: a skeleton, no English left.
+   */
+  it('P19.4-T2 the retired roster and approval addresses: a skeleton, nothing in English, while they redirect', () => {
+    stubFetch({ ...SHELL });
+    const { unmount } = inIndonesian('/admin/tenants/kpm-1/roster', <RetiredRosterAddress params={routeParams({ kpmId: 'kpm-1' })} />);
+    expect(screen.queryByText(/Impor roster|Import a roster/)).toBeNull();
+    noEnglishLeft();
+    unmount();
+    inIndonesian('/admin/impersonation/s1', <RetiredApprovalAddress />);
+    expect(screen.queryByText(/Setujui|Approve/)).toBeNull();
     noEnglishLeft();
   });
 
@@ -302,13 +323,41 @@ describe('P18.98-T6 the Super Admin’s console in Indonesian', () => {
     noEnglishLeft();
   });
 
-  it('AC-1, AC-3 Billing & subscription: the cards, the estimate, a refusal, the dialog and the quote', async () => {
+  it('P19.4-T3 AC-10 Billing & subscription: the tiers strip and the KPMs, with no “Tingkat Anda”', async () => {
+    stubFetch({
+      ...SHELL,
+      '/admin/billing/prices': { body: { currency: 'IDR', tiers: TIERS, annualDiscountPct: 5 } },
+      '/admin/billing/kpms': {
+        body: [
+          { kpmId: 'kpm-1', code: '0417', branch: 'BSD City Branch', company: { id: 'co-1', name: 'Prudential' }, leadersUsed: 9, tier: { code: 'TIER_1_10', minLeaders: 1, maxLeaders: 10 }, plan: 'annual', renewalDate: '2027-01-05', status: 'active' },
+          { kpmId: 'kpm-2', code: '0601', branch: 'Cikarang Branch', company: { id: 'co-1', name: 'Prudential' }, leadersUsed: 1, tier: { code: 'TIER_1_10', minLeaders: 1, maxLeaders: 10 }, plan: 'six_months', renewalDate: '2026-09-25', status: 'ended' },
+          { kpmId: 'kpm-3', code: '0100', branch: 'Sudirman', company: { id: 'co-2', name: 'Manulife' }, leadersUsed: 0, tier: { code: 'TIER_1_10', minLeaders: 1, maxLeaders: 10 }, plan: null, renewalDate: null, status: 'none' },
+        ],
+      },
+    });
+    inIndonesian('/admin/billing', <BillingPage />);
+    const table = await screen.findByRole('table');
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Billing & subscription$/);
+    expect(within(table).getAllByRole('columnheader').map((h) => h.textContent?.replace(/[▲▼⇅]/g, '').trim()))
+      .toEqual(['KPM', 'Perusahaan', 'Leader', 'Tingkat', 'Paket', 'Perpanjangan', 'Status']);
+    expect(within(table).getByText('Tahunan')).toBeInTheDocument();
+    expect(within(table).getByText('6 bulan')).toBeInTheDocument();
+    expect(within(table).getByText('Berakhir')).toBeInTheDocument();
+    expect(within(table).getByText('Belum ada langganan')).toBeInTheDocument();
+    expect(within(table).getByText('5 Jan 2027')).toBeInTheDocument();
+    expect(screen.getByRole('list', { name: 'Tingkat harga' })).toBeInTheDocument();
+    expect(screen.queryByText('Tingkat Anda')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Perusahaan')).toHaveDisplayValue('Semua perusahaan');
+    noEnglishLeft();
+  });
+
+  it('AC-1, AC-3 a KPM’s Billing tab: the cards, the estimate, a refusal, the dialog and the quote', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-10-07T18:30:00Z'));
     stubFetch({ ...SHELL, '/admin/billing/prices': { body: { currency: 'IDR', tiers: TIERS, annualDiscountPct: 5 } } });
-    inIndonesian('/admin/billing', <BillingPage />);
+    // P19.4-T3 AC-10 (ADR-0211 §4): the calculator moved to the KPM's *Billing* tab, filled with its 8 leaders.
+    inIndonesian('/admin/tenants/kpm-1', <KpmBillingTab kpm={{ ...KPM, leadersUsed: 8, subscription: null } as unknown as TenantRow} />);
     expect(await screen.findByText('Perkirakan harga Anda')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Billing & subscription$/);
     const grid = screen.getByText('Tingkat Anda').closest('ul') as HTMLElement;
     const cards = within(grid).getAllByRole('listitem').map((c) => c.textContent);
     expect(cards[0]).toBe('1–10 leadersRp 500.000/blnRp 400.000 /leader/blnHemat 20%Tingkat Anda');
@@ -330,12 +379,13 @@ describe('P18.98-T6 the Super Admin’s console in Indonesian', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Kirim penawaran' }));
     const dialog = screen.getByRole('dialog', { name: 'Kirim penawaran' });
     expect(within(dialog).getByLabelText('Tanggal mulai')).toHaveAttribute('placeholder', 'HH/BB/TTTT');
+    // The KPM's own name, read-only, and its Owner as the PIC (ADR-0211 §4).
+    expect(within(dialog).getByLabelText('Nama KPM')).toHaveValue('KPM 0417 · BSD City Branch');
+    await userEvent.clear(within(dialog).getByLabelText('Nama PIC'));
     await userEvent.click(within(dialog).getByRole('button', { name: 'Buat penawaran' }));
-    expect(within(dialog).getByText('Isi nama KPM.')).toBeInTheDocument();
     expect(within(dialog).getByText('Isi nama PIC.')).toBeInTheDocument();
     noEnglishLeft();
 
-    await userEvent.type(within(dialog).getByLabelText('Nama KPM'), 'Jakarta Selatan');
     await userEvent.type(within(dialog).getByLabelText('Nama PIC'), 'Andi Wijaya');
     await userEvent.type(within(dialog).getByLabelText('Diisi oleh sales'), 'Maya');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Buat penawaran' }));
@@ -349,6 +399,7 @@ describe('P18.98-T6 the Super Admin’s console in Indonesian', () => {
     expect(within(quote).getByText('Penanggung jawab (PIC)').nextElementSibling).toHaveTextContent('Andi Wijaya');
     expect(quote).toHaveTextContent('AgencyBoost');
     expect(screen.getByRole('button', { name: 'Cetak / simpan sebagai PDF' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Kirim ke Rina Wijaya' })).toBeInTheDocument();
     noEnglishLeft();
   });
 
@@ -357,7 +408,7 @@ describe('P18.98-T6 the Super Admin’s console in Indonesian', () => {
     const session = makeSession({ me: SUPER_ADMIN });
     const at = (language: 'id' | 'en') => (
       <SessionContext.Provider value={session}>
-        <Suspense fallback={null}><InLanguage language={language}><BillingPage /></InLanguage></Suspense>
+        <Suspense fallback={null}><InLanguage language={language}><KpmBillingTab kpm={{ ...KPM, leadersUsed: 8, subscription: null } as unknown as TenantRow} /></InLanguage></Suspense>
       </SessionContext.Provider>
     );
     const { rerender } = render(at('id'));
@@ -392,7 +443,7 @@ describe('P18.98-T6 the Super Admin’s console in Indonesian', () => {
       },
     });
     inIndonesian('/admin/analytics', <PlatformAnalyticsPage />);
-    const table = await screen.findByRole('table', { name: 'Adopsi per cabang dan perusahaan' });
+    const table = await screen.findByRole('table', { name: 'Adopsi per KPM dan perusahaan' });
     expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual([
       'Kode', 'Cabang', 'Perusahaan', 'Status', 'Anggota', 'Per jenjang', 'Bergabung pada Okt 2026', 'Keluar pada Okt 2026',
       'Masuk dalam 7 hari terakhir', 'Masuk dalam 30 hari terakhir',
@@ -401,8 +452,8 @@ describe('P18.98-T6 the Super Admin’s console in Indonesian', () => {
     const office = within(table).getByRole('row', { name: /^0417/ });
     expect(within(office).getByText('Ditangguhkan')).toBeInTheDocument();
     expect(within(office).getByText('1.072 (80%)')).toBeInTheDocument();
-    expect(within(table).getByText('Prudential — Total (1 cabang)')).toBeInTheDocument();
-    expect(within(table).getByText('Platform — Total (1 perusahaan, 1 cabang)')).toBeInTheDocument();
+    expect(within(table).getByText('Prudential — Total (1 KPM)')).toBeInTheDocument();
+    expect(within(table).getByText('Platform — Total (1 perusahaan, 1 KPM)')).toBeInTheDocument();
     noEnglishLeft();
   });
 
@@ -411,11 +462,15 @@ describe('P18.98-T6 the Super Admin’s console in Indonesian', () => {
       ...SHELL,
       '/admin/tenants': { body: [] },
       '/admin/audit': {
-        body: [{
-          _id: 'a-1', actorUserId: 'u-root', actorName: 'Root Operator', effectiveUserId: 'u-owner', effectiveName: 'Rangga Wibisono',
-          action: 'kpm.created', targetCollection: 'kpms', targetId: 'kpm-1', targetLabel: '0417 · Surabaya Branch',
-          createdAt: '2026-10-04T02:00:00.000Z',
-        }],
+        body: {
+          items: [{
+            _id: 'a-1', actorUserId: 'u-root', actorName: 'Root Operator', effectiveUserId: 'u-owner', effectiveName: 'Rangga Wibisono',
+            action: 'kpm.created', targetCollection: 'kpms', targetId: 'kpm-1', targetLabel: '0417 · Surabaya Branch',
+            createdAt: '2026-10-04T02:00:00.000Z', count: 3, oldestAt: '2026-10-04T01:55:00.000Z',
+          }],
+          page: { cursor: null, nextCursor: 'cur-2', limit: 50, hasMore: true },
+          facets: { actions: ['kpm.created'], actors: [{ userId: 'u-root', name: 'Root Operator' }] },
+        },
       },
     });
     inIndonesian('/admin/audit', <AuditPage />);
@@ -426,7 +481,14 @@ describe('P18.98-T6 the Super Admin’s console in Indonesian', () => {
     expect(within(table).getByText('kpms')).toBeInTheDocument();
     expect(within(table).getByText('sebagai Rangga Wibisono')).toBeInTheDocument();
     expect(within(table).getByText('4 Okt 2026, 09.00')).toBeInTheDocument();
-    expect(screen.getByRole('option', { name: 'Tingkat platform (tanpa KPM)' })).toBeInTheDocument();
+    // P19.2-T2 AC-6: the chips, the count pill and *Muat lagi*, the mockups' own words.
+    expect(screen.getByRole('button', { name: 'Cakupan: Tingkat platform (tanpa KPM)' })).toBeInTheDocument();
+    for (const chip of ['Perusahaan', 'Tindakan', 'Pelaku', 'Tanggal']) {
+      expect(screen.getByRole('button', { name: new RegExp(`^${chip}: `) })).toBeInTheDocument();
+    }
+    expect(within(table).getByText('×3')).toBeInTheDocument();
+    expect(within(table).getByText('3 kali')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Muat lagi' })).toBeInTheDocument();
     noEnglishLeft();
   });
 
@@ -434,12 +496,24 @@ describe('P18.98-T6 the Super Admin’s console in Indonesian', () => {
     const req = (over: Record<string, unknown> = {}) => ({
       requestId: 'req-1', branchName: 'Surabaya Branch', companyId: 'co-1', companyName: 'Prudential',
       requestedByName: 'Rangga Wibisono', requestedByEmail: 'rangga@example.test', note: 'Sudah ada dua belas agen.',
-      status: 'pending', requestedAt: '2026-09-01T00:00:00.000Z', decidedAt: null, reason: null, createdKpmId: null, ...over,
+      status: 'pending', requestedAt: '2026-09-01T00:00:00.000Z', decidedAt: null, reason: null, createdKpmId: null,
+      requestedByPhone: '+62 812 3456 7890', requesterCompanyId: 'co-1', requesterCompanyName: 'Prudential',
+      requesterEmailVerified: true, createdKpm: null, ...over,
     });
-    stubFetch({ ...SHELL, '/admin/kpm-requests': { body: [req(), req({ requestId: 'req-2', branchName: 'Medan Branch', status: 'declined', reason: 'Sudah ada KPM 0417.' })] } });
+    stubFetch({
+      ...SHELL,
+      '/admin/kpm-requests': { body: [req(), req({ requestId: 'req-2', branchName: 'Medan Branch', status: 'declined', reason: 'Sudah ada KPM 0417.' })] },
+      '/companies': { body: [{ _id: 'co-1', name: 'Prudential' }] },
+    });
     inIndonesian('/admin/kpm-requests', <KpmRequestsPage />);
     expect(await screen.findByText('Surabaya Branch')).toBeInTheDocument();
-    expect(screen.getByText(/diajukan oleh/)).toHaveTextContent('Prudential · diajukan oleh Rangga Wibisono (calon KPM Owner) · rangga@example.test');
+    // P19-T3 AC-1: name, email, phone and the date; the company is the picker below.
+    expect(screen.getByText(/diajukan oleh/)).toHaveTextContent(
+      'diajukan oleh Rangga Wibisono (calon KPM Owner) · rangga@example.test · +62 812 3456 7890 · 1 Sep 2026',
+    );
+    expect(screen.getByLabelText('Perusahaan')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Setujui & jadikan Owner' })).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Hapus' }).length).toBe(2);
     expect(screen.getByText('Sudah ada dua belas agen.')).toBeInTheDocument();
     expect(screen.getByText('Menunggu')).toBeInTheDocument();
     expect(screen.getByLabelText('Kode KPM')).toBeInTheDocument();
@@ -470,7 +544,7 @@ describe('P18.98-T6 the Super Admin’s console in Indonesian', () => {
     noEnglishLeft();
   });
 
-  it('AC-1 Act as another user: the consequences, the two purposes, the person and their office named', async () => {
+  it('AC-1 P19.4-T2 AC-1 Act as another user: the consequences, Hanya melihat with no choice, the person and their office', async () => {
     nav.search = new URLSearchParams({ purpose: 'setup', kpmId: 'kpm-1' });
     stubFetch({ ...SHELL, '/admin/tenants/kpm-1': { body: KPM } });
     inIndonesian('/admin/impersonate/u-owner', <ImpersonatePage params={routeParams({ userId: 'u-owner' })} />);
@@ -480,9 +554,12 @@ describe('P18.98-T6 the Super Admin’s console in Indonesian', () => {
       'Setiap tindakan Anda dicatat atas nama kedua pihak: Anda dan Rina Wijaya, Owner KPM 0417 · BSD City Branch.',
     );
     expect(screen.getByText('Sesi ini dibatasi waktu dan tidak dapat melebihi 60 menit.')).toBeInTheDocument();
-    expect(screen.getByRole('group', { name: 'Untuk apa sesi ini?' })).toBeInTheDocument();
-    expect(screen.getByRole('radio', { name: /^Penyiapan/ })).toBeChecked();
-    expect(screen.getByRole('radio', { name: /^Hanya melihat/ })).not.toBeChecked();
+    // P19.4-T2 AC-1 (UI-151): one kind of session, said and not chosen — whatever an old address says.
+    expect(screen.getByText('Hanya melihat')).toBeInTheDocument();
+    expect(screen.getByText('Lihat layarnya tanpa mengubah apa pun. Setiap perubahan ditolak selama Anda melihat sebagai dia.'))
+      .toBeInTheDocument();
+    expect(screen.queryByRole('radio')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Penyiapan|Untuk apa sesi ini/)).not.toBeInTheDocument();
     await userEvent.clear(screen.getByLabelText('Durasi (menit)'));
     await userEvent.type(screen.getByLabelText('Durasi (menit)'), '90');
     expect(screen.getByText('Antara 1 dan 60.')).toBeInTheDocument();
@@ -491,29 +568,15 @@ describe('P18.98-T6 the Super Admin’s console in Indonesian', () => {
     noEnglishLeft();
   });
 
-  it('AC-1 Approve a support session to write: the rules, a reason too short, and the approval', async () => {
-    stubFetch({ '/admin/impersonation/s1/elevate': { status: 204, body: null } });
-    renderInIndonesian(<ElevateSessionPage params={routeParams({ sessionId: 's1' })} />, { me: SUPER_ADMIN });
-    expect(screen.getByRole('heading', { level: 1, name: 'Setujui sesi dukungan untuk mengubah data' })).toBeInTheDocument();
-    expect(screen.getByText('Anda tidak dapat menyetujui sesi Anda sendiri.')).toBeInTheDocument();
-    await userEvent.type(screen.getByLabelText('Mengapa melihat saja tidak cukup?'), 'perbaiki');
-    expect(screen.getByText('Minimal 10 karakter.')).toBeInTheDocument();
-    noEnglishLeft();
-    await userEvent.type(screen.getByLabelText('Mengapa melihat saja tidak cukup?'), ' kode ganda di taksonomi');
-    await userEvent.click(screen.getByRole('button', { name: 'Setujui sesi ini untuk mengubah data' }));
-    expect(await screen.findByRole('status')).toHaveTextContent('Disetujui. Sesi itu kini dapat mengubah data');
-    expect(screen.getByRole('button', { name: 'Kembali ke konsol' })).toBeInTheDocument();
-    noEnglishLeft();
-  });
-
-  it.each([
-    ['a support session', { impersonationReadOnly: true, impersonationPurpose: 'support' as const }, 'Anda dapat melihat tetapi tidak dapat mengubah apa pun — Super Admin kedua harus menyetujuinya.'],
-    ['a setup session', { impersonationReadOnly: true, impersonationPurpose: 'setup' as const }, 'Ini sesi penyiapan: Anda dapat mengubah pengaturan KPM, mengimpor orang, dan mengunggah file produksi, dan tidak lebih.'],
-    ['an elevated session', { impersonationReadOnly: false, impersonationPurpose: 'setup' as const }, 'Sesi ini dapat mengubah data. Sesi ini disetujui oleh Super Admin kedua.'],
-  ])('AC-1 the banner in %s', (_kind, session, sentence) => {
-    renderInIndonesian(<ImpersonationBanner />, { me: makeMe({ isImpersonating: true, impersonatedBy: 'u-root', ...session }) });
+  it('AC-1 P19.4-T2 AC-5 the banner: the session only looks', () => {
+    renderInIndonesian(<ImpersonationBanner />, {
+      me: makeMe({ isImpersonating: true, impersonatedBy: 'u-root', impersonationReadOnly: true }),
+    });
     const banner = screen.getByRole('status');
-    expect(banner).toHaveTextContent(`Anda bertindak sebagai Rina. ${sentence} Semua yang Anda lakukan juga dicatat atas nama Anda.`);
+    expect(banner).toHaveTextContent(
+      'Anda bertindak sebagai Rina. Ini sesi hanya melihat: Anda dapat melihat, dan tidak ada yang bisa diubah. '
+      + 'Semua yang Anda lakukan juga dicatat atas nama Anda.',
+    );
     expect(screen.getByRole('button', { name: 'Berhenti bertindak sebagai dia' })).toBeInTheDocument();
     noEnglishLeft();
   });
@@ -535,7 +598,7 @@ describe('P18.98-T6 the Super Admin’s console in Indonesian', () => {
   });
 });
 
-describe('P18.98-T6 the console’s lib functions, language by language', () => {
+describe('P18.10-T6 the console’s lib functions, language by language', () => {
   const row = { ...KPM, subscriptionState: 'ended_kept_active' as const, subscription: { ...SUBSCRIPTION, endDate: '2026-10-02' } };
 
   it('an office’s status, subscription line and leaders, the words and the figures each in their own language', () => {

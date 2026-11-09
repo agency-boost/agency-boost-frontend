@@ -12,12 +12,12 @@ import type { Lead } from '@/lib/leads';
 import { callLink, saveLeadPhone, saveMemberPhone, whatsAppHref } from '@/lib/phone-number';
 import { useOpenedOnce } from '@/lib/use-opened-once';
 
-/** WhatsApp's chat link with a message typed in: `lib/phone-number.ts`' (P18.99-T16), re-exported for this module's importers. */
+/** WhatsApp's chat link with a message typed in: `lib/phone-number.ts`' (P18.11-T16), re-exported for this module's importers. */
 export { whatsAppHref } from '@/lib/phone-number';
 
 /**
  * ***Isi nomor WhatsApp***, downloaded the first time a button without a number is pressed, and mounted from then on
- * (`useOpenedOnce`; P18.99-T16, the bundle): most rows have a number, and a tap on them opens WhatsApp, not the sheet.
+ * (`useOpenedOnce`; P18.11-T16, the bundle): most rows have a number, and a tap on them opens WhatsApp, not the sheet.
  */
 const PhoneNumberSheet = dynamic(() => import('@/components/phone-number-sheet').then((m) => m.PhoneNumberSheet), { ssr: false });
 
@@ -70,8 +70,10 @@ export function ContactButtons({
     call: callLink(number),
   };
 
-  const circle = cn(
-    'flex shrink-0 items-center justify-center rounded-full text-white',
+  // The glyph's colour is the fill's own: white on WhatsApp's green, the secondary's contrast on the secondary (P19.6-T1).
+  const circle = (channel: Channel) => cn(
+    'flex shrink-0 items-center justify-center rounded-full',
+    channel === 'whatsapp' ? 'text-white' : 'text-secondary-contrast',
     size === 36 ? 'h-9 w-9' : 'h-10 w-10',
   );
   const tap = 'relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full lg:h-auto lg:w-auto';
@@ -79,7 +81,7 @@ export function ContactButtons({
   const button = (channel: Channel) => {
     const label = channel === 'whatsapp' ? t.contact.whatsApp({ name }) : t.contact.call({ name });
     const face = (
-      <span className={cn(circle, channel === 'whatsapp' ? 'bg-whatsapp' : 'bg-navy')}>
+      <span className={cn(circle(channel), channel === 'whatsapp' ? 'bg-whatsapp' : 'bg-secondary')}>
         <LineIcon name={channel === 'whatsapp' ? 'whatsapp' : 'phone'} className={size === 36 ? 'h-[18px] w-[18px]' : 'h-5 w-5'} />
       </span>
     );

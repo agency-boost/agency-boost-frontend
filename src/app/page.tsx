@@ -31,6 +31,6 @@ export default function Home() {
 
   // Always a hand-off. Rendering content here as well would mean two screens claiming to
   // be home, and which one you saw would depend on how fast the redirect ran.
-  // Nothing in it is words to paint in the wrong language (`sessionWait`, P18.98-T2): it is never held back for one.
+  // Nothing in it is words to paint in the wrong language (`sessionWait`, P18.10-T2): it is never held back for one.
   return <PageSkeleton label={t.takingYouToYourWork} sessionWait />;
 }

@@ -27,11 +27,11 @@ const OFFICE = {
 const ENGLISH = /\b(KPM code|Branch name|Company|tagged by|Address|Contact phone|Nobody yet|Financial year|January|March|May|June|July|August|October|December|Time zone|Save|Saved)\b/;
 
 /**
- * **P18.98-T4, Settings › Branch info in ID mode**: the form's words the approved glossary's Indonesian, its title,
+ * **P18.10-T4, Settings › Branch info in ID mode**: the form's words the approved glossary's Indonesian, its title,
  * *KPM*, *KPM Owner* and *Superadmin* English (§A), the office's own details as typed, and the months by their
  * Indonesian names. In English: `page.spec.tsx`.
  */
-describe('P18.98-T4 Settings › Branch info in Indonesian', () => {
+describe('P18.10-T4 Settings › Branch info in Indonesian', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it('AC-2 labels the form in Indonesian, the kept terms English and the office’s details as typed', async () => {

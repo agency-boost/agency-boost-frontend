@@ -3,7 +3,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 /**
- * A tab strip's behaviour on a phone (ADR-0167; UI-013; P18.95-T1 AC-8): the edge fade on the side that
+ * A tab strip's behaviour on a phone (ADR-0167; UI-013; P18.7-T1 AC-8): the edge fade on the side that
  * has more, and the current tab scrolled into view. Its classes are `phone.ts`'s `TAB_ROW_PHONE` and
  * `TAB_PHONE`; the fade itself is drawn by `globals.css` below 768px only.
  */
@@ -50,7 +50,7 @@ const useBeforePaint = typeof window === 'undefined' ? useEffect : useLayoutEffe
 
 /**
  * The current tab, by what the strip already says about it: `aria-current` on a link, `aria-selected` on a tab,
- * `aria-pressed` on a filter's toggle button — the catalog's category pills (P18.95-T6 AC-4).
+ * `aria-pressed` on a filter's toggle button — the catalog's category pills (P18.7-T6 AC-4).
  */
 const CURRENT = '[aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"]';
 

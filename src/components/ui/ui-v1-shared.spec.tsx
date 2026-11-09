@@ -158,10 +158,10 @@ describe('PersonRow, Avatar, TreeToggle, TreeIndent (UI V1, UI-059 / UI-073; D-0
 
   it('UI-059 the reader’s own row navy with white words; an AAB tinted; an agent white with the desktop hover', () => {
     const { rerender } = render(<PersonRow name="Agus" tone="self" href="/unit/dashboard" />);
-    expect(document.querySelector('[data-person-row]')).toHaveClass('bg-navy');
-    expect(screen.getByRole('link')).toHaveClass('text-white');
+    expect(document.querySelector('[data-person-row]')).toHaveClass('bg-secondary');
+    expect(screen.getByRole('link')).toHaveClass('text-secondary-contrast');
     rerender(<PersonRow name="Sari" tone="tinted" href="/x" />);
-    expect(document.querySelector('[data-person-row]')!.className).toContain('bg-amber/[0.12]');
+    expect(document.querySelector('[data-person-row]')!.className).toContain('bg-primary/[0.12]');
     rerender(<PersonRow name="Dimas" href="/x" />);
     expect(document.querySelector('[data-person-row]')).toHaveClass('bg-card', 'lg:hover:bg-hover-row');
   });
@@ -252,7 +252,7 @@ describe('TonePill and ActivityPill (UI V1, UI-005, UI-059, UI-101; D-27)', () =
         <ActivityPill count={null} onTint />
       </>,
     );
-    expect(screen.getByText('5 aktivitas')).toHaveClass('bg-amber', 'text-navy', 'font-bold');
+    expect(screen.getByText('5 aktivitas')).toHaveClass('bg-primary', 'text-primary-contrast', 'font-bold');
     const [none, tinted] = screen.getAllByText('Belum lapor');
     expect(none).toHaveClass('bg-base', 'text-muted');
     expect(tinted).toHaveClass('bg-card');
@@ -465,7 +465,7 @@ describe('Save state (UI V1, UI-019, UI-039, UI-015)', () => {
     expect(pill).toHaveClass('lg:hidden', 'inset-x-3');
     expect(within(pill as HTMLElement).getByRole('status')).toHaveTextContent('Belum disimpan');
     const save = screen.getByRole('button', { name: 'Simpan goal' });
-    expect(save).toHaveClass('min-h-11', 'bg-amber');
+    expect(save).toHaveClass('min-h-11', 'bg-primary');
     await userEvent.click(save);
     expect(onSave).toHaveBeenCalled();
   });

@@ -2,9 +2,15 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { SettingsScreen, TenantConfigBars } from '@/components/settings-screen';
+import { SettingsReviewed } from '@/components/settings-reviewed';
+import { ActivityBindingSheet } from '@/components/activity-binding-sheet';
 import { ActionMenu, type ActionMenuItem } from '@/components/ui/action-menu';
 import { ConfigBadge } from '@/components/ui/config-badge';
 import { DragHandle } from '@/components/ui/drag-handle';
+import { ListCard, ListRow } from '@/components/ui/list-rows';
+import { ReorderArrows } from '@/components/ui/reorder-arrows';
+import { ResponsiveSheet } from '@/components/ui/responsive-sheet';
+import { TonePill } from '@/components/ui/tone-pill';
 import { ACTIVITY_SETTINGS_TABS } from '@/components/settings-tabs';
 import { EmptyState } from '@/components/ui/empty-state';
 import {
@@ -22,8 +28,11 @@ import { projectStaged, unstageRow } from '@/lib/staged-projection';
 import { planSummaryTile, summaryGroups, summaryTileName, tileRefusal } from '@/lib/summary-tiles';
 import { reservedRefusal } from '@/lib/reserved-types';
 import { BINDING_ROLE_LABEL, readOwnActivityBinding, rolesByCode, type BindingRole } from '@/lib/activity-binding';
+import { ACTIVITY_SHORT_LABEL_MAX } from '@/lib/activity-text';
 import { useTenantConfig } from '@/lib/tenant-config-cache';
 import { useMediaQuery } from '@/lib/use-media-query';
+import { usePhone } from '@/lib/use-phone';
+import { ARCHIVED_SWITCH_ROW, CHECK_LINE_TOUCH, HANDLE_TOUCH, TEXT_BUTTON_TOUCH } from '../settings-touch';
 import {
   applyConfigChanges,
   stageChange,
@@ -39,7 +48,7 @@ import {
 type Opener = 'rename' | 'scope';
 
 /*
- * **The chip on a bound type: the stage it counts as** (P18.97-T4 AC-1, ADR-0176 §3; the client's UI-022: *"Set
+ * **The chip on a bound type: the stage it counts as** (P18.9-T4 AC-1, ADR-0176 §3; the client's UI-022: *"Set
  * Appointment Set appointment"* read as a name and its alias run together). It is no name of the type but the cascade
  * stage the office's activity binding counts it as (ADR-0163 §3), so it says so — *Counts as: Sales meeting* — on the
  * quiet chip the prototype draws for the activity a cascade column counts (`.activity-tag`, `Overall.html:718-721`).
@@ -77,15 +86,22 @@ export default function ActivityTypesPage() {
   const language = useLanguage();
   const canWrite = useCan('tenant_config:write');
   /*
-   * **Below 1024px a section's three actions sit behind one ⋮** (P18.97-T6 AC-3, ADR-0178 §2; the client's UI-037:
+   * **Below 1024px a section's three actions sit behind one ⋮** (P18.9-T6 AC-3, ADR-0178 §2; the client's UI-037:
    * *Rename*, *Change who it applies to* and *Archive the section* wrapped to two rows on a phone and three on a
    * tablet). Asked where the page mounts, before its read, so the sections never draw one way and then the other;
    * from 1024px the hook answers false and the row is the inline links it was, to the byte.
    */
   const belowDesktop = useMediaQuery(['phone', 'tablet']);
   /*
-   * **Which types the office's activity binding names** (ADR-0163 §3, P18.9-T2 AC-3): the Owner and the Admin read
-   * it, the Super Admin keeps it. A bound type wears its role beside its name — the explicit request of the product
+   * **Below 768px a type is one line, and its editor is in its sheet** (P19.2-T3 AC-3; UI-141: *Activity types … same
+   * row + sheet*, 3.6 screens at 375). The section's card, its ⋮ and *Add* stay; from 768px the rows are as they were.
+   */
+  const phone = usePhone();
+  /** The type whose sheet is open, on a phone. */
+  const [sheetFor, setSheetFor] = useState<string | null>(null);
+  /*
+   * **Which types the office's activity binding names** (ADR-0163 §3, P18.6-T2 AC-3): the Owner and the Admin read
+   * it, and since P19.4-T3 set it (*Pengaitan aktivitas*, ADR-0206 §1); the Super Admin reads it. A bound type wears its role beside its name — the explicit request of the product
    * owner, 2026-10-26 — and is the one an archive refuses. A failed read leaves the names unmarked.
    */
   const canReadBinding = useCan('activity_binding:read');
@@ -98,9 +114,15 @@ export default function ActivityTypesPage() {
   const [published, setPublished] = useState(0);
   const [busy, setBusy] = useState<string | null>(null);
   const [adding, setAdding] = useState<string | null>(null);
-  const [draft, setDraft] = useState({ code: '', label: '', description: '' });
+  const [draft, setDraft] = useState({ code: '', label: '', shortLabel: '', description: '' });
   const [editing, setEditing] = useState<string | null>(null);
   const [editLabel, setEditLabel] = useState('');
+  /*
+   * ***Nama singkat*** (P19.8-T4 AC-5, ADR-0229 §5; MOB UI-180): a type's second name, the one line the Unit Dashboard's
+   * activity table shows. One field beside the name wherever the name is edited (ADR-0062: the smallest footprint) — the
+   * phone's sheet, the row's editor, the add form — sent as `shortLabel`, `null` when left empty.
+   */
+  const [editShortLabel, setEditShortLabel] = useState('');
   const [editDescription, setEditDescription] = useState('');
   // Section-level controls (P4-T18). The ladder is the company's (ADR-0012): this reads it.
   const { ladder } = useTenantConfig();
@@ -114,7 +136,7 @@ export default function ActivityTypesPage() {
    */
   const [renaming, setRenaming] = useState<string | null>(null);
   /*
-   * **Where the focus goes when a section's editor opens and closes** (WCAG 2.4.3; P18.97-T4, parity F-255). *Rename*
+   * **Where the focus goes when a section's editor opens and closes** (WCAG 2.4.3; P18.9-T4, parity F-255). *Rename*
    * and *Change who it applies to* replace the line they sit on with an editor, so the control that opened it is gone
    * the moment it is chosen — and the focus with it, to the top of the page. Each section's line is held here, so
    * opening moves the focus to the editor's first control and closing gives it back to what opened it: the inline
@@ -351,6 +373,7 @@ export default function ActivityTypesPage() {
           code: String(body.code ?? ''),
           categoryCode: category.code,
           label: String(body.label ?? ''),
+          shortLabel: body.shortLabel ? String(body.shortLabel) : null,
           description: body.description ? String(body.description) : null,
           appliesToOrgLevelCodes: [],
           displayOrder: category.types.length + 1,
@@ -365,7 +388,7 @@ export default function ActivityTypesPage() {
 
   /*
    * **A section's actions, once** — the inline links from 1024px and the ⋮'s items below it do the same four things
-   * (P18.97-T6 AC-3), so the two cannot come to differ. Archiving and restoring are staged, as every edit here is.
+   * (P18.9-T6 AC-3), so the two cannot come to differ. Archiving and restoring are staged, as every edit here is.
    */
   type Section = (typeof shown)[number];
   const startRename = (category: Section) => {
@@ -406,6 +429,168 @@ export default function ActivityTypesPage() {
       : { label: t.restoreSection, disabled: busy !== null, onSelect: () => restoreSection(category) },
   ];
 
+  /** A type's number circle: its place among the live rows, and an empty dashed one for an archived row. */
+  const numberOf = (type: ActivityTypeRow) => (
+    <span
+      className={cn(
+        'flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-bold',
+        liveNumber.has(type.id)
+          ? 'border-2 border-secondary text-navy'
+          : 'border border-dashed border-hairline text-transparent',
+      )}
+      aria-hidden
+    >
+      {liveNumber.get(type.id) ?? '–'}
+    </span>
+  );
+
+  /**
+   * **A section's types on a phone** (P19.2-T3 AC-3; UI-141): one 56px line each — its number, its name, its description
+   * or *archived*, a staged mark when it has one — whose › opens the type's sheet.
+   */
+  function phoneTypes(types: Section['types']) {
+    return (
+      <ListCard className="mt-2">
+        {types.map(({ row: type, staged: typeMark }) => (
+          <ListRow
+            key={type.id}
+            data-row={type.id}
+            lead={numberOf(type)}
+            title={type.label}
+            meta={type.status === 'archived' ? s.archivedLine : type.description ?? undefined}
+            trailing={typeMark ? <TonePill tone="amber">{s.staged.mark[typeMark]}</TonePill> : undefined}
+            haspopup
+            onSelect={() => {
+              setSheetFor(type.id);
+              setEditLabel(type.label);
+              setEditShortLabel(type.shortLabel ?? '');
+              setEditDescription(type.description ?? '');
+            }}
+          />
+        ))}
+      </ListCard>
+    );
+  }
+
+  /**
+   * **A type's sheet, on a phone**: what its row held from 768px — its stage, its description, a staged mark and *Undo*
+   * — with its editor open (the code, the label, the description; *Save* pinned), ↑ and ↓, and *Archive* or *Restore*
+   * last. Every edit is staged, as on the row.
+   */
+  function typeSheet() {
+    const found = sheetFor === null ? null
+      : shown.flatMap((c) => c.types).find(({ row }) => row.id === sheetFor) ?? null;
+    const type = found?.row ?? null;
+    const typeMark = found?.staged ?? null;
+    const close = () => setSheetFor(null);
+    const visible = shown.flatMap((c) => c.types).map(({ row }) => row.id);
+    return (
+      <ResponsiveSheet
+        open={type !== null}
+        title={type?.label ?? ''}
+        onClose={close}
+        footer={type && canWrite ? (
+          <Button
+            className="w-full"
+            disabled={!editLabel.trim() || busy !== null}
+            onClick={() => {
+              stage({
+                op: 'type.update',
+                id: type.id,
+                expectedVersion: type.version,
+                body: { label: editLabel, shortLabel: editShortLabel.trim() || null, description: editDescription },
+              });
+              close();
+            }}
+          >
+            {s.save}
+          </Button>
+        ) : undefined}
+      >
+        {type && (
+          <div className="flex flex-col gap-3">
+            {bound.has(type.code) && (
+              <p>
+                <ConfigBadge tone="navy" className="normal-case tracking-normal">
+                  <span title={t.countsAsTip({ stage: BINDING_ROLE_LABEL[bound.get(type.code)!] })}>
+                    {t.countsAs({ stage: BINDING_ROLE_LABEL[bound.get(type.code)!] })}
+                  </span>
+                </ConfigBadge>
+              </p>
+            )}
+            {type.status === 'archived' && <p className="text-sm text-muted">{s.archivedLine}</p>}
+            {typeMark && (
+              <p className="flex flex-wrap items-center gap-2 text-sm">
+                <TonePill tone="amber">{s.staged.mark[typeMark]}</TonePill>
+                <Button variant="inline" onClick={() => setStaged((now) => unstageRow(now, 'type', type.id))}>
+                  {s.undo}
+                </Button>
+              </p>
+            )}
+            {canWrite ? (
+              <>
+                <CodeField id={`code-type-code-${type.code}`} value={type.code} reason={t.codeReason} />
+                <Field label={s.label} htmlFor={`label-${type.id}`}>
+                  <TextInput id={`label-${type.id}`} value={editLabel} onChange={(e) => setEditLabel(e.target.value)} />
+                </Field>
+                <ShortLabelField
+                  id={`short-label-${type.id}`}
+                  value={editShortLabel}
+                  onChange={setEditShortLabel}
+                  label={t.shortLabel}
+                  hint={t.shortLabelHint({ max: ACTIVITY_SHORT_LABEL_MAX })}
+                />
+                <Field label={s.description} htmlFor={`description-${type.id}`} hint={t.descriptionHint}>
+                  <TextInput
+                    id={`description-${type.id}`}
+                    value={editDescription}
+                    onChange={(e) => setEditDescription(e.target.value)}
+                  />
+                </Field>
+                <div className="flex flex-wrap items-center gap-2">
+                  <ReorderArrows
+                    label={type.label}
+                    index={visible.indexOf(type.id)}
+                    count={visible.length}
+                    disabled={busy !== null}
+                    onMove={(by) => move(flat, type.id, by)}
+                  />
+                  <span className="ml-auto">
+                    {type.status === 'active' ? (
+                      <Button
+                        variant="inlineDanger"
+                        disabled={busy !== null}
+                        onClick={() => {
+                          stage({ op: 'type.archive', id: type.id, expectedVersion: type.version });
+                          close();
+                        }}
+                      >
+                        {s.archive}
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="inline"
+                        disabled={busy !== null}
+                        onClick={() => {
+                          stage({ op: 'type.restore', id: type.id, expectedVersion: type.version });
+                          close();
+                        }}
+                      >
+                        {s.restore}
+                      </Button>
+                    )}
+                  </span>
+                </div>
+              </>
+            ) : (
+              type.description && <p className="text-md text-navy">{type.description}</p>
+            )}
+          </div>
+        )}
+      </ResponsiveSheet>
+    );
+  }
+
   /**
    * The badge an agent sees beside a row, counted over the **live** rows only.
    *
@@ -434,6 +619,8 @@ export default function ActivityTypesPage() {
       title={kept('Activity types')}
       subtitle={t.subtitle}
       permission="tenant_config:read"
+      // P19.3-T2 AC-5 (UI-149): *Sudah sesuai*, step 2 of the KPM setup card (Activity types and Ratio benchmarks).
+      actions={<SettingsReviewed page="activity-types" />}
       tabs={ACTIVITY_SETTINGS_TABS}
       error={error}
       bars={(
@@ -464,7 +651,11 @@ export default function ActivityTypesPage() {
            reversible act teaches people to dismiss confirms. */
         actions: (
           <>
-            <label className="flex items-center gap-2 text-md text-navy">
+            {/* *Pengaitan aktivitas* (P19.4-T3; ADR-0206 §1): the office's own binding, set here by the Owner and the
+                Admin since the Super Admin no longer writes it; the markers below follow a save. */}
+            <ActivityBindingSheet onSaved={(binding) => setBound(rolesByCode(binding))} />
+            {/* A 44px switch row below 1024px (P19.2-T3 AC-4; UI-142), the checkbox it was from 1024px. */}
+            <label className={cn('flex items-center gap-2 text-md text-navy', ARCHIVED_SWITCH_ROW)}>
               <input
                 type="checkbox"
                 checked={showArchived}
@@ -562,7 +753,7 @@ export default function ActivityTypesPage() {
                  the browser lifts the handle button instead of the section. */
               data-row={category.id}
               className={[
-                over === category.id ? 'ring-2 ring-amber' : '',
+                over === category.id ? 'ring-2 ring-primary' : '',
                 dragging?.kind === 'section' && dragging.id === category.id ? 'opacity-40' : '',
               ].filter(Boolean).join(' ')}
               onDragOver={(e) => {
@@ -589,8 +780,20 @@ export default function ActivityTypesPage() {
                   <DragHandle
                     label={category.label}
                     disabled={busy !== null}
+                    // 44 × 44px below 1024px (P19.2-T3 AC-4; UI-142: *⠿ 20px*).
+                    className={HANDLE_TOUCH}
                     onPick={() => setDragging({ kind: 'section', id: category.id })}
                     onDrop={() => { setDragging(null); setOver(null); }}
+                    onMove={(by) => moveSection(category.id, by)}
+                  />
+                )}
+                {/* On a phone a drag never starts: ↑ and ↓ beside the handle move the section (P19.2-T3 AC-3). */}
+                {canWrite && phone && (
+                  <ReorderArrows
+                    label={category.label}
+                    index={shown.findIndex((c) => c.id === category.id)}
+                    count={shown.length}
+                    disabled={busy !== null}
                     onMove={(by) => moveSection(category.id, by)}
                   />
                 )}
@@ -598,12 +801,12 @@ export default function ActivityTypesPage() {
                 <span className="ml-auto flex items-center gap-2">
                   {category.staged && (
                     <>
-                      <span className="whitespace-nowrap rounded-full bg-amber/20 px-2 py-0.5 text-sm text-navy">
+                      <span className="whitespace-nowrap rounded-full bg-primary/20 px-2 py-0.5 text-sm text-navy">
                         {s.staged.mark[category.staged]}
                       </span>
                       <button
                         type="button"
-                        className="text-sm font-semibold text-navy underline"
+                        className={cn('text-sm font-semibold text-navy underline', TEXT_BUTTON_TOUCH)}
                         onClick={() => setStaged((now) => unstageRow(now, 'category', category.id))}
                       >
                         {s.undo}
@@ -634,7 +837,7 @@ export default function ActivityTypesPage() {
                       <ul className="mt-1 flex flex-wrap gap-3">
                         {ladder.map((rung) => (
                           <li key={rung.code}>
-                            <label className="flex items-center gap-1.5 text-md text-navy">
+                            <label className={cn('flex items-center gap-1.5 text-md text-navy', CHECK_LINE_TOUCH)}>
                               <input
                                 type="checkbox"
                                 checked={rungs.includes(rung.code)}
@@ -697,7 +900,7 @@ export default function ActivityTypesPage() {
                         * **The summary tile: one field, in the edit that already exists** (ADR-0064,
                         * ADR-0062 §2). A name, offering the tiles the office already has; sections
                         * with the same one share a tile above the Activity Dashboard (Log Activity draws
-                        * a tile per section since P18.95-T5 AC-2).
+                        * a tile per section since P18.7-T5 AC-2).
                         */}
                       <Field
                         label={t.summaryTile}
@@ -806,178 +1009,189 @@ export default function ActivityTypesPage() {
                 )}
               </div>
 
-              <ul className="mt-3 flex flex-col divide-y divide-hairline">
-                {category.types.map(({ row: type, staged: typeMark }) => (
-                  <li
-                    key={type.id}
-                    className={`flex flex-wrap items-center gap-3 py-3 ${
-                      over === type.id ? 'bg-canvas' : ''
-                    } ${dragging?.id === type.id ? 'opacity-40' : ''}`}
-                    onDragOver={(e) => {
-                      if (!dragging || dragging.kind !== 'type') return;
-                      e.preventDefault();
-                      setOver(type.id);
-                    }}
-                    onDragLeave={() => setOver((now) => (now === type.id ? null : now))}
-                    onDrop={(e) => { e.preventDefault(); drop(type.id); }}
-                  >
-                    {canWrite && (
-                      <DragHandle
-                        label={type.label}
-                        disabled={busy !== null}
-                        className="cursor-grab select-none text-md text-muted disabled:cursor-not-allowed"
-                        onPick={() => setDragging({ kind: 'type', id: type.id })}
-                        onDrop={() => { setDragging(null); setOver(null); }}
-                        onMove={(by) => move(flat, type.id, by)}
-                      />
-                    )}
-                    {/*
-                      * No number on an archived row. It is out of the sequence the agent sees,
-                      * and numbering it would put back the gap this is here to remove — the
-                      * empty circle keeps the rows aligned with each other.
-                      */}
-                    <span
-                      className={cn(
-                        'flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-bold',
-                        liveNumber.has(type.id)
-                          ? 'border-2 border-navy text-navy'
-                          : 'border border-dashed border-hairline text-transparent',
-                      )}
-                      aria-hidden
+              {phone ? phoneTypes(category.types) : (
+                <ul className="mt-3 flex flex-col divide-y divide-hairline">
+                  {category.types.map(({ row: type, staged: typeMark }) => (
+                    <li
+                      key={type.id}
+                      className={`flex flex-wrap items-center gap-3 py-3 ${
+                        over === type.id ? 'bg-canvas' : ''
+                      } ${dragging?.id === type.id ? 'opacity-40' : ''}`}
+                      onDragOver={(e) => {
+                        if (!dragging || dragging.kind !== 'type') return;
+                        e.preventDefault();
+                        setOver(type.id);
+                      }}
+                      onDragLeave={() => setOver((now) => (now === type.id ? null : now))}
+                      onDrop={(e) => { e.preventDefault(); drop(type.id); }}
                     >
-                      {liveNumber.get(type.id) ?? '–'}
-                    </span>
-
-                    <div className="min-w-0 flex-1">
-                      {editing === type.id ? (
-                        <div className="flex flex-col gap-2">
-                          {/* The code, shown and not editable. `readOnly` rather than
-                              `disabled`: the old argument — that disabled reads as "not
-                              right now", and this is never — still holds, and read-only
-                              answers it without leaving the tab order or refusing to be
-                              copied, which is half of why it is on screen. */}
-                          <CodeField
-                            id={`code-type-code-${type.code}`}
-                            value={type.code}
-                            reason={t.codeReason}
-                          />
-                          <FieldRow>
-                            <Field label={s.label} htmlFor={`label-${type.id}`} className="min-w-60 flex-1">
-                              <TextInput
-                                id={`label-${type.id}`}
-                                value={editLabel}
-                                onChange={(e) => setEditLabel(e.target.value)}
-                              />
-                            </Field>
-                            <Field
-                              label={s.description}
-                              htmlFor={`description-${type.id}`}
-                              hint={t.descriptionHint}
-                              className="min-w-60 flex-1"
-                            >
-                              <TextInput
-                                id={`description-${type.id}`}
-                                value={editDescription}
-                                onChange={(e) => setEditDescription(e.target.value)}
-                              />
-                            </Field>
-                          </FieldRow>
-                          <div className="flex flex-wrap gap-2">
-                            <Button
-                              disabled={!editLabel.trim() || busy !== null}
-                              onClick={() => {
-                                stage({
-                                  op: 'type.update',
-                                  id: type.id,
-                                  expectedVersion: type.version,
-                                  body: { label: editLabel, description: editDescription },
-                                });
-                                setEditing(null);
-                              }}
-                            >
-                              {s.save}
-                            </Button>
-                            <Button variant="secondary" onClick={() => setEditing(null)}>{s.cancel}</Button>
-                          </div>
-                        </div>
-                      ) : (
-                        <>
-                          <p className="text-md text-navy">
-                            {type.label}
-                            {/* The stage it counts as, said as one, and set apart from the name (P18.97-T4 AC-1). */}
-                            {bound.has(type.code) && (
-                              <ConfigBadge
-                                tone="navy"
-                                className="ml-2 align-middle normal-case tracking-normal"
-                              >
-                                <span title={t.countsAsTip({ stage: BINDING_ROLE_LABEL[bound.get(type.code)!] })}>
-                                  {t.countsAs({ stage: BINDING_ROLE_LABEL[bound.get(type.code)!] })}
-                                </span>
-                              </ConfigBadge>
-                            )}
-                          </p>
-                          {type.description && (
-                            <p className="text-sm text-muted">{type.description}</p>
-                          )}
-                          {type.status === 'archived' && (
-                            <p className="mt-0.5 text-sm text-muted">{s.archivedLine}</p>
-                          )}
-                          {typeMark && (
-                            <p className="mt-1 text-sm">
-                              <span className="rounded-full bg-amber/20 px-2 py-0.5 text-navy">
-                                {s.staged.mark[typeMark]}
-                              </span>
-                              <button
-                                type="button"
-                                className="ml-2 font-semibold text-navy underline"
-                                onClick={() => setStaged((now) => unstageRow(now, 'type', type.id))}
-                              >
-                                {s.undo}
-                              </button>
-                            </p>
-                          )}
-                        </>
+                      {canWrite && (
+                        <DragHandle
+                          label={type.label}
+                          disabled={busy !== null}
+                          className={HANDLE_TOUCH}
+                          onPick={() => setDragging({ kind: 'type', id: type.id })}
+                          onDrop={() => { setDragging(null); setOver(null); }}
+                          onMove={(by) => move(flat, type.id, by)}
+                        />
                       )}
-                    </div>
+                      {/*
+                        * No number on an archived row. It is out of the sequence the agent sees,
+                        * and numbering it would put back the gap this is here to remove — the
+                        * empty circle keeps the rows aligned with each other.
+                        */}
+                      <span
+                        className={cn(
+                          'flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-bold',
+                          liveNumber.has(type.id)
+                            ? 'border-2 border-secondary text-navy'
+                            : 'border border-dashed border-hairline text-transparent',
+                        )}
+                        aria-hidden
+                      >
+                        {liveNumber.get(type.id) ?? '–'}
+                      </span>
 
-                    {canWrite && editing !== type.id && (
-                      <div className="flex shrink-0 flex-wrap items-center gap-2">
-                        <Button
-                          variant="inline"
-                          onClick={() => {
-                            setEditing(type.id);
-                            setEditLabel(type.label);
-                            setEditDescription(type.description ?? '');
-                          }}
-                        >
-                          {s.edit}
-                        </Button>
-                        {type.status === 'active' ? (
-                          <Button
-                            variant="inlineDanger"
-                            disabled={busy !== null}
-                            onClick={() => stage({
-                              op: 'type.archive', id: type.id, expectedVersion: type.version,
-                            })}
-                          >
-                            {s.archive}
-                          </Button>
+                      <div className="min-w-0 flex-1">
+                        {editing === type.id ? (
+                          <div className="flex flex-col gap-2">
+                            {/* The code, shown and not editable. `readOnly` rather than
+                                `disabled`: the old argument — that disabled reads as "not
+                                right now", and this is never — still holds, and read-only
+                                answers it without leaving the tab order or refusing to be
+                                copied, which is half of why it is on screen. */}
+                            <CodeField
+                              id={`code-type-code-${type.code}`}
+                              value={type.code}
+                              reason={t.codeReason}
+                            />
+                            <FieldRow>
+                              <Field label={s.label} htmlFor={`label-${type.id}`} className="min-w-60 flex-1">
+                                <TextInput
+                                  id={`label-${type.id}`}
+                                  value={editLabel}
+                                  onChange={(e) => setEditLabel(e.target.value)}
+                                />
+                              </Field>
+                              <ShortLabelField
+                                id={`short-label-${type.id}`}
+                                value={editShortLabel}
+                                onChange={setEditShortLabel}
+                                label={t.shortLabel}
+                                hint={t.shortLabelHint({ max: ACTIVITY_SHORT_LABEL_MAX })}
+                                className="min-w-48"
+                              />
+                              <Field
+                                label={s.description}
+                                htmlFor={`description-${type.id}`}
+                                hint={t.descriptionHint}
+                                className="min-w-60 flex-1"
+                              >
+                                <TextInput
+                                  id={`description-${type.id}`}
+                                  value={editDescription}
+                                  onChange={(e) => setEditDescription(e.target.value)}
+                                />
+                              </Field>
+                            </FieldRow>
+                            <div className="flex flex-wrap gap-2">
+                              <Button
+                                disabled={!editLabel.trim() || busy !== null}
+                                onClick={() => {
+                                  stage({
+                                    op: 'type.update',
+                                    id: type.id,
+                                    expectedVersion: type.version,
+                                    body: { label: editLabel, shortLabel: editShortLabel.trim() || null, description: editDescription },
+                                  });
+                                  setEditing(null);
+                                }}
+                              >
+                                {s.save}
+                              </Button>
+                              <Button variant="secondary" onClick={() => setEditing(null)}>{s.cancel}</Button>
+                            </div>
+                          </div>
                         ) : (
-                          <Button
-                            variant="inline"
-                            disabled={busy !== null}
-                            onClick={() => stage({
-                              op: 'type.restore', id: type.id, expectedVersion: type.version,
-                            })}
-                          >
-                            {s.restore}
-                          </Button>
+                          <>
+                            <p className="text-md text-navy">
+                              {type.label}
+                              {/* The stage it counts as, said as one, and set apart from the name (P18.9-T4 AC-1). */}
+                              {bound.has(type.code) && (
+                                <ConfigBadge
+                                  tone="navy"
+                                  className="ml-2 align-middle normal-case tracking-normal"
+                                >
+                                  <span title={t.countsAsTip({ stage: BINDING_ROLE_LABEL[bound.get(type.code)!] })}>
+                                    {t.countsAs({ stage: BINDING_ROLE_LABEL[bound.get(type.code)!] })}
+                                  </span>
+                                </ConfigBadge>
+                              )}
+                            </p>
+                            {type.description && (
+                              <p className="text-sm text-muted">{type.description}</p>
+                            )}
+                            {type.status === 'archived' && (
+                              <p className="mt-0.5 text-sm text-muted">{s.archivedLine}</p>
+                            )}
+                            {typeMark && (
+                              <p className="mt-1 text-sm">
+                                <span className="rounded-full bg-primary/20 px-2 py-0.5 text-navy">
+                                  {s.staged.mark[typeMark]}
+                                </span>
+                                <button
+                                  type="button"
+                                  className={cn('ml-2 font-semibold text-navy underline', TEXT_BUTTON_TOUCH)}
+                                  onClick={() => setStaged((now) => unstageRow(now, 'type', type.id))}
+                                >
+                                  {s.undo}
+                                </button>
+                              </p>
+                            )}
+                          </>
                         )}
                       </div>
-                    )}
-                  </li>
-                ))}
-              </ul>
+
+                      {canWrite && editing !== type.id && (
+                        <div className="flex shrink-0 flex-wrap items-center gap-2">
+                          <Button
+                            variant="inline"
+                            onClick={() => {
+                              setEditing(type.id);
+                              setEditLabel(type.label);
+                              setEditShortLabel(type.shortLabel ?? '');
+                              setEditDescription(type.description ?? '');
+                            }}
+                          >
+                            {s.edit}
+                          </Button>
+                          {type.status === 'active' ? (
+                            <Button
+                              variant="inlineDanger"
+                              disabled={busy !== null}
+                              onClick={() => stage({
+                                op: 'type.archive', id: type.id, expectedVersion: type.version,
+                              })}
+                            >
+                              {s.archive}
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="inline"
+                              disabled={busy !== null}
+                              onClick={() => stage({
+                                op: 'type.restore', id: type.id, expectedVersion: type.version,
+                              })}
+                            >
+                              {s.restore}
+                            </Button>
+                          )}
+                        </div>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
 
               {canWrite && (adding === category.code ? (
                 <FieldRow className="mt-3 border-t border-hairline pt-3">
@@ -1001,6 +1215,14 @@ export default function ActivityTypesPage() {
                       onChange={(e) => setDraft({ ...draft, label: e.target.value })}
                     />
                   </Field>
+                  <ShortLabelField
+                    id={`new-short-label-${category.id}`}
+                    value={draft.shortLabel}
+                    onChange={(shortLabel) => setDraft({ ...draft, shortLabel })}
+                    label={t.shortLabel}
+                    hint={t.shortLabelHint({ max: ACTIVITY_SHORT_LABEL_MAX })}
+                    className="min-w-48"
+                  />
                   {/* `draft.description` was sent from the first day and no input was ever
                       bound to it, so it was always the empty string. */}
                   <Field
@@ -1026,11 +1248,12 @@ export default function ActivityTypesPage() {
                             code: draft.code,
                             categoryCode: category.code,
                             label: draft.label,
+                            ...(draft.shortLabel.trim() ? { shortLabel: draft.shortLabel.trim() } : {}),
                             description: draft.description || undefined,
                           },
                         });
                         setAdding(null);
-                        setDraft({ code: '', label: '', description: '' });
+                        setDraft({ code: '', label: '', shortLabel: '', description: '' });
                       }}
                     >
                       {s.add}
@@ -1042,7 +1265,7 @@ export default function ActivityTypesPage() {
                 <Button
                   variant="secondary"
                   className="mt-3"
-                  onClick={() => { setAdding(category.code); setDraft({ code: '', label: '', description: '' }); }}
+                  onClick={() => { setAdding(category.code); setDraft({ code: '', label: '', shortLabel: '', description: '' }); }}
                 >
                   {t.addTo({ name: category.label })}
                 </Button>
@@ -1051,6 +1274,8 @@ export default function ActivityTypesPage() {
           ))}
         </div>
       )}
+
+      {phone && typeSheet()}
 
       {/* The tiles a section can join: the office's groups as they will be, staged edits included. */}
       {canWrite && (
@@ -1061,5 +1286,21 @@ export default function ActivityTypesPage() {
         </datalist>
       )}
     </SettingsScreen>
+  );
+}
+
+/**
+ * ***Nama singkat*** (P19.8-T4 AC-5, ADR-0229 §5; MOB UI-180): one field beside the name, held to the server's bound
+ * (`ACTIVITY_SHORT_LABEL_MAX`, mirrored) so the limit is heard before a round trip; the hint says where the words show.
+ */
+function ShortLabelField({
+  id, value, onChange, label, hint, className,
+}: {
+  id: string; value: string; onChange: (next: string) => void; label: string; hint: string; className?: string;
+}) {
+  return (
+    <Field label={label} htmlFor={id} hint={hint} className={className}>
+      <TextInput id={id} value={value} maxLength={ACTIVITY_SHORT_LABEL_MAX} onChange={(e) => onChange(e.target.value)} />
+    </Field>
   );
 }

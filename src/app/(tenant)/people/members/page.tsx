@@ -11,13 +11,12 @@ import { EmptyState } from '@/components/ui/empty-state';
 import {
   Button, ErrorBanner, Field, FieldRow, Select, TextInput,
 } from '@/components/ui/field';
-import { TAP_TARGET, TEXT_TAP } from '@/components/ui/phone';
+import { FilterChips, SearchPill, type FilterChip } from '@/components/ui/list-rows';
 import { RoleBadge, rungShort, useLadder } from '@/components/ui/role-badge';
-import { CardField, CardFields, RowCard, RowCards } from '@/components/ui/row-cards';
 import { SkeletonCards, SkeletonTable } from '@/components/ui/skeleton';
 import { StatusPill } from '@/components/ui/status-pill';
 import {
-  BELOW_DESKTOP_ROW, TAB_BELOW_DESKTOP, TAB_ROW_BELOW_DESKTOP, UNDERLINED_ROW_BELOW_DESKTOP,
+  BELOW_DESKTOP_ROW, TAB_BELOW_DESKTOP, TAB_ROW_BELOW_DESKTOP,
 } from '@/components/ui/tablet';
 import { useTabRow } from '@/components/ui/use-tab-row';
 import { kept } from '@/i18n/kept';
@@ -32,7 +31,7 @@ import { CORE_LEADER_LABEL } from '@/lib/profile-line';
 import { displayName } from '@/lib/display-name';
 import { useDebounced } from '@/lib/use-debounced';
 import { useCan } from '@/lib/session';
-import { usePhone } from '@/lib/use-phone';
+import { useMediaQuery } from '@/lib/use-media-query';
 import { declineRequest, readInbox, approveRequest, type PendingRequest } from '@/lib/join';
 import { dayInZone, formatCalendarDay, formatDateTime, formatOfficeDay, OFFICE_TIME_ZONE } from '@/lib/format';
 import {
@@ -45,6 +44,7 @@ import {
   listGroups,
   listMembers,
   readOrgTree,
+  type OrgTree,
   readRoleChangeLog,
   setCoreLeader,
   updateGroup,
@@ -55,6 +55,7 @@ import {
   type MemberStatus,
   type RoleChangeEntry,
 } from '@/lib/org';
+import { MemberRows } from './member-rows';
 
 /**
  * All Members › Directory (`KPM_Owner.html:1826-1837`).
@@ -76,9 +77,6 @@ const ROLE_INDENT: Record<HierarchyRole, string> = {
   aab: 'block pl-4',
   agent: 'block pl-8',
 };
-
-/** The same steps on a phone's card, half the table's (`Tables as cards`): its 16px gutter and 12px a step in. */
-const CARD_INDENT: Record<HierarchyRole, number> = { ab: 16, aab: 28, agent: 40 };
 
 const STATUS_TO_PILL: Record<MemberStatus, 'success' | 'alert' | 'neutral'> = {
   active: 'success',
@@ -151,11 +149,20 @@ export default function MembersPage() {
   const figures = useFigureLanguage();
   const [tab, setTab] = useState<TabKey>('directory');
   /*
-   * **Below 768px the roster is a card per member** (P18.97-T7 AC-1, ADR-0178 §4; the client's UI-034: *All members*,
-   * 839px on a 375px screen) — on *Directory* and on *Removed*, which draw the one roster. Asked here, where the screen
-   * mounts and before the roster answers, so a phone never draws the table first. From 768px the table it was.
+   * **Below 1024px the roster is the shared person row** (P19.2-T3 AC-2; UI-140: *12 screens on mobile, sideways table
+   * on tablet*; `kpm-owner-mobile` screen 4, *tablet = mobile rows*) — on *Directory* and on *Removed*, which draw the one
+   * roster, with the search pill and the role chips over it. It was a card per member below 768px (P18.9-T7 AC-1,
+   * ADR-0178 §4) and the table from 768px. Asked here, where the screen mounts and before the roster answers, so a
+   * phone or a tablet never draws the table first. From 1024px the table, the search and the role select as they were.
    */
-  const phone = usePhone();
+  const below = useMediaQuery(['phone', 'tablet']);
+  /**
+   * **The role chips' counts** (UI-140: *Semua 28 · AB 5 · AAB 4 · Agent 19*): the office tree's own count by role,
+   * `GET /members/tree` — the read the Groups tab and *Manage KPM Admins* already make, office-wide for the Owner and an
+   * Admin. The roster pages at 25, so its rows cannot count a role; a tree that cannot be read leaves the chips without
+   * their numbers, never a wrong one. Read below 1024px only, where the chips are.
+   */
+  const [roleCounts, setRoleCounts] = useState<OrgTree['counts'] | null>(null);
   const [log, setLog] = useState<RoleChangeEntry[] | null>(null);
   const [groups, setGroups] = useState<GroupSummary[] | null>(null);
   const [editing, setEditing] = useState<{ groupId: string | null; name: string; owner: string } | null>(null);
@@ -180,7 +187,7 @@ export default function MembersPage() {
   const [counts, setCounts] = useState<MemberPage['counts'] | null>(null);
   const [requests, setRequests] = useState<PendingRequest[] | null>(null);
   /**
-   * P18.96-T7 G1 (ADR-0169; T3's rule on every approval): *Approve* asks for the join date — the request whose row has
+   * P18.8-T7 G1 (ADR-0169; T3's rule on every approval): *Approve* asks for the join date — the request whose row has
    * its *Join date* open, and the date, the office's today by default and never after it — as the request inbox does.
    */
   const officeToday = dayInZone(OFFICE_TIME_ZONE, new Date());
@@ -195,11 +202,11 @@ export default function MembersPage() {
   const [refusedFor, setRefusedFor] = useState<string | null>(null);
   const [asks, setAsks] = useState<LeaderLimitRequestRow[] | null>(null);
   const ladder = useLadder();
-  /** P18.96-T3 AC-3: the office's transfer requests sit on the Pending tab, for whoever decides them. */
+  /** P18.8-T3 AC-3: the office's transfer requests sit on the Pending tab, for whoever decides them. */
   const mayDecideTransfers = useCan('member:transfer_approve');
 
   /*
-   * **A notice opens its tab** (P18.96-T3): a transfer request's notice links to `?tab=pending`. Read once from the
+   * **A notice opens its tab** (P18.8-T3): a transfer request's notice links to `?tab=pending`. Read once from the
    * address on arrival, so a tab chosen afterwards is the reader's.
    */
   useEffect(() => {
@@ -350,7 +357,7 @@ export default function MembersPage() {
   }
 
   /**
-   * **The row's Core Leader control** (ADR-0159 §1, P18.8-T5 AC-3): tag or untag a leader, their groups untouched
+   * **The row's Core Leader control** (ADR-0159 §1, P18.5-T5 AC-3): tag or untag a leader, their groups untouched
    * (`PUT /members/:id/core-leader`). The row is replaced by what the server answers, so the chip says what was
    * stored. Offered where the row says the viewer may (`canTagCoreLeader`); the API refuses regardless.
    */
@@ -409,7 +416,33 @@ export default function MembersPage() {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    if (!below) return undefined;
+    let live = true;
+    readOrgTree()
+      .then((tree) => {
+        // Only a tree's own counts: anything else answering here says nothing about the office's roles.
+        if (live && tree && typeof tree.counts?.ab === 'number' && typeof tree.counts.agent === 'number') setRoleCounts(tree.counts);
+      })
+      .catch(() => { /* the chips stand without their numbers */ });
+    return () => { live = false; };
+  }, [below]);
+
   const filtered = q !== '' || role !== '';
+
+  /**
+   * The role chips (UI-140): *Semua* and each rung by its badge's name, as the role select offers them; each sets the
+   * same server-side filter the select does. The directory's own count on *Semua*, the tree's on a role; on *Removed*,
+   * *Semua* counts the removed and a role carries no number, the tree counting only those still here.
+   */
+  const roleChips: readonly FilterChip<'all' | HierarchyRole>[] = [
+    { key: 'all', label: t.allRoles, count: counts ? (tab === 'removed' ? counts.removed : counts.directory) : undefined },
+    ...(['ab', 'aab', 'agent'] as const).map((r) => ({
+      key: r,
+      label: rungShort(r, ladder),
+      count: tab === 'directory' && roleCounts ? roleCounts[r] : undefined,
+    })),
+  ];
 
   // The count is part of the label, not a badge: the prototype writes it inside the
   // parentheses and it is a population, not an alert.
@@ -417,7 +450,7 @@ export default function MembersPage() {
     'count' in named && counts ? `${named.label} (${counts[named.count]})` : named.label;
 
   /*
-   * **Below 1024px the five tabs are one row that scrolls sideways** (P18.97-T6 AC-4, ADR-0178 §2; the client's
+   * **Below 1024px the five tabs are one row that scrolls sideways** (P18.9-T6 AC-4, ADR-0178 §2; the client's
    * UI-038: two rows at 768px and at 375px) — the shared tab row every strip has on a phone (`useTabRow`): the side
    * that has more fades, and the current tab is brought into view on arriving and whenever it changes. The tabs, their
    * names, `aria-current` and the keyboard are this row's own; a row that fits reads as it did, and from 1024px it
@@ -437,7 +470,12 @@ export default function MembersPage() {
         ref={row.ref}
         data-fade={row.fade}
         {...BELOW_DESKTOP_ROW}
-        className={cn('mb-6 flex flex-wrap gap-6 border-b border-hairline', TAB_ROW_BELOW_DESKTOP, UNDERLINED_ROW_BELOW_DESKTOP)}
+        className={cn(
+          'mb-6 flex flex-wrap gap-6 border-b border-hairline',
+          TAB_ROW_BELOW_DESKTOP,
+          // Below 1024px the row of pills `kpm-owner-mobile` draws (UI-140, UI-142): no rule under it, 4px between them.
+          'max-lg:mb-2.5 max-lg:gap-1 max-lg:border-b-0',
+        )}
       >
         {/* Every tab is built. A disabled branch for an unbuilt one, titled "Arrives with its
             phase", sat here unreachable — no tab set it — and went in P10.1-T2. */}
@@ -449,9 +487,16 @@ export default function MembersPage() {
             aria-current={tab === t.key ? 'page' : undefined}
             className={cn(
               tab === t.key
-                ? '-mb-px border-b-2 border-amber px-0.5 pb-3 text-md font-semibold text-navy'
+                ? '-mb-px border-b-2 border-primary px-0.5 pb-3 text-md font-semibold text-navy'
                 : '-mb-px border-b-2 border-transparent px-0.5 pb-3 text-md font-semibold text-muted',
               TAB_BELOW_DESKTOP,
+              /*
+               * **Below 1024px a 44px pill** (P19.2-T3 AC-2, AC-4; UI-140: *tabs as one 44px scrollable row with an edge
+               * fade*; UI-142: *tabs 44px*): the current one navy with white words, the others grey on the page, as
+               * `kpm-owner-mobile` screen 4 draws them. The row still scrolls and fades (`TAB_ROW_BELOW_DESKTOP`).
+               */
+              'max-lg:inline-flex max-lg:h-11 max-lg:items-center max-lg:rounded-pill max-lg:border-b-0 max-lg:px-3.5 max-lg:pb-0',
+              tab === t.key && 'max-lg:bg-secondary max-lg:text-secondary-contrast',
             )}
           >
             {label(t)}
@@ -459,7 +504,20 @@ export default function MembersPage() {
         ))}
       </div>
 
-      {tab !== 'rolelog' && tab !== 'groups' && tab !== 'pending' && (
+      {tab !== 'rolelog' && tab !== 'groups' && tab !== 'pending' && below && (
+        // The search pill and the role chips (P19.2-T3 AC-2; UI-140): the same two filters, sent to the server as before.
+        <div role="search" aria-label={t.search} className="mb-2.5 flex flex-col gap-2">
+          <SearchPill label={t.searchPill} value={q} onChange={setQ} />
+          <FilterChips
+            label={t.roleChips}
+            chips={roleChips}
+            active={role === '' ? 'all' : role}
+            onSelect={(key) => setRole(key === 'all' ? '' : key)}
+          />
+        </div>
+      )}
+
+      {tab !== 'rolelog' && tab !== 'groups' && tab !== 'pending' && !below && (
       <FieldRow className="mb-4">
         <Field label={t.search} htmlFor="q" className="min-w-56 flex-1">
           <TextInput
@@ -472,7 +530,7 @@ export default function MembersPage() {
         <Field label={t.role} htmlFor="role" className="w-44">
           <Select id="role" value={role} onChange={(e) => setRole(e.target.value as HierarchyRole | '')}>
             <option value="">{t.everyRole}</option>
-            {/* Each role by its badge's name (P18.95-T9 AC-1, ADR-0167 §10). */}
+            {/* Each role by its badge's name (P18.7-T9 AC-1, ADR-0167 §10). */}
             <option value="ab">{rungShort('AB', ladder)}</option>
             <option value="aab">{rungShort('AAB', ladder)}</option>
             <option value="agent">{rungShort('AGENT', ladder)}</option>
@@ -517,7 +575,11 @@ export default function MembersPage() {
                     </time>
                   </Cell>
                   <Cell className="font-semibold">
-                    <Link href={`/people/members/${entry.membershipId}`} className="underline">
+                    {/* 44px tall below 1024px (P19.2-T3 AC-4; UI-142), its words centred; from 1024px on its line. */}
+                    <Link
+                      href={`/people/members/${entry.membershipId}`}
+                      className="underline max-lg:inline-flex max-lg:min-h-11 max-lg:items-center"
+                    >
                       {entry.fullName}
                     </Link>
                     <span className="block text-sm font-normal text-muted">{entry.agentCode}</span>
@@ -603,7 +665,7 @@ export default function MembersPage() {
                           onCancel={() => void cancelAsk(pendingFor(asks, m.membershipId)!.requestId)}
                         />
                       ) : ask && approving === ask.requestId ? (
-                        // The first *Approve* opened the row's *Join date*; this one sends it (P18.96-T7 G1).
+                        // The first *Approve* opened the row's *Join date*; this one sends it (P18.8-T7 G1).
                         <span className="flex flex-wrap items-end gap-2">
                           <Field
                             label={joining.joinDate}
@@ -619,6 +681,8 @@ export default function MembersPage() {
                               invalid={lateDate}
                               onChange={setJoinDate}
                               className="w-full"
+                              // A field 48px tall below 1024px, as the shell's fields are (P19.2-T3 AC-4; UI-142, UI-010).
+                              faceClassName="max-lg:min-h-12"
                             />
                           </Field>
                           <span className="flex flex-wrap gap-2">
@@ -682,7 +746,7 @@ export default function MembersPage() {
           </div>
 
           {editing && (
-            <div className="mb-4 rounded-md border border-amber bg-base p-4">
+            <div className="mb-4 rounded-md border border-primary bg-base p-4">
               <h2 className="font-display text-md font-bold text-navy">
                 {editing.groupId === null ? t.groups.create : t.groups.edit}
               </h2>
@@ -812,7 +876,7 @@ export default function MembersPage() {
         </>
       )}
 
-      {tab !== 'rolelog' && tab !== 'groups' && tab !== 'pending' && page === null && (phone ? (
+      {tab !== 'rolelog' && tab !== 'groups' && tab !== 'pending' && page === null && (below ? (
         <SkeletonCards count={4} label={tab === 'removed' ? t.roster.loadingRemoved : t.roster.loading} />
       ) : (
         <SkeletonTable
@@ -851,13 +915,8 @@ export default function MembersPage() {
 
       {tab !== 'rolelog' && tab !== 'groups' && tab !== 'pending' && page && page.length > 0 && (
         <>
-          {phone ? (
-            <MemberCards
-              members={page}
-              removed={tab === 'removed'}
-              busy={busy}
-              onToggleCoreLeader={(m) => void toggleCoreLeader(m)}
-            />
+          {below ? (
+            <MemberRows members={page} removed={tab === 'removed'} />
           ) : (
           <DataTable
             caption={tab === 'removed' ? t.roster.removedCaption : t.roster.caption}
@@ -876,7 +935,7 @@ export default function MembersPage() {
                     <span className="block text-sm font-normal text-muted">{m.email}</span>
                   </span>
                 </Cell>
-                {/* On one line: *PRU-80003* broke at its hyphen in a narrow column (P18.97-T4 AC-3; UI-024). */}
+                {/* On one line: *PRU-80003* broke at its hyphen in a narrow column (P18.9-T4 AC-3; UI-024). */}
                 <Cell className="whitespace-nowrap">
                   <code className="text-sm">{m.agentCode}</code>
                 </Cell>
@@ -897,7 +956,7 @@ export default function MembersPage() {
                           ? t.roster.untag({ name: displayName(m) })
                           : t.roster.tag({ name: displayName(m) })}
                         title={m.isCoreLeader ? t.roster.untagTitle : t.roster.tagTitle}
-                        className="px-0.5 text-2xs font-semibold text-muted hover:text-amber-deep disabled:opacity-50"
+                        className="px-0.5 text-2xs font-semibold text-muted hover:text-primary-deep disabled:opacity-50"
                       >
                         {/* Beside the chip it removes, a cross; on an untagged leader, the prototype's words, kept. */}
                         {m.isCoreLeader ? <span aria-hidden>×</span> : <>+ {CORE_LEADER_LABEL}</>}
@@ -933,7 +992,7 @@ export default function MembersPage() {
                       ) : (
                         '—'
                       )}
-                      {/* The membership she left, and the day she came back on another (P18.97-T4 AC-3, ADR-0176 §5). */}
+                      {/* The membership she left, and the day she came back on another (P18.9-T4 AC-3, ADR-0176 §5). */}
                       {m.rejoinedOn && (
                         <span className="block text-sm">
                           {t.roster.rejoinedOn({
@@ -992,113 +1051,9 @@ export default function MembersPage() {
   );
 }
 
-/**
- * **The roster as cards** (P18.97-T7 AC-1, ADR-0178 §4; UI-034). A card per member, in the table's order and words,
- * through the shared card pieces (`components/ui/row-cards.tsx`): the name — the person page's link, 44px tall — with
- * the rung's badge, *Owner*, *Admin*, *Core Leader* and its control after it on the same wrapping line, their email
- * under it; the status, with ***Rejoined*** beside it for a member who came back (P18.97-T4 AC-3); then each value
- * under its column's heading — *Agent code* on one line, *Reports to*, *Last activity*, *Last coached*, *Unit* (*No
- * team* for one who leads nobody) and, on *Removed*, the day they left and ***Rejoined {date}***. A value the table
- * writes as — is not drawn. The cards step in by rung as the table's names do, 12px a step.
- */
-function MemberCards({
-  members, removed, busy, onToggleCoreLeader,
-}: {
-  members: Member[];
-  /** The *Removed* tab: the day they left in place of the status, and no activity. */
-  removed: boolean;
-  busy: boolean;
-  onToggleCoreLeader: (member: Member) => void;
-}) {
-  const t = useMessages(membersMessages);
-  const status = useMessages(orgMessages).status;
-  const language = useLanguage();
-  const figures = useFigureLanguage();
-  return (
-    <RowCards label={removed ? t.roster.removedCaption : t.roster.caption}>
-      {members.map((m) => (
-        <RowCard key={m.membershipId} data-row={m.membershipId} style={{ paddingLeft: CARD_INDENT[m.role] }}>
-          <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <Link
-              href={`/people/members/${m.membershipId}`}
-              className={cn('min-w-0 break-words text-md font-semibold text-navy underline', TEXT_TAP)}
-            >
-              {displayName(m)}
-            </Link>
-            <RoleBadge role={m.role} />
-            {m.isKpmOwner && <Tag>{kept('Owner')}</Tag>}
-            {m.isKpmAdmin && <Tag>{kept('Admin')}</Tag>}
-            {m.isCoreLeader && <Tag>{CORE_LEADER_LABEL}</Tag>}
-            {!removed && m.canTagCoreLeader && (
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => onToggleCoreLeader(m)}
-                aria-label={m.isCoreLeader
-                  ? t.roster.untag({ name: displayName(m) })
-                  : t.roster.tag({ name: displayName(m) })}
-                title={m.isCoreLeader ? t.roster.untagTitle : t.roster.tagTitle}
-                className={cn(
-                  'inline-flex items-center justify-center px-0.5 text-2xs font-semibold text-muted hover:text-amber-deep disabled:opacity-50',
-                  TAP_TARGET,
-                )}
-              >
-                {m.isCoreLeader ? <span aria-hidden>×</span> : <>+ {CORE_LEADER_LABEL}</>}
-              </button>
-            )}
-          </p>
-          <p className="break-all text-sm text-muted">{m.email}</p>
-          {!removed && (
-            <p className="mt-2 flex flex-wrap items-center gap-1.5">
-              <StatusPill status={STATUS_TO_PILL[m.status]} label={status[m.status]} />
-              {m.rejoinedOn && <StatusPill status="neutral" label={t.roster.rejoined} />}
-            </p>
-          )}
-          <CardFields>
-            {/* On one line, as in the table: *PRU-80003* never breaks at its hyphen (P18.97-T4 AC-3). */}
-            <CardField label={t.roster.columns.agentCode}><code className="whitespace-nowrap text-sm text-navy">{m.agentCode}</code></CardField>
-            {m.leaderName && <CardField label={t.roster.columns.reportsTo}><span className="text-muted">{m.leaderName}</span></CardField>}
-            {!removed && m.lastActivityDays !== undefined && (
-              <CardField label={t.roster.columns.lastActivity}>
-                <span className="text-muted">
-                  {m.lastActivityOn
-                    ? <time dateTime={m.lastActivityOn}>{daysAgoWords(m.lastActivityDays, language)}</time>
-                    : daysAgoWords(m.lastActivityDays, language)}
-                </span>
-              </CardField>
-            )}
-            {!removed && m.lastCoachedDays !== undefined && (
-              <CardField label={t.roster.columns.lastCoached}><span className="text-muted">{daysAgoWords(m.lastCoachedDays, language)}</span></CardField>
-            )}
-            <CardField label={t.roster.columns.unit}>
-              <span className="text-muted">
-                {m.isLeader ? t.roster.unitCounts({ direct: m.directCount, unit: m.subtreeCount }) : t.roster.noTeam}
-              </span>
-            </CardField>
-            {removed && (m.removedAt || m.rejoinedOn) && (
-              <CardField label={t.roster.columns.removed}>
-                <span className="text-muted">
-                  {m.removedAt && <time dateTime={m.removedAt}>{formatOfficeDay(m.removedAt, OFFICE_TIME_ZONE, figures)}</time>}
-                  {m.rejoinedOn && (
-                    <span className="block text-sm">
-                      {t.roster.rejoinedOn({
-                        date: <time dateTime={m.rejoinedOn}>{formatCalendarDay(m.rejoinedOn, figures)}</time>,
-                      })}
-                    </span>
-                  )}
-                </span>
-              </CardField>
-            )}
-          </CardFields>
-        </RowCard>
-      ))}
-    </RowCards>
-  );
-}
-
 function Tag({ children }: { children: React.ReactNode }) {
   return (
-    <span className="rounded-pill bg-amber/20 px-2 py-0.5 text-2xs font-bold uppercase tracking-wide text-amber-deep">
+    <span className="rounded-pill bg-primary/20 px-2 py-0.5 text-2xs font-bold uppercase tracking-wide text-primary-deep">
       {children}
     </span>
   );

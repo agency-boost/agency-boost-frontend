@@ -49,7 +49,7 @@ const state = (notificationId: string, readAt: string | null, unread: number) =>
 /** jsdom cannot navigate; next/link's href is where a row goes, and the click is what is under test. */
 const swallow = (event: Event) => event.preventDefault();
 
-describe('the notifications inbox (P3.5-T10, P12.1)', () => {
+describe('the notifications inbox (P3.1-T10, P12.1)', () => {
   beforeEach(() => {
     // 10:00 on 3 October in Jakarta, so a row's short date is the same on any day the suite runs.
     vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-03T03:00:00Z') });
@@ -81,7 +81,7 @@ describe('the notifications inbox (P3.5-T10, P12.1)', () => {
     expect(unread).toHaveAccessibleDescription('Your request was approved. You now have a leader. 1 Sep');
     // The dot is drawn; its words are the name's.
     expect(screen.getByText('Unread:')).toHaveClass('sr-only');
-    // One line each from 768px, cut with an ellipsis; P18.95-T7 AC-4 (UI-030): on a phone neither is cut, both wrap.
+    // One line each from 768px, cut with an ellipsis; P18.7-T7 AC-4 (UI-030): on a phone neither is cut, both wrap.
     for (const line of [within(unread).getByText('You are in'), within(unread).getByText('Your request was approved. You now have a leader.')]) {
       expect(line).toHaveClass('md:truncate', 'break-words');
       expect(line).not.toHaveClass('truncate');
@@ -112,13 +112,13 @@ describe('the notifications inbox (P3.5-T10, P12.1)', () => {
     expect(screen.getByRole('button', { name: 'You are in' })).toHaveFocus();
   });
 
-  it('P18.98-T3 AC-1 writes a row’s time and its modal’s date and time in the reader’s language: 08.05 and 08:05', async () => {
+  it('P18.10-T3 AC-1 writes a row’s time and its modal’s date and time in the reader’s language: 08.05 and 08:05', async () => {
     const page = { body: pageOf([item({ createdAt: '2026-10-03T01:05:00.000Z' })]) };
     stubFetch({ '/notifications': [page, page] });
     const { unmount } = renderWithSession(<InLanguage language="id"><NotificationsPage /></InLanguage>, { me: READER });
     // Today's notice by its time, on the office's clock; its modal the day and the time in full.
     expect(await screen.findByText('08.05')).toHaveAttribute('dateTime', '2026-10-03T01:05:00.000Z');
-    // The row's own words are Indonesian too since P18.98-T4 (the shared pieces); the notice's title is the API's.
+    // The row's own words are Indonesian too since P18.10-T4 (the shared pieces); the notice's title is the API's.
     await userEvent.click(screen.getByRole('button', { name: 'Belum dibaca: You are in' }));
     expect(within(screen.getByRole('dialog', { name: 'You are in' })).getByText('3 Okt 2026, 08.05')).toBeInTheDocument();
     unmount();
@@ -278,7 +278,7 @@ describe('the notifications inbox (P3.5-T10, P12.1)', () => {
     try {
       renderWithSession(<NotificationsPage />, { me: READER });
       await userEvent.click(await screen.findByRole('button', { name: 'Mark as read' }));
-      // The badge's move as it is clicked (P18.95-T1 AC-7), then the answer's count.
+      // The badge's move as it is clicked (P18.7-T1 AC-7), then the answer's count.
       await vi.waitFor(() => expect(heard).toHaveLength(2));
       expect(heard[0]).toMatchObject({ delta: -1, local: true });
       expect(heard[1].unread).toBe(4);
@@ -454,26 +454,30 @@ describe('the notifications inbox (P3.5-T10, P12.1)', () => {
     expect(calls.map((c) => c.url)).toContain('http://api.test/api/v1/notifications?page=1&pageSize=20');
   });
 
-  it('P18.95-T7 AC-1 keeps the page’s sub-line from 768px and draws it nowhere on a phone (grey text row 25)', async () => {
+  /*
+   * *Changed 2026-11-04 (P19.1-T1 AC-1; UI-112):* a field member's inbox sits in the field shell, which draws no grey
+   * sub-line from 768px either — so this reader sees it at no size. The consoles keep theirs from 768px.
+   */
+  it('P18.7-T7 AC-1, P19.1-T1 AC-1 draws the page’s sub-line nowhere on a phone, nor from 768px in the field shell', async () => {
     stubFetch({ '/notifications': { body: pageOf([item()]) } });
     renderWithSession(<NotificationsPage />, { me: READER });
     await screen.findByText('You are in');
     const sub = screen.getByText('What has happened that you should know about.');
-    expect(sub.className.split(/\s+/).filter((c) => /hidden/.test(c))).toEqual(['max-md:hidden']);
+    expect(sub.className.split(/\s+/).filter((c) => /hidden/.test(c))).toEqual(['max-md:hidden', 'md:hidden']);
     expect(screen.getByRole('heading', { level: 1, name: 'Notifications' })).toBeInTheDocument();
   });
 
   /*
-   * **Repeats of one notice in a row, as one line** (P18.95-T7 AC-4; the client's UI review, UI-030 — *Wilson updated
+   * **Repeats of one notice in a row, as one line** (P18.7-T7 AC-4; the client's UI review, UI-030 — *Wilson updated
    * your goal · 7×*): one template, the same words and the same address, next to each other on the page.
    */
-  describe('P18.95-T7 AC-4 repeats', () => {
+  describe('P18.7-T7 AC-4 repeats', () => {
     const KICKOFF = (n: number, readAt: string | null = null) => item({
       notificationId: `n-k${n}`, templateId: 'event.reminder', title: 'Kickoff 2026 is coming up',
       detail: '9 Nov 2026, 09.00 · Kantor KPM', createdAt: `2026-10-0${3 - Math.min(n, 2)}T0${n}:00:00.000Z`, readAt,
     });
 
-    it('P18.95-T7 AC-4 draws three in a row as one line with its count, and one apart from them on its own', async () => {
+    it('P18.7-T7 AC-4 draws three in a row as one line with its count, and one apart from them on its own', async () => {
       stubFetch({ '/notifications': { body: pageOf([KICKOFF(1), KICKOFF(2), KICKOFF(3), item(), KICKOFF(4)]) } });
       renderWithSession(<NotificationsPage />, { me: READER });
 
@@ -486,7 +490,7 @@ describe('the notifications inbox (P3.5-T10, P12.1)', () => {
       expect(screen.getAllByRole('button', { name: /^Unread: Kickoff 2026 is coming up$/ })).toHaveLength(1);
     });
 
-    it('P18.95-T7 AC-4 opens to the notices themselves, reading none of them, each opening and marking on its own', async () => {
+    it('P18.7-T7 AC-4 opens to the notices themselves, reading none of them, each opening and marking on its own', async () => {
       const { calls } = stubFetch({
         'POST /notifications/n-k2/read': state('n-k2', '2026-10-03T03:00:00.000Z', 2),
         '/notifications': { body: pageOf([KICKOFF(1), KICKOFF(2), KICKOFF(3)]) },
@@ -512,7 +516,7 @@ describe('the notifications inbox (P3.5-T10, P12.1)', () => {
       expect(line).toHaveAccessibleName('Unread: Kickoff 2026 is coming up, 3 notices');
     });
 
-    it('P18.95-T7 AC-4 its toggle reads all of them at once, the bell moving by three, then settling on the last answer', async () => {
+    it('P18.7-T7 AC-4 its toggle reads all of them at once, the bell moving by three, then settling on the last answer', async () => {
       const { calls } = stubFetch({
         'POST /notifications/n-k1/read': state('n-k1', '2026-10-03T03:00:00.000Z', 4),
         'POST /notifications/n-k2/read': state('n-k2', '2026-10-03T03:00:00.000Z', 3),
@@ -541,7 +545,7 @@ describe('the notifications inbox (P3.5-T10, P12.1)', () => {
       }
     });
 
-    it('P18.95-T7 AC-4 unreads all of them, and puts back the one the server refused, saying why', async () => {
+    it('P18.7-T7 AC-4 unreads all of them, and puts back the one the server refused, saying why', async () => {
       const read = '2026-10-02T00:00:00.000Z';
       const { calls } = stubFetch({
         'POST /notifications/n-k1/unread': state('n-k1', null, 1),
@@ -563,7 +567,7 @@ describe('the notifications inbox (P3.5-T10, P12.1)', () => {
       expect(within(list).getAllByRole('button', { name: 'Kickoff 2026 is coming up' })).toHaveLength(1);
     });
 
-    it('P18.95-T7 AC-4 a read-only support session opens the line and its notices, and is offered no mark', async () => {
+    it('P18.7-T7 AC-4 a read-only support session opens the line and its notices, and is offered no mark', async () => {
       stubFetch({ '/notifications': { body: pageOf([KICKOFF(1), KICKOFF(2)]) } });
       renderWithSession(<NotificationsPage />, { me: SUPPORT });
       await userEvent.click(await screen.findByRole('button', { name: /Kickoff 2026 is coming up, 2 notices/ }));

@@ -33,6 +33,7 @@ export function GoalHeroCard({
   target,
   facts,
   aside,
+  note,
   className,
 }: {
   /** *Target vs. realisasi (APE)*. */
@@ -45,6 +46,12 @@ export function GoalHeroCard({
   /** The foot: two facts, side by side. */
   facts?: readonly [GoalHeroFact, GoalHeroFact];
   aside?: ReactNode;
+  /**
+   * **What the reader can do about the figure** (P19.1-T4, UI-157; rule R2), under it and above the bar: who uploads it,
+   * *Isi produksi sementara* and its *Ubah* · *Hapus*, *Unggah produksi →*, *Diganti data produksi resmi (…)*. The
+   * page's to compose; nothing when it has nothing to say.
+   */
+  note?: ReactNode;
   className?: string;
 }) {
   const t = useMessages(uiV1Messages);
@@ -52,10 +59,10 @@ export function GoalHeroCard({
   const shown = percent === null ? '–' : formatPercent(percent, {}, figures);
   const width = percent === null ? 0 : Math.min(100, Math.max(0, percent));
   return (
-    <section data-goal-hero="" className={cn('rounded-lg bg-amber p-3.5 text-navy', className)}>
+    <section data-goal-hero="" className={cn('rounded-lg bg-primary p-3.5 text-primary-contrast', className)}>
       <div className="flex items-start gap-2">
         <p className="min-w-0 flex-1 text-base font-semibold">{title}</p>
-        <span className="shrink-0 rounded-pill bg-card px-2 py-0.5 text-sm font-bold text-amber-ink">{shown}</span>
+        <span className="shrink-0 rounded-pill bg-card px-2 py-0.5 text-sm font-bold text-primary-ink">{shown}</span>
       </div>
       <div className="flex items-end gap-3">
         <p className="mb-2 mt-1 min-w-0 flex-1">
@@ -64,6 +71,7 @@ export function GoalHeroCard({
         </p>
         {aside}
       </div>
+      {note && <div data-goal-note="" className="mb-2.5 flex flex-col items-start gap-1 text-sm">{note}</div>}
       <div
         role="progressbar"
         aria-valuemin={0}
@@ -73,12 +81,12 @@ export function GoalHeroCard({
         aria-label={t.goal.progress({ value: shown })}
         className="h-2 overflow-hidden rounded-sm bg-card/50"
       >
-        <div className="h-full rounded-sm bg-navy" style={{ width: `${width}%` }} />
+        <div className="h-full rounded-sm bg-primary-contrast" style={{ width: `${width}%` }} />
       </div>
       {facts && (
-        <dl className="mt-3 grid grid-cols-2 border-t border-navy/20 pt-2.5">
+        <dl className="mt-3 grid grid-cols-2 border-t border-primary-contrast/20 pt-2.5">
           {facts.map((fact, i) => (
-            <div key={i} className={cn(i === 1 && 'border-l border-navy/20 pl-3')}>
+            <div key={i} className={cn(i === 1 && 'border-l border-primary-contrast/20 pl-3')}>
               <dt className="text-sm">{fact.label}</dt>
               <dd className="text-2xl font-bold tabular-nums">{fact.value}</dd>
             </div>

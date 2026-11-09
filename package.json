@@ -12,12 +12,14 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "test:browser": "BROWSER_SPECS=1 vitest run --no-file-parallelism",
     "check:secrets": "node scripts/check-no-demo-credentials.mjs",
     "vercel-build": "node scripts/vercel-build.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",
     "next": "^15.5.28",
+    "pdfjs-dist": "^6.5.438",
     "qrcode": "^1.5.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

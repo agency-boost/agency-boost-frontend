@@ -46,7 +46,7 @@ export function PlanTabs({ label, tabs }: { label: string; tabs: readonly PlanTa
             className={cn(
               '-mb-px border-b-2 px-0.5 pb-3 text-md font-semibold',
               'md:max-lg:[:root:has([data-surface=v1])_&]:pt-3',
-              on ? 'border-amber text-navy' : 'border-transparent text-muted',
+              on ? 'border-primary text-navy' : 'border-transparent text-muted',
               'max-md:mb-0 max-md:flex max-md:min-h-11 max-md:flex-1 max-md:rounded-pill max-md:border-b-0 max-md:p-[3px]',
               'max-md:text-base max-md:focus-visible:[outline-offset:-2px]',
             )}
@@ -55,7 +55,7 @@ export function PlanTabs({ label, tabs }: { label: string; tabs: readonly PlanTa
               className={cn(
                 'max-md:flex max-md:w-full max-md:items-center max-md:justify-center max-md:whitespace-nowrap',
                 'max-md:rounded-pill max-md:px-2',
-                on && 'max-md:bg-navy max-md:text-white',
+                on && 'max-md:bg-secondary max-md:text-secondary-contrast',
               )}
             >
               {tab.label}

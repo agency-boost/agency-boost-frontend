@@ -83,7 +83,7 @@ export interface Pricing {
 /*
  * ── Words ────────────────────────────────────────────────────────────────────────────────────────
  *
- * The catalogue's (`i18n/messages/billing.tsx`, P18.98-T6). The two objects below are its English, the source, in the
+ * The catalogue's (`i18n/messages/billing.tsx`, P18.10-T6). The two objects below are its English, the source, in the
  * shapes the specs read; a screen reads its reader's with `useMessages(billingMessages)`, and every function here that
  * writes words takes the words' language last, after the figures', English and Indonesian figures when given neither.
  */
@@ -180,7 +180,7 @@ function afterPercent(rateMinor: number, pct: { units: bigint; scale: bigint }):
  *   that rate × the count (× 6 or 12), exactly, so a printed rate × count is always the printed total.
  * - **The manual discount is bounded** (§5): a percent from 0 to 100, an amount from Rp 0 to the period's
  *   rate. Outside that, the rate is priced without it and `discountError` says why — its sums in the `figures`'
- *   language, its words in the words' (P18.98-T6), and the amount read in the figures' grouping.
+ *   language, its words in the words' (P18.10-T6), and the amount read in the figures' grouping.
  */
 export function priceQuote(
   prices: Pick<BillingPrices, 'tiers'>,
@@ -295,6 +295,12 @@ export function addMonths(day: string, n: number): string {
 export const planEnd = (start: string, period: BillingPeriod) =>
   addDays(addMonths(start, period === 'annual' ? 12 : 6), -1);
 
+/** A subscription's plan (ADR-0211 §1) as the calculator's period: *6 bulan* is `sixMonth`, *Tahunan* `annual`. */
+export const planPeriodOf = (plan: 'six_months' | 'annual'): BillingPeriod => (plan === 'annual' ? 'annual' : 'sixMonth');
+
+/** The calculator's period as the plan the API carries. */
+export const periodPlanOf = (period: BillingPeriod): 'six_months' | 'annual' => (period === 'annual' ? 'annual' : 'six_months');
+
 /** `YYYY-MM-DD` as the dialog's date fields are typed, `DD/MM/YYYY` (`formatDMY`, `:580`). */
 export function toDmy(day: string): string {
   const [y, m, d] = day.split('-');
@@ -313,7 +319,7 @@ export function quoteDay(typed: string, figures: Language = DEFAULT_LANGUAGE): s
 
 /**
  * The card's *Save 20%*: `savePct`'s whole percent, written whole (ADR-0174 §1, OD-213) — the percentage in the
- * `figures`' language, the word in the words' (P18.98-T6).
+ * `figures`' language, the word in the words' (P18.10-T6).
  */
 export const saveWordsIn = (
   tier: Pick<BillingTier, 'standardMinor' | 'sixMonthMinor'>,
@@ -359,7 +365,7 @@ export type QuoteErrors = Partial<Record<keyof QuoteDetails, string>>;
 /**
  * *Generate quote*'s checks (`generateQuote`, `:625-650`, and the Fixes): the three names non-empty once
  * trimmed, each date a real `DD/MM/YYYY` day, and the end on or after the start — each refusal a sentence, in the
- * reader's `language` (P18.98-T6).
+ * reader's `language` (P18.10-T6).
  */
 export function validateQuote(details: QuoteDetails, language: Language = SOURCE_LANGUAGE): QuoteErrors {
   const { prototype, own } = messagesIn(billingMessages, language);
@@ -450,9 +456,93 @@ export function subscriptionCosts(input: {
 
 /**
  * *— no price per leader*, *— no maximum leaders and no start and end dates*: a line that cannot be worked out — in the
- * reader's `language` (P18.98-T6; `i18n/messages/office-subscription.ts`).
+ * reader's `language` (P18.10-T6; `i18n/messages/office-subscription.ts`).
  */
 export function costMissingWords(missing: readonly CostInput[], language: Language = SOURCE_LANGUAGE): string {
   const words = messagesIn(officeSubscriptionMessages, language).costMissing;
   return words.joined({ parts: missing.map((m) => words[m]) });
 }
+
+// ---- Billing per KPM (P19.4-T3 AC-10; ADR-0211; `functional/billing.md`, the Data contract).
+
+/** Where a KPM stands against its end date (`SubscriptionState`, ADR-0112 §3). */
+export type BillingKpmStatus = 'active' | 'ended' | 'ended_kept_active' | 'none';
+
+/** One row of `GET /admin/billing/kpms` (`BillingKpmRowDto`): counts and codes, no member named. */
+export interface BillingKpmRow {
+  kpmId: string;
+  code: string;
+  branch: string;
+  company: { id: string; name: string };
+  leadersUsed: number;
+  tier: { code: string; minLeaders: number; maxLeaders: number | null };
+  plan: 'six_months' | 'annual' | null;
+  renewalDate: string | null;
+  status: BillingKpmStatus;
+}
+
+/** The list's columns, as the API sorts them. */
+export type BillingKpmSort = 'kpm' | 'company' | 'leaders' | 'tier' | 'plan' | 'renewal' | 'status';
+
+/** `GET /admin/billing/kpms?companyId=&sort=&dir=`: the Super Admin's alone (`billing:read_prices`). */
+export function listBillingKpms(query: { companyId?: string; sort?: BillingKpmSort; dir?: 'asc' | 'desc' } = {}) {
+  const params = new URLSearchParams();
+  if (query.companyId) params.set('companyId', query.companyId);
+  if (query.sort) params.set('sort', query.sort);
+  if (query.dir) params.set('dir', query.dir);
+  const qs = params.toString();
+  return api<BillingKpmRow[]>(`/admin/billing/kpms${qs ? `?${qs}` : ''}`);
+}
+
+/** What `POST /admin/tenants/:kpmId/quote` takes: the inputs and the dialog's names — **no figure** (ADR-0211 §5). */
+export interface SendQuoteBody {
+  leaders: number;
+  plan: 'six_months' | 'annual';
+  discount: { type: 'percent'; percent: string } | { type: 'flat'; amountMinor: number } | null;
+  startDate: string;
+  endDate: string;
+  pic: string;
+  salesBy: string;
+}
+
+/** What the server answers: who received it, and its own figures. */
+export interface QuoteSent {
+  kpmId: string;
+  recipient: { fullName: string };
+  pricing: {
+    leaders: number; tierCode: string; plan: 'six_months' | 'annual'; months: 6 | 12; standardMinor: number;
+    offerMinor: number; baseMinor: number; annualDiscountMinor: number; manualDiscountMinor: number; finalMinor: number;
+    monthlyTotalMinor: number; periodTotalMinor: number;
+  };
+}
+
+/**
+ * **The request a generated quote is sent as** (ADR-0211 §5): the count priced, the plan, the manual discount
+ * normalised — a percent as decimal digits with a `.` (the field reads a typed comma as one), an amount as the sen it
+ * took off — the two dates as office dates, and the two names as typed. A discount that took nothing off is none.
+ */
+export function quoteRequestOf(input: CalculatorInput, pricing: Pricing, details: QuoteDetails): SendQuoteBody {
+  let discount: SendQuoteBody['discount'] = null;
+  if (pricing.manualDiscountMinor > 0) {
+    if (input.discountType === 'percent') {
+      const typed = input.discount.trim().replace(',', '.');
+      const percent = (typed.startsWith('.') ? `0${typed}` : typed).replace(/\.$/, '');
+      discount = { type: 'percent', percent };
+    } else {
+      discount = { type: 'flat', amountMinor: pricing.manualDiscountMinor };
+    }
+  }
+  return {
+    leaders: pricing.leaders,
+    plan: periodPlanOf(pricing.period),
+    discount,
+    startDate: parseDmy(details.start) ?? '',
+    endDate: parseDmy(details.end) ?? '',
+    pic: details.pic.trim(),
+    salesBy: details.sales.trim(),
+  };
+}
+
+/** *Kirim penawaran*: the KPM's Owner receives it, by email and in the app. The Super Admin's alone (`billing:send_quote`). */
+export const sendKpmQuote = (kpmId: string, body: SendQuoteBody) =>
+  api<QuoteSent>(`/admin/tenants/${encodeURIComponent(kpmId)}/quote`, { method: 'POST', body });
