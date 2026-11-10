@@ -73,10 +73,11 @@ describe('UI V1 /new-hires in Indonesian', () => {
     expect(englishShown(document.body, ENGLISH)).toEqual(expect.arrayContaining(['Show', 'No checklist', 'Activated after 3M']));
   });
 
-  it('UI-023, UI-024 below 768px: Aktivasi 3M, Menunggu bergabung, the filter and the tree in the report’s words', async () => {
+  it('UI-023, UI-024, P19.11-T2 AC-2, AC-3 below 768px: Aktivasi 3M, Menunggu bergabung, the filter and the tree in the report’s words', async () => {
     atWidth(375);
     list();
-    expect(await screen.findByRole('region', { name: 'Aktivasi 3M' })).toHaveTextContent(/^Aktivasi 3M80%$/);
+    // P19.11-T2 AC-2: 4 of 6 due, 67%, the server's.
+    expect(await screen.findByRole('region', { name: 'Aktivasi 3M' })).toHaveTextContent(/^Aktivasi 3M67%$/);
     expect(screen.getByRole('button', { name: 'Menunggu bergabung: 2. Tampilkan' })).toBeInTheDocument();
     const filter = screen.getByRole('group', { name: 'Tampilkan' });
     expect(within(filter).getAllByRole('button').map((b) => b.textContent)).toEqual(['Semua 9', 'Teraktivasi 5', 'Belum 4']);
@@ -84,6 +85,8 @@ describe('UI V1 /new-hires in Indonesian', () => {
     expect(own).toHaveTextContent('Anda · Direct Unit · 5');
     expect(own).toHaveTextContent('Pecah telor di hari ke-39');
     expect(own).toHaveTextContent('Hari ke-38');
+    // P19.11-T2 AC-3 (UXQ1): past day 90 with no first sale, in alert ink.
+    expect(within(own).getByText('Hari ke-110 · belum pecah telor dalam 90 hari')).toHaveClass('text-alert');
     expect(own).toHaveTextContent('Tanpa checklist');
     expect(screen.getByRole('group', { name: 'Sari Puspita' })).toHaveTextContent('AAB · 2');
     // UI-025, UI-026: no Keluar, no Tandai keluar, no terlambat.

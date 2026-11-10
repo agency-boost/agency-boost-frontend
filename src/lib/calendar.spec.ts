@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { stubFetch } from '@test/harness';
-import { AAB_RUNG, AB_RUNG, AGENT_RUNG, busy, entry } from '@test/calendar-fixtures';
+import { AAB_RUNG, AB_RUNG, AGENT_RUNG, busy, entry, joinedEvent } from '@test/calendar-fixtures';
 import {
   addDays, answerEntry, createEntry, daysInclusive, deleteEntry, DOWNLINE_GROUP_LABEL, entryDate, entryNameSuffix,
   hhmm, initialsOf, INVITEES_MAX, isBusy, NOTES_MAX, OWN_COPY, PEOPLE_GROUP_LABEL, peopleOn, personTag, placeBlock,
@@ -159,8 +159,11 @@ describe('the words', () => {
 });
 
 describe('reading an entry', () => {
-  it('draws an empty title as the prototype does (`:782`)', () => {
-    expect(titleOf({ title: '  ' })).toBe('(untitled event)');
+  // *Rewritten 2026-11-10 (P19.11-T1 AC-6; UX-6):* the prototype's `(untitled event)` (`:782`) became *(Tanpa judul)*.
+  it('P19.11-T1 AC-6 draws an empty title as (Untitled) — (Tanpa judul) in Indonesian — an entry’s and a joined event’s alike', () => {
+    expect(titleOf({ title: '  ' })).toBe('(Untitled)');
+    expect(titleOf({ title: '' }, 'id')).toBe('(Tanpa judul)');
+    expect(titleOf(joinedEvent({ title: '' }), 'id')).toBe('(Tanpa judul)');
     expect(titleOf({ title: 'Goal review' })).toBe('Goal review');
   });
 

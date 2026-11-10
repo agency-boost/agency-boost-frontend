@@ -51,9 +51,13 @@ const activity = {
   total: 42,
   sections: [],
 };
+/** One of Rina's open leads, in `GET /leads`' row shape (P19.11-T5 AC-4): hers, so the coach's card is the not-mine one. */
 const lead = (over: Record<string, unknown>) => ({
-  id: 'l-1', name: 'Desi Pratama', type: 'sales', statusCode: 'FOLLOW_UP', statusLabel: 'Follow-up',
-  thisMonth: false, flags: [], overdueDays: null, nextActionDate: '2026-09-20', nextActionNote: null, ...over,
+  id: 'l-1', ownerMembershipId: 'mem-rina', owner: { membershipId: 'mem-rina', name: 'Rina Wijaya' }, type: 'sales',
+  name: 'Desi Pratama', contact: { phone: null, email: null }, statusCode: 'FOLLOW_UP', thisMonth: false,
+  committedMonths: [], closedThisMonth: false, lastEditedBy: null, remarks: null, nextActionDate: '2026-09-20',
+  nextActionNote: null, outcome: null, source: null, dateRegistered: '2026-09-01T03:00:00.000Z', version: 1, flags: [],
+  overdueDays: null, proposals: null, ...over,
 });
 const summary = (over: Record<string, unknown> = {}) => ({
   year: '2026', month: '2026-09', today: '2026-09-14',
@@ -69,7 +73,7 @@ const summary = (over: Record<string, unknown> = {}) => ({
   leads: {
     rows: [
       lead({ thisMonth: true, flags: ['overdue'], overdueDays: 6, nextActionNote: 'Confirm submission paperwork' }),
-      lead({ id: 'l-2', name: 'Alvin Sanjaya', type: null, statusCode: null, statusLabel: null, flags: ['no-next-action', 'no-remarks'], nextActionDate: null }),
+      lead({ id: 'l-2', name: 'Alvin Sanjaya', type: null, statusCode: null, flags: ['no-next-action', 'no-remarks'], nextActionDate: null }),
     ],
     total: 2,
   },
@@ -211,6 +215,41 @@ describe('a coachee’s Personal Summary tab (P11-T7 AC-4)', () => {
     expect(within(goal).getByRole('button', { name: 'Entered by Agus Salim, not uploaded' })).toBeInTheDocument();
   });
 
+  /*
+   * **P19.11-T4 AC-6 (UX-12)**: the month's APE she typed over the upload is the figure on her page, *Changed manually*
+   * beside it — read by her coach as she reads it, and changed by nobody but her: no button, no field, no way back.
+   */
+  it('P19.11-T4 AC-6 her own month over the upload: the figure and Changed manually, read-only — no field, no Back to uploaded data', async () => {
+    show(summary({
+      monthly: {
+        ...figures({ actualMinor: 100 * M }), source: { provenance: 'self_reported', month: '2026-09' }, production: 'estimate',
+        withoutProduction: null,
+        realised: { source: 'manual', uploaded: true, manual: { minor: 100 * M, typedAt: '2026-09-14T05:00:00.000Z' } },
+      },
+    }));
+    const goal = await card('Goal vs. actual (APE)');
+    expect(within(goal).getByText('IDR 100M')).toBeInTheDocument();
+    expect(goal.querySelector('[data-month-ape-manual]')).toHaveTextContent('Changed manually');
+    expect(within(goal).queryByRole('button', { name: /change the realised APE/ })).not.toBeInTheDocument();
+    expect(within(goal).queryByRole('textbox')).not.toBeInTheDocument();
+    expect(within(goal).queryByRole('button', { name: /Back to uploaded data|Clear manual figure/ })).not.toBeInTheDocument();
+    expect(goal.querySelector('[data-goal-note]')).toBeNull();
+    expect(goal.textContent).not.toMatch(SIX_WORDS);
+  });
+
+  it('P19.11-T4 AC-6 her uploaded month: the figure read-only with its source in her words — no button', async () => {
+    show(summary({
+      monthly: {
+        ...figures(), source: { provenance: 'imported', month: '2026-09' }, production: 'official', withoutProduction: null,
+        realised: { source: 'uploaded', uploaded: true, manual: null },
+      },
+    }));
+    const goal = await card('Goal vs. actual (APE)');
+    expect(within(goal).getByText('IDR 30M')).toBeInTheDocument();
+    expect(within(goal).getByRole('button', { name: 'From the production upload, Sep 2026' })).toBeInTheDocument();
+    expect(within(goal).queryByRole('button', { name: /change the realised APE/ })).not.toBeInTheDocument();
+  });
+
   it('P11-T7 AC-4 keeps the insight rules under the prototype’s AI-powered badge, in her words, linking nowhere', async () => {
     show(summary());
 
@@ -311,16 +350,86 @@ describe('a coachee’s Personal Summary tab (P11-T7 AC-4)', () => {
     expect(screen.getByRole('link', { name: 'Set her goal' })).toHaveAttribute('href', '/coaching/mem-rina/goal-setting');
   });
 
-  it('P11-T7 AC-4 says a lead with no type without a type, and an empty list in the prototype’s words', async () => {
+  it('P11-T7 AC-4, P19.11-T5 AC-1 says a lead with no type in the Leads screen’s card words, and an empty list in the prototype’s', async () => {
     show(summary());
     const leads = await card('Leads that need her');
-    expect(within(leads).getByText('No status yet')).toBeInTheDocument();
+    expect(within(leads).getByText('No type yet')).toBeInTheDocument();
     expect(leads).not.toHaveTextContent(SIX_WORDS);
     vi.unstubAllGlobals();
     document.body.innerHTML = '';
 
     show(summary({ leads: { rows: [], total: 0 } }));
     expect(await card('Leads that need her')).toHaveTextContent('No active leads.');
+  });
+
+  /*
+   * **P19.11-T5 AC-4: the coach reads her leads on the shared card, in its not-mine form** — as under *Leads milik: Tim*:
+   * whose it is, WhatsApp, and no proposal (the server sends a coach none; *Buat proposal* is the owner's). The sheet is
+   * hers to edit as the coach's own grant allows, and a save reads her Summary again.
+   */
+  describe('P19.11-T5 her leads on the shared card', () => {
+    const COACH = makeMe({ ...LEADER, permissions: [...LEADER.permissions, 'lead:read', 'lead:update', 'proposal:create', 'proposal:read'] });
+    const withPhone = () => summary({
+      leads: { rows: [lead({ contact: { phone: '0812-1100-2200', email: null } }), lead({ id: 'l-2', name: 'Alvin Sanjaya' })], total: 2, shown: 5 },
+    });
+    /** Her tab as `show` draws it, with the sheet's own read of the lead and its pinned save. */
+    const showWithSheet = (me: typeof LEADER) => {
+      const stub = stubFetch({
+        ...SHELL, '/coaching/coachees/': { body: person('she') }, '/summary': { body: withPhone() },
+        '/activity/ratios': { body: RATIOS }, 'GET /campaigns/chasing': { body: RINA_CHASING },
+        '/leads/l-1': { body: { ...lead({ contact: { phone: '0812-1100-2200', email: null } }), history: [] } },
+        'PATCH /leads/l-1': { body: lead({ nextActionNote: 'Ask about the SPAJ.', version: 2 }) },
+      });
+      renderInLayout(
+        AgentLayout,
+        <CoachingPersonLayout params={routeParams({ membershipId: 'mem-rina' })}><CoacheeSummaryTab /></CoachingPersonLayout>,
+        { me },
+      );
+      return stub;
+    };
+    const openFirst = async () => {
+      const leads = await card('Leads that need her');
+      await userEvent.click(within(within(leads).getAllByRole('listitem')[0]).getByRole('button', { name: 'Desi Pratama' }));
+      return within(await screen.findByRole('dialog', { name: 'Desi Pratama' }));
+    };
+
+    it('P19.11-T5 AC-4 each card is hers: her name on it, WhatsApp, and no proposal action or pill, whatever the coach holds', async () => {
+      show(withPhone(), person('she'), COACH);
+      const leads = await card('Leads that need her');
+      const [first, second] = within(leads).getAllByRole('listitem');
+
+      expect(within(first).getByText('Rina Wijaya’s')).toBeInTheDocument();
+      expect(within(second).getByText('Rina Wijaya’s')).toBeInTheDocument();
+      expect(first.querySelector('[data-channel="whatsapp"]')).not.toBeNull();
+      expect(leads.querySelector('[data-make-proposal]')).toBeNull();
+      expect(leads.querySelector('[data-proposal-pill]')).toBeNull();
+    });
+
+    it('P19.11-T5 AC-1 AC-4 a coach who may update her leads edits one in the sheet, pinned, and her Summary is read again', async () => {
+      const { calls } = showWithSheet(COACH);
+      const sheet = await openFirst();
+      await userEvent.type(await sheet.findByLabelText('Next action note'), 'Ask about the SPAJ.');
+      await userEvent.click(sheet.getByRole('button', { name: 'Save' }));
+
+      await waitFor(() => expect(calls.filter((c) => c.init.method === 'PATCH').map((c) => [c.url.replace(/^.*\/api\/v1/, ''), c.init.body]))
+        .toEqual([['/leads/l-1', JSON.stringify({ nextActionNote: 'Ask about the SPAJ.', version: 1 })]]));
+      await waitFor(() => expect(calls.filter((c) => c.url.endsWith('/summary?for=mem-rina'))).toHaveLength(2));
+    });
+
+    it('P19.11-T5 AC-4 her lead is never the coach’s to delete: the sheet offers no Delete', async () => {
+      showWithSheet(COACH);
+      const sheet = await openFirst();
+      await sheet.findByLabelText('Next action note');
+      expect(sheet.queryByRole('button', { name: /^Delete/ })).not.toBeInTheDocument();
+    });
+
+    it('P19.11-T5 AC-4 a reader the server grants no `lead:update` reads her lead in the sheet and saves nothing', async () => {
+      showWithSheet(LEADER);
+      const sheet = await openFirst();
+
+      expect(await sheet.findByLabelText('Next action note')).toBeDisabled();
+      expect(sheet.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
+    });
   });
 
   it('P11-T7 AC-4 uses none of ADR-0084’s six words anywhere on the tab, across both periods', async () => {

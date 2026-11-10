@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { homeMessages } from '@/i18n/messages/home';
@@ -6,7 +6,7 @@ import { languageOf } from '@/components/home/home-quote';
 import type { HomeView } from '@/lib/home';
 import { englishOnly, englishShown } from '@test/english-left';
 import { renderInIndonesian, renderWithSession, stubFetch, wears } from '@test/harness';
-import { AGENT_VIEW, AGUS, LEADER } from '@test/home-fixtures';
+import { AGENT_VIEW, AGUS, AGUS_AB, LEADER, WIWIK_TASK } from '@test/home-fixtures';
 import HomePage from './page';
 
 vi.mock('next/navigation', () => ({
@@ -94,27 +94,33 @@ describe('UI-100 Home', () => {
     expect([...coached.querySelectorAll('li')].map((li) => li.textContent)).toEqual(['Unit 1/4', 'AAB 1/8']);
   });
 
-  it('UI-100 Aksi hari ini rows and Semua › open /calendar; three rows, a person’s with WhatsApp and Call', async () => {
-    await open(LEADER);
+  // *Rewritten 2026-11-10 (P19.11-T1 AC-3; UX-2):* the Calendar's own rows, today's alone — where they were Home's own,
+  // and the third the next day's.
+  it('P19.11-T1 AC-3 Aksi hari ini: today’s tasks first as the Calendar’s task rows, then today’s entry as the Agenda’s row; Semua › opens the Agenda from today', async () => {
+    // The AB with the Calendar's writes, so each task carries its checkbox.
+    stubFetch({ '/home': { body: LEADER } });
+    renderWithSession(<HomePage />, { me: AGUS_AB });
+    await waitFor(() => expect(document.querySelector('[data-home-actions]')).not.toBeNull());
     const section = document.querySelector('[data-home-actions]') as HTMLElement;
     expect(within(section).getByRole('link', { name: 'All of today in Calendar' })).toHaveAttribute('href', '/calendar?view=agenda&date=2026-10-30');
-    const rows = section.querySelectorAll('[data-action-row]');
-    expect(rows).toHaveLength(3);
-    // The two *Tugas* keep their target. *Changed 2026-11-07 (P19.8-T2 AC-7; MOB UI-169):* an entry's row opens the
-    // Calendar's detail over Home (`home-review.spec.tsx`), a button rather than a link to the Agenda.
-    for (const row of [...rows].slice(0, 2)) {
-      expect(row.querySelector('a[data-row-main]')).toHaveAttribute('href', '/calendar?view=agenda&date=2026-10-30');
-    }
-    expect(rows[2].querySelector('button[data-row-main]')).toHaveAttribute('aria-haspopup', 'dialog');
+    const tasks = within(section).getByRole('list', { name: 'Today’s tasks' });
+    const rows = [...tasks.querySelectorAll<HTMLElement>('[data-task]')];
+    expect(rows.map((r) => r.getAttribute('data-task'))).toEqual(['coaching:s-1:i-1', 'lead:l-1']);
+    // Each the Calendar's own row: a checkbox, the source icon, the name in bold over the note, green WhatsApp, a ›.
+    expect(within(rows[0]).getByRole('checkbox', { name: 'Done: From: Wilson Tanoto' })).not.toBeChecked();
     expect(rows[0]).toHaveTextContent('From: WILSON TANOTO');
     expect(rows[0]).toHaveTextContent('Siapkan daftar 20 prospek baru');
-    expect(within(rows[0] as HTMLElement).getByRole('link', { name: /WhatsApp/ })).toHaveAttribute('href', 'https://wa.me/6281299990000');
-    expect(rows[1]).toHaveTextContent('Ibu Wiwik Setyaningsih');
-    expect(within(rows[1] as HTMLElement).getByRole('link', { name: /Call/ })).toHaveAttribute('href', 'tel:+6281211112222');
-    // The next day's agenda item: its time in the box, its type and its day under the title, a ›.
-    expect(rows[2]).toHaveTextContent('15:00');
-    expect(rows[2]).toHaveTextContent('Weekly unit huddle');
-    expect(rows[2]).toHaveTextContent(/Internal meeting · 31 Oct/);
+    expect(within(rows[0]).getByRole('link', { name: /WhatsApp/ })).toHaveAttribute('href', 'https://wa.me/6281299990000');
+    expect(within(rows[1]).getByRole('checkbox', { name: 'Done: Ibu Wiwik Setyaningsih' })).not.toBeChecked();
+    expect(within(rows[1]).getByRole('button', { name: 'Open Ibu Wiwik Setyaningsih' })).toBeInTheDocument();
+    expect(within(rows[1]).getByRole('link', { name: /WhatsApp/ })).toHaveAttribute('href', 'https://wa.me/6281211112222');
+    expect(rows[1].querySelector('[data-chevron]')).not.toBeNull();
+    // Then the entry, the Agenda's row: its time range, title and type, the 3px accent bar in its tone.
+    const timed = within(section).getByRole('list', { name: 'Today’s events' });
+    const huddle = within(timed).getByRole('button', { name: /^Internal meeting: Weekly unit huddle, 15:00–16:00/ });
+    expect(huddle).toHaveTextContent(/15:00–16:00\s*Weekly unit huddle\s*Internal meeting/);
+    expect(huddle.className.split(' ')).toEqual(expect.arrayContaining(['border-l-[3px]', 'border-navy-soft']));
+    expect(tasks.compareDocumentPosition(timed) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('UI-100 the chart shows the 7 days ending today, Hari ini last and in the accent, the total on the header', async () => {
@@ -140,7 +146,7 @@ describe('UI-100 Home', () => {
     expect(chart).not.toHaveTextContent('activities');
   });
 
-  it('UI-100 agents see no leader tiles and no Laporan tim; empty sections are hidden', async () => {
+  it('UI-100 P19.11-T1 AC-4 agents see no leader tiles and no Laporan tim; nothing today, Aksi hari ini says so', async () => {
     await open(AGENT_VIEW);
     // *Changed 2026-11-07 (P19.8-T2 AC-4; OD-284):* the Agent's *Leads* joins their two.
     expect(document.querySelectorAll('[data-stat-tile]')).toHaveLength(3);
@@ -148,8 +154,12 @@ describe('UI-100 Home', () => {
     expect(screen.queryByText(/Active Agent/)).toBeNull();
     expect(screen.queryByText(/^Coaching 7 days$/)).toBeNull();
     expect(document.querySelector('[data-home-team]')).toBeNull();
-    // Nothing to do and nothing ahead: no *Aksi hari ini* at all, not a sentence saying so (D-08).
-    expect(document.querySelector('[data-home-actions]')).toBeNull();
+    // *Changed 2026-11-10 (P19.11-T1 AC-4; UXQ6):* nothing today — the card stays, one line saying so, *Semua* above it,
+    // where it was hidden (D-08).
+    const actions = document.querySelector('[data-home-actions]') as HTMLElement;
+    expect(within(actions).getByText('Nothing scheduled for today.')).toBeInTheDocument();
+    expect(within(actions).getByRole('link', { name: 'All of today in Calendar' })).toHaveAttribute('href', '/calendar?view=agenda&date=2026-10-30');
+    expect(within(actions).queryByRole('list')).toBeNull();
   });
 
   it('UI-100 a read that fails says so through the shared banner', async () => {
@@ -161,12 +171,8 @@ describe('UI-100 Home', () => {
 
 describe('UI-101 Laporan tim', () => {
   const rowsOf = () => [...document.querySelectorAll('[data-home-team] [data-person-row]')] as HTMLElement[];
-  // The name alone: the *Group* tab draws the level tag before it (P19.9-T2 AC-2).
-  const namesOf = () => rowsOf().map((r) => {
-    const line = r.querySelector('[class*="uppercase"]')!.cloneNode(true) as HTMLElement;
-    line.querySelector('[data-rung-tag]')?.remove();
-    return line.textContent;
-  });
+  // The name alone: no row draws a level tag before it, on Unit or Group (P19.11-T6 AC-3).
+  const namesOf = () => rowsOf().map((r) => r.querySelector('[class*="uppercase"]')!.textContent);
 
   it('UI-101 starts on Unit, the server’s order kept, the leader never on it', async () => {
     await open(LEADER);
@@ -273,9 +279,130 @@ describe('UI-100 Home in ID mode', () => {
 
   it('UI-100 the greeting follows the office’s clock: Siang, Sore, Malam', async () => {
     for (const [minute, words] of [[12 * 60, 'Siang, AGUS'], [16 * 60, 'Sore, AGUS'], [20 * 60, 'Malam, AGUS'], [2 * 60, 'Malam, AGUS']] as const) {
-      const { unmount } = await open({ ...LEADER, now: { minute } }, 'id');
+      const { unmount } = await open({ ...LEADER, now: { ...LEADER.now, minute } }, 'id');
       expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(words);
       unmount();
+    }
+  });
+});
+
+/**
+ * **P19.11-T1 — *Aksi hari ini* as the Calendar's own rows** (UX-1, UX-2; UXQ6, UXQ8): the AB with the Calendar's writes,
+ * so each task carries its checkbox.
+ */
+describe('P19.11-T1 Aksi hari ini ticks, counts open tasks, says when today is empty, and turns with the day', () => {
+  const homeReads = (stub: ReturnType<typeof stubFetch>) => stub.calls.filter((c) => c.url.endsWith('/home'));
+  const show = async (view: HomeView, routes: Parameters<typeof stubFetch>[0] = {}) => {
+    const stub = stubFetch({ '/home': { body: view }, ...routes });
+    renderWithSession(<HomePage />, { me: AGUS_AB });
+    await waitFor(() => expect(document.querySelector('[data-home-actions]')).not.toBeNull());
+    return stub;
+  };
+  const rowOf = (taskId: string) => document.querySelector<HTMLElement>(`[data-task="${taskId}"]`)!;
+  /** The one completed style (AC-1): checked, struck, WhatsApp and › faded — WhatsApp still a link. */
+  const drawnDone = (row: HTMLElement) => {
+    expect(row).toHaveAttribute('data-done');
+    expect(within(row).getByRole('checkbox')).toBeChecked();
+    expect(within(row).getByText('IBU WIWIK SETYANINGSIH').className).toContain('line-through');
+    expect(within(row).getByText('Invite BOP').className).toContain('line-through');
+    expect(within(row).getByRole('link', { name: /WhatsApp/ }).closest('.opacity-40')).not.toBeNull();
+    expect(row.querySelector('[data-chevron]')!.className).toContain('opacity-40');
+  };
+
+  it('P19.11-T1 AC-1 AC-2 AC-3 a tap ticks the task at its source in the completed style, and Tugas n counts open tasks alone; Undo restores both', async () => {
+    const user = userEvent.setup();
+    const stub = await show(LEADER, {
+      'PUT /leads/l-1/next-action/done': [{ body: { id: 'l-1', version: 3 } }, { body: { id: 'l-1', version: 4 } }],
+    });
+    expect(tile(/^Today’s schedule$/)).toHaveTextContent('Tasks 3');
+    await user.click(within(rowOf('lead:l-1')).getByRole('checkbox', { name: 'Done: Ibu Wiwik Setyaningsih' }));
+    await waitFor(() => expect(rowOf('lead:l-1')).toHaveAttribute('data-done'));
+    const ticks = stub.calls.filter((c) => c.url.includes('/next-action/done'));
+    expect(JSON.parse(ticks[0].init.body as string)).toEqual({ done: true, version: 2 });
+    drawnDone(rowOf('lead:l-1'));
+    // Still listed, in its place; the chip counts what is left.
+    expect([...document.querySelectorAll('[data-task]')].map((r) => r.getAttribute('data-task'))).toEqual(['coaching:s-1:i-1', 'lead:l-1']);
+    expect(tile(/^Today’s schedule$/)).toHaveTextContent('Tasks 2');
+    await user.click(screen.getByRole('button', { name: 'Undo' }));
+    await waitFor(() => expect(rowOf('lead:l-1')).not.toHaveAttribute('data-done'));
+    expect(JSON.parse(stub.calls.filter((c) => c.url.includes('/next-action/done'))[1].init.body as string)).toEqual({ done: false, version: 3 });
+    expect(tile(/^Today’s schedule$/)).toHaveTextContent('Tasks 3');
+    expect(homeReads(stub)).toHaveLength(1);
+  });
+
+  it('P19.11-T1 AC-1 AC-2 a task read ticked from the server is drawn in the same completed style and not counted; unticking pins its version and restores it', async () => {
+    const user = userEvent.setup();
+    const ticked: HomeView = {
+      ...LEADER,
+      schedule: { ...LEADER.schedule, tasks: 2 },
+      actions: LEADER.actions.map((a) => (a.kind === 'task' && a.task.taskId === WIWIK_TASK.taskId ? { kind: 'task', task: { ...WIWIK_TASK, done: true } } : a)),
+    };
+    const stub = await show(ticked, { 'PUT /leads/l-1/next-action/done': { body: { id: 'l-1', version: 3 } } });
+    drawnDone(rowOf('lead:l-1'));
+    expect(tile(/^Today’s schedule$/)).toHaveTextContent('Tasks 2');
+    await user.click(within(rowOf('lead:l-1')).getByRole('checkbox'));
+    await waitFor(() => expect(rowOf('lead:l-1')).not.toHaveAttribute('data-done'));
+    expect(JSON.parse(stub.calls.find((c) => c.url.includes('/next-action/done'))!.init.body as string)).toEqual({ done: false, version: 2 });
+    expect(within(rowOf('lead:l-1')).getByText('IBU WIWIK SETYANINGSIH').className).not.toContain('line-through');
+    expect(tile(/^Today’s schedule$/)).toHaveTextContent('Tasks 3');
+  });
+
+  it('P19.11-T1 AC-3 a task with no number fills it from the row: the lead is read first, so its email and version are its own', async () => {
+    const user = userEvent.setup();
+    const lead = {
+      id: 'l-1', ownerMembershipId: 'mem-agus', type: 'sales', name: 'Ibu Wiwik Setyaningsih',
+      contact: { phone: null, email: 'wiwik@example.test' }, statusCode: null, thisMonth: false, remarks: null,
+      nextActionDate: null, nextActionNote: null, outcome: null, source: null, dateRegistered: '2026-09-04T03:00:00.000Z',
+      version: 3, flags: [], overdueDays: null, committedMonths: [], lastEditedBy: null, history: [],
+    };
+    const noNumber: HomeView = { ...LEADER, actions: [{ kind: 'task', task: { ...WIWIK_TASK, phone: null, done: true } }] };
+    const stub = await show(noNumber, {
+      'GET /leads/l-1': { body: lead },
+      'PATCH /leads/l-1': { body: { ...lead, contact: { phone: '+6281211112222', email: 'wiwik@example.test' }, version: 4 } },
+    });
+    await user.click(within(rowOf('lead:l-1')).getByRole('button', { name: /WhatsApp/ }));
+    const sheet = await screen.findByRole('dialog', { name: 'Enter WhatsApp number' });
+    await user.type(within(sheet).getByLabelText('WhatsApp number'), '081211112222');
+    await user.click(within(sheet).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(stub.calls.some((c) => c.init.method === 'PATCH')).toBe(true));
+    const patch = stub.calls.find((c) => c.init.method === 'PATCH')!;
+    expect(JSON.parse(String(patch.init.body))).toEqual({ contact: { phone: expect.any(String), email: 'wiwik@example.test' }, version: 3 });
+  });
+
+  it('P19.11-T1 AC-3 without calendar_entry:update a task row has no checkbox — the server refuses the tick too', async () => {
+    await open(LEADER);
+    expect(document.querySelectorAll('[data-task]')).toHaveLength(2);
+    expect(within(document.querySelector('[data-home-actions]') as HTMLElement).queryByRole('checkbox')).toBeNull();
+  });
+
+  it('P19.11-T1 AC-4 nothing today in Indonesian: Tidak ada tugas atau jadwal hari ini., Semua still there', async () => {
+    stubFetch({ '/home': { body: { ...LEADER, actions: [] } } });
+    renderInIndonesian(<HomePage />, { me: AGUS_AB });
+    const actions = await waitFor(() => {
+      const el = document.querySelector('[data-home-actions]') as HTMLElement | null;
+      expect(el).not.toBeNull();
+      return el!;
+    });
+    expect(within(actions).getByText('Tidak ada tugas atau jadwal hari ini.')).toBeInTheDocument();
+    expect(within(actions).getByRole('link', { name: 'Semua untuk hari ini di Kalender' })).toBeInTheDocument();
+  });
+
+  it('P19.11-T1 AC-5 Home reads itself again after the office’s midnight and draws the new day’s list', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      // 23:59 in Jakarta; the read after midnight answers the next day, with nothing on it yet.
+      const late: HomeView = { ...LEADER, now: { minute: 23 * 60 + 59, at: '2026-10-30T16:59:00.000Z' } };
+      const next: HomeView = { ...LEADER, today: '2026-10-31', yesterday: '2026-10-30', actions: [], now: { minute: 0, at: '2026-10-30T17:00:05.000Z' } };
+      const stub = stubFetch({ '/home': [{ body: late }, { body: next }] });
+      renderWithSession(<HomePage />, { me: AGUS_AB });
+      await waitFor(() => expect(document.querySelectorAll('[data-task]')).toHaveLength(2));
+      expect(homeReads(stub)).toHaveLength(1);
+      await act(async () => { vi.advanceTimersByTime(75_000); });
+      await waitFor(() => expect(homeReads(stub)).toHaveLength(2));
+      await waitFor(() => expect(screen.getByText('Nothing scheduled for today.')).toBeInTheDocument());
+      expect(document.querySelectorAll('[data-task]')).toHaveLength(0);
+    } finally {
+      vi.useRealTimers();
     }
   });
 });

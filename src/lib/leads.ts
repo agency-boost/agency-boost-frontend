@@ -116,7 +116,20 @@ export interface Lead {
 /** `Lead.proposals`: the lead's live proposals, drafts included, and the latest one's products (ADR-0221 §6). */
 export interface LeadProposals {
   count: number;
+  /** Kept in the payload; no longer drawn on the card since P19.11-T3 AC-2 (UX-9: the *"PRUMapan"* chip went). */
   latest: LeadLatestProposal;
+  /**
+   * **The finished ones among them** (P19.11-T3 AC-1; UX-9; UXQ3): `status: 'done'`, counted by the server. The card
+   * draws its proposal icon only when this is 1 or more; drafts never count.
+   */
+  done: number;
+  /** The finished one saved last (by `doneAt`): what the card's icon opens. `null` when none is finished. */
+  latestDone: LeadLatestDoneProposal | null;
+}
+
+/** `LeadProposals.latestDone`: the proposal the card's icon opens, at its step 3 (P19.11-T3 AC-1). */
+export interface LeadLatestDoneProposal {
+  id: string;
 }
 
 /**

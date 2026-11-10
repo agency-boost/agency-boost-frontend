@@ -46,6 +46,22 @@ export const ENTRY_WITH_TIME_PX = 2 * ENTRY_PAD_Y_PX + (ENTRY_TITLE_PX + ENTRY_T
 export function showsTime(height: number): boolean {
   return height >= ENTRY_WITH_TIME_PX;
 }
+
+/** The most lines a block's title wraps to (P19.11-T1 AC-6; UX-6: *tall blocks may wrap to 2–3 lines*). */
+export const ENTRY_TITLE_LINES_MAX = 3;
+
+/**
+ * **How many lines a block's title takes** (P19.11-T1 AC-6; UX-6): as many whole 11px lines as its height holds under
+ * its padding — and under its time, where the time is drawn (`showsTime`) — at least one and at most
+ * `ENTRY_TITLE_LINES_MAX`. A short block's title is one line, cut with an ellipsis; a 1-hour block's two, with its time;
+ * a 2-hour block's three. **A narrow block** (a phone's Week, ~45px a day) keeps one line whatever its height.
+ */
+export function titleLines(height: number, withTime: boolean, narrow = false): 1 | 2 | 3 {
+  if (narrow) return 1;
+  const room = height - 2 * ENTRY_PAD_Y_PX - (withTime ? ENTRY_TIME_PX * ENTRY_LEADING : 0);
+  const lines = Math.floor(room / (ENTRY_TITLE_PX * ENTRY_LEADING));
+  return Math.min(Math.max(lines, 1), ENTRY_TITLE_LINES_MAX) as 1 | 2 | 3;
+}
 /** A drag snaps to a quarter hour (`snap`, `:623`). */
 export const SNAP_MINUTES = 15;
 /** A click or a tap is half an hour (`:660-661`). */

@@ -86,7 +86,7 @@ describe('P18.10-T4 the Sales Attack Plan in Indonesian', () => {
       expect(chips('Rentang usia')).toEqual(['< 25', '25–34', '35–49', '50–64', '65+']);
       // The reader's figures, Indonesian here: the backend's own labels, to the character.
       expect(chips('Anggaran premi bulanan')).toEqual([
-        '< Rp 500 rb', 'Rp 500 rb–Rp 2 jt', 'Rp 2 jt–Rp 5 jt', 'Rp 5 jt–Rp 10 jt', 'Rp 10 jt–Rp 20 jt', '> Rp 20 jt',
+        '< Rp 500 rb', 'Rp 500 rb–Rp 2 Jt', 'Rp 2 Jt–Rp 5 Jt', 'Rp 5 Jt–Rp 10 Jt', 'Rp 10 Jt–Rp 20 Jt', '> Rp 20 Jt',
       ]);
       expect(chips('Atau bayar sekali')).toEqual(['Sekaligus']);
       expect(screen.getByText('Pilih kebutuhan, rentang usia, dan anggaran untuk melanjutkan.')).toBeInTheDocument();
@@ -121,7 +121,7 @@ describe('P18.10-T4 the Sales Attack Plan in Indonesian', () => {
       renderWithLanguage(page({}), { me: RINA_ME }, { live: false });
       await screen.findByRole('heading', { level: 2, name: 'Who are we talking to?' });
       expect(monthly()).toEqual([
-        '< Rp 500 rb', 'Rp 500 rb–Rp 2 jt', 'Rp 2 jt–Rp 5 jt', 'Rp 5 jt–Rp 10 jt', 'Rp 10 jt–Rp 20 jt', '> Rp 20 jt',
+        '< Rp 500 rb', 'Rp 500 rb–Rp 2 Jt', 'Rp 2 Jt–Rp 5 Jt', 'Rp 5 Jt–Rp 10 Jt', 'Rp 10 Jt–Rp 20 Jt', '> Rp 20 Jt',
       ]);
       expect(chips('Or pay once')).toEqual(['Lump-sum']);
     });
@@ -141,7 +141,7 @@ describe('P18.10-T4 the Sales Attack Plan in Indonesian', () => {
       stubs();
       renderWithLanguage(page(BRIEF), { me: RINA_ME }, { live: false });
       await result();
-      expect(screen.getByLabelText('Gambaran nasabah').textContent).toBe('Kebutuhan: Dana pensiunUsia: 25–34Anggaran: Rp 500 rb–Rp 2 jt');
+      expect(screen.getByLabelText('Gambaran nasabah').textContent).toBe('Kebutuhan: Dana pensiunUsia: 25–34Anggaran: Rp 500 rb–Rp 2 Jt');
     });
   });
 
@@ -149,7 +149,7 @@ describe('P18.10-T4 the Sales Attack Plan in Indonesian', () => {
     it('AC-2, AC-4 the summary, the tag, the pill, the blocks and the alternatives’ line in Indonesian; the product as typed', async () => {
       show(BRIEF);
       await result();
-      expect(screen.getByLabelText('Gambaran nasabah').textContent).toBe('Kebutuhan: Dana pensiunUsia: 25–34Anggaran: Rp 500 rb–Rp 2 jt');
+      expect(screen.getByLabelText('Gambaran nasabah').textContent).toBe('Kebutuhan: Dana pensiunUsia: 25–34Anggaran: Rp 500 rb–Rp 2 Jt');
       expect(screen.getByText('Dana pensiun · Konvensional')).toBeInTheDocument();
       expect(screen.getByText('Dana pensiun yang cair rutin dari usia 55.')).toBeInTheDocument();
       expect(screen.getByText('Cocok')).toHaveAttribute('data-tone', 'success');
@@ -178,7 +178,7 @@ describe('P18.10-T4 the Sales Attack Plan in Indonesian', () => {
         'Di luar rentang usia dan rentang anggaran yang umum untuk produk ini — masih memungkinkan, tetapi periksa kelayakan '
         + 'dan besaran premi sebelum membuat penawaran.',
       )).toBeInTheDocument();
-      expect(screen.getByLabelText('Gambaran nasabah').textContent).toBe('Kebutuhan: Dana pensiunUsia: 65+Anggaran: > Rp 20 jt');
+      expect(screen.getByLabelText('Gambaran nasabah').textContent).toBe('Kebutuhan: Dana pensiunUsia: 65+Anggaran: > Rp 20 Jt');
       noEnglishLeft();
     });
 

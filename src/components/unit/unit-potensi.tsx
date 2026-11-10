@@ -10,7 +10,7 @@ import { Avatar, initialsFor } from '@/components/ui/avatar';
 import { PickerMenu } from '@/components/ui/picker-menu';
 import { ResponsiveSheet } from '@/components/ui/responsive-sheet';
 import { rungShort } from '@/components/ui/role-badge';
-import { RungTag } from '@/components/ui/rung-tag';
+import { RungTag, useIsLeaderRung } from '@/components/ui/rung-tag';
 import { Skeleton, SkeletonBar } from '@/components/ui/skeleton';
 import { TonePill } from '@/components/ui/tone-pill';
 import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
@@ -271,6 +271,7 @@ function UnitCard({
 /** One person's row: avatar, the role tag for a leader, the name in full (two lines at most, never cut), the marks, ›. */
 function PersonRow({ person, view, onOpen }: { person: PotensiPerson; view: PotensiView; onOpen: (p: PotensiPerson) => void }) {
   const t = useMessages(unitPotensiMessages);
+  const isLeader = useIsLeaderRung();
   const { potensi, done, none } = marksOf(person, view);
   const said = [
     potensi > 0 ? t.potensi({ n: potensi }) : null,
@@ -281,8 +282,11 @@ function PersonRow({ person, view, onOpen }: { person: PotensiPerson; view: Pote
     <>
       <Avatar name={person.name} photoUrl={person.photoUrl} seed={person.membershipId} size={36} />
       <span data-potensi-name="" className="min-w-0 flex-1 text-base font-bold uppercase leading-snug text-ink [overflow-wrap:anywhere]">
-        {/* The shared level tag (P19.9-T4 AC-1), which the Overview's roster wears on every row. */}
-        {person.isLeader && <RungTag rung={person.rung} className="mr-1.5" />}
+        {/*
+          * The shared level tag (P19.9-T4 AC-1), on the card's leader — and, one rule with the Overview's roster, only
+          * where their rung is a leader's (P19.11-T6 AC-4; UXQ10): a card led by somebody on an Agent's rung draws none.
+          */}
+        {person.isLeader && isLeader(person.rung) && <RungTag rung={person.rung} className="mr-1.5" />}
         {person.name}
       </span>
       <span data-potensi-marks="" className="flex shrink-0 items-center gap-1.5">

@@ -286,12 +286,6 @@ export function fieldLabel(field: Pick<ProposalFieldView, 'label' | 'labelSyaria
   return channel === 'syariah' && field.labelSyariah ? field.labelSyariah : field.label;
 }
 
-/** *"PRUWell Medical +1"*: the first product, then how many more (ADR-0221 §6). `null` for none. */
-export function productsPill(products: readonly string[]): string | null {
-  if (products.length === 0) return null;
-  return products.length === 1 ? products[0] : `${products[0]} +${products.length - 1}`;
-}
-
 // ------------------------------------------------------------------------------------------------ calls
 
 const qs = (query: Record<string, string | number | boolean | undefined>) => {
@@ -307,7 +301,10 @@ const qs = (query: Record<string, string | number | boolean | undefined>) => {
 export const listProposals = (query: ProposalQuery = {}) =>
   api<ProposalPage>('/proposals' + qs({ ...query }));
 
-/** The draft, created at step 1's *Lanjut* for one of the reader's own Sales leads. */
+/**
+ * The draft, created at step 1's *Lanjut* for one of the reader's own Sales leads — **or the lead's empty draft the
+ * reader already has**, its client taken again, which the server answers rather than making another (P19.11-T3 AC-8).
+ */
 export const createProposal = (leadId: string) =>
   api<Proposal>('/proposals', { method: 'POST', body: { leadId } });
 

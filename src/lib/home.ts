@@ -1,4 +1,5 @@
 import { api } from './api-client';
+import type { CalendarEntry, CalendarJoinedEvent, CalendarTask } from './calendar';
 
 /**
  * **Home** (UI V1, 2026-10-30, Phase 18.11 T11; UI-100, UI-101; `functional/home.md`): `GET /home`, every block of the
@@ -12,6 +13,8 @@ import { api } from './api-client';
 export interface HomeNow {
   /** Minutes since the office's midnight: the greeting's time of day. */
   minute: number;
+  /** The instant, ISO (P19.11-T1 AC-5): Home counts on from it to the office's midnight, and reads itself again. */
+  at: string;
 }
 
 /** Boost's four quote poses, the day number mod 4 (the server's `HOME_QUOTE_POSES`). */
@@ -45,52 +48,30 @@ export interface HomeSchedule {
   tasks: number;
 }
 
-/** Somebody a row names, with the WhatsApp number on their account. */
-export interface HomePerson {
-  membershipId: string;
-  name: string;
-  phone: string | null;
+/**
+ * ***Aksi hari ini*** **rows, in the Calendar's own shapes** (P19.11-T1 AC-3; UX-2): each drawn with the Calendar's own
+ * row — a *Tugas* with its `TaskRow` (the checkbox ticks it at its source; `done` when ticked), an entry and a joined
+ * event with the Agenda's `AgendaItem`. Today's alone. *Changed 2026-11-10: Home's own `coaching`, `lead` and `agenda`
+ * rows, the last with a start and no end, from the days after as well.*
+ */
+export interface HomeTaskAction {
+  kind: 'task';
+  task: CalendarTask;
 }
 
-export interface HomeLeadContact {
-  phone: string | null;
-  email: string | null;
+/** A calendar entry of today's, as `GET /calendar/entries` answers it: its `entryId` opens the detail over Home. */
+export interface HomeEntryAction {
+  kind: 'entry';
+  entry: CalendarEntry;
 }
 
-/** A coaching action item due today: *Dari: NAME* and the item. */
-export interface HomeCoachingAction {
-  kind: 'coaching';
-  sessionId: string;
-  itemId: string;
-  text: string;
-  from: HomePerson | null;
+/** An event the reader joined, today: its `eventId` opens `/events/{id}`. */
+export interface HomeEventAction {
+  kind: 'event';
+  event: CalendarJoinedEvent;
 }
 
-/** A lead whose next action is today. */
-export interface HomeLeadAction {
-  kind: 'lead';
-  leadId: string;
-  name: string;
-  type: 'sales' | 'recruitment' | null;
-  note: string | null;
-  contact: HomeLeadContact;
-  version: number;
-}
-
-/** A timed item: today's not yet ended, or the next days'. */
-export interface HomeAgendaAction {
-  kind: 'agenda';
-  source: 'entry' | 'event';
-  id: string;
-  /** An entry's type code, or a joined event's type as the office named it. */
-  type: string;
-  title: string;
-  date: string;
-  /** `HH:mm`, the office's. */
-  start: string;
-}
-
-export type HomeAction = HomeCoachingAction | HomeLeadAction | HomeAgendaAction;
+export type HomeAction = HomeTaskAction | HomeEntryAction | HomeEventAction;
 
 export interface HomeCountOf {
   count: number;

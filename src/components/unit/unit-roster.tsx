@@ -6,7 +6,7 @@ import { MemberContactButtons } from '@/components/contact-buttons';
 import { HEADER_CONTROL } from '@/components/ui/header-control';
 import { LineIcon } from '@/components/ui/line-icon';
 import { PersonRow } from '@/components/ui/person-row';
-import { RungTag } from '@/components/ui/rung-tag';
+import { RungTag, useIsLeaderRung } from '@/components/ui/rung-tag';
 import { SectionTitle } from '@/components/ui/section-title';
 import { TippedGlyph } from '@/components/ui/tipped-glyph';
 import { TonePill, type PillTone } from '@/components/ui/tone-pill';
@@ -28,10 +28,10 @@ import {
  *
  * - **Below 768px, an accordion by leader** (UI-002): *Unit Anda · 4* first and open, each AAB unit closed, a unit nested
  *   in one inside it; each header 48px with the unit's goal bar and percentage, in place of the old *— Total* card; each
- *   person a 60px row — avatar, NAME, the goal's mini bar, percentage and *Rp 29 jt / 94,7 jt* — with the status pill on
+ *   person a 60px row — avatar, NAME, the goal's mini bar, percentage and *Rp 29 Jt / 94,7 Jt* — with the status pill on
  *   the right. No ⓘ per row, no ⌄, no *Perbarui produksi*, no *+ Tambah agent* (the owner, 30 Oct). **Since the owner's
  *   mobile review of 7 November** (P19.8-T4 AC-3, MOB UI-178; ADR-0229 §3): the NAME on up to two lines, never cut; under
- *   it the percentage in colour and *Rp 68 / 94,7 jt*, and under that **a 5px bar across the name column, for every
+ *   it the percentage in colour and *Rp 68 / 94,7 Jt*, and under that **a 5px bar across the name column, for every
  *   person**; the whole row a target with ›; and the chips **equal count tiles**, the count over its words.
  * - **768–1023px, a table of four** (UI-009): *Nama · Progres goal · Aktivitas · Status*.
  * - **From 1024px, a table of nine and a ›** (UI-009): *Nama · Progres goal · Leads penjualan · Closing · Leads rekrut ·
@@ -55,11 +55,15 @@ import {
  * drawn, and **when only *Semua* would remain the chip row is not drawn at all — the title reads *Roster tim Anda · 12***.
  * The title is the section titles' one size, 14px / 700 (MOB UI-185); the chips are header controls (MOB UI-171).
  *
- * **Since the owner's requests of 6 November** (P19.9-T4; R6, R7; ADR-0235, OD-291): **every row, at every period and
- * size, carries the person's level** — the navy tag *Potensi* draws (`RungTag`), before the name — **and a WhatsApp
- * button** (`RowWhatsApp`), Home's rule: with a number on file, or for a reader who may save one; never on the reader's
- * own row, never in the office's read-only view. **Each unit's header carries its amount**, *Rp x / y*, under its label
- * on a phone and on its own line on a laptop below 1280px, where it was read only by a screen reader.
+ * **Since the owner's requests of 6 November** (P19.9-T4; R6, R7; ADR-0235, OD-291): **a leader's row, at every period
+ * and size, carries the person's level** — the navy tag *Potensi* draws (`RungTag`), before the name — **and every row a
+ * WhatsApp button** (`RowWhatsApp`), Home's rule: with a number on file, or for a reader who may save one; never on the
+ * reader's own row, never in the office's read-only view. **Each unit's header carries its amount**, *Rp x / y*, under
+ * its label on a phone and on its own line on a laptop below 1280px, where it was read only by a screen reader.
+ *
+ * *Changed 2026-11-10 (P19.11-T6 AC-4; UX-16, UXQ10):* **the tag is a leader's alone** — AB and AAB, as the company's
+ * ladder places them (`useIsLeaderRung`); an Agent's row has none, and nothing in its place: on a phone the name follows
+ * the avatar directly, on a tablet and a laptop no empty line stands under the name. It was on every row (P19.9-T4 AC-1).
  */
 export interface RosterProps {
   view: UnitDashboardView;
@@ -248,7 +252,7 @@ function CountTiles({
 
 /**
  * **A goal's line** (UI-002, UI-005): the 44px mini bar, the percentage — red under 100%, green from it, judged on the
- * server's unrounded figure — and *Rp 29 jt / 94,7 jt* in grey. No goal: *Goal belum diatur*; no upload: a dashed empty
+ * server's unrounded figure — and *Rp 29 Jt / 94,7 Jt* in grey. No goal: *Goal belum diatur*; no upload: a dashed empty
  * bar and *Belum diunggah*; a year made before the month: *Target tahun ini tercapai*. **No figure is shown as 0.**
  */
 function GoalLine({ goal, pair = true }: {
@@ -287,7 +291,7 @@ function GoalLine({ goal, pair = true }: {
 
 /**
  * **A phone row's goal** (P19.8-T4 AC-3, MOB UI-178; ADR-0229 §3): the percentage in colour — green from 100%, red under
- * it — and *Rp 68 jt / 94,7 jt* in grey, and under them **a 5px bar across the name column**, for every person with a
+ * it — and *Rp 68 Jt / 94,7 Jt* in grey, and under them **a 5px bar across the name column**, for every person with a
  * figure, in the same colour. No goal: *Goal belum diatur*; no upload: the dashed bar and *Belum diunggah*; a year made
  * before the month: *Target tahun ini tercapai*. **No figure is shown as 0.**
  */
@@ -400,7 +404,7 @@ function RowWhatsApp({ row, readOnly }: { row: UnitRow; readOnly: boolean }) {
 }
 
 /**
- * **A unit's amount** (P19.9-T4 AC-2; R7, ADR-0235): *Rp 262,4 jt / 320 jt* — the shared pair, beside its percentage —
+ * **A unit's amount** (P19.9-T4 AC-2; R7, ADR-0235): *Rp 262,4 Jt / 320 Jt* — the shared pair, beside its percentage —
  * or *Belum diunggah* while none of its production is uploaded; nothing without a target. Each figure kept whole, so a
  * narrow column wraps after the slash and never cuts a sum.
  */
@@ -500,6 +504,7 @@ function AccordionSection({
   const t = useMessages(unitDashboardMessages);
   const language = useLanguage();
   const figures = useFigureLanguage();
+  const isLeader = useIsLeaderRung();
   const bodyId = useId();
   const expanded = filter !== 'all' || open.has(section.key);
   const goal = section.total.goal;
@@ -548,7 +553,8 @@ function AccordionSection({
                   height={60}
                   // 13px / 700, on up to two lines and never cut (MOB UI-178; PersonRow wraps it below 768px).
                   nameClassName="text-base"
-                  tag={<RungTag rung={row.rung} className="mr-1.5" />}
+                  // A leader's level before the name; an Agent's row none, the name straight after the avatar (P19.11-T6 AC-4).
+                  tag={isLeader(row.rung) ? <RungTag rung={row.rung} className="mr-1.5" /> : undefined}
                   badge={phoneMarksOf(row)}
                   meta={<PhoneGoalLine goal={row.goal} />}
                   trailing={<PhoneTrailing row={row} period={period} readOnly={readOnly} />}
@@ -788,6 +794,7 @@ function PersonTableRow({
 }: { row: UnitRow; period: UnitPeriod; from: string; wide: boolean; depth: number; readOnly: boolean }) {
   const language = useLanguage();
   const t = useMessages(unitDashboardMessages);
+  const isLeader = useIsLeaderRung();
   const href = rowHref(row, from);
   const name = rowName(row, language);
   const last = row.lastOneOnOne;
@@ -812,12 +819,15 @@ function PersonTableRow({
           {marks}
         </span>
         {/*
-         * P19.9-T4 AC-1 (R6): the level on a line of its own under the name — the row keeps its height, and the name the
-         * width it had, where nine columns share the laptop's line.
+         * P19.9-T4 AC-1 (R6): a leader's level on a line of its own under the name — the row keeps its height, and the
+         * name the width it had, where nine columns share the laptop's line. An Agent's row draws no line at all
+         * (P19.11-T6 AC-4).
          */}
-        <span className="mt-px flex" style={depth ? { paddingLeft: depth * 14 } : undefined}>
-          <RungTag rung={row.rung} className="text-2xs leading-tight" />
-        </span>
+        {isLeader(row.rung) && (
+          <span className="mt-px flex" style={depth ? { paddingLeft: depth * 14 } : undefined}>
+            <RungTag rung={row.rung} className="text-2xs leading-tight" />
+          </span>
+        )}
       </th>
       <td className={CELL}>
         <span className="flex min-w-0">

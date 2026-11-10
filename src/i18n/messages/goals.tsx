@@ -162,7 +162,7 @@ const id: MessagesOf<typeof en> = {
   months: 'bulan',
   produced: 'APE yang sudah dicapai tahun ini',
   // The draft mockup's and the findings' own words (MOB UI-190): *⚡ Otomatis · per Okt 2026*, *Diubah oleh Anda*,
-  // *↶ Pakai otomatis (Rp 67 jt)*.
+  // *↶ Pakai otomatis (Rp 67 Jt)*.
   automatic: ({ month }) => (month ? `Otomatis · per ${month}` : 'Otomatis'),
   edited: 'Diubah oleh Anda',
   useAutomatic: ({ amount }) => `Pakai otomatis (${amount})`,
@@ -195,7 +195,7 @@ const id: MessagesOf<typeof en> = {
   mapsTo: ({ numbers }) => `Terhubung ke aktivitas ${numbers} di ${kept('Activity Management')}.`,
 
   commitment: ({ mine, date }) => `${mine ? 'Komitmen saya' : 'Komitmen'}${date ? ` (per ${date})` : ''}`,
-  // The report's own sentence (UI-017, the owner's of 2026-10-30): *Bulan ini APE Rp 100 jt (menuju Rp 500 jt tahun ini):
+  // The report's own sentence (UI-017, the owner's of 2026-10-30): *Bulan ini APE Rp 100 Jt (menuju Rp 500 Jt tahun ini):
   // 40 Set appointment, 20 Sales meeting, 6 Submission polis.*
   pledge: ({ strong, monthly, annual, stages }) => (
     <>

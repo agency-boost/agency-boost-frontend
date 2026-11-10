@@ -34,7 +34,7 @@ interface Paper {
  * - **The session's date, not today's** (a Fix): the prototype printed the browser's today under every
  *   session it exported. A coachee's print says who led it, as the prototype's leader's own export does
  *   (`:11677`), and so does anybody's who did not lead it.
- * - **Money in the one formatter** (F-02), where the prototype's export wrote *Rp1.2M+*: **compact**, *Rp 6,5 jt / Rp 8 jt*,
+ * - **Money in the one formatter** (F-02), where the prototype's export wrote *Rp1.2M+*: **compact**, *Rp 6,5 Jt / Rp 8 Jt*,
  *   as every figure is but a price and the file's own (ADR-0174 §4) — a print is read, not checked against a field.
  * - **Numbered as the screen numbers them** (F1 of P11's final walk): the other action items by date,
  *   undated last, with the screen's own comparator, as the prototype sorts them before it exports

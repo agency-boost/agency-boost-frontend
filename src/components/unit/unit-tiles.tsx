@@ -20,7 +20,7 @@ import {
  * | Tile | Number | Extra | Chips |
  * |---|---|---|---|
  * | *Tim Anda* | 12 agent | — | 4 langsung · 8 AAB |
- * | *Produksi Group* | Rp 333,5 jt | *54%* badge, the bar, *dari Rp 612,3 jt* | — |
+ * | *Produksi Group* | Rp 333,5 Jt | *54%* badge, the bar, *dari Rp 612,3 Jt* | — |
  * | *Active Agent {Bulan}* | 4 dari 12 | the ring, *33%* (UI-013: out of manpower) | Unit 1/4 · AAB 3/8 |
  * | *Recruitment {Bulan}* | 2 kandidat | — | Unit 1 · AAB 1 |
  *

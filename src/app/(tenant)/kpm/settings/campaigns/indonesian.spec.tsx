@@ -77,8 +77,8 @@ describe('P18.10-T4 Settings › Campaigns in Indonesian', () => {
     expect(screen.getByText('Berjalan')).toBeInTheDocument();
     expect(screen.getByText('KPM ini')).toBeInTheDocument();
     // The metric's name as served (§A.4), the comparison Indonesian, the figure the reader's.
-    expect(screen.getByText('APE achieved minimal Rp 500 jt')).toBeInTheDocument();
-    expect(screen.getByText(/^Net APE kurang dari Rp 600 jt/)).toBeInTheDocument();
+    expect(screen.getByText('APE achieved minimal Rp 500 Jt')).toBeInTheDocument();
+    expect(screen.getByText(/^Net APE kurang dari Rp 600 Jt/)).toBeInTheDocument();
     expect(screen.getByText('Belum diukur')).toBeInTheDocument();
     expect(screen.getByText('Hadiah: Extra unit budget')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Tambah campaign' })).toBeInTheDocument();

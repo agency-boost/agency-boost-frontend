@@ -55,32 +55,32 @@ describe('the words a row is drawn in', () => {
   });
 
   it('P15-T2 AC-3, P18.9-T3 AC-1 writes the goal line over or short — the percentage whole — over its achieved-of-target, compact, one Rp (UI-030)', () => {
-    expect(goalWords(goalCell())).toEqual({ tone: 'short', line: '82% · Rp 14,4 jt short', sub: 'Rp 65,6 jt of 80 jt' });
+    expect(goalWords(goalCell())).toEqual({ tone: 'short', line: '82% · Rp 14,4 Jt short', sub: 'Rp 65,6 Jt of 80 Jt' });
     expect(goalWords(goalCell({ actualMinor: rp(108), attainmentPct: 135, targetMet: true, overMinor: rp(28) })))
-      .toEqual({ tone: 'over', line: '135% · +Rp 28 jt over', sub: 'Rp 108 jt of 80 jt' });
+      .toEqual({ tone: 'over', line: '135% · +Rp 28 Jt over', sub: 'Rp 108 Jt of 80 Jt' });
     // The client's own example (UI-030): it wrapped as *Rp 357.500.000 of Rp 712.666.667*.
-    expect(goalWords({ targetMinor: rp(712.666667), actualMinor: rp(357.5), attainmentPct: 50 }).sub).toBe('Rp 357,5 jt of 712,7 jt');
+    expect(goalWords({ targetMinor: rp(712.666667), actualMinor: rp(357.5), attainmentPct: 50 }).sub).toBe('Rp 357,5 Jt of 712,7 Jt');
   });
 
   it('P15-T2 AC-3 never shows a missing figure as 0: Not uploaded yet, and No goal set', () => {
     expect(goalWords(goalCell({ actualMinor: null, attainmentPct: null })))
-      .toEqual({ tone: 'missing', line: 'Not uploaded yet', sub: 'of Rp 80 jt target' });
+      .toEqual({ tone: 'missing', line: 'Not uploaded yet', sub: 'of Rp 80 Jt target' });
     // The figure alone is labelled (P18.7-T3 AC-2; UI-030), which it was not until 2026-10-26.
     expect(goalWords(goalCell({ set: false, targetMinor: null, attainmentPct: null })))
-      .toEqual({ tone: 'none', line: 'No goal set', sub: 'produced Rp 65,6 jt' });
+      .toEqual({ tone: 'none', line: 'No goal set', sub: 'produced Rp 65,6 Jt' });
     expect(goalWords({ targetMinor: null, actualMinor: null, attainmentPct: null }))
       .toEqual({ tone: 'none', line: 'No goal set', sub: null });
   });
 
-  it('P18.7-T3 AC-2 labels a figure that stands without a target: produced Rp 29 jt, on every row and total', () => {
+  it('P18.7-T3 AC-2 labels a figure that stands without a target: produced Rp 29 Jt, on every row and total', () => {
     // The client's own row (UI-030): *"You (Agus): No goal set · Rp 29.000.000"*, an unlabelled number.
     const agus = goalWords({ set: false, targetMinor: null, actualMinor: rp(29), attainmentPct: null });
-    expect(agus).toEqual({ tone: 'none', line: 'No goal set', sub: 'produced Rp 29 jt' });
-    expect(OWN_COPY.produced('Rp 29 jt')).toBe('produced Rp 29 jt');
+    expect(agus).toEqual({ tone: 'none', line: 'No goal set', sub: 'produced Rp 29 Jt' });
+    expect(OWN_COPY.produced('Rp 29 Jt')).toBe('produced Rp 29 Jt');
     // A total of nobody's targets says it the same way, and a figure beside its target needs no label.
-    expect(goalWords({ targetMinor: null, actualMinor: rp(131.2), attainmentPct: null }).sub).toBe('produced Rp 131,2 jt');
-    expect(goalWords(goalCell()).sub).toBe('Rp 65,6 jt of 80 jt');
-    expect(goalWords(goalCell({ actualMinor: null, attainmentPct: null })).sub).toBe('of Rp 80 jt target');
+    expect(goalWords({ targetMinor: null, actualMinor: rp(131.2), attainmentPct: null }).sub).toBe('produced Rp 131,2 Jt');
+    expect(goalWords(goalCell()).sub).toBe('Rp 65,6 Jt of 80 Jt');
+    expect(goalWords(goalCell({ actualMinor: null, attainmentPct: null })).sub).toBe('of Rp 80 Jt target');
   });
 
   it('P18.7-T3 AC-1 draws a phone card’s goal bar from the server’s percentage, capped, and none without a figure or a target', () => {
@@ -99,7 +99,7 @@ describe('the words a row is drawn in', () => {
 
   it('P15-T2 AC-3 says a month made before it began is made, never 0% of Rp 0 (ADR-0047)', () => {
     const made = goalCell({ targetMinor: 0, actualMinor: rp(12), attainmentPct: null, gapMinor: 0, overMinor: rp(12), policiesNeeded: 0, targetMet: true });
-    expect(goalWords(made)).toEqual({ tone: 'over', line: 'Year’s target made', sub: 'produced Rp 12 jt' });
+    expect(goalWords(made)).toEqual({ tone: 'over', line: 'Year’s target made', sub: 'produced Rp 12 Jt' });
     expect(goalWords({ ...made, actualMinor: null })).toEqual({ tone: 'over', line: 'Year’s target made', sub: 'Not uploaded yet' });
     // A total whose target-holding rows were all made sums to a target of 0, and says the same.
     expect(goalWords({ targetMinor: 0, actualMinor: rp(30), attainmentPct: null }).line).toBe('Year’s target made');
@@ -110,10 +110,10 @@ describe('the words a row is drawn in', () => {
   });
 
   it('P15-T2 AC-4 works a total’s over and short from its two sums, when the server sends no gap', () => {
-    expect(goalWords({ targetMinor: rp(100), actualMinor: rp(120), attainmentPct: 120 }).line).toBe('120% · +Rp 20 jt over');
-    expect(goalWords({ targetMinor: rp(100), actualMinor: rp(40), attainmentPct: 40 }).line).toBe('40% · Rp 60 jt short');
+    expect(goalWords({ targetMinor: rp(100), actualMinor: rp(120), attainmentPct: 120 }).line).toBe('120% · +Rp 20 Jt over');
+    expect(goalWords({ targetMinor: rp(100), actualMinor: rp(40), attainmentPct: 40 }).line).toBe('40% · Rp 60 Jt short');
     // A percentage with nothing to show is the cell's own zero, not a missing one.
-    expect(goalWords({ targetMinor: rp(100), actualMinor: rp(40), attainmentPct: null }).line).toBe('0% · Rp 60 jt short');
+    expect(goalWords({ targetMinor: rp(100), actualMinor: rp(40), attainmentPct: null }).line).toBe('0% · Rp 60 Jt short');
   });
 
   it('P15-T2 AC-3 writes the leads lines, the recruit line a dash when there is nothing to recruit', () => {
@@ -157,9 +157,9 @@ describe('the words a row is drawn in', () => {
 
   it('P15-T2 AC-5 writes the gap and the policies it needs, singular at one', () => {
     expect(gapWords(goalCell())).toEqual({
-      value: 'Rp 14,4 jt remaining', note: '≈ 1 policy needed at their avg case size of Rp 18 jt.',
+      value: 'Rp 14,4 Jt remaining', note: '≈ 1 policy needed at their avg case size of Rp 18 Jt.',
     });
-    expect(gapWords(goalCell({ policiesNeeded: 3 })).note).toBe('≈ 3 policies needed at their avg case size of Rp 18 jt.');
+    expect(gapWords(goalCell({ policiesNeeded: 3 })).note).toBe('≈ 3 policies needed at their avg case size of Rp 18 Jt.');
     expect(gapWords(goalCell({ policiesNeeded: null })).note).toBeNull();
     expect(gapWords(goalCell({ set: false }))).toEqual({ value: 'No goal set', note: null });
     expect(gapWords(goalCell({ gapMinor: null }))).toEqual({ value: 'Not uploaded yet', note: null });
@@ -342,16 +342,16 @@ describe('P18.10-T4 the Unit Dashboard’s words in Indonesian', () => {
   });
 
   it('writes the goal line over and short, Not uploaded yet and No goal set, the figures in theirs', () => {
-    expect(goalWords(goalCell(), 'id')).toEqual({ tone: 'short', line: '82% · kurang Rp 14,4 jt', sub: 'Rp 65,6 jt dari 80 jt' });
+    expect(goalWords(goalCell(), 'id')).toEqual({ tone: 'short', line: '82% · kurang Rp 14,4 Jt', sub: 'Rp 65,6 Jt dari 80 Jt' });
     expect(goalWords(goalCell({ actualMinor: rp(108), attainmentPct: 135, targetMet: true, overMinor: rp(28) }), 'id').line)
-      .toBe('135% · lebih Rp 28 jt');
+      .toBe('135% · lebih Rp 28 Jt');
     expect(goalWords(goalCell({ actualMinor: null, attainmentPct: null }), 'id'))
-      .toEqual({ tone: 'missing', line: 'Belum diunggah', sub: 'dari target Rp 80 jt' });
+      .toEqual({ tone: 'missing', line: 'Belum diunggah', sub: 'dari target Rp 80 Jt' });
     expect(goalWords(goalCell({ set: false, targetMinor: null, attainmentPct: null }), 'id'))
-      .toEqual({ tone: 'none', line: 'Goal belum diatur', sub: 'produksi Rp 65,6 jt' });
+      .toEqual({ tone: 'none', line: 'Goal belum diatur', sub: 'produksi Rp 65,6 Jt' });
     expect(goalWords({ targetMinor: 0, actualMinor: rp(12), attainmentPct: null }, 'id').line).toBe('Target tahun ini tercapai');
     // The words' language and the figures' are apart: English words, Indonesian figures, as a reader with no choice reads.
-    expect(goalWords(goalCell())).toEqual({ tone: 'short', line: '82% · Rp 14,4 jt short', sub: 'Rp 65,6 jt of 80 jt' });
+    expect(goalWords(goalCell())).toEqual({ tone: 'short', line: '82% · Rp 14,4 Jt short', sub: 'Rp 65,6 Jt of 80 Jt' });
     expect(goalWords(goalCell(), 'en', 'en')).toEqual({ tone: 'short', line: '82% · IDR 14.4M short', sub: 'IDR 65.6M of 80M' });
   });
 
@@ -366,7 +366,7 @@ describe('P18.10-T4 the Unit Dashboard’s words in Indonesian', () => {
   });
 
   it('writes the gap, the provenance, the totals’ marks and the lock', () => {
-    expect(gapWords(goalCell(), 'id')).toEqual({ value: 'Sisa Rp 14,4 jt', note: '≈ perlu 1 polis lagi, dengan rata-rata ukuran case-nya Rp 18 jt.' });
+    expect(gapWords(goalCell(), 'id')).toEqual({ value: 'Sisa Rp 14,4 Jt', note: '≈ perlu 1 polis lagi, dengan rata-rata ukuran case-nya Rp 18 Jt.' });
     const corrected = {
       provenance: 'corrected' as const, month: '2026-10',
       correctedBy: { membershipId: 'mem-owner', name: 'Ibu Ratna' }, correctedAt: '2026-10-05T18:00:00.000Z',
@@ -462,7 +462,7 @@ describe('UI V1 (Phase 18.11 T4): the page’s small rules', () => {
   });
 
   it('UI-003 a tile’s sum splits into its figure and its unit, in either language', () => {
-    expect(splitMoney('Rp 333,5 jt')).toEqual({ value: 'Rp 333,5', unit: 'jt' });
+    expect(splitMoney('Rp 333,5 Jt')).toEqual({ value: 'Rp 333,5', unit: 'Jt' });
     expect(splitMoney('IDR 333.5M')).toEqual({ value: 'IDR 333.5', unit: 'M' });
     expect(splitMoney('Rp 750')).toEqual({ value: 'Rp 750', unit: null });
   });

@@ -155,7 +155,7 @@ const en = {
     short: ({ pct, sum }: { pct: string; sum: string }) => `${pct} · ${sum} short`,
     /** The Summary's own phrase beside its figure, under a missing one. */
     ofTarget: ({ sum }: { sum: string }) => `of ${sum} target`,
-    /** The pair's joiner: *Rp 65,6 jt of 80 jt* (UI-030). */
+    /** The pair's joiner: *Rp 65,6 Jt of 80 Jt* (UI-030). */
     of: 'of',
   },
   /** The *Leads* column (`:7399`, `:7371-7373`, `:7443-7445`). */
@@ -220,7 +220,7 @@ const en = {
     agentUnit: ({ n }: { n: number }): string => (n === 1 ? 'agent' : 'agents'),
     candidateUnit: ({ n }: { n: number }): string => (n === 1 ? 'candidate' : 'candidates'),
     direct: 'direct',
-    /** *dari Rp 612,3 jt*, *dari 12*: `of` the figure, written by the caller. */
+    /** *dari Rp 612,3 Jt*, *dari 12*: `of` the figure, written by the caller. */
     of: ({ of }: { of: string }) => `of ${of}`,
     /** UI-028: `day` written by the caller, *28 Okt 26*. */
     lastUpdated: ({ day }: { day: string }) => `${kept('Last updated')} ${day}`,

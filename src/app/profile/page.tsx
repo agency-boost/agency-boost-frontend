@@ -34,6 +34,7 @@ import {
   normalisedPhone, PHONE_COUNTRY_PREFIX, PHONE_NATIONAL_DIGITS, phoneFieldValue,
 } from '@/lib/phone-number';
 import { describeDevice } from '@/lib/device-name';
+import { looksLikeEmail } from '@/lib/email-address';
 import { CORE_LEADER_LABEL } from '@/lib/profile-line';
 import { readProfileFacts, type ProfileFacts } from '@/lib/profile';
 import { PASSWORD_MIN_LENGTH } from '@/lib/password';
@@ -278,8 +279,6 @@ function detailsOf(me: Me): Details {
 
 /** An address as the account stores it — lower-cased and trimmed, as the API compares it (`normalisedEmail`). */
 const emailKey = (email: string) => email.trim().toLowerCase();
-/** Something that can be an address: a name, an @, a domain with a dot. The API checks it properly. */
-const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** `1995-03-18` as *18 / 03 / 1995*; `2020-09` as *09 / 2020* (UI-111: the dates as sign-up shows them). */
 const dayShape = (day: string) => {
@@ -361,7 +360,7 @@ function PersonalForm({ me, facts, say }: { me: Me; facts: ProfileFacts | null; 
     if (body === null) return;
     if (emailChanged) {
       // A changed email is sent only with the password again (ADR-0181 §1): nothing is saved until the sheet is.
-      if (!EMAIL_SHAPE.test(details.email.trim())) {
+      if (!looksLikeEmail(details.email)) {
         setEmailError(t.emailInvalid);
         return;
       }

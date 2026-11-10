@@ -464,7 +464,7 @@ describe('P19.3-T3 KPM Analytics in Indonesian', () => {
   it('P19.3-T3 AC-1 writes the phone’s rows in Indonesian: n orang, ke Hendra, Goal belum diatur', async () => {
     openInIndonesian(375);
     await screen.findByRole('region', { name: 'Leader' });
-    expect(rowOf('Hendra Wibowo')).toHaveTextContent('Rp 62 jt · 31 orang');
+    expect(rowOf('Hendra Wibowo')).toHaveTextContent('Rp 62 Jt · 31 orang');
     expect(rowOf('Ika Wirawan')).toHaveTextContent('ke Hendra');
     expect(rowOf('Fajar Nugroho')).toHaveTextContent('Goal belum diatur');
     expect(rowOf('Wilson Tanoto')).toHaveTextContent('Anda');

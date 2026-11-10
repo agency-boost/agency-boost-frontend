@@ -405,7 +405,7 @@ export const STATUS_TOOLTIP: Record<RosterStatus, string> = EN.statusTooltip;
  */
 export const OWN_COPY = {
   ...EN.own,
-  /** *produced Rp 29 jt*: `sum` written by the caller (P18.7-T3 AC-2). */
+  /** *produced Rp 29 Jt*: `sum` written by the caller (P18.7-T3 AC-2). */
   produced: (sum: string) => EN.own.produced({ sum }),
 };
 
@@ -455,9 +455,9 @@ export interface GoalWords {
  * {short} short"* over *"{achieved} of {target}"*. **No figure is shown as 0** (D-figures): no target is
  * *No goal set* (ADR-0080), and no actual *Not uploaded yet*.
  *
- * **Compact, by the client's own example** (UI-030, ADR-0167 §1): *"Rp 357,5 jt of 712,7 jt"*, one `Rp` for the
+ * **Compact, by the client's own example** (UI-030, ADR-0167 §1): *"Rp 357,5 Jt of 712,7 Jt"*, one `Rp` for the
  * pair, where *"Rp 357.500.000 of Rp 712.666.667"* wrapped in the cell — as every table's money is since ADR-0174
- * §4; the percentage whole (§1), *50% · Rp 355,2 jt short*.
+ * §4; the percentage whole (§1), *50% · Rp 355,2 Jt short*.
  */
 export function goalWords(
   cell: {
@@ -475,7 +475,7 @@ export function goalWords(
   const t = wordsIn(language);
   const { targetMinor: target, actualMinor: actual } = cell;
   const money = (minor: number) => formatRupiahCompact(minor, {}, figures);
-  // The production alone, with no target beside it, is labelled (P18.7-T3 AC-2): *produced Rp 29 jt*.
+  // The production alone, with no target beside it, is labelled (P18.7-T3 AC-2): *produced Rp 29 Jt*.
   const produced = (sum: number) => t.own.produced({ sum: money(sum) });
   if (cell.set === false || target === null) {
     return { tone: 'none', line: t.own.noGoal, sub: actual === null ? null : produced(actual) };
@@ -893,7 +893,7 @@ export function rowHref(row: Pick<UnitRow, 'membershipId' | 'isReader' | 'coache
 
 /**
  * A compact sum split into its figure and its unit, for a tile's big number with the unit small beside it (UI-003):
- * *Rp 333,5* and *jt*; *IDR 333.5* and *M*. A sum with no unit (under a thousand) is all figure.
+ * *Rp 333,5* and *Jt*; *IDR 333.5* and *M*. A sum with no unit (under a thousand) is all figure.
  */
 export function splitMoney(text: string): { value: string; unit: string | null } {
   const match = /^(.*\d)\s?([A-Za-z]+)$/.exec(text);

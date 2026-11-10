@@ -1,5 +1,5 @@
 import { api } from './api-client';
-import type { LeadFlag } from './leads';
+import type { Lead } from './leads';
 import type { RatioDisplayUnit } from './ratio-format';
 
 /**
@@ -31,8 +31,20 @@ export interface FigureSource {
  * something else need not.
  */
 export interface ProductionHeld {
+  /** `estimate` on `monthly` is the month's own figure the member typed over the upload (P19.11-T4, `realised`). */
   production?: 'official' | 'estimate' | 'none';
   withoutProduction?: { gapMinor: number; policiesNeeded: number | null } | null;
+}
+
+/**
+ * ***Bulanan*'s realised APE** (P19.11-T4; UX-12, UXQ2's default): which figure `actualMinor` is — the member's own,
+ * typed over the upload in the headline (`manual`, *Diubah manual*), the office's upload (`uploaded`), or neither yet
+ * (`none`, *Belum diunggah*) — and whether an upload exists beneath it, which *Kembalikan ke data unggahan* goes back to.
+ */
+export interface MonthRealised {
+  source: 'manual' | 'uploaded' | 'none';
+  uploaded: boolean;
+  manual: { minor: number; typedAt: string } | null;
 }
 
 export interface PeriodFigures {
@@ -102,21 +114,6 @@ export interface SummaryActivity {
   sections: SectionChip[];
 }
 
-/** One of *Leads that need you* (P10-T6): the reader's own open lead, flagged as the Leads screen flags it. */
-export interface OpenLead {
-  id: string;
-  name: string;
-  type: 'sales' | 'recruitment' | null;
-  statusCode: string | null;
-  statusLabel: string | null;
-  /** Promised for this month. It hides none of the flags (I-103). */
-  thisMonth: boolean;
-  flags: LeadFlag[];
-  overdueDays: number | null;
-  nextActionDate: string | null;
-  nextActionNote: string | null;
-}
-
 /** What a ratio rule read (P10-T7). */
 export interface RatioFacts {
   code: string;
@@ -161,7 +158,11 @@ export interface Summary {
   period: SummaryPeriod;
   goal: { set: boolean; savedAt: string | null };
   caseSizeMinor: number;
-  monthly: PeriodFigures & { source: FigureSource | null } & ProductionHeld;
+  /**
+   * `realised` (P19.11-T4): the API always sends it; optional so a fixture about something else need not, and without it
+   * the month reads as its `production` says.
+   */
+  monthly: PeriodFigures & { source: FigureSource | null } & ProductionHeld & { realised?: MonthRealised };
   yearly: PeriodFigures & { source: FigureSource } & ProductionHeld;
   /**
    * **The office's figure replaced an estimate** (P19.1-T4 AC-11; ADR-0195 §3): the day it was written, for *Diganti data
@@ -184,11 +185,15 @@ export interface Summary {
   uploadedOn?: { month: string | null; year: string | null };
   activity: { monthly: SummaryActivity; yearly: SummaryActivity };
   /**
-   * The nearest of the reader's own open leads, and how many there are; and `unitOpen`, the open leads Leads
-   * Management lists them besides their own — counted on their own summary while their own card is empty
-   * (P18.5-T15 AC-4). The API always sends it; optional so a fixture about something else need not.
+   * ***Leads yang perlu perhatian Anda*** (P10-T6; P19.11-T5, UX-13): **every** open lead of the member's own, in
+   * `GET /leads`' row shape — what the shared lead card draws and its sheet opens — what needs attention first (the
+   * server's order: a dated next action first, the most overdue on top, then the undated, waiting longest first); how
+   * many there are; `shown`, how many the section draws before *Lihat semua (N)* (`SUMMARY.LEADS_SHOWN`, the server's,
+   * never re-declared here); and `unitOpen`, the open leads Leads Management lists them besides their own — counted on
+   * their own summary while their own card is empty (P18.5-T15 AC-4). The API always sends `shown` and `unitOpen`;
+   * optional so a fixture about something else need not, and without `shown` every row is drawn.
    */
-  leads: { rows: OpenLead[]; total: number; unitOpen?: number };
+  leads: { rows: Lead[]; total: number; shown?: number; unitOpen?: number };
   /** The rules that fired, in their fixed priority, at most four. */
   insights: Insight[];
 }

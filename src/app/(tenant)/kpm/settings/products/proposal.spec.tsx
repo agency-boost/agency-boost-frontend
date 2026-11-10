@@ -32,8 +32,8 @@ const row = (over: Record<string, unknown> = {}) => ({
   },
   faq: field(FAQ),
   plans: [
-    { name: 'Silver', popular: false, highlights: field([{ label: 'Kamar', value: 'Rp 1 jt' }]) },
-    { name: 'Gold', popular: true, highlights: field([{ label: 'Kamar', value: 'Rp 1,5 jt' }]) },
+    { name: 'Silver', popular: false, highlights: field([{ label: 'Kamar', value: 'Rp 1 Jt' }]) },
+    { name: 'Gold', popular: true, highlights: field([{ label: 'Kamar', value: 'Rp 1,5 Jt' }]) },
   ],
   reviewState: 'none', rejectionReason: null, documents: [],
   ...over,
@@ -79,7 +79,7 @@ describe('P19.7-T1 AC-3 the office’s FAQ and plan highlights', () => {
     expect(block.getAllByText('Following Prudential.').length).toBeGreaterThanOrEqual(3);
     const gold = block.getByText('Gold').closest('[data-office-plan]') as HTMLElement;
     expect(within(gold).getByText('Most chosen')).toBeInTheDocument();
-    expect(within(gold).getByRole('textbox', { name: 'Gold, highlight 1, value' })).toHaveValue('Rp 1,5 jt');
+    expect(within(gold).getByRole('textbox', { name: 'Gold, highlight 1, value' })).toHaveValue('Rp 1,5 Jt');
   });
 
   it('P19.7-T1 AC-3 saves the office’s whole FAQ, its line breaks as typed', async () => {

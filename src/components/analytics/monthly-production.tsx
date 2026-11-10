@@ -14,7 +14,7 @@ import { shortMonth, type MonthlyProduction } from '@/lib/kpm-analytics';
  *   by age in four colours with no stated meaning.
  * - **A month with no upload is a hatched bar and *–***, never a zero bar: a zero would read as a month nobody sold.
  * - **No footnote** (D-35: the owner removed it). **It fits 375px without scrolling sideways**: six columns that share
- *   the card's width, each sum without its currency mark (*462 jt*), the mark being the section's.
+ *   the card's width, each sum without its currency mark (*462 Jt*), the mark being the section's.
  * - **A list for a screen reader**: each month by name and its sum, or *not uploaded*. The bars are hidden from it.
  */
 export function MonthlyProductionChart({ monthly, labelledBy }: { monthly: readonly MonthlyProduction[]; labelledBy: string }) {

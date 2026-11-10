@@ -247,6 +247,27 @@ const MEMBER_PERFORMANCE = {
   lastOneOnOne: { date: '2026-10-21' }, leads: { month: '2026-11', open: 9, closing: 2 },
 };
 
+/** One open lead in `GET /leads`' row shape — the Summary's leads since P19.11-T5, drawn on the shared lead card. */
+const summaryLead = (over: Record<string, unknown>) => ({
+  id: 'l-1', ownerMembershipId: 'mem-1', owner: { membershipId: 'mem-1', name: 'Rina Wijaya' }, type: 'sales', name: 'Pak Hendro',
+  contact: { phone: null, email: null }, statusCode: 'FOLLOW_UP', thisMonth: false, committedMonths: [], closedThisMonth: false,
+  lastEditedBy: null, remarks: null, nextActionDate: null, nextActionNote: null, outcome: null, source: null,
+  dateRegistered: '2026-09-01T03:00:00.000Z', version: 1, flags: [], overdueDays: null, proposals: null, ...over,
+});
+/** The reader's own Summary leads: more than five, so *See all (7)* is drawn too (P19.11-T5 AC-2). */
+const SUMMARY_LEADS = {
+  total: 7,
+  shown: 5,
+  rows: [
+    summaryLead({
+      thisMonth: true, committedMonths: ['2026-09'], flags: ['overdue', 'no-remarks'], overdueDays: 6,
+      nextActionDate: '2026-09-08', nextActionNote: 'Chase the illustration.',
+    }),
+    summaryLead({ id: 'l-2', name: 'Pak Bambang', type: null, statusCode: null, flags: ['no-next-action'] }),
+    ...[3, 4, 5, 6, 7].map((n) => summaryLead({ id: `l-${n}`, name: `Pak Lead ${n}`, nextActionDate: `2026-09-2${n}` })),
+  ],
+};
+
 const treeNode = (over: Record<string, unknown>) => ({
   fullName: 'Somebody', preferredName: null, initials: 'SB', agentCode: 'KPM0417-000',
   role: 'agent', depth: 0, layer: 1, leaderId: null, directCount: 0, directCounts: { ab: 0, aab: 0, agent: 0, total: 0 }, subtreeCount: 0,
@@ -1342,7 +1363,11 @@ describe('screens have no axe violations', () => {
             pace: { closingTarget: 5, closingsLast30Days: 4, dayOfMonth: 14, daysInMonth: 30, weeksLeft: 3, policiesNeeded: 3, neededPerWeek: 1, targetMet: false },
             activity: { monthly: activity, yearly: activity },
             leads: {
-              rows: [{ id: 'l-1', name: 'Desi Pratama', type: 'sales', statusCode: 'FOLLOW_UP', statusLabel: 'Follow-up', thisMonth: true, flags: ['overdue'], overdueDays: 6, nextActionDate: '2026-09-08', nextActionNote: 'Confirm paperwork' }],
+              // P19.11-T5: hers, in `GET /leads`' row shape — the shared card's not-mine form.
+              rows: [summaryLead({
+                name: 'Desi Pratama', ownerMembershipId: 'mem-rina', owner: { membershipId: 'mem-rina', name: 'Rina Wijaya' }, thisMonth: true,
+                committedMonths: ['2026-09'], flags: ['overdue'], overdueDays: 6, nextActionDate: '2026-09-08', nextActionNote: 'Confirm paperwork',
+              })],
               total: 1,
             },
             insights: [{ rule: 'LEAD_OVERDUE', kind: 'action', facts: { leadId: 'l-1', name: 'Desi Pratama', overdueDays: 6, others: 0 } }],
@@ -1814,19 +1839,8 @@ describe('screens have no axe violations', () => {
           yearly: { ...figures, targetMinor: 500 * M, source: { provenance: 'self_reported', month: null } },
           pace: { closingTarget: 6, closingsLast30Days: 4, dayOfMonth: 14, daysInMonth: 30, weeksLeft: 3, policiesNeeded: 5, neededPerWeek: 2, targetMet: false },
           activity: { monthly: activity, yearly: activity },
-          leads: {
-            total: 12,
-            rows: [
-              {
-                id: 'l-1', name: 'Pak Hendro', type: 'sales', statusCode: 'FOLLOW_UP', statusLabel: 'Follow-up', thisMonth: true,
-                flags: ['overdue', 'no-remarks'], overdueDays: 6, nextActionDate: '2026-09-08', nextActionNote: 'Chase the illustration.',
-              },
-              {
-                id: 'l-2', name: 'Pak Bambang', type: null, statusCode: null, statusLabel: null, thisMonth: false,
-                flags: ['no-next-action'], overdueDays: null, nextActionDate: null, nextActionNote: null,
-              },
-            ],
-          },
+          // P19.11-T5: the shared lead card, the top five and *See all (7)*.
+          leads: SUMMARY_LEADS,
           // Both insight cards: a numbered action list and a bulleted improvement list.
           insights: [
             { rule: 'LEAD_OVERDUE', kind: 'action', facts: { leadId: 'l-1', name: 'Pak Hendro', overdueDays: 6, others: 0 } },
@@ -1857,7 +1871,7 @@ describe('screens have no axe violations', () => {
     await expectClean('summary (a tile’s activities)');
   });
 
-  it('Personal Summary, P19.1-T4 not uploaded: who uploads, the helpers marked, Upload production →, the estimate field open', async () => {
+  it('Personal Summary, P19.1-T4, P19.11-T4 not uploaded: Upload production →, the month’s field open, then the year’s estimate field', async () => {
     const M = 1_000_000 * 100;
     const nothing = { targetMinor: 75 * M, actualMinor: null, attainmentPct: null, gapMinor: null, overMinor: null, policiesNeeded: null, targetMet: false };
     const activity = { from: '2026-09-01', to: '2026-09-14', total: 0, targets: [], sections: [] };
@@ -1870,7 +1884,10 @@ describe('screens have no axe violations', () => {
           year: '2026', month: '2026-09', today: '2026-09-14', goal: { set: true, savedAt: '2026-09-01T02:00:00.000Z' },
           period: { firstMonth: '2026-01', thisMonth: '2026-09', currentMonth: true, currentYear: true },
           caseSizeMinor: 18 * M,
-          monthly: { ...nothing, source: null, production: 'none', withoutProduction: { gapMinor: 75 * M, policiesNeeded: 5 } },
+          monthly: {
+            ...nothing, source: null, production: 'none', withoutProduction: { gapMinor: 75 * M, policiesNeeded: 5 },
+            realised: { source: 'none', uploaded: false, manual: null },
+          },
           yearly: {
             ...nothing, targetMinor: 500 * M, actualMinor: 0, source: { provenance: 'self_reported', month: null }, production: 'none',
             withoutProduction: { gapMinor: 500 * M, policiesNeeded: 28 },
@@ -1889,8 +1906,18 @@ describe('screens have no axe violations', () => {
     const goal = await screen.findByRole('region', { name: 'Goal vs. actual (APE)' });
     await within(goal).findByRole('link', { name: 'Upload production →' });
     await expectClean('summary (not uploaded)');
-    await userEvent.click(within(goal).getByRole('button', { name: 'Enter interim production' }));
-    await within(goal).findByRole('textbox', { name: 'APE already produced this year' });
+    // P19.11-T4 (UX-12): the month's realised APE, edited in place in millions — and a figure that is no number, said.
+    await userEvent.click(within(goal).getByRole('button', { name: 'Not uploaded yet, change the realised APE' }));
+    const month = await within(goal).findByRole('textbox', { name: 'Realised APE this month, in millions' });
+    await userEvent.type(month, '1,2,3{Enter}');
+    await within(goal).findByRole('alert');
+    await expectClean('summary (the month’s field, refused)');
+    await userEvent.type(month, '{Escape}');
+    // The year's estimate is *Tahunan*'s since P19.11-T4.
+    await userEvent.click(screen.getByRole('button', { name: 'Yearly' }));
+    const year = await screen.findByRole('region', { name: 'Goal vs. actual (APE)' });
+    await userEvent.click(within(year).getByRole('button', { name: 'Enter interim production' }));
+    await within(year).findByRole('textbox', { name: 'APE already produced this year' });
     await expectClean('summary (the estimate field)');
   });
 
@@ -2289,7 +2316,7 @@ describe('screens have no axe violations', () => {
 
     const produced = await screen.findByRole('textbox', { name: 'APE yang sudah dicapai tahun ini' });
     expect(produced).toHaveAccessibleDescription('Diubah oleh Anda');
-    expect(screen.getByRole('button', { name: 'Pakai otomatis (Rp 67 jt)' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Pakai otomatis (Rp 67 Jt)' })).toBeInTheDocument();
     await expectClean(`goals typed over the office’s figure (${px})`);
   });
 
@@ -6122,19 +6149,8 @@ describe('P18.10-T4 the field’s selling screens in Indonesian', () => {
           yearly: { ...figures, targetMinor: 500 * M, source: { provenance: 'self_reported', month: null } },
           pace: { closingTarget: 6, closingsLast30Days: 4, dayOfMonth: 14, daysInMonth: 30, weeksLeft: 3, policiesNeeded: 5, neededPerWeek: 2, targetMet: false },
           activity: { monthly: activity, yearly: activity },
-          leads: {
-            total: 12,
-            rows: [
-              {
-                id: 'l-1', name: 'Pak Hendro', type: 'sales', statusCode: 'FOLLOW_UP', statusLabel: 'Follow-up', thisMonth: true,
-                flags: ['overdue', 'no-remarks'], overdueDays: 6, nextActionDate: '2026-09-08', nextActionNote: 'Chase the illustration.',
-              },
-              {
-                id: 'l-2', name: 'Pak Bambang', type: null, statusCode: null, statusLabel: null, thisMonth: false,
-                flags: ['no-next-action'], overdueDays: null, nextActionDate: null, nextActionNote: null,
-              },
-            ],
-          },
+          // P19.11-T5: the shared lead card, the top five and *See all (7)*.
+          leads: SUMMARY_LEADS,
           // Both insight cards: a numbered action list and a bulleted improvement list.
           insights: [
             { rule: 'LEAD_OVERDUE', kind: 'action', facts: { leadId: 'l-1', name: 'Pak Hendro', overdueDays: 6, others: 0 } },
@@ -6466,7 +6482,7 @@ describe('P18.10-T4 coaching and the Unit Dashboard in Indonesian', () => {
   it('coaching/[membershipId]/session: a draft with the Activity drill open', async () => {
     stubFetch(sessionRoutes({ sessionId: 's-1', status: 'draft' }));
     inPerson('/coaching/mem-rina/session', <CoachingSessionTabPage />);
-    await screen.findByText(/Rp 620 jt/);
+    await screen.findByText(/Rp 620 Jt/);
     const drill = await screen.findByRole('button', { name: '7 hari terakhir' });
     await waitFor(() => expect(drill).toBeEnabled());
     await expectClean('coaching/[membershipId]/session (id, a draft)');
@@ -7640,9 +7656,9 @@ describe('UI V1 the shared components (Phase 18.11 T2)', () => {
         <GoalHeroCard
           title="Target vs. realisasi (APE)"
           percent={31}
-          achieved="Rp 29 jt"
-          target="dari target Rp 94,7 jt"
-          facts={[{ label: 'Sisa bulan ini', value: 'Rp 65,7 jt' }, { label: 'Polis yang dibutuhkan', value: '± 4 polis' }]}
+          achieved="Rp 29 Jt"
+          target="dari target Rp 94,7 Jt"
+          facts={[{ label: 'Sisa bulan ini', value: 'Rp 65,7 Jt' }, { label: 'Polis yang dibutuhkan', value: '± 4 polis' }]}
         />
         <div className="divide-y divide-divider">
           <ActionRow date="2026-10-30" text="Ambil SPAJ yang sudah ditandatangani." person="Ibu Melati" control={{ kind: 'check', checked: false, onChange: () => {} }} />
@@ -7654,7 +7670,7 @@ describe('UI V1 the shared components (Phase 18.11 T2)', () => {
             control={{ kind: 'lead', name: 'Ibu Shinta', href: '/leads' }}
           />
         </div>
-        <SliderWithValue label="Target APE tahunan" value={500} onChange={() => {}} min={0} max={2000} format={(v) => `Rp ${v} jt`} />
+        <SliderWithValue label="Target APE tahunan" value={500} onChange={() => {}} min={0} max={2000} format={(v) => `Rp ${v} Jt`} />
         <StepperRow label="Rasio penutupan" value={30} onChange={() => {}} />
         <SaveStateLabel state="unsaved" />
         <ContactButtons name="Ibu Melati" phone="0812-1100-2200" onSave={async (p) => p} />

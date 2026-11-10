@@ -109,7 +109,7 @@ describe('P18.10-T4 the Unit Dashboard in Indonesian', () => {
     expect(within(rowOf('Siti Rahma')).getByText('Belum diunggah')).toBeInTheDocument();
     expect(within(rowOf('Siti Rahma')).queryByText('Perlu perhatian')).not.toBeInTheDocument();
     expect(within(rowOf('Sari Wulandari')).getAllByText('Goal belum diatur').length).toBeGreaterThan(0);
-    expect(within(rowOf('Dimas Pratama')).getByText('Rp 65,6 jt / 80 jt')).toBeInTheDocument();
+    expect(within(rowOf('Dimas Pratama')).getByText('Rp 65,6 Jt / 80 Jt')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Bagaimana status ditentukan?' })).toBeInTheDocument();
     noEnglishLeft();
   });

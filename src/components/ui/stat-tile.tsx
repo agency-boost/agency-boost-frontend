@@ -20,7 +20,7 @@ export interface StatChip {
  * (*Unit* first, then *AAB*). Optional, each where a tile in the report has it:
  *
  * - **`badge`**, a corner figure (*54%*, *Produksi Group*) with **`bar`**, the share under the number, and **`sub`**, the
- *   line under the bar (*dari Rp 612,3 jt*);
+ *   line under the bar (*dari Rp 612,3 Jt*);
  * - **`ring`**, a 38px ring with its percentage inside (*Active Agent Oktober*, *Coaching 7 hari*);
  * - **`href`** makes **the whole tile the target**, with a small grey › top right (Home, D-09).
  *
@@ -51,7 +51,7 @@ export function StatTile({
   badge?: ReactNode;
   /** A share, 0–100, drawn as a bar under the number. */
   bar?: number | null;
-  /** The line under the bar: *dari Rp 612,3 jt*. */
+  /** The line under the bar: *dari Rp 612,3 Jt*. */
   sub?: ReactNode;
   /** A ring of 38px with its whole percentage inside; `null` draws the empty ring and *–*. */
   ring?: { percent: number | null };

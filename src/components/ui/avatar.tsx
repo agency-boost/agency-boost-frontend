@@ -44,6 +44,10 @@ export const AVATAR_MIN_TEXT_PX = 12;
  * **An avatar: the photo when there is one, else initials on a tint** (UI-059). A photo that fails to load falls back to
  * the initials rather than a broken image. Decorative — the name is always beside it — so it is hidden from assistive
  * technology.
+ *
+ * **While a photo loads, its circle is the person's tint** (P19.11-T2 AC-4, UX-14: *show a placeholder while the image
+ * loads*): the same seeded tint the initials sit on, as the image's background, so the row never shows an empty hole or a
+ * broken frame — taken off once it has loaded (`data-loaded`), so a photo with transparent edges is drawn on nothing.
  */
 export function Avatar({
   name,
@@ -61,6 +65,8 @@ export function Avatar({
   className?: string;
 }) {
   const [broken, setBroken] = useState(false);
+  // The photo this avatar has finished loading: a new `photoUrl` shows its placeholder again until it loads.
+  const [loaded, setLoaded] = useState<string | null>(null);
   const box = cn('inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full font-bold', className);
   // Initials at about a third of the circle, never under 12px (UI-008: *nothing under 12px, at any width*; T16).
   const style = { width: size, height: size, fontSize: Math.max(AVATAR_MIN_TEXT_PX, Math.round(size * 0.36)) };
@@ -72,8 +78,10 @@ export function Avatar({
         src={photoUrl}
         alt=""
         aria-hidden="true"
-        className={cn(box, 'object-cover')}
+        data-loaded={loaded === photoUrl ? '' : undefined}
+        className={cn(box, 'object-cover', loaded !== photoUrl && tintFor(seed ?? name))}
         style={style}
+        onLoad={() => setLoaded(photoUrl)}
         onError={() => setBroken(true)}
       />
     );

@@ -3,7 +3,7 @@ import { PRONOUN_FORMS, type Pronoun } from '@/lib/coaching';
 import { messagesIn } from '@/i18n/catalogue';
 import { DEFAULT_LANGUAGE, SOURCE_LANGUAGE, type Language } from '@/i18n/language';
 import { goalWordMessages, voiceOf } from '@/i18n/messages/goal-words';
-import { formatMonth, formatNumber } from '@/lib/format';
+import { formatMonth, formatNumber, RUPIAH_PER_UNIT, toMajor, toMinor } from '@/lib/format';
 
 /**
  * An agent's agreed plan for a period (P8).
@@ -198,6 +198,33 @@ export const saveGoal = (period: string, inputs: GoalBody, membershipId?: string
 export const saveApeEstimate = (period: string, apeAchievedMinor: number | null) =>
   api<Goal>(`/goals/${period}/ape-estimate`, { method: 'PUT', body: { apeAchievedMinor } });
 
+/** **`PUT /goals/:period/ape-month`'s answer** (P19.11-T4; UX-12): the month, and the figure now stored for it. */
+export interface GoalMonthApe {
+  period: string;
+  /** `YYYY-MM`. */
+  month: string;
+  /** IDR sen, and when it was typed; `null` once cleared. */
+  manual: { minor: number; typedAt: string } | null;
+}
+
+/**
+ * **A month's APE, typed by the member over the office's upload** (P19.11-T4; UX-12, UXQ2's default): the Summary's
+ * headline on *Bulanan*, edited in place in millions — in force over the upload on the member's own Summary until they
+ * clear it with `null` (*Kembalikan ke data unggahan*, or back to *Belum diunggah*). The reader's own plan only: no
+ * `for`. `period` is the plan's year, `month` one of its months up to the office's current one; `404` without a saved
+ * plan, `GOAL_PERIOD_LOCKED` for a year that has ended.
+ */
+export const saveMonthApe = (period: string, month: string, apeAchievedMinor: number | null) =>
+  api<GoalMonthApe>(`/goals/${period}/ape-month`, { method: 'PUT', body: { month, apeAchievedMinor } });
+
+/**
+ * **Millions, as the Summary's headline takes a month's APE** (P19.11-T4; UXQ2's default: typed in millions, *216,5* is
+ * Rp 216.500.000), to IDR sen — rounded to the whole rupiah, as every sum is held — and back. One *juta*, read from the
+ * compact formatter's own table (`RUPIAH_PER_UNIT.jt`), never a second `1e6`.
+ */
+export const millionsToMinor = (millions: number) => toMinor(Math.round(millions * RUPIAH_PER_UNIT.jt));
+export const minorToMillions = (minor: number) => toMajor(minor) / RUPIAH_PER_UNIT.jt;
+
 /**
  * **A plan worked out and not saved** (P18.11-T5, UI V1 UI-014): what the inputs the screen holds would mean, by the
  * formula a save uses. `monthsLeft` is the figure in force — typed, or the office's calendar; `projected` is `null`
@@ -279,7 +306,7 @@ export function goalInputsOf(goal: Goal): GoalInputs {
 
 /*
  * **Money's unit and its two formatters live in `lib/format.ts`** since ADR-0167 §1 (parity I-394, I-502): the
- * compact `formatRupiahCompact`, `Rp 500 jt`, everywhere — a table too, since ADR-0174 §4 — and the full
+ * compact `formatRupiahCompact`, `Rp 500 Jt`, everywhere — a table too, since ADR-0174 §4 — and the full
  * `formatRupiah`, `Rp 500.000.000`, only where precision matters: Data upload, an input and what it echoes, a
  * price. Re-exported here because a goal's screens, and many others, have always imported them from this module.
  */

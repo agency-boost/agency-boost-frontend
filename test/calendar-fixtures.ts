@@ -136,6 +136,8 @@ export function leadTask(over: Partial<CalendarTask> = {}): CalendarTask {
     phone: '+6281234567890',
     lead: { leadId: 'lead-wiwik', version: 3 },
     coaching: null,
+    // Open, unless a test ticks it (P19.11-T1 AC-1).
+    done: false,
     ...over,
   };
 }
@@ -152,6 +154,7 @@ export function coachingTask(over: Partial<CalendarTask> = {}): CalendarTask {
     phone: '+6281111111111',
     lead: null,
     coaching: { sessionId: 'sess-1', itemId: 'item-1', coachMembershipId: 'mem-wilson' },
+    done: false,
     ...over,
   };
 }

@@ -6,7 +6,7 @@ import { isHiddenTask, type CalendarEntry, type CalendarRead } from '@/lib/calen
 import type { Slot } from '@/lib/calendar-form';
 import { cn } from '@/lib/cn';
 import { PaneHeadBar, type PaneHead } from './calendar-parts';
-import { useCalendarTasks } from './calendar-tasks';
+import { doneTasks, openTasks, useCalendarTasks } from './calendar-tasks';
 import { TimeGrid, TimeGridSkeleton, type GridItem, type ScrollGroup } from './time-grid';
 
 export type { PaneHead } from './calendar-parts';
@@ -25,7 +25,8 @@ export { EntryBlock } from './time-grid';
  *
  * **A phone's week fits its seven days** (P19.1-T3 AC-4; UI-144, *Conflicts* row 155): *Sen* to *Min* in view with
  * nothing to scroll sideways — where it was 52px of hours and seven 48px columns scrolling inside the pane (D-phone;
- * P12-T2 AC-13). An entry there is its colour, which opens its details.
+ * P12-T2 AC-13). An entry there shows its title on one line, cut with an ellipsis (P19.11-T1 AC-6; UX-6), and opens its
+ * details.
  *
  * *Changed 2026-11-07 (P19.8-T3; MOB UI-172, UI-174, UI-175):* **no person row on the reader's own calendar** — the head
  * is drawn only where somebody is compared (`head`), as 3 Hari draws it; **on a phone it opens with 07.00 at its top**
@@ -68,10 +69,12 @@ export function WeekPane({
   fill?: boolean;
   className?: string;
 }) {
-  const { struck } = useCalendarTasks();
+  const { isDone } = useCalendarTasks();
   const days = read.days.map((d) => d.date);
-  // *Tugas* by day, a tick in this visit taken off at once (UI-104 point 4); a hidden person's are counts only.
-  const counts = tasksPerDay(read.tasks.filter((task) => isHiddenTask(task) || !struck.has(task.taskId)));
+  // *Tugas* by day, the open ones (P19.11-T1 AC-2): a tick, loaded or tapped, taken off; a hidden person's are counts only.
+  const counts = tasksPerDay(openTasks(read.tasks, isDone));
+  // A day with every task ticked keeps a muted ✓ that opens them (P19.11-T1 AC-1).
+  const done = tasksPerDay(doneTasks(read.tasks, isDone));
   const hiddenTasks = read.tasks.some(isHiddenTask);
   const timed: GridItem[] = [...read.entries, ...read.events];
 
@@ -88,14 +91,15 @@ export function WeekPane({
         placedOn={(day) => timedOn(timed, day).map((item) => ({ item, who: null }))}
         trips={read.entries.filter((item) => item.allDay)}
         counts={counts}
+        done={done}
         opensTasks={() => !hiddenTasks}
         onTasks={onTasks}
         onOpen={onOpen}
         onSlot={onSlot}
         gutter={hoursWhenStacked ? 'stacked' : 'always'}
         scroll={scroll}
-        // Below 768px only (`max-md:`): 41px holds no title, so the block is its colour and its name.
-        blocks="colour"
+        // Below 768px only (`max-md:`): ~45px a day, so each title is one line with an ellipsis (P19.11-T1 AC-6).
+        blocks="narrow"
       />
     </section>
   );

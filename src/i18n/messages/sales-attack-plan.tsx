@@ -19,7 +19,7 @@ import { kept } from '@/i18n/kept';
  * stays as typed** (ADR-0179 §5; §C3): the product's name, tagline and script, an alternative's name.
  *
  * **A message never writes a figure** (P18.10-T3): a budget band's sums are written by `budgetLabel` in the figures'
- * language (*Rp 500 rb–Rp 2 jt*, *IDR 500K–IDR 2M*), and a count is passed in.
+ * language (*Rp 500 rb–Rp 2 Jt*, *IDR 500K–IDR 2M*), and a count is passed in.
  *
  * @moved components/attack-plan.tsx
  * @moved app/(agent)/attack-plan/

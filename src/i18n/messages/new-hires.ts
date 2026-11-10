@@ -54,7 +54,7 @@ const en = {
   sections: { inProgress: 'In progress (day 1–90)', activated: 'Activated', notActivated: 'Not activated' },
   sectionEmpty: 'No one here.',
   result3M: { in_progress: 'In progress', activated: 'Activated', not_activated: 'Not activated' },
-  /** After *Activated*, for a first sale after day 90 (UI-023, D-24): outside the 3M share. */
+  /** After *Activated*, for a first sale after day 90 (UI-023, D-24): due, and not on time (P19.11-T2, ADR-0239). */
   late3M: 'after 3M',
   columns: {
     name: 'Name',
@@ -127,6 +127,8 @@ const en = {
     /** A person's one meta line (UI-024, Appendix A). */
     firstSaleOnDay: ({ day }: { day: number }) => `First sale on day ${day}`,
     dayN: ({ day }: { day: number }) => `Day ${day}`,
+    /** P19.11-T2 AC-3 (UXQ1, ADR-0239): day 90 is over with no first sale — the missed state, in alert ink. */
+    missedOnDay: ({ day }: { day: number }) => `Day ${day} · no first sale within 90 days`,
     /** The status circle's words, for a screen reader and the table's *Status*. */
     status: { activated: 'Activated', activated_late: 'Activated after 3M', not_yet: 'Not yet' },
     columns: { name: 'Name', status: 'Status', checklist: 'Checklist' },
@@ -290,6 +292,7 @@ const id: MessagesOf<typeof en> = {
     groupShare: ({ name }) => `Aktivasi 3M ${name}`,
     firstSaleOnDay: ({ day }) => `Pecah telor di hari ke-${day}`,
     dayN: ({ day }) => `Hari ke-${day}`,
+    missedOnDay: ({ day }) => `Hari ke-${day} · belum pecah telor dalam 90 hari`,
     status: { activated: 'Teraktivasi', activated_late: 'Teraktivasi, lewat 3M', not_yet: 'Belum' },
     columns: { name: 'Nama', status: 'Status', checklist: 'Checklist' },
     noWaiting: 'Tidak ada yang menunggu bergabung.',

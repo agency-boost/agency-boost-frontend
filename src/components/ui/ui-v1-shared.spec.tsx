@@ -293,12 +293,12 @@ describe('StatTile (UI V1, UI-003)', () => {
     render(
       <InLanguage language="id">
         <StatTile label="Active Agent Oktober" value="4" unit="dari 12" ring={{ percent: 33 }} />
-        <StatTile label="Produksi Group" value="Rp 333,5" unit="jt" badge="54%" bar={54} sub="dari Rp 612,3 jt" />
+        <StatTile label="Produksi Group" value="Rp 333,5" unit="jt" badge="54%" bar={54} sub="dari Rp 612,3 Jt" />
       </InLanguage>,
     );
     expect(screen.getByRole('img', { name: '33% dari keseluruhan' })).toBeInTheDocument();
     expect(screen.getByText('54%')).toBeInTheDocument();
-    expect(screen.getByText('dari Rp 612,3 jt')).toBeInTheDocument();
+    expect(screen.getByText('dari Rp 612,3 Jt')).toBeInTheDocument();
     expect(document.querySelector('[style*="width: 54%"]')).not.toBeNull();
   });
 });
@@ -350,15 +350,15 @@ describe('ActionRow (UI V1, UI-061)', () => {
 describe('SliderWithValue and StepperRow (UI V1, UI-016)', () => {
   function Slider() {
     const [v, setV] = useState(500);
-    return <SliderWithValue label="Annual APE target" value={v} onChange={setV} min={0} max={2000} step={10} format={(n) => `Rp ${n} jt`} />;
+    return <SliderWithValue label="Annual APE target" value={v} onChange={setV} min={0} max={2000} step={10} format={(n) => `Rp ${n} Jt`} />;
   }
 
   it('UI-016 every value set without the keyboard: the slider moves it by its step; the value reads 28px/800', () => {
     render(<Slider />);
     const range = screen.getByRole('slider', { name: 'Annual APE target' });
-    expect(range).toHaveAttribute('aria-valuetext', 'Rp 500 jt');
+    expect(range).toHaveAttribute('aria-valuetext', 'Rp 500 Jt');
     fireEvent.change(range, { target: { value: '620' } });
-    expect(screen.getByRole('button', { name: 'Type an exact amount for Annual APE target' })).toHaveTextContent('Rp 620 jt');
+    expect(screen.getByRole('button', { name: 'Type an exact amount for Annual APE target' })).toHaveTextContent('Rp 620 Jt');
     expect(screen.getByRole('button', { name: /Type an exact amount/ })).toHaveClass('text-[1.75rem]', 'font-extrabold');
   });
 
@@ -369,14 +369,14 @@ describe('SliderWithValue and StepperRow (UI V1, UI-016)', () => {
     expect(field).toHaveAttribute('inputmode', 'decimal');
     await userEvent.clear(field);
     await userEvent.type(field, '733{Enter}');
-    expect(screen.getByRole('button', { name: /Type an exact amount/ })).toHaveTextContent('Rp 733 jt');
+    expect(screen.getByRole('button', { name: /Type an exact amount/ })).toHaveTextContent('Rp 733 Jt');
     await userEvent.click(screen.getByRole('button', { name: /Type an exact amount/ }));
     await userEvent.clear(screen.getByRole('textbox'));
     await userEvent.type(screen.getByRole('textbox'), '99999{Enter}');
-    expect(screen.getByRole('button', { name: /Type an exact amount/ })).toHaveTextContent('Rp 2000 jt');
+    expect(screen.getByRole('button', { name: /Type an exact amount/ })).toHaveTextContent('Rp 2000 Jt');
     await userEvent.click(screen.getByRole('button', { name: /Type an exact amount/ }));
     await userEvent.type(screen.getByRole('textbox'), '1{Escape}');
-    expect(screen.getByRole('button', { name: /Type an exact amount/ })).toHaveTextContent('Rp 2000 jt');
+    expect(screen.getByRole('button', { name: /Type an exact amount/ })).toHaveTextContent('Rp 2000 Jt');
   });
 
   it('UI-016 the rates: round − / + of 44px around a whole percentage, by 5, held at 0 and 100', async () => {

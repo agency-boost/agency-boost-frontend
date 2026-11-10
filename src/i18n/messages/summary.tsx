@@ -115,7 +115,10 @@ const en = {
     noProduction: '(no production data yet)',
     /** Item 3: the Owner's and an Admin's way to the upload, in their field view. */
     upload: 'Upload production →',
-    /** Item 4: the member's own estimate — the year to date (OD-250), one value with Goal Settings. */
+    /**
+     * Item 4: the member's own estimate — the year to date (OD-250), one value with Goal Settings. On *Tahunan* only since
+     * P19.11-T4 (UX-12): *Bulanan*'s headline is the month's own figure (`month`, below).
+     */
     estimate: {
       add: 'Enter interim production',
       label: 'APE already produced this year',
@@ -126,6 +129,21 @@ const en = {
       cancel: 'Cancel',
       /** *Diganti data produksi resmi (diunggah 5 Des)*: `date` written by the caller. */
       replaced: ({ date }: { date: string }) => `Replaced by official production data (uploaded ${date})`,
+    },
+    /**
+     * **P19.11-T4 (UX-12; UXQ2's default)**: *Bulanan*'s headline — the month's realised APE, edited in place in millions
+     * on the reader's own page; the marker while their own figure is in force; and the way back, to the upload or, with
+     * none, to *Belum diunggah*. `sum`, `when` and `example` are written by the caller, in the figures' language.
+     */
+    month: {
+      /** The headline's button: the figure it shows first (WCAG 2.5.3), then what a tap does. */
+      edit: ({ sum }: { sum: string }) => `${sum}, change the realised APE`,
+      /** The field's name: `when` is the month in a sentence, *this month* or *in August 2026*. */
+      field: ({ when }: { when: string }) => `Realised APE ${when}, in millions`,
+      manual: 'Changed manually',
+      revert: 'Back to uploaded data',
+      clear: 'Clear manual figure',
+      invalid: ({ example }: { example: string }) => `Type the APE in millions, such as ${example}.`,
     },
     ofTarget: ({ sum }: { sum: string }) => `of ${sum} target`,
     /** The bar's end, and its name: the current period's, or a closed one's by its name. */
@@ -216,14 +234,15 @@ const en = {
     noneYet: ({ link }: { link: LinkTo }) => <>No active leads yet — add some in {link('Leads Management')}.</>,
     /** The prototype's own empty line on a coachee's card (`Overall.html:10498`). */
     noneTheirs: 'No active leads.',
-    /** A lead's type, the Leads screen's words: *Recruit*, not *Recruitment* (ADR-0161 §2). */
-    types: { sales: kept('Sales'), recruitment: kept('Recruit') },
-    /** The reader's lead with no type yet; a coachee's is said without one. */
-    unassigned: 'Unassigned',
-    noStatus: 'No status yet',
-    unnamed: '(unnamed)',
-    closesThisMonth: kept('Closes this month'),
-    noDate: 'No date set',
+    /*
+     * *Changed 2026-11-10 (P19.11-T5, UX-13):* the rows are the shared lead card's, in the Leads screen's words, so the
+     * section's own row words went — a type, *Unassigned*, *No status yet*, *(unnamed)*, *Closes this month* (the card's
+     * Potensi badge says it) and *No date set* (the card's *Add an action*).
+     */
+    /** UX-13: *Lihat semua (N)* below the top five, `n` every open lead; it opens the rest in place. */
+    showAll: ({ n }: { n: number }) => `See all (${n})`,
+    /** …and closes them again (UX-13): *Tampilkan lebih sedikit*. */
+    showLess: 'Show less',
   },
 
   /**
@@ -364,6 +383,15 @@ const id: MessagesOf<typeof en> = {
       cancel: 'Batal',
       replaced: ({ date }) => `Diganti data produksi resmi (diunggah ${date})`,
     },
+    // UX-12, the brief's own words: *Diubah manual*, *Kembalikan ke data unggahan*.
+    month: {
+      edit: ({ sum }) => `${sum}, ubah realisasi ${kept('APE')}`,
+      field: ({ when }) => `Realisasi ${kept('APE')} ${when}, dalam juta`,
+      manual: 'Diubah manual',
+      revert: 'Kembalikan ke data unggahan',
+      clear: 'Hapus angka manual',
+      invalid: ({ example }) => `Tulis ${kept('APE')} dalam juta, misalnya ${example}.`,
+    },
     ofTarget: ({ sum }) => `dari ${kept('target')} ${sum}`,
     target: { month: `${kept('Target')} bulan ini`, year: `${kept('Target')} tahun ini` },
     namedTarget: ({ named }) => `${kept('Target')} ${named}`,
@@ -437,12 +465,8 @@ const id: MessagesOf<typeof en> = {
     ),
     noneYet: ({ link }) => <>Belum ada {kept('leads')} aktif — tambahkan di {link(kept('Leads Management'))}.</>,
     noneTheirs: `Tidak ada ${kept('leads')} aktif.`,
-    types: { sales: kept('Sales'), recruitment: kept('Recruit') },
-    unassigned: 'Tanpa jenis',
-    noStatus: 'Belum ada status',
-    unnamed: '(tanpa nama)',
-    closesThisMonth: kept('Closes this month'),
-    noDate: 'Tanggal belum diatur',
+    showAll: ({ n }) => `Lihat semua (${n})`,
+    showLess: 'Tampilkan lebih sedikit',
   },
 
   insights: {

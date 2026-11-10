@@ -461,11 +461,15 @@ describe('P12-T2 — my calendar, week view', () => {
       expect(within(dialog).getAllByRole('button').map((b) => b.textContent)).toEqual(['Delete', 'Edit', 'Close']);
     });
 
-    it('reads an empty title and notes as the prototype does', async () => {
+    // *Rewritten 2026-11-10 (P19.11-T1 AC-6; UX-6):* an empty title reads *(Untitled)* — *(Tanpa judul)* — on the block
+    // and in the detail, where it was the prototype's `(untitled event)`.
+    it('P19.11-T1 AC-6 reads an empty title as (Untitled) on the block and in the detail, and empty notes as —', async () => {
       show({ [WEEK_READ]: { body: weekRead({ entries: [entry({ title: '', notes: '' })] }) } });
       await grid();
-      await userEvent.click(screen.getByRole('button', { name: /^Internal meeting: \(untitled event\)/ }));
-      const dialog = await screen.findByRole('dialog', { name: '(untitled event)' });
+      const block = screen.getByRole('button', { name: /^Internal meeting: \(Untitled\)/ });
+      expect(within(block).getByText('(Untitled)')).toBeInTheDocument();
+      await userEvent.click(block);
+      const dialog = await screen.findByRole('dialog', { name: '(Untitled)' });
       expect(within(dialog).getByText('—')).toBeInTheDocument();
     });
 
@@ -741,9 +745,13 @@ describe('P12-T2 — my calendar, week view', () => {
     expect(wears(gutter, 360).split(' ')).toContain('w-[46px]');
     expect(wears(gutter, 768).split(' ')).toContain('w-14');
     expect(within(region).getAllByRole('group')).toHaveLength(7);
-    // An entry is its colour there, and still names itself in full and opens its details.
-    expect(wears(standup().querySelector('span')!, 360)).toContain('sr-only');
-    expect(wears(standup().querySelector('span')!, 768)).not.toContain('sr-only');
+    // *Changed 2026-11-10 (P19.11-T1 AC-6; UX-6):* an entry shows its title there — one line, cut with an ellipsis, at
+    // 10px — where it was its colour alone; it still names itself in full and opens its details.
+    const title = standup().querySelector('span')!;
+    expect(title).toHaveTextContent('Weekly unit standup');
+    expect(wears(title, 360)).not.toContain('sr-only');
+    expect(wears(title, 360).split(' ')).toEqual(expect.arrayContaining(['truncate', 'text-2xs', 'font-bold']));
+    expect(wears(title, 768).split(' ')).not.toContain('text-2xs');
   });
 
   describe('P12-T2 AC-14 the states the prototype lacks', () => {
@@ -1999,16 +2007,42 @@ describe('P13.1-T8 — an entry’s words, and Hide my personal activities (ADR-
   const HIDE = 'Hide my personal activities';
   const LONG = 'Quarterly review with the Hartono family on their two children’s education plans';
 
-  it('P13.1-T8 AC-1 lays an entry’s words out from its top, the title on one line cut with an ellipsis, whole in its name and tooltip', async () => {
-    show({ [WEEK_READ]: { body: weekRead({ entries: [entry({ title: LONG, start: '09:00', end: '10:00' })] }) } });
+  // *Rewritten 2026-11-10 (P19.11-T1 AC-6; UX-6):* a tall block's title wraps to two or three lines; a short one keeps one.
+  it('P19.11-T1 AC-6 lays an entry’s words out from its top-left: a tall block’s title wraps to 2–3 lines with its time under it, a short one’s is one line cut with an ellipsis — whole in its name and tooltip', async () => {
+    show({
+      [WEEK_READ]: {
+        body: weekRead({
+          entries: [
+            entry({ title: LONG, start: '09:00', end: '10:00' }),
+            entry({ entryId: 'e-long2', title: `${LONG} II`, date: '2026-09-29', start: '13:00', end: '15:00' }),
+            entry({ entryId: 'e-short', title: `${LONG} III`, date: '2026-09-30', start: '08:00', end: '08:30' }),
+          ],
+        }),
+      },
+    });
     await grid();
     const block = screen.getByRole('button', { name: `Internal meeting: ${LONG}, 09:00–10:00` });
     // A button centres what it holds; this one is a column from its top edge, as the prototype's `.event`.
     expect(block.className.split(' ')).toEqual(expect.arrayContaining(['flex', 'flex-col', 'justify-start']));
     const title = within(block).getByText(LONG);
-    expect(title.className.split(' ')).toEqual(expect.arrayContaining(['truncate', 'shrink-0']));
+    // An hour: two lines and the time under them, from 768px; a phone's narrow Week keeps one line.
+    expect(wears(title, 1280).split(' ')).toEqual(expect.arrayContaining(['line-clamp-2', 'break-words', 'shrink-0', 'font-bold']));
+    expect(wears(title, 360).split(' ')).toEqual(expect.arrayContaining(['truncate', 'text-2xs']));
     expect(title).toHaveAttribute('title', `${LONG}, 09:00–10:00`);
-    expect(within(block).getByText('09:00–10:00')).toBeInTheDocument();
+    expect(title.nextElementSibling).toHaveTextContent('09:00–10:00');
+    // Two hours: three lines. Half an hour: one, cut with an ellipsis, and no time drawn.
+    const tall = screen.getByRole('button', { name: `Internal meeting: ${LONG} II, 13:00–15:00` });
+    expect(wears(within(tall).getByText(`${LONG} II`), 1280).split(' ')).toContain('line-clamp-3');
+    const short = screen.getByRole('button', { name: `Internal meeting: ${LONG} III, 08:00–08:30` });
+    expect(wears(within(short).getByText(`${LONG} III`), 1280).split(' ')).toEqual(expect.arrayContaining(['block', 'truncate']));
+    expect(short).toHaveTextContent(new RegExp(`^${LONG} III$`));
+  });
+
+  it('P19.11-T1 AC-6 a joined event with no title reads (Untitled) on its block, in its name and its tooltip', async () => {
+    show({ [WEEK_READ]: { body: weekRead({ events: [joinedEvent({ title: '' })] }) } });
+    await grid();
+    const block = screen.getByRole('link', { name: /^Event: \(Untitled\) \(/ });
+    expect(within(block).getByText('(Untitled)')).toHaveAttribute('title', expect.stringMatching(/^\(Untitled\), /));
   });
 
   it('P13.1-T8 AC-1 draws the time only where the title and the time both fit whole: not on a half hour, on 45 minutes', async () => {
@@ -3774,3 +3808,189 @@ describe('P19.9-T5 — Calendar: each Agenda day its own band, 3 Hari’s Tugas 
     expect(cells.filter((cell) => wears(cell, width).split(' ').includes('bg-today'))).toEqual([cells[0]]);
   });
 });
+
+/**
+ * **P19.11-T1 — a ticked task stays, in one completed style, and every *Tugas* counter counts open tasks** (UX-1; UXQ8).
+ * Today is Monday 28 Sep 2026 in these doubles: Wilson's coaching item open, Ibu Wiwik's next action read back ticked.
+ */
+describe('P19.11-T1 AC-1 AC-2 a ticked task stays on its day, completed, and counts are of open tasks', () => {
+  const ticked = () => [coachingTask(), leadTask({ done: true, lead: { leadId: 'lead-wiwik', version: 4 } })];
+  const region = () => screen.findByRole('region', { name: `Calendar, ${RANGE}` });
+  const checklist = async () => within((await region()).querySelector<HTMLElement>('[data-day="2026-09-28"]')!).getByRole('region', { name: 'Tasks' });
+  const rowOf = (scope: HTMLElement, taskId: string) => scope.querySelector<HTMLElement>(`[data-task="${taskId}"]`)!;
+  /** The one completed style: checked, struck in grey, WhatsApp and › faded — WhatsApp still a link (UXQ8). */
+  const completed = (row: HTMLElement, title: string) => {
+    expect(row).toHaveAttribute('data-done');
+    expect(within(row).getByRole('checkbox')).toBeChecked();
+    expect(within(row).getByText(title).className.split(' ')).toEqual(expect.arrayContaining(['text-line', 'line-through']));
+    expect(within(row).getByRole('link', { name: /WhatsApp/ }).closest('.opacity-40')).not.toBeNull();
+  };
+
+  it('P19.11-T1 AC-1 AC-2 a task read ticked is drawn completed on its day — Tugas · 1 beside it — and unticking pins its version, restores it and counts it', async () => {
+    atWidth(375);
+    const stub = show({
+      [AGENDA_READ]: { body: agendaRead({ tasks: ticked() }) },
+      'PUT /leads/lead-wiwik/next-action/done': { body: { id: 'lead-wiwik', version: 5, nextActionDate: '2026-09-28', nextActionNote: 'Invite BOP' } },
+    });
+    const list = await checklist();
+    expect(within(list).getByText('Tasks · 1')).toBeInTheDocument();
+    const wiwik = rowOf(list, 'lead:lead-wiwik');
+    completed(wiwik, 'IBU WIWIK SETYANINGSIH');
+    expect(within(wiwik).getByText('Invite BOP').className).toContain('line-through');
+    expect(wiwik.querySelector('[data-chevron]')!.className).toContain('opacity-40');
+    await userEvent.click(within(wiwik).getByRole('checkbox', { name: 'Done: Ibu Wiwik Setyaningsih' }));
+    await waitFor(() => expect(rowOf(list, 'lead:lead-wiwik')).not.toHaveAttribute('data-done'));
+    expect(bodyOf(calls(stub, '/next-action/done', 'PUT')[0])).toEqual({ done: false, version: 4 });
+    expect(within(rowOf(list, 'lead:lead-wiwik')).getByText('IBU WIWIK SETYANINGSIH').className).not.toContain('line-through');
+    expect(rowOf(list, 'lead:lead-wiwik').querySelector('[data-chevron]')!.className).not.toContain('opacity-40');
+    expect(within(list).getByText('Tasks · 2')).toBeInTheDocument();
+  });
+
+  it('P19.11-T1 AC-1 a fresh tap draws the same completed style as a loaded tick', async () => {
+    atWidth(375);
+    show({
+      [AGENDA_READ]: { body: agendaRead({ tasks: ticked() }) },
+      'PUT /coaching/sessions/sess-1/action-items/item-1/done': { body: { sessionId: 'sess-1', itemId: 'item-1', done: true } },
+    });
+    const list = await checklist();
+    await userEvent.click(within(list).getByRole('checkbox', { name: 'Done: From: Wilson Tanoto' }));
+    await waitFor(() => expect(rowOf(list, 'coaching:sess-1:item-1')).toHaveAttribute('data-done'));
+    completed(rowOf(list, 'coaching:sess-1:item-1'), 'From: WILSON TANOTO');
+    const classesOf = (taskId: string) => [...rowOf(list, taskId).querySelectorAll('span')].map((el) => el.className).filter((c) => /line-through|opacity-40/.test(c));
+    expect(classesOf('coaching:sess-1:item-1').slice(0, 3)).toEqual(classesOf('lead:lead-wiwik').slice(0, 3));
+    expect(within(list).getByText('Tasks · 0')).toBeInTheDocument();
+  });
+
+  it('P19.11-T1 AC-1 AC-2 the Week’s count row and its popup count open tasks, and the popup draws the loaded tick completed', async () => {
+    show({ [WEEK_READ]: { body: weekRead({ tasks: ticked() }) } });
+    await grid();
+    await userEvent.click(screen.getByRole('button', { name: 'Tasks on Mon, 28 Sep: 1' }));
+    const popup = await screen.findByRole('dialog', { name: 'Tasks · Mon, 28 Sep (1)' });
+    completed(rowOf(popup, 'lead:lead-wiwik'), 'IBU WIWIK SETYANINGSIH');
+    expect(within(rowOf(popup, 'coaching:sess-1:item-1')).getByRole('checkbox')).not.toBeChecked();
+  });
+
+  it('P19.11-T1 AC-2 3 Hari’s count row and the Month’s badge count open tasks alone', async () => {
+    show({ [THREE_READ]: { body: threeDayRead({ tasks: ticked() }) } }, AGUS, { view: 'three_days' });
+    expect(await screen.findByRole('button', { name: 'Tasks on Mon, 28 Sep: 1' })).toBeInTheDocument();
+    cleanup();
+    show({ [MONTH_READ]: { body: monthRead({ tasks: ticked() }) } }, AGUS, { view: 'month' });
+    expect(await screen.findByRole('button', { name: 'Tasks on Mon, 28 Sep: 1' })).toBeInTheDocument();
+  });
+
+  it('P19.11-T1 AC-2 a compared person’s group counts their open tasks, and draws their ticked one completed with no checkbox, said in words', async () => {
+    atWidth(375);
+    const COMPARED = `${AGENDA_READ}&date=2026-09-28&for=`;
+    show({
+      '/calendar/downline': { body: DOWNLINE },
+      [`${COMPARED}mem-indah`]: {
+        body: agendaRead({
+          subject: { membershipId: 'mem-indah', name: 'Indah Permata', rung: { code: 'AGENT', label: 'Agent' }, phone: null },
+          tasks: [
+            leadTask({ taskId: 'lead:melati', name: 'Ibu Melati', ownerMembershipId: 'mem-indah', lead: { leadId: 'melati', version: 1 } }),
+            leadTask({ taskId: 'lead:done', name: 'Pak Done', ownerMembershipId: 'mem-indah', lead: { leadId: 'done', version: 2 }, done: true }),
+          ],
+        }),
+      },
+    }, AGUS);
+    await region();
+    await userEvent.click(screen.getByRole('button', { name: 'Filters' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Compare with downline' }));
+    await userEvent.click(await screen.findByRole('button', { name: /^Indah Permata/ }));
+    await userEvent.keyboard('{Escape}');
+    const group = await waitFor(() => {
+      const el = document.querySelector<HTMLElement>('[data-person-tasks="mem-indah"]');
+      expect(el).not.toBeNull();
+      return el!;
+    });
+    expect(group).toHaveTextContent('INDAH PERMATA · Tasks 1');
+    const done = rowOf(group, 'lead:done');
+    expect(done).toHaveAttribute('data-done');
+    expect(within(done).queryByRole('checkbox')).toBeNull();
+    expect(within(done).getByText('PAK DONE').className).toContain('line-through');
+    expect(done).toHaveTextContent(/, Done$/);
+  });
+});
+
+/**
+ * **P19.11-T1 AC-1 — a day whose tasks are all ticked is still a tap away** (UX-1): its count stays the open count, 0
+ * (UXQ8), drawn as a muted ✓ where the number goes, which opens the same popup — or, in the Month, the day in the Agenda.
+ */
+describe('P19.11-T1 AC-1 a day with every task ticked keeps a muted ✓ that opens them', () => {
+  const allTicked = () => [coachingTask({ done: true }), leadTask({ done: true })];
+  const NAME = 'All tasks done (2), Mon, 28 Sep';
+  /** The ✓: the status grey, never *Tugas* blue, and no number on it. */
+  const muted = (button: HTMLElement) => {
+    expect(button).toHaveAttribute('data-all-done');
+    const pill = button.querySelector('span')!;
+    expect(pill.className.split(' ')).toEqual(expect.arrayContaining(['bg-pill-grey', 'text-signal-grey']));
+    expect(pill.className).not.toMatch(/bg-tugas|text-tugas-ink/);
+    expect(button).toHaveTextContent(/^$/);
+  };
+  /** The popup it opens: the day's tasks, both drawn completed, its count the open one. */
+  const popupDrawsBoth = async () => {
+    const popup = await screen.findByRole('dialog', { name: 'Tasks · Mon, 28 Sep (0)' });
+    for (const id of ['coaching:sess-1:item-1', 'lead:lead-wiwik']) {
+      const row = popup.querySelector<HTMLElement>(`[data-task="${id}"]`)!;
+      expect(row).toHaveAttribute('data-done');
+      expect(within(row).getByRole('checkbox')).toBeChecked();
+    }
+  };
+
+  it.each([375, 1280])('P19.11-T1 AC-1 at %ipx the Week’s count row draws the muted ✓, named, which opens the day’s popup', async (px) => {
+    atWidth(px);
+    show({ [WEEK_READ]: { body: weekRead({ tasks: allTicked() }) } }, AGUS, { view: 'week' });
+    const check = await screen.findByRole('button', { name: NAME });
+    muted(check);
+    expect(screen.queryByRole('button', { name: /^Tasks on Mon, 28 Sep/ })).not.toBeInTheDocument();
+    await userEvent.click(check);
+    await popupDrawsBoth();
+  });
+
+  it.each([375, 1280])('P19.11-T1 AC-1 at %ipx 3 Hari’s count row draws the muted ✓, which opens the day’s popup', async (px) => {
+    atWidth(px);
+    show({ [THREE_READ]: { body: threeDayRead({ tasks: allTicked() }) } }, AGUS, { view: 'three_days' });
+    const check = await screen.findByRole('button', { name: NAME });
+    muted(check);
+    await userEvent.click(check);
+    await popupDrawsBoth();
+  });
+
+  it.each([375, 1280])('P19.11-T1 AC-1 at %ipx a day with one task open shows its count, not the ✓', async (px) => {
+    atWidth(px);
+    show({ [WEEK_READ]: { body: weekRead({ tasks: [coachingTask(), leadTask({ done: true })] }) } }, AGUS, { view: 'week' });
+    expect(await screen.findByRole('button', { name: 'Tasks on Mon, 28 Sep: 1' })).not.toHaveAttribute('data-all-done');
+    expect(screen.queryByRole('button', { name: /^All tasks done/ })).not.toBeInTheDocument();
+  });
+
+  it('P19.11-T1 AC-1 at 1280px the Month draws the muted ✓ badge, which opens that day in the Agenda', async () => {
+    atWidth(1280);
+    const stub = show({
+      [MONTH_READ]: { body: monthRead({ tasks: allTicked() }) },
+      [`${AGENDA_READ}&date=2026-09-28`]: { body: agendaRead({ tasks: allTicked() }) },
+    }, AGUS, { view: 'month' });
+    const badge = await screen.findByRole('button', { name: NAME });
+    expect(badge.className.split(' ')).toEqual(expect.arrayContaining(['bg-pill-grey', 'text-signal-grey']));
+    expect(badge).toHaveTextContent(/^$/);
+    await userEvent.click(badge);
+    await waitFor(() => expect(calls(stub, `${AGENDA_READ}&date=2026-09-28`)).toHaveLength(1));
+  });
+
+  it('P19.11-T1 AC-1 at 375px the Month cell draws the muted ✓ and says it in its name; the cell opens the day in the Agenda', async () => {
+    atWidth(375);
+    show({ [MONTH_READ]: { body: monthRead({ tasks: allTicked() }) } }, AGUS, { view: 'month' });
+    const cell = await screen.findByRole('button', { name: /^Monday, 28 Sep 2026, .*All tasks done \(2\), Mon, 28 Sep$/ });
+    const check = cell.parentElement!.querySelector<HTMLElement>('[data-all-done]')!;
+    expect(check).toHaveAttribute('aria-hidden', 'true');
+    expect(check.className.split(' ')).toEqual(expect.arrayContaining(['bg-pill-grey', 'text-signal-grey']));
+  });
+
+  it.each([375, 1280])('P19.11-T1 AC-1 at %ipx the muted ✓ passes axe', async (px) => {
+    atWidth(px);
+    show({ [WEEK_READ]: { body: weekRead({ tasks: allTicked() }) } }, AGUS, { view: 'week' });
+    await screen.findByRole('button', { name: NAME });
+    const rules = { rules: { 'color-contrast': { enabled: false }, region: { enabled: false } } };
+    expect((await axe(document.body, rules)).violations).toEqual([]);
+  });
+});
+

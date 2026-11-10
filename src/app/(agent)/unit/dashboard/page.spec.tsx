@@ -128,8 +128,6 @@ describe('the Unit Dashboard (P15-T2; UI V1, Phase 18.11 T4)', () => {
       expect(within(within(grid).getByRole('columnheader', { name: 'Agus Santoso' })).getByText('Agus')).toHaveAttribute('aria-hidden', 'true');
       // The sticky columns: Aktivitas at the edge, Total beside it; only the person columns slide on a phone.
       expect(within(grid).getByRole('columnheader', { name: 'Activity' }).className).toMatch(/sticky left-0/);
-      // 132px for *Aktivitas* on a phone (the Unit mockup), 7.5rem from 768px (P19.8-T4 AC-5).
-      expect(within(grid).getByRole('columnheader', { name: 'Total' }).className).toMatch(/sticky left-\[8\.25rem\] .*md:left-\[7\.5rem\]/);
       expect(grid.parentElement).toHaveClass('overflow-x-auto');
       for (const type of ['Set Appointment', 'Mendapatkan calon prospek baru', 'Sales meeting', 'Submission polis']) {
         const [totalCell, ...people] = cells(within(grid).getByRole('rowheader', { name: type }).closest('tr')!);
@@ -137,6 +135,40 @@ describe('the Unit Dashboard (P15-T2; UI V1, Phase 18.11 T4)', () => {
       }
       const foot = within(grid).getByRole('rowheader', { name: 'Total' }).closest('tr')!;
       expect(cells(foot)).toEqual([21, 1, 20, 0]);
+    });
+
+    /*
+     * **P19.11-T6 AC-2 (UX-5)**: the fixed layout at every width, the columns the `<colgroup>`'s, and *Total*'s `left` the
+     * *Aktivitas* width itself — 132px on a phone (the Unit mockup), 7.5rem from 768px (P19.8-T4 AC-5), 12.5rem from 1024px.
+     * That the two meet at every scroll position is measured in Chrome (`unit-activities.browser.spec.ts`).
+     */
+    it('P19.11-T6 AC-2 the table is fixed at every width, its colgroup sizing the two sticky columns, Total pinned at the Aktivitas width', async () => {
+      await openActivities();
+      const grid = screen.getByRole('table', { name: 'Activities · Unit' });
+      expect(grid).toHaveClass('table-fixed', 'w-full', '[--act:8.25rem]', 'md:[--act:7.5rem]', 'lg:[--act:12.5rem]', '[--tot:2.75rem]', 'lg:[--tot:4rem]');
+      expect(grid.className).not.toMatch(/\blg:table-fixed\b/);
+      const cols = Array.from(grid.querySelectorAll('colgroup > col'));
+      expect(cols.map((c) => c.getAttribute('data-col'))).toEqual(['activity', 'total', 'person', 'person', 'person']);
+      expect(cols[0]).toHaveClass('w-[var(--act)]');
+      expect(cols[1]).toHaveClass('w-[var(--tot)]');
+      // A person's column takes its share, at least 56px: no width of its own, the table's min-width the sum.
+      expect(cols[2].getAttribute('class')).toBeNull();
+      // Every row type: the header, a subtotal row, a type's row and the navy foot.
+      const rows = [
+        grid.querySelector('thead tr')!, grid.querySelector('[data-subtotal]')!, grid.querySelector('[data-type]')!,
+        grid.querySelector('tfoot tr')!,
+      ];
+      for (const row of rows) {
+        const [activity, total, person] = Array.from(row.children);
+        expect(activity).toHaveClass('sticky', 'left-0', 'z-[1]');
+        expect(total).toHaveClass('sticky', 'left-[var(--act)]', 'z-[1]');
+        // No cell sizes its column: the colgroup does.
+        for (const cell of [activity, total, person]) expect(cell.className).not.toMatch(/(^|\s)(md:|lg:)?(min-)?w-/);
+      }
+      // The words clipped inside the cell: a type's name truncates within the column, the old 7.5rem cap gone.
+      const label = within(grid).getByRole('rowheader', { name: 'Mendapatkan calon prospek baru' }).querySelector('span[title]')!;
+      expect(label).toHaveClass('block', 'truncate');
+      expect(label.className).not.toMatch(/max-w-/);
     });
 
     it('UI-001 Unit | Group: the Group adds the AAB units’ people and their totals, without another read', async () => {
@@ -638,9 +670,9 @@ describe('the Unit Dashboard (P15-T2; UI V1, Phase 18.11 T4)', () => {
       render(view);
       await screen.findByRole('button', { name: /^Your Unit · 4/ });
       const name = screen.getByRole('link', { name: long });
-      // Since P19.9-T4 AC-1 the name's line is a block holding the level tag and the link: it wraps, never cut.
-      expect(name.parentElement!.className).toMatch(/max-md:whitespace-normal/);
-      expect(name.parentElement).toHaveClass('text-base');
+      // An Agent's row has no level tag (P19.11-T6 AC-4): the link is the name's line itself — it wraps, never cut.
+      expect(name.className).toMatch(/max-md:whitespace-normal/);
+      expect(name).toHaveClass('text-base');
       const row = name.closest('[data-person-row]')!;
       expect(row).toHaveTextContent('82%IDR 65.6M / 80M');
       const bar = row.querySelector('[data-goal-bar="82"]')!;
@@ -732,8 +764,9 @@ describe('the Unit Dashboard (P15-T2; UI V1, Phase 18.11 T4)', () => {
 
   /*
    * **P19.9-T4 — the level and WhatsApp on every row, and each unit's amount** (R6, R7; ADR-0235, OD-291; parity
-   * I-916–I-918): every row, at every period and size, carries the person's level — the navy tag *Potensi* draws — and a
-   * WhatsApp button by Home's rule; each unit's header carries its *Rp x / y* on a phone, and on a laptop below 1280px.
+   * I-916–I-918): a leader's row, at every period and size, carries the person's level — the navy tag *Potensi* draws —
+   * and every row a WhatsApp button by Home's rule; each unit's header carries its *Rp x / y* on a phone, and on a laptop
+   * below 1280px. **Since P19.11-T6 AC-4** (UX-16, UXQ10) the tag is AB's and AAB's alone: an Agent's row has none.
    */
   describe('P19.9-T4 the level and WhatsApp on every row, each unit’s amount', () => {
     const SAVER = makeMe({ ...AGUS_ME, permissions: [...AGUS_ME.permissions, 'member:update_phone'] });
@@ -746,19 +779,53 @@ describe('the Unit Dashboard (P15-T2; UI V1, Phase 18.11 T4)', () => {
     };
     const phoneRow = (name: string) => screen.getByRole('link', { name }).closest('[data-person-row]')!;
 
-    it.each(['7d', 'month', 'year'])('P19.9-T4 AC-1 at 375px, period=%s: every row’s level tag before the name, in the company’s short name', async (period) => {
+    it.each(['7d', 'month', 'year'])('P19.11-T6 AC-4 at 375px, period=%s: AB and AAB rows carry the level tag before the name; an Agent’s row none, its name straight after the avatar', async (period) => {
       atWidth(375);
       render(dashboard({ period: period as UnitDashboardView['period'] }), { period });
       await screen.findByRole('button', { name: /^Your Unit · 4/ });
       const tags = ['You (Agus)', 'Dimas Pratama', 'Indah Lestari', 'Siti Rahma'].map((name) => tagOf(phoneRow(name)));
-      expect(tags.map((tag) => tag?.textContent)).toEqual(['AB', 'Agent', 'Agent', 'Agent']);
-      // Before the name, outside the row's link: the row is still named by the person alone, its level read first.
-      const name = screen.getByRole('link', { name: 'Dimas Pratama' });
-      expect(tags[1]!.nextElementSibling).toBe(name);
-      expect(tags[1]).toHaveClass('bg-secondary', 'text-secondary-contrast', 'normal-case');
-      // Unit Arief's AAB, once his unit is open.
+      expect(tags.map((tag) => tag?.textContent ?? null)).toEqual(['AB', null, null, null]);
+      // The leader's: before the name, outside the row's link — the row still named by the person alone, its level first.
+      const agus = screen.getByRole('link', { name: 'You (Agus)' });
+      expect(tags[0]!.nextElementSibling).toBe(agus);
+      expect(tags[0]).toHaveClass('bg-secondary', 'text-secondary-contrast', 'normal-case', 'mr-1.5');
+      // An Agent's: no tag and nothing in its place — the link is the name's column's first child, wearing the name's line.
+      for (const name of ['Dimas Pratama', 'Indah Lestari', 'Siti Rahma']) {
+        const link = screen.getByRole('link', { name });
+        const row = phoneRow(name);
+        const column = row.children[1]!;
+        expect(row.firstElementChild!.nextElementSibling).toBe(column);
+        expect(column.querySelector('[data-rung-tag]')).toBeNull();
+        // From the avatar to the name, nothing first at any level: the name leads its column.
+        for (let el: Element = link; el !== column; el = el.parentElement!) expect(el.previousElementSibling).toBeNull();
+        expect(link).toHaveClass('uppercase', 'font-bold');
+        // *Belum diunggah* or the goal's line under it, and the row's › at its end, as on a leader's row.
+        expect(column.lastElementChild!.contains(link)).toBe(false);
+        expect(row.lastElementChild!.tagName.toLowerCase()).toBe('svg');
+      }
+      // Unit Arief's AAB, once his unit is open; his agents untagged.
       await userEvent.click(screen.getByRole('button', { name: /^Arief Wibowo’s Unit · 3/ }));
       expect(tagOf(phoneRow('Arief Wibowo'))).toHaveTextContent('AAB');
+      expect(tagOf(phoneRow('Novi Anggraini'))).toBeNull();
+      expect(document.querySelectorAll('[data-rung-tag="AGENT"]')).toHaveLength(0);
+    });
+
+    it('P19.11-T6 AC-4 a company’s own rungs: the tag follows the ladder’s leader tier, never the word Agent', async () => {
+      atWidth(375);
+      const view = dashboard();
+      const BP = { code: 'BP', label: 'Business Partner' };
+      const SBP = { code: 'SBP', label: 'Senior Business Partner' };
+      view.yourUnit.rows = view.yourUnit.rows.map((r) => ({ ...r, rung: r.isReader ? SBP : BP }));
+      // The office's ladder, as the shell reads it: *BP* with no leader tier, *SBP* a Senior Leader's.
+      const ladder = [
+        { orgLevelId: 'l-bp', companyId: 'c-1', code: 'BP', label: 'Business Partner', displayOrder: 1, leaderTier: null, status: 'active' },
+        { orgLevelId: 'l-sbp', companyId: 'c-1', code: 'SBP', label: 'Senior Business Partner', displayOrder: 2, leaderTier: 'senior', status: 'active' },
+      ];
+      stubFetch({ ...SHELL, '/kpm/org-levels': { body: ladder }, 'GET /unit/dashboard': { body: view }, '/activity/ratios': { body: RATIOS } });
+      renderInLayout(AgentLayout, <UnitDashboardPage />, { me: AGUS_ME });
+      await screen.findByRole('button', { name: /^Your Unit · 4/ });
+      await waitFor(() => expect(tagOf(phoneRow('You (Agus)'))).toHaveTextContent(/^SBP$/));
+      for (const name of ['Dimas Pratama', 'Indah Lestari', 'Siti Rahma']) expect(tagOf(phoneRow(name))).toBeNull();
     });
 
     it.each(['month', 'year'])('P19.9-T4 AC-1 at 375px, period=%s: WhatsApp straight through with a number, Isi nomor for a reader who may save one, never on the reader’s row', async (period) => {
@@ -785,33 +852,46 @@ describe('the Unit Dashboard (P15-T2; UI V1, Phase 18.11 T4)', () => {
       for (const name of ['Dimas Pratama', 'Siti Rahma', 'You (Agus)']) expect(whatsAppIn(phoneRow(name))).toBeNull();
     });
 
-    it('P19.9-T4 AC-1 the office’s read-only view draws every level and no WhatsApp at all', async () => {
+    it('P19.11-T6 AC-4 the office’s read-only view tags the leader alone and draws no WhatsApp at all', async () => {
       atWidth(375);
       const view = dashboard({ readOnly: true, head: { membershipId: 'mem-agus', name: 'Agus Santoso', isReader: false } });
       render(view, { me: makeMe({ ...SAVER, membership: { ...SAVER.membership!, isKpmOwner: true } }) });
       await screen.findByRole('button', { name: /^Agus Santoso’s Unit · 4/ });
-      expect(document.querySelectorAll('[data-rung-tag]').length).toBe(4);
+      expect([...document.querySelectorAll('[data-rung-tag]')].map((tag) => tag.textContent)).toEqual(['AB']);
       expect(document.querySelectorAll('[data-channel="whatsapp"]')).toHaveLength(0);
     });
 
-    it.each([[1024, 'month'], [1280, 'year']])('P19.9-T4 AC-1 at %ipx, period=%s: the level under the name, WhatsApp beside the ›', async (px, period) => {
+    /** A table row's name cell: the name's line, and under it a leader's level on a line of its own. */
+    const nameCell = (name: string) => rowOf(name).querySelector('th')!;
+
+    it.each([[1024, 'month'], [1280, 'year']])('P19.11-T6 AC-4 at %ipx, period=%s: a leader’s level under the name, an Agent’s row no line at all; WhatsApp beside the ›', async (px, period) => {
       atWidth(px);
       render(dashboard({ period: period as UnitDashboardView['period'] }), { me: SAVER, period });
       await table();
-      const header = rowOf('Dimas Pratama').querySelector('th')!;
-      expect(tagOf(header)).toHaveTextContent('Agent');
-      expect(header.querySelector('a')!.compareDocumentPosition(tagOf(header)!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      for (const [name, tag] of [['You (Agus)', 'AB'], ['Arief Wibowo', 'AAB']] as const) {
+        const cell = nameCell(name);
+        expect(tagOf(cell)).toHaveTextContent(tag);
+        expect(cell.querySelector('a')!.compareDocumentPosition(tagOf(cell)!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(cell.children).toHaveLength(2);
+      }
+      for (const name of ['Dimas Pratama', 'Indah Lestari', 'Siti Rahma', 'Novi Anggraini']) {
+        // The name's line alone: no tag, and no empty line where one was.
+        expect(tagOf(nameCell(name))).toBeNull();
+        expect(nameCell(name).children).toHaveLength(1);
+      }
       const last = [...rowOf('Indah Lestari').querySelectorAll('td')].at(-1)!;
       expect(within(last).getByRole('link', { name: 'Send a WhatsApp message to Indah Lestari' })).toHaveAttribute('href', 'https://wa.me/6281234567001');
       expect(last.querySelector('svg:last-child')).not.toBeNull();
       expect(whatsAppIn(rowOf('You (Agus)'))).toBeNull();
     });
 
-    it('P19.9-T4 AC-1 a tablet draws the same: the level under the name, WhatsApp beside the ›', async () => {
+    it('P19.11-T6 AC-4 a tablet draws the same: a leader’s level under the name, none on an Agent’s; WhatsApp beside the ›', async () => {
       atWidth(800);
       render(dashboard(), { me: SAVER });
       await table();
-      expect(tagOf(rowOf('Siti Rahma'))).toHaveTextContent('Agent');
+      expect(tagOf(nameCell('You (Agus)'))).toHaveTextContent('AB');
+      expect(tagOf(nameCell('Siti Rahma'))).toBeNull();
+      expect(nameCell('Siti Rahma').children).toHaveLength(1);
       expect(whatsAppIn(rowOf('Siti Rahma'))).not.toBeNull();
     });
 

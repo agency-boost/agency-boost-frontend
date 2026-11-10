@@ -204,16 +204,27 @@ export interface NewHireChecklist {
 
 /**
  * **A new hire's status** (UI V1, D-24, UI-023): *Teraktivasi* as soon as there is a first sale — `activated` by day 90,
- * `activated_late` after it (amber, *lewat 3M*, outside the 3M share) — and `not_yet` without one. The server decides it.
+ * `activated_late` after it (amber, *lewat 3M*; due and not on time in the 3M share since P19.11-T2) — and `not_yet` without
+ * one. The server decides it.
  */
 export type NewHireStatus = 'activated' | 'activated_late' | 'not_yet';
 
 /** Where a first sale came from (D-26): the data — a lead or the production file — or a closing logged by hand. */
 export type FirstSaleSource = 'sales' | 'manual';
 
+/**
+ * A new hire as their row names them (P19.11-T2 AC-4, UX-14): the person and their photo, signed — `null` without one —
+ * which the circle of a hire not activated yet shows, initials otherwise.
+ */
+export interface NewHirePerson {
+  membershipId: string;
+  name: string;
+  photoUrl: string | null;
+}
+
 /** One new hire on `/new-hires` (ADR-0173 §2; UI V1, UI-023). */
 export interface NewHireRow {
-  hire: ActivationPerson;
+  hire: NewHirePerson;
   unit: NewHireUnitRef;
   joinDate: string;
   /** Which day since joining today is: *Hari ke-X*. */
@@ -224,14 +235,18 @@ export interface NewHireRow {
   firstSaleSource: FirstSaleSource | null;
   status: NewHireStatus;
   activation3M: Activation3MResult;
-  /** Kept as data only since UI V1: it decides nothing (D-24). */
+  /**
+   * Kept as data only since UI V1: it decides nothing (D-24) — their row opens as anybody's, onto a read-only detail
+   * (P19.11-T2 AC-1).
+   */
   leftOn: string | null;
   checklist: NewHireChecklist | null;
 }
 
 /**
- * `ACTIVATION_3M_PCT` over a set, as the server computes it (rule A): `pct` `null` while nobody is decided. `late` — a
- * first sale after day 90 — and `inProgress` are in neither part. The screen shows `pct` alone (D-24).
+ * `ACTIVATION_3M_PCT` over a set, as the server computes it (P19.11-T2 AC-2; ADR-0239): of the new hires who are due —
+ * past day 90, or with a first sale at any time — the share whose first sale was by day 90. `late` is in the denominator
+ * and not the numerator; `inProgress` in neither; `pct` `null` while nobody is due. The screen shows `pct` alone (D-24).
  */
 export interface Activation3MShare {
   activated: number;
@@ -328,8 +343,12 @@ export interface NewHireLeader {
   role: 'ab' | 'aab' | 'agent';
 }
 
-/** `GET /new-hires/:membershipId`: the activation as a leader reads it, and the hire's 3M standing. */
-export type NewHireDetail = ActivationView & { newHire?: NewHireStanding | null };
+/**
+ * `GET /new-hires/:membershipId`: the activation as a leader reads it, and the hire's 3M standing — and **`readOnly`** for
+ * a new hire who left (P19.11-T2 AC-1; ADR-0239): the page opens for them as for anybody listed, and draws no write
+ * control, as the API refuses every write.
+ */
+export type NewHireDetail = ActivationView & { newHire?: NewHireStanding | null; readOnly?: boolean };
 
 /** What a saved note answers. */
 export interface ActivationNoteSaved {
@@ -761,6 +780,13 @@ export const startDateRangeText = (today: string, language: Language = SOURCE_LA
 
 /** *Teraktivasi* as soon as there is a first sale, in amber after day 90 (UI-023): the server's status, read. */
 export const hasFirstSale = (row: Pick<NewHireRow, 'status'>) => row.status !== 'not_yet';
+
+/**
+ * **Missed** (P19.11-T2 AC-3; UXQ1, ADR-0239): day 90 is over with no first sale — the server's result `not_activated`
+ * and no sale since. Its row says so in alert ink; a sale after day 90 is late (amber), never this.
+ */
+export const missedThreeMonths = (row: Pick<NewHireRow, 'status' | 'activation3M'>) =>
+  row.status === 'not_yet' && row.activation3M === 'not_activated';
 
 /** The filter's three choices: *Semua*, *Teraktivasi*, *Belum* (UI-024). */
 export type NewHireFilter = 'all' | 'activated' | 'not_yet';

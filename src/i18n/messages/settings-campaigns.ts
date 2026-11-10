@@ -26,7 +26,7 @@ const en = {
   /** A campaign's phase, worked out on every read, and whose it is (P18.9-T4 AC-8; UI-030). */
   phases: { upcoming: 'Upcoming', running: 'Running', ended: 'Ended' },
   thisOffice: 'This office',
-  /** One requirement in words: *"APE achieved at least Rp 600 jt"* — the metric's name as served, the target the caller's. */
+  /** One requirement in words: *"APE achieved at least Rp 600 Jt"* — the metric's name as served, the target the caller's. */
   comparators: { gte: 'at least', gt: 'more than', lte: 'at most', lt: 'less than', eq: 'exactly' },
   requirement: ({ name, comparator, target }: { name: string; comparator: string; target: string }) =>
     `${name} ${comparator} ${target}`,

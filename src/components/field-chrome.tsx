@@ -192,6 +192,14 @@ const MENU_FOCUSABLE = 'a[href], button:not([disabled])';
  * - **The panel**: the views (`ViewMenu`) — one tap switches, the active one ticked — then *Profil saya*, where the avatar
  *   always went, then whatever comes after the views (*Tambah akun*, AC-8). Escape closes it and gives the focus back;
  *   so does a click outside it, or choosing anything in it.
+ *
+ * *Changed 2026-11-10 (P19.11-T6 AC-1; UX-8, UXQ5):* **_Keluar_ is its last row**, under *Profil saya* with a divider
+ * above it, red as *Lainnya*'s, `aria-busy` and *Sedang keluar…* while it runs. One tap, no confirmation, as *Lainnya*:
+ * the account's `onSignOut` (`useSignOut`) — `POST /auth/logout` ends both sessions this browser holds, the active login
+ * and a linked one parked here (ADR-0199 §4, *leaving is leaving*), the token, `me`, the tab's view and the cached reads
+ * go (`session-provider.tsx`), and `/login` replaces the page. The panel stays open while it runs, so the busy row is
+ * seen; the shell unmounts with the session. A single-view account has no panel: its avatar stays the link to *Profil*
+ * (UI-004), and *Keluar* stays in *Lainnya*, the sidebar's menu and *Profil*.
  */
 function AvatarViewMenu({ chrome, views }: { chrome: FieldChrome; views: ViewSwitcher }) {
   const t = useMessages(shellMessages);
@@ -259,6 +267,16 @@ function AvatarViewMenu({ chrome, views }: { chrome: FieldChrome; views: ViewSwi
           >
             {t.yourProfile}
           </Link>
+          <button
+            type="button"
+            data-sign-out=""
+            onClick={chrome.account.onSignOut}
+            disabled={chrome.account.signingOut}
+            aria-busy={chrome.account.signingOut || undefined}
+            className="mt-1 flex min-h-11 w-full items-center border-t border-divider px-2.5 pt-1 text-left text-md font-semibold text-pill-red-ink disabled:opacity-60"
+          >
+            {chrome.account.signingOut ? t.signingOut : t.signOut}
+          </button>
         </div>
       )}
     </div>

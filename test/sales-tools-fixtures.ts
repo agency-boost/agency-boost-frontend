@@ -97,7 +97,7 @@ export const PGB = product({
   script: { ...SCRIPT, opening: '', fullScript: '', nextAction: '' },
 });
 
-/** *Retirement income, 25–34, Rp 500 rb–Rp 2 jt* in 0417: PRUMapan, Good fit, PRUAnugerah the one alternative. */
+/** *Retirement income, 25–34, Rp 500 rb–Rp 2 Jt* in 0417: PRUMapan, Good fit, PRUAnugerah the one alternative. */
 export function plan(over: Partial<AttackPlan> = {}): AttackPlan {
   return {
     brief: { need: 'retirement', age: 2, budget: 2 },

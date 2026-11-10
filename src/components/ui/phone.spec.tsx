@@ -381,7 +381,7 @@ describe('AC-10 a finger’s target on a phone', () => {
   });
 
   it('the ⓘ keeps its 28px box in its line and takes the tap on a 44px square around it', () => {
-    render(<p>Rp 12 jt <TippedGlyph glyph="ⓘ" name="Not uploaded yet" tip="Not uploaded yet" align="fit" /></p>);
+    render(<p>Rp 12 Jt <TippedGlyph glyph="ⓘ" name="Not uploaded yet" tip="Not uploaded yet" align="fit" /></p>);
     const glyph = screen.getByRole('button', { name: 'Not uploaded yet' });
     expect(wider(glyph)).toContain('h-7 w-7');
     // Its grown box would push the figure beside it; the square hangs from the wrapper instead.

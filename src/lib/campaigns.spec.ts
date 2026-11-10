@@ -11,7 +11,7 @@ import {
 
 describe('a campaign in words (P18.2-T7 AC-3, P18.2-T8 AC-6)', () => {
   it('P18.2-T7 AC-3 money is rupiah from sen, never raw sen (invariant §9, X-68’s rule)', () => {
-    expect(figureWords(50_000_000_000, 'idr_minor')).toBe('Rp 500 jt');
+    expect(figureWords(50_000_000_000, 'idr_minor')).toBe('Rp 500 Jt');
     expect(figureWords(90, 'percentage')).toBe('90%');
     expect(figureWords(3, 'count')).toBe('3');
     expect(figureWords(0.15, 'ratio')).toBe('0,15');
@@ -34,13 +34,13 @@ describe('a campaign in words (P18.2-T7 AC-3, P18.2-T8 AC-6)', () => {
     expect(figureWords(30, 'percentage_points')).toBe('±30 points');
   });
 
-  it('P18.7-T10 AC-3 the client’s line: Needs: Rp 16 jt APE + 3 new hires', () => {
+  it('P18.7-T10 AC-3 the client’s line: Needs: Rp 16 Jt APE + 3 new hires', () => {
     expect(OWN_COPY.needs).toBe('Needs:');
-    expect(`${OWN_COPY.needs} ${requirementsLine([APE(16), NEW_HIRE(3)])}`).toBe('Needs: Rp 16 jt APE + 3 new hires');
+    expect(`${OWN_COPY.needs} ${requirementsLine([APE(16), NEW_HIRE(3)])}`).toBe('Needs: Rp 16 Jt APE + 3 new hires');
   });
 
   it('P18.7-T10 AC-3 APE only, new hires only, both: each its own words, the figure first, joined by " + "', () => {
-    expect(requirementsLine([APE(500)])).toBe('Rp 500 jt APE');
+    expect(requirementsLine([APE(500)])).toBe('Rp 500 Jt APE');
     expect(requirementsLine([NEW_HIRE(3)])).toBe('3 new hires');
     expect(requirementsLine([NEW_HIRE(1)])).toBe('1 new hire');
     expect(requirementsLine([APE(1200), NEW_HIRE(6)])).toBe('Rp 1,2 M APE + 6 new hires');
@@ -48,7 +48,7 @@ describe('a campaign in words (P18.2-T7 AC-3, P18.2-T8 AC-6)', () => {
   });
 
   it('P18.7-T10 AC-3 a threshold compact writing would round is written in full, never as another rule', () => {
-    // Rp 16,25 jt would read Rp 16,3 jt — a different requirement.
+    // Rp 16,25 Jt would read Rp 16,3 Jt — a different requirement.
     expect(requirementsLine([APE(16.25), NEW_HIRE(3)])).toBe('Rp 16.250.000 APE + 3 new hires');
     expect(requirementWords(APE(2450))).toBe('Rp 2.450.000.000 APE');
   });
@@ -62,7 +62,7 @@ describe('a campaign in words (P18.2-T7 AC-3, P18.2-T8 AC-6)', () => {
     expect(requirementWords(PERSISTENCY)).toBe('90% rolling persistency');
     expect(requirementWords({ ...NEW_HIRE(2), comparator: 'lt' })).toBe('under 2 new hires');
     expect(requirementWords({ ...NEW_HIRE(2), comparator: 'gt' })).toBe('more than 2 new hires');
-    expect(requirementWords({ ...APE(500), comparator: 'lte' })).toBe('at most Rp 500 jt APE');
+    expect(requirementWords({ ...APE(500), comparator: 'lte' })).toBe('at most Rp 500 Jt APE');
     expect(requirementWords({ ...NEW_HIRE(3), comparator: 'eq' })).toBe('exactly 3 new hires');
   });
 
@@ -74,8 +74,8 @@ describe('a campaign in words (P18.2-T7 AC-3, P18.2-T8 AC-6)', () => {
     };
     expect(requirementWords(ratio)).toBe('Selling success rate 0,15');
     expect(requirementWords(balance)).toBe('Selling vs Recruitment balance at most ±30 points');
-    expect(requirementWords(APE(600, { metricKey: 'NET_APE', metricName: 'Net APE', measured: false }))).toBe('Net APE Rp 600 jt');
-    expect(requirementsLine([APE(16), ratio])).toBe('Rp 16 jt APE + Selling success rate 0,15');
+    expect(requirementWords(APE(600, { metricKey: 'NET_APE', metricName: 'Net APE', measured: false }))).toBe('Net APE Rp 600 Jt');
+    expect(requirementsLine([APE(16), ratio])).toBe('Rp 16 Jt APE + Selling success rate 0,15');
   });
 
   it('P18.7-T10 AC-2 the chase is drawn only while the campaign has not ended, and only where the reader may chase', () => {
@@ -114,10 +114,10 @@ describe('a campaign in words (P18.2-T7 AC-3, P18.2-T8 AC-6)', () => {
 
   it('P18.2-T8 AC-6 progress: "{current} of {target}", met only when met, and never ✕ for a month not held', () => {
     const row = { metricKey: 'APE_ACHIEVED', current: 62_000_000_000, target: 50_000_000_000, unit: 'idr_minor' };
-    expect(progressWords({ ...row, state: 'met' })).toEqual({ text: 'Rp 620 jt of Rp 500 jt', met: true, figure: true });
-    expect(progressWords({ ...row, state: 'in_progress' })).toEqual({ text: 'Rp 620 jt of Rp 500 jt', met: false, figure: true });
+    expect(progressWords({ ...row, state: 'met' })).toEqual({ text: 'Rp 620 Jt of Rp 500 Jt', met: true, figure: true });
+    expect(progressWords({ ...row, state: 'in_progress' })).toEqual({ text: 'Rp 620 Jt of Rp 500 Jt', met: false, figure: true });
     // A current figure compact writing would round is written in full, so it never reads as the target it misses.
-    expect(progressWords({ ...row, current: 49_996_000_000, state: 'in_progress' })?.text).toBe('Rp 499.960.000 of Rp 500 jt');
+    expect(progressWords({ ...row, current: 49_996_000_000, state: 'in_progress' })?.text).toBe('Rp 499.960.000 of Rp 500 Jt');
     expect(progressWords({ ...row, state: 'not_met' })?.met).toBe(false);
     expect(progressWords({ ...row, current: null, state: 'not_uploaded' })).toEqual({ text: 'Not uploaded yet', met: false, figure: false });
     expect(progressWords({ ...row, current: null, state: 'not_measured' })).toEqual({ text: 'Not measured yet', met: false, figure: false });

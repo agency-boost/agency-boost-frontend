@@ -10,7 +10,7 @@ import { formatDecimalInput, parseDecimal } from '@/lib/format';
  * **A value set with the thumb, or typed exactly** (UI V1, UI-016 — Goal Setting's *Annual APE target*, *Rata-rata
  * case size*, and *Annual savings target*; D-21: many agents are over 50).
  *
- * - The label on the left and **the value on the right, 28px/800** (*Rp 500 jt*), written by the caller's `format`.
+ * - The label on the left and **the value on the right, 28px/800** (*Rp 500 Jt*), written by the caller's `format`.
  * - **A slider under it**: a 6px track filled in the accent up to the thumb, a 22px thumb. Every value can be set
  *   without a keyboard (UI-016's *Done when*), by `step`.
  * - **Tapping the value opens a number field** in its place — 16px, a numeric keyboard — for an exact amount; Enter or
@@ -45,7 +45,7 @@ export function SliderWithValue({
   /** The most an exact amount may be typed as; `max` when absent. */
   exactMax?: number;
   step?: number;
-  /** The value as the reader reads it: *Rp 500 jt*. */
+  /** The value as the reader reads it: *Rp 500 Jt*. */
   format: (value: number) => string;
   /** An ⓘ beside the label. */
   info?: ReactNode;

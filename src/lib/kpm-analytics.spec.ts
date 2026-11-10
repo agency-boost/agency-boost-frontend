@@ -39,7 +39,7 @@ describe('KPM analytics’ client (P18-T2)', () => {
 
   it('P18-T2 AC-3, P18.9-T3 AC-1, AC-3 writes an APE cell: the figure and "of {target} target" compact, the pill whole', () => {
     expect(moneyWords({ achievedMinor: rp(620), targetMinor: rp(1500), pct: 41 }, 70)).toEqual({
-      actual: 'Rp 620 jt',
+      actual: 'Rp 620 Jt',
       uploaded: true,
       of: 'of Rp 1,5 M target',
       pill: { text: '41%', tone: 'alert' },
@@ -63,7 +63,7 @@ describe('KPM analytics’ client (P18-T2)', () => {
 
   it('P18-T2 AC-3 never writes 0 for want of data: Not uploaded yet, No goal set, and no pill', () => {
     expect(moneyWords({ achievedMinor: null, targetMinor: rp(75), pct: null }, 70)).toEqual({
-      actual: 'Not uploaded yet', uploaded: false, of: 'of Rp 75 jt target', pill: null,
+      actual: 'Not uploaded yet', uploaded: false, of: 'of Rp 75 Jt target', pill: null,
     });
     expect(moneyWords({ achievedMinor: rp(10), targetMinor: null, pct: null }, 70).of).toBe('No goal set');
     expect(rateWords({ count: 0, of: 0, pct: null })).toEqual({ main: '0 / 0', pct: '—' });
@@ -108,7 +108,7 @@ describe('KPM analytics’ client (P18-T2)', () => {
 
   it('P18.9-T3 AC-8 the MOC ⓘ says what MOC is — the glossary’s line — above the company’s rules', () => {
     expect(mocTermName).toBe('What is MOC?');
-    expect(mocTip('AAB: Net APE ≥ Rp 200 jt.')).toBe(`${TERMS.MOC.definition}\n\nAAB: Net APE ≥ Rp 200 jt.`);
+    expect(mocTip('AAB: Net APE ≥ Rp 200 Jt.')).toBe(`${TERMS.MOC.definition}\n\nAAB: Net APE ≥ Rp 200 Jt.`);
     // A company with no MOC rule still has the term explained.
     expect(mocTip('')).toBe(TERMS.MOC.definition);
   });
@@ -156,9 +156,9 @@ describe('KPM analytics’ client (P18-T2)', () => {
   });
 
   it('P18-T2 AC-4 writes each criterion in its own unit, and never Gap for a figure nobody has', () => {
-    expect(criterionValue('MOC_APE', rp(600))).toBe('Rp 600 jt');
+    expect(criterionValue('MOC_APE', rp(600))).toBe('Rp 600 Jt');
     // P19.3-T1 AC-5: a stored `NET_APE` reads as rupiah all the same; P19.3-T1 AC-14, *Monthly2 AA* is an average.
-    expect(criterionValue('NET_APE', rp(600))).toBe('Rp 600 jt');
+    expect(criterionValue('NET_APE', rp(600))).toBe('Rp 600 Jt');
     expect(criterionValue('MONTHLY2_AA_DU', 7 / 3)).toBe('2,33');
     // A persistency keeps the places it has and no ,0 (P18.9-T3 AC-2): the rule's 75%, the carrier's 74,96%.
     expect(criterionValue('MOC_PERSISTENCY', 75)).toBe('75%');
@@ -188,7 +188,7 @@ describe('KPM analytics’ client (P18-T2)', () => {
       { month: '2026-10', apeMinor: 0 },
     ]);
     expect(bars.map((b) => b.height)).toEqual([50, null, 100, 0]);
-    expect(bars.map((b) => b.value)).toEqual(['Rp 400 jt', 'Not uploaded yet', 'Rp 800 jt', 'Rp 0']);
+    expect(bars.map((b) => b.value)).toEqual(['Rp 400 Jt', 'Not uploaded yet', 'Rp 800 Jt', 'Rp 0']);
     expect(chartBars([{ month: '2026-08', apeMinor: null }])[0].height).toBeNull();
     expect(shortMonth('2026-03')).toBe('Mar');
     expect(shortMonth('2025-12')).toBe('Des');
@@ -234,7 +234,7 @@ describe('OD-235 the Producing cell over the share’s own base', () => {
 describe('P18.10-T4 KPM analytics’ words, language by language', () => {
   it('P18.10-T4 writes an APE cell in Indonesian words and figures: dari target Rp 1,5 M, Belum diunggah, Goal belum diatur', () => {
     expect(moneyWords({ achievedMinor: rp(620), targetMinor: rp(1500), pct: 41 }, 70, 'id', 'id')).toEqual({
-      actual: 'Rp 620 jt', uploaded: true, of: 'dari target Rp 1,5 M', pill: { text: '41%', tone: 'alert' },
+      actual: 'Rp 620 Jt', uploaded: true, of: 'dari target Rp 1,5 M', pill: { text: '41%', tone: 'alert' },
     });
     expect(moneyWords({ achievedMinor: null, targetMinor: null, pct: null }, 70, 'id', 'id'))
       .toMatchObject({ actual: 'Belum diunggah', of: 'Goal belum diatur' });
@@ -320,12 +320,12 @@ describe('P19.3-T3 KPM Analytics — every leader', () => {
     expect(memberPageHref('mem-sari')).toBe('/people/members/mem-sari');
   });
 
-  it('P19.3-T3 AC-12 the MOC dialog writes money with the shared formatter: Rp 3,1 M / Rp 600 jt (UI-096)', () => {
-    expect(criterionPair('MOC_APE', 3_094_500_000 * 100, rp(600))).toEqual(['Rp 3,1 M', 'Rp 600 jt']);
+  it('P19.3-T3 AC-12 the MOC dialog writes money with the shared formatter: Rp 3,1 M / Rp 600 Jt (UI-096)', () => {
+    expect(criterionPair('MOC_APE', 3_094_500_000 * 100, rp(600))).toEqual(['Rp 3,1 M', 'Rp 600 Jt']);
     expect(criterionPair('MOC_APE', 3_094_500_000 * 100, rp(600), 'en')).toEqual(['IDR 3.1B', 'IDR 600M']);
     // Two different sums that compact writing would make equal are written in full (ADR-0167 §1 kept).
-    expect(criterionPair('MOC_APE', rp(599.96), rp(600))).toEqual(['Rp 599.960.000', 'Rp 600 jt']);
-    expect(criterionPair('MOC_APE', null, rp(600))).toEqual(['—', 'Rp 600 jt']);
+    expect(criterionPair('MOC_APE', rp(599.96), rp(600))).toEqual(['Rp 599.960.000', 'Rp 600 Jt']);
+    expect(criterionPair('MOC_APE', null, rp(600))).toEqual(['—', 'Rp 600 Jt']);
     expect(criterionPair('MOC_PERSISTENCY', 74.96, 75)).toEqual(['74,96%', '75%']);
   });
 });

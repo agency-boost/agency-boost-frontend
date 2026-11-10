@@ -158,14 +158,14 @@ export const KEPT_ENGLISH = {
   ],
   /**
    * §A.4 — the KPI labels the Owner's and the AB's screens draw, screen by screen. *APE (Rp M)* and *Avg. Case Size
-   * (Rp jt)* keep their names; the unit in brackets is a format, which P18.10-T3 writes in each language (§E).
+   * (Rp Jt)* keep their names; the unit in brackets is a format, which P18.10-T3 writes in each language (§E).
    */
   kpis: [
     // The forum's *Overview & Stats*.
     'Manpower', '# of agents', '# of units', '# of AB', '# of AAB', 'Metrics', 'Full Year & YTD View', 'Monthly View',
     'Full Year', 'YTD', 'This Month, Last Year', 'Last Month', 'This Month', 'Monthly Target', 'APE (Rp M)',
     'FLC (avg. monthly)', 'Annual Active Agents', '3M new agent %', 'Avg. monthly AA', 'Case submission',
-    'Cases/producing agents', 'Avg. Case Size (Rp jt)', 'AS OF', 'TBD',
+    'Cases/producing agents', 'Avg. Case Size (Rp Jt)', 'AS OF', 'TBD',
     // The Overview (`/kpm/overview`).
     'Team composition', 'Total members', 'Engagement', 'Agents who logged activity this month',
     'Activity logging — this week', 'Coaching coverage', 'Coached in last 7 days', 'Coached in last 30 days',

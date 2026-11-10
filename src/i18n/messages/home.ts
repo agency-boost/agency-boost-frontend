@@ -66,10 +66,12 @@ const en = {
     heading: 'Today’s actions',
     all: 'All',
     allLabel: 'All of today in Calendar',
-    /** A coaching item's top line: *Dari: WILSON TANOTO*. */
-    from: ({ name }: { name: string }) => `From: ${name}`,
-    /** An agenda row's line under its title: its type, and its day when it is not today. */
-    typeOn: ({ type, day }: { type: string; day: string }) => `${type} · ${day}`,
+    /** The card's line when today holds nothing (P19.11-T1 AC-4; UXQ6), *Semua* still above it. */
+    empty: 'Nothing scheduled for today.',
+    /** The task rows' list, for a screen reader: the Calendar's *Tugas* (P19.11-T1 AC-3). */
+    tasks: 'Today’s tasks',
+    /** The event rows' list, for a screen reader. */
+    events: 'Today’s events',
   },
   team: {
     /** *Laporan aktivitas tim* at every size (MOB UI-165, the owner's copy change). */
@@ -147,8 +149,9 @@ const id: MessagesOf<typeof en> = {
     heading: 'Aksi hari ini',
     all: 'Semua',
     allLabel: 'Semua untuk hari ini di Kalender',
-    from: ({ name }) => `Dari: ${name}`,
-    typeOn: ({ type, day }) => `${type} · ${day}`,
+    empty: 'Tidak ada tugas atau jadwal hari ini.',
+    tasks: 'Tugas hari ini',
+    events: 'Event hari ini',
   },
   team: {
     heading: 'Laporan aktivitas tim',

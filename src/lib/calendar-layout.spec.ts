@@ -1,9 +1,11 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { busy, entry, trip, WEEK } from '@test/calendar-fixtures';
 import {
-  allDayHeight, columnSpan, DAY_PX, ENTRY_LEADING, ENTRY_PAD_Y_PX, ENTRY_TIME_PX, ENTRY_TITLE_PX, ENTRY_WITH_TIME_PX,
-  HOUR_PX, isWeekend, itemsOnDay, layoutDay, MIN_ENTRY_PX, minutesOf, nextHalfHour, OPEN_AT_HOUR,
-  openingHour, showsTime, slotFromSelection, snapMinutes, stackBars, timedOn,
+  allDayHeight, columnSpan, DAY_PX, ENTRY_LEADING, ENTRY_PAD_Y_PX, ENTRY_TIME_PX, ENTRY_TITLE_LINES_MAX, ENTRY_TITLE_PX,
+  ENTRY_WITH_TIME_PX, HOUR_PX, isWeekend, itemsOnDay, layoutDay, MIN_ENTRY_PX, minutesOf, nextHalfHour, OPEN_AT_HOUR,
+  openingHour, showsTime, slotFromSelection, snapMinutes, stackBars, timedOn, titleLines,
 } from './calendar-layout';
 
 const at = (h: number, m = 0) => ((h * 60 + m) / 60) * HOUR_PX;
@@ -72,6 +74,68 @@ describe('what an entry has room for (P13.1-T8 AC-1)', () => {
   it('never cuts the title: at the shortest an entry is drawn, its title still ends inside it', () => {
     expect(ENTRY_PAD_Y_PX + ENTRY_TITLE_PX * ENTRY_LEADING).toBeLessThanOrEqual(MIN_ENTRY_PX);
     expect(showsTime(MIN_ENTRY_PX)).toBe(false);
+  });
+});
+
+/**
+ * **P19.11-T1 AC-6 (UX-6) — every block shows its title**: one line when short or narrow, two or three when tall, the
+ * time under it where it fits; navy on each block's pastel tone at 4.5:1 or more.
+ */
+describe('P19.11-T1 AC-6 a block’s title lines and its contrast', () => {
+  const heightOf = (start: string, end: string) => layoutDay([entry({ start, end })])[0].height;
+  const linesOf = (start: string, end: string, narrow = false) => {
+    const height = heightOf(start, end);
+    return titleLines(height, showsTime(height), narrow);
+  };
+
+  it('P19.11-T1 AC-6 a short block’s title is one line; an hour’s two, with its time; two hours’ three, never more', () => {
+    expect(ENTRY_TITLE_LINES_MAX).toBe(3);
+    expect(linesOf('09:00', '09:15')).toBe(1);
+    expect(linesOf('09:00', '09:30')).toBe(1);
+    expect(linesOf('09:00', '09:45')).toBe(1);
+    expect(linesOf('09:00', '10:00')).toBe(2);
+    expect(linesOf('09:00', '11:00')).toBe(3);
+    expect(linesOf('09:00', '13:00')).toBe(3);
+  });
+
+  it('P19.11-T1 AC-6 every line it is given fits inside the block, under its padding and its time', () => {
+    for (let minutes = 15; minutes <= 240; minutes += 5) {
+      const height = Math.max(MIN_ENTRY_PX, (minutes / 60) * HOUR_PX - 2);
+      const lines = titleLines(height, showsTime(height));
+      const used = 2 * ENTRY_PAD_Y_PX + lines * ENTRY_TITLE_PX * ENTRY_LEADING + (showsTime(height) ? ENTRY_TIME_PX * ENTRY_LEADING : 0);
+      // One line always, even where the shortest block's padding runs into it (`MIN_ENTRY_PX`, cut with an ellipsis).
+      if (lines > 1) expect([minutes, used <= height]).toEqual([minutes, true]);
+    }
+  });
+
+  it('P19.11-T1 AC-6 a narrow block — a phone’s Week — keeps one line whatever its height', () => {
+    expect(linesOf('09:00', '13:00', true)).toBe(1);
+    expect(linesOf('09:00', '09:30', true)).toBe(1);
+  });
+
+  it('P19.11-T1 AC-6 navy titles read at 4.5:1 or more on every block’s tone, over the card and over today’s shade', () => {
+    const globals = readFileSync(join(__dirname, '../styles/globals.css'), 'utf8');
+    const hex = (name: string) => globals.match(new RegExp(`--color-${name}:\\s*(#[0-9a-f]{6});`, 'i'))![1];
+    const rgb = (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+    const over = (top: string, alpha: number, under: string) => rgb(top).map((c, i) => Math.round(c * alpha + rgb(under)[i] * (1 - alpha)));
+    const lum = (c: number[]) => {
+      const [r, g, b] = c.map((v) => { const x = v / 255; return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; });
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    const ratio = (a: number[], b: number[]) => {
+      const [x, y] = [lum(a), lum(b)].sort((m, n) => n - m);
+      return (x + 0.05) / (y + 0.05);
+    };
+    // `ENTRY_TONE`, `EVENT_TONE` and the busy block's: each colour at its alpha.
+    const tones: [string, number][] = [
+      ['navy-soft', 0.12], ['amber', 0.18], ['alert', 0.1], ['success', 0.1], ['teal', 0.12], ['lavender', 0.14], ['navy', 0.06],
+    ];
+    for (const ground of ['card', 'today']) {
+      for (const [tone, alpha] of tones) {
+        const r = ratio(rgb(hex('navy')), over(hex(tone), alpha, hex(ground)));
+        expect([ground, tone, r >= 4.5]).toEqual([ground, tone, true]);
+      }
+    }
   });
 });
 

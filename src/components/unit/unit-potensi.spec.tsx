@@ -252,6 +252,20 @@ describe('P19.1-T6, P19.8-T4 the Potensi tab', () => {
       expect(firstRow.querySelector('.bg-secondary')).toHaveTextContent('AAB');
     });
 
+    it('P19.11-T6 AC-4 one rule with the roster: the tag is a leader’s rung’s — AB, AAB — never an Agent’s, even at a card’s head', async () => {
+      // A card led by somebody on an Agent's rung who leads somebody (the server's `isUnitHead`): no tag before them.
+      const ledByAgent = unit('unit', [
+        person('Dedi Kurniawan', 'AGENT', { isLeader: true }),
+        person('Fajar Nugraha', 'AGENT'),
+      ]);
+      render(potensi({ units: [AGUS_UNIT, SARI_UNIT, ledByAgent] }));
+      await tiles();
+      const tags = [...document.querySelectorAll('[data-rung-tag]')].map((tag) => tag.textContent);
+      expect(tags).toEqual(['AB', 'AAB']);
+      const dedi = within(cards()[2]).getAllByRole('listitem')[0];
+      expect(dedi.querySelector('[data-potensi-name]')!.textContent).toBe('Dedi Kurniawan');
+    });
+
     it('P19.8-T4 AC-4 MOB UI-179 a unit below the reader names its head’s card Unit {name}', async () => {
       render(potensi({ head: { membershipId: 'mem-agus', name: 'Agus Prasetyo', isReader: false } }), { language: 'id' });
       await screen.findByRole('radiogroup', { name: 'Active Agent atau Rekrut' });

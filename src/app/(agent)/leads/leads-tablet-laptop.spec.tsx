@@ -82,12 +82,13 @@ afterEach(() => vi.unstubAllGlobals());
 /**
  * **The phone is the T0 baseline** (P19.1-T2 AC-13; the full report's *mobile out of scope: it must not change*). The
  * digests were taken from the build before UI-116 (P18.9-T7's technique, `test/harness.tsx`): the list and the open
- * sheet at 375 and 360, and the sheet at 768, which UI-116 keeps as the phone's.
+ * sheet at 375 and 360, and the sheet at 768, which UI-116 keeps as the phone's. *The sheet's two were re-recorded on
+ * 2026-11-10 for P19.11-T3* (the client's revision redraws the phone's sheet; the note in the test says why).
  */
 const BASELINE = {
   list: '5fc92766b47f69c3dfec477dcd7bb8fe22dea562e6177775d4d62fdbea08d394',
-  sheet375: 'be60f76c89d4527df37b48862ac59ac3c8b4b0227fd166d55d6b0f3eb9c74d5d',
-  sheet768: 'f6682847c25fc3fb1eb90ef2bc7c6b0e7774f0fd78c669e053444a10212b7f69',
+  sheet375: '3b805c3d3d117a5615f5adab4dd34e6e5b154d6c87ec467658a27158f1ac5ae0',
+  sheet768: '435f923493a321bb5cb1db9290b37aa8cfe26df5599509d1b1b8d2050b8c8802',
 };
 
 describe('P19.1-T2 AC-13 the phone as it was', () => {
@@ -111,6 +112,24 @@ describe('P19.1-T2 AC-13 the phone as it was', () => {
       name.removeAttribute('data-stage-name');
       name.setAttribute('class', 'line-clamp-2 text-xs leading-tight text-secondary-muted');
     }
+    /*
+     * *Amended 2026-11-10 (P19.11-T3 AC-3; UX-9, the client's revision of 9 November):* each card's stage pill travels
+     * with a muted *›* in a span of its own (`[data-lead-stage]`), and the tag line centres them. The digest is taken with
+     * the stage put back as it was — the pill straight in the line, its own classes, no *›* — and still matches the
+     * baseline: nothing else on the phone's list moved.
+     */
+    const units = before.querySelectorAll('[data-lead-stage]');
+    expect(units.length).toBeGreaterThan(0);
+    for (const unit of units) {
+      expect(unit.querySelector('[data-pill-separator]')).toHaveTextContent('›');
+      const line = unit.parentElement!;
+      line.setAttribute('class', line.getAttribute('class')!.replace(' items-center gap-1.5', ' gap-1.5'));
+      const pill = unit.querySelector('[data-tone]')!;
+      pill.setAttribute('class', pill.getAttribute('class')!
+        .replace('inline-flex items-center', 'inline-flex shrink-0 items-center')
+        .replace(' min-w-0 max-w-full shrink truncate', ' max-w-full truncate'));
+      unit.replaceWith(pill);
+    }
     expect(digestAt(before, px)).toBe(BASELINE.list);
   });
 
@@ -120,14 +139,19 @@ describe('P19.1-T2 AC-13 the phone as it was', () => {
     const sheet = await screen.findByRole('dialog', { name: /Felicia Elvina/i });
     await waitFor(() => expect(within(sheet).queryByText('Loading the history…')).not.toBeInTheDocument());
     /*
-     * *Amended 2026-11-05 (P19.7-T1 AC-1; the proposal spec's step 1, a client request):* the sheet gains *Umur ulang
-     * tahun berikutnya* and *Jenis kelamin* above *Riwayat* (`[data-client-fields]`). Everything else is drawn as before:
-     * the digest is taken with that block lifted out, and still matches the baseline.
+     * *Amended 2026-11-05 (P19.7-T1 AC-1; the proposal spec's step 1, a client request):* the sheet gained *Umur ulang
+     * tahun berikutnya* and *Jenis kelamin* above *Riwayat*; the digest was taken with that block lifted out.
+     *
+     * *Re-recorded 2026-11-10 (P19.11-T3 AC-3, AC-4, AC-5, AC-9; UX-9, UX-10, UX-17, the client's revision of 9
+     * November):* the client redraws the phone's sheet on purpose — *Detail* as labelled fields (*Nama*, *WhatsApp*,
+     * *Email*, *Jenis kelamin*; *Umur* and *Sumber lead* gone), *Hasil*'s helper out of sight, every section a box with
+     * one gap, a *›* in the head's tag line — so the old sheet cannot be put back from this one. The two digests are
+     * this build's, and pin the phone's sheet from here; `components/lead-sheet-detail.spec.tsx` and
+     * `lead-sheet-spacing.browser.spec.ts` say what changed.
      */
-    const without = sheet.cloneNode(true) as Element;
-    without.querySelector('[data-client-fields]')!.remove();
-    expect(within(sheet).getByRole('group', { name: 'Age at next birthday' })).toBeInTheDocument();
-    expect(digestAt(without, px)).toBe(px === 768 ? BASELINE.sheet768 : BASELINE.sheet375);
+    expect(within(sheet).getByRole('group', { name: 'Details' })).toBeInTheDocument();
+    expect(within(sheet).queryByRole('group', { name: 'Age at next birthday' })).not.toBeInTheDocument();
+    expect(digestAt(sheet, px)).toBe(px === 768 ? BASELINE.sheet768 : BASELINE.sheet375);
   });
 });
 

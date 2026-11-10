@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SummaryCards } from '@/components/personal-summary';
@@ -49,14 +49,21 @@ const activity = (over: Record<string, unknown> = {}) => ({
   ],
   ...over,
 });
+/** One of the reader's own open leads, in `GET /leads`' row shape (P19.11-T5 AC-4): what the shared card draws. */
 const openLead = (over: Record<string, unknown>) => ({
-  id: 'l-1', name: 'Pak Hendro Gunawan', type: 'sales', statusCode: 'FOLLOW_UP', statusLabel: 'Sudah di-follow up',
-  thisMonth: false, flags: [], overdueDays: null, nextActionDate: '2026-09-20', nextActionNote: null, ...over,
+  id: 'l-1', ownerMembershipId: 'mem-1', owner: { membershipId: 'mem-1', name: 'Rina Wijaya' }, type: 'sales',
+  name: 'Pak Hendro Gunawan', contact: { phone: null, email: null }, statusCode: 'FOLLOW_UP', thisMonth: false,
+  committedMonths: [], closedThisMonth: false, lastEditedBy: null, remarks: null, nextActionDate: '2026-09-20',
+  nextActionNote: null, outcome: null, source: null, dateRegistered: '2026-09-01T03:00:00.000Z', version: 1, flags: [],
+  overdueDays: null, proposals: null, ...over,
 });
 const LEADS = [
-  openLead({ id: 'l-1', thisMonth: true, flags: ['overdue', 'no-remarks'], overdueDays: 6, nextActionDate: '2026-09-08', nextActionNote: 'Kirim ilustrasi' }),
-  openLead({ id: 'l-2', name: 'Ibu Wulan Sari', type: 'recruitment', statusLabel: 'Polis diajukan', nextActionDate: '2026-10-16' }),
-  openLead({ id: 'l-3', name: '', type: null, statusCode: null, statusLabel: null, flags: ['no-next-action'], nextActionDate: null }),
+  openLead({
+    id: 'l-1', thisMonth: true, committedMonths: ['2026-09'], flags: ['overdue', 'no-remarks'], overdueDays: 6,
+    nextActionDate: '2026-09-08', nextActionNote: 'Kirim ilustrasi',
+  }),
+  openLead({ id: 'l-2', name: 'Ibu Wulan Sari', type: 'recruitment', statusCode: 'MEETING_SCHEDULED', nextActionDate: '2026-10-16' }),
+  openLead({ id: 'l-3', name: 'Pak Bambang', type: null, statusCode: null, flags: ['no-next-action'], nextActionDate: null }),
 ];
 const INSIGHTS = [
   { rule: 'BEHIND_PACE', kind: 'action', facts: { closingsLast30Days: 2, closingTarget: 5, neededPerWeek: 1, weeksLeft: 3 } },
@@ -136,12 +143,12 @@ describe('P18.10-T4 Personal Summary in Indonesian', () => {
     const goal = await card('Target vs. realisasi (APE)');
 
     expect(goal.querySelector('[data-date-header]')).toHaveTextContent('12 Sep 2026sisa 16 hari bulan ini');
-    expect(goal).toHaveTextContent('Rp 30 jt');
-    expect(goal).toHaveTextContent('dari target Rp 75 jt');
+    expect(goal).toHaveTextContent('Rp 30 Jt');
+    expect(goal).toHaveTextContent('dari target Rp 75 Jt');
     expect(within(goal).getByText('40%')).toBeInTheDocument();
     expect(within(goal).getByRole('button', { name: 'Dari unggahan KPM Anda, Sep 2026' })).toBeInTheDocument();
     // UI-006: *Sisa bulan ini* | *Polis yang dibutuhkan ± 3 polis*; the pace box is gone (UI-054).
-    expect(foot(goal)).toBe('Sisa bulan iniRp 45 jtPolis yang dibutuhkan± 3 polis');
+    expect(foot(goal)).toBe('Sisa bulan iniRp 45 JtPolis yang dibutuhkan± 3 polis');
     expect(screen.queryByText(/laju Anda saat ini/)).not.toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'Selisih' })).not.toBeInTheDocument();
     noEnglishLeft();
@@ -157,7 +164,7 @@ describe('P18.10-T4 Personal Summary in Indonesian', () => {
     noEnglishLeft();
   });
 
-  it('AC-2, AC-4, UI-052 the targets: the stages kept, the tiles and activities as the office typed them, the source', async () => {
+  it('AC-2, AC-4, UI-052, P19.11-T4 AC-2 the targets: the stages kept, the tiles and activities as the office typed them, the source', async () => {
     show(summary());
     const targets = await card('Target aktivitas penjualan Anda');
 
@@ -171,10 +178,13 @@ describe('P18.10-T4 Personal Summary in Indonesian', () => {
     expect(within(targets).getByRole('button', {
       name: 'Submission polis adalah polis yang Anda catat di Log Activity.',
     })).toBeInTheDocument();
-    // UI-157 item 1: *APE berasal dari unggahan produksi* is the goal card's ⓘ now.
+    // UI-157 item 1: *APE berasal dari unggahan produksi* is the goal card's ⓘ now — and, since P19.11-T4 AC-2 (UX-12),
+    // who uploads it, verbatim, moved there from under the figure.
     const goal = await card('Target vs. realisasi (APE)');
     await userEvent.click(within(goal).getByRole('button', { name: 'Apa itu APE?' }));
-    expect(await screen.findByRole('tooltip')).toHaveTextContent(/APE berasal dari unggahan produksi\.$/);
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      /APE berasal dari unggahan produksi\. Produksi diunggah oleh admin KPM Anda, biasanya setiap bulan\. Belum muncul\? Hubungi admin KPM\.$/,
+    );
     const phone = targets.querySelector('[data-breakdown="collapsed"]') as HTMLElement;
     expect(within(phone).getAllByRole('button').map((b) => b.textContent)).toEqual(['Aktivitas Recruitment6', 'Aktivitas Development2']);
     await userEvent.click(within(phone).getAllByRole('button')[0]);
@@ -193,23 +203,30 @@ describe('P18.10-T4 Personal Summary in Indonesian', () => {
     noEnglishLeft();
   });
 
-  it('AC-2, AC-4 the leads that need the reader: our words Indonesian, a lead’s name, status and note as typed', async () => {
-    show(summary());
+  it('AC-2, AC-4, P19.11-T5 AC-1 AC-2 the leads that need the reader: the Leads screen’s card in Indonesian, a lead’s name and note as typed; Lihat semua and Tampilkan lebih sedikit', async () => {
+    const six = [...LEADS, ...[4, 5, 6].map((i) => openLead({ id: `l-${i}`, name: `Pak Lead ${i}` }))];
+    show(summary({ leads: { rows: six, total: 6, shown: 5 } }));
     const leads = await card('Leads yang perlu perhatian Anda');
 
     expect(within(leads).getByText('Leads terbuka Anda, tanggal terdekat lebih dulu')).toBeInTheDocument();
-    const [late, recruit, unnamed] = within(leads).getAllByRole('listitem');
-    expect(late).toHaveTextContent('Sales · Sudah di-follow up');
-    expect(within(late).getByText('Closes this month')).toBeInTheDocument();
-    expect(within(late).getByText('Terlambat 6 hari')).toBeInTheDocument();
-    expect(within(late).getByText('Tanpa keterangan')).toBeInTheDocument();
-    expect(late).toHaveTextContent('8 Sep — Kirim ilustrasi');
-    expect(recruit).toHaveTextContent('Recruit · Polis diajukan');
-    expect(recruit).toHaveTextContent('16 Okt');
-    expect(unnamed).toHaveTextContent('(tanpa nama)');
-    expect(unnamed).toHaveTextContent('Tanpa jenis · Belum ada status');
-    expect(within(unnamed).getByText('Tanpa tindakan berikutnya')).toBeInTheDocument();
-    expect(unnamed).toHaveTextContent('Tanggal belum diatur');
+    const [late, recruit, undated] = within(leads).getAllByRole('listitem');
+    // The card's next-action line: the date and the note as typed, *terlambat* to a screen reader; *Isi tindakan* where none.
+    expect(late.querySelector('[data-next-action="overdue"]')).toHaveTextContent('8 Sep, terlambatKirim ilustrasi');
+    expect(within(late).getByRole('img', { name: 'Potensi bulan ini' })).toBeInTheDocument();
+    expect(recruit).toHaveTextContent('Recruit');
+    expect(recruit.querySelector('[data-next-action]')).toHaveTextContent('16 Okt');
+    expect(undated).toHaveTextContent('Belum ada jenis');
+    expect(undated.querySelector('[data-next-action="missing"]')).toHaveTextContent('Isi tindakan');
+    // UX-13: no red chips, no *Tanggal belum diatur*, no *Closes this month* chip.
+    for (const gone of ['Terlambat 6 hari', 'Tanpa keterangan', 'Tanpa tindakan berikutnya', 'Tanggal belum diatur', 'Closes this month']) {
+      expect(leads).not.toHaveTextContent(gone);
+    }
+    // The top five; *Lihat semua (6)* draws the sixth in place, *Tampilkan lebih sedikit* puts it away.
+    expect(within(leads).getAllByRole('listitem')).toHaveLength(5);
+    await userEvent.click(within(leads).getByRole('button', { name: 'Lihat semua (6)' }));
+    expect(within(leads).getAllByRole('listitem')).toHaveLength(6);
+    await userEvent.click(within(leads).getByRole('button', { name: 'Tampilkan lebih sedikit' }));
+    expect(within(leads).getAllByRole('listitem')).toHaveLength(5);
     // UI-006 (owner): *Campaign yang Anda kejar*.
     expect(await card('Campaign yang Anda kejar')).toBeInTheDocument();
     noEnglishLeft();
@@ -280,10 +297,10 @@ describe('P18.10-T4 Personal Summary in Indonesian', () => {
 
     expect(screen.getByRole('button', { name: 'Tahun: 2026' })).toBeInTheDocument();
     const goal = await card('Target vs. realisasi (APE)');
-    expect(goal).toHaveTextContent('Rp 230 jt');
+    expect(goal).toHaveTextContent('Rp 230 Jt');
     expect(within(goal).getByRole('button', { name: 'Dikoreksi oleh Sari Puspita, sejak awal tahun per Agu 2026' }))
       .toBeInTheDocument();
-    expect(foot(goal)).toBe('Sisa tahun iniRp 270 jtPolis yang dibutuhkan± 15 polis');
+    expect(foot(goal)).toBe('Sisa tahun iniRp 270 JtPolis yang dibutuhkan± 15 polis');
     expect(await card('Target aktivitas penjualan Anda')).toHaveTextContent('310 aktivitas tahun ini');
     noEnglishLeft();
   });
@@ -294,7 +311,7 @@ describe('P18.10-T4 Personal Summary in Indonesian', () => {
       pace: { closingTarget: 5, closingsLast30Days: 6, dayOfMonth: 20, daysInMonth: 30, weeksLeft: 2, policiesNeeded: 0, neededPerWeek: 0, targetMet: true },
     }));
     const goal = await card('Target vs. realisasi (APE)');
-    expect(foot(goal)).toBe('Sisa bulan iniTercapai — lebih Rp 20 jtPolis yang dibutuhkanTidak ada');
+    expect(foot(goal)).toBe('Sisa bulan iniTercapai — lebih Rp 20 JtPolis yang dibutuhkanTidak ada');
     noEnglishLeft();
   });
 
@@ -305,7 +322,7 @@ describe('P18.10-T4 Personal Summary in Indonesian', () => {
     }));
     const goal = await card('Target vs. realisasi (APE)');
     expect(goal).toHaveTextContent('Target tahunan Anda sudah tercapai sebelum bulan ini dimulai — bulan ini tidak memerlukan apa-apa lagi.');
-    expect(goal).toHaveTextContent('Tercapai — lebih Rp 30 jt');
+    expect(goal).toHaveTextContent('Tercapai — lebih Rp 30 Jt');
   });
 
   it('AC-1 no goal, and a goal with no APE target: said in Indonesian, with the way to Goal Settings', async () => {
@@ -408,9 +425,12 @@ describe('P18.10-T4 a coachee’s Personal Summary in Indonesian', () => {
   };
 
   it.each(['she', 'he', 'they'] as const)('AC-3 writes the coachee as dia and -nya whatever their pronoun (%s)', async (pronoun) => {
+    // Her leads, as `GET /summary?for=` sends them: hers, so the reader's card is the not-mine one (P19.11-T5 AC-4).
+    const hers = LEADS.map((lead) => ({ ...lead, ownerMembershipId: 'mem-rina', owner: { membershipId: 'mem-rina', name: 'Rina Wijaya' } }));
     cards(summary({
       monthly: { ...figures(), source: { provenance: 'imported', month: '2026-09' } },
       insights: [{ rule: 'NOTHING_LOGGED', kind: 'action', facts: { windowDays: 7, lastLoggedOn: '2026-09-04' } }, ...INSIGHTS.slice(1)],
+      leads: { rows: hers, total: hers.length, shown: 5 },
     }), pronoun);
 
     const targets = await card('Target aktivitas penjualannya');
@@ -420,12 +440,14 @@ describe('P18.10-T4 a coachee’s Personal Summary in Indonesian', () => {
     })).toBeInTheDocument();
     const goal = await card('Target vs. realisasi (APE)');
     expect(within(goal).getByRole('button', { name: 'Dari unggahan produksi, Sep 2026' })).toBeInTheDocument();
-    expect(foot(goal)).toBe('Sisa bulan iniRp 45 jtPolis yang dibutuhkan± 3 polis');
+    expect(foot(goal)).toBe('Sisa bulan iniRp 45 JtPolis yang dibutuhkan± 3 polis');
     const leads = await card('Leads yang perlu perhatiannya');
     expect(within(leads).getByText('Semua leads aktif, tanggal terdekat lebih dulu')).toBeInTheDocument();
-    // A lead with no type is said without one about a coachee.
-    expect(within(leads).getAllByRole('listitem')[2]).toHaveTextContent('Belum ada status');
+    // P19.11-T5 AC-1: a lead with no type in the Leads screen's card words, *Belum ada jenis* — never *Tanpa jenis*
+    // (ADR-0084's *unassigned*); AC-4: each card hers, *Milik Rina Wijaya*, as under *Leads milik: Tim*.
+    expect(within(leads).getAllByRole('listitem')[2]).toHaveTextContent('Belum ada jenis');
     expect(within(leads).getAllByRole('listitem')[2]).not.toHaveTextContent('Tanpa jenis');
+    expect(within(leads).getAllByText('Milik Rina Wijaya')).toHaveLength(3);
     expect(await card('Campaign yang dia kejar')).toBeInTheDocument();
     const next = await card('Langkah berikutnya');
     expect(next).toHaveTextContent(
@@ -454,13 +476,19 @@ describe('P18.10-T4 a coachee’s Personal Summary in Indonesian', () => {
   });
 });
 
-/** P19.1-T4 — UI-157's words, as the 6 November handover gives them (improvement 5). */
-describe('P19.1-T4 the goal card’s UI-157 words in Indonesian', () => {
+/**
+ * P19.1-T4 — UI-157's words, as the 6 November handover gives them (improvement 5), **as P19.11-T4 cleaned *Bulanan* up**
+ * (UX-12): who uploads is the card's ⓘ; the helpers' marker and the year's estimate are *Tahunan*'s.
+ */
+describe('P19.1-T4, P19.11-T4 the goal card’s UI-157 words in Indonesian', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   const NOTHING = figures({ actualMinor: null, attainmentPct: null, gapMinor: null, overMinor: null, policiesNeeded: null });
   const notUploaded = (yearly: Record<string, unknown>) => summary({
-    monthly: { ...NOTHING, source: null, production: 'none', withoutProduction: { gapMinor: 290 * M, policiesNeeded: 15 } },
+    monthly: {
+      ...NOTHING, source: null, production: 'none', withoutProduction: { gapMinor: 290 * M, policiesNeeded: 15 },
+      realised: { source: 'none', uploaded: false, manual: null },
+    },
     yearly,
     uploadedOn: { month: null, year: null },
     insights: [],
@@ -474,38 +502,93 @@ describe('P19.1-T4 the goal card’s UI-157 words in Indonesian', () => {
     source: { provenance: 'self_reported', month: null }, production: 'estimate', withoutProduction: null,
   };
 
-  it('P19.1-T4 AC-7, AC-8, AC-9 Belum diunggah: who uploads, the helpers marked, Unggah produksi → — verbatim', async () => {
+  it('P19.1-T4 AC-9, P19.11-T4 AC-2 Belum diunggah on Bulanan: no paragraph, no marker, Unggah produksi → — verbatim; Tahunan keeps its own', async () => {
     nav.search = '';
     stubFetch({ '/summary': { body: notUploaded(NONE_YEAR) }, '/activity/ratios': { body: RATIOS }, 'GET /campaigns/chasing': { body: NONE_CHASED } });
     renderInIndonesian(<PersonalSummaryPage />, { me: makeMe({ permissions: ['personal_summary:read', 'data_upload:upload_and_preview'] }) });
     const goal = await card('Target vs. realisasi (APE)');
     expect(goal).toHaveTextContent('Belum diunggah');
-    expect(goal.querySelector('[data-who-uploads]')).toHaveTextContent(
-      /^Produksi diunggah oleh admin KPM Anda, biasanya setiap bulan\. Belum muncul\? Hubungi admin KPM\.$/,
-    );
-    expect(goal.querySelector('dl')).toHaveTextContent(
-      'Sisa bulan iniRp 290 jt(belum ada data produksi)Polis yang dibutuhkan± 15 polis(belum ada data produksi)',
-    );
+    expect(goal.querySelector('[data-who-uploads]')).toBeNull();
+    expect(goal.querySelector('dl')).toHaveTextContent(/^Sisa bulan iniRp 290 JtPolis yang dibutuhkan± 15 polis$/);
     expect(within(goal).getByRole('link', { name: 'Unggah produksi →' })).toHaveAttribute('href', '/kpm/data-upload');
-    expect(within(goal).getByRole('button', { name: 'Isi produksi sementara' })).toBeInTheDocument();
+    expect(within(goal).queryByRole('button', { name: 'Isi produksi sementara' })).not.toBeInTheDocument();
+    noEnglishLeft();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Tahunan' }));
+    const year = await card('Target vs. realisasi (APE)');
+    expect(year.querySelector('dl')).toHaveTextContent(
+      'Sisa tahun iniRp 580 Jt(belum ada data produksi)Polis yang dibutuhkan± 33 polis(belum ada data produksi)',
+    );
+    expect(within(year).getByRole('button', { name: 'Isi produksi sementara' })).toBeInTheDocument();
     noEnglishLeft();
   });
 
-  it('P19.1-T4 AC-10 the estimate reads Rp 120 jt · perkiraan Anda, with Ubah and Hapus', async () => {
+  it('P19.1-T4 AC-10, P19.11-T4 AC-2 the estimate reads Rp 120 Jt · perkiraan Anda, with Ubah and Hapus — on Tahunan', async () => {
     show(notUploaded(ESTIMATE_YEAR));
+    expect((await card('Target vs. realisasi (APE)')).querySelector('[data-estimate-row]')).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Tahunan' }));
     const goal = await card('Target vs. realisasi (APE)');
+    expect(goal.querySelector('[data-estimate]')).toHaveTextContent('Rp 120 Jt · perkiraan Anda');
     const row = goal.querySelector('[data-estimate-row]') as HTMLElement;
-    expect(row).toHaveTextContent('APE yang sudah dicapai tahun ini: Rp 120 jt · perkiraan Anda');
     expect(within(row).getByRole('button', { name: 'Ubah' })).toBeInTheDocument();
     expect(within(row).getByRole('button', { name: 'Hapus' })).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Tahunan' }));
-    expect((await card('Target vs. realisasi (APE)')).querySelector('[data-estimate]')).toHaveTextContent('Rp 120 jt · perkiraan Anda');
     noEnglishLeft();
   });
 
-  it('P19.1-T4 AC-11 Diganti data produksi resmi (diunggah 5 Des)', async () => {
+  it('P19.1-T4 AC-11, P19.11-T4 AC-2 Diganti data produksi resmi (diunggah 5 Des) — on Tahunan', async () => {
     show(summary({ today: '2026-12-08', month: '2026-12', estimateReplaced: { uploadedOn: '2026-12-05' } }));
+    expect((await card('Target vs. realisasi (APE)')).querySelector('[data-estimate-replaced]')).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Tahunan' }));
     const goal = await card('Target vs. realisasi (APE)');
     expect(goal.querySelector('[data-estimate-replaced]')).toHaveTextContent(/^Diganti data produksi resmi \(diunggah 5 Des\)$/);
+  });
+});
+
+/** **P19.11-T4 — UX-12's words, verbatim**: the realised APE in *Rp XXX,X Jt*, *Diubah manual*, *Kembalikan ke data unggahan*. */
+describe('P19.11-T4 UX-12 the realised APE in Indonesian', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const monthly = (actual: number, realised: Record<string, unknown>) => ({
+    ...figures({ targetMinor: 216.5 * M, actualMinor: actual, attainmentPct: 46, gapMinor: 216.5 * M - actual, policiesNeeded: 7 }),
+    source: realised.source === 'manual' ? { provenance: 'self_reported', month: '2026-09' } : { provenance: 'imported', month: '2026-09' },
+    production: realised.source === 'manual' ? 'estimate' : 'official', withoutProduction: null, realised,
+  });
+  const MANUAL = (uploaded: boolean) => ({ source: 'manual', uploaded, manual: { minor: 100 * M, typedAt: '2026-09-14T05:00:00.000Z' } });
+
+  it('P19.11-T4 AC-5 Rp 55 Jt, tapped: the field in juta, a decimal comma, Simpan on Enter — Diubah manual and Kembalikan ke data unggahan', async () => {
+    const { calls } = show(summary(), {
+      '/summary': [
+        { body: summary({ monthly: monthly(55 * M, { source: 'uploaded', uploaded: true, manual: null }) }) },
+        { body: summary({ monthly: monthly(216.5 * M, { ...MANUAL(true), manual: { minor: 216.5 * M, typedAt: '2026-09-14T05:00:00.000Z' } }) }) },
+      ],
+      'PUT /goals/2026/ape-month': { body: {} },
+    });
+    const goal = await card('Target vs. realisasi (APE)');
+    await userEvent.click(within(goal).getByRole('button', { name: 'Rp 55 Jt, ubah realisasi APE' }));
+    const field = screen.getByRole('textbox', { name: 'Realisasi APE bulan ini, dalam juta' });
+    expect(field).toHaveValue('55');
+    expect(field.closest('span')).toHaveTextContent(/^RpJt$/);
+    await userEvent.clear(field);
+    await userEvent.type(field, '216,5{Enter}');
+    await waitFor(() => expect(calls.filter((c) => c.init.method === 'PUT')).toHaveLength(1));
+    expect(JSON.parse(String(calls.find((c) => c.init.method === 'PUT')!.init.body))).toEqual({ month: '2026-09', apeAchievedMinor: 216_500_000_00 });
+    await waitFor(() => expect(within(goal).getByRole('button', { name: 'Rp 216,5 Jt, ubah realisasi APE' })).toBeInTheDocument());
+    expect(goal.querySelector('[data-month-ape-manual]')).toHaveTextContent(/^Diubah manual$/);
+    expect(within(goal).getByRole('button', { name: 'Kembalikan ke data unggahan' })).toBeInTheDocument();
+    noEnglishLeft();
+  });
+
+  it('P19.11-T4 AC-5 with nothing uploaded: Hapus angka manual; a figure that is no number is said in Indonesian', async () => {
+    show(summary({ monthly: monthly(100 * M, MANUAL(false)) }));
+    const goal = await card('Target vs. realisasi (APE)');
+    expect(within(goal).getByRole('button', { name: 'Hapus angka manual' })).toBeInTheDocument();
+    expect(within(goal).queryByRole('button', { name: 'Kembalikan ke data unggahan' })).not.toBeInTheDocument();
+    await userEvent.click(within(goal).getByRole('button', { name: 'Rp 100 Jt, ubah realisasi APE' }));
+    const field = screen.getByRole('textbox', { name: 'Realisasi APE bulan ini, dalam juta' });
+    expect(field).toHaveValue('100');
+    await userEvent.clear(field);
+    await userEvent.type(field, '1,2,3{Enter}');
+    expect(await screen.findByRole('alert')).toHaveTextContent(/^Tulis APE dalam juta, misalnya 216,5\.$/);
+    noEnglishLeft();
   });
 });

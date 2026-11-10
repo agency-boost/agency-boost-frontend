@@ -120,10 +120,13 @@ export function SourceIcon({ source, size = 'md' }: { source: TaskSource | 'even
   );
 }
 
-/** What a task row may do, held by the page (`CalendarScreen`) and read by every row. */
+/** What a task row may do, held by the page (`CalendarScreen`, `HomeScreen`; `useTaskTicks`) and read by every row. */
 export interface CalendarTasks {
-  /** Tasks ticked done in this visit, struck through until the page reads again. */
-  struck: ReadonlySet<string>;
+  /**
+   * **Whether a task is done** (P19.11-T1 AC-1, AC-2): the server's `done`, with this visit's taps laid over it — one
+   * rule for a row's completed style and for every count, so a fresh tap and a loaded tick look and count alike.
+   */
+  isDone: (task: CalendarTask) => boolean;
   /** Tick or untick one of the reader's own: done at its source, the toast offering *Urungkan*. */
   toggle: (task: CalendarTask) => void;
   /** A lead row's ›: the lead's details. */
@@ -140,7 +143,7 @@ export interface CalendarTasks {
 }
 
 const NOTHING: CalendarTasks = {
-  struck: new Set(), toggle: () => undefined, openLead: () => undefined, canTick: false, canTickCoaching: false,
+  isDone: (task) => task.done, toggle: () => undefined, openLead: () => undefined, canTick: false, canTickCoaching: false,
   onPhoneSaved: () => undefined,
 };
 
@@ -149,17 +152,41 @@ export const CalendarTasksContext = createContext<CalendarTasks>(NOTHING);
 /** The page's task controls; inert outside one. */
 export const useCalendarTasks = () => useContext(CalendarTasksContext);
 
-/** Tasks not yet ticked in this visit: what a count counts (UI-104 point 4: *lowers the day's count … right away*). */
-export function openCount(tasks: readonly CalendarTaskItem[], struck: ReadonlySet<string>): number {
-  return tasks.filter((task) => isHiddenTask(task) || !struck.has(task.taskId)).length;
+/**
+ * **The open tasks: what every *Tugas* count counts** (P19.11-T1 AC-2; UXQ8 — open only) — *Tugas · n*, the popup's
+ * title, the Week's and 3 Hari's count row, the Month's badge and Home's *Tugas* chip. A hidden person's task is a count
+ * of an open one already (the server sends no ticked one as busy).
+ */
+export function openTasks<T extends CalendarTaskItem>(tasks: readonly T[], isDone: (task: CalendarTask) => boolean): T[] {
+  return tasks.filter((task) => isHiddenTask(task) || !isDone(task));
 }
+
+/** How many of them are open (`openTasks`). */
+export function openCount(tasks: readonly CalendarTaskItem[], isDone: (task: CalendarTask) => boolean): number {
+  return openTasks(tasks, isDone).length;
+}
+
+/** **The ticked ones** (P19.11-T1 AC-1): what a day with no open task still holds, behind its muted ✓. */
+export function doneTasks(tasks: readonly CalendarTaskItem[], isDone: (task: CalendarTask) => boolean): CalendarTask[] {
+  return tasks.filter((task): task is CalendarTask => !isHiddenTask(task) && isDone(task));
+}
+
+/**
+ * **A day whose tasks are all done** (P19.11-T1 AC-1): a muted ✓ where the count goes — the status grey, never *Tugas*
+ * blue, so it is never read as work to do (4.4:1 on its pill, over the 3:1 a graphic needs; WCAG 1.4.11).
+ */
+export const ALL_DONE_TONE = 'bg-pill-grey text-signal-grey';
 
 /**
  * **One task row** (UI-104 point 2; the mockup's 52–56px row): the checkbox — the reader's own only — the source icon,
  * the NAME in caps (a coaching item *Dari: NAME*), the note in grey under it, the round WhatsApp button for the name on
  * the row (*Isi nomor WhatsApp* when there is no number, UI-081), and, for a lead, the › that opens its details. A
- * coaching row opens the 1:1 it came from. **Ticked**, it is struck through and checked, and stays until the page reads
- * again; *Urungkan* (the toast's, or the checkbox again) puts it back.
+ * coaching row opens the 1:1 it came from. *Urungkan* (the toast's, or the checkbox again) puts a tick back.
+ *
+ * **Completed — one style, whether ticked a moment ago or read ticked from the server** (P19.11-T1 AC-1; UX-1): the
+ * checkbox filled *Tugas* blue with a white check, the name and the note struck through in grey, the WhatsApp button and
+ * the › faded — WhatsApp still tappable (UXQ8). It stays on its due date across a refresh. Reused whole by Home's *Aksi
+ * hari ini* (AC-3).
  */
 export function TaskRow({ task, mine, owner }: {
   task: CalendarTask;
@@ -169,8 +196,9 @@ export function TaskRow({ task, mine, owner }: {
   owner?: { membershipId: string; name: string };
 }) {
   const t = useMessages(calendarMessages);
-  const { struck, toggle, openLead, canTick, canTickCoaching, onPhoneSaved } = useCalendarTasks();
-  const done = struck.has(task.taskId);
+  const { isDone, toggle, openLead, canTick, canTickCoaching, onPhoneSaved } = useCalendarTasks();
+  const done = isDone(task);
+  const ticks = mine && canTick && (task.source !== 'coaching' || canTickCoaching);
   const title = task.source === 'coaching' ? t.from({ name: task.name.toLocaleUpperCase('id') }) : task.name.toLocaleUpperCase('id');
   const words = (
     <span className="min-w-0 flex-1">
@@ -178,6 +206,8 @@ export function TaskRow({ task, mine, owner }: {
       {task.note && (
         <span className={cn('block truncate text-xs', done ? 'text-line line-through' : 'text-muted')}>{task.note}</span>
       )}
+      {/* A strike is not heard: a row with no checkbox — somebody else's — says it is done in words. */}
+      {done && !ticks && <span className="sr-only">{`, ${t.done}`}</span>}
     </span>
   );
   const name = task.source === 'coaching' ? t.from({ name: task.name }) : task.name;
@@ -211,7 +241,7 @@ export function TaskRow({ task, mine, owner }: {
   }
   return (
     <li data-task={task.taskId} data-done={done ? '' : undefined} className={cn('flex min-h-[52px] items-center gap-2 px-2.5', done && 'opacity-90')}>
-      {mine && canTick && (task.source !== 'coaching' || canTickCoaching) && (
+      {ticks && (
         <label className="relative flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center">
           <input
             type="checkbox"
@@ -240,6 +270,8 @@ export function TaskRow({ task, mine, owner }: {
             lead={{ id: task.lead.leadId, name: task.name, contact: { phone: task.phone, email: null }, version: task.lead.version }}
             channels={['whatsapp']}
             size={36}
+            // The task carries no email, and its version a tick moves: the lead is read before its number is saved.
+            readFirst
             onSaved={onPhoneSaved}
           />
         ) : task.coaching && task.phone ? (
@@ -255,7 +287,10 @@ export function TaskRow({ task, mine, owner }: {
         ) : null}
       </span>
       {task.source === 'lead' && (
-        <span aria-hidden="true" className="shrink-0 text-line"><LineIcon name="chevronRight" className="h-4 w-4" /></span>
+        // Faded with the WhatsApp button when done (P19.11-T1 AC-1): it was the one part of the row a tick left as it was.
+        <span aria-hidden="true" data-chevron="" className={cn('shrink-0 text-line', done && 'opacity-40')}>
+          <LineIcon name="chevronRight" className="h-4 w-4" />
+        </span>
       )}
     </li>
   );
@@ -277,7 +312,7 @@ export interface TaskPerson {
 export function PersonTaskGroup({ person, tasks }: { person: TaskPerson; tasks: readonly CalendarTaskItem[] }) {
   const t = useMessages(calendarMessages);
   const figures = useFigureLanguage();
-  const { onPhoneSaved } = useCalendarTasks();
+  const { onPhoneSaved, isDone } = useCalendarTasks();
   const hidden = tasks.some(isHiddenTask);
   const shown = tasks.filter((task): task is CalendarTask => !isHiddenTask(task));
   return (
@@ -285,7 +320,7 @@ export function PersonTaskGroup({ person, tasks }: { person: TaskPerson; tasks: 
       <div className={cn('flex min-h-11 items-center gap-2 px-2.5 text-xs font-bold text-navy', !hidden && 'border-b border-divider')}>
         <Avatar initials={person.initials} />
         <span className="min-w-0 flex-1 truncate">
-          {t.personTasks({ name: person.name.toLocaleUpperCase('id'), count: formatNumber(tasks.length, {}, figures) })}
+          {t.personTasks({ name: person.name.toLocaleUpperCase('id'), count: formatNumber(openCount(tasks, isDone), {}, figures) })}
         </span>
         {hidden ? (
           <span className="font-semibold text-signal-grey">{t.busy}</span>
@@ -317,13 +352,13 @@ export function PersonTaskGroup({ person, tasks }: { person: TaskPerson; tasks: 
 export function TaskChecklist({ tasks }: { tasks: readonly CalendarTask[] }) {
   const t = useMessages(calendarMessages);
   const figures = useFigureLanguage();
-  const { struck } = useCalendarTasks();
+  const { isDone } = useCalendarTasks();
   if (tasks.length === 0) return null;
   return (
     <section aria-label={t.tasks} data-checklist="" className="rounded-[6px] border border-dashed border-tugas-edge bg-card">
       <p className="flex min-h-8 items-center gap-1.5 border-b border-divider px-2.5 text-xs font-bold text-tugas-ink">
         <LineIcon name="checklist" className="h-4 w-4" />
-        {t.tasksCount({ count: formatNumber(openCount(tasks, struck), {}, figures) })}
+        {t.tasksCount({ count: formatNumber(openCount(tasks, isDone), {}, figures) })}
       </p>
       <ul className="divide-y divide-divider">
         {tasks.map((task) => <TaskRow key={task.taskId} task={task} mine />)}
@@ -338,9 +373,34 @@ export function TaskChecklist({ tasks }: { tasks: readonly CalendarTask[] }) {
  * (P19.1-T3 AC-6, UI-154), where it was a solid orange one that shouted as loudly as today; 44px a target on a phone and
  * a tablet, 32px on a laptop.
  */
-export function CountPill({ day, count, onOpen }: { day: string; count: number; onOpen?: () => void }) {
+export function CountPill({ day, count, done = 0, onOpen }: {
+  day: string;
+  /** The open tasks (UXQ8): the number drawn. */
+  count: number;
+  /** The ticked ones (P19.11-T1 AC-1): with none open, a muted ✓ that still opens the day's popup. */
+  done?: number;
+  onOpen?: () => void;
+}) {
   const t = useMessages(calendarMessages);
   const figures = useFigureLanguage();
+  if (count === 0 && done > 0 && onOpen) {
+    // *Changed 2026-11-10 (P19.11-T1 AC-1; UX-1):* a day whose tasks are all ticked drew `·`, so its completed tasks could
+    // not be reached from the Week or 3 Hari. Its ✓ opens the same popup; the number stays the open count, 0.
+    return (
+      <button
+        type="button"
+        data-count-pill={day}
+        data-all-done=""
+        aria-label={t.allTasksDone({ day: dayShort(day, figures), count: formatNumber(done, {}, figures) })}
+        onClick={onOpen}
+        className="flex h-11 min-w-11 items-center justify-center justify-self-center lg:h-8"
+      >
+        <span className={cn('inline-flex h-5 min-w-[22px] items-center justify-center rounded-pill px-[7px]', ALL_DONE_TONE)}>
+          <LineIcon name="check" className="h-3.5 w-3.5" />
+        </span>
+      </button>
+    );
+  }
   if (count === 0) {
     return <span aria-hidden="true" className="justify-self-center text-md font-bold text-line">·</span>;
   }
@@ -385,9 +445,9 @@ export function TaskPopup({
 }) {
   const t = useMessages(calendarMessages);
   const figures = useFigureLanguage();
-  const { struck } = useCalendarTasks();
+  const { isDone } = useCalendarTasks();
   const theirs = others.map((o) => ({ ...o, tasks: o.tasks.filter((task) => task.date === day) })).filter((o) => o.tasks.length > 0);
-  const count = openCount(tasks, struck) + theirs.reduce((n, o) => n + o.tasks.length, 0);
+  const count = openCount(tasks, isDone) + theirs.reduce((n, o) => n + openCount(o.tasks, isDone), 0);
   return (
     <CenterPopup open title={t.tasksTitle({ day: dayShort(day, figures), count: formatNumber(count, {}, figures) })} onClose={onClose}>
       <div className="flex flex-col gap-2">

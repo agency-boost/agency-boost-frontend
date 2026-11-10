@@ -266,12 +266,11 @@ const en = {
     /** A card whose lead is not the reader's (P19.9-T1 AC-4): whose it is, on the line under the name. */
     ownedBy: ({ name }: { name: string }) => `${name}’s`,
     /**
-     * **The card's proposal pill and its *Buat proposal*** (P19.7-T2 AC-1, AC-12): the pill's count where it has no
-     * product's name (an empty draft), and the icon link's name. The pill's own name is `filters.proposal`.
+     * **The card's proposal icon** (P19.11-T3 AC-1; UX-9): on a lead with a finished proposal only, opening the one saved
+     * last. Its tip, and its name with the lead's.
      */
-    proposalCount: ({ n }: { n: number }) => (n === 1 ? '1 proposal' : `${n} proposals`),
-    makeProposal: 'Make a proposal',
-    makeProposalFor: ({ who }: { who: string }) => `Make a proposal for ${who}`,
+    openProposal: 'Open the proposal',
+    openProposalFor: ({ who }: { who: string }) => `Open the proposal for ${who}`,
   },
 
   /**
@@ -311,8 +310,10 @@ const en = {
     remarks: 'Remarks',
     details: 'Details',
     phone: 'WhatsApp number',
+    /** *Detail*'s field (P19.11-T3 AC-5; UX-10): the same number as `phone` at the sheet's top, labelled as the brief does. */
+    whatsApp: 'WhatsApp',
     email: 'Email',
-    source: 'Where they came from',
+    emailInvalid: 'Write a whole email address, like name@example.com.',
     outcome: 'Outcome',
     history: 'History',
     historyLoading: 'Loading the history…',
@@ -538,9 +539,8 @@ const id: MessagesOf<typeof en> = {
       team: 'Tim',
     },
     ownedBy: ({ name }) => `Milik ${name}`,
-    proposalCount: ({ n }) => `${n} proposal`,
-    makeProposal: 'Buat proposal',
-    makeProposalFor: ({ who }) => `Buat proposal untuk ${who}`,
+    openProposal: 'Buka proposal',
+    openProposalFor: ({ who }) => `Buka proposal ${who}`,
   },
 
   stageShort: {
@@ -573,8 +573,10 @@ const id: MessagesOf<typeof en> = {
     remarks: 'Keterangan',
     details: 'Detail',
     phone: 'Nomor WhatsApp',
+    whatsApp: 'WhatsApp',
     email: 'Email',
-    source: `Sumber ${kept('lead')}`,
+    // *Profil saya*'s own sentence for the same check (`accountMessages.emailInvalid`).
+    emailInvalid: 'Tulis alamat email yang lengkap, misalnya nama@contoh.com.',
     outcome: 'Hasil',
     history: 'Riwayat',
     historyLoading: 'Memuat riwayat…',

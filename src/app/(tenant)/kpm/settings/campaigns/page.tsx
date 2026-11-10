@@ -58,7 +58,7 @@ const wordFor = (words: Readonly<Record<string, string>>, value: string) => word
  *
  * `idr_minor` is integer sen, rendered as rupiah — the prototype stores *"Rp 600,000,000"* as a
  * display string and one campaign's reward in **pesos**, so neither can be compared or totalled.
- * Written as the campaign cards write it (`figureWords`, ADR-0167 §1): *Rp 600 jt*, in full where
+ * Written as the campaign cards write it (`figureWords`, ADR-0167 §1): *Rp 600 Jt*, in full where
  * compact writing would round the rule. **A rate as a percentage** (P18.9-T4 AC-8, ADR-0176 §8; UI-030): a
  * requirement on one of the office's ratios is written in that ratio's own unit, `ratioUnits` — *Recruitment success
  * rate at least 30%*, where it read *0,30* — and one the office does not hold as a number, as before.

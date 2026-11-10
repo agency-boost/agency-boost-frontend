@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { axe } from 'vitest-axe';
 import { atWidth, makeMe, renderInIndonesian, renderWithSession, resetLanguage, stubFetch } from '@test/harness';
 import { getAccessToken, setAccessToken } from '@/lib/api-client';
+import { joinInFlight } from '@/lib/in-flight';
 import { useSession, type LinkedLogin, type Me } from '@/lib/session';
 import { VIEW_KEY, resetViewsForTest } from '@/lib/views';
 import { Page } from './page';
@@ -333,5 +334,52 @@ describe('P19.2-T1 AC-8 Keluar ends both sessions (ADR-0199 §4)', () => {
     expect(out[0].init.credentials).toBe('include');
     expect(calls.some((c) => c.url.includes('/auth/links'))).toBe(false);
     expect(getAccessToken()).toBeNull();
+  });
+
+  /*
+   * **P19.11-T6 AC-1 (UX-8, UXQ5)**: the account dropdown's *Keluar*, end to end with the real session provider. Both
+   * logins on this browser end (the server reads and clears both cookies, ADR-0199 §4; `account-links.int.spec.ts`), the
+   * token leaves memory, `me` and the tab's view go, **the cached reads are let go** — a read still out is never handed
+   * to whoever signs in next — and `/login` replaces the page, plain, with no `next`.
+   */
+  it('P19.11-T6 AC-1 Keluar in the dropdown ends both logins and clears the token, me, the view and the cached reads; /login replaces the page', async () => {
+    setAccessToken(null);
+    nav.replace.mockClear();
+    nav.push.mockClear();
+    window.sessionStorage.setItem(VIEW_KEY, 'self');
+    const { calls } = stubFetch({
+      '/auth/refresh': { body: { accessToken: 'tok-owner' } },
+      '/auth/me': { body: owner({ linkedLogin: SA_LOGIN }) },
+      '/auth/logout': { status: 204, body: undefined },
+      // Whatever else the shell reads on its way in: nothing this test is about.
+      '/': { status: 404, body: { error: { code: 'NOT_FOUND', message: 'No.', requestId: 'r' } } },
+    });
+    renderInIndonesian(<SessionProvider>{page()}</SessionProvider>);
+    await waitFor(() => expect(titleAvatar()).not.toBeNull());
+    expect(getAccessToken()).toBe('tok-owner');
+    // A read the session started, still out when the reader leaves.
+    const held = vi.fn(() => new Promise<string>(() => undefined));
+    void joinInFlight('/probe', held);
+
+    const menu = await openViews();
+    await userEvent.click(menu.getByRole('button', { name: 'Keluar' }));
+
+    await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('/login'));
+    for (const [to] of nav.replace.mock.calls) expect(to).toBe('/login');
+    expect(nav.push).not.toHaveBeenCalled();
+    const out = calls.filter((c) => c.url.includes('/auth/logout'));
+    expect(out).toHaveLength(1);
+    expect(out[0].init.method).toBe('POST');
+    expect(out[0].init.credentials).toBe('include');
+    expect(getAccessToken()).toBeNull();
+    // The shell went with the session; the tab's view with it.
+    expect(document.querySelector('[data-title-avatar]')).toBeNull();
+    expect(window.sessionStorage.getItem(VIEW_KEY)).toBeNull();
+    // The cached reads: the next read of the same key goes out afresh rather than joining the old session's.
+    const fresh = vi.fn(async () => 'fresh');
+    const next = joinInFlight('/probe', fresh);
+    expect(fresh).toHaveBeenCalledTimes(1);
+    await expect(next).resolves.toBe('fresh');
+    expect(held).toHaveBeenCalledTimes(1);
   });
 });

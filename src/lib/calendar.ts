@@ -181,6 +181,12 @@ export interface CalendarTask {
   phone: string | null;
   lead: CalendarTaskLead | null;
   coaching: CalendarTaskCoaching | null;
+  /**
+   * **Ticked done** (P19.11-T1 AC-1; UX-1): it stays on its due date, struck through, and no *Tugas* count counts it.
+   * The server's, so a tick survives a refresh and another device; a tap in this visit lays an override over it
+   * (`useTaskTicks`).
+   */
+  done: boolean;
 }
 
 /** A compared member's task while they hide their details (ADR-0110): counted, never read. */
@@ -464,6 +470,7 @@ export const PROTOTYPE_COPY = {
   invitePlaceholder: EN.invitePlaceholder,
   notesLabel: EN.notesLabel,
   notesPlaceholder: EN.notesPlaceholder,
+  /** *Not* the prototype's since P19.11-T1 AC-6 (UX-6, a client revision wins): *(Untitled)*, where it was `(untitled event)`. */
   untitled: EN.untitled,
   noOneElse: EN.noOneElse,
   noMatches: EN.noMatches,
@@ -589,7 +596,10 @@ export const OWN_COPY = {
 
 export const isBusy = (item: CalendarItem | CalendarJoinedItem): item is CalendarBusy => 'busy' in item && item.busy === true;
 
-/** The title to draw, as typed: the prototype draws an empty one as `(untitled event)` (`:782`), in `language`. */
+/**
+ * The title to draw, as typed, or ***(Tanpa judul)*** when there is none, in `language` — an entry's and a joined event's
+ * alike (P19.11-T1 AC-6; UX-6). *Changed 2026-11-10: the prototype's `(untitled event)` (`:782`).*
+ */
 export const titleOf = (entry: { title: string }, language: Language = SOURCE_LANGUAGE) =>
   entry.title.trim() || calendarWordsIn(language).untitled;
 

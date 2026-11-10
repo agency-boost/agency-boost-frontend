@@ -181,19 +181,20 @@ describe('a coachee’s Goal Setting tab (P11-T7 AC-5)', () => {
    * ADR-0183 (OD-242; the owner's staging review SR-07, P18.11-T17), partly reversing ADR-0075: while the office holds
    * no figure for her, her leader types her APE produced here, and the save stores it (`typedApeOf`).
    */
-  it('ADR-0183, P19.1-T4 AC-1 her leader types her APE produced while the office holds none: tapping the pill focuses it, the figure selected', async () => {
+  it('ADR-0183, P19.11-T4 AC-1 her leader types her APE produced while the office holds none: tapping the pill focuses it, the figure selected', async () => {
     const { calls } = show([{ body: goal() }, { body: goal({ apeAchievedMinor: 75_000_000_00 }) }]);
     await screen.findByRole('button', { name: 'Save goal' });
     const field = screen.getByRole('textbox', { name: 'APE already produced this year' }) as HTMLInputElement;
-    // The full figure since ADR-0230 §2, its currency mark beside it.
-    expect(field).toHaveValue('0');
-    expect(field.previousElementSibling).toHaveTextContent('IDR');
+    // Compact at rest since UX-7 (P19.11-T4 AC-1); the full figure, its currency mark beside it, once tapped.
+    expect(field).toHaveValue('IDR 0');
     // The whole pill is the target — no ✎ since UI-122 — and the figure is selected, so typing replaces it.
     const pill = field.closest('label')!;
     expect(pill).toHaveAttribute('for', field.id);
     expect(pill.querySelector('svg')).toBeNull();
     await userEvent.click(pill);
     expect(field).toHaveFocus();
+    expect(field).toHaveValue('0');
+    expect(field.previousElementSibling).toHaveTextContent('IDR');
     await waitFor(() => expect([field.selectionStart, field.selectionEnd]).toEqual([0, field.value.length]));
     await userEvent.keyboard('75000000');
     expect(field).toHaveValue('75,000,000');
@@ -208,15 +209,15 @@ describe('a coachee’s Goal Setting tab (P11-T7 AC-5)', () => {
     expect(JSON.parse(String(put.init.body))).toMatchObject({ apeAchievedMinor: 75_000_000_00 });
   });
 
-  it('P19.1-T4 AC-12, P19.8-T5 AC-5 the member’s own estimate, read by her coach, is labelled as hers', async () => {
+  it('P19.1-T4 AC-12, P19.11-T4 AC-1 the member’s own estimate, read by her coach, is labelled as hers', async () => {
     show([{ body: goal({ apeAchievedMinor: 120_000_000_00, achieved: { minor: 120_000_000_00, provenance: 'self_reported', month: null } }) }]);
     await screen.findByRole('button', { name: 'Save goal' });
     const field = screen.getByRole('textbox', { name: 'APE already produced this year' });
     expect(field).toHaveAccessibleDescription(/^(Her|Their|His) own estimate, not uploaded$/);
-    expect(field).toHaveValue('120,000,000');
+    expect(field).toHaveValue('IDR 120M');
   });
 
-  it('P19.8-T5 AC-5, AC-7 typed by her over an upload: her coach reads it plain, labelled hers — no field, nothing to put back', async () => {
+  it('P19.8-T5 AC-5, P19.11-T4 AC-1 typed by her over an upload: her coach reads it plain and compact, labelled hers — no field, nothing to put back', async () => {
     show([{ body: goal({
       apeAchievedMinor: 120_000_000_00,
       achieved: { minor: 120_000_000_00, provenance: 'self_reported', month: null },
@@ -226,7 +227,8 @@ describe('a coachee’s Goal Setting tab (P11-T7 AC-5)', () => {
     // ADR-0183, kept by ADR-0230 §7: the office holds a figure, so a coach types nothing over it.
     expect(screen.queryByRole('textbox', { name: 'APE already produced this year' })).not.toBeInTheDocument();
     const shown = screen.getByText('APE already produced this year').closest('dl')!;
-    expect(shown.querySelector('dd')).toHaveTextContent(/^IDR 120,000,000$/);
+    // The read-only pill is compact too (UX-7): never clipped in its fixed width.
+    expect(shown.querySelector('dd')).toHaveTextContent(/^IDR 120M$/);
     expect(shown.querySelector('[data-figure-line="estimate"]')).toHaveTextContent(/^(Her|Their|His) own estimate, not uploaded$/);
     expect(screen.queryByRole('button', { name: /^Use automatic/ })).not.toBeInTheDocument();
   });

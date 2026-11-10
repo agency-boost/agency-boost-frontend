@@ -21,8 +21,8 @@ export interface AgendaPerson {
   read: CalendarRead | null;
 }
 
-/** One thing on a day of the Agenda, whoever's it is. */
-type AgendaLine =
+/** One thing on a day of the Agenda, whoever's it is: `who` is a compared person, `null` the reader. */
+export type AgendaLine =
   | { kind: 'entry'; item: CalendarItem; who: TaskPerson | null }
   | { kind: 'event'; item: CalendarJoinedItem; who: TaskPerson | null };
 
@@ -142,8 +142,12 @@ export function AgendaDay({
  * A line: its time, `09.00–09.30` — or, for a trip, the plane and *Hari x/y* — then the title, whole, and the type in
  * words, so colour is never the only thing that says what it is. **Named as the grid names it**, *{type}: {title},
  * {time}*. A compared person's line starts with their avatar. A busy block reads *Sibuk* and its time and opens nothing.
+ *
+ * **Home's *Aksi hari ini* draws its timed things with this row** (P19.11-T1 AC-3; UX-2): the time range, the title and
+ * the type, a joined event's calendar icon, the 3px accent bar in its tone — `line.item` being the day's part of it
+ * (`segmentOn`), as here.
  */
-function AgendaItem({ line, date, onOpen }: { line: AgendaLine; date: string; onOpen: (entry: CalendarEntry) => void }) {
+export function AgendaItem({ line, date, onOpen }: { line: AgendaLine; date: string; onOpen: (entry: CalendarEntry) => void }) {
   const t = useMessages(calendarMessages);
   const words = useLanguage();
   const language = useFigureLanguage();
@@ -172,16 +176,17 @@ function AgendaItem({ line, date, onOpen }: { line: AgendaLine; date: string; on
   }
   if (line.kind === 'event') {
     const event = item as Extract<CalendarJoinedItem, { eventId: string }>;
+    const title = titleOf(event, words);
     return (
       <Link
         href={`/events/${encodeURIComponent(event.eventId)}`}
         data-event=""
-        aria-label={t.joinedName({ title: event.title, type: event.type.label, time: span })}
+        aria-label={t.joinedName({ title, type: event.type.label, time: span })}
         className={cn(shape, 'hover:brightness-[0.96]', EVENT_TONE)}
       >
         {when}
         <span className="min-w-0 flex-1">
-          <span className="block break-words text-md font-semibold">{event.title}</span>
+          <span className="block break-words text-md font-semibold">{title}</span>
           <span className="block text-xs">{event.type.label}</span>
         </span>
         <SourceIcon source="event" size="sm" />

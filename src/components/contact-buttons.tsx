@@ -140,6 +140,7 @@ export function LeadContactButtons({
   channels,
   size,
   className,
+  readFirst = false,
 }: {
   lead: Pick<Lead, 'id' | 'name' | 'contact' | 'version'>;
   onSaved?: (lead: Lead) => void;
@@ -147,6 +148,12 @@ export function LeadContactButtons({
   channels?: readonly Channel[];
   size?: 36 | 40;
   className?: string;
+  /**
+   * **The row holds the lead's number alone** — a Calendar *Tugas*, on the Calendar or Home (P19.11-T1 AC-3): the lead is
+   * read before the number is saved, so the email written beside it (`PATCH /leads/:id` writes the pair) is the lead's
+   * own, never `null` over one on file, and the version pinned is the lead's now — which a tick moves.
+   */
+  readFirst?: boolean;
 }) {
   const latest = useRef<Lead | null>(null);
   return (
@@ -157,7 +164,8 @@ export function LeadContactButtons({
       size={size}
       className={className}
       onSave={async (phone) => {
-        const next = await saveLeadPhone(lead, phone);
+        const current = readFirst ? await (await import('@/lib/leads')).readLead(lead.id) : lead;
+        const next = await saveLeadPhone(current, phone);
         latest.current = next;
         return next.contact.phone ?? phone;
       }}

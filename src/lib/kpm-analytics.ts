@@ -572,8 +572,8 @@ export function mocButtonName(moc: Moc, name: string, language: Language = SOURC
  * ADR-0201 §1), a percentage for persistency, a count for the rest (`:3301-3313`) — *Monthly2 AA* an average to two
  * places. *—* for an input not uploaded. A figure, in `figures`.
  *
- * **Compact, the shared formatter's** (UI-096, P19.3-T3 AC-12): *Rp 3,1 M / Rp 600 jt*, as every other screen writes
- * the same sum — where it wrote the full rupiah beside *jt* (*Rp 3.094.500.000 / Rp 600 jt*). A persistency — the
+ * **Compact, the shared formatter's** (UI-096, P19.3-T3 AC-12): *Rp 3,1 M / Rp 600 Jt*, as every other screen writes
+ * the same sum — where it wrote the full rupiah beside *jt* (*Rp 3.094.500.000 / Rp 600 Jt*). A persistency — the
  * carrier's figure and the rule's threshold — keeps the places it has and no *,0*: *74,96% / 75%*.
  */
 export function criterionValue(code: string, value: number | null, figures?: Language): string {
@@ -585,8 +585,8 @@ export function criterionValue(code: string, value: number | null, figures?: Lan
 
 /**
  * **A criterion's figure over its threshold, never two equal words for two different sums** (ADR-0167 §1, ADR-0174 §3
- * kept under UI-096): compact both — *Rp 3,1 M / Rp 600 jt* — unless compact writing would make them read the same while
- * they differ, when both are written in full: *Rp 199.960.000 / Rp 200.000.000 — Gap*, never *Rp 200 jt / Rp 200 jt*.
+ * kept under UI-096): compact both — *Rp 3,1 M / Rp 600 Jt* — unless compact writing would make them read the same while
+ * they differ, when both are written in full: *Rp 199.960.000 / Rp 200.000.000 — Gap*, never *Rp 200 Jt / Rp 200 Jt*.
  */
 export function criterionPair(code: string, current: number | null, required: number, figures?: Language): [string, string] {
   const pair: [string, string] = [criterionValue(code, current, figures), criterionValue(code, required, figures)];

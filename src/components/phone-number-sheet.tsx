@@ -2,14 +2,12 @@
 
 import { useId, useRef, useState } from 'react';
 import { ErrorBanner } from '@/components/ui/field';
+import { PhoneField } from '@/components/ui/phone-field';
 import { ResponsiveSheet } from '@/components/ui/responsive-sheet';
 import { useMessages } from '@/i18n/language-provider';
 import { uiV1Messages } from '@/i18n/messages/ui-v1';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
-import { cn } from '@/lib/cn';
-import {
-  callLink, nationalDigits, normalisedPhone, PHONE_COUNTRY_PREFIX, PHONE_NATIONAL_DIGITS, phoneFieldValue, whatsAppHref,
-} from '@/lib/phone-number';
+import { callLink, nationalDigits, normalisedPhone, phoneFieldValue, whatsAppHref } from '@/lib/phone-number';
 
 /** What opens once a number is saved: WhatsApp's chat or the dialler. */
 export type Channel = 'whatsapp' | 'call';
@@ -52,7 +50,6 @@ export function PhoneNumberSheet({
   const t = useMessages(uiV1Messages);
   const formId = useId();
   const fieldId = useId();
-  const errorId = useId();
   const field = useRef<HTMLInputElement>(null);
   const [typed, setTyped] = useState(() => phoneFieldValue(phone));
   const [invalid, setInvalid] = useState(false);
@@ -114,36 +111,17 @@ export function PhoneNumberSheet({
     >
       <form id={formId} onSubmit={submit} noValidate className="pb-2">
         <label htmlFor={fieldId} className="mb-1.5 block text-base font-semibold text-navy">{t.contact.field}</label>
-        <div
-          className={cn(
-            'flex h-12 items-center overflow-hidden rounded-md border bg-card focus-within:border-primary focus-within:ring-2 focus-within:ring-focus-ring',
-            invalid ? 'border-alert' : 'border-line',
-          )}
-        >
-          <span aria-hidden="true" className="flex h-full items-center border-r border-line bg-base px-3 text-[1rem] font-semibold text-muted">
-            {PHONE_COUNTRY_PREFIX}
-          </span>
-          <input
-            ref={field}
-            id={fieldId}
-            type="tel"
-            inputMode="tel"
-            autoComplete="tel-national"
-            value={typed}
-            onChange={(e) => {
-              setTyped(e.target.value);
-              if (invalid && nationalDigits(e.target.value) !== null) setInvalid(false);
-            }}
-            aria-invalid={invalid || undefined}
-            aria-describedby={invalid ? errorId : undefined}
-            className="h-full min-w-0 flex-1 bg-transparent px-3 text-[1rem] text-ink outline-none focus-visible:outline-none"
-          />
-        </div>
-        {invalid && (
-          <p id={errorId} className="mt-1.5 text-base text-alert">
-            {t.contact.invalid(PHONE_NATIONAL_DIGITS)}
-          </p>
-        )}
+        {/* The shared field since P19.11-T3 AC-5: the lead sheet's *Detail → WhatsApp* draws the same one. */}
+        <PhoneField
+          id={fieldId}
+          inputRef={field}
+          value={typed}
+          invalid={invalid}
+          onChange={(next) => {
+            setTyped(next);
+            if (invalid && nationalDigits(next) !== null) setInvalid(false);
+          }}
+        />
         {error && <div className="mt-3"><ErrorBanner {...error} /></div>}
       </form>
     </ResponsiveSheet>

@@ -6,7 +6,6 @@ import { MemberContactButtons } from '@/components/contact-buttons';
 import { HEADER_CONTROL } from '@/components/ui/header-control';
 import { LineIcon } from '@/components/ui/line-icon';
 import { PersonRow } from '@/components/ui/person-row';
-import { RungTag } from '@/components/ui/rung-tag';
 import { SectionHead } from '@/components/ui/section-title';
 import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
 import { homeMessages } from '@/i18n/messages/home';
@@ -26,9 +25,10 @@ import { useCan } from '@/lib/session';
  *   chosen scope; **five shown, then *Semua ›***, which **opens the rest in place** (P19.9-T2 AC-1, R8; ADR-0235, OD-278
  *   option 3) — a button, `aria-expanded`, that reads *Lebih sedikit* once open and closes them again; choosing *Unit* or
  *   *Group* closes them too. From P19.8-T2 it went to the Unit Dashboard's *Aktivitas* tab, which the owner reversed.
- * - **On *Group*, each person's level** (P19.9-T2 AC-2; R8): the navy tag before the name, in the company's short words
- *   (`RungTag`, the Unit roster's and *Potensi*'s: *AB*, *AAB*, *Agent*). *Unit* holds the reader's direct agents, so it
- *   draws none.
+ * - **No level tag, on *Unit* or *Group*** (P19.11-T6 AC-3; UX-15, UXQ10): the name directly after the avatar. *Changed
+ *   2026-11-10*: from P19.9-T2 AC-2 (R8, ADR-0235 §2) *Group* drew the navy `RungTag` before each name — *AAB*, *Agent* —
+ *   which the owner's round of 9 November removed. `leader.team[].rung` stays in the payload; the Unit roster keeps its
+ *   leaders' tags (`isLeaderRung`).
  * - **A day**: the orange count where they reported, a **grey ✕** where not — its name *Belum lapor* — where a two-line
  *   *Belum lapor* pill wrapped twice a row. A saved day of nothing is a ✕ too (ADR-0042), as the pill was.
  * - **The row** (the mockup's grid): avatar 32 · the name, **never cut** — two lines on a phone (`PersonRow`, P19.8-T1
@@ -99,7 +99,6 @@ export function HomeTeam({
                       avatarSize={32}
                       className="gap-2.5 rounded-none bg-transparent py-1.5 lg:hover:bg-transparent"
                       nameClassName="text-md max-md:text-base md:max-lg:text-md lg:text-md"
-                      tag={scope === 'group' ? <RungTag rung={person.rung} /> : undefined}
                       trailing={(
                         <div className="flex shrink-0 items-center gap-2.5">
                           <DayCell label={t.yesterdayLong} count={person.yesterday} notReported={t.notReported} />

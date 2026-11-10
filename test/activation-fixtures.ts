@@ -167,7 +167,7 @@ const ARIEF_UNIT = { kind: 'aab' as const, leader: ARIEF };
 
 export function hireRow(name: string, membershipId: string, over: Partial<NewHireRow> = {}): NewHireRow {
   return {
-    hire: { membershipId, name }, unit: DIRECT, joinDate: '2026-08-30', day: 59, firstSaleDate: null, firstSaleDay: null,
+    hire: { membershipId, name, photoUrl: null }, unit: DIRECT, joinDate: '2026-08-30', day: 59, firstSaleDate: null, firstSaleDay: null,
     firstSaleSource: null, status: 'not_yet', activation3M: 'in_progress', leftOn: null, checklist: checklist(38), ...over,
   };
 }
@@ -183,9 +183,10 @@ const share = (activated: number, notActivated: number, inProgress: number, pct:
 
 /**
  * Agus's `/new-hires` on the seed (P18.8-T6; UI V1, UI-023): a year of new hires by their status — his own unit,
- * Arief's and Sari's — with *Aktivasi 3M* at the top, overall and by join month, and each unit's. Rule A: Novi, Rina,
- * Dimas and Indah activated by day 90; Kemal past day 90 with none; Lukman's day-96 sale in amber and in neither part;
- * Tari (marked left — it decides nothing), Budi and Fikri inside their 90 days with none. 4 of 5 decided: 80%.
+ * Arief's and Sari's — with *Aktivasi 3M* at the top, overall and by join month, and each unit's. As P19.11-T2 counts it
+ * (ADR-0239): Novi, Rina, Dimas and Indah on time; Kemal past day 90 with none — the missed line; Lukman's day-96 sale in
+ * amber, due and not on time; Tari (marked left — her row opens all the same), Budi and Fikri inside their 90 days with
+ * none, not due. 4 of 6 due: 67% — his own unit 2 of 4, 50%. (Rule A read 80%, Lukman in neither part.)
  */
 export const ROSTER: NewHiresRoster = {
   today: '2026-10-27',
@@ -194,15 +195,15 @@ export const ROSTER: NewHiresRoster = {
   window: { from: '2026-01-01', to: '2026-10-27' },
   days: 90,
   activation3M: {
-    all: share(4, 1, 3, 80, 1),
+    all: share(4, 1, 3, 67, 1),
     byMonth: [
       { month: '2026-09', ...share(0, 0, 2, null) },
       { month: '2026-08', ...share(2, 0, 1, 100) },
-      { month: '2026-07', ...share(2, 1, 0, 67, 1) },
+      { month: '2026-07', ...share(2, 1, 0, 50, 1) },
     ],
   },
   units: [
-    { ...DIRECT, activation3M: { all: share(2, 1, 1, 67, 1), byMonth: [{ month: '2026-09', ...share(0, 0, 1, null) }, { month: '2026-07', ...share(2, 1, 0, 67, 1) }] } },
+    { ...DIRECT, activation3M: { all: share(2, 1, 1, 50, 1), byMonth: [{ month: '2026-09', ...share(0, 0, 1, null) }, { month: '2026-07', ...share(2, 1, 0, 50, 1) }] } },
     { ...ARIEF_UNIT, activation3M: { all: share(1, 0, 1, 100), byMonth: [{ month: '2026-09', ...share(0, 0, 1, null) }, { month: '2026-08', ...share(1, 0, 0, 100) }] } },
     { ...SARI_UNIT, activation3M: { all: share(1, 0, 1, 100), byMonth: [{ month: '2026-08', ...share(1, 0, 1, 100) }] } },
   ],
@@ -222,7 +223,7 @@ export const ROSTER: NewHiresRoster = {
       hireRow('Lukman Hakim', 'mem-lukman', { joinDate: '2026-07-20', day: 100, ...sold(96, '2026-10-23'), checklist: checklist(25, true) }),
     ],
     notActivated: [
-      // Past day 90 with no first sale: the one result that counts against the share.
+      // Past day 90 with no first sale: due and missed — *Hari ke-110 · belum pecah telor dalam 90 hari* (P19.11-T2 AC-3).
       hireRow('Kemal Pratama', 'mem-kemal', { joinDate: '2026-07-10', day: 110, activation3M: 'not_activated', checklist: checklist(31, true) }),
     ],
   },
