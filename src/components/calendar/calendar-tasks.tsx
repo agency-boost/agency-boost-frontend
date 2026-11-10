@@ -11,7 +11,7 @@ import {
   ENTRY_TYPES, isBusy, isHiddenTask, type CalendarRead, type CalendarTask, type CalendarTaskItem, type EntryType,
   type TaskSource,
 } from '@/lib/calendar';
-import { myCoachingHref, coachingSessionHref } from '@/lib/coaching';
+import { myCoachingHref, coachingSessionHref } from '@/lib/hrefs';
 import { formatNumber, formatShortDay, formatWeekday } from '@/lib/format';
 import type { Language } from '@/i18n/language';
 import { cn } from '@/lib/cn';

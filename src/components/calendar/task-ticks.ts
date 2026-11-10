@@ -6,7 +6,7 @@ import { useMessages } from '@/i18n/language-provider';
 import { calendarMessages } from '@/i18n/messages/calendar';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { setCoachingItemDone, setLeadActionDone, type CalendarTask } from '@/lib/calendar';
-import { readLead, type Lead } from '@/lib/leads';
+import type { Lead } from '@/lib/leads';
 import type { CalendarTasks } from './calendar-tasks';
 
 /**
@@ -95,7 +95,10 @@ export function useTaskTicks({
       toggle,
       openLead: (task) => {
         if (!task.lead) return;
-        readLead(task.lead.leadId).then(onLead).catch(fail);
+        const { leadId } = task.lead;
+        // Loaded with the tap, as the sheet it opens is: `lib/leads.ts` and Leads' catalogue were `/home`'s first load
+        // over the 200 kB budget (P19.11, the bundle).
+        import('@/lib/leads').then((m) => m.readLead(leadId)).then(onLead).catch(fail);
       },
       canTick,
       canTickCoaching,
