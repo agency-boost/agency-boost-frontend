@@ -98,9 +98,9 @@ describe('the small readings', () => {
 
   it('names the roster’s cards: Direct Unit, or AAB: {name}', () => {
     expect(groupTitle({ kind: 'direct', leader: null })).toBe('Direct Unit');
-    expect(groupTitle({ kind: 'aab', leader: SARI })).toBe('AAB: Sari Puspita');
+    expect(groupTitle({ kind: 'aab', leader: { ...SARI, photoUrl: null } })).toBe('AAB: Sari Puspita');
     // D-group's Fix: an AB under the reader names its rung.
-    expect(groupTitle({ kind: 'ab', leader: SARI })).toBe('AB: Sari Puspita');
+    expect(groupTitle({ kind: 'ab', leader: { ...SARI, photoUrl: null } })).toBe('AB: Sari Puspita');
     expect(groupTitle({ kind: 'aab', leader: null })).toBe('Direct Unit');
     expect(newHireHref('mem 1')).toBe('/new-hires/mem%201');
   });
@@ -325,8 +325,8 @@ describe('P18.10-T4 the activation’s words in Indonesian', () => {
   it('names a unit: Direct Unit and the rungs kept, in both languages', () => {
     for (const language of ['en', 'id'] as const) {
       expect(groupTitle({ kind: 'direct', leader: null }, language)).toBe('Direct Unit');
-      expect(groupTitle({ kind: 'aab', leader: SARI }, language)).toBe('AAB: Sari Puspita');
-      expect(groupTitle({ kind: 'ab', leader: SARI }, language)).toBe('AB: Sari Puspita');
+      expect(groupTitle({ kind: 'aab', leader: { ...SARI, photoUrl: null } }, language)).toBe('AAB: Sari Puspita');
+      expect(groupTitle({ kind: 'ab', leader: { ...SARI, photoUrl: null } }, language)).toBe('AB: Sari Puspita');
     }
   });
 

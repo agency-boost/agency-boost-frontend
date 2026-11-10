@@ -187,10 +187,10 @@ export type NewHireGroupKind = 'direct' | 'aab' | 'ab';
  */
 export type Activation3MResult = 'in_progress' | 'activated' | 'not_activated';
 
-/** The unit a new hire is counted in. */
+/** The unit a new hire is counted in: its leader with their photo, which the group's row draws (UI-111). */
 export interface NewHireUnitRef {
   kind: NewHireGroupKind;
-  leader: ActivationPerson | null;
+  leader: NewHirePerson | null;
 }
 
 /** A new hire's checklist, where they have one: an AB or an AAB placed as a new hire has none (ADR-0103). */
@@ -214,7 +214,7 @@ export type FirstSaleSource = 'sales' | 'manual';
 
 /**
  * A new hire as their row names them (P19.11-T2 AC-4, UX-14): the person and their photo, signed — `null` without one —
- * which the circle of a hire not activated yet shows, initials otherwise.
+ * which the circle of a hire not activated yet shows, initials otherwise. A unit's leader the same way (UI-111).
  */
 export interface NewHirePerson {
   membershipId: string;
@@ -273,7 +273,7 @@ export interface Activation3MFigures {
 
 export interface NewHireUnit {
   kind: NewHireGroupKind;
-  leader: ActivationPerson | null;
+  leader: NewHirePerson | null;
   activation3M: Activation3MFigures;
 }
 

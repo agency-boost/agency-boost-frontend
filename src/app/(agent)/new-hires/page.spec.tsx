@@ -438,4 +438,24 @@ describe('/new-hires — P19.11-T2', () => {
       expect([name, done.getAttribute('data-status'), done.querySelector('img'), !!done.querySelector('svg')]).toEqual([name, status, null, true]);
     }
   });
+
+  // 2026-11-10: every group's row drew initials, its leader's photo or the reader's own notwithstanding.
+  it('UI-111 a group’s row wears its leader’s photo — a unit leader’s from the read, Direct Unit’s the reader’s own — or initials', async () => {
+    atWidth(375);
+    const arief = 'https://cdn.test/arief.jpg?sig=abc';
+    const mine = 'https://cdn.test/agus.jpg?sig=abc';
+    const withLeader: NewHiresRoster = {
+      ...ROSTER,
+      units: ROSTER.units.map((u) => (u.leader?.name === 'Arief Hidayat' ? { ...u, leader: { ...u.leader, photoUrl: arief } } : u)),
+    };
+    show({ '/new-hires': { body: withLeader } }, { ...AGUS, user: { ...AGUS.user, avatarUrl: mine } });
+    const head = async (name: string) => (await group(name)).querySelector('[data-person-row]') as HTMLElement;
+
+    expect((await head('Agus Prasetyo')).querySelector('img')).toHaveAttribute('src', mine);
+    expect((await head('Arief Hidayat')).querySelector('img')).toHaveAttribute('src', arief);
+    // Sari has none: her initials, as before.
+    const sari = await head('Sari Puspita');
+    expect(sari.querySelector('img')).toBeNull();
+    expect(sari.querySelector('[aria-hidden="true"]')).toHaveTextContent(/^SP$/);
+  });
 });

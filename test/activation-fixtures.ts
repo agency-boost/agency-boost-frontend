@@ -162,8 +162,9 @@ export function leaderView(over: Partial<ActivationView> = {}): ActivationView {
 
 const checklist = (pct: number, overdue = false) => ({ state: 'open' as const, done: Math.round((pct * 16) / 100), total: 16, pct, overdue });
 const DIRECT = { kind: 'direct' as const, leader: null };
-const SARI_UNIT = { kind: 'aab' as const, leader: SARI };
-const ARIEF_UNIT = { kind: 'aab' as const, leader: ARIEF };
+// A unit's leader carries their photo (UI-111): none here, so the group rows draw initials.
+const SARI_UNIT = { kind: 'aab' as const, leader: { ...SARI, photoUrl: null } };
+const ARIEF_UNIT = { kind: 'aab' as const, leader: { ...ARIEF, photoUrl: null } };
 
 export function hireRow(name: string, membershipId: string, over: Partial<NewHireRow> = {}): NewHireRow {
   return {

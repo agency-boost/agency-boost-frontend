@@ -152,6 +152,8 @@ export function NewHires({ waiting, onAdd, year = 'current', onYear }: {
   // P19.9-T3 AC-4 (the owner's R4): every reader opens the person's activation, the year riding along for its ‹.
   const hrefOf = (membershipId: string) => newHireHref(membershipId, year);
   const readerName = me?.user.fullName ?? '';
+  // *Anda · Direct Unit*'s avatar: the reader's own photo, as the title row's (UI-111).
+  const readerPhoto = me?.user.avatarUrl ?? null;
   const groups = roster
     ? newHireGroups(roster)
       .map((group) => ({ ...group, rows: group.rows.filter((row) => inFilter(row, filter)) }))
@@ -184,6 +186,7 @@ export function NewHires({ waiting, onAdd, year = 'current', onYear }: {
               key={group.key}
               group={group}
               readerName={readerName}
+              readerPhoto={readerPhoto}
               hrefOf={hrefOf}
               startOpen={tablet || group.key === 'direct' || (i === 0 && !groups.some((g) => g.key === 'direct'))}
             />
@@ -410,12 +413,18 @@ function ChecklistMini({ checklist, wide = false }: { checklist: NewHireRow['che
   );
 }
 
-/** One leader's group below 768px (UI-024, UI-073): the leader's row with its ⌄, and its people on the shared tree. */
+/**
+ * One leader's group below 768px (UI-024, UI-073): the leader's row with its ⌄, and its people on the shared tree. **The
+ * leader's avatar is their photo** (UI-111): the unit's leader's from the read, *Direct Unit*'s the reader's own — initials
+ * without one. *Changed 2026-11-10:* it drew initials for everybody, a leader with a photo included.
+ */
 function GroupCard({
-  group, readerName, hrefOf, startOpen,
+  group, readerName, readerPhoto = null, hrefOf, startOpen,
 }: {
   group: NewHireGroup;
   readerName: string;
+  /** The reader's own photo, for *Direct Unit*; none on the sample. */
+  readerPhoto?: string | null;
   hrefOf: (membershipId: string) => string;
   startOpen: boolean;
 }) {
@@ -428,6 +437,7 @@ function GroupCard({
       <PersonRow
         name={name}
         seed={group.key}
+        photoUrl={group.unit.leader ? group.unit.leader.photoUrl : readerPhoto}
         avatarSize={32}
         meta={groupMeta(group, t, group.rows.length)}
         trailing={(
