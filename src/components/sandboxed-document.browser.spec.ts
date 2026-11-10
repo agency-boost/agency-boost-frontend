@@ -38,7 +38,7 @@ const CHROME = [
 const WIDTHS = [375, 768, 1024, 1280] as const;
 const SECRET = 'agencyboost-secret-value';
 
-/** The lesson stand-in: it reads what it can, follows its own anchor, and says what it found. */
+/** The lesson stand-in: it reads what it can, follows its own anchor once it is laid out, and says what it found. */
 const PROBE = `<!doctype html>
 <html><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>probe</title></head>
 <body style="margin:0">
@@ -51,16 +51,27 @@ const PROBE = `<!doctype html>
   try { found.storage = String(localStorage.getItem('agencyboost.session')); } catch (e) { found.storage = 'refused:' + e.name; }
   try { found.parent = String(parent.document.title); } catch (e) { found.parent = 'refused:' + e.name; }
   found.origin = self.origin;
-  document.getElementById('jump').click();
-  // Report once the anchor has scrolled and the frame has its width, or 3 s on the clock: a loaded machine can take longer than one fixed wait
-  // to apply the jump, and a fixed 400 ms then read an unscrolled frame (2026-11-06). By the clock, not by a count of
-  // timers: Chrome runs an off-screen cross-origin frame's timers about once a second.
-  var until = Date.now() + 3000;
+  // Follow the anchor as a reader does, once the lesson is loaded and laid out, and again every half second while it has
+  // not scrolled; report once it has, or at 5 s on the clock. *Changed 2026-11-10:* the click ran while the page was
+  // still parsing, and Chrome keeps a pending jump only while the document loads — a frame that took its final size
+  // after that (768px, the first width after the emulated phone, on CI) never scrolled, and read 0 for the whole wait.
+  // A fixed 400 ms wait before that read an unscrolled frame on a loaded machine (2026-11-06). By the clock, not by a
+  // count of timers: Chrome runs an off-screen cross-origin frame's timers about once a second.
+  var until = Date.now() + 5000;
+  var nextClick = 0;
+  found.clicks = 0;
   (function report() {
-    var settled = window.scrollY > 0 && document.documentElement.clientWidth > 0;
-    if (!settled && Date.now() < until) { setTimeout(report, 50); return; }
-    found.scrolledInside = window.scrollY > 0;
-    found.innerWidth = document.documentElement.clientWidth;
+    var root = document.documentElement;
+    var laidOut = document.readyState === 'complete' && root.clientWidth > 0 && root.clientHeight > 0;
+    var scrolled = window.scrollY > 0;
+    if (laidOut && !scrolled && Date.now() >= nextClick) {
+      document.getElementById('jump').click();
+      found.clicks += 1;
+      nextClick = Date.now() + 500;
+    }
+    if (!(laidOut && scrolled) && Date.now() < until) { setTimeout(report, 50); return; }
+    found.scrolledInside = scrolled;
+    found.innerWidth = root.clientWidth;
     parent.postMessage(found, '*');
   })();
 </script>
@@ -235,7 +246,8 @@ describe.skipIf(!CHROME)('P19.6-T2 a lesson in the sandboxed frame, in a real br
   it.each(WIDTHS)('P19.6-T2 AC-4 at %ipx the frame fills the content width, and the lesson’s anchor scrolls the lesson, not the page', async (width) => {
     const { found, page } = await at(width, false);
     for (const frameWidth of page.frames) expect(Math.round(frameWidth)).toBe(page.main);
-    expect(found['storage-sandboxed'].scrolledInside).toBe(true);
+    // The whole report on a failure, its clicks and its width with it: a bare `false` said nothing of why (2026-11-10).
+    expect(found['storage-sandboxed']).toMatchObject({ scrolledInside: true, innerWidth: expect.any(Number) });
     expect(found['storage-sandboxed'].innerWidth).toBeGreaterThan(0);
     expect(page.scrollY).toBe(0);
   }, 30_000);
