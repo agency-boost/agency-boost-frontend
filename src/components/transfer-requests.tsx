@@ -26,6 +26,10 @@ const typedOtherwise = (row: TransferView) => {
  * **The name the leader typed** sits on the code's line, *Added as {name}*, where it is not the account's own (the
  * P18.8 exit review, M3): the leader who asked is shown only what they typed, so the decider is the one who can see a
  * code typed for the wrong person before approving it.
+ *
+ * **A leader's move** (P19.12-T4, ADR-0247 §3): a leader moving one of their people to a leader outside their own tree
+ * asks here too. Its row says so in the leader's words — *{leader} meminta memindahkan {nama} ke unit {to}* — with the
+ * note they gave under it.
  */
 export function TransferRequests() {
   // The section's words (ADR-0170 §4; `i18n/messages/requests.ts`): ours, no prototype draws a transfer.
@@ -86,7 +90,12 @@ export function TransferRequests() {
                   {typedOtherwise(row) && <> · {copy.typedAs({ name: row.requestedName! })}</>}
                 </span>
               </Cell>
-              <Cell className="text-muted">{copy.move({ from: row.from?.name ?? null, to: row.to.name })}</Cell>
+              <Cell className="text-muted">
+                {row.kind === 'move'
+                  ? copy.moveAsked({ leader: row.requestedBy.name, name: row.member.name, to: row.to.name })
+                  : copy.move({ from: row.from?.name ?? null, to: row.to.name })}
+                {row.note && <span className="mt-0.5 block text-sm italic">{copy.note({ note: row.note })}</span>}
+              </Cell>
               <Cell className="text-muted">
                 {`${row.requestedBy.name}, ${formatOfficeDay(row.requestedAt, OFFICE_TIME_ZONE, figures)}`}
               </Cell>

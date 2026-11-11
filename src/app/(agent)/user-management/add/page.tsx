@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { InviteShareBlock } from '@/components/invite-share-block';
+import { LeaderPicker } from '@/components/leader-picker';
 import { LeaderLimitNotice, LeaderLimitWaiting, isLeaderLimit } from '@/components/leader-limit-notice';
 import { RolePill } from '@/components/org-tree/role-pill';
 import { Page } from '@/components/page';
@@ -21,6 +22,8 @@ import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-pro
 import { uiV1Messages } from '@/i18n/messages/ui-v1';
 import { samplePreviewMessages } from '@/i18n/messages/sample-preview';
 import { userManagementMessages } from '@/i18n/messages/user-management';
+import { leaderChangeMessages } from '@/i18n/messages/leader-change';
+import { cancelTransferRequest } from '@/lib/invites';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import { formatNumber } from '@/lib/format';
@@ -79,10 +82,18 @@ import {
  * as it was from 768px. *Tim Anda* is the shared person rows with a role pill below 1024px and a compact table from
  * 1024px (UI-083): the pill opens the role sheet — the rungs as choice rows, *Keluarkan* last, red, asking first — and
  * a saved change toasts *Tersimpan ✓*. No native select, no red button on a row. No sub-line below 1024px (UI-087).
+ *
+ * **P19.12-T4 (ADR-0247; the client's message of 11 November 2026, items 4 and 8).** The role sheet offers the rungs the
+ * server sends for that member (`roleChoices`) — an AB leader *Agent · AAB · AB*, an AAB leader *Agent · AAB* — with the
+ * rung they stand on checked, Maya's AB included; it filtered the AB rung out for everybody until then. *Pindahkan ke
+ * leader lain* sits above *Keluarkan* for a member the reader may move (`canChangeLeader`) and opens the shared leader
+ * picker: inside the reader's tree the move is made at once, outside it a request to the Owner or an Admin, and the row
+ * then reads *Menunggu persetujuan pemindahan ke {to}* with *Batalkan*.
  */
 
 export default function AddAgentsPage() {
   const t = useMessages(userManagementMessages).add;
+  const moveWords = useMessages(leaderChangeMessages).team;
   const saved = useMessages(uiV1Messages).save.saved;
   const language = useLanguage();
   const figures = useFigureLanguage();
@@ -116,6 +127,9 @@ export default function AddAgentsPage() {
   const mayAsk = me?.permissions.includes('leader_limit_request:read') ?? false;
   const [roleReason, setRoleReason] = useState('');
   const [removing, setRemoving] = useState<TeamMember | null>(null);
+  /** Whom the leader picker is moving (ADR-0247 §2). */
+  const [moving, setMoving] = useState<TeamMember | null>(null);
+  const office = Boolean(me?.membership?.isKpmOwner || me?.membership?.isKpmAdmin);
   const [removeWord, setRemoveWord] = useState('');
   const [removeReason, setRemoveReason] = useState('');
   const [disposition, setDisposition] = useState<'reassign' | 'orphan'>('reassign');
@@ -196,6 +210,26 @@ export default function AddAgentsPage() {
     }
   }
 
+  /** ADR-0247 §3: the leader withdraws a move still waiting on the office. Nothing about the person changes. */
+  async function cancelMove(transferId: string) {
+    setBusy('move-cancel');
+    setError(null);
+    try {
+      await cancelTransferRequest(transferId);
+      show(moveWords.cancelled);
+    } catch (err) {
+      setError(toDisplayError(err));
+    } finally {
+      await load();
+      setBusy(null);
+    }
+  }
+
+  function openMove(member: TeamMember) {
+    closeRoleSheet();
+    setMoving(member);
+  }
+
   function closeRemoval() {
     setRemoving(null);
     setRemoveWord('');
@@ -274,10 +308,14 @@ export default function AddAgentsPage() {
   const rungLabel = (member: TeamMember) => rungShort(member.orgLevelCode ?? member.role.toUpperCase(), ladder);
   const meta = (member: TeamMember) =>
     `${member.agentCode} · ${member.directCount > 0 ? t.leadsCount({ n: member.directCount }) : t.reportsToYou}`;
-  /** Every rung a direct leader may place somebody on, junior first, by label (OD-50): none that makes an AB. */
-  const rungs = [...ladder]
-    .filter((l) => l.status === 'active' && classOfRung(l) !== 'ab')
-    .sort((a, b) => a.displayOrder - b.displayOrder);
+  const activeRungs = [...ladder].filter((l) => l.status === 'active').sort((a, b) => a.displayOrder - b.displayOrder);
+  /**
+   * **The rungs this reader may put this member on**, junior first, by label (OD-50): exactly the server's `roleChoices`
+   * (ADR-0247 §1) — an AB leader's include AB. An answer older than them falls back to the old offer, none that makes an AB.
+   */
+  const rungsFor = (member: TeamMember) => member.roleChoices
+    ? activeRungs.filter((l) => member.roleChoices!.some((code) => code.toLowerCase() === l.code.toLowerCase()))
+    : activeRungs.filter((l) => classOfRung(l) !== 'ab');
 
   function openRoleSheet(member: TeamMember) {
     setRoleSheet(member.membershipId);
@@ -326,6 +364,22 @@ export default function AddAgentsPage() {
       />
     ) : null;
   };
+
+  /** A move waiting on the office (ADR-0247 §3): where to, and *Batalkan*. */
+  const movePending = (member: TeamMember) => member.pendingTransfer ? (
+    <p className="flex flex-wrap items-center gap-2 text-sm text-muted" data-testid={`move-pending-${member.membershipId}`}>
+      <span>{moveWords.waiting({ to: member.pendingTransfer.toName })}</span>
+      <Button
+        variant="secondary"
+        className="min-h-11"
+        aria-label={moveWords.cancelOf({ name: member.fullName })}
+        disabled={busy !== null}
+        onClick={() => void cancelMove(member.pendingTransfer!.transferId)}
+      >
+        {busy === 'move-cancel' ? moveWords.cancelling : moveWords.cancel}
+      </Button>
+    </p>
+  ) : null;
 
   /** Inline, as the prototype does it — a modal for one row is heavier than the decision. */
   const confirmAdd = (membershipId: string) => (
@@ -519,6 +573,7 @@ export default function AddAgentsPage() {
                 trailing={rolePill(member)}
               />
               {pendingFor(asks, member.membershipId) && <div className="pb-3">{waiting(member.membershipId)}</div>}
+              {member.pendingTransfer && <div className="pb-3">{movePending(member)}</div>}
             </li>
           ))}
         </ul>
@@ -550,12 +605,16 @@ export default function AddAgentsPage() {
                       <ActionMenu
                         label={t.actionsFor({ name: member.fullName })}
                         items={destructiveLast([
+                          ...(member.canChangeLeader && !member.pendingTransfer
+                            ? [{ label: moveWords.moveToAnother, disabled: busy !== null, onSelect: () => setMoving(member) }]
+                            : []),
                           { label: t.remove, tone: 'alert', disabled: busy !== null, onSelect: () => askRemoval(member) },
                         ])}
                       />
                     </span>
                   </div>
                   {pendingFor(asks, member.membershipId) && <div className="pb-3">{waiting(member.membershipId)}</div>}
+                  {member.pendingTransfer && <div className="pb-3">{movePending(member)}</div>}
                 </li>
               ))}
             </ul>
@@ -589,7 +648,7 @@ export default function AddAgentsPage() {
                   <TippedGlyph glyph="ⓘ" name={t.teamLine} tip={t.teamLine} align="fit" />
                 </legend>
                 <div className="flex flex-col gap-2">
-                  {rungs.map((rung) => {
+                  {rungsFor(sheetMember).map((rung) => {
                     const value = rung.code.toLowerCase();
                     const current = (sheetMember.orgLevelCode ?? sheetMember.role).toLowerCase();
                     const chosen = (proposal?.toRole ?? current) === value;
@@ -617,7 +676,7 @@ export default function AddAgentsPage() {
                 </div>
               </fieldset>
             ) : (
-              // An AB report never gets the control, whoever is looking. The server decides that and sends the answer.
+              // Nothing to change it to — a report who stands above the reader. The server decides that and sends the answer.
               <p className="flex items-center gap-2 text-md text-ink">
                 {t.role}
                 <RolePill role={sheetMember.role}>{rungLabel(sheetMember)}</RolePill>
@@ -649,11 +708,37 @@ export default function AddAgentsPage() {
             )}
 
             {pendingFor(asks, sheetMember.membershipId) && <div className="mt-3">{waiting(sheetMember.membershipId)}</div>}
+            {sheetMember.pendingTransfer && <div className="mt-3">{movePending(sheetMember)}</div>}
+
+            {/* ADR-0247 §2: above *Keluarkan*, for somebody the reader may move and whose move is not already waiting. */}
+            {sheetMember.canChangeLeader && !sheetMember.pendingTransfer && (
+              <div className="mt-4 border-t border-divider pt-2">
+                <button
+                  type="button"
+                  disabled={busy !== null}
+                  onClick={() => openMove(sheetMember)}
+                  className="flex min-h-11 w-full items-center rounded-row px-3 text-left text-md font-semibold text-navy hover:bg-base disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {moveWords.moveToAnother}
+                </button>
+              </div>
+            )}
 
             <DestructiveRow label={t.remove} disabled={busy !== null} onClick={() => askRemoval(sheetMember)} className="mt-4" />
           </div>
         )}
       </ResponsiveSheet>
+
+      {/* *Pindahkan ke leader lain* (ADR-0247 §2–§3): the shared picker; a move or a request reloads the team. */}
+      <LeaderPicker
+        open={moving !== null}
+        membershipId={moving?.membershipId ?? ''}
+        memberName={moving?.fullName ?? ''}
+        downlineCount={moving?.subtreeCount ?? moving?.directCount ?? 0}
+        mode={office ? 'office' : 'leader'}
+        onDone={() => { setMoving(null); void load(); }}
+        onClose={() => setMoving(null)}
+      />
 
       {/*
         * *Keluarkan*'s confirmation (UI-083: last, red, asked first): what removal does, where their reports go, why, and

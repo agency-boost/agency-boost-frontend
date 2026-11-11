@@ -32,8 +32,9 @@ import { useOpenedOnce } from '@/lib/use-opened-once';
 import { leadsByRole } from '@/lib/field-nav';
 import { sampleUnitView } from '@/lib/sample-data';
 import {
-  lockedWords, productionToast, readUnitDashboard, unitPeriods,
-  type UnitDashboardView, type UnitPeriod, type UnitTab,
+  keepView, lockedWords, productionToast, readUnitDashboard, storedView, unitPeriods, unitViews,
+  type GroupMembersAdded, type UnitDashboardView, type UnitInformal, type UnitPeriod, type UnitTab, type UnitView,
+  type UnitViews,
 } from '@/lib/unit-dashboard';
 import { UnitRoster } from './unit-roster';
 import { UnitTiles } from './unit-tiles';
@@ -53,6 +54,15 @@ const UnitPotensi = dynamic(() => import('./unit-potensi').then((m) => m.UnitPot
 const UnitSearchSheet = dynamic(() => import('./unit-search-sheet'), { ssr: false });
 /** *+ Tambah agent*'s form, downloaded when it is first opened and mounted from then on (`useOpenedOnce`; P18.11-T16). */
 const AddAgentDialog = dynamic(() => import('@/components/add-agent-form').then((m) => m.AddAgentDialog), { ssr: false });
+/** *+ Tambah ke grup*'s sheet (ADR-0249 §4), downloaded when it is first opened. */
+const InformalGroupSheet = dynamic(() => import('./informal-group-sheet'), { ssr: false });
+
+/** What a read of either tab says about the views: the one answered, those offered, and *Grup informal*'s line. */
+interface ViewAnswer {
+  scope: UnitView;
+  scopes: UnitViews;
+  informal: UnitInformal | null;
+}
 
 /**
  * **The Unit Dashboard** (UI V1, Phase 18.11 T4; the owner's report of 2026-10-30, UI-001 to UI-012 and UI-028;
@@ -73,10 +83,19 @@ const AddAgentDialog = dynamic(() => import('@/components/add-agent-form').then(
  * - ***+ Tambah agent*** and ***Perbarui produksi*** on a tablet and a desktop, in the roster's header; **not on a
  *   phone** (the owner, 30 Oct: adding people lives in User Management).
  *
+ * - **The view picker** (the client's message of 11 November 2026, item 7; ADR-0249): *Grup langsung · Grup informal ·
+ *   Semua downline*, beside the period on *Overview* and beside the month on *Potensi* — **never on *Aktivitas***, whose
+ *   *Group* is *Grup langsung*. Only the views the server offers this head; **hidden with one or none**. The choice is
+ *   the address's (`?scope=`) first, then — the reader's own dashboard only — the one last chosen on this browser
+ *   (`ab.unit.scope.{membershipId}`), then the server's default. In *Grup informal* a line says ***"{n} AB di bawah Anda
+ *   belum masuk grup"***, and the Owner or an Admin is offered ***+ Tambah ke grup***, a sheet in place.
+ *
  * The states the prototype lacks are Fills (L-01): a skeleton shaped like the tiles and the roster, an error with a
  * retry, the empty unit of somebody who leads nobody, and the not-found unit.
  */
-export function UnitDashboard({ forId, period, tab = 'overview' }: { forId?: string; period: UnitPeriod; tab?: UnitTab }) {
+export function UnitDashboard({
+  forId, period, tab = 'overview', scope = null,
+}: { forId?: string; period: UnitPeriod; tab?: UnitTab; scope?: UnitView | null }) {
   const router = useRouter();
   const pathname = usePathname();
   const { me } = useSession();
@@ -99,7 +118,22 @@ export function UnitDashboard({ forId, period, tab = 'overview' }: { forId?: str
   useEffect(() => setShown(period), [period]);
   useEffect(() => setShownTab(tab), [tab]);
 
-  const key = `${forId ?? ''}|${shown}`;
+  /*
+   * **The view asked for** (ADR-0249): the address's; else, on the reader's own dashboard, the one last chosen here —
+   * read in an effect, never on the server, before the first read; else `null`, the server's default. A view of another
+   * leader's unit never reads nor writes the reader's own choice.
+   */
+  const readerId = me?.membership?.membershipId ?? null;
+  const [view0, setView0] = useState<{ ready: boolean; view: UnitView | null }>({ ready: false, view: scope });
+  useEffect(() => {
+    setView0({ ready: true, view: scope ?? (forId ? null : storedView(readerId)) });
+  }, [scope, forId, readerId]);
+  const chosenView = view0.view;
+  const [answer, setAnswer] = useState<ViewAnswer | null>(null);
+  const [tagging, setTagging] = useState(false);
+  const mayTag = useCan('member:tag_group');
+
+  const key = `${forId ?? ''}|${shown}|${chosenView ?? ''}`;
   const [held, setHeld] = useState<{ key: string; view: UnitDashboardView } | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [missing, setMissing] = useState(false);
@@ -121,15 +155,16 @@ export function UnitDashboard({ forId, period, tab = 'overview' }: { forId?: str
   const activeTab: UnitTab = shownTab === 'potensi' && !mayPotensi ? 'overview' : shownTab;
 
   useEffect(() => {
-    if (activeTab !== 'overview') return;
+    if (activeTab !== 'overview' || !view0.ready) return;
     let live = true;
     setError(null);
     setMissing(false);
-    readUnitDashboard({ period: periodOf(key), for: forId })
+    readUnitDashboard({ period: periodOf(key), for: forId, scope: chosenView })
       .then((view) => {
         if (!live) return;
         setHeld({ key, view });
         setHeadName(view.head.name);
+        if (view.scope && view.scopes) setAnswer({ scope: view.scope, scopes: view.scopes, informal: view.informal ?? null });
       })
       .catch((err) => {
         if (!live) return;
@@ -137,12 +172,12 @@ export function UnitDashboard({ forId, period, tab = 'overview' }: { forId?: str
         else setError(toDisplayError(err));
       });
     return () => { live = false; };
-  }, [key, forId, attempt, activeTab]);
+  }, [key, forId, chosenView, attempt, activeTab, view0.ready]);
 
   // A save's read keeps the roster on screen until the new one arrives; a new period starts from the skeleton.
   const view = held?.key === key ? held.view : null;
-  /** This page's address as a row's ‹ comes back to it: the period and the tab when they are not the first. */
-  const here = addressOf(pathname, shown, shownTab);
+  /** This page's address as a row's ‹ comes back to it: the period, the tab and the view when the address holds them. */
+  const here = addressOf(pathname, shown, shownTab, scope);
 
   // Back from a person (UI-011): the roster where it was left.
   useEffect(() => {
@@ -150,8 +185,25 @@ export function UnitDashboard({ forId, period, tab = 'overview' }: { forId?: str
   }, [view, here]);
   const keepScroll = useCallback(() => saveScroll(here), [here]);
   const onActivitiesHead = useCallback((head: { name: string }) => setHeadName(head.name), []);
+  // A read that names no views (one from before them) leaves the picker as it was.
+  const onPotensiAnswered = useCallback((next: Partial<ViewAnswer>) => {
+    if (next.scope && next.scopes) setAnswer({ scope: next.scope, scopes: next.scopes, informal: next.informal ?? null });
+  }, []);
 
-  const go = (nextPeriod: UnitPeriod, nextTab: UnitTab) => router.replace(addressOf(pathname, nextPeriod, nextTab), { scroll: false });
+  const go = (nextPeriod: UnitPeriod, nextTab: UnitTab) =>
+    router.replace(addressOf(pathname, nextPeriod, nextTab, scope), { scroll: false });
+  const chooseView = (next: UnitView) => {
+    if (next === (chosenView ?? answer?.scope)) return;
+    setView0({ ready: true, view: next });
+    // Remembered for the next visit, on the reader's own dashboard only (*"Pilihan terakhir diinget"*).
+    if (!forId) keepView(readerId, next);
+    router.replace(addressOf(pathname, shown, shownTab, next), { scroll: false });
+  };
+  const tagged = (result: GroupMembersAdded) => {
+    setTagging(false);
+    show(t.views.sheet.added({ n: result.added, group: result.name }));
+    setAttempt((n) => n + 1);
+  };
   const choosePeriod = (next: UnitPeriod) => {
     if (next === shown) return;
     setShown(next);
@@ -211,6 +263,39 @@ export function UnitDashboard({ forId, period, tab = 'overview' }: { forId?: str
   )) : null;
 
   const nobody = <NobodyYet action={canAdd ? addButton : null} />;
+
+  /*
+   * **The view picker** (ADR-0249): the views offered, hidden with one or none — beside the period on *Overview*, beside
+   * the month on *Potensi*, never on *Aktivitas*. Its value is the view asked for while it is offered, else the answer's.
+   */
+  const offered = answer?.scopes.offered ?? [];
+  const viewPicker = activeTab !== 'activities' && answer && offered.length > 1 ? (
+    <PickerMenu
+      label={t.views.label}
+      value={chosenView && offered.includes(chosenView) ? chosenView : answer.scope}
+      options={unitViews(language).filter((v) => offered.includes(v.id)).map(({ id, label }) => ({ value: id, label }))}
+      onChange={chooseView}
+      className="shrink-0"
+    />
+  ) : null;
+  // *Grup informal*'s line (ADR-0249 §4): the ABs below the head in none of their groups — and, for the Owner or an
+  // Admin, *+ Tambah ke grup*. Nothing when there are none.
+  const informal = answer?.scope === 'informal' ? answer.informal : null;
+  const canTag = !!informal?.canTag && mayTag && !me?.impersonationReadOnly && (informal?.abs?.length ?? 0) > 0;
+  const informalLine = informal && informal.absNotInGroup > 0 ? (
+    <p data-informal-line="" className="mb-3 flex flex-wrap items-center gap-x-3 text-md text-muted">
+      <span>{t.views.absNotInGroup({ n: informal.absNotInGroup, name: forId ? headName : null })}</span>
+      {canTag && (
+        <button
+          type="button"
+          onClick={() => setTagging(true)}
+          className="inline-flex items-center font-semibold text-navy underline-offset-2 hover:underline max-lg:min-h-11"
+        >
+          {t.views.addToGroup}
+        </button>
+      )}
+    </p>
+  ) : null;
   const searchPill = (
     <button
       type="button"
@@ -248,11 +333,24 @@ export function UnitDashboard({ forId, period, tab = 'overview' }: { forId?: str
           ))}
         </div>
         {activeTab === 'overview' && <PeriodPill period={shown} onChoose={choosePeriod} />}
+        {activeTab === 'overview' && viewPicker}
       </div>
+      {activeTab === 'overview' && informalLine}
 
       <div role="tabpanel" id={`${tabsId}-panel`} aria-labelledby={`${tabsId}-${activeTab}`}>
         {activeTab === 'potensi' ? (
-          <UnitPotensi forId={forId} onHead={onActivitiesHead} readOnly={readOnly} />
+          view0.ready ? (
+            <UnitPotensi
+              forId={forId}
+              onHead={onActivitiesHead}
+              readOnly={readOnly}
+              scope={chosenView}
+              reload={attempt}
+              onAnswered={onPotensiAnswered}
+              viewPicker={viewPicker}
+              informalLine={informalLine && <div className="mt-2">{informalLine}</div>}
+            />
+          ) : <TabSkeleton />
         ) : activeTab === 'activities' ? (
           // A leader by role with nobody yet sees the normal table at 0 (MOB UI-181, D-37); anybody else, the empty unit.
           <UnitActivities forId={forId} onHead={onActivitiesHead} empty={leadsByRole(me?.membership) ? null : nobody} />
@@ -299,18 +397,30 @@ export function UnitDashboard({ forId, period, tab = 'overview' }: { forId?: str
         <AddAgentDialog open={adding} today={view.today} leader={addLeader} onClose={() => setAdding(false)} onAdded={added} />
       )}
       {searching && <UnitSearchSheet onClose={() => setSearching(false)} />}
+      {tagging && informal && answer && (
+        <InformalGroupSheet
+          informal={informal}
+          head={{ membershipId: view?.head.membershipId ?? forId ?? readerId ?? '', name: headName ?? view?.head.name ?? '' }}
+          onClose={() => setTagging(false)}
+          onAdded={tagged}
+        />
+      )}
       <Toast toast={toast} />
     </div>
   );
 }
 
-const periodOf = (key: string) => key.slice(key.indexOf('|') + 1) as UnitPeriod;
+const periodOf = (key: string) => key.split('|')[1] as UnitPeriod;
 
-/** The page's address for a period and a tab: each in the query only when it is not the first. */
-export function addressOf(pathname: string, period: UnitPeriod, tab: UnitTab): string {
+/**
+ * The page's address for a period, a tab and a view: the period and the tab only when they are not the first; the view
+ * when one was chosen (ADR-0249) — the address's is what a reload and a shared link open.
+ */
+export function addressOf(pathname: string, period: UnitPeriod, tab: UnitTab, view: UnitView | null = null): string {
   const search = new URLSearchParams();
   if (period !== 'month') search.set('period', period);
   if (tab !== 'overview') search.set('tab', tab);
+  if (view !== null) search.set('scope', view);
   const query = search.toString();
   return query ? `${pathname}?${query}` : pathname;
 }

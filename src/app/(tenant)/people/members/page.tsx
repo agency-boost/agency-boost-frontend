@@ -52,8 +52,9 @@ import {
   type HierarchyRole,
   type Member,
   type MemberPage,
-  type MemberStatus,
   type RoleChangeEntry,
+  MEMBER_STATE_TONE,
+  memberStateOf,
 } from '@/lib/org';
 import { MemberRows } from './member-rows';
 
@@ -78,11 +79,6 @@ const ROLE_INDENT: Record<HierarchyRole, string> = {
   agent: 'block pl-8',
 };
 
-const STATUS_TO_PILL: Record<MemberStatus, 'success' | 'alert' | 'neutral'> = {
-  active: 'success',
-  pending: 'neutral',
-  removed: 'alert',
-};
 
 /**
  * `Directory (187)` · `Pending (14)` · `Removed (3)` · `Role change log` · `Groups`
@@ -1003,9 +999,11 @@ export default function MembersPage() {
                     </>
                   ) : (
                     <span className="flex flex-wrap items-center gap-1.5">
+                      {/* An active member who never signed in reads *Diundang* or *Belum diundang*, grey, not *Aktif*
+                          (P19.12-T5 AC-4; ADR-0248 §4): the server's `invitation`, `memberStateOf`. */}
                       <StatusPill
-                        status={STATUS_TO_PILL[m.status]}
-                        label={status[m.status]}
+                        status={MEMBER_STATE_TONE[memberStateOf(m)]}
+                        label={status[memberStateOf(m)]}
                       />
                       {/* She left and came back: the live membership says so beside its status, so *Active* beside
                           a *Removed* tab holding her earlier one is not read as a contradiction (UI-024). */}

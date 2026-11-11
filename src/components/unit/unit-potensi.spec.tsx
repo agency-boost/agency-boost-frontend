@@ -77,7 +77,8 @@ const AGUS_UNIT = unit('direct', [
 const potensi = (over: Partial<UnitPotensiView> = {}): UnitPotensiView => ({
   month: '2026-11', currentMonth: '2026-11', today: '2026-11-04',
   head: { membershipId: 'mem-agus', name: 'Agus Prasetyo', isReader: true },
-  tiles: { aa: 4, rekrut: 1, potensi: { aa: 4, rekrut: 2 } }, units: [AGUS_UNIT, SARI_UNIT], ...over,
+  tiles: { aa: 4, rekrut: 1, potensi: { aa: 4, rekrut: 2 } }, units: [AGUS_UNIT, SARI_UNIT],
+  scope: 'direct', scopes: { offered: ['direct'], default: 'direct' }, informal: null, ...over,
 });
 const SHEET: UnitPotensiPersonView = {
   month: '2026-11', currentMonth: '2026-11',
@@ -400,5 +401,41 @@ describe('P19.1-T6, P19.8-T4 the Potensi tab', () => {
       const results = await axe(document.body, { rules: { 'color-contrast': { enabled: false }, region: { enabled: false } } });
       expect(results.violations.map((v) => `${v.id} (${v.nodes.length})`)).toEqual([]);
     });
+  });
+});
+
+/**
+ * **The views on *Potensi*** (P19.12-T6; ADR-0249): the same view as the Overview, read with the tab's month, the picker
+ * beside the month, and the office-wide view's people with no leader as a card of their own, last.
+ */
+describe('P19.12-T6 the Potensi tab’s view', () => {
+  beforeEach(() => { nav.replace.mockClear(); nav.search = ''; });
+  afterEach(() => vi.unstubAllGlobals());
+
+  const UNLED = {
+    kind: 'unled' as const, leader: null,
+    people: [person('Nora Siregar', 'AGENT')],
+    totals: totalsOf([person('Nora Siregar', 'AGENT')]),
+  };
+
+  it('P19.12-T6 AC-2 the view asked for is read, the picker beside the month; Belum punya leader is the last card', async () => {
+    const { calls } = render(potensi({
+      units: [AGUS_UNIT, SARI_UNIT, UNLED], scope: 'downline', scopes: { offered: ['direct', 'downline'], default: 'downline' },
+    }));
+    await tiles();
+    const month = screen.getByRole('button', { name: /^Month / });
+    expect(month.parentElement).toContainElement(screen.getByRole('button', { name: 'View All downline' }));
+    expect(cards().map((c) => c.getAttribute('aria-label'))).toEqual(['Your Unit', 'Sari Puspita’s Unit', 'No leader yet']);
+    expect(cards().at(-1)).toHaveTextContent('Nora Siregar');
+    await userEvent.click(screen.getByRole('button', { name: 'View All downline' }));
+    await userEvent.click(within(screen.getByRole('listbox', { name: 'View' })).getByRole('option', { name: 'Direct group' }));
+    expect(nav.replace).toHaveBeenCalledWith('/unit/dashboard?tab=potensi&scope=direct', { scroll: false });
+    await waitFor(() => expect(calls.map((c) => c.url)).toContain('http://api.test/api/v1/unit/dashboard/potensi?scope=direct'));
+  });
+
+  it('P19.12-T6 AC-2 one view offered: no picker beside the month', async () => {
+    render();
+    await tiles();
+    expect(screen.queryByRole('button', { name: /^View / })).toBeNull();
   });
 });

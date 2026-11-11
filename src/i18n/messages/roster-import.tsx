@@ -37,12 +37,12 @@ const en = {
     fullName: 'Their full name',
     role: ({ code }: { code: Code }) => <>{code('Agent')}, {code('AAB')} or {code('AB')}. {code('Agen')} is read as Agent.</>,
     upline: 'The agent code of their upline: a leader at least their rank, in the file or already in the KPM. Empty only for the top rung',
-    phone: 'Optional. Without one they are added, and cannot be reminded on WhatsApp yet',
-    email: 'What they sign in with. Needed for somebody new: the invitation goes there',
+    phone: 'Optional. Without one they are added, and cannot be reminded on WhatsApp yet. A new Agent with no email is invited on it',
+    email: 'What they sign in with. Needed for somebody new: the invitation goes there. A new Agent with none is invited on WhatsApp',
     joinDate: ({ code }: { code: Code }) => <>{code('DD/MM/YYYY')}, the day they joined this KPM. Empty is today</>,
     workStatus: ({ code }: { code: Code }) => <>{code('Full-time')} or {code('Part-time')}</>,
     dateOfBirth: ({ code }: { code: Code }) => <>{code('DD/MM/YYYY')}, at least 18 years ago</>,
-    gender: ({ code }: { code: Code }) => <>{code('male')} or {code('female')}</>,
+    gender: ({ code }: { code: Code }) => <>{code('male')} or {code('female')}; {code('L')} and {code('P')} are read too</>,
     companyJoinMonth: ({ code }: { code: Code }) => <>{code('YYYY-MM')}, the month they joined the insurer</>,
   },
   /**
@@ -62,7 +62,9 @@ const en = {
   ruleRequired: 'Kode agen, Nama and Peran are required. Leave any other cell empty when you do not know it.',
   ruleOnePerRow: 'One person per row.',
   ruleUplines: 'Rows can come in any order: an upline is matched in the file and among the people already in the KPM.',
-  ruleSkipped: 'A row with a problem is skipped with its reason, and the rest are imported together.',
+  /** ADR-0250 §2: a bad optional cell is left empty with a warning; only a required one skips the row. */
+  ruleSkipped: 'An optional cell written wrongly is left empty, with a warning, and the person is still imported. A row '
+    + 'with a problem in a required cell is skipped with its reason, and the rest are imported together.',
   /** **Card 2, the upload**: the filled file first, the paste second (ADR-0184). */
   uploadHeading: 'Upload',
   how: 'How are you adding them?',
@@ -82,28 +84,36 @@ const en = {
    * **The preview** (A3): *"N new people ready to import, M updated, K rows skipped."* A part that is zero is left out,
    * as A3's own mockup leaves it.
    */
-  ready: ({ imported, updated, skipped }: { imported: number; updated: number; skipped: number }) =>
+  ready: ({ imported, updated, invited, skipped }: { imported: number; updated: number; invited: number; skipped: number }) =>
     `${imported} new ${imported === 1 ? 'person' : 'people'} ready to import`
-    + `${updated ? `, ${updated} updated` : ''}${skipped ? `, ${skipped} ${skipped === 1 ? 'row' : 'rows'} skipped` : ''}.`,
+    + `${updated ? `, ${updated} updated` : ''}${invited ? `, ${invited} invited on WhatsApp` : ''}`
+    + `${skipped ? `, ${skipped} ${skipped === 1 ? 'row' : 'rows'} skipped` : ''}.`,
   resultsCaption: 'Each row of the file, and what it comes to',
   resultColumns: { agentCode: 'Agent code', name: 'Name', role: 'Role', upline: 'Upline code', result: 'Result' },
-  outcome: { imported: 'Imported', updated: 'Updated', skipped: 'Skipped' },
+  /** `invited` (ADR-0250 §4): a new Agent with no email, invited on WhatsApp. */
+  outcome: { imported: 'Imported', updated: 'Updated', invited: 'Invited on WhatsApp', skipped: 'Skipped' },
+  /** A row's invitation, shared from its WhatsApp button (ADR-0250 §4): the button's name, and its tooltip. */
+  sendOnWhatsApp: ({ name }: { name: string }) => `Send ${name} their invitation on WhatsApp`,
   /** No upline on a row. */
   none: 'None',
   /** A3's checkbox, naming email (ADR-0205 §7): `n` the new people. */
   invite: ({ n }: { n: number }) => `Send an email invitation to ${n} new ${n === 1 ? 'person' : 'people'}`,
-  inviteHint: 'Each gets a one-time link to choose their password. Nothing is sent by WhatsApp.',
+  inviteHint: 'Each gets a one-time link by email to choose their password.',
   /** `n` the rows that would be written: the new and the updated. */
   importN: ({ n }: { n: number }) => `Import ${n} ${n === 1 ? 'person' : 'people'}`,
   importing: 'Importing…',
   cancel: 'Cancel',
   downloadSkipped: '⬇ Download the skipped rows',
   /** **Done** (A3's toast, naming email): who was imported, who updated, and whether they were invited. */
-  done: ({ imported, updated }: { imported: number; updated: number }) =>
-    `${imported} ${imported === 1 ? 'member' : 'members'} imported${updated ? `, ${updated} updated` : ''}`,
-  toast: ({ imported, updated, invited }: { imported: number; updated: number; invited: boolean }) =>
-    `${imported} ${imported === 1 ? 'member' : 'members'} imported${updated ? `, ${updated} updated` : ''}.`
-    + `${invited ? ' Invitations sent by email.' : ''}`,
+  done: ({ imported, updated, whatsApp }: { imported: number; updated: number; whatsApp: number }) =>
+    `${imported} ${imported === 1 ? 'member' : 'members'} imported${updated ? `, ${updated} updated` : ''}`
+    + `${whatsApp ? `, ${whatsApp} invited on WhatsApp` : ''}`,
+  toast: ({ imported, updated, whatsApp, invited }: { imported: number; updated: number; whatsApp: number; invited: boolean }) =>
+    `${imported} ${imported === 1 ? 'member' : 'members'} imported${updated ? `, ${updated} updated` : ''}`
+    + `${whatsApp ? `, ${whatsApp} invited on WhatsApp` : ''}.${invited ? ' Invitations sent by email.' : ''}`,
+  /** ADR-0250 §4: where each WhatsApp invitation is sent from, now and later. */
+  whatsAppLine: `Send each person invited on WhatsApp their link with the WhatsApp button on their row, or later from `
+    + `${kept('New Hires')} › Waiting to join.`,
   invitedLine: ({ n }: { n: number }) =>
     `An invitation went by email to ${n} new ${n === 1 ? 'person' : 'people'}, with a link to choose their password.`,
   notInvitedLine: 'Nobody was emailed. Each new person can sign in with Forgot your password? and their email.',
@@ -121,12 +131,12 @@ const id: MessagesOf<typeof en> = {
     fullName: 'Nama lengkapnya',
     role: ({ code }) => <>{code('Agent')}, {code('AAB')}, atau {code('AB')}. {code('Agen')} dibaca sebagai Agent.</>,
     upline: `Kode agen upline-nya: ${kept('leader')} yang jenjangnya paling tidak sama, di file atau sudah ada di ${kept('KPM')}. Kosongkan hanya untuk jenjang teratas`,
-    phone: 'Opsional. Tanpa nomor, mereka tetap masuk, tetapi belum bisa diingatkan lewat WhatsApp',
-    email: 'Untuk masuk. Wajib untuk orang baru: undangan dikirim ke sana',
+    phone: 'Opsional. Tanpa nomor, mereka tetap masuk, tetapi belum bisa diingatkan lewat WhatsApp. Agent baru tanpa email diundang lewat nomor ini',
+    email: 'Untuk masuk. Wajib untuk orang baru: undangan dikirim ke sana. Agent baru tanpa email diundang lewat WhatsApp',
     joinDate: ({ code }) => <>{code('DD/MM/YYYY')}, tanggal bergabung di {kept('KPM')} ini. Kosong berarti hari ini</>,
     workStatus: ({ code }) => <>{code('Full-time')} atau {code('Part-time')}</>,
     dateOfBirth: ({ code }) => <>{code('DD/MM/YYYY')}, minimal 18 tahun yang lalu</>,
-    gender: ({ code }) => <>{code('male')} atau {code('female')}</>,
+    gender: ({ code }) => <>{code('male')} atau {code('female')}; {code('L')} dan {code('P')} juga dibaca</>,
     companyJoinMonth: ({ code }) => <>{code('YYYY-MM')}, bulan dia bergabung dengan perusahaan asuransi</>,
   },
   downloadHeading: 'Unduh template',
@@ -140,7 +150,8 @@ const id: MessagesOf<typeof en> = {
   ruleRequired: 'Kode agen, Nama, dan Peran wajib diisi. Kosongkan sel lain bila tidak tahu isinya.',
   ruleOnePerRow: 'Satu orang per baris.',
   ruleUplines: `Urutan baris bebas: upline dicocokkan dari file dan dari anggota yang sudah ada di ${kept('KPM')}.`,
-  ruleSkipped: 'Baris yang bermasalah dilewati dengan alasannya. Sisanya masuk sekaligus.',
+  ruleSkipped: 'Sel opsional yang salah isi dikosongkan, dengan peringatan, dan orangnya tetap masuk. Baris yang '
+    + 'bermasalah di kolom wajib dilewati dengan alasannya. Sisanya masuk sekaligus.',
   uploadHeading: 'Unggah',
   how: 'Bagaimana Anda menambahkan mereka?',
   upload: 'Unggah file yang sudah diisi (.xlsx atau .csv)',
@@ -154,21 +165,27 @@ const id: MessagesOf<typeof en> = {
   unreadableLine: 'Tidak ada isinya yang bisa diimpor sebelum ini diperbaiki. Nomor baris menghitung baris judul kolom, seperti di spreadsheet.',
   problemsCaption: 'Yang salah dengan file ini',
   problemColumns: { line: 'Baris', column: 'Kolom', problem: 'Masalah' },
-  ready: ({ imported, updated, skipped }) =>
-    `${imported} orang baru siap diimpor${updated ? `, ${updated} diperbarui` : ''}${skipped ? `, ${skipped} baris dilewati` : ''}.`,
+  ready: ({ imported, updated, invited, skipped }) =>
+    `${imported} orang baru siap diimpor${updated ? `, ${updated} diperbarui` : ''}`
+    + `${invited ? `, ${invited} diundang lewat WhatsApp` : ''}${skipped ? `, ${skipped} baris dilewati` : ''}.`,
   resultsCaption: 'Setiap baris file, dan hasilnya',
   resultColumns: { agentCode: 'Kode agen', name: 'Nama', role: 'Peran', upline: 'Kode upline', result: 'Hasil' },
-  outcome: { imported: 'Masuk', updated: 'Diperbarui', skipped: 'Dilewati' },
+  outcome: { imported: 'Masuk', updated: 'Diperbarui', invited: 'Diundang lewat WhatsApp', skipped: 'Dilewati' },
+  sendOnWhatsApp: ({ name }) => `Kirim undangan ke ${name} lewat WhatsApp`,
   none: 'Tidak ada',
   invite: ({ n }) => `Kirim undangan lewat email ke ${n} orang baru`,
-  inviteHint: 'Masing-masing mendapat tautan sekali pakai untuk membuat kata sandi. Tidak ada yang dikirim lewat WhatsApp.',
+  inviteHint: 'Masing-masing mendapat tautan sekali pakai lewat email untuk membuat kata sandi.',
   importN: ({ n }) => `Impor ${n} orang`,
   importing: 'Mengimpor…',
   cancel: 'Batal',
   downloadSkipped: '⬇ Unduh baris yang dilewati',
-  done: ({ imported, updated }) => `${imported} anggota diimpor${updated ? `, ${updated} diperbarui` : ''}`,
-  toast: ({ imported, updated, invited }) =>
-    `${imported} anggota diimpor${updated ? `, ${updated} diperbarui` : ''}.${invited ? ' Undangan dikirim lewat email.' : ''}`,
+  done: ({ imported, updated, whatsApp }) =>
+    `${imported} anggota diimpor${updated ? `, ${updated} diperbarui` : ''}${whatsApp ? `, ${whatsApp} diundang lewat WhatsApp` : ''}`,
+  toast: ({ imported, updated, whatsApp, invited }) =>
+    `${imported} anggota diimpor${updated ? `, ${updated} diperbarui` : ''}${whatsApp ? `, ${whatsApp} diundang lewat WhatsApp` : ''}.`
+    + `${invited ? ' Undangan dikirim lewat email.' : ''}`,
+  whatsAppLine: `Kirim tautan ke setiap orang yang diundang lewat WhatsApp dengan tombol WhatsApp di barisnya, atau nanti `
+    + `dari ${kept('New Hires')} › Menunggu bergabung.`,
   invitedLine: ({ n }) => `Undangan dikirim lewat email ke ${n} orang baru, dengan tautan untuk membuat kata sandi.`,
   notInvitedLine: 'Tidak ada email yang dikirim. Setiap orang baru dapat masuk lewat Lupa kata sandi? dengan email-nya.',
   skippedLine: ({ n }) => `${n} baris dilewati. Unduh, perbaiki, lalu unggah lagi.`,

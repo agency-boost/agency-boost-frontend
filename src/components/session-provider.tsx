@@ -128,18 +128,30 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     })();
   }, [reload]);
 
-  const signIn = useCallback(
-    async (email: string, password: string) => {
-      const { accessToken } = await api<{ accessToken: string }>('/auth/login', {
-        method: 'POST',
-        body: { email, password },
-      });
+  /*
+   * **A session the server has just started, taken up** (P19.12-T2 AC-3; ADR-0245 §3): its access token held in memory,
+   * the refresh cookie already set by the answer that carried it. What signing in does after the password, and what
+   * registering does with the token `POST /auth/register` answers — so a new account starts as a signed-in one does.
+   */
+  const adopt = useCallback(
+    async (accessToken: string) => {
       setAccessToken(accessToken);
       // Signing in starts on *Akun saya* (P19.2-T1 AC-4; ADR-0198 §5), whatever view this tab was last in.
       forgetView();
       return load();
     },
     [load],
+  );
+
+  const signIn = useCallback(
+    async (email: string, password: string) => {
+      const { accessToken } = await api<{ accessToken: string }>('/auth/login', {
+        method: 'POST',
+        body: { email, password },
+      });
+      return adopt(accessToken);
+    },
+    [adopt],
   );
 
   // Signing out never fails. The server call revokes the refresh-token family, but if
@@ -199,8 +211,8 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   }, [me]);
 
   const value = useMemo(
-    () => ({ me, loading, signedOut, expired, signIn, signOut, reload }),
-    [me, loading, signedOut, expired, signIn, signOut, reload],
+    () => ({ me, loading, signedOut, expired, signIn, adopt, signOut, reload }),
+    [me, loading, signedOut, expired, signIn, adopt, signOut, reload],
   );
 
   return (

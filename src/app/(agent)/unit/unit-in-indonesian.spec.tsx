@@ -255,3 +255,39 @@ describe('P18.10-T4 the Group tree in Indonesian', () => {
     noEnglishLeft();
   });
 });
+
+/**
+ * **The views, in Indonesian** (P19.12-T6; ADR-0249): the client's own words — *Tampilan*, *Grup langsung · Grup
+ * informal · Semua downline*, *"3 AB di bawah Anda belum masuk grup"*, *+ Tambah ke grup*, *Belum punya leader* — and the
+ * tiles' *AB* chip, with no English left.
+ */
+describe('P19.12-T6 the views in Indonesian', () => {
+  const OWNER = makeMe({
+    ...AGUS_ME,
+    membership: { ...AGUS_ME.membership!, isKpmOwner: true },
+    permissions: [...AGUS_ME.permissions, 'member:tag_group'],
+  });
+  const informal = dashboard({
+    scope: 'informal',
+    scopes: { offered: ['direct', 'informal', 'downline'], default: 'downline' },
+    informal: { groups: [], absNotInGroup: 3, abs: [{ membershipId: 'mem-y', name: 'Yosef Tambunan' }], canTag: true },
+    tiles: { ...dashboard().tiles, team: { ...dashboard().tiles.team, aab: 10, ab: 2, total: 16 } },
+    unled: { rows: [{ ...dashboard().yourUnit.rows[1], membershipId: 'mem-nora', name: 'Nora Siregar' }], total: dashboard().yourUnit.total },
+  });
+
+  it('P19.12-T6 AC-2 the picker, the line, the AB chip and Belum punya leader, all in Indonesian', async () => {
+    nav.search = 'scope=informal';
+    stubFetch({ ...SHELL, 'GET /unit/dashboard': { body: informal }, '/activity/ratios': { body: RATIOS } });
+    renderWithSession(<InLanguage language="id"><AgentLayout><UnitDashboardPage /></AgentLayout></InLanguage>, { me: OWNER });
+    await roster();
+    expect(screen.getByRole('button', { name: 'Tampilan Grup informal' })).toBeInTheDocument();
+    expect(screen.getByText('3 AB di bawah Anda belum masuk grup')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '+ Tambah ke grup' })).toBeInTheDocument();
+    expect(document.querySelector('[data-unit-tiles]')).toHaveTextContent('2 AB');
+    expect(document.body).toHaveTextContent(/Belum punya leader/);
+    await userEvent.click(screen.getByRole('button', { name: 'Tampilan Grup informal' }));
+    expect(within(screen.getByRole('listbox', { name: 'Tampilan' })).getAllByRole('option').map((o) => o.textContent?.replace('✓', '').trim()))
+      .toEqual(['Grup langsung', 'Grup informal', 'Semua downline']);
+    noEnglishLeft();
+  });
+});

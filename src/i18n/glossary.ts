@@ -148,6 +148,8 @@ export const KEPT_ENGLISH = {
     'Proposals made',
     // P19.8-T2 (ADR-0228 §4, OD-283): Home's *Leads* tile (`metrics-and-definitions.md` §A.17).
     'Your open leads',
+    // P19.12-T6 (ADR-0249 §4): *Grup informal*'s line (`metrics-and-definitions.md` §A.18).
+    'ABs not in your group',
     // P19.5-T3 (ADR-0215): the *Advanced analytics* page's nineteen (`metrics-and-definitions.md` §A.15) — Demographics, the
     // events' NPS for a period, Quant's seven, the peers' two and Sub-group's eight.
     'Demographics', 'Event NPS, for a period', 'A1 Recruitment per leader', 'A2 Net growth in annual active agents',

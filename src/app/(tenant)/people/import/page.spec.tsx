@@ -27,11 +27,11 @@ const ADMIN = makeMe({
 const HEADER = 'Kode agen,Nama,Peran,Kode upline,No. WhatsApp,Email,Tanggal bergabung,Waktu,Tanggal lahir,Jenis kelamin,'
   + 'Bulan bergabung di perusahaan';
 const PREVIEW = {
-  issues: [], header: HEADER.split(','), counts: { imported: 1, updated: 0, skipped: 1 },
+  issues: [], header: HEADER.split(','), counts: { imported: 1, updated: 0, invited: 0, skipped: 1 },
   rows: [
-    { line: 2, agentCode: '70045001', fullName: 'Rahmat Hidayat', role: 'AB', leaderAgentCode: '', email: 'rahmat@contoh.id', outcome: 'imported', messages: [] },
+    { line: 2, agentCode: '70045001', fullName: 'Rahmat Hidayat', role: 'AB', leaderAgentCode: '', email: 'rahmat@contoh.id', outcome: 'imported', messages: [], warnings: [] },
     { line: 3, agentCode: '70013011', fullName: 'Rina Wijaya', role: 'Agent', leaderAgentCode: '70045001', email: '', outcome: 'skipped',
-      messages: ['This agent code is already registered at this insurer.'] },
+      messages: ['This agent code is already registered at this insurer.'], warnings: [] },
   ],
   skippedCsv: `${HEADER},Alasan\n`,
 };

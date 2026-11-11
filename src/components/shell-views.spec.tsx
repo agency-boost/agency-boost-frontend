@@ -226,9 +226,12 @@ describe('P19.2-T1 AC-4 after signing in, an Owner or an Admin is on their own H
 
   it('P19.2-T1 AC-4 sign-in and sign-out forget the tab’s view, so the next session starts on Akun saya', () => {
     const provider = readFileSync(join(SRC, 'components', 'session-provider.tsx'), 'utf8');
+    // Signing in adopts the session it was given (P19.12-T2: registering too), and adopting is where the view is forgotten.
+    const adopt = provider.slice(provider.indexOf('const adopt = useCallback'), provider.indexOf('const signIn = useCallback'));
     const signIn = provider.slice(provider.indexOf('const signIn = useCallback'), provider.indexOf('const signOut = useCallback'));
     const signOut = provider.slice(provider.indexOf('const signOut = useCallback'), provider.indexOf('const endSupportSession'));
-    expect(signIn).toContain('forgetView();');
+    expect(adopt).toContain('forgetView();');
+    expect(signIn).toContain('return adopt(accessToken);');
     expect(signOut).toContain('forgetView();');
   });
 });

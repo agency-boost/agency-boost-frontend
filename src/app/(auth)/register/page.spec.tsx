@@ -1,14 +1,15 @@
 import { fireEvent, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { renderWithSession, stubFetch } from '@test/harness';
+import { makeMe, renderWithSession, stubFetch } from '@test/harness';
 import { AUTH_PAGE } from '@/components/auth-page';
 import RegisterPage from './page';
 
 /** The page's query string: `?invite=…` for a leader's invite (P18.8-T3), nothing otherwise. */
 const query = { current: '' };
+const push = vi.hoisted(() => vi.fn());
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  useRouter: () => ({ push, replace: vi.fn() }),
   usePathname: () => '/register',
   useSearchParams: () => new URLSearchParams(query.current),
 }));
@@ -42,8 +43,18 @@ async function personal() {
   await userEvent.selectOptions(screen.getByLabelText('Gender'), 'female');
 }
 
+/** What `POST /auth/register` answers an account it made (ADR-0245 §3): the session, its cookie set beside it. */
+const SIGNED_IN = { status: 'signed_in', accessToken: 'tok-new', expiresIn: 900 };
+/** A new account in no KPM: where signing in lands is `/user-management/kpm` (`landingFor`). */
+const NEWCOMER = makeMe({ membership: null });
+/** A new account that joined on an invite or a leader's code: active in the leader's unit, so Home. */
+const JOINED = makeMe();
+
 describe('register', () => {
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    push.mockClear();
+  });
 
   it('says plainly that an account is not an office, from 768px — on a phone it is not drawn (P18.7-T7 AC-1)', () => {
     // Creating an account and joining an office are separate steps; a reader who
@@ -200,21 +211,57 @@ describe('register', () => {
     expect(screen.getByRole('button', { name: 'Create account' })).toBeDisabled();
   });
 
-  it('confirms the same way whether or not the address is already taken', async () => {
-    // The API answers identically on purpose — confirming would let anyone test
-    // addresses against this form. The screen must not undo that.
+  it('P19.12-T2 AC-3 a new account is signed in: the session taken up, and on to where signing in lands', async () => {
     stubFetch({
       '/companies': { body: INSURERS },
-      '/auth/register': { status: 201, body: { status: 'verification_sent' } },
+      '/auth/register': { status: 201, body: SIGNED_IN },
     });
-    renderWithSession(<RegisterPage />, { me: null });
+    const adopt = vi.fn(async () => NEWCOMER);
+    renderWithSession(<RegisterPage />, { me: null, adopt });
 
     await fill();
     await userEvent.click(screen.getByRole('button', { name: 'Create account' }));
 
-    const confirmation = await screen.findByText(/verification link is on its way/);
-    expect(confirmation.textContent).toMatch(/if .* can be registered/i);
-    expect(confirmation.textContent).not.toMatch(/already|exists|taken/i);
+    await vi.waitFor(() => expect(push).toHaveBeenCalledWith('/user-management/kpm'));
+    expect(adopt).toHaveBeenCalledWith('tok-new');
+    // No screen in between: the account is in, and the email is optional (ADR-0190 §4).
+    expect(screen.queryByText(/may already have an account/)).toBeNull();
+    // Still busy while the page leaves, so the form is not offered twice.
+    expect(screen.getByRole('button', { name: 'Creating…' })).toBeDisabled();
+  });
+
+  it('P19.12-T2 AC-3 an address that already had an account gets a neutral screen: no session, Sign in and Forgot your password?', async () => {
+    stubFetch({
+      '/companies': { body: INSURERS },
+      '/auth/register': { status: 201, body: { status: 'verification_sent' } },
+    });
+    const adopt = vi.fn(async () => NEWCOMER);
+    renderWithSession(<RegisterPage />, { me: null, adopt });
+
+    await fill();
+    await userEvent.click(screen.getByRole('button', { name: 'Create account' }));
+
+    const said = await screen.findByText(/may already have an account/);
+    expect(said).toHaveTextContent('rina@kpm0417.test may already have an account.');
+    expect(screen.getByText('Sign in with it, or set a new password if you have forgotten it.')).toBeInTheDocument();
+    // Nothing says verifying is still to do: signing in never waited on it.
+    expect(document.body.textContent).not.toMatch(/verif/i);
+    expect(screen.getByRole('link', { name: 'Sign in' })).toHaveAttribute('href', '/login');
+    expect(screen.getByRole('link', { name: 'Forgot your password?' })).toHaveAttribute('href', '/forgot-password');
+    expect(adopt).not.toHaveBeenCalled();
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it('P19.12-T2 AC-3 a session that cannot be read back reads the neutral screen, never a blank page', async () => {
+    stubFetch({
+      '/companies': { body: INSURERS },
+      '/auth/register': { status: 201, body: SIGNED_IN },
+    });
+    renderWithSession(<RegisterPage />, { me: null, adopt: vi.fn(async () => null) });
+    await fill();
+    await userEvent.click(screen.getByRole('button', { name: 'Create account' }));
+    expect(await screen.findByRole('link', { name: 'Sign in' })).toHaveAttribute('href', '/login');
+    expect(push).not.toHaveBeenCalled();
   });
 
   it('applies the password rules the server applies, before the round trip', async () => {
@@ -270,17 +317,6 @@ describe('register', () => {
     expect(screen.getByLabelText('Confirm password')).toHaveAttribute('type', 'password');
   });
 
-  it('says how long the verification link lasts', async () => {
-    stubFetch({
-      '/companies': { body: INSURERS },
-      '/auth/register': { status: 201, body: {} },
-    });
-    renderWithSession(<RegisterPage />, { me: null });
-    await fill();
-    await userEvent.click(screen.getByRole('button', { name: 'Create account' }));
-    expect(await screen.findByText(/24 hours and works once/)).toBeInTheDocument();
-  });
-
   it('shows a server rejection rather than a false confirmation', async () => {
     stubFetch({
       '/companies': { body: INSURERS },
@@ -295,7 +331,8 @@ describe('register', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Create account' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('must not begin or end with a space');
-    expect(screen.queryByText(/verification link is on its way/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/may already have an account/)).not.toBeInTheDocument();
+    expect(push).not.toHaveBeenCalled();
   });
 
   it('offers the way back to sign in', () => {
@@ -346,13 +383,14 @@ describe('register', () => {
       expect(title).not.toHaveClass('max-md:mb-6');
     });
 
-    it('P18.8-T3 AC-4 registers with the invite’s token, insurer and code, and says they join the leader’s team', async () => {
+    it('P18.8-T3 AC-4 registers with the invite’s token, insurer and code; P19.12-T2 AC-3 and lands in the team, signed in', async () => {
       query.current = `invite=${TOKEN}`;
       const { calls } = stubFetch({
         '/companies': { body: INSURERS }, '/invites/': { body: BANNER },
-        '/auth/register': { status: 201, body: { status: 'verification_sent' } },
+        '/auth/register': { status: 201, body: SIGNED_IN },
       });
-      renderWithSession(<RegisterPage />, { me: null });
+      const adopt = vi.fn(async () => JOINED);
+      renderWithSession(<RegisterPage />, { me: null, adopt });
       await screen.findByText("You're joining Agus Prasetyo's team · KPM 0417");
       await userEvent.type(screen.getByLabelText('Email'), 'yusuf@new.test');
       await userEvent.type(screen.getByLabelText('Password'), 'a long enough password');
@@ -363,7 +401,29 @@ describe('register', () => {
       expect(JSON.parse(register.init.body as string)).toMatchObject({
         fullName: 'Yusuf Hidayat', companyId: 'co-2', agentCode: '80777', inviteToken: TOKEN, email: 'yusuf@new.test',
       });
-      expect(await screen.findByText("Once you have verified it and signed in, you are in Agus Prasetyo's team.")).toBeInTheDocument();
+      // In the leader's unit as it is made (ADR-0170 §3), and signed in: Home, where signing in lands a member.
+      await vi.waitFor(() => expect(push).toHaveBeenCalledWith('/home'));
+      expect(adopt).toHaveBeenCalledWith('tok-new');
+    });
+
+    it('P19.12-T2 AC-3 an address that already had an account joins nothing: the neutral screen signs in back to the invite', async () => {
+      query.current = `invite=${TOKEN}`;
+      stubFetch({
+        '/companies': { body: INSURERS }, '/invites/': { body: BANNER },
+        '/auth/register': { status: 201, body: { status: 'verification_sent' } },
+      });
+      renderWithSession(<RegisterPage />, { me: null });
+      await screen.findByText("You're joining Agus Prasetyo's team · KPM 0417");
+      await userEvent.type(screen.getByLabelText('Email'), 'rina@kpm0417.test');
+      await userEvent.type(screen.getByLabelText('Password'), 'a long enough password');
+      await userEvent.type(screen.getByLabelText('Confirm password'), 'a long enough password');
+      await personal();
+      await userEvent.click(screen.getByRole('button', { name: 'Create account' }));
+      await screen.findByText(/may already have an account/);
+      // Nothing says they are in the team: an address that existed joins nobody.
+      expect(screen.queryByText(/Agus Prasetyo's team\./)).toBeNull();
+      expect(screen.getByRole('link', { name: 'Sign in' }))
+        .toHaveAttribute('href', `/login?next=${encodeURIComponent(`/join?invite=${encodeURIComponent(TOKEN)}`)}`);
     });
 
     it('P18.8-T3 AC-4 a link that opens nothing says so plainly, and offers signing in or registering without it', async () => {
@@ -406,20 +466,22 @@ describe('register', () => {
         .toHaveAttribute('href', `/login?next=${encodeURIComponent('/join?code=jor417')}`);
     });
 
-    it('P19.10-T2 AC-2 registers with the code, and says they are in the leader’s team once signed in', async () => {
+    it('P19.10-T2 AC-2 registers with the code; P19.12-T2 AC-3 and lands in the leader’s team, signed in', async () => {
       query.current = 'code=JOR417';
       const { calls } = stubFetch({
         '/companies': { body: INSURERS },
-        '/auth/register': { status: 201, body: { status: 'verification_sent' } },
+        '/auth/register': { status: 201, body: SIGNED_IN },
       });
-      renderWithSession(<RegisterPage />, { me: null });
+      const adopt = vi.fn(async () => JOINED);
+      renderWithSession(<RegisterPage />, { me: null, adopt });
       await fill();
       await userEvent.click(screen.getByRole('button', { name: 'Create account' }));
       const register = calls.find((c) => c.url.includes('/auth/register'))!;
       expect(JSON.parse(register.init.body as string)).toMatchObject({
         fullName: 'Rina Wijaya', companyId: 'co-2', agentCode: '88213', leaderCode: 'JOR417',
       });
-      expect(await screen.findByText('Once you sign in, you are already in the team of the leader who shared the code.')).toBeInTheDocument();
+      await vi.waitFor(() => expect(push).toHaveBeenCalledWith('/home'));
+      expect(adopt).toHaveBeenCalledWith('tok-new');
     });
 
     it('P19.10-T2 AC-2 a code that opens nothing is refused in the server’s words, with the way on without it', async () => {

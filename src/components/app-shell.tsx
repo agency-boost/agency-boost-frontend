@@ -915,7 +915,7 @@ export function AppShell({
         )}
       >
         <FieldChromeContext.Provider value={{ ...field, compact }}>
-          {/* P19-T1 AC-4 (UI-163, ADR-0190 §4): *Verifikasi email Anda · Kirim ulang* until the address is verified. */}
+          {/* P19-T1 AC-4 (UI-163, ADR-0190 §4; P19.12-T2 AC-4): *Email Anda belum diverifikasi · Kirim ulang tautan* until verified. */}
           <VerifyEmailBanner />
           {title !== undefined && (
             <PageHeader title={title} subtitle={subtitle} actions={actions} />

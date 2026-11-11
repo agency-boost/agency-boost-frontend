@@ -188,7 +188,10 @@ export function PlatformMembers({ kpmId, initial = {} }: { kpmId?: string; initi
 
       {page && page.total === 0 && (
         <div className="rounded-lg border border-card-edge bg-card">
-          <EmptyState title={filtered ? t.noMatch : t.empty} />
+          <EmptyState
+            title={filtered ? t.noMatch : t.empty}
+            action={!kpmId && filters.q ? <FindInAccounts q={filters.q} /> : undefined}
+          />
         </div>
       )}
 
@@ -260,6 +263,23 @@ export function PlatformMembers({ kpmId, initial = {} }: { kpmId?: string; initi
         </>
       )}
     </div>
+  );
+}
+
+/**
+ * ***Cari di Akun terdaftar*** (P19.12-T2 AC-2; ADR-0245 §1): a search that finds no membership may name somebody who
+ * registered and joined no KPM, whom only the *Akun terdaftar* tab lists — the same search, carried there. 44px below
+ * 1024px (P19.2-T2 AC-5).
+ */
+function FindInAccounts({ q }: { q: string }) {
+  const t = useMessages(adminPlatformReadsMessages).members;
+  return (
+    <Link
+      href={`/admin/members?tab=accounts&q=${encodeURIComponent(q)}`}
+      className="text-navy underline max-lg:inline-flex max-lg:min-h-11 max-lg:items-center"
+    >
+      {t.findInAccounts}
+    </Link>
   );
 }
 

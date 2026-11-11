@@ -1,10 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
 import { api, toDisplayError, type ApiError } from '@/lib/api-client';
 import { inviteTokenOf, readInviteBanner, type InviteBanner } from '@/lib/invites';
+import { landingFor } from '@/lib/landing';
+import { useSession } from '@/lib/session';
 import { signInPathFrom } from '@/lib/return-path';
 import { listInsurers, type Insurer } from '@/lib/companies';
 import { genderLabels, workStatusLabels, type Gender, type WorkStatus } from '@/lib/personal';
@@ -39,7 +41,19 @@ import { LinkBranding } from '@/components/branding/link-branding';
  * insurer — the label names it, *Joined Prudential*, once one is chosen — whether they work full-time
  * or part-time, and their gender. All four required. Whether the birth date is 18 years ago and the
  * month not still to come is the server's to say, and its sentence is shown under the field it names.
+ *
+ * **_Buat akun_ signs you in** (P19.12-T2 AC-3; ADR-0245 §3; the client's message of 11 November 2026, item 6): the
+ * answer carries the session — its refresh cookie set, its access token taken up here as signing in takes login's — and
+ * the page goes where signing in would land (`landingFor`): a person in no KPM to find one, somebody who joined on an
+ * invite or a leader's code to Home. The verification email is still sent, and optional (ADR-0190 §4). An address that
+ * already had an account is signed in to nothing, and reads a neutral screen with *Masuk* and *Lupa kata sandi?*.
  */
+
+/** What `POST /auth/register` answers (ADR-0245 §3): a session for an account made, or nothing for one that existed. */
+interface RegisterAnswer {
+  status: 'signed_in' | 'verification_sent';
+  accessToken?: string;
+}
 
 /** The four `POST /auth/register` refuses by name (`details.field`), shown under their own field. */
 const PERSONAL_FIELDS = ['dateOfBirth', 'companyJoinMonth', 'workStatus', 'gender'] as const;
@@ -76,6 +90,8 @@ function Register() {
   const workStatuses = workStatusLabels(language);
   const all = useMessages(authMessages);
   const t = all.register;
+  const { adopt } = useSession();
+  const router = useRouter();
   const rules = all.password;
   const [invite, setInvite] = useState<InviteBanner | null>(null);
   const [inviteError, setInviteError] = useState<ApiError | null>(null);
@@ -156,20 +172,29 @@ function Register() {
     event.preventDefault();
     setBusy(true);
     setError(null);
+    let leaving = false;
     try {
       // The confirmation never leaves the screen. `RegisterDto` has no field for it, and
       // global validation rejects an unknown one — so sending the whole form object would
       // turn a correctly filled form into a 400.
       const { confirmPassword: _confirm, ...body } = form;
-      await api('/auth/register', {
+      const answer = await api<RegisterAnswer>('/auth/register', {
         method: 'POST',
         body: invite && token ? { ...body, inviteToken: token } : leaderCode ? { ...body, leaderCode } : body,
       });
+      // An account made here is signed in (ADR-0245 §3): its session taken up, and on to where signing in lands.
+      const signedIn = answer?.status === 'signed_in' && answer.accessToken ? await adopt(answer.accessToken) : null;
+      if (signedIn) {
+        leaving = true;
+        router.push(landingFor(signedIn));
+        return;
+      }
       setDone(true);
     } catch (err) {
       setError(toDisplayError(err));
     } finally {
-      setBusy(false);
+      // Still busy while the page leaves, so the form is never offered twice.
+      if (!leaving) setBusy(false);
     }
   }
 
@@ -246,17 +271,20 @@ function Register() {
             <ButtonLink href={signIn} className="self-start">{t.invite.signInToAccept}</ButtonLink>
           </div>
         ) : done ? (
-          <div>
-            {/* The API answers the same way for an address that already exists, so this
-                screen must too — saying "already registered" would let anyone test
-                addresses against it. */}
+          /*
+           * **Nothing was made** (ADR-0245 §3): the address already had an account, or the session could not be read
+           * back. Neutral — no word of verifying, which signing in never waits on — with the two ways on: signing in
+           * (back to the invite or the code's page, to join from there) and a new password.
+           */
+          <div className="flex flex-col gap-3">
             <p className="text-md text-navy">{t.sent({ email: <strong>{form.email}</strong> })}</p>
-            <p className="mt-2 text-sm text-muted">{t.sentLine}</p>
-            {invite && <p className="mt-2 text-sm text-muted">{t.invite.doneLine({ leader: invite.leaderName })}</p>}
-            {leaderCode && <p className="mt-2 text-sm text-muted">{t.code.doneLine}</p>}
-            <Link href="/login" className="mt-4 inline-block text-sm text-muted underline">
-              {t.backToSignIn}
-            </Link>
+            <p className="text-sm text-muted">{t.sentLine}</p>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+              <ButtonLink href={signIn}>{t.signIn}</ButtonLink>
+              <Link href="/forgot-password" className="inline-flex min-h-11 items-center text-sm text-muted underline">
+                {all.signIn.forgot}
+              </Link>
+            </div>
           </div>
         ) : (
           <form onSubmit={submit} className="flex flex-col gap-4" noValidate>

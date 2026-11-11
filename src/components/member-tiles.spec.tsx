@@ -20,8 +20,8 @@ const AGUS = { membershipId: 'mem-agus', isLeader: true };
 /**
  * **P19.3-T4 the member page's four tiles** (OWN UI-020, OWN R4; ADR-0205 §1, §3; `kpm-owner-mobile` screen 5,
  * `kpm-owner-desktop` screen 3): *Aktivitas 7 hari*, *Produksi tahun ini* with *n% dari goal*, *1:1 terakhir* and *Leads*
- * with *n closing*, then *Lihat dashboard ›* — at 375px two to a row with the pill after them, at 1280px four in a row,
- * the bar under the production figure, and the link on the page's title row.
+ * with *n closing*, then *Lihat dashboard ›* — since P19.12-T5 one compact row of four at every width (ADR-0248 §1), the
+ * pill after it below 1024px, and the link on the page's title row from 1024px.
  */
 describe('P19.3-T4 the member’s four tiles', () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -84,19 +84,24 @@ describe('P19.3-T4 the member’s four tiles', () => {
     expect(await screen.findByRole('link', { name: 'Lihat dashboard' })).toHaveAttribute('href', '/coaching/mem-indah/summary');
   });
 
-  it('P19.3-T4 AC-1 at 375px two tiles to a row and the 44px pill after them; at 1280px four in a row, the bar shown', async () => {
+  /*
+   * P19.12-T5 AC-1 (ADR-0248 §1; the client's message of 11 November 2026, item 9, *"Stat dikecilin jadi 1 baris"*): one
+   * compact row of four at every width, no production bar; the 44px pill after it below 1024px.
+   */
+  it('P19.12-T5 AC-1 one row of four at every width, no bar, and the 44px pill after it below 1024px', async () => {
     stubFetch({ '/members/mem-agus/performance': { body: view() } });
     renderInIndonesian(<MemberTiles member={AGUS} />);
     await screen.findByText('Aktivitas 7 hari');
-    const grid = tile('Aktivitas 7 hari').parentElement!;
-    expect(grid.className).toContain('grid-cols-2');
-    expect(grid.className).toContain('lg:grid-cols-4');
+    const row = tile('Aktivitas 7 hari').parentElement!;
+    expect(row.className).toContain('grid-cols-4');
+    expect(row.className).not.toMatch(/grid-cols-2/);
+    expect(row.querySelectorAll('[data-stat-tile]')).toHaveLength(4);
+    // No bar under the production figure, at any width.
+    expect(tile('Produksi tahun ini').querySelector('[aria-hidden="true"]')).toBeNull();
     const pill = screen.getByRole('link', { name: 'Lihat dashboard' });
     // Below 1024px only (the page's title row carries it from 1024px), and a 44px target.
     expect(pill.className).toContain('lg:hidden');
     expect(pill.className).toContain('min-h-11');
-    // The production bar is the desktop mockup's: hidden below 1024px.
-    expect(tile('Produksi tahun ini').className).toContain('max-lg:[&_[aria-hidden=true]]:hidden');
   });
 
   it('P19.3-T4 AC-1 waits with a skeleton, and a refused read says so in place', async () => {

@@ -989,3 +989,130 @@ describe('P18.5-T2 — a leader past the limit waits for AgencyBoost', () => {
   });
 });
 });
+
+/*
+ * P19.12-T4 (ADR-0247; the client's message of 11 November 2026, items 4 and 8): the role sheet offers the server's
+ * `roleChoices`, the current rung checked — Maya's AB too — and *Pindahkan ke leader lain* moves somebody, at once
+ * inside the reader's tree and by request outside it.
+ */
+describe('P19.12-T4 Tim Anda: roles up to the leader’s own rung, and moving people', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const OWNER = makeMe({
+    membership: {
+      membershipId: 'mem-owner', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab', status: 'active',
+      isKpmOwner: true, isKpmAdmin: false, directCount: 4,
+    },
+    permissions: [...LEADER.permissions, 'member:reassign_leader', 'member:transfer_approve'],
+  });
+  const MOVER = makeMe({
+    membership: LEADER.membership,
+    permissions: [...LEADER.permissions, 'member:reassign_leader', 'member:transfer_request'],
+  });
+  const AAB_LEADER = makeMe({
+    membership: { ...LEADER.membership!, membershipId: 'mem-aab', orgLevelCode: 'AAB', hierarchyRole: 'aab' },
+    permissions: MOVER.permissions,
+  });
+  const teamMember = (over: Record<string, unknown> = {}) => ({
+    membershipId: 'mem-t1', fullName: 'Rina Wijaya', initials: 'RW', agentCode: '88003', role: 'agent',
+    orgLevelCode: 'AGENT', directCount: 1, subtreeCount: 2, canChangeRole: true, roleChoices: ['AGENT', 'AAB', 'AB'],
+    canChangeLeader: true, pendingTransfer: null, ...over,
+  });
+  const choice = (over: Record<string, unknown> = {}) => ({
+    membershipId: 'mem-sari', fullName: 'Sari Puspita', agentCode: '10004', orgLevelCode: 'AAB', role: 'aab',
+    unitSize: 3, direct: true, ...over,
+  });
+  const CHOICES = [choice(), choice({ membershipId: 'mem-yosef', fullName: 'Yosef Tambunan', agentCode: '87001', orgLevelCode: 'AB', role: 'ab', unitSize: 9, direct: false })];
+  const stub = (team: Record<string, unknown>[], extra: Record<string, unknown> = {}) => stubFetch({
+    '/join/my-code': { body: MY_CODE },
+    '/join/untagged': { body: [] },
+    '/members/my-team': { body: team },
+    '/leader-choices': { body: CHOICES },
+    ...extra,
+  });
+  const radios = (sheet: HTMLElement) => within(sheet).getAllByRole('radio').map((r) => [r.closest('label')!.textContent, (r as HTMLInputElement).checked]);
+
+  it('P19.12-T4 AC-1 the Owner’s Tim Anda: Maya, an AB, with AB checked among Agent · AAB · AB (item 4)', async () => {
+    stub([teamMember({ membershipId: 'mem-maya', fullName: 'Maya Halim', role: 'ab', orgLevelCode: 'AB' })]);
+    renderInLayout(AgentLayout, <AddAgentsPage />, { me: OWNER });
+    const sheet = await openRoleSheet('Maya Halim');
+    expect(radios(sheet)).toEqual([['Agent', false], ['AAB', false], ['AB', true]]);
+  });
+
+  it('P19.12-T4 AC-1 an AB leader is offered three rungs and sends AB; an AAB leader two', async () => {
+    const { calls } = stub([teamMember()], { '/members/mem-t1/role': { body: [teamMember({ role: 'ab', orgLevelCode: 'AB' })] } });
+    renderInLayout(AgentLayout, <AddAgentsPage />, { me: MOVER });
+    const sheet = await openRoleSheet();
+    expect(radios(sheet)).toEqual([['Agent', true], ['AAB', false], ['AB', false]]);
+    await userEvent.click(within(sheet).getByRole('radio', { name: 'AB' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm change' }));
+    expect(JSON.parse(String(calls.find((c) => c.init.method === 'PATCH')?.init.body))).toEqual({ toRole: 'ab' });
+  });
+
+  it('P19.12-T4 AC-1 an AAB leader: Agent and AAB only', async () => {
+    stub([teamMember({ roleChoices: ['AGENT', 'AAB'] })]);
+    renderInLayout(AgentLayout, <AddAgentsPage />, { me: AAB_LEADER });
+    expect(radios(await openRoleSheet())).toEqual([['Agent', true], ['AAB', false]]);
+  });
+
+  it('P19.12-T4 AC-3 Move to another leader, inside the tree: the confirmation counts who moves, PUT, Saved ✓, the team reloaded', async () => {
+    const { calls } = stub([teamMember()], { 'PUT /members/mem-t1/leader': { body: { membershipId: 'mem-t1', leaderId: 'mem-sari' } } });
+    renderInLayout(AgentLayout, <AddAgentsPage />, { me: MOVER });
+    const sheet = await openRoleSheet();
+    // Above *Remove*, in the member's sheet.
+    const buttons = within(sheet).getAllByRole('button').map((b) => b.textContent);
+    expect(buttons.indexOf('Move to another leader')).toBeLessThan(buttons.indexOf('Remove'));
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Move to another leader' }));
+
+    const picker = await screen.findByRole('dialog', { name: 'Move Rina Wijaya to another leader' });
+    expect(await within(picker).findByRole('heading', { name: 'In your team' })).toBeInTheDocument();
+    expect(within(picker).getByRole('heading', { name: 'Other leaders · needs the Owner’s or an Admin’s approval' })).toBeInTheDocument();
+    await userEvent.click(within(picker).getByRole('button', { name: 'Sari Puspita' }));
+    expect(within(picker).getByText('Rina Wijaya and the 2 people under them move to Sari Puspita’s unit now.')).toBeInTheDocument();
+    await userEvent.type(within(picker).getByLabelText('Why? (optional)'), 'Sari will coach her');
+    await userEvent.click(screen.getByRole('button', { name: 'Move now' }));
+
+    const put = calls.find((c) => c.init.method === 'PUT')!;
+    expect(put.url).toMatch(/\/members\/mem-t1\/leader$/);
+    expect(JSON.parse(String(put.init.body))).toEqual({ leaderMembershipId: 'mem-sari', reason: 'Sari will coach her' });
+    expect(await screen.findByText('Saved ✓')).toBeInTheDocument();
+    expect(calls.filter((c) => c.url.endsWith('/members/my-team')).length).toBeGreaterThan(1);
+  });
+
+  it('P19.12-T4 AC-3 outside the tree it is a request: the leader is told, POST, Request sent ✓', async () => {
+    const { calls } = stub([teamMember()], {
+      'POST /members/mem-t1/transfer-request': { status: 201, body: { transferId: 'tr-9', toName: 'Yosef Tambunan', requestedAt: '2026-11-11T03:00:00.000Z' } },
+    });
+    renderInLayout(AgentLayout, <AddAgentsPage />, { me: MOVER });
+    await userEvent.click(within(await openRoleSheet()).getByRole('button', { name: 'Move to another leader' }));
+    const picker = await screen.findByRole('dialog', { name: 'Move Rina Wijaya to another leader' });
+    await userEvent.click(await within(picker).findByRole('button', { name: 'Yosef Tambunan' }));
+    expect(within(picker).getByText(
+      'This is sent as a request to the Owner or an Admin. Rina Wijaya keeps reporting to you until it is approved.',
+    )).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Send request' }));
+    expect(JSON.parse(String(calls.find((c) => c.init.method === 'POST')?.init.body))).toEqual({ leaderMembershipId: 'mem-yosef' });
+    expect(await screen.findByText('Request sent ✓')).toBeInTheDocument();
+  });
+
+  it('P19.12-T4 AC-3 a waiting move reads where to, and Cancel withdraws it', async () => {
+    const { calls } = stub(
+      [teamMember({ pendingTransfer: { transferId: 'tr-9', toName: 'Yosef Tambunan', requestedAt: '2026-11-11T03:00:00.000Z' } })],
+      { 'DELETE /transfer-requests/tr-9': { body: { transferId: 'tr-9', status: 'cancelled' } } },
+    );
+    renderInLayout(AgentLayout, <AddAgentsPage />, { me: MOVER });
+    expect((await screen.findAllByText('Waiting for approval to move to Yosef Tambunan')).length).toBeGreaterThan(0);
+    // A move already waiting offers no second one.
+    const sheet = await openRoleSheet();
+    expect(within(sheet).queryByRole('button', { name: 'Move to another leader' })).toBeNull();
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Cancel the move of Rina Wijaya' }));
+    expect(calls.some((c) => c.init.method === 'DELETE' && c.url.endsWith('/transfer-requests/tr-9'))).toBe(true);
+    expect(await screen.findByText('Request cancelled ✓')).toBeInTheDocument();
+  });
+
+  it('P19.12-T4 AC-3 nobody the reader may not move is offered the move', async () => {
+    stub([teamMember({ canChangeLeader: false })]);
+    renderInLayout(AgentLayout, <AddAgentsPage />, { me: MOVER });
+    expect(within(await openRoleSheet()).queryByRole('button', { name: 'Move to another leader' })).toBeNull();
+  });
+});

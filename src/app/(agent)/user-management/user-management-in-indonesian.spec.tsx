@@ -252,6 +252,35 @@ describe('P18.10-T4 User Management in Indonesian', () => {
     noEnglishLeft();
   });
 
+  it('P19.12-T4 AC-8 Tim Anda: Maya’s AB checked, Pindahkan ke leader lain, a waiting move and Batalkan, in Indonesian', async () => {
+    stubFetch({
+      '/join/my-code': { body: { code: 'JOR417', url: 'https://agencyboost.app/join?code=JOR417' } },
+      '/members/my-team': {
+        body: [
+          {
+            membershipId: 'mem-maya', fullName: 'Maya Halim', initials: 'MH', agentCode: '80002', role: 'ab', orgLevelCode: 'AB',
+            directCount: 0, subtreeCount: 0, canChangeRole: true, roleChoices: ['AGENT', 'AAB', 'AB'], canChangeLeader: true, pendingTransfer: null,
+          },
+          {
+            membershipId: 'mem-d', fullName: 'Dimas Pratama', initials: 'DP', agentCode: '80102', role: 'agent', orgLevelCode: 'AGENT',
+            directCount: 0, subtreeCount: 0, canChangeRole: true, roleChoices: ['AGENT', 'AAB', 'AB'], canChangeLeader: true,
+            pendingTransfer: { transferId: 'tr-9', toName: 'Yosef Tambunan', requestedAt: '2026-11-11T03:00:00.000Z' },
+          },
+        ],
+      },
+      '/join/untagged': { body: [] },
+    });
+    const mover = makeMe({ membership: LEADER.membership, permissions: [...LEADER.permissions, 'member:reassign_leader', 'member:transfer_request'] });
+    inIndonesian(<AddAgentsPage />, mover);
+    expect((await screen.findAllByText('Menunggu persetujuan pemindahan ke Yosef Tambunan')).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('button', { name: 'Batalkan pemindahan Dimas Pratama' }).length).toBeGreaterThan(0);
+    await userEvent.click((await screen.findAllByRole('button', { name: 'Ubah peran Maya Halim, sekarang AB' }))[0]);
+    const sheet = screen.getByRole('dialog', { name: 'Maya Halim' });
+    expect((within(sheet).getByRole('radio', { name: 'AB' }) as HTMLInputElement).checked).toBe(true);
+    expect(within(sheet).getByRole('button', { name: 'Pindahkan ke leader lain' })).toBeInTheDocument();
+    noEnglishLeft();
+  });
+
   it('AC-1 Pending Requests: its line and the incoming requests in Indonesian, the inbox’s words its own', async () => {
     stubFetch({ '/join/requests/routing': { body: [] }, '/join/requests': { body: [joinRequest()] } });
     inIndonesian(<PendingPage />, LEADER);

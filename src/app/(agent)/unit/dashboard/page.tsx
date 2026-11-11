@@ -3,7 +3,7 @@
 import { Suspense } from 'react';
 import { Page } from '@/components/page';
 import { UnitDashboard } from '@/components/unit/unit-dashboard';
-import { periodFrom, tabFrom } from '@/lib/unit-dashboard';
+import { periodFrom, tabFrom, viewFrom } from '@/lib/unit-dashboard';
 import { useQuery } from '@/lib/use-query';
 
 /**
@@ -29,7 +29,7 @@ function Dashboard() {
   return (
     // UI V1 (UI-004, UI-012): the screen draws its own title row — the title, and below 1024px the *Search agent* pill.
     <Page permission="unit_dashboard:read">
-      <UnitDashboard period={periodFrom(query.period)} tab={tabFrom(query.tab)} />
+      <UnitDashboard period={periodFrom(query.period)} tab={tabFrom(query.tab)} scope={viewFrom(query.scope)} />
     </Page>
   );
 }

@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import TenantLayout from '@/app/(tenant)/layout';
 import MembersPage from '@/app/(tenant)/people/members/page';
-import { makeMe, renderInLayout, renderWithSession, stubFetch } from '@test/harness';
+import { makeMe, renderInIndonesian, renderInLayout, renderWithSession, stubFetch } from '@test/harness';
 import { transfer } from '@test/joining-fixtures';
 import { TransferRequests } from './transfer-requests';
 
@@ -37,6 +37,37 @@ describe('transfer requests, decided by the office (P18.8-T3 AC-3)', () => {
     expect(row).toHaveTextContent(/^.*Agus Prasetyo, /);
     // The name the leader typed is the account's own: nothing more is said.
     expect(row).not.toHaveTextContent('Added as');
+  });
+
+  it('P19.12-T4 AC-3 words a leader’s move as the leader asking, with their note, and in Indonesian as the client wrote it', async () => {
+    const move = transfer({
+      transferId: 'tr-move', kind: 'move', note: 'Dekat kantor Pak Yosef', requestedName: null,
+      member: { membershipId: 'mem-dimas', name: 'Dimas Pratama', agentCode: '80102' },
+      from: { membershipId: 'mem-agus', name: 'Agus Prasetyo' },
+      to: { membershipId: 'mem-yosef', name: 'Yosef Tambunan' },
+      requestedBy: { membershipId: 'mem-agus', name: 'Agus Prasetyo' },
+    });
+    stubFetch({ '/transfer-requests': { body: [move, transfer()] } });
+    renderWithSession(<TransferRequests />);
+    const table = await screen.findByRole('table', { name: 'Transfer requests, oldest first' });
+    const [, moveRow, addRow] = within(table).getAllByRole('row');
+    expect(moveRow).toHaveTextContent('Agus Prasetyo asks to move Dimas Pratama to Yosef Tambunan’s unit');
+    expect(moveRow).toHaveTextContent('“Dekat kantor Pak Yosef”');
+    // *+ Add agent*'s request reads as it always did.
+    expect(addRow).toHaveTextContent('From Satria Nugraha’s unit to Agus Prasetyo’s');
+  });
+
+  it('P19.12-T4 AC-8 a move row in Indonesian: “{leader} meminta memindahkan {nama} ke unit {to}”', async () => {
+    stubFetch({
+      '/transfer-requests': {
+        body: [transfer({
+          kind: 'move', note: null, member: { membershipId: 'mem-dimas', name: 'Dimas Pratama', agentCode: '80102' },
+          to: { membershipId: 'mem-yosef', name: 'Yosef Tambunan' }, requestedBy: { membershipId: 'mem-agus', name: 'Agus Prasetyo' },
+        })],
+      },
+    });
+    renderInIndonesian(<TransferRequests />);
+    expect(await screen.findByText('Agus Prasetyo meminta memindahkan Dimas Pratama ke unit Yosef Tambunan')).toBeInTheDocument();
   });
 
   it('P18.8-T8 M3 says the name the leader typed on the code’s line where it is not the account’s, so a wrong code is seen', async () => {

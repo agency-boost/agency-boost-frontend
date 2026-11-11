@@ -52,6 +52,12 @@ export interface Member {
   /** Set only on a removed row. */
   removedAt: string | null;
   /**
+   * **Whether they were invited, and have signed in** (P19.12-T5 AC-4; ADR-0248 §4), the server's: `signed_in`, or —
+   * never signed in — `invited` (*Diundang*) or `not_invited` (*Belum diundang*). An active member who never signed in
+   * reads one of those two in place of *Aktif* (`memberStateOf`). Optional for a read older than it; absent is *Aktif*.
+   */
+  invitation?: InvitationState;
+  /**
    * **The office date the person came back, if they did** (P18.9-T4 AC-3, ADR-0176 §5), the server's: on a live
    * membership that follows a removed one, its own join date — *Rejoined* beside the status; on the removed one, the
    * later membership's — *Rejoined {date}* under *Removed*. Optional, for a read older than it; absent is *never left*.
@@ -71,6 +77,16 @@ export interface Member {
   canPromoteToAb: boolean;
   canRemove: boolean;
   /**
+   * The rungs this reader may put them on, by ladder code, junior first, their own among them (P19.12-T4, ADR-0247
+   * §1) — `canChangeRole` and `canPromoteToAb` are read off it. Optional for a fixture older than it.
+   */
+  roleChoices?: string[];
+  /**
+   * This reader may change who they report to — *Ganti* on *Melapor ke* (P19.12-T4, ADR-0247 §2). Optional; absent
+   * is no. `PUT /members/:id/leader` refuses regardless.
+   */
+  canChangeLeader?: boolean;
+  /**
    * The directory's *Last activity* (P18-T1, D-directory): the member's last logged day, in the office's
    * calendar, and how many days ago that was; `null` when they have never logged. Each directory row
    * carries them and is an audited read; optional because one member's own read does not.
@@ -88,10 +104,61 @@ export interface Member {
      * join month. Optional for a read older than it; `null` for an office with no company.
      */
     companyName?: string | null;
+    /**
+     * **Their WhatsApp number** (P19.12-T5 AC-2; ADR-0248 §2), as stored, `+62…`; `null` is *Belum dicatat*. Optional for
+     * a read older than it.
+     */
+    phone?: string | null;
   };
   /** The directory's *Last coached*: `DAYS_SINCE_LAST_COACHING`, `null` without a session. */
   lastCoachedDays?: number | null;
 }
+
+/** Whether somebody was invited, and has signed in (ADR-0212 §2, ADR-0248 §4) — `DirectoryMember.invitation`. */
+export type InvitationState = 'signed_in' | 'invited' | 'not_invited';
+
+/** What a member's pill says: their status, or — active and never signed in — whether they were invited. */
+export type MemberState = MemberStatus | 'invited' | 'not_invited';
+
+/**
+ * **The pill's state** (P19.12-T5 AC-4; ADR-0248 §4; the client's TI-1, *"Diundang sampai login pertama"*): an active
+ * member who has never signed in is *Diundang* or *Belum diundang*, never *Aktif*; everybody else their status. The
+ * server decides both halves; this only chooses which one the pill says.
+ */
+export function memberStateOf(member: Pick<Member, 'status' | 'invitation'>): MemberState {
+  if (member.status === 'active' && member.invitation && member.invitation !== 'signed_in') return member.invitation;
+  return member.status;
+}
+
+/** A state's pill tone: *Aktif* green, *Dikeluarkan* red, and the three waiting states grey. */
+export const MEMBER_STATE_TONE: Record<MemberState, 'success' | 'alert' | 'neutral'> = {
+  active: 'success',
+  pending: 'neutral',
+  removed: 'alert',
+  invited: 'neutral',
+  not_invited: 'neutral',
+};
+
+/** The five a member page's *Lengkapi data* may fill, by their API names (`PATCH /members/:id/personal`). */
+export type PersonalField = 'dateOfBirth' | 'gender' | 'companyJoinMonth' | 'workStatus' | 'phone';
+
+/** What `PATCH /members/:membershipId/personal` answers: what was filled, and *Data pribadi* as it now stands. */
+export interface MemberPersonalCompleted {
+  membershipId: string;
+  filled: PersonalField[];
+  personal: NonNullable<Member['personal']>;
+}
+
+/**
+ * ***Lengkapi data*** (P19.12-T5 AC-3; ADR-0248 §3) — the Owner or an Admin fills a member's **blank** personal fields,
+ * `member:complete_personal`. Send only the blank ones: one already on file is `409 MEMBER_DETAIL_ON_FILE`, nothing
+ * written; another office's member, or somebody removed, `404`. `phone` as typed, `+62…` or the national digits.
+ */
+export const completePersonal = (
+  membershipId: string,
+  fields: Partial<Record<PersonalField, string>>,
+) =>
+  api<MemberPersonalCompleted>(`/members/${encodeURIComponent(membershipId)}/personal`, { method: 'PATCH', body: fields });
 
 export interface MemberPage {
   members: Member[];
@@ -169,8 +236,31 @@ export interface TeamMember {
   /** The rung they stand on, by its ladder code (ADR-0156). */
   orgLevelCode?: string;
   directCount: number;
+  /** Everybody below them, who moves with them to another leader. Optional for a fixture older than it. */
+  subtreeCount?: number;
   /** Sent by the server, so the screen keeps no second copy of the rule. */
   canChangeRole: boolean;
+  /**
+   * **The rungs this reader may put them on, by ladder code, junior first, their own rung always among them**
+   * (P19.12-T4; ADR-0247 §1): a direct leader any rung no higher than their own — an AB leader *Agent · AAB · AB* — and
+   * the Owner or an Admin every rung. *Tim Anda*'s role sheet offers exactly these. Optional for a fixture older than it.
+   */
+  roleChoices?: string[];
+  /** This reader may move them to another leader (*Pindahkan ke leader lain*, ADR-0247 §2). Optional, absent is no. */
+  canChangeLeader?: boolean;
+  /**
+   * **A move to a leader outside the reader's tree, waiting on the Owner or an Admin** (ADR-0247 §3): the row reads
+   * *Menunggu persetujuan pemindahan ke {to}* with *Batalkan*. `null` when none waits.
+   */
+  pendingTransfer?: PendingMove | null;
+}
+
+/** A move waiting on the office, as whoever asked for it sees it (`POST /members/:id/transfer-request`). */
+export interface PendingMove {
+  transferId: string;
+  /** The leader they would move under, by name. */
+  toName: string;
+  requestedAt: string;
 }
 
 export interface RoleChangeEntry {
@@ -197,6 +287,40 @@ export const changeRole = (membershipId: string, toRole: string, reason?: string
   });
 
 export const readRoleChangeLog = () => api<RoleChangeEntry[]>('/members/role-changes');
+
+/**
+ * **A leader somebody may be moved under** (`GET /members/:id/leader-choices`; P19.12-T4, ADR-0247 §2), mirroring
+ * `LeaderMoveChoice` in the backend. Never the person, anybody below them, their leader now, or anybody who cannot
+ * lead a unit. `direct`: the move is made at once — the Owner's and an Admin's every choice, a leader's own tree — and
+ * otherwise it is asked of the Owner or an Admin (`requestTransfer`).
+ */
+export interface LeaderMoveChoice {
+  membershipId: string;
+  fullName: string;
+  agentCode: string;
+  orgLevelCode: string;
+  role: HierarchyRole;
+  /** How many active people are below them now. */
+  unitSize: number;
+  direct: boolean;
+}
+
+/** The leaders this reader may move somebody under, by part of a name or an agent code (`q`). */
+export const readLeaderChoices = (membershipId: string, q?: string) =>
+  api<LeaderMoveChoice[]>(
+    `/members/${encodeURIComponent(membershipId)}/leader-choices${q?.trim() ? `?q=${encodeURIComponent(q.trim())}` : ''}`,
+  );
+
+/**
+ * **Move somebody, with everybody under them, to another leader — now** (`PUT /members/:id/leader`; ADR-0247 §2):
+ * the Owner and an Admin anywhere in the office, a leader one of their direct reports to somebody in their own tree.
+ * Answers the member as they now stand.
+ */
+export const changeLeader = (membershipId: string, leaderMembershipId: string, reason?: string) =>
+  api<Member>(`/members/${encodeURIComponent(membershipId)}/leader`, {
+    method: 'PUT',
+    body: { leaderMembershipId, ...(reason?.trim() ? { reason: reason.trim() } : {}) },
+  });
 
 /** One person in the tree. `layer` is one-based within this projection, not office depth. */
 export interface OrgTreeNode {

@@ -9,9 +9,12 @@ import {
   PROTOTYPE_COPY, provenanceWords, readUnitDashboard, readerName, recruitLine, regroup, rowName, salesLine, STATUS_TOOLTIP,
   totalNote, totalRecruitLine, touchesWords, UNIT_PERIODS, unitPeriods, updateUnitProduction,
   goalMet, marksOf, matchesFilter, readUnitActivities, rowHref, sectionCount, splitMoney, statusShown, statusTally, tabFrom,
+  addGroupMembers, keepView, readUnitPotensi, storedView, UNIT_VIEWS, unitViews, viewFrom,
   type UnitRow,
 } from './unit-dashboard';
 import { formatMonthLong } from './format';
+import { messagesIn } from '@/i18n/catalogue';
+import { unitDashboardMessages } from '@/i18n/messages/unit-dashboard';
 
 describe('the Unit Dashboard’s client', () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -492,5 +495,79 @@ describe('UI-001 the Activities read', () => {
       // P19.8-T4 AC-7 (MOB UI-184): one person's ratios.
       'http://api.test/api/v1/unit/dashboard/activities?for=mem-sari&ratioFor=mem-budi',
     ]);
+  });
+});
+
+/**
+ * **The three views** (P19.12-T6; the client's message of 11 November 2026, item 7; ADR-0249): the address's word, the
+ * picker's names in both languages, the choice kept per membership, and the office-wide view's people with no leader on
+ * the roster and in *Perbarui produksi*.
+ */
+describe('P19.12-T6 the views', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    try { window.localStorage.clear(); } catch { /* none */ }
+  });
+
+  it('P19.12-T6 AC-3 reads ?scope= as one of the three, anything else as none', () => {
+    expect(UNIT_VIEWS).toEqual(['direct', 'informal', 'downline']);
+    expect(viewFrom('informal')).toBe('informal');
+    expect(viewFrom(['downline', 'direct'])).toBe('downline');
+    for (const other of ['', 'all', 'Direct', undefined, null]) expect(viewFrom(other)).toBeNull();
+  });
+
+  it('P19.12-T6 AC-2 names the views in the client’s words, and in English', () => {
+    expect(unitViews('id').map((v) => v.label)).toEqual(['Grup langsung', 'Grup informal', 'Semua downline']);
+    expect(unitViews().map((v) => v.label)).toEqual(['Direct group', 'Informal group', 'All downline']);
+  });
+
+  it('P19.12-T6 AC-3 keeps the last view per membership, and nothing when storage is refused', () => {
+    keepView('mem-agus', 'informal');
+    expect(window.localStorage.getItem('ab.unit.scope.mem-agus')).toBe('informal');
+    expect(storedView('mem-agus')).toBe('informal');
+    expect(storedView('mem-sari')).toBeNull();
+    expect(storedView(null)).toBeNull();
+    window.localStorage.setItem('ab.unit.scope.mem-agus', 'everything');
+    expect(storedView('mem-agus')).toBeNull();
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('blocked'); });
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('blocked'); });
+    expect(storedView('mem-agus')).toBeNull();
+    expect(() => keepView('mem-agus', 'direct')).not.toThrow();
+  });
+
+  it('P19.12-T6 AC-2 the people with no leader come last on the roster and in the production dialog', () => {
+    const nora = { ...dashboard().yourUnit.rows[1], membershipId: 'mem-nora', name: 'Nora Siregar', depth: 1 };
+    const view = dashboard({ unled: { rows: [nora], total: dashboard().yourUnit.total } });
+    expect(everyRow(view).at(-1)?.membershipId).toBe('mem-nora');
+    expect(dialogGroups(view, 'id').at(-1)).toEqual({ label: 'Belum punya leader', rows: [{ row: nora, indent: 0 }] });
+    expect(dialogGroups(dashboard()).map((g) => g.label)).not.toContain('No leader yet');
+  });
+
+  it('P19.12-T6 AC-4 says the informal line in both languages, the head named in a view of a unit below', () => {
+    expect(messagesIn(unitDashboardMessages, 'id').views.absNotInGroup({ n: 3, name: null })).toBe('3 AB di bawah Anda belum masuk grup');
+    expect(messagesIn(unitDashboardMessages, 'id').views.absNotInGroup({ n: 1, name: 'Agus Santoso' }))
+      .toBe('1 AB di bawah Agus Santoso belum masuk grup');
+    expect(messagesIn(unitDashboardMessages, 'en').views.absNotInGroup({ n: 1, name: null })).toBe('1 AB below you is not in a group yet');
+  });
+
+  it('P19.12-T6 AC-4 the add is one POST naming the group and the people', async () => {
+    const { calls } = stubFetch({ 'POST /members/groups/g-1/members': { body: { groupId: 'g-1', name: 'G', added: 2, memberCount: 2 } } });
+    expect(await addGroupMembers('g-1', ['m-1', 'm-2'])).toMatchObject({ added: 2 });
+    expect(calls[0].url).toBe('http://api.test/api/v1/members/groups/g-1/members');
+    expect(JSON.parse(calls[0].init.body as string)).toEqual({ membershipIds: ['m-1', 'm-2'] });
+    vi.unstubAllGlobals();
+  });
+
+  it('P19.12-T6 AC-3 sends the view asked for, and none when there is none', async () => {
+    const { calls } = stubFetch({ 'GET /unit/dashboard': { body: dashboard() }, 'GET /unit/dashboard/potensi': { body: {} } });
+    await readUnitDashboard({ period: 'month', scope: 'informal' });
+    await readUnitDashboard({ period: 'month', scope: null });
+    await readUnitPotensi({ scope: 'downline' });
+    expect(calls.map((c) => c.url)).toEqual([
+      'http://api.test/api/v1/unit/dashboard?period=month&scope=informal',
+      'http://api.test/api/v1/unit/dashboard?period=month',
+      'http://api.test/api/v1/unit/dashboard/potensi?scope=downline',
+    ]);
+    vi.unstubAllGlobals();
   });
 });

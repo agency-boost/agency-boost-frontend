@@ -451,7 +451,7 @@ interface Section {
   inner: Section[];
 }
 
-function sectionsOf(view: UnitDashboardView, own: string, unitOf: (name: string) => string): Section[] {
+function sectionsOf(view: UnitDashboardView, own: string, unitOf: (name: string) => string, unledLabel: string): Section[] {
   const unit = (group: UnitGroup): Section => ({
     key: group.head.membershipId,
     label: unitOf(group.head.name),
@@ -463,7 +463,11 @@ function sectionsOf(view: UnitDashboardView, own: string, unitOf: (name: string)
   const first: Section[] = view.yourUnit.rows.length > 0
     ? [{ key: 'own', label: own, count: view.yourUnit.rows.length, rows: view.yourUnit.rows, total: view.yourUnit.total, inner: [] }]
     : [];
-  return [...first, ...view.units.map(unit)];
+  // ADR-0249 §2: the office-wide *Semua downline*'s people with no leader, their own section, last.
+  const unled: Section[] = view.unled && view.unled.rows.length > 0
+    ? [{ key: 'unled', label: unledLabel, count: view.unled.rows.length, rows: view.unled.rows, total: view.unled.total, inner: [] }]
+    : [];
+  return [...first, ...view.units.map(unit), ...unled];
 }
 
 /** A section with somebody the filter keeps, in it or in a unit inside it. */
@@ -477,7 +481,7 @@ const holds = (section: Section, filter: RosterFilter): boolean =>
 function RosterAccordion({ view, period, filter, from }: { view: UnitDashboardView; period: UnitPeriod; filter: RosterFilter; from: string }) {
   const t = useMessages(unitDashboardMessages);
   const own = view.head.isReader ? t.prototype.yourUnitGroup : t.unitOf({ name: view.head.name });
-  const sections = sectionsOf(view, own, (name) => t.unitOf({ name }));
+  const sections = sectionsOf(view, own, (name) => t.unitOf({ name }), t.views.unled);
   // Your own unit open, every AAB unit closed (UI-002); a filter opens every unit that holds a match.
   const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set(sections[0] ? [sections[0].key] : []));
   const toggle = (key: string) => setOpen((now) => {
@@ -617,7 +621,7 @@ function RosterTable({
   const own = view.head.isReader ? t.prototype.yourUnitGroup : t.unitOf({ name: view.head.name });
   const flat: { section: Section; depth: number }[] = [];
   const walk = (s: Section, depth: number) => { flat.push({ section: s, depth }); s.inner.forEach((i) => walk(i, depth + 1)); };
-  sectionsOf(view, own, (name) => t.unitOf({ name })).forEach((s) => walk(s, 0));
+  sectionsOf(view, own, (name) => t.unitOf({ name }), t.views.unled).forEach((s) => walk(s, 0));
   const [closed, setClosed] = useState<ReadonlySet<string>>(() => new Set());
   const toggle = (key: string) => setClosed((now) => {
     const next = new Set(now);

@@ -3,7 +3,7 @@ import { kept } from '@/i18n/kept';
 
 /**
  * **The Super Admin's reads across KPMs** (P19.4-T3; ADR-0207; SA UI-010, SA UI-013, SA UI-018; the setup spec's A2):
- * *All members*, the KPM comparison under *Cross-platform analytics*, *Lihat sebagai KPM*, the KPM page's tabs
+ * *All members* with its *Akun terdaftar* tab (P19.12-T2, ADR-0245), the KPM comparison under *Cross-platform analytics*, *Lihat sebagai KPM*, the KPM page's tabs
  * (*Ringkasan · Anggota · Data bulanan · Lihat sebagai KPM · Billing*) and the company's *KPM & data*.
  *
  * **The Indonesian is the flow report's and the setup spec's, verbatim where they give it** (*"Belum ada anggota. Anggota
@@ -15,6 +15,7 @@ import { kept } from '@/i18n/kept';
  * @moved components/advanced-analytics/look-as-advanced-tab.tsx
  * @moved app/(admin)/admin/companies/[companyId]/kpms/
  * @moved components/admin/platform-members.tsx
+ * @moved components/admin/platform-accounts.tsx
  * @moved components/admin/kpm-comparison.tsx
  * @moved components/admin/kpm-data-tab.tsx
  */
@@ -52,6 +53,37 @@ const en = {
     openKpm: ({ code }: { code: string }) => `Open KPM ${code}`,
     joined: 'Joined',
     agentCode: 'Agent code',
+    /** P19.12-T2 (ADR-0245 §1): the page's two tabs, and the way from an empty search to the other. */
+    tabs: 'All members',
+    tab: { members: 'KPM members', accounts: 'Registered accounts' },
+    findInAccounts: 'Search in Registered accounts',
+  },
+  /**
+   * ***Akun terdaftar*** (P19.12-T2 AC-2; ADR-0245 §1; the client's message of 11 November 2026, item 2): every registered
+   * account, a KPM or none.
+   */
+  accounts: {
+    caption: 'Every registered account',
+    search: 'Search by name or email',
+    searchHint: 'At least two characters.',
+    kpm: kept('KPM'),
+    any: 'All',
+    kpmChoice: { none: 'No KPM', some: 'Has a KPM' },
+    columns: {
+      name: 'Name', company: 'Company', registered: 'Registered', email: 'Email', lastSignIn: 'Last signed in', kpm: kept('KPM'),
+    },
+    verified: 'Verified',
+    unverified: 'Not verified',
+    never: 'Never',
+    noKpm: 'No KPM yet',
+    kpms: ({ n }: { n: number }) => `${n} ${kept('KPM')}`,
+    /** The *n KPM* link's name: its words first (WCAG 2.5.3), then whose and where it goes — the other tab. */
+    openKpms: ({ n, name }: { n: number; name: string }) => `${n} ${kept('KPM')} · ${name}, in KPM members`,
+    empty: 'No accounts yet.',
+    noMatch: 'No account matches these filters.',
+    loading: 'Loading the accounts',
+    retry: 'Try again',
+    total: ({ n }: { n: number }) => `${n} ${n === 1 ? 'account' : 'accounts'}`,
   },
   comparison: {
     title: 'KPM comparison',
@@ -192,6 +224,31 @@ const id: MessagesOf<typeof en> = {
     openKpm: ({ code }) => `Buka ${kept('KPM')} ${code}`,
     joined: 'Bergabung',
     agentCode: 'Kode agen',
+    tabs: kept('All members'),
+    tab: { members: `Anggota ${kept('KPM')}`, accounts: 'Akun terdaftar' },
+    findInAccounts: 'Cari di Akun terdaftar',
+  },
+  accounts: {
+    caption: 'Semua akun terdaftar',
+    search: 'Cari nama atau email',
+    searchHint: 'Minimal dua karakter.',
+    kpm: kept('KPM'),
+    any: 'Semua',
+    kpmChoice: { none: `Tanpa ${kept('KPM')}`, some: `Punya ${kept('KPM')}` },
+    columns: {
+      name: 'Nama', company: 'Perusahaan', registered: 'Terdaftar', email: 'Email', lastSignIn: 'Terakhir masuk', kpm: kept('KPM'),
+    },
+    verified: 'Terverifikasi',
+    unverified: 'Belum diverifikasi',
+    never: 'Belum pernah',
+    noKpm: `Belum punya ${kept('KPM')}`,
+    kpms: ({ n }) => `${n} ${kept('KPM')}`,
+    openKpms: ({ n, name }) => `${n} ${kept('KPM')} · ${name}, di Anggota ${kept('KPM')}`,
+    empty: 'Belum ada akun.',
+    noMatch: 'Tidak ada akun yang cocok dengan filter ini.',
+    loading: 'Memuat akun',
+    retry: 'Coba lagi',
+    total: ({ n }) => `${n} akun`,
   },
   comparison: {
     title: `Perbandingan ${kept('KPM')}`,

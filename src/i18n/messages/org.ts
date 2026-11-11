@@ -14,8 +14,12 @@ import { kept } from '@/i18n/kept';
  * @moved lib/org.ts
  */
 const en = {
-  /** The status pill (`StatusPill`'s label). */
-  status: { active: 'Active', pending: 'Pending', removed: 'Removed' },
+  /**
+   * The status pill (`StatusPill`'s label). *Invited* and *Not invited* (P19.12-T5 AC-4; ADR-0248 §4) are an active
+   * member who has never signed in (`memberStateOf`): the glossary's *Diundang* and *Belum diundang*, as the Super
+   * Admin's KPM pages say them.
+   */
+  status: { active: 'Active', pending: 'Pending', removed: 'Removed', invited: 'Invited', not_invited: 'Not invited' },
   /** What a role change means for the person (`roleChangeExplanation`): `from` and `to` each rung's badge name. */
   roleChange: {
     /** To their own leader, an Agent made an AAB: they keep reporting to the reader. */
@@ -31,7 +35,7 @@ const en = {
 };
 
 const id: MessagesOf<typeof en> = {
-  status: { active: 'Aktif', pending: 'Menunggu', removed: 'Dikeluarkan' },
+  status: { active: 'Aktif', pending: 'Menunggu', removed: 'Dikeluarkan', invited: 'Diundang', not_invited: 'Belum diundang' },
   roleChange: {
     promoted: ({ name, from, to }) =>
       `${name} akan berubah dari ${from} menjadi ${to}. Dia tetap melapor kepada Anda, dan kini dapat merekrut serta mengelola agen langsungnya sendiri.`,

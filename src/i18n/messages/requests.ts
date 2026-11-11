@@ -9,7 +9,7 @@ import { kept } from '@/i18n/kept';
  *
  * **English is the source.** The Indonesian is the approved glossary's: *Setujui · Tolak · Batal* (§B.1), *Tanggal
  * bergabung* (§B.4), *Pemindahan disetujui ✓* (§B.2), *leader* and *unit* kept (§A.6). A person is *dia* (§B.0 rule 8).
- * **Typed content stays as typed**: a name, a reason, the name a leader typed. **A figure is never a message's**: the
+ * **Typed content stays as typed**: a name, a reason, the name a leader typed, a leader's note on a move. **A figure is never a message's**: the
  * day is written by the caller in the figures' language and passed in.
  *
  * @moved components/request-inbox.tsx
@@ -50,6 +50,11 @@ const en = {
     move: ({ from, to }: { from: string | null; to: string }) => (from ? `From ${from}’s unit to ${to}’s` : `To ${to}’s unit`),
     /** The name the leader typed, where it is not the account's. */
     typedAs: ({ name }: { name: string }) => `Added as ${name}`,
+    /** A leader moving one of their people to a leader outside their tree (P19.12-T4, ADR-0247 §3). */
+    moveAsked: ({ leader, name, to }: { leader: string; name: string; to: string }) =>
+      `${leader} asks to move ${name} to ${to}’s unit`,
+    /** The leader's note, as typed. */
+    note: ({ note }: { note: string }) => `“${note}”`,
     approve: 'Approve',
     decline: 'Decline',
     cancel: 'Cancel',
@@ -90,6 +95,8 @@ const id: MessagesOf<typeof en> = {
     columns: { who: 'Siapa', move: 'Pemindahan', askedBy: 'Diajukan oleh', actions: 'Aksi' },
     move: ({ from, to }) => (from ? `Dari ${kept('unit')} ${from} ke ${kept('unit')} ${to}` : `Ke ${kept('unit')} ${to}`),
     typedAs: ({ name }) => `Ditambahkan sebagai ${name}`,
+    moveAsked: ({ leader, name, to }) => `${leader} meminta memindahkan ${name} ke ${kept('unit')} ${to}`,
+    note: ({ note }) => `“${note}”`,
     approve: 'Setujui',
     decline: 'Tolak',
     cancel: 'Batal',

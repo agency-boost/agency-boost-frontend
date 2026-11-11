@@ -63,6 +63,10 @@ function target(el: HTMLElement, px: number): string | null {
   if (tall(el, px)) return null;
   // A field laid over its face, the face's size (`DateField`): the face is the target.
   if (el.tagName === 'INPUT' && el.classList.contains('inset-0') && el.nextElementSibling && tall(el.nextElementSibling, px)) return null;
+  // …or laid over the box it sits in (`MonthShapeField`, P19.12-T5): the box is the target.
+  if (el.tagName === 'INPUT' && el.classList.contains('inset-0') && el.parentElement && tall(el.parentElement, px)) return null;
+  // A number's field filling its box after the fixed +62 (`PhoneField`): the box is the target.
+  if (el.tagName === 'INPUT' && el.closest('[data-phone-field]') && tall(el.closest('[data-phone-field]')!, px)) return null;
   // A field inside a pill that is its label: the pill is the target (`SearchPill`).
   if (el.tagName === 'INPUT' && el.closest('label') && tall(el.closest('label')!, px)) return null;
   const worn = wears(el, px);
@@ -79,10 +83,9 @@ function target(el: HTMLElement, px: number): string | null {
   return 'itself';
 }
 
-/** Every control in `main` that is not a 44px target at `px`, by its name. */
-function under44(px: number): string[] {
-  const main = screen.getByRole('main');
-  const controls = main.querySelectorAll<HTMLElement>('button, a[href], input, select, textarea, summary');
+/** Every control in `main` — or in `root`, a sheet drawn over the page — that is not a 44px target at `px`, by its name. */
+function under44(px: number, root: HTMLElement = screen.getByRole('main')): string[] {
+  const controls = root.querySelectorAll<HTMLElement>('button, a[href], input, select, textarea, summary');
   return [...controls]
     .map((el) => ({ el, why: target(el, px) }))
     .filter(({ why }) => why !== null)
@@ -178,10 +181,50 @@ describe('P19.2-T3 AC-4 no target under 44px on /people/* at 375 and 768 (UI-142
     inShell(<MemberPage params={routeParams({ membershipId: 'mem-1' })} />);
     await screen.findByRole('link', { name: 'Dimas Pratama' });
     expect(under44(px)).toEqual([]);
-    // The tags' editor: each group's tick and *Core Leader*'s, their lines 44px.
-    await userEvent.click(screen.getByRole('button', { name: 'Edit tags' }));
+    // P19.12-T5 (ADR-0248 §1): the informal groups' form, a sheet over the page: each group's tick and *Core Leader*'s,
+    // their lines 44px, and its buttons.
+    await userEvent.click(screen.getByRole('button', { name: 'Edit informal groups' }));
     expect(screen.getByRole('checkbox', { name: 'Mentoring' })).toBeInTheDocument();
+    expect(under44(px, screen.getByRole('dialog'))).toEqual([]);
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    // The role form and the removal form: the select, the reason, the word, the choices for a leader's people.
+    await userEvent.click(screen.getByRole('button', { name: 'Edit role' }));
+    expect(under44(px, screen.getByRole('dialog'))).toEqual([]);
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Remove from the office' }));
+    expect(under44(px, screen.getByRole('dialog'))).toEqual([]);
+  });
+
+  /* P19.12-T5 AC-2, AC-3 (ADR-0248 §2, §3): *Data pribadi* opened — its summary, the WhatsApp link — and *Lengkapi data*. */
+  it.each([375, 768])('P19.12-T5 AC-2, AC-3 at %ipx a member’s data opened, its WhatsApp link, and Complete details', async (px) => {
+    atWidth(px);
+    stubFetch({
+      '/members/mem-1/reports': { body: [] },
+      '/members/mem-1/performance': {
+        body: {
+          membershipId: 'mem-1', today: '2026-11-05', activity: { from: '2026-10-30', to: '2026-11-05', count: 14 },
+          production: { year: '2026', actualMinor: null, targetMinor: null, attainmentPct: null, goalSet: false },
+          lastOneOnOne: null, leads: { month: '2026-11', open: 9, closing: 2 },
+        },
+      },
+      '/members/mem-1/tags': { body: { membershipId: 'mem-1', fullName: 'Rina Wijaya', groupIds: [], isCoreLeader: false } },
+      '/members/groups': { body: [] },
+      '/members/mem-1': {
+        body: member({
+          personal: {
+            dateOfBirth: null, gender: null, companyJoinMonth: null, workStatus: null, phone: null, companyName: 'Prudential',
+          },
+        }),
+      },
+    });
+    renderWithSession(<div data-surface="v1"><main><MemberPage params={routeParams({ membershipId: 'mem-1' })} /></main></div>, {
+      me: makeMe({ ...OWNER, permissions: [...OWNER.permissions, 'member:complete_personal'] }),
+    });
+    await userEvent.click((await screen.findByRole('heading', { name: 'Personal data' })).closest('summary')!);
     expect(under44(px)).toEqual([]);
+    await userEvent.click(screen.getByRole('button', { name: 'Complete details' }));
+    expect(screen.getByLabelText('WhatsApp number')).toBeInTheDocument();
+    expect(under44(px, screen.getByRole('dialog'))).toEqual([]);
   });
 
   it.each([375, 768])('P19.2-T3 AC-4 at %ipx Manage KPM Admins: the grant, the list and a revoke asked first', async (px) => {

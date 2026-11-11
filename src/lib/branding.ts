@@ -161,10 +161,15 @@ export interface BrandingSettings {
   version: number;
   canWrite: boolean;
 }
+/**
+ * One colour as the preview measures it (P19.12-T3; ADR-0246): its words, their ratio on the fill, and the fill —
+ * the colour chosen, or its nearest shade the words read 4.5:1 on, `adjusted` when it is not the colour chosen.
+ */
+export interface PreviewColour { contrast: 'light' | 'dark'; ratio: number; fill: string; adjusted: boolean }
 export interface BrandingPreview {
   palette: BrandingPalette;
-  primary: { contrast: 'light' | 'dark'; ratio: number };
-  secondary: { contrast: 'light' | 'dark'; ratio: number };
+  primary: PreviewColour;
+  secondary: PreviewColour;
 }
 export interface ConfirmedImage { storageKey: string; width: number; height: number; previews: Record<string, string> }
 export type UploadKind = 'logo' | 'logo_square' | 'mascot';

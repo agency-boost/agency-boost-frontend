@@ -21,8 +21,10 @@ import { useCan, useSession } from '@/lib/session';
  *
  * - **The Owner's and the Admins'** (`tenant_config:write`); every other reader, and a view-as session, sees the same
  *   page with every input disabled and no *Simpan* (AC-17) — and the API refuses them regardless.
- * - ***Simpan*** is blocked while a colour carries unreadable words (acceptance 2). After it, the session is read again,
- *   so the Owner's own screens take the new look at once; every member sees it after a refresh (acceptance 1).
+ * - ***Simpan*** is blocked only while a colour is not `#rrggbb`: every colour is accepted, and one no words read on
+ *   is painted as its nearest readable shade, which the field names (P19.12-T3; ADR-0246). After it, the session is
+ *   read again, so the Owner's own screens take the new look at once; every member sees it after a refresh
+ *   (acceptance 1).
  */
 export default function BrandingPage() {
   const t = useMessages(brandingMessages);
@@ -52,7 +54,7 @@ export default function BrandingPage() {
   useEffect(() => { void load(); }, [load]);
 
   const writable = canWrite && settings?.canWrite === true;
-  const blocked = check.state === 'unreadable' || check.state === 'invalid';
+  const blocked = check.state === 'invalid';
 
   async function run(action: () => Promise<BrandingSettings>, done: string) {
     setBusy(true);

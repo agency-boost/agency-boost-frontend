@@ -171,10 +171,10 @@ export function sampleUnitView(base: UnitDashboardView, name: SampleName): UnitD
     ...base,
     empty: false,
     tiles: {
-      team: { total: SAMPLE_PEOPLE, direct: SAMPLE_PEOPLE, units: 0, underUnits: 0, newHires: 0 },
+      team: { total: SAMPLE_PEOPLE, direct: SAMPLE_PEOPLE, units: 0, underUnits: 0, aab: 0, ab: 0, newHires: 0 },
       directGroupProduction: { ...goal, period: base.tiles.directGroupProduction.period },
-      potentialActive: { ...potentialActive, unit: potentialActive, aab: { count: 0, of: 0 } },
-      potentialRecruits: { yourUnit: 1, aabs: 0 },
+      potentialActive: { ...potentialActive, unit: potentialActive, aab: { count: 0, of: 0 }, ab: { count: 0, of: 0 } },
+      potentialRecruits: { yourUnit: 1, aabs: 0, abs: 0 },
     },
     yourUnit: {
       rows,

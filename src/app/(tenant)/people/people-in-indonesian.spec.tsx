@@ -57,7 +57,7 @@ const OWNER = makeMe({
   permissions: [
     'member:read_profile', 'member:transfer_approve', 'kpm_admin:grant', 'kpm_admin:revoke', 'kpm_admin:list',
     'org_tree:read', 'kpm:import_roster', 'leader_request:read_inbox', 'leader_request:approve',
-    'leader_limit_request:read',
+    'leader_limit_request:read', 'member:complete_personal',
   ],
 });
 
@@ -319,15 +319,26 @@ describe('P18.10-T4 a member’s page in Indonesian', () => {
     renderInIndonesian(<TenantLayout><MemberPage params={params} /></TenantLayout>, { me: OWNER });
   };
 
-  it('P18.10-T4 AC-1, AC-4 their details, their unit and their tags: the terms Indonesian, the person as typed', async () => {
-    open();
-    const card = (await screen.findByRole('heading', { name: 'Pribadi' })).closest('div')!;
-    const row = (term: string) => within(card).getByText(term).nextElementSibling?.textContent;
-    expect(row('Nama lengkap')).toBe('Rina Wijaya');
-    expect(row('Melapor ke')).toBe('Wilson Tanoto');
-    // P19.3-T4 AC-5 (OWN UI-025): the office's join date, said whose.
-    expect(row('Bergabung di AgencyBoost')).toBe('2 Mar 2026');
-    // P19.3-T4 AC-1: the four tiles in Indonesian, as the mockup words them.
+  /* P19.12-T5 AC-1 (ADR-0248 §1): *Posisi di tim*, *Data pribadi* folded, *Keluarkan dari KPM* last — in Indonesian. */
+  it('P18.10-T4 AC-1, AC-4, P19.12-T5 AC-1 to AC-4 their position, their data and their state: the terms Indonesian, the person as typed', async () => {
+    open({
+      invitation: 'invited',
+      personal: {
+        dateOfBirth: null, gender: 'female', companyJoinMonth: '2020-09', workStatus: null, phone: '+6281211002200',
+        companyName: 'Prudential',
+      },
+    });
+    const position = (await screen.findByRole('heading', { name: 'Posisi di tim' })).closest('[data-position-card]') as HTMLElement;
+    const line = (term: string) => within(position).getByText(term).nextElementSibling as HTMLElement;
+    expect(line('Melapor ke')).toHaveTextContent('Wilson Tanoto');
+    expect(within(line('Peran')).getByRole('button', { name: 'Ubah peran' })).toHaveTextContent('Ubah');
+    expect(await within(line('Grup informal')).findByText('Tidak ada')).toBeInTheDocument();
+    expect(within(line('Grup informal')).getByRole('button', { name: 'Ubah grup informal' })).toHaveTextContent('Ubah');
+    expect(line('Unit')).toHaveTextContent('Tanpa tim');
+    // P19.12-T5 AC-4: invited, never signed in.
+    expect(screen.getByText('Diundang')).toBeInTheDocument();
+    expect(screen.queryByText('Aktif')).not.toBeInTheDocument();
+    // P19.3-T4 AC-1: the four figures in Indonesian, as the mockup words them, one row.
     const tiles = screen.getByRole('region', { name: 'Kinerjanya' });
     for (const label of ['Aktivitas 7 hari', 'Produksi tahun ini', '1:1 terakhir', 'Leads']) {
       expect(await within(tiles).findByText(label)).toBeInTheDocument();
@@ -336,32 +347,56 @@ describe('P18.10-T4 a member’s page in Indonesian', () => {
     expect(within(tiles).getByText('Goal belum diatur')).toBeInTheDocument();
     expect(within(tiles).getByText('2 closing')).toBeInTheDocument();
     expect(screen.getAllByRole('link', { name: 'Lihat dashboard' }).length).toBeGreaterThan(0);
-    expect(screen.getByText('Aktif')).toBeInTheDocument();
-    expect(screen.getByText(/^Agent, dan tidak memimpin siapa pun\. Kepemimpinan mengikuti pohon/)).toBeInTheDocument();
-    expect(screen.getByText('Tidak ada tag.')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Ubah tag' }));
-    expect(screen.getByRole('link', { name: 'All members → Groups' })).toBeInTheDocument();
-    expect(screen.getByText(/Hanya seorang leader yang dapat menjadi Core Leader: pindahkan dia ke jenjang leader dulu\./)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Simpan tag' })).toBeInTheDocument();
+
+    // *Data pribadi*, folded, counting what is not recorded; opened, every term Indonesian.
+    const heading = screen.getByRole('heading', { name: 'Data pribadi' });
+    const details = heading.closest('details')!;
+    expect(within(heading.closest('summary')!).getByText('2 belum dicatat')).toBeInTheDocument();
+    await userEvent.click(heading.closest('summary')!);
+    const row = (term: string) => within(details).getByText(term).nextElementSibling?.textContent;
+    expect(row('Nama lengkap')).toBe('Rina Wijaya');
+    expect(row('No. WhatsApp')).toBe('+6281211002200');
+    // P19.3-T4 AC-5 (OWN UI-025): the two join dates, said whose.
+    expect(row('Bergabung di AgencyBoost')).toBe('2 Mar 2026');
+    expect(row('Bergabung di Prudential')).toBe('Sep 2020');
+    expect(row('Tanggal lahir')).toBe('Belum dicatat');
+    expect(row('Jenis kelamin')).toBe('Perempuan');
+    await userEvent.click(within(details).getByRole('button', { name: 'Lengkapi data' }));
+    const dialog = screen.getByRole('dialog', { name: 'Lengkapi data Rina' });
+    expect(within(dialog).getByText('Hanya data yang belum dicatat. Data yang sudah tercatat hanya dapat diubah oleh dia sendiri.')).toBeInTheDocument();
+    expect(within(dialog).getByRole('radiogroup', { name: 'Status kerja' })).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Simpan' })).toBeDisabled();
+    noEnglishLeft();
+  });
+
+  it('P18.10-T4 AC-1 the informal groups’ form in Indonesian', async () => {
+    open();
+    await userEvent.click(await screen.findByRole('button', { name: 'Ubah grup informal' }));
+    const dialog = screen.getByRole('dialog', { name: 'Grup informal' });
+    expect(within(dialog).getByRole('link', { name: 'All members → Groups' })).toBeInTheDocument();
+    expect(within(dialog).getByText('Hanya seorang leader yang dapat menjadi Core Leader.')).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Simpan tag' })).toBeInTheDocument();
     noEnglishLeft();
   });
 
   it('P18.10-T4 AC-3 a role change and a removal, each sentence whole in Indonesian', async () => {
     open();
-    await screen.findByRole('heading', { name: 'Ubah perannya' });
-    expect(screen.getByText('Hanya KPM yang dapat menjadikan seseorang AB, atau mencabutnya.')).toBeInTheDocument();
-    const select = screen.getByLabelText('Peran baru');
+    await userEvent.click(await screen.findByRole('button', { name: 'Ubah peran' }));
+    const role = screen.getByRole('dialog', { name: 'Ubah perannya' });
+    const select = within(role).getByLabelText('Peran baru');
     expect(within(select).getByRole('option', { name: /— tanpa perubahan$/ })).toBeInTheDocument();
     await userEvent.selectOptions(select, 'aab');
-    expect(screen.getByText('Rina akan berubah dari Agent menjadi AAB. Tidak ada yang pindah — dia tetap melapor kepada leader yang sama seperti sekarang.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Ubah peran' })).toBeInTheDocument();
+    expect(within(role).getByText('Rina akan berubah dari Agent menjadi AAB. Tidak ada yang pindah — dia tetap melapor kepada leader yang sama seperti sekarang.')).toBeInTheDocument();
+    expect(within(role).getByRole('button', { name: 'Ubah peran' })).toBeInTheDocument();
+    await userEvent.click(within(role).getByRole('button', { name: 'Batal' }));
 
-    expect(screen.getByRole('heading', { name: 'Keluarkan dari KPM' })).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Keluarkan Rina' }));
-    expect(screen.getByLabelText('Ketik REMOVE untuk mengonfirmasi')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Keluarkan dia' })).toBeDisabled();
     expect(screen.getByRole('heading', { name: 'Yang melapor kepadanya' })).toBeInTheDocument();
     expect(screen.getByText('Tidak ada yang melapor kepadanya.')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Keluarkan dari KPM' }));
+    const removal = screen.getByRole('dialog', { name: 'Keluarkan Rina' });
+    expect(within(removal).getByText(/^Tidak ada yang dihapus\./)).toBeInTheDocument();
+    expect(within(removal).getByLabelText('Ketik REMOVE untuk mengonfirmasi')).toBeInTheDocument();
+    expect(within(removal).getByRole('button', { name: 'Keluarkan dia' })).toBeDisabled();
     noEnglishLeft();
   });
 });
@@ -480,7 +515,8 @@ describe('P18.10-T4 Import people in Indonesian (A3’s words since P19.3-T4)', 
     // The file's own codes, as typed in it, in either language.
     expect(within(guide).getByRole('row', { name: /^Peran/ })).toHaveTextContent('Agent, AAB, atau AB. Agen dibaca sebagai Agent.');
     expect(within(guide).getByRole('row', { name: /^Tanggal lahir/ })).toHaveTextContent('DD/MM/YYYY, minimal 18 tahun yang lalu');
-    expect(within(guide).getByRole('row', { name: /^Jenis kelamin/ })).toHaveTextContent('male atau female');
+    // P19.12-T7 AC-1 (ADR-0250 §1): L and P are read too.
+    expect(within(guide).getByRole('row', { name: /^Jenis kelamin/ })).toHaveTextContent('male atau female; L dan P juga dibaca');
     expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent))
       .toEqual(['Unduh template', 'Panduan pengisian', 'Unggah']);
     expect(screen.getByRole('button', { name: 'Unduh Excel (.xlsx)' })).toHaveAccessibleDescription('Disarankan');
@@ -489,7 +525,8 @@ describe('P18.10-T4 Import people in Indonesian (A3’s words since P19.3-T4)', 
         'Kode agen, Nama, dan Peran wajib diisi. Kosongkan sel lain bila tidak tahu isinya.',
         'Satu orang per baris.',
         'Urutan baris bebas: upline dicocokkan dari file dan dari anggota yang sudah ada di KPM.',
-        'Baris yang bermasalah dilewati dengan alasannya. Sisanya masuk sekaligus.',
+        'Sel opsional yang salah isi dikosongkan, dengan peringatan, dan orangnya tetap masuk. Baris yang bermasalah di '
+          + 'kolom wajib dilewati dengan alasannya. Sisanya masuk sekaligus.',
       ]);
     expect(screen.getByLabelText('Unggah file yang sudah diisi (.xlsx atau .csv)')).toBeChecked();
     await userEvent.click(screen.getByLabelText('Tempel dari spreadsheet'));
@@ -500,34 +537,51 @@ describe('P18.10-T4 Import people in Indonesian (A3’s words since P19.3-T4)', 
 
   it('P19.3-T4 AC-10, AC-11 the check in A3’s words, each row’s result, the invitation by email, and the toast', async () => {
     const rows = [
-      { line: 2, agentCode: '70045001', fullName: 'Rahmat Hidayat', role: 'AB', leaderAgentCode: '', email: 'rahmat@contoh.id', outcome: 'imported', messages: [] },
+      { line: 2, agentCode: '70045001', fullName: 'Rahmat Hidayat', role: 'AB', leaderAgentCode: '', email: 'rahmat@contoh.id', outcome: 'imported', messages: [],
+        // P19.12-T7 AC-3 (ADR-0250 §3): what the row leaves out, in the server's Indonesian.
+        warnings: ['Data belum lengkap: Jenis kelamin kosong. Impor ulang barisnya untuk melengkapi.'] },
       { line: 3, agentCode: '70045006', fullName: 'Desi Anggraeni', role: 'Agen Senior', leaderAgentCode: '70045001', email: '', outcome: 'skipped',
-        messages: ['Peran "Agen Senior" tidak ada. Pakai: Agent, AAB, AB.'] },
+        messages: ['Peran "Agen Senior" tidak ada. Pakai: Agent, AAB, AB.'], warnings: [] },
+      // P19.12-T7 AC-4 (ADR-0250 §4): an Agent with no email, invited on WhatsApp.
+      { line: 4, agentCode: '70045007', fullName: 'Tono', role: 'Agent', leaderAgentCode: '70045001', email: '', outcome: 'invited',
+        messages: ['Tanpa email: diundang lewat WhatsApp. Dia mendaftar lewat tautannya dengan email dan kata sandinya sendiri.'],
+        warnings: [] },
     ];
-    const preview = { issues: [], header: HEADER.split(','), counts: { imported: 1, updated: 0, skipped: 1 }, rows, skippedCsv: `${HEADER},Alasan\n` };
+    const preview = {
+      issues: [], header: HEADER.split(','), counts: { imported: 1, updated: 0, invited: 1, skipped: 1 }, rows, skippedCsv: `${HEADER},Alasan\n`,
+    };
+    const done = {
+      ...preview, invited: 1,
+      rows: rows.map((row) => (row.outcome === 'invited'
+        ? { ...row, invite: { link: 'https://app.agencyboost.test/register?invite=kpm-1.secret', phone: '+6281211003300' } } : row)),
+    };
     stubFetch({
       ...TEMPLATE,
       '/admin/tenants/kpm-1/roster/preview': { body: preview },
-      '/admin/tenants/kpm-1/roster': { body: { ...preview, invited: 1 } },
+      '/admin/tenants/kpm-1/roster': { body: done },
     } as never);
     renderInIndonesian(<RosterImport kpmId="kpm-1" backHref="/people/members" />, { me: OWNER });
     await userEvent.click(screen.getByLabelText('Tempel dari spreadsheet'));
     await userEvent.type(await screen.findByLabelText('Baris dari spreadsheet Anda'), '70045001,Rahmat,AB');
     await userEvent.click(screen.getByRole('button', { name: 'Periksa file' }));
-    expect(await screen.findByText('1 orang baru siap diimpor, 1 baris dilewati.')).toBeInTheDocument();
+    expect(await screen.findByText('1 orang baru siap diimpor, 1 diundang lewat WhatsApp, 1 baris dilewati.')).toBeInTheDocument();
     const table = screen.getByRole('table', { name: 'Setiap baris file, dan hasilnya' });
     expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['Kode agen', 'Nama', 'Peran', 'Kode upline', 'Hasil']);
     expect(within(table).getByText('Masuk')).toBeInTheDocument();
     expect(within(table).getByText('Dilewati')).toBeInTheDocument();
+    expect(within(table).getByText('Diundang lewat WhatsApp')).toBeInTheDocument();
     expect(within(table).getByText('Tidak ada')).toBeInTheDocument();
     expect(screen.getByRole('checkbox', { name: 'Kirim undangan lewat email ke 1 orang baru' })).toBeChecked();
     expect(screen.getByRole('button', { name: '⬇ Unduh baris yang dilewati' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Batal' })).toBeInTheDocument();
     noEnglishLeft();
-    await userEvent.click(screen.getByRole('button', { name: 'Impor 1 orang' }));
-    expect(await screen.findByRole('heading', { name: '1 anggota diimpor' })).toBeInTheDocument();
-    expect(screen.getByText('1 anggota diimpor. Undangan dikirim lewat email.')).toBeInTheDocument();
-    expect(screen.getByText('Undangan dikirim lewat email ke 1 orang baru, dengan tautan untuk membuat kata sandi.')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Impor 2 orang' }));
+    expect(await screen.findByRole('heading', { name: '1 anggota diimpor, 1 diundang lewat WhatsApp' })).toBeInTheDocument();
+    expect(screen.getByText('1 anggota diimpor, 1 diundang lewat WhatsApp. Undangan dikirim lewat email.')).toBeInTheDocument();
+    expect(screen.getByText(/^Undangan dikirim lewat email ke 1 orang baru, dengan tautan untuk membuat kata sandi\./))
+      .toHaveTextContent('Kirim tautan ke setiap orang yang diundang lewat WhatsApp dengan tombol WhatsApp di barisnya, atau '
+        + 'nanti dari New Hires › Menunggu bergabung.');
+    expect(screen.getByRole('link', { name: 'Kirim undangan ke Tono lewat WhatsApp' })).toHaveAttribute('data-channel', 'whatsapp');
     expect(screen.getByRole('link', { name: 'Kembali' })).toHaveAttribute('href', '/people/members');
     noEnglishLeft();
   });
@@ -594,8 +648,13 @@ describe('P18.10-T4 the people module’s sentences in each language', () => {
     expect(adminsMessages.id.count({ n: 1 })).toBe('1 KPM Admin, didelegasikan oleh Anda');
   });
 
-  it('P18.10-T4 AC-1 a member’s status, by its pill, in each language', async () => {
-    await waitFor(() => expect(orgMessages.id.status).toEqual({ active: 'Aktif', pending: 'Menunggu', removed: 'Dikeluarkan' }));
-    expect(orgMessages.en.status).toEqual({ active: 'Active', pending: 'Pending', removed: 'Removed' });
+  // P19.12-T5 AC-4 (ADR-0248 §4): and an active member who never signed in, *Diundang* or *Belum diundang*.
+  it('P18.10-T4 AC-1, P19.12-T5 AC-4 a member’s status, by its pill, in each language', async () => {
+    await waitFor(() => expect(orgMessages.id.status).toEqual({
+      active: 'Aktif', pending: 'Menunggu', removed: 'Dikeluarkan', invited: 'Diundang', not_invited: 'Belum diundang',
+    }));
+    expect(orgMessages.en.status).toEqual({
+      active: 'Active', pending: 'Pending', removed: 'Removed', invited: 'Invited', not_invited: 'Not invited',
+    });
   });
 });

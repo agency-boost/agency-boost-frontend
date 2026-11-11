@@ -35,7 +35,7 @@ export function payloadOfDraft(draft: BrandingDraft): Payload {
 
 /**
  * **A template's *Tampilan*** (P19.6-T1 AC-11; ADR-0218 §3): the same fields and preview as a KPM's page, its pictures
- * uploaded into the company's folder and its colours checked under `company_template:write`. Drafted and published as
+ * uploaded into the company's folder and its colours previewed under `company_template:write`. Drafted and published as
  * every section is; every KPM on the template reads the published version live, and a KPM's own always wins.
  */
 export function TemplateBrandingEditor({ payload, onChange, disabled, companyId, templateId }: {

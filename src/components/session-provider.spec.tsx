@@ -81,6 +81,38 @@ describe('SessionProvider', () => {
     expect(login.init.body as string).not.toContain('refreshToken');
   });
 
+  /*
+   * P19.12-T2 AC-3 (ADR-0245 §3): registering answers a session — the cookie set, the token in the body — and `adopt`
+   * takes it up as signing in takes login's: the token held in memory only, the session read, resolving to who it is.
+   */
+  it('P19.12-T2 AC-3 adopts a session the server just started: the token in memory, the session read, no login call', async () => {
+    function Adopter() {
+      const { me, loading, adopt } = useSession();
+      const [who, setWho] = useState('');
+      return (
+        <div>
+          <p data-testid="state">{loading ? 'loading' : (me?.user.email ?? 'anonymous')}</p>
+          <p data-testid="who">{who}</p>
+          <button onClick={() => void adopt('tok-registered').then((m) => setWho(m?.user.email ?? 'nobody'))}>adopt</button>
+        </div>
+      );
+    }
+    const { calls } = stubFetch({
+      '/auth/refresh': { status: 401, body: {} },
+      '/auth/me': { body: ME },
+    });
+    render(<SessionProvider><Adopter /></SessionProvider>);
+    await waitFor(() => expect(screen.getByTestId('state')).toHaveTextContent('anonymous'));
+    await userEvent.click(screen.getByRole('button', { name: 'adopt' }));
+
+    await waitFor(() => expect(screen.getByTestId('who')).toHaveTextContent('rina@kpm0417.test'));
+    expect(screen.getByTestId('state')).toHaveTextContent('rina@kpm0417.test');
+    expect(getAccessToken()).toBe('tok-registered');
+    const me = calls.find((c) => c.url.includes('/auth/me'))!;
+    expect(new Headers(me.init.headers).get('Authorization')).toBe('Bearer tok-registered');
+    expect(calls.some((c) => c.url.includes('/auth/login'))).toBe(false);
+  });
+
   it('drops the token locally even if the logout call fails', async () => {
     stubFetch({
       '/auth/refresh': { body: { accessToken: 'fresh' } },
