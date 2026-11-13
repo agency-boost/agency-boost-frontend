@@ -89,19 +89,33 @@ function asBeforeP199(root: HTMLElement): HTMLElement {
 }
 
 /**
- * **The page with the Phase 19.9 exit review's L4 put back**: a new hire who left is a row that opens nothing — on the
- * table, their name a plain span where it was a link with its ›. Each is drawn again as its neighbours' link is, to
- * their own `/new-hires/{id}`, before `asBeforeP199` turns every such address back. A copy, as above.
+ * **The page with P19.11-T2's changes put back** (AC-1 to AC-4; ADR-0239): the circle of a hire not activated yet empty
+ * again, with no avatar; the missed line back to *Day N* in the row's ink; the figures as rule A served them — 4 of 5,
+ * 80%, Agus's own unit 67%; and the table's rows without the stretched link. A copy, as above.
+ *
+ * *It replaces the Phase 19.9 exit review's L4 transform*, which drew a leaver's unlinked name back as a link: every row is
+ * a link again, as on the baseline, so there is nothing of L4 to put back.
  */
-function asBeforeExitL4(root: HTMLElement): HTMLElement {
+function asBeforeP1911(root: HTMLElement): HTMLElement {
   const copy = root.cloneNode(true) as HTMLElement;
-  const ids = new Map(Object.values(ROSTER.sections).flat().map((r) => [r.hire.name, r.hire.membershipId]));
-  const model = copy.querySelector('th[scope="row"] > a');
-  for (const name of copy.querySelectorAll('th[scope="row"] > span')) {
-    const link = model!.cloneNode(true) as HTMLElement;
-    link.setAttribute('href', `/new-hires/${ids.get(name.textContent!)}`);
-    link.firstChild!.textContent = name.textContent;
-    name.replaceWith(link);
+  for (const circle of copy.querySelectorAll('[data-status="not_yet"]')) {
+    circle.setAttribute('class', 'inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 border-line bg-card');
+    circle.querySelector(':scope > [aria-hidden="true"]')?.remove();
+  }
+  for (const line of copy.querySelectorAll('span')) {
+    const missed = /^Day (\d+) · no first sale within 90 days$/.exec(line.textContent ?? '');
+    if (!missed || line.children.length > 0) continue;
+    line.textContent = `Day ${missed[1]}`;
+    line.setAttribute('class', line.closest('td') ? 'mt-0.5 block text-sm text-muted' : '');
+  }
+  for (const [selector, was] of [
+    ['[aria-label="3M activation rate"] > span', '80%'], ['[aria-label="Agus Prasetyo’s 3M activation"] > span', '67%'],
+  ] as const) {
+    for (const figure of copy.querySelectorAll(selector)) figure.textContent = was;
+  }
+  for (const link of copy.querySelectorAll('th[scope="row"] > a')) {
+    link.setAttribute('class', link.getAttribute('class')!.split(' ').filter((c) => !c.startsWith('after:')).join(' '));
+    link.closest('tr')!.setAttribute('class', 'lg:hover:bg-hover-row');
   }
   return copy;
 }
@@ -110,8 +124,6 @@ const EVERYONE = [
   'Fikri Ramadhan', 'Dimas Saputra', 'Indah Permata', 'Lukman Hakim', 'Kemal Pratama', 'Tari Wulandari', 'Novi Lestari',
   'Rina Wijaya', 'Budi Hartono',
 ];
-/** Who a row opens: everybody but Tari, marked left (the Phase 19.9 exit review, L4). */
-const OPENED = EVERYONE.filter((name) => name !== 'Tari Wulandari');
 
 async function open(px: number) {
   atWidth(px);
@@ -139,19 +151,20 @@ describe('P19.1-T5 AC-2 /new-hires on a tablet: the phone’s page, the tiles on
     // The side column and its list are gone; no table at all.
     expect(screen.queryByRole('region', { name: 'Waiting to join' })).not.toBeInTheDocument();
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
-    expect(tile).toHaveTextContent(/^3M activation rate80%$/);
+    expect(tile).toHaveTextContent(/^3M activation rate67%$/);
   });
 
-  it('P19.1-T5 AC-2 at 768px: every leader’s group open, as the table it replaces had them, each person on the phone’s row', async () => {
+  it('P19.1-T5 AC-2, P19.11-T2 AC-1 at 768px: every leader’s group open, as the table it replaces had them, each person on the phone’s row and opening', async () => {
     await open(768);
     for (const name of ['Agus Prasetyo', 'Arief Hidayat', 'Sari Puspita']) {
       const group = screen.getByRole('group', { name });
       expect(within(group).getAllByRole('button', { name: /team$/ })[0]).toHaveAttribute('aria-expanded', 'true');
     }
     const people = screen.getAllByRole('link').filter((a) => a.hasAttribute('data-row-main')).map((a) => a.textContent);
-    expect(people).toEqual(OPENED);
-    // Tari, marked left, on her row as anybody, opening nothing.
-    expect(within(screen.getByRole('group', { name: 'Arief Hidayat' })).getByText('Tari Wulandari').closest('a')).toBeNull();
+    // P19.11-T2 AC-1: everybody opens — Tari, marked left, as anybody.
+    expect(people).toEqual(EVERYONE);
+    expect(within(screen.getByRole('group', { name: 'Arief Hidayat' })).getByRole('link', { name: 'Tari Wulandari' }))
+      .toHaveAttribute('href', '/new-hires/mem-tari');
     // The ⌄ still closes a group.
     const arief = screen.getByRole('group', { name: 'Arief Hidayat' });
     await userEvent.click(within(arief).getAllByRole('button', { name: /team$/ })[0]);
@@ -194,10 +207,13 @@ describe('P19.1-T5 AC-2 /new-hires on a tablet: the phone’s page, the tiles on
    * filter *Semua · Teraktivasi · Belum* is a header control at every size — 13px, 600, 44px, where it was 12px and 40px
    * on a desktop — and on a phone a person's name is 13px and wraps rather than being cut. The digest is taken with those
    * two put back as they were (`asBeforeP198`), and still matches the baseline: nothing else moved.
+   *
+   * *Amended 2026-11-10 (P19.11-T2 AC-1 to AC-4; ADR-0239):* four more move on purpose — the not-yet circle's avatar, the
+   * missed line, the 3M figures, the table row's stretched link — and are put back by `asBeforeP1911`.
    */
-  it.each([375, 1024, 1280] as const)('P19.1-T5 AC-2 at %ipx the page is drawn as before, to the byte', async (px) => {
+  it.each([375, 1024, 1280] as const)('P19.1-T5 AC-2, P19.11-T2 at %ipx the page is drawn as before but for this task’s changes, to the byte', async (px) => {
     const root = await open(px);
-    expect(digestAt(asBeforeP198(asBeforeP199(asBeforeExitL4(root))), px)).toBe(BEFORE_T5[px]);
+    expect(digestAt(asBeforeP198(asBeforeP199(asBeforeP1911(root))), px)).toBe(BEFORE_T5[px]);
   });
 
   it.each([375, 768, 1024, 1280])('P19.8-T1 AC-1 MOB UI-171 at %ipx the filter is three header controls — 13px, 600, 44px', async (px) => {

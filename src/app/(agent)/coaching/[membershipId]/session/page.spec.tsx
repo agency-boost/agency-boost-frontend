@@ -420,15 +420,15 @@ describe('the session workspace (P11-T8)', () => {
     it('P18.10-T3 AC-1 in Indonesian: the header’s day, the Goal tiles’ sums in juta and the ratios whole', async () => {
       show({}, 'id');
       const goal = await card('Goal');
-      await within(goal).findByText(/Rp 65,6 jt/);
+      await within(goal).findByText(/Rp 65,6 Jt/);
       expect(goal).toHaveTextContent('Bulan ini');
       expect(goal).toHaveTextContent('Tahun ini');
-      expect(goal).toHaveTextContent('Rp 65,6 jt/ Rp 80 jt · 82%');
+      expect(goal).toHaveTextContent('Rp 65,6 Jt/ Rp 80 Jt · 82%');
       expect(within(sessionCard()).getByRole('heading', { level: 2 })).toHaveTextContent(/^Sesi hari ini ?Jumat, 2 Okt 2026$/);
       const ratios = await card('Ratio · 30 hari terakhir');
       expect(await within(ratios).findByText('18%')).toBeInTheDocument();
       // The box holds the target's digits in its marks, its prefix *Rp*.
-      expect(within(goal).getAllByRole('button').map((b) => b.textContent)).toEqual(['Rp 960 jt, target tahun ini — ubah']);
+      expect(within(goal).getAllByRole('button').map((b) => b.textContent)).toEqual(['Rp 960 Jt, target tahun ini — ubah']);
       await userEvent.click(within(goal).getByRole('button', { name: /target tahun ini — ubah/ }));
       expect(within(goal).getByLabelText('Target APE tahunan')).toHaveValue('960.000.000');
     });

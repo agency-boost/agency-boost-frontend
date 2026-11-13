@@ -10,7 +10,7 @@ import {
 } from '@/lib/calendar';
 import {
   allDayHeight, BAR_GAP_PX, BAR_PX, DAY_PX, HOUR_PX, isWeekend, layoutDay, OPEN_AT_HOUR, openingHour, showsTime,
-  slotFromSelection, stackBars,
+  slotFromSelection, stackBars, titleLines,
 } from '@/lib/calendar-layout';
 import type { Slot } from '@/lib/calendar-form';
 import { formatDayHeader, formatHour, formatTimeSpan, formatWeekdayDay } from '@/lib/format';
@@ -85,8 +85,9 @@ const HOURS = Array.from({ length: 24 }, (_, h) => h);
  *
  * What differs between the views is passed in, never re-drawn: how a slot is taken — a drag on a column, or a tap where a
  * horizontal finger turns 3 Hari's page (`slotBy`, `pager`). A compared pane side by side draws no gutter (`gutter:
- * 'stacked'`, contradiction 8). On a phone's Week the blocks are their colour alone (`blocks: 'colour'`, below 768px
- * only) — ~45px holds no title — and still open their details, named in full.
+ * 'stacked'`, contradiction 8). **On a phone's Week the blocks are narrow** (`blocks: 'narrow'`, below 768px only): ~45px
+ * a day, so each title is one line cut with an ellipsis, at 10px (P19.11-T1 AC-6, UX-6 — *changed 2026-11-10*: they
+ * were their colour alone, the title read but not drawn).
  */
 export function TimeGrid({
   days,
@@ -99,6 +100,7 @@ export function TimeGrid({
   placedOn,
   trips,
   counts,
+  done,
   opensTasks,
   onTasks,
   onOpen,
@@ -122,7 +124,10 @@ export function TimeGrid({
   placedOn: (day: string) => GridPlaced[];
   /** The all-day trips in view: the Trip row, drawn only when one falls in these days (UI-104 point 8). */
   trips: readonly CalendarItem[];
+  /** Each day's open *Tugas* (P19.11-T1 AC-2): the number drawn. */
   counts: ReadonlyMap<string, number>;
+  /** Each day's ticked ones (P19.11-T1 AC-1): with none open, a muted ✓ that opens the day's popup all the same. */
+  done?: ReadonlyMap<string, number>;
   /** Whether a day's count opens its popup — a hidden person's opens nothing. */
   opensTasks: (day: string) => boolean;
   onTasks?: (day: string) => void;
@@ -132,7 +137,7 @@ export function TimeGrid({
   gutter?: 'always' | 'stacked';
   scroll?: ScrollGroup;
   pager?: Pager;
-  blocks?: 'words' | 'colour';
+  blocks?: 'words' | 'narrow';
 }) {
   const t = useMessages(calendarMessages);
   const language = useFigureLanguage();
@@ -221,7 +226,7 @@ export function TimeGrid({
         {lane((day, current) => (
           <div key={day} className={cn('grid min-w-0 flex-1 place-items-center border-r border-hairline last:border-r-0', day === today && TODAY_SHADE)}>
             {current ? (
-              <CountPill day={day} count={counts.get(day) ?? 0} onOpen={onTasks && opensTasks(day) ? () => onTasks(day) : undefined} />
+              <CountPill day={day} count={counts.get(day) ?? 0} done={done?.get(day) ?? 0} onOpen={onTasks && opensTasks(day) ? () => onTasks(day) : undefined} />
             ) : <span aria-hidden="true" className="text-md font-bold text-line">·</span>}
           </div>
         ))}
@@ -399,7 +404,7 @@ function DayColumn({
   onOpen: (entry: CalendarEntry) => void;
   onSlot?: (slot: Slot) => void;
   slotBy: 'drag' | 'tap';
-  blocks: 'words' | 'colour';
+  blocks: 'words' | 'narrow';
 }) {
   const language = useFigureLanguage();
   const [selection, setSelection] = useState<Selection | null>(null);
@@ -475,7 +480,8 @@ function DayColumn({
             width: `calc(${100 / lanes}% - 6px)`,
           }}
           withTime={showsTime(height)}
-          colourOnly={blocks === 'colour'}
+          lines={titleLines(height, showsTime(height))}
+          narrow={blocks === 'narrow'}
           onOpen={onOpen}
           chip={who ? <WhoChip initials={who.initials} /> : undefined}
         />
@@ -512,28 +518,48 @@ function WhoChip({ initials }: { initials: string }) {
 }
 
 /**
+ * A title's lines (P19.11-T1 AC-6): one, cut with an ellipsis; or two or three, wrapping, the last cut. `NARROW_LINES`
+ * keeps a phone's narrow Week to one line below 768px and wraps from there.
+ */
+const TITLE_LINES: Record<1 | 2 | 3, string> = {
+  1: 'block truncate',
+  2: 'line-clamp-2 break-words',
+  3: 'line-clamp-3 break-words',
+};
+const NARROW_LINES: Record<1 | 2 | 3, string> = {
+  1: 'block truncate',
+  2: 'block max-md:truncate md:line-clamp-2 md:break-words',
+  3: 'block max-md:truncate md:line-clamp-3 md:break-words',
+};
+
+/**
  * An entry on the grid: its title and its time, `09.00–09.30` (`:611`). **A button**, named by its
  * type, title and time, so colour is never the only thing that says what it is (H-18; P12-T2 AC-11).
  * A compared member's busy block reads *Busy* and its time, and opens nothing.
  *
- * **Its words start at the top, as the prototype's `.event` does** (`:136-138`; P13.1-T8 AC-1): a button
- * centres what it holds, so this one lays its lines out as a column from its top edge. **The title is one
- * line**, cut with an ellipsis when it runs long, and **the time is drawn under it only where both lines
- * fit whole** (`withTime`, `showsTime`) — a 30-minute entry draws its title alone rather than half
- * a time. Nothing cut or left out is lost: the name holds the whole title and the time, and so does the
- * title's tooltip, for a pointer. **`colourOnly`** — a phone's Week, 41px a day (UI-144) — draws the block's colour and
- * reads its words, as the 2 Nov mockup draws it.
+ * **Its words start at the top-left, as the prototype's `.event` does** (`:136-138`; P13.1-T8 AC-1): a button centres
+ * what it holds, so this one lays its lines out as a column from its top edge.
+ *
+ * **Every block shows its title, at every size** (P19.11-T1 AC-6; UX-6): navy on the block's pastel tone, 11px — 10px on
+ * a phone's narrow Week — beside its 3px accent bar. **A short or narrow block's title is one line**, cut with an
+ * ellipsis; **a taller one wraps to two or three** (`lines`, `titleLines`). **The time is drawn under the title only
+ * where it fits whole** (`withTime`, `showsTime`). No title → *(Tanpa judul)* (`titleOf`), a joined event's as an
+ * entry's. Nothing cut is lost: the name holds the whole title and the time, and so does the title's tooltip.
+ * *Changed 2026-11-10: a phone's Week drew the colour alone (`colourOnly`), and every title was one line.*
  */
 export function EntryBlock({
-  item, style, withTime, onOpen, chip, colourOnly = false,
+  item, style, withTime, lines = 1, onOpen, chip, narrow = false,
 }: {
   item: GridItem;
   style: CSSProperties;
   withTime: boolean;
+  /** The lines the title may take at this height (`titleLines`). */
+  lines?: 1 | 2 | 3;
   onOpen: (e: CalendarEntry) => void;
   /** Something small inside the block, after its words: 3 Hari's avatar of a compared person (UI-104 point 9). */
   chip?: ReactNode;
-  colourOnly?: boolean;
+  /** A phone's Week, ~45px a day: one line below 768px, at 10px. */
+  narrow?: boolean;
 }) {
   const t = useMessages(calendarMessages);
   const words = useLanguage();
@@ -541,12 +567,14 @@ export function EntryBlock({
   const time = formatTimeSpan(item.start ?? '', item.end ?? '', language);
   const shape = 'absolute flex flex-col justify-start overflow-hidden rounded-[6px] border-l-[3px] px-1.5 py-1 text-left text-xs leading-tight text-navy';
   // `shrink-0`: a line in a column that is too short keeps its height and is never squeezed into itself.
-  const line = cn('block w-full shrink-0 truncate', colourOnly && 'max-md:sr-only');
-  const timeLine = cn(line, 'text-2xs leading-tight');
+  const titleLine = cn(
+    'w-full shrink-0 font-bold', (narrow ? NARROW_LINES : TITLE_LINES)[isBusy(item) ? 1 : lines], narrow && 'max-md:text-2xs',
+  );
+  const timeLine = 'block w-full shrink-0 truncate text-2xs leading-tight';
   if (isBusy(item)) {
     return (
       <div data-busy="" style={style} className={cn(shape, 'cursor-default border-muted bg-secondary/[0.06]')}>
-        <span title={t.busyAt({ time })} className={cn(line, 'font-bold')}>{t.busy}</span>
+        <span title={t.busyAt({ time })} className={titleLine}>{t.busy}</span>
         <span className="sr-only">, </span>
         <span className={withTime ? timeLine : 'sr-only'}>{time}</span>
         {chip}
@@ -555,15 +583,16 @@ export function EntryBlock({
   }
   // An event joined (UI-104 point 1): read-only here, it opens its own page.
   if (isJoined(item)) {
+    const title = titleOf(item, words);
     return (
       <Link
         href={`/events/${encodeURIComponent(item.eventId)}`}
         data-event=""
         style={style}
-        aria-label={t.joinedName({ title: item.title, type: item.type.label, time })}
+        aria-label={t.joinedName({ title, type: item.type.label, time })}
         className={cn(shape, 'z-[1] hover:brightness-[0.96]', EVENT_TONE)}
       >
-        <span title={`${item.title}, ${time}`} className={cn(line, 'font-bold')}>{item.title}</span>
+        <span title={`${title}, ${time}`} className={titleLine}>{title}</span>
         {withTime && <span className={timeLine}>{time}</span>}
         {chip}
       </Link>
@@ -580,7 +609,7 @@ export function EntryBlock({
       onClick={() => onOpen(item)}
       className={cn(shape, 'z-[1] hover:brightness-[0.96]', ENTRY_TONE[item.type])}
     >
-      <span title={`${titleOf(item, words)}, ${time}`} className={cn(line, 'font-bold')}>
+      <span title={`${titleOf(item, words)}, ${time}`} className={titleLine}>
         {/* A trip with times is a block like any other, with the plane line icon (UI-104 point 8). */}
         {item.type === 'travel' && <LineIcon name="plane" className="mr-1 inline h-3 w-3 align-[-2px]" />}
         {titleOf(item, words)}

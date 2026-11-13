@@ -1,18 +1,24 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { CalendarTasksContext, openCount } from '@/components/calendar/calendar-tasks';
+import { useTaskTicks } from '@/components/calendar/task-ticks';
 import { Page } from '@/components/page';
 import { ErrorBanner } from '@/components/ui/field';
 import { Skeleton, SkeletonBar } from '@/components/ui/skeleton';
+import { Toast, useToast } from '@/components/ui/toast';
 import { useMessages } from '@/i18n/language-provider';
+import { calendarMessages } from '@/i18n/messages/calendar';
 import { homeMessages } from '@/i18n/messages/home';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
-import { readEntry, type CalendarEntry } from '@/lib/calendar';
+import { readEntry, type CalendarEntry, type CalendarTask } from '@/lib/calendar';
 import { cn } from '@/lib/cn';
 import { minuteInZone, OFFICE_TIME_ZONE } from '@/lib/format';
 import { dayPartOf, firstNameOf, readHome, type HomeView } from '@/lib/home';
+import type { Lead } from '@/lib/leads';
 import { useCan, useSession } from '@/lib/session';
+import { useOfficeMinute } from '@/lib/use-office-minute';
 import { HomeActions } from './home-actions';
 import { HomeButtons } from './home-buttons';
 import { HomeChart } from './home-chart';
@@ -24,6 +30,8 @@ import { SurveyPopup } from '@/components/surveys/survey-popup';
 /** The Calendar's own detail and edit dialogs, loaded when a row asks for them: most visits open neither. */
 const DetailDialog = dynamic(() => import('@/components/calendar/detail-dialog').then((m) => m.DetailDialog), { ssr: false });
 const EntryDialog = dynamic(() => import('@/components/calendar/entry-dialog').then((m) => m.EntryDialog), { ssr: false });
+/** The lead a task row's › opens (P19.11-T1 AC-3), as the Calendar opens it: loaded when a lead is opened. */
+const LeadSheet = dynamic(() => import('@/components/lead-sheet').then((m) => m.LeadSheet), { ssr: false });
 
 /**
  * **Home** (UI V1, 2026-10-30, Phase 18.11 T11; UI-100, UI-101; P19.8-T2, ADR-0228; `home-mobile-stopmotion`): the page
@@ -44,7 +52,13 @@ const EntryDialog = dynamic(() => import('@/components/calendar/entry-dialog').t
  *   (`GET /calendar/entries/:id`), with what the reader may do — *Hapus*, which asks first, *Ubah*, which opens the
  *   Calendar's edit dialog over Home, *Tutup*; none of the writes in a read-only support session. **After any write Home
  *   reads itself again**, so a deleted entry leaves the list.
- * - **One read**, `GET /home`; every figure is the server's. An empty section is hidden, never a sentence (D-08).
+ * - **One read**, `GET /home`; every figure is the server's. An empty section is hidden, never a sentence (D-08) — but
+ *   *Aksi hari ini*, which says when today holds nothing (P19.11-T1 AC-4).
+ * - ***Aksi hari ini*** **is the Calendar's own rows** (P19.11-T1 AC-3): a task's checkbox ticks it at its source with
+ *   the Calendar's hook (`useTaskTicks`) — the row drawn completed, *Selesai* with *Urungkan*, and *Jadwal hari ini*'s
+ *   *Tugas* chip counting open tasks alone (AC-2) — and its › opens the lead's sheet over Home, as in the Calendar.
+ * - **Home reads itself again after the office's midnight** (P19.11-T1 AC-5): the read's clock moved on each minute, as
+ *   the Calendar's (`useOfficeMinute`), so a page left open overnight shows the new day's list, never yesterday's.
  */
 export function HomeScreen() {
   const t = useMessages(homeMessages);
@@ -55,6 +69,9 @@ export function HomeScreen() {
   const [detail, setDetail] = useState<CalendarEntry | null>(null);
   const [editing, setEditing] = useState<CalendarEntry | null>(null);
   const [entryError, setEntryError] = useState<ApiError | null>(null);
+  const [sheetLead, setSheetLead] = useState<Lead | null>(null);
+  const { toast, show } = useToast();
+  const taskWords = useMessages(calendarMessages);
 
   // The Calendar's own rights (`calendar-screen.tsx`): what the API would refuse is never offered.
   const readOnly = !!me?.isImpersonating && !!me.impersonationReadOnly;
@@ -73,6 +90,18 @@ export function HomeScreen() {
   }, [reload]);
 
   const again = useCallback(() => setReload((n) => n + 1), []);
+  // The Calendar's own ticks (P19.11-T1 AC-3): its rights, and never a coaching item in a support session (T16, L3).
+  const ticks = useTaskTicks({
+    canTick: may.edit, canTickCoaching: may.edit && !me?.isImpersonating, show, onChanged: again, onLead: setSheetLead,
+  });
+  // A new day at the office's midnight: read again, and the server says what today is (AC-5, invariant §9).
+  useOfficeMinute(view?.now, again);
+  // *Tugas n* on the tile: the server's open count, with this visit's taps on the rows shown laid over it (AC-2).
+  const shown = useMemo(() => (view?.actions ?? []).flatMap((a) => (a.kind === 'task' ? [a.task] : [])), [view]);
+  const served = (task: CalendarTask) => task.done;
+  const tiles = view
+    ? { ...view, schedule: { ...view.schedule, tasks: view.schedule.tasks + openCount(shown, ticks.value.isDone) - openCount(shown, served) } }
+    : null;
   const openEntry = useCallback((entryId: string) => {
     setEntryError(null);
     readEntry(entryId)
@@ -101,14 +130,21 @@ export function HomeScreen() {
               {/* P19.8-T2 AC-3 (ADR-0228 §3): the slim row above the tiles, by role. */}
               <HomeButtons className="md:max-lg:col-span-2" />
               {/* 8px under the button row on a phone (the mockup's `.g2+.g2`), where the column's gap is 14px. */}
-              <HomeTiles view={view} className="md:max-lg:col-span-2 max-md:-mt-1.5" />
+              <HomeTiles view={tiles ?? view} className="md:max-lg:col-span-2 max-md:-mt-1.5" />
               {entryError && <div className="md:max-lg:col-span-2"><ErrorBanner {...entryError} /></div>}
-              <HomeActions
-                actions={view.actions}
-                today={view.today}
-                onOpenEntry={openEntry}
-                className="mt-1.5 md:max-lg:col-span-2 lg:mt-2.5"
-              />
+              {ticks.error && (
+                <div className="md:max-lg:col-span-2">
+                  <ErrorBanner code={ticks.error.code} message={taskWords.taskFailed} requestId={ticks.error.requestId} />
+                </div>
+              )}
+              <CalendarTasksContext.Provider value={ticks.value}>
+                <HomeActions
+                  actions={view.actions}
+                  today={view.today}
+                  onOpenEntry={openEntry}
+                  className="mt-1.5 md:max-lg:col-span-2 lg:mt-2.5"
+                />
+              </CalendarTasksContext.Provider>
             </div>
             <div className="contents lg:flex lg:min-w-0 lg:flex-col lg:gap-3.5">
               {/* Every leader's by role (P19.8-T2 AC-9): with nobody, its one line *Tambah agent pertama →*. */}
@@ -155,6 +191,20 @@ export function HomeScreen() {
           }}
         />
       )}
+      {sheetLead && (
+        <LeadSheet
+          open
+          lead={sheetLead}
+          offerDelete={false}
+          // As the Calendar's (`calendar-screen.tsx`): a read-only support session reads the lead and writes nothing.
+          readOnly={readOnly}
+          offerClearTask={!readOnly}
+          onClose={() => setSheetLead(null)}
+          onSaved={() => again()}
+          onClosedLead={() => { setSheetLead(null); again(); }}
+        />
+      )}
+      <Toast toast={toast} />
       {/* P19.5-T4 (C-R3 to C-R7): the survey popup, on Home only, once Home has drawn; the server says when one is due. */}
       {view && <SurveyPopup />}
     </Page>

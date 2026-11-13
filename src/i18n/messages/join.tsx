@@ -28,7 +28,8 @@ const en = {
   code: {
     title: 'Join an office',
     subtitle: "With a leader's code, link or QR. All three are the same invite.",
-    signInFirst: 'Sign in first, then open this link again.',
+    /** P19.10-T2 AC-1: *Sign in* comes back here with the code, so nothing has to be opened again. */
+    signInFirst: 'Sign in first — you will come back to this invite.',
     signIn: 'Sign in',
     /** `link` draws its words as the link to `/register`. */
     noAccount: ({ link }: { link: Wrap }) => <>No account yet? {link('Create one')}.</>,
@@ -68,7 +69,7 @@ const id: MessagesOf<typeof en> = {
   code: {
     title: `Bergabung ke ${kept('KPM')}`,
     subtitle: `Dengan kode, tautan, atau QR dari ${kept('leader')}. Ketiganya adalah undangan yang sama.`,
-    signInFirst: 'Masuk terlebih dahulu, lalu buka tautan ini lagi.',
+    signInFirst: 'Masuk terlebih dahulu — Anda akan kembali ke undangan ini.',
     signIn: 'Masuk',
     noAccount: ({ link }) => <>Belum punya akun? {link('Buat akun')}.</>,
     alreadyIn: `Anda sudah tergabung di ${kept('KPM')}, jadi undangan ini bukan untuk Anda.`,

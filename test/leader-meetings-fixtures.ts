@@ -20,7 +20,7 @@ import {
 export const sen = (rupiah: number) => Math.round(rupiah * 100);
 /** *Miliar* of rupiah, as *APE (Rp M)* reads, to minor units. */
 export const billions = (b: number) => sen(b * 1e9);
-/** *Juta* of rupiah, as *Avg. Case Size (Rp jt)* reads, to minor units. */
+/** *Juta* of rupiah, as *Avg. Case Size (Rp Jt)* reads, to minor units. */
 export const millions = (m: number) => sen(m * 1e6);
 
 const fig = (value: number, leavesOut: string[] = []): ScorecardCell => ({ kind: 'figure', value, leavesOut });

@@ -18,7 +18,7 @@ import { Button, ButtonLink, Card, ErrorBanner, Textarea } from '@/components/ui
 import { HEADER_CONTROL } from '@/components/ui/header-control';
 import { LineIcon } from '@/components/ui/line-icon';
 import { NumberBadge } from '@/components/ui/number-badge';
-import { PersonRow, TreeIndent, TreeNode, TreeToggle } from '@/components/ui/person-row';
+import { Avatar, PersonRow, TreeIndent, TreeNode, TreeToggle } from '@/components/ui/person-row';
 import { ResponsiveSheet } from '@/components/ui/responsive-sheet';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { InlineSaveStatus, useInlineSave, type InlineSaveStatusProps } from '@/components/ui/inline-save-status';
@@ -34,8 +34,8 @@ import { leadsByRole } from '@/lib/field-nav';
 import { sampleNewHires } from '@/lib/sample-data';
 import {
   ACTIVATION_NOTE_MAX, aspectTitle, attributionOf, autoBadge, correctionOf, correctStartDate, earliestStart,
-  FIRST_CASE_CLOSED, inFilter, isDataBacked, isEmptyActivation, isManual, isTickedByHandLink, NEW_HIRE_FILTERS,
-  NEW_HIRE_YEARS, newHireCounts, newHireGroups, newHireHref, readHireClosings, readNewHire, readNewHires,
+  FIRST_CASE_CLOSED, inFilter, isDataBacked, isEmptyActivation, isManual, isTickedByHandLink, missedThreeMonths,
+  NEW_HIRE_FILTERS, NEW_HIRE_YEARS, newHireCounts, newHireGroups, newHireHref, readHireClosings, readNewHire, readNewHires,
   saveActivationNote, saveHireItem, startDateAllowed, startDateRangeText, takesHandWrite, type ActivationAspectProgress,
   type ActivationEmpty, type ActivationItemProgress, type ActivationRecordInput, type ActivationView,
   type NewHireDetail as NewHireDetailRead, type NewHireFilter, type NewHireGroup, type NewHireLeader, type NewHireRow,
@@ -75,7 +75,8 @@ export interface WaitingSummary {
  * **New Hires** (`/new-hires`; P13-T5, P18.8-T6 — ADR-0173; **UI V1, 2026-10-30: UI-023 to UI-026**, D-24): a year
  * of new hires **as a tree of their leaders**.
  *
- * - **At the top, two tiles**: *Aktivasi 3M* — the server's percentage alone, never *3/4* (rule A, ADR-0180 §6) — and
+ * - **At the top, two tiles**: *Aktivasi 3M* — the server's percentage alone, never *3/4* (ADR-0180 §6; counted as
+ *   ADR-0239 has it, a late first sale due and not on time) — and
  *   *Menunggu bergabung n ›*, which opens the invitations (`waiting`; only for a reader who may add agents).
  * - **The filter** *Semua · Teraktivasi · Belum*, with counts: *Teraktivasi* is a first sale, late ones included;
  *   *Belum* everybody without one. A leader with nobody left under it is hidden.
@@ -85,13 +86,15 @@ export interface WaitingSummary {
  *   away; only when neither has anybody is the page the sample below.
  * - **Below 768px, a leader accordion** (UI-073's shared tree): the reader's own group open, the units below closed;
  *   a leader's row — avatar, NAME, *Anda · Direct Unit · 4* or *AAB · 3*, the group's *Aktivasi 3M* — and under it a
- *   row per person, newest joiner first: a status circle (green ✓ Teraktivasi, amber ✓ after day 90, empty when not
- *   yet), NAME, one line — *Pecah telor di hari ke-X* (amber after day 90) or *Hari ke-X* — and the checklist's % with
- *   a 40px bar. **The whole row opens the person's activation** — `/new-hires/{id}`, for every reader (P19.9-T3 AC-4,
- *   the owner's R4; it was their coaching page for a leader who coaches, UI-029) — carrying the year, so its ‹ comes back
- *   to it. No join date, first-sale date, agent code, status chip, *Keluar* or *terlambat* (UI-024 to UI-026).
- * - **From 1024px the same tree as a table** — *Nama · Status · Checklist*, every leader open — with a right column:
- *   the *Aktivasi 3M* tile and the invitation list.
+ *   row per person, newest joiner first: a status circle (green ✓ Teraktivasi, amber ✓ after day 90; **not yet, their
+ *   photo or initials** — P19.11-T2 AC-4, UX-14), NAME, one line — *Pecah telor di hari ke-X* (amber after day 90),
+ *   *Hari ke-X*, or past day 90 with none *Hari ke-X · belum pecah telor dalam 90 hari* in alert ink (AC-3) — and the
+ *   checklist's % with a 40px bar. **The whole row opens the person's activation** — `/new-hires/{id}`, for every reader
+ *   (P19.9-T3 AC-4, the owner's R4; it was their coaching page for a leader who coaches, UI-029) — carrying the year, so
+ *   its ‹ comes back to it. **Every row opens** (P19.11-T2 AC-1, UX-3): a new hire who left as anybody, onto a read-only
+ *   detail. No join date, first-sale date, agent code, status chip, *Keluar* or *terlambat* (UI-024 to UI-026).
+ * - **From 1024px the same tree as a table** — *Nama · Status · Checklist*, every leader open, the whole row a person's
+ *   link (P19.11-T2 AC-1) — with a right column: the *Aktivasi 3M* tile and the invitation list.
  * - **A tablet (768–1023px) draws the phone's page** (P19.1-T5 AC-2; UI-115, D-24; `coaching-newhires-tablet` 2): the
  *   two tiles above the list, not a 240px side column — which put *DIMAS / PRATAMA* on two lines and wrapped the
  *   *Teraktivasi, lewat 3M* pill — the filter, and the leaders' groups with the phone's rows, **every group open** as the
@@ -149,6 +152,8 @@ export function NewHires({ waiting, onAdd, year = 'current', onYear }: {
   // P19.9-T3 AC-4 (the owner's R4): every reader opens the person's activation, the year riding along for its ‹.
   const hrefOf = (membershipId: string) => newHireHref(membershipId, year);
   const readerName = me?.user.fullName ?? '';
+  // *Anda · Direct Unit*'s avatar: the reader's own photo, as the title row's (UI-111).
+  const readerPhoto = me?.user.avatarUrl ?? null;
   const groups = roster
     ? newHireGroups(roster)
       .map((group) => ({ ...group, rows: group.rows.filter((row) => inFilter(row, filter)) }))
@@ -181,6 +186,7 @@ export function NewHires({ waiting, onAdd, year = 'current', onYear }: {
               key={group.key}
               group={group}
               readerName={readerName}
+              readerPhoto={readerPhoto}
               hrefOf={hrefOf}
               startOpen={tablet || group.key === 'direct' || (i === 0 && !groups.some((g) => g.key === 'direct'))}
             />
@@ -353,16 +359,27 @@ function groupMeta(group: NewHireGroup, t: HiresWords, n: number): string {
   return group.unit.kind === 'ab' ? t.list.abGroup({ n }) : t.list.aabGroup({ n });
 }
 
-/** A person's one line (UI-024, Appendix A): *Pecah telor di hari ke-X*, or *Hari ke-X* while there is none. */
+/**
+ * A person's one line (UI-024, Appendix A): *Pecah telor di hari ke-X*; *Hari ke-X* while there is none; and **past day
+ * 90 with none, *Hari ke-X · belum pecah telor dalam 90 hari*** (P19.11-T2 AC-3; UXQ1, ADR-0239).
+ */
 function personLine(row: NewHireRow, t: HiresWords): string {
-  return row.firstSaleDay !== null && row.status !== 'not_yet'
-    ? t.list.firstSaleOnDay({ day: row.firstSaleDay })
-    : t.list.dayN({ day: row.day });
+  if (row.firstSaleDay !== null && row.status !== 'not_yet') return t.list.firstSaleOnDay({ day: row.firstSaleDay });
+  return missedThreeMonths(row) ? t.list.missedOnDay({ day: row.day }) : t.list.dayN({ day: row.day });
 }
 
-/** The status circle (UI-024): green ✓ *Teraktivasi*, amber ✓ after day 90, empty when not yet — named for a reader. */
-function StatusCircle({ status }: { status: NewHireStatus }) {
+/** The line's ink: amber for a first sale after day 90, the alert's for one missed (AC-3), the row's own otherwise. */
+const lineInk = (row: NewHireRow) =>
+  (row.status === 'activated_late' ? 'text-primary-ink' : missedThreeMonths(row) ? 'text-alert' : undefined);
+
+/**
+ * The status circle (UI-024): green ✓ *Teraktivasi*, amber ✓ after day 90 — and **not yet, the person's photo, or their
+ * initials on their tint** (P19.11-T2 AC-4, UX-14), the shared `Avatar` at the circle's 28px, so the tree's line meets
+ * every row at the same height. Named for a screen reader by its status, as before.
+ */
+function StatusCircle({ row }: { row: NewHireRow }) {
   const t = useMessages(newHiresMessages).list;
+  const status: NewHireStatus = row.status;
   return (
     <span
       data-status={status}
@@ -370,10 +387,11 @@ function StatusCircle({ status }: { status: NewHireStatus }) {
         'inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full',
         status === 'activated' && 'bg-pill-green text-pill-green-ink',
         status === 'activated_late' && 'bg-pill-amber text-pill-amber-ink',
-        status === 'not_yet' && 'border-2 border-line bg-card',
       )}
     >
-      {status !== 'not_yet' && <LineIcon name="check" className="h-4 w-4" />}
+      {status === 'not_yet'
+        ? <Avatar name={row.hire.name} photoUrl={row.hire.photoUrl} seed={row.hire.membershipId} size={28} />
+        : <LineIcon name="check" className="h-4 w-4" />}
       <span className="sr-only">{t.status[status]}</span>
     </span>
   );
@@ -396,20 +414,17 @@ function ChecklistMini({ checklist, wide = false }: { checklist: NewHireRow['che
 }
 
 /**
- * **Where a row opens: the person's activation, unless they have left** (the Phase 19.9 exit review, L4). A new hire who
- * was marked as left stays on the list (ADR-0173 §2), but nobody coaches them now, so `/new-hires/{id}` answers *not
- * found* for them: their row reads as a row and opens nothing, on the phone's tree and the table alike.
+ * One leader's group below 768px (UI-024, UI-073): the leader's row with its ⌄, and its people on the shared tree. **The
+ * leader's avatar is their photo** (UI-111): the unit's leader's from the read, *Direct Unit*'s the reader's own — initials
+ * without one. *Changed 2026-11-10:* it drew initials for everybody, a leader with a photo included.
  */
-function hrefFor(row: NewHireRow, hrefOf: (membershipId: string) => string): string | undefined {
-  return row.leftOn ? undefined : hrefOf(row.hire.membershipId);
-}
-
-/** One leader's group below 768px (UI-024, UI-073): the leader's row with its ⌄, and its people on the shared tree. */
 function GroupCard({
-  group, readerName, hrefOf, startOpen,
+  group, readerName, readerPhoto = null, hrefOf, startOpen,
 }: {
   group: NewHireGroup;
   readerName: string;
+  /** The reader's own photo, for *Direct Unit*; none on the sample. */
+  readerPhoto?: string | null;
   hrefOf: (membershipId: string) => string;
   startOpen: boolean;
 }) {
@@ -422,6 +437,7 @@ function GroupCard({
       <PersonRow
         name={name}
         seed={group.key}
+        photoUrl={group.unit.leader ? group.unit.leader.photoUrl : readerPhoto}
         avatarSize={32}
         meta={groupMeta(group, t, group.rows.length)}
         trailing={(
@@ -439,10 +455,11 @@ function GroupCard({
             <TreeNode key={row.hire.membershipId}>
               <PersonRow
                 name={row.hire.name}
-                href={hrefFor(row, hrefOf)}
+                // P19.11-T2 AC-1 (UX-3): every row opens — a new hire who left too, onto their read-only detail.
+                href={hrefOf(row.hire.membershipId)}
                 chevron
-                lead={<StatusCircle status={row.status} />}
-                meta={<span className={cn(row.status === 'activated_late' && 'text-primary-ink')}>{personLine(row, t)}</span>}
+                lead={<StatusCircle row={row} />}
+                meta={<span className={cn(lineInk(row))}>{personLine(row, t)}</span>}
                 trailing={<ChecklistMini checklist={row.checklist} />}
               />
             </TreeNode>
@@ -457,8 +474,15 @@ function GroupCard({
 const STATUS_TONE = { activated: 'green', activated_late: 'amber', not_yet: 'grey' } as const;
 
 /**
- * **From 768px, the tree as a table** (UI-024, D-24): *Nama · Status · Checklist*, every leader open — a leader's row
- * spanning the table, their people under it, newest first. The name opens the person, as the phone's row does.
+ * **The person's link stretched over their table row** (P19.11-T2 AC-1, UX-3: *make the whole row tappable*): the name is
+ * the target, as on the phone's row, its `::after` covering the row (`relative` on the `<tr>`), so a click on the status
+ * or the checklist opens the person too — nothing else in the row is a control.
+ */
+const ROW_STRETCH = "after:absolute after:inset-0 after:content-['']";
+
+/**
+ * **From 1024px, the tree as a table** (UI-024, D-24): *Nama · Status · Checklist*, every leader open — a leader's row
+ * spanning the table, their people under it, newest first. The whole row opens the person, as the phone's row does.
  */
 function RosterTable({
   groups, readerName, hrefOf,
@@ -498,33 +522,29 @@ function RosterTable({
                   </span>
                 </th>
               </tr>
-              {group.rows.map((row) => {
-                const href = hrefFor(row, hrefOf);
-                return (
-                  <tr key={row.hire.membershipId} className="lg:hover:bg-hover-row">
-                    <th scope="row" className={cn(TD, 'text-left')}>
-                      {href === undefined
-                        ? <span className="inline-flex min-h-11 items-center text-md font-bold uppercase text-ink lg:min-h-8">{row.hire.name}</span>
-                        : (
-                          <Link
-                            href={href}
-                            className="inline-flex min-h-11 items-center gap-1 text-md font-bold uppercase text-ink hover:underline lg:min-h-8"
-                          >
-                            {row.hire.name}
-                            <LineIcon name="chevronRight" className="h-4 w-4 text-signal-grey" />
-                          </Link>
-                        )}
-                    </th>
-                    <td className={TD}>
-                      <TonePill tone={STATUS_TONE[row.status]}>{t.list.status[row.status]}</TonePill>
-                      <span className={cn('mt-0.5 block text-sm text-muted', row.status === 'activated_late' && 'text-primary-ink')}>
-                        {personLine(row, t)}
-                      </span>
-                    </td>
-                    <td className={TD}><ChecklistMini checklist={row.checklist} wide /></td>
-                  </tr>
-                );
-              })}
+              {group.rows.map((row) => (
+                <tr key={row.hire.membershipId} className="relative lg:hover:bg-hover-row">
+                  <th scope="row" className={cn(TD, 'text-left')}>
+                    <Link
+                      href={hrefOf(row.hire.membershipId)}
+                      className={cn(
+                        'inline-flex min-h-11 items-center gap-1 text-md font-bold uppercase text-ink hover:underline lg:min-h-8',
+                        ROW_STRETCH,
+                      )}
+                    >
+                      {row.hire.name}
+                      <LineIcon name="chevronRight" className="h-4 w-4 text-signal-grey" />
+                    </Link>
+                  </th>
+                  <td className={TD}>
+                    <TonePill tone={STATUS_TONE[row.status]}>{t.list.status[row.status]}</TonePill>
+                    <span className={cn('mt-0.5 block text-sm text-muted', lineInk(row))}>
+                      {personLine(row, t)}
+                    </span>
+                  </td>
+                  <td className={TD}><ChecklistMini checklist={row.checklist} wide /></td>
+                </tr>
+              ))}
             </tbody>
           );
         })}
@@ -560,7 +580,7 @@ function RosterTable({
  *   hand the sheet offers the days up to it.
  * - **Every figure is served**, and every write answers the whole activation and the strip in place, nothing jumping
  *   (P18.8-T7). A hire outside the reader's reach is a 404, named for nobody; a read-only support session draws no
- *   write control.
+ *   write control, **nor does a new hire who left** (`readOnly`, P19.11-T2 AC-1), whom the roster lists and opens.
  * - **The first year only** (P19.9-T3 AC-5; OD-289, ADR-0233, the owner's R5): from the join date plus twelve months the
  *   server answers the activation empty, and the page is the person's header and one line — *the 90-Day Activation
  *   covers the first year after joining only* — with nothing of the checklist; so is a new hire New Hires lists who has
@@ -583,14 +603,13 @@ export function NewHireDetail({
   const figures = useFigureLanguage();
   const phone = usePhone();
   const { me } = useSession();
-  const readOnly = !!me?.isImpersonating && !!me.impersonationReadOnly;
-  const mayTick = useCan('activation:update_manual_item') && !readOnly;
-  // P18.8-T4 AC-3: a data-backed item's hand tick carries its record, which only a leader who runs sessions writes.
-  const mayRecord = useCan('coaching_session:create') && mayTick;
-  const mayCorrect = useCan('activation:set_start_date') && !readOnly;
-  const mayNote = useCan('activation_note:write') && !readOnly;
-  const maySchedule = useCan('calendar_entry:create') && !readOnly;
-  const mayPhone = useCan('member:update_phone') && !readOnly;
+  const sessionReadOnly = !!me?.isImpersonating && !!me.impersonationReadOnly;
+  const canTick = useCan('activation:update_manual_item');
+  const canRecord = useCan('coaching_session:create');
+  const canCorrect = useCan('activation:set_start_date');
+  const canNote = useCan('activation_note:write');
+  const canSchedule = useCan('calendar_entry:create');
+  const canPhone = useCan('member:update_phone');
   const reader = me?.membership?.membershipId;
   const { toast, show } = useToast();
   const queue = useWriteQueue();
@@ -610,6 +629,19 @@ export function NewHireDetail({
   const [sheet, setSheet] = useState<'firstSale' | 'joinDate' | 'phone' | null>(null);
   const phoneSheetOpened = useOpenedOnce(sheet === 'phone');
   const [savedPhone, setSavedPhone] = useState<string | null>(null);
+
+  /*
+   * **No write control** in a read-only support session, **nor on a new hire who left** (P19.11-T2 AC-1, UX-3; ADR-0239):
+   * the server serves them `readOnly` — listed and opened, never written; every write route answers 404 for them.
+   */
+  const readOnly = sessionReadOnly || view?.readOnly === true;
+  const mayTick = canTick && !readOnly;
+  // P18.8-T4 AC-3: a data-backed item's hand tick carries its record, which only a leader who runs sessions writes.
+  const mayRecord = canRecord && mayTick;
+  const mayCorrect = canCorrect && !readOnly;
+  const mayNote = canNote && !readOnly;
+  const maySchedule = canSchedule && !readOnly;
+  const mayPhone = canPhone && !readOnly;
 
   useEffect(() => {
     let live = true;

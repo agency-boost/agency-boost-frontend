@@ -5,7 +5,9 @@ import { kept } from '@/i18n/kept';
 /**
  * **One member** — `/people/members/[membershipId]`, the prototype's person modal as a page (P18.10-T4, people and
  * forum; `functional/org-hierarchy.md`, *Changing what somebody is*, *Removing somebody*): their details, their unit,
- * their tags, a role change, a removal, and who reports to them.
+ * their tags, a role change, a removal, and who reports to them. **Since P19.12-T5** (ADR-0248 §1; the client's message
+ * of 11 November 2026, item 9): one card *Posisi di tim* (*Peran · Ubah*, *Melapor ke · Ganti*, *Grup informal · Ubah*),
+ * *Data pribadi* folded with *Lengkapi data*, and *Keluarkan dari KPM* last — the long explanations gone.
  *
  * **English is the source.** The Indonesian is the approved glossary's (§B.1 to §B.5; *office* is *KPM*, §B.9), with
  * *Keluarkan* for removing somebody from the office — §B.3's *Dikeluarkan*, never *Hapus*, since nothing is deleted
@@ -17,16 +19,23 @@ import { kept } from '@/i18n/kept';
  * @moved app/(tenant)/people/members/[membershipId]/page.tsx
  */
 
-/** A run of words drawn bold, or as a link. */
-type Wrap = (words: ReactNode) => ReactNode;
-
 const en = {
   /** Said beside the refusal of a member the reader cannot see: the same as one who does not exist. */
   hidden: 'Someone outside what you can see reads the same as someone who does not exist — a distinct message would confirm they are here.',
   back: 'Back to the roster',
   loading: 'Loading the member…',
-  /** *Personal*: the person's details. */
-  personal: 'Personal',
+  /**
+   * ***Data pribadi***, folded (P19.12-T5 AC-1, AC-2; ADR-0248 §1–§3): `missing` how many of the five a person records
+   * are not, the summary's count; *Lengkapi data* opens a form of the blank ones only.
+   */
+  personalData: 'Personal data',
+  missing: ({ n }: { n: number }) => `${n} not recorded`,
+  whatsapp: 'WhatsApp number',
+  complete: 'Complete details',
+  completeTitle: ({ name }: { name: string }) => `Complete ${name}’s details`,
+  completeLine: 'Only what is not recorded yet. What is recorded is theirs to change.',
+  completeSave: 'Save',
+  completed: 'Saved',
   fullName: 'Full name',
   email: 'Email',
   agentCode: 'Agent code',
@@ -62,46 +71,39 @@ const en = {
     closing: ({ n }: { n: string }) => `${n} closing`,
     seeDashboard: 'See dashboard',
   },
-  /** *Unit*: whom they lead. */
+  /**
+   * ***Posisi di tim*** (P19.12-T5 AC-1; ADR-0248 §1): the role, the leader and the informal groups, one line each with
+   * its control — *Ubah* or *Ganti*, each named in full for a screen reader — and the unit in one line.
+   */
+  position: 'Position in the team',
+  edit: 'Edit',
+  change: 'Change',
+  editRole: 'Edit role',
+  changeLeader: 'Change leader',
+  editGroups: 'Edit informal groups',
+  /** *Unit*: whom they lead, in one line — `direct` their direct reports, `whole` everybody below them. */
   unit: kept('Unit'),
-  directReports: 'Direct reports',
-  wholeUnit: 'Whole unit',
-  depth: 'Depth',
-  belowRoot: ({ n }: { n: number }) => `${n} below the root`,
-  /** One who leads nobody: `rung` their badge's name. */
-  leadsNobody: ({ rung }: { rung: string }) =>
-    `${rung}, and leads nobody. Leadership follows the tree rather than the role — an ${rung} with no direct reports has no unit, and the surfaces that need one stay closed until they do.`,
-  /** *Tags*: groups and *Core Leader* (ADR-0159). */
-  tags: 'Tags',
-  tagsLine: ({ strong }: { strong: Wrap }) => (
-    <>
-      Groups are labels this office defines for its own organising. A group is {strong('not')} hierarchy: it changes
-      nothing about who reports to whom, and grants nobody access to anything.
-    </>
-  ),
+  unitLine: ({ direct, whole }: { direct: string; whole: string }) => `${direct} direct · ${whole} in the whole unit`,
+  /** *Grup informal*: groups and *Core Leader* (ADR-0159). */
+  informalGroups: 'Informal groups',
   editTags: 'Edit tags',
   retiredGroup: 'A group since retired',
-  noTags: 'No tags.',
+  noTags: 'None',
   /** `where` the link to *All members › Groups*, its words kept. */
   noGroups: ({ where }: { where: ReactNode }) => <>No groups yet — create one on {where} first.</>,
   groups: 'Groups',
-  coreLeaderLine: ({ notALeader }: { notALeader: boolean }) =>
-    `A Core Leader opens the Strategic Leader Forum's meetings and reads the office's KPM analytics, besides the Owner and the Admins. It is not a role, and it grants no hierarchy and no unit. ${notALeader
-      ? 'Only a leader can be one: move them to a leader rung first. A tag kept from before has no effect until they lead again.'
-      : 'Only a leader can be one.'}`,
+  /** Why the *Core Leader* box cannot be ticked, said only then (ADR-0159 §1). */
+  coreLeaderOnlyLeaders: 'Only a leader can be a Core Leader.',
   saveTags: 'Save tags',
   saving: 'Saving…',
   cancel: 'Cancel',
   /** *Change their role* (P3.1-T13). */
   changeRole: 'Change their role',
   newRole: 'New role',
-  /** `ab` the AB rung's badge name. */
-  onlyOfficeMakesAb: ({ ab }: { ab: string }) => `Only the office can make somebody an ${ab}, or stop them being one.`,
   noChange: ({ rung }: { rung: string }) => `${rung} — no change`,
   why: 'Why?',
-  whyRole: 'Optional, and worth writing: this is what the role change log shows months later.',
   changeRoleButton: 'Change role',
-  /** *Remove from the office* (P3-T7): nothing is deleted. */
+  /** *Remove from the office* (P3-T7): nothing is deleted — the dialog's one line says so, the removal's consequence. */
   remove: 'Remove from the office',
   removeLine: 'Nothing is deleted. Their record and everything they logged stays with the office, on the Removed list.',
   removeName: ({ name }: { name: string }) => `Remove ${name}`,
@@ -109,10 +111,8 @@ const en = {
   sayWhere: 'Say where they go.',
   moveUp: ({ to }: { to: string | null }) => `Move them up to ${to ?? 'their leader’s leader'}`,
   leaveUnassigned: 'Leave them unassigned, for another leader to pick up',
-  whyRemove: 'Kept on their record, and sent to them.',
   /** `word` the one the server checks, *REMOVE*, the same in both languages. */
   typeToConfirm: ({ word }: { word: string }) => `Type ${word} to confirm`,
-  confirmHint: 'The server checks this too. A confirmation only the screen enforces is not a confirmation.',
   removeThem: 'Remove them',
   removing: 'Removing…',
   /** *Who reports to them*. */
@@ -127,7 +127,14 @@ const id: MessagesOf<typeof en> = {
   hidden: 'Orang di luar yang dapat Anda lihat tampak sama seperti orang yang tidak ada — pesan yang berbeda akan memastikan bahwa dia ada di sini.',
   back: 'Kembali ke roster',
   loading: 'Memuat anggota…',
-  personal: 'Pribadi',
+  personalData: 'Data pribadi',
+  missing: ({ n }) => `${n} belum dicatat`,
+  whatsapp: 'No. WhatsApp',
+  complete: 'Lengkapi data',
+  completeTitle: ({ name }) => `Lengkapi data ${name}`,
+  completeLine: 'Hanya data yang belum dicatat. Data yang sudah tercatat hanya dapat diubah oleh dia sendiri.',
+  completeSave: 'Simpan',
+  completed: 'Tersimpan',
   fullName: 'Nama lengkap',
   email: 'Email',
   agentCode: 'Kode agen',
@@ -154,38 +161,28 @@ const id: MessagesOf<typeof en> = {
     closing: ({ n }) => `${n} ${kept('closing')}`,
     seeDashboard: `Lihat ${kept('dashboard')}`,
   },
+  position: 'Posisi di tim',
+  edit: 'Ubah',
+  change: 'Ganti',
+  editRole: 'Ubah peran',
+  changeLeader: `Ganti ${kept('leader')}`,
+  editGroups: 'Ubah grup informal',
   unit: kept('Unit'),
-  directReports: 'Bawahan langsung',
-  wholeUnit: `Seluruh ${kept('unit')}`,
-  depth: 'Kedalaman',
-  belowRoot: ({ n }) => `${n} di bawah puncak`,
-  leadsNobody: ({ rung }) =>
-    `${rung}, dan tidak memimpin siapa pun. Kepemimpinan mengikuti pohon, bukan peran — ${rung} tanpa bawahan langsung tidak punya ${kept('unit')}, dan bagian yang memerlukannya tetap tertutup sampai dia punya.`,
-  tags: 'Tag',
-  tagsLine: ({ strong }) => (
-    <>
-      Grup adalah label yang ditetapkan {kept('KPM')} ini untuk pengaturannya sendiri. Grup {strong('bukan')} hierarki:
-      grup tidak mengubah siapa melapor kepada siapa, dan tidak memberi siapa pun akses ke apa pun.
-    </>
-  ),
+  unitLine: ({ direct, whole }) => `${direct} langsung · ${whole} seluruh ${kept('unit')}`,
+  informalGroups: 'Grup informal',
   editTags: 'Ubah tag',
   retiredGroup: 'Grup yang sudah dinonaktifkan',
-  noTags: 'Tidak ada tag.',
+  noTags: 'Tidak ada',
   noGroups: ({ where }) => <>Belum ada grup — buat dulu di {where}.</>,
   groups: 'Grup',
-  coreLeaderLine: ({ notALeader }) =>
-    `${kept('Core Leader')} membuka rapat ${kept('Strategic Leader Forum')} dan membaca ${kept('KPM analytics')}, selain ${kept('Owner')} dan para ${kept('Admin')}. Ini bukan peran, dan tidak memberi hierarki maupun ${kept('unit')}. ${notALeader
-      ? `Hanya seorang ${kept('leader')} yang dapat menjadi ${kept('Core Leader')}: pindahkan dia ke jenjang ${kept('leader')} dulu. Tag yang tersimpan dari sebelumnya tidak berlaku sampai dia memimpin lagi.`
-      : `Hanya seorang ${kept('leader')} yang dapat menjadi ${kept('Core Leader')}.`}`,
+  coreLeaderOnlyLeaders: `Hanya seorang ${kept('leader')} yang dapat menjadi ${kept('Core Leader')}.`,
   saveTags: 'Simpan tag',
   saving: 'Menyimpan…',
   cancel: 'Batal',
   changeRole: 'Ubah perannya',
   newRole: 'Peran baru',
-  onlyOfficeMakesAb: ({ ab }) => `Hanya ${kept('KPM')} yang dapat menjadikan seseorang ${ab}, atau mencabutnya.`,
   noChange: ({ rung }) => `${rung} — tanpa perubahan`,
   why: 'Alasan',
-  whyRole: `Opsional, tetapi sebaiknya ditulis: inilah yang ditampilkan ${kept('Role change log')} berbulan-bulan kemudian.`,
   changeRoleButton: 'Ubah peran',
   remove: `Keluarkan dari ${kept('KPM')}`,
   removeLine: `Tidak ada yang dihapus. Datanya dan semua yang pernah dia catat tetap ada di ${kept('KPM')}, di daftar ${kept('Removed')}.`,
@@ -194,9 +191,7 @@ const id: MessagesOf<typeof en> = {
   sayWhere: 'Tentukan ke mana mereka pindah.',
   moveUp: ({ to }) => `Naikkan mereka ke ${to ?? `${kept('leader')} di atasnya`}`,
   leaveUnassigned: `Biarkan mereka belum ditempatkan, untuk diambil ${kept('leader')} lain`,
-  whyRemove: 'Disimpan di datanya, dan dikirim kepadanya.',
   typeToConfirm: ({ word }) => `Ketik ${word} untuk mengonfirmasi`,
-  confirmHint: 'Server juga memeriksanya. Konfirmasi yang hanya diperiksa di layar bukanlah konfirmasi.',
   removeThem: 'Keluarkan dia',
   removing: 'Mengeluarkan…',
   reports: 'Yang melapor kepadanya',

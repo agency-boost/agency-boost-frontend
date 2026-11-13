@@ -185,6 +185,36 @@ describe('/new-hires/[membershipId] — UI V1 (UI-023, UI-025, UI-027; D-25, D-2
     for (const box of screen.getAllByRole('checkbox')) expect(box).toBeDisabled();
   });
 
+  /*
+   * P19.11-T2 AC-1 (UX-3; ADR-0239): a new hire who left opens from New Hires as anybody does, served `readOnly` — the API
+   * refuses every write on them — so the page draws none: no ⋯, no *Isi tanggal*, no box to tick, no 1:1 to schedule, no
+   * number to ask for, no note to write; at both sizes, for a leader who may do all of it for anybody else.
+   */
+  it.each([375, 1024])('P19.11-T2 AC-1 at %ipx a new hire who left opens read-only: every write control hidden, nothing sent', async (px) => {
+    atWidth(px);
+    const left: NewHireDetail = { ...noFirstSale(), readOnly: true };
+    const { calls } = show(left);
+    expect(await screen.findByText('Rina Wijaya', { selector: 'h1' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'More for Rina Wijaya' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Schedule 1:1 with Rina Wijaya' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'WhatsApp Rina Wijaya' })).toBeNull();
+    expect(screen.queryByText('Add date')).toBeNull();
+    if (px < 768) await userEvent.click(screen.getByRole('button', { name: /First Sale/ }));
+    for (const box of screen.getAllByRole('checkbox')) expect(box).toBeDisabled();
+    expect(screen.queryByRole('button', { name: /^Save/ })).toBeNull();
+    // The coaching note reads as it stands, never typed into.
+    for (const box of screen.queryAllByRole('textbox')) expect(box).toHaveAttribute('readonly');
+    expect(writes(calls)).toEqual([]);
+  });
+
+  it('P19.11-T2 AC-1 the same hire the reader coaches (readOnly false) keeps every write control', async () => {
+    atWidth(375);
+    show({ ...noFirstSale(), readOnly: false });
+    await screen.findByTestId('hire-header-phone');
+    expect(screen.getByRole('button', { name: 'More for Rina Wijaya' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Schedule 1:1 with Rina Wijaya' })).toBeInTheDocument();
+  });
+
   it('UI-027 from 768px: today’s layout with the strip and the two buttons added — the way back in words, no subtitle, no table', async () => {
     atWidth(1024);
     show();

@@ -295,7 +295,7 @@ describe('P18.10-T4 a person and their session in Indonesian', () => {
     expect(screen.getByText('Draf')).toBeInTheDocument();
 
     const goal = await card('Goal');
-    await within(goal).findByText(/Rp 65,6 jt/);
+    await within(goal).findByText(/Rp 65,6 Jt/);
     expect(goal).toHaveTextContent('Bulan ini');
     expect(goal).toHaveTextContent('Tahun ini');
     expect(within(goal).getByText('Ketuk target tahun ini untuk mengubah')).toBeInTheDocument();
@@ -445,8 +445,8 @@ describe('P18.10-T4 the record in Indonesian', () => {
     expect(paper).toHaveTextContent('Jumat, 2 Okt 2026 · Di-coaching oleh Agus Santoso · Final');
     expect(paper).toHaveTextContent('Tindakan minggu lalu');
     expect(paper).toHaveTextContent('[x] Confirm the paperwork');
-    expect(paper).toHaveTextContent('Bulan ini: Rp 65,6 jt / Rp 80 jt');
-    expect(paper).toHaveTextContent('Tahun ini: Belum diunggah / Rp 960 jt');
+    expect(paper).toHaveTextContent('Bulan ini: Rp 65,6 Jt / Rp 80 Jt');
+    expect(paper).toHaveTextContent('Tahun ini: Belum diunggah / Rp 960 Jt');
     expect(paper).toHaveTextContent('Tips coaching');
     expect(paper).toHaveTextContent('Tindakan berikutnya — dari leads');
     expect(paper).toHaveTextContent('1. 3 Okt — Lakukan follow up dengan Desi (Leads: Desi)');
@@ -497,7 +497,7 @@ describe('P18.10-T4 the record in Indonesian', () => {
     await userEvent.click(within(earlier).getByRole('button', { name: 'Lihat yang disepakati' }));
     expect(within(earlier).getByRole('button', { name: 'Sembunyikan yang disepakati' })).toBeInTheDocument();
     expect(within(earlier).getAllByText('Tidak ada tips yang ditambahkan di sesi ini.')).toHaveLength(1);
-    expect(screen.getByRole('region', { name: 'Goal' })).toHaveTextContent('Sisa Rp 14,4 jt untuk bulan ini.');
+    expect(screen.getByRole('region', { name: 'Goal' })).toHaveTextContent('Sisa Rp 14,4 Jt untuk bulan ini.');
     expect(screen.getByRole('region', { name: /^Rasio/ })).toHaveTextContent('Belum ada ratio untuk perannya.');
     noEnglishLeft();
   });

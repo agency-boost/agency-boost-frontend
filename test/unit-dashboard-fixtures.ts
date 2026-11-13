@@ -165,16 +165,21 @@ export function dashboard(over: Partial<UnitDashboardView> = {}): UnitDashboardV
     empty: false,
     readOnly: false,
     tiles: {
-      team: { total: 16, direct: 4, units: 3, underUnits: 9, newHires: 0 },
+      team: { total: 16, direct: 4, units: 3, underUnits: 9, aab: 12, ab: 0, newHires: 0 },
       directGroupProduction: {
         targetMinor: rp(1280), actualMinor: rp(1000), attainmentPct: 78, missing: 2, gapMinor: rp(280), overMinor: 0, period: 'month',
       },
       // UI-013: out of manpower, split Unit (Agus and his three) / AAB (the twelve below).
-      potentialActive: { count: 12, of: 16, unit: { count: 3, of: 4 }, aab: { count: 9, of: 12 } },
-      potentialRecruits: { yourUnit: 1, aabs: 1 },
+      potentialActive: { count: 12, of: 16, unit: { count: 3, of: 4 }, aab: { count: 9, of: 12 }, ab: { count: 0, of: 0 } },
+      potentialRecruits: { yourUnit: 1, aabs: 1, abs: 0 },
     },
     yourUnit: { rows: [AGUS_ROW, DIMAS, INDAH, SITI], total: total() },
     units: UNITS,
+    // P19.12-T6 (ADR-0249): Grup langsung, the only view an AB with no AB below is offered.
+    unled: null,
+    scope: 'direct',
+    scopes: { offered: ['direct'], default: 'direct' },
+    informal: null,
     production: { month: '2026-10', revision: 7, locked: false, canUpdate: true },
     mdrt: { running: true, tooltip: MDRT_TOOLTIP },
     lastUpload: '2026-10-07',
@@ -187,12 +192,12 @@ export const EMPTY = dashboard({
   head: { membershipId: 'mem-rina', name: 'Rina Wijaya', isReader: true },
   empty: true,
   tiles: {
-    team: { total: 0, direct: 0, units: 0, underUnits: 0, newHires: 0 },
+    team: { total: 0, direct: 0, units: 0, underUnits: 0, aab: 0, ab: 0, newHires: 0 },
     directGroupProduction: {
       targetMinor: null, actualMinor: null, attainmentPct: null, missing: 0, gapMinor: null, overMinor: null, period: 'month',
     },
-    potentialActive: { count: 0, of: 0, unit: { count: 0, of: 0 }, aab: { count: 0, of: 0 } },
-    potentialRecruits: { yourUnit: 0, aabs: 0 },
+    potentialActive: { count: 0, of: 0, unit: { count: 0, of: 0 }, aab: { count: 0, of: 0 }, ab: { count: 0, of: 0 } },
+    potentialRecruits: { yourUnit: 0, aabs: 0, abs: 0 },
   },
   yourUnit: { rows: [], total: total({ potentialActive: { count: 0, of: 0 } }) },
   units: [],
@@ -203,12 +208,12 @@ export const EMPTY = dashboard({
 export const SARI_UNIT = dashboard({
   head: { membershipId: 'mem-sari', name: 'Sari Wulandari', isReader: false },
   tiles: {
-    team: { total: 6, direct: 4, units: 1, underUnits: 1, newHires: 0 },
+    team: { total: 6, direct: 4, units: 1, underUnits: 1, aab: 2, ab: 0, newHires: 0 },
     directGroupProduction: {
       targetMinor: rp(240), actualMinor: rp(131.2), attainmentPct: 55, missing: 1, gapMinor: rp(108.8), overMinor: 0, period: 'month',
     },
-    potentialActive: { count: 4, of: 6, unit: { count: 3, of: 4 }, aab: { count: 1, of: 2 } },
-    potentialRecruits: { yourUnit: 1, aabs: 0 },
+    potentialActive: { count: 4, of: 6, unit: { count: 3, of: 4 }, aab: { count: 1, of: 2 }, ab: { count: 0, of: 0 } },
+    potentialRecruits: { yourUnit: 1, aabs: 0, abs: 0 },
   },
   yourUnit: {
     rows: [{ ...SARI, depth: 0 }, { ...BUDI, depth: 1 }, { ...RINA, depth: 1 }, { ...YANTI, depth: 1 }],
@@ -226,12 +231,12 @@ export const SARI_UNIT = dashboard({
 export const YANTI_NEW = { ...YANTI, newHireBeforeFirstSale: true };
 export const NEW_HIRE_VIEW = dashboard({
   tiles: {
-    team: { total: 16, direct: 4, units: 3, underUnits: 9, newHires: 1 },
+    team: { total: 16, direct: 4, units: 3, underUnits: 9, aab: 12, ab: 0, newHires: 1 },
     directGroupProduction: {
       targetMinor: rp(1200), actualMinor: rp(1000), attainmentPct: 83, missing: 1, gapMinor: rp(200), overMinor: 0, period: 'month',
     },
-    potentialActive: { count: 11, of: 16, unit: { count: 3, of: 4 }, aab: { count: 8, of: 12 } },
-    potentialRecruits: { yourUnit: 1, aabs: 1 },
+    potentialActive: { count: 11, of: 16, unit: { count: 3, of: 4 }, aab: { count: 8, of: 12 }, ab: { count: 0, of: 0 } },
+    potentialRecruits: { yourUnit: 1, aabs: 1, abs: 0 },
   },
   units: [
     UNITS[0],

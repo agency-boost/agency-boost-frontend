@@ -5,6 +5,7 @@ import { useEffect, useId, useState } from 'react';
 import { Cell, DataTable, Row } from '@/components/ui/data-table';
 import { Button, Card, ErrorBanner, Field, Textarea } from '@/components/ui/field';
 import { ConsoleCode } from '@/components/ui/console-code';
+import { LineIcon } from '@/components/ui/line-icon';
 import { Toast, useToast } from '@/components/ui/toast';
 import { TonePill, type PillTone } from '@/components/ui/tone-pill';
 import { useMessages } from '@/i18n/language-provider';
@@ -12,6 +13,7 @@ import { rosterImportMessages } from '@/i18n/messages/roster-import';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { errorReference } from '@/lib/browser-errors';
 import { cn } from '@/lib/cn';
+import { inviteWhatsAppLink } from '@/lib/invites';
 import { saveFile } from '@/lib/save-file';
 import { useSession } from '@/lib/session';
 import { usePhone } from '@/lib/use-phone';
@@ -43,8 +45,11 @@ const COLUMNS = [
   ['Jenis kelamin', 'gender'], ['Bulan bergabung di perusahaan', 'companyJoinMonth'],
 ] as const;
 
-/** A3's chips: *Masuk* green, *Diperbarui* blue, *Dilewati* red — each with its words, never the colour alone. */
-const OUTCOME_TONE: Record<RosterOutcome, PillTone> = { imported: 'green', updated: 'blue', skipped: 'red' };
+/**
+ * A3's chips: *Masuk* green, *Diperbarui* blue, *Dilewati* red — each with its words, never the colour alone — and
+ * *Diundang lewat WhatsApp* grey, as New Hires draws an invitation still waiting (ADR-0250 §4).
+ */
+const OUTCOME_TONE: Record<RosterOutcome, PillTone> = { imported: 'green', updated: 'blue', invited: 'grey', skipped: 'red' };
 
 /**
  * Filling and updating an office from a spreadsheet (P3.2-T4; the setup spec's §A3 since P19.3-T4, ADR-0205).
@@ -164,13 +169,15 @@ export function RosterImport({
       setRows('');
       setFile(null);
       // A3's toast, naming email (ADR-0205 §7).
-      show(t.toast({ imported: result.counts.imported, updated: result.counts.updated, invited: result.invited > 0 }));
+      show(t.toast({
+        imported: result.counts.imported, updated: result.counts.updated, whatsApp: result.counts.invited, invited: result.invited > 0,
+      }));
     } catch (err) {
       setError(toDisplayError(err));
       // A file the server could not read carries its issues: the list reappears rather than a bare refusal.
       // `err.error.details`, not `err.details`: `ApiRequestError` carries the envelope on an `error` field.
       const issues = (err as { error?: { details?: { issues?: RosterPreview['issues'] } } })?.error?.details?.issues;
-      if (issues) setPreview({ issues, header: [], counts: { imported: 0, updated: 0, skipped: 0 }, rows: [], skippedCsv: null });
+      if (issues) setPreview({ issues, header: [], counts: { imported: 0, updated: 0, invited: 0, skipped: 0 }, rows: [], skippedCsv: null });
     } finally {
       setBusy(null);
     }
@@ -184,7 +191,8 @@ export function RosterImport({
   /* The paste box shows the same three people the template does, tab-separated — what a clipboard carries. */
   const placeholder = examples.map((cells) => cells.join('\t')).join('\n');
   const code = (typed: string) => <code>{typed}</code>;
-  const writes = preview ? preview.counts.imported + preview.counts.updated : 0;
+  // The rows the import acts on: the new, the updated, and those it invites on WhatsApp (ADR-0250 §4).
+  const writes = preview ? preview.counts.imported + preview.counts.updated + preview.counts.invited : 0;
 
   return (
     <>
@@ -197,10 +205,12 @@ export function RosterImport({
       {done ? (
         <Card>
           <h2 className="font-display text-lg font-bold text-navy">
-            {t.done({ imported: done.counts.imported, updated: done.counts.updated })}
+            {t.done({ imported: done.counts.imported, updated: done.counts.updated, whatsApp: done.counts.invited })}
           </h2>
           <p className="mt-1 text-md text-muted">
             {done.invited > 0 ? t.invitedLine({ n: done.invited }) : done.counts.imported > 0 ? t.notInvitedLine : null}
+            {/* ADR-0250 §4: the WhatsApp invitations are shared from their rows, or later from New Hires. */}
+            {done.counts.invited > 0 && <>{done.invited > 0 || done.counts.imported > 0 ? ' ' : null}{t.whatsAppLine}</>}
           </p>
           {done.skippedCsv && (
             <div className="mt-3 flex flex-wrap items-center gap-3">
@@ -210,7 +220,7 @@ export function RosterImport({
               </Button>
             </div>
           )}
-          <Results rows={done.rows} />
+          <Results rows={done.rows} touchTargets={touchTargets} />
           <Link
             href={backHref}
             className={cn('mt-4 inline-block text-md font-semibold text-navy underline', touchTargets && 'max-lg:inline-flex max-lg:min-h-11 max-lg:items-center')}
@@ -404,8 +414,12 @@ export function RosterImport({
   );
 }
 
-/** **Each row and what it comes to** (A3): *Kode agen · Nama · Peran · Kode upline · Hasil*, the server's words beside the chip. */
-function Results({ rows }: { rows: RosterPreview['rows'] }) {
+/**
+ * **Each row and what it comes to** (A3): *Kode agen · Nama · Peran · Kode upline · Hasil*, the server's words beside the
+ * chip. **What a row leaves out** — a cell left empty, no number, details missing (ADR-0250 §2, §3) — follows in the
+ * warning tone. **A row invited on WhatsApp** carries, once imported, the WhatsApp button that sends its link (§4).
+ */
+function Results({ rows, touchTargets = false }: { rows: RosterPreview['rows']; touchTargets?: boolean }) {
   const t = useMessages(rosterImportMessages);
   if (rows.length === 0) return null;
   return (
@@ -423,11 +437,44 @@ function Results({ rows }: { rows: RosterPreview['rows'] }) {
           <Cell>
             <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
               <TonePill tone={OUTCOME_TONE[row.outcome]}>{t.outcome[row.outcome]}</TonePill>
+              {row.invite && <SendOnWhatsApp name={row.fullName} invite={row.invite} touchTargets={touchTargets} />}
               {row.messages.length > 0 && <span className="text-sm text-muted">{row.messages.join(' ')}</span>}
+              {row.warnings.length > 0 && <span className="text-sm text-pill-amber-ink">{row.warnings.join(' ')}</span>}
             </span>
           </Cell>
         </Row>
       ))}
     </DataTable>
+  );
+}
+
+/**
+ * **The row's invitation, sent on WhatsApp** (ADR-0250 §4): the chat with the invitee's number, *+ Tambah agent*'s
+ * message and link filled in — `inviteWhatsAppLink`, as *Menunggu bergabung* sends one. An icon in the *Hasil* cell, its
+ * name and tooltip saying whom it goes to; none when the number is not one WhatsApp opens.
+ */
+function SendOnWhatsApp({
+  name, invite, touchTargets,
+}: { name: string; invite: { link: string; phone: string }; touchTargets: boolean }) {
+  const t = useMessages(rosterImportMessages);
+  const href = inviteWhatsAppLink(invite.phone, name, invite.link);
+  if (!href) return null;
+  const label = t.sendOnWhatsApp({ name });
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label={label}
+      title={label}
+      data-channel="whatsapp"
+      className={cn(
+        'flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-whatsapp text-white',
+        'focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus-ring',
+        touchTargets && 'max-lg:h-11 max-lg:w-11',
+      )}
+    >
+      <LineIcon name="whatsapp" className="h-4 w-4" />
+    </a>
   );
 }

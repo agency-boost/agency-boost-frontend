@@ -4,6 +4,7 @@ import { messagesIn } from '@/i18n/catalogue';
 import { DEFAULT_LANGUAGE, type Language } from '@/i18n/language';
 import { addAgentMessages } from '@/i18n/messages/add-agent';
 import { api } from './api-client';
+import type { PendingMove } from './org';
 import { whatsAppNumber } from './phone-number';
 
 /**
@@ -61,6 +62,14 @@ export interface TransferView {
   requestedAt: string;
   /** `null` on a request made before it was kept. */
   requestedName: string | null;
+  /**
+   * **What made it** (P19.12-T4, ADR-0247 §3): *+ Add agent* for a code held in another unit (`add_agent`), or a leader
+   * moving one of their people to a leader outside their tree (`move`) — *{leader} meminta memindahkan {nama} ke unit
+   * {to}*. Optional for a fixture older than it; absent is `add_agent`.
+   */
+  kind?: 'add_agent' | 'move';
+  /** Why the leader asked, as typed (≤300 characters); `null` when they said nothing. */
+  note?: string | null;
 }
 
 /**
@@ -149,6 +158,23 @@ export const declineTransfer = (transferId: string, reason?: string) =>
   api<TransferView[]>(`/transfer-requests/${encodeURIComponent(transferId)}/decline`, {
     method: 'POST',
     body: reason ? { reason } : {},
+  });
+
+/**
+ * **A leader asks the Owner or an Admin to move one of their people to a leader outside their tree**
+ * (`POST /members/:id/transfer-request`; P19.12-T4, ADR-0247 §3). The person stays with the leader until it is
+ * approved; the answer is the move as it waits — *Menunggu persetujuan pemindahan ke {to}* on *Tim Anda*.
+ */
+export const requestTransfer = (membershipId: string, leaderMembershipId: string, reason?: string) =>
+  api<PendingMove>(`/members/${encodeURIComponent(membershipId)}/transfer-request`, {
+    method: 'POST',
+    body: { leaderMembershipId, ...(reason?.trim() ? { reason: reason.trim() } : {}) },
+  });
+
+/** Whoever asked withdraws a move still waiting (`DELETE /transfer-requests/:id`). Nothing about the person changes. */
+export const cancelTransferRequest = (transferId: string) =>
+  api<{ transferId: string; status: 'cancelled' }>(`/transfer-requests/${encodeURIComponent(transferId)}`, {
+    method: 'DELETE',
   });
 
 /**

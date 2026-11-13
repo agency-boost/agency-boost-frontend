@@ -222,33 +222,40 @@ describe('P19.8-T2 AC-6 MOB UI-168 type sizes on a phone', () => {
     for (const chip of block('tiles')!.querySelectorAll('li')) expect(chip.className.split(' ')).toContain('text-sm');
     const name = block('team')!.querySelector('[data-person-row] .uppercase')!;
     expect(wears(name, px).split(' ')).toEqual(expect.arrayContaining(['text-base', 'font-bold']));
-    for (const meta of block('actions')!.querySelectorAll('[data-row-main] > span:last-child')) {
-      expect(meta.className.split(' ')).toContain('text-sm');
-    }
+    // *Aksi hari ini*'s rows are the Calendar's own since P19.11-T1 AC-3, at the Calendar's sizes (its own specs).
   });
 });
 
-describe('P19.8-T2 AC-7 MOB UI-169 Aksi hari ini: the row, the detail over Home, Hapus asks', () => {
-  const rows = () => [...block('actions')!.querySelectorAll<HTMLElement>('[data-action-row]')];
+/*
+ * *Rewritten 2026-11-10 (P19.11-T1 AC-3, AC-4; UX-2):* the rows are the Calendar's own — `TaskRow` and the Agenda's
+ * `AgendaItem` — today's alone, where they were Home's 64px rows (MOB UI-169) and the third was the next day's.
+ */
+describe('P19.8-T2 AC-7 MOB UI-169 P19.11-T1 AC-3 Aksi hari ini: the Calendar’s rows, the detail over Home, Hapus asks', () => {
+  const huddle = () => within(block('actions')!).getByRole('button', { name: /Weekly unit huddle/ });
   const entryRoutes = (second: HomeView = { ...LEADER, actions: LEADER.actions.slice(0, 2) }) => ({
     '/home': [{ body: LEADER }, { body: second }],
     'GET /calendar/entries/e-1': { body: HUDDLE_ENTRY },
     'DELETE /calendar/entries/e-1': { body: { entryId: 'e-1', deletedAt: '2026-10-30T02:10:00.000Z' } },
   });
 
-  it.each([375, 360, 1280])('P19.8-T2 AC-7 MOB UI-169 at %ipx each row is 64px and tappable whole', async (px) => {
+  it.each([375, 360, 1280])('P19.11-T1 AC-3 at %ipx the tasks are the Calendar’s task rows and the entry the Agenda’s row, each tappable', async (px) => {
     await open(LEADER, { px });
-    expect(rows()).toHaveLength(3);
-    for (const row of rows()) {
-      expect(wears(row, px).split(' ')).toContain('min-h-16');
-      expect(row.querySelector('[data-row-main]')!.className).toContain("after:inset-0");
+    const tasks = [...block('actions')!.querySelectorAll<HTMLElement>('[data-home-tasks] > li[data-task]')];
+    expect(tasks).toHaveLength(2);
+    for (const row of tasks) {
+      // The Calendar's 52px row and its 44px checkbox target.
+      expect(row.className.split(' ')).toContain('min-h-[52px]');
+      expect(within(row).getByRole('checkbox').parentElement!.className.split(' ')).toEqual(expect.arrayContaining(['h-11', 'w-11']));
     }
+    // The entry: the Agenda's row, a button the whole width, 44px at least, its tone's 3px accent bar on the left.
+    expect(huddle().className.split(' ')).toEqual(expect.arrayContaining(['min-h-11', 'w-full', 'border-l-[3px]']));
+    expect(huddle()).toHaveTextContent(/15\.00–16\.00/);
   });
 
-  it.each(PHONES)('P19.8-T2 AC-7 MOB UI-169 at %ipx an event row opens the Calendar’s detail over Home, with no navigation: Hapus · Ubah · Tutup', async (px) => {
+  it.each(PHONES)('P19.8-T2 AC-7 MOB UI-169 at %ipx an entry row opens the Calendar’s detail over Home, with no navigation: Hapus · Ubah · Tutup', async (px) => {
     const user = userEvent.setup();
     const { calls } = await open(LEADER, { px, routes: entryRoutes() });
-    await user.click(within(rows()[2]).getByRole('button', { name: /Weekly unit huddle/ }));
+    await user.click(huddle());
     const detail = await screen.findByRole('dialog', { name: 'Weekly unit huddle' });
     expect(calls.some((c) => c.url.includes('/calendar/entries/e-1'))).toBe(true);
     expect(nav.push).not.toHaveBeenCalled();
@@ -264,11 +271,11 @@ describe('P19.8-T2 AC-7 MOB UI-169 Aksi hari ini: the row, the detail over Home,
   it('P19.8-T2 AC-7 MOB UI-169 Hapus asks first: Hapus event ini?, the title and day under it; Batal goes back to the detail', async () => {
     const user = userEvent.setup();
     const { calls } = await open(LEADER, { routes: entryRoutes() });
-    await user.click(within(rows()[2]).getByRole('button', { name: /Weekly unit huddle/ }));
+    await user.click(huddle());
     const detail = await screen.findByRole('dialog', { name: 'Weekly unit huddle' });
     await user.click(within(detail).getByRole('button', { name: 'Hapus' }));
     const question = await screen.findByRole('dialog', { name: 'Hapus event ini?' });
-    expect(question).toHaveAccessibleDescription(/Weekly unit huddle · Sabtu, 31 Okt 2026/);
+    expect(question).toHaveAccessibleDescription(/Weekly unit huddle · Jumat, 30 Okt 2026/);
     expect(calls.some((c) => c.init.method === 'DELETE')).toBe(false);
     await user.click(within(question).getByRole('button', { name: 'Batal' }));
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Hapus event ini?' })).toBeNull());
@@ -278,10 +285,11 @@ describe('P19.8-T2 AC-7 MOB UI-169 Aksi hari ini: the row, the detail over Home,
   it('P19.8-T2 AC-7 MOB UI-169 Hapus deletes, pinned to the version read, and Home reads itself again: the row leaves', async () => {
     const user = userEvent.setup();
     const { calls } = await open(LEADER, { routes: entryRoutes() });
-    await user.click(within(rows()[2]).getByRole('button', { name: /Weekly unit huddle/ }));
+    await user.click(huddle());
     await user.click(within(await screen.findByRole('dialog', { name: 'Weekly unit huddle' })).getByRole('button', { name: 'Hapus' }));
     await user.click(within(await screen.findByRole('dialog', { name: 'Hapus event ini?' })).getByRole('button', { name: 'Hapus' }));
-    await waitFor(() => expect(rows()).toHaveLength(2));
+    await waitFor(() => expect(within(block('actions')!).queryByRole('button', { name: /Weekly unit huddle/ })).toBeNull());
+    expect(block('actions')!.querySelectorAll('[data-task]')).toHaveLength(2);
     const deleted = calls.find((c) => c.init.method === 'DELETE')!;
     expect(deleted.url).toContain('/calendar/entries/e-1');
     expect(deleted.url).toContain('version=3');
@@ -292,42 +300,74 @@ describe('P19.8-T2 AC-7 MOB UI-169 Aksi hari ini: the row, the detail over Home,
   it('P19.8-T2 AC-7 Ubah opens the Calendar’s edit dialog over Home', async () => {
     const user = userEvent.setup();
     await open(LEADER, { routes: { ...entryRoutes(), '/calendar/people': { body: { groups: [] } } } });
-    await user.click(within(rows()[2]).getByRole('button', { name: /Weekly unit huddle/ }));
+    await user.click(huddle());
     await user.click(within(await screen.findByRole('dialog', { name: 'Weekly unit huddle' })).getByRole('button', { name: 'Ubah' }));
     expect(await screen.findByRole('dialog', { name: 'Ubah event' })).toBeInTheDocument();
     expect(nav.push).not.toHaveBeenCalled();
   });
 
-  it('P19.8-T2 AC-7 a read-only support session sees neither Hapus nor Ubah: Tutup alone', async () => {
+  it('P19.8-T2 AC-7 a read-only support session sees neither Hapus nor Ubah: Tutup alone — and no task checkbox', async () => {
     const user = userEvent.setup();
     await open(LEADER, { me: { ...AGUS_AB, isImpersonating: true, impersonationReadOnly: true }, routes: entryRoutes() });
-    await user.click(within(rows()[2]).getByRole('button', { name: /Weekly unit huddle/ }));
+    expect(within(block('actions')!).queryByRole('checkbox')).toBeNull();
+    await user.click(huddle());
     const detail = await screen.findByRole('dialog', { name: 'Weekly unit huddle' });
     const footer = detail.querySelector('[data-detail-actions]') as HTMLElement;
     expect(within(footer).getAllByRole('button').map((b) => b.textContent)).toEqual(['Tutup']);
   });
 
-  it('P19.8-T2 AC-7 a Tugas row keeps its target, an event joined opens its page, Semua › the Agenda from today', async () => {
+  it('P19.11-T1 AC-3 a coaching task opens its 1:1, an event joined opens its page with the calendar icon, Semua › the Agenda from today', async () => {
     const joined: HomeView = {
       ...LEADER,
-      actions: [...LEADER.actions.slice(0, 2), { kind: 'agenda', source: 'event', id: 'ev-9', type: 'BOP', title: 'BOP Surabaya', date: '2026-11-02', start: '09:00' }],
+      actions: [...LEADER.actions.slice(0, 2), {
+        kind: 'event',
+        event: {
+          eventId: 'ev-9', title: 'BOP Surabaya', type: { code: 'BOP', label: 'Business Opportunity Presentation' }, location: 'Kantor KPM',
+          allDay: false, date: '2026-10-30', start: '13:00', end: '15:00', startsOn: null, endsOn: null,
+          startsAt: '2026-10-30T06:00:00.000Z', endsAt: '2026-10-30T08:00:00.000Z',
+        },
+      }],
     };
     await open(joined);
-    expect(rows()[0].querySelector('a[data-row-main]')).toHaveAttribute('href', '/calendar?view=agenda&date=2026-10-30');
-    expect(rows()[1].querySelector('a[data-row-main]')).toHaveAttribute('href', '/calendar?view=agenda&date=2026-10-30');
-    expect(rows()[2].querySelector('a[data-row-main]')).toHaveAttribute('href', '/events/ev-9');
-    expect(within(block('actions')!).getByRole('link', { name: 'Semua untuk hari ini di Kalender' })).toHaveAttribute('href', '/calendar?view=agenda&date=2026-10-30');
+    const actions = block('actions')!;
+    expect(within(actions).getByRole('link', { name: 'Buka 1:1 dengan Wilson Tanoto' })).toHaveAttribute('href', expect.stringContaining('s-1'));
+    const event = within(actions).getByRole('link', { name: /BOP Surabaya/ });
+    expect(event).toHaveAttribute('href', '/events/ev-9');
+    expect(event).toHaveTextContent(/13\.00–15\.00\s*BOP Surabaya\s*Business Opportunity Presentation/);
+    expect(within(event).getByRole('img', { name: 'Event' })).toBeInTheDocument();
+    expect(within(actions).getByRole('link', { name: 'Semua untuk hari ini di Kalender' })).toHaveAttribute('href', '/calendar?view=agenda&date=2026-10-30');
   });
 
-  it('P19.8-T2 AC-7 D-08 the section is hidden when there is nothing', async () => {
+  it('P19.11-T1 AC-3 a multi-day event spanning today shows today’s part of its range', async () => {
+    const spanning: HomeView = {
+      ...LEADER,
+      actions: [{
+        kind: 'event',
+        event: {
+          eventId: 'ev-r', title: 'Leaders retreat', type: { code: 'RETREAT', label: 'Retreat' }, location: '',
+          allDay: false, date: '2026-10-29', start: '20:00', end: '12:00', startsOn: '2026-10-29', endsOn: '2026-10-31',
+          startsAt: '2026-10-29T13:00:00.000Z', endsAt: '2026-10-31T05:00:00.000Z',
+        },
+      }],
+    };
+    await open(spanning);
+    // The whole of the 30th: from the night before to the next noon, as the Agenda draws its middle day.
+    expect(within(block('actions')!).getByRole('link', { name: /Leaders retreat/ })).toHaveTextContent(/00\.00–00\.00\s*Leaders retreat/);
+  });
+
+  // *Changed 2026-11-10 (P19.11-T1 AC-4; UXQ6):* the card stays and says so, where it was hidden (D-08).
+  it('P19.11-T1 AC-4 with nothing today the card stays: Tidak ada tugas atau jadwal hari ini., and Semua', async () => {
     await open(NEW_LEADER, { me: DEWI_AAB });
-    expect(block('actions')).toBeNull();
+    expect(block('actions')).not.toBeNull();
+    expect(within(block('actions')!).getByText('Tidak ada tugas atau jadwal hari ini.')).toBeInTheDocument();
+    expect(within(block('actions')!).getByRole('link', { name: 'Semua untuk hari ini di Kalender' })).toBeInTheDocument();
   });
 
-  it.each(PHONES)('P19.8-T2 AC-7 at %ipx the detail over Home and its question pass axe', async (px) => {
+  it.each(PHONES)('P19.8-T2 AC-7 P19.11-T1 AC-3 at %ipx the rows, the detail over Home and its question pass axe', async (px) => {
     const user = userEvent.setup();
     await open(LEADER, { px, routes: entryRoutes() });
-    await user.click(within(rows()[2]).getByRole('button', { name: /Weekly unit huddle/ }));
+    expect((await axe(block('actions')!, RULES)).violations).toEqual([]);
+    await user.click(huddle());
     await screen.findByRole('dialog', { name: 'Weekly unit huddle' });
     expect((await axe(document.body, RULES)).violations).toEqual([]);
     await user.click(screen.getByRole('button', { name: 'Hapus' }));
@@ -338,12 +378,8 @@ describe('P19.8-T2 AC-7 MOB UI-169 Aksi hari ini: the row, the detail over Home,
 
 describe('P19.8-T2 AC-8 MOB UI-165 D-22 Laporan aktivitas tim', () => {
   const rowsOf = () => [...block('team')!.querySelectorAll<HTMLElement>('[data-person-row]')];
-  /** A row's name, without the level tag the *Group* tab draws before it (P19.9-T2 AC-2). */
-  const nameOf = (row: HTMLElement) => {
-    const line = row.querySelector('.uppercase')!.cloneNode(true) as HTMLElement;
-    line.querySelector('[data-rung-tag]')?.remove();
-    return line.textContent;
-  };
+  /** A row's name: the line holds the name alone, no level tag before it (P19.11-T6 AC-3). */
+  const nameOf = (row: HTMLElement) => row.querySelector('.uppercase')!.textContent;
 
   it.each(PHONES)('P19.8-T2 AC-8 MOB UI-165 at %ipx: the title; a grey ✕ named Belum lapor where nobody reported, the orange count where they did', async (px) => {
     const user = userEvent.setup();
@@ -421,27 +457,45 @@ describe('P19.8-T2 AC-8 MOB UI-165 D-22 Laporan aktivitas tim', () => {
     expect(within(block('team')!).getByRole('button', { name: 'Semua 7 orang' })).toHaveAttribute('aria-expanded', 'false');
   });
 
-  it.each(PHONES)('P19.9-T2 AC-2 R8 at %ipx on Group each row shows the level tag before the name, in the company’s short words; Unit shows none', async (px) => {
+  /*
+   * **P19.11-T6 AC-3 (UX-15, UXQ10)**: no level tag on any row, *Unit* or *Group* — the owner's round of 9 November took
+   * back P19.9-T2 AC-2's (R8). The name directly after the avatar, the two days and WhatsApp in their columns.
+   */
+  it.each(PHONES)('P19.11-T6 AC-3 at %ipx no row carries a level tag, on Unit or on Group; the name sits directly after the avatar', async (px) => {
     const user = userEvent.setup();
+    // Every row's `rung` still in the payload (`leader.team[].rung`): the screen draws none of it.
+    expect(TEAM.every((p) => p.rung && p.rung.label)).toBe(true);
     await open(LEADER, { px });
-    expect(block('team')!.querySelectorAll('[data-rung-tag]')).toHaveLength(0);
-    await user.click(screen.getByRole('button', { name: 'Group' }));
-    const tags = rowsOf().map((r) => r.querySelector('[data-rung-tag]')!.textContent);
-    expect(tags).toEqual(['Agent', 'AAB', 'Agent', 'AAB', 'Agent']);
-    const herman = rowsOf()[1];
-    // The navy tag, as the Unit roster and Potensi draw it, before the name and outside the row's name.
-    expect(herman.querySelector('[data-rung-tag]')!.className).toContain('bg-secondary');
-    const line = herman.querySelector('.uppercase')!;
-    expect(line.firstElementChild).toBe(herman.querySelector('[data-rung-tag]'));
-    expect(line).toHaveTextContent(/^AABHerman Widjaja$/);
-    // A company that names its rungs longer: their label, as `rungShort` reads it.
-    vi.unstubAllGlobals();
-    document.body.innerHTML = '';
-    const bp = { code: 'BUSINESS_PARTNER', label: 'BP' };
-    await open({ ...LEADER, leader: { ...LEADER.leader!, team: TEAM.map((p) => ({ ...p, rung: bp })) } }, { px });
-    await user.click(screen.getByRole('button', { name: 'Group' }));
-    expect(rowsOf()[0].querySelector('[data-rung-tag]')).toHaveTextContent(/^BP$/);
+    for (const scope of ['Unit', 'Group']) {
+      await user.click(screen.getByRole('button', { name: scope }));
+      const team = block('team')!;
+      expect(team.querySelectorAll('[data-rung-tag]')).toHaveLength(0);
+      for (const word of ['AB', 'AAB', 'Agent']) expect(within(team).queryByText(word, { exact: true })).toBeNull();
+      for (const row of rowsOf()) {
+        // The avatar, then the name's column holding the name alone — no tag, no wrapper between them.
+        const [avatar, names, trailing] = [...row.children];
+        expect(avatar.querySelector('.uppercase')).toBeNull();
+        expect(names.children).toHaveLength(1);
+        const name = names.firstElementChild!;
+        expect(name).toHaveClass('uppercase');
+        expect(name.children).toHaveLength(0);
+        expect(name.textContent).toBe(nameOf(row));
+        // The two days, then the 36px WhatsApp column — the button, or its blank — in every row alike.
+        expect(trailing.querySelectorAll('[data-logged]')).toHaveLength(2);
+        expect(trailing.firstElementChild!.lastElementChild!.className).toMatch(/(^|\s)(w-9|-mx-1)(\s|$)/);
+      }
+    }
+    expect(nameOf(rowsOf()[1])).toBe('Herman Widjaja');
     expect((await axe(block('team')!, RULES)).violations).toEqual([]);
+  });
+
+  it('P19.11-T6 AC-3 a long name still wraps on a phone and truncates from 768px, as before, with no tag before it', async () => {
+    const long = 'Wahyuningsih Permatasari Kusumawardhani Rahmadani';
+    await open({ ...LEADER, leader: { ...LEADER.leader!, team: TEAM.map((p, i) => (i === 0 ? { ...p, name: long } : p)) } }, { px: 375 });
+    const row = rowsOf().find((r) => r.textContent!.includes(long))!;
+    const name = row.querySelector('.uppercase')!;
+    expect(name).toHaveTextContent(new RegExp(`^${long}$`));
+    expect(name).toHaveClass('truncate', 'max-md:whitespace-normal', 'max-md:break-words');
   });
 
   it('P19.8-T2 AC-8 MOB UI-171 Unit | Group at the header-control size, 13px / 600 / 44px, at every size', async () => {

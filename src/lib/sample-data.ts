@@ -87,7 +87,8 @@ export function sampleOrgTree(name: SampleName, leader: string): OrgTree {
 export function sampleNewHires(name: SampleName, today: string): NewHiresRoster {
   const share = { activated: 1, notActivated: 0, late: 0, inProgress: 2, pct: 33 };
   const rows: NewHireRow[] = ids.map((membershipId, i) => ({
-    hire: { membershipId, name: name(i + 1) },
+    // No photo (ADR-0189 §3): a sample's circle is its initials (P19.11-T2 AC-4).
+    hire: { membershipId, name: name(i + 1), photoUrl: null },
     unit: { kind: 'direct', leader: null },
     joinDate: today,
     day: [12, 40, 75][i],
@@ -116,7 +117,7 @@ export function sampleNewHires(name: SampleName, today: string): NewHiresRoster 
  * round sample figure.
  */
 export function sampleUnitView(base: UnitDashboardView, name: SampleName): UnitDashboardView {
-  const million = 100_000_000; // Rp 1 jt in sen
+  const million = 100_000_000; // Rp 1 Jt in sen
   const rows: UnitRow[] = ids.map((membershipId, i) => {
     const target = 10 * million;
     const actual = [8, 5, 2][i] * million;
@@ -170,10 +171,10 @@ export function sampleUnitView(base: UnitDashboardView, name: SampleName): UnitD
     ...base,
     empty: false,
     tiles: {
-      team: { total: SAMPLE_PEOPLE, direct: SAMPLE_PEOPLE, units: 0, underUnits: 0, newHires: 0 },
+      team: { total: SAMPLE_PEOPLE, direct: SAMPLE_PEOPLE, units: 0, underUnits: 0, aab: 0, ab: 0, newHires: 0 },
       directGroupProduction: { ...goal, period: base.tiles.directGroupProduction.period },
-      potentialActive: { ...potentialActive, unit: potentialActive, aab: { count: 0, of: 0 } },
-      potentialRecruits: { yourUnit: 1, aabs: 0 },
+      potentialActive: { ...potentialActive, unit: potentialActive, aab: { count: 0, of: 0 }, ab: { count: 0, of: 0 } },
+      potentialRecruits: { yourUnit: 1, aabs: 0, abs: 0 },
     },
     yourUnit: {
       rows,
@@ -209,7 +210,8 @@ export function sampleHomeView(today: string, quote: HomeView['quote']): HomeVie
     today,
     yesterday: day(1),
     month: today.slice(0, 7),
-    now: { minute: 9 * 60 },
+    // 09:00 in Jakarta on the browser's day (P19.11-T1: `now` carries its instant); nothing here counts on from it.
+    now: { minute: 9 * 60, at: `${today}T02:00:00.000Z` },
     quote,
     activity: { today: 3, yesterday: 0, days, total: counts.reduce((a, b) => a + b, 0) },
     schedule: { meetings: 2, tasks: 1 },

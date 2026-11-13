@@ -306,7 +306,9 @@ describe('formatRupiah, in full (P18.7-T1 AC-2)', () => {
 
   it('P18.9-T1 AC-15 holds each compact unit’s size once, by its mark — what the forum’s header units read (ADR-0174 §4, §5)', () => {
     expect(RUPIAH_PER_UNIT).toEqual({ M: 1_000_000_000, jt: 1_000_000, rb: 1_000 });
-    for (const [mark, size] of Object.entries(RUPIAH_PER_UNIT)) expect(formatRupiahCompact(rp(size))).toBe(`Rp 1 ${mark}`);
+    // The unit's code is `jt`; what Indonesian writes after a figure is *Jt* (P19.11-T4, ADR-0240 §1).
+    const written: Record<string, string> = { M: 'M', jt: 'Jt', rb: 'rb' };
+    for (const [mark, size] of Object.entries(RUPIAH_PER_UNIT)) expect(formatRupiahCompact(rp(size))).toBe(`Rp 1 ${written[mark]}`);
   });
 });
 
@@ -317,12 +319,12 @@ describe('formatRupiahCompact (P18.7-T1 AC-2)', () => {
     [999, 'Rp 999'],
     [1_000, 'Rp 1 rb'],
     [750_000, 'Rp 750 rb'],
-    [999_999, 'Rp 1 jt'],
-    [1_000_000, 'Rp 1 jt'],
-    [500_000_000, 'Rp 500 jt'],
-    [357_500_000, 'Rp 357,5 jt'],
-    [712_666_667, 'Rp 712,7 jt'],
-    [999_949_999, 'Rp 999,9 jt'],
+    [999_999, 'Rp 1 Jt'],
+    [1_000_000, 'Rp 1 Jt'],
+    [500_000_000, 'Rp 500 Jt'],
+    [357_500_000, 'Rp 357,5 Jt'],
+    [712_666_667, 'Rp 712,7 Jt'],
+    [999_949_999, 'Rp 999,9 Jt'],
     [999_950_000, 'Rp 1 M'],
     [1_000_000_000, 'Rp 1 M'],
     [1_200_000_000, 'Rp 1,2 M'],
@@ -335,14 +337,14 @@ describe('formatRupiahCompact (P18.7-T1 AC-2)', () => {
   it('rounds half up on the digit shown, in integers — 1.150 is never the float’s 1,1 rb', () => {
     expect(formatRupiahCompact(rp(1_150))).toBe('Rp 1,2 rb');
     expect(formatRupiahCompact(rp(1_149))).toBe('Rp 1,1 rb');
-    expect(formatRupiahCompact(rp(1_050_000))).toBe('Rp 1,1 jt');
-    expect(formatRupiahCompact(rp(1_049_999))).toBe('Rp 1 jt');
+    expect(formatRupiahCompact(rp(1_050_000))).toBe('Rp 1,1 Jt');
+    expect(formatRupiahCompact(rp(1_049_999))).toBe('Rp 1 Jt');
   });
 
   it('never writes a trailing ,0, nor more than one decimal', () => {
-    expect(formatRupiahCompact(rp(2_000_000))).toBe('Rp 2 jt');
-    expect(formatRupiahCompact(rp(2_040_000))).toBe('Rp 2 jt');
-    expect(formatRupiahCompact(rp(2_345_678))).toBe('Rp 2,3 jt');
+    expect(formatRupiahCompact(rp(2_000_000))).toBe('Rp 2 Jt');
+    expect(formatRupiahCompact(rp(2_040_000))).toBe('Rp 2 Jt');
+    expect(formatRupiahCompact(rp(2_345_678))).toBe('Rp 2,3 Jt');
   });
 
   it('keeps a negative’s minus in front', () => {
@@ -368,10 +370,10 @@ describe('money in miliar, juta and ribu (P18.9-T3 AC-3)', () => {
     [999, 'Rp 999'],
     [1_000, 'Rp 1 rb'],
     [999_949, 'Rp 999,9 rb'],
-    [999_950, 'Rp 1 jt'],
-    [1_000_000, 'Rp 1 jt'],
-    [150_000_000, 'Rp 150 jt'],
-    [999_949_999, 'Rp 999,9 jt'],
+    [999_950, 'Rp 1 Jt'],
+    [1_000_000, 'Rp 1 Jt'],
+    [150_000_000, 'Rp 150 Jt'],
+    [999_949_999, 'Rp 999,9 Jt'],
     [999_950_000, 'Rp 1 M'],
     [1_000_000_000, 'Rp 1 M'],
     [5_672_500_000, 'Rp 5,7 M'],
@@ -593,8 +595,8 @@ describe('formatDayClock, formatOfficeMonth and formatRupiahCompactPair (P18.7-T
   });
 
   it('writes two sums with one Rp between them, in the word the screen uses (UI-030)', () => {
-    expect(formatRupiahCompactPair(rp(357_500_000), rp(712_666_667), 'of')).toBe('Rp 357,5 jt of 712,7 jt');
-    expect(formatRupiahCompactPair(rp(620_000_000), rp(1_500_000_000), '/')).toBe('Rp 620 jt / 1,5 M');
+    expect(formatRupiahCompactPair(rp(357_500_000), rp(712_666_667), 'of')).toBe('Rp 357,5 Jt of 712,7 Jt');
+    expect(formatRupiahCompactPair(rp(620_000_000), rp(1_500_000_000), '/')).toBe('Rp 620 Jt / 1,5 M');
     expect(formatRupiahCompactPair(rp(-5_000), rp(-750_000), '/')).toBe('-Rp 5 rb / -750 rb');
   });
 });
@@ -631,7 +633,7 @@ describe('the backend formatter writes what this one writes (P18.7-T1 AC-4; P18.
   it('P18.10-T3 AC-1 holds the same compact units, each written as this module writes it in both languages', () => {
     const units = [...source.matchAll(/\{ value: ([\d_]+), suffix: \{ id: '([^']+)', en: '([^']+)' \} \}/g)]
       .map((m) => ({ size: Number(m[1].replace(/_/g, '')), id: m[2], en: m[3] }));
-    expect(units.map((u) => u.id)).toEqual(['M', 'jt', 'rb']);
+    expect(units.map((u) => u.id)).toEqual(['M', 'Jt', 'rb']); // P19.11-T4: a juta is written *Jt* (ADR-0240 §1)
     expect(units.map((u) => u.en)).toEqual(['B', 'M', 'K']);
     for (const { size, id, en } of units) {
       expect(formatRupiahCompact(rp(size))).toBe(`Rp 1 ${id}`);
@@ -673,7 +675,7 @@ describe('P18.10-T3 AC-1 a caller that passes no language writes Indonesian', ()
     expect(formatPercent(29.6, {}, 'id')).toBe('30%');
     expect(formatRupiah(rp(45_000_000), 'id')).toBe('Rp 45.000.000');
     expect(formatRupiahCompact(rp(5_800_000_000), {}, 'id')).toBe('Rp 5,8 M');
-    expect(formatRupiahCompactPair(rp(357_500_000), rp(712_666_667), '/', 'id')).toBe('Rp 357,5 jt / 712,7 jt');
+    expect(formatRupiahCompactPair(rp(357_500_000), rp(712_666_667), '/', 'id')).toBe('Rp 357,5 Jt / 712,7 Jt');
     expect(moneyPrefix()).toBe('Rp');
     expect(weekdayHeadings()).toEqual(weekdayHeadings('id'));
   });
@@ -843,12 +845,12 @@ describe('P18.10-T3 AC-1 English money (§E, UI-019)', () => {
     [1_000, 'Rp 1 rb', 'IDR 1K'],
     [750_000, 'Rp 750 rb', 'IDR 750K'],
     [999_949, 'Rp 999,9 rb', 'IDR 999.9K'],
-    [999_950, 'Rp 1 jt', 'IDR 1M'],
-    [1_000_000, 'Rp 1 jt', 'IDR 1M'],
-    [150_000_000, 'Rp 150 jt', 'IDR 150M'],
-    [357_500_000, 'Rp 357,5 jt', 'IDR 357.5M'],
-    [712_666_667, 'Rp 712,7 jt', 'IDR 712.7M'],
-    [999_949_999, 'Rp 999,9 jt', 'IDR 999.9M'],
+    [999_950, 'Rp 1 Jt', 'IDR 1M'],
+    [1_000_000, 'Rp 1 Jt', 'IDR 1M'],
+    [150_000_000, 'Rp 150 Jt', 'IDR 150M'],
+    [357_500_000, 'Rp 357,5 Jt', 'IDR 357.5M'],
+    [712_666_667, 'Rp 712,7 Jt', 'IDR 712.7M'],
+    [999_949_999, 'Rp 999,9 Jt', 'IDR 999.9M'],
     [999_950_000, 'Rp 1 M', 'IDR 1B'],
     [1_000_000_000, 'Rp 1 M', 'IDR 1B'],
     [1_200_000_000, 'Rp 1,2 M', 'IDR 1.2B'],
@@ -887,9 +889,9 @@ describe('P18.10-T3 AC-1 English money (§E, UI-019)', () => {
     expect(formatRupiahCompactPair(rp(620_000_000), rp(999), '/', 'en')).toBe('IDR 620M / 999');
   });
 
-  it('P18.10-T3 AC-1 writes a header’s unit Rp M · Rp jt, and IDR B · IDR M: the forum’s APE (IDR B) and Avg. Case Size (IDR M)', () => {
+  it('P18.10-T3 AC-1 writes a header’s unit Rp M · Rp Jt, and IDR B · IDR M: the forum’s APE (IDR B) and Avg. Case Size (IDR M)', () => {
     expect(formatMoneyUnit('M')).toBe('Rp M');
-    expect(formatMoneyUnit('jt', 'id')).toBe('Rp jt');
+    expect(formatMoneyUnit('jt', 'id')).toBe('Rp Jt');
     expect(formatMoneyUnit('rb', 'id')).toBe('Rp rb');
     expect(formatMoneyUnit('M', 'en')).toBe('IDR B');
     expect(formatMoneyUnit('jt', 'en')).toBe('IDR M');
@@ -914,7 +916,7 @@ describe('P18.10-T3 AC-2 one rounding: the language changes the characters, neve
   const asIndonesian = (en: string) => en
     .replace(/[.,:]/g, (mark) => (mark === '.' ? ',' : '.'))
     .replace(/^(-?)IDR /, '$1Rp ')
-    .replace(/(\d)(B|M|K)( |$)/, (_, digit: string, unit: string, after: string) => `${digit} ${{ B: 'M', M: 'jt', K: 'rb' }[unit]}${after}`);
+    .replace(/(\d)(B|M|K)( |$)/, (_, digit: string, unit: string, after: string) => `${digit} ${{ B: 'M', M: 'Jt', K: 'rb' }[unit]}${after}`);
 
   it.each([
     0, 999, 1_000, 1_049, 1_050, 1_149, 1_150, 99_950, 999_949, 999_950, 1_049_999, 1_050_000, 2_345_678, 357_500_000,

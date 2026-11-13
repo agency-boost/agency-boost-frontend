@@ -22,7 +22,7 @@ describe('SliderWithValue — exactMin and exactMax (P18.11-T5)', () => {
         step={10}
         exactMin={exactMin}
         exactMax={exactMax}
-        format={(n) => `Rp ${n} jt`}
+        format={(n) => `Rp ${n} Jt`}
       />
     );
   }
@@ -38,23 +38,23 @@ describe('SliderWithValue — exactMin and exactMax (P18.11-T5)', () => {
     render(<Slider exactMin={0} exactMax={100_000} />);
 
     await typeExact('2500');
-    expect(screen.getByRole('button', { name: /Type an exact amount/ })).toHaveTextContent('Rp 2500 jt');
+    expect(screen.getByRole('button', { name: /Type an exact amount/ })).toHaveTextContent('Rp 2500 Jt');
     expect(screen.getByRole('slider', { name: 'Annual APE target' })).toHaveValue('1000');
 
     await typeExact('40');
-    expect(screen.getByRole('button', { name: /Type an exact amount/ })).toHaveTextContent('Rp 40 jt');
+    expect(screen.getByRole('button', { name: /Type an exact amount/ })).toHaveTextContent('Rp 40 Jt');
     expect(screen.getByRole('slider', { name: 'Annual APE target' })).toHaveValue('100');
   });
 
   it('P18.11-T5 UI-016 still holds a typed amount to its own bounds, and to the track’s without them', async () => {
     render(<Slider exactMin={0} exactMax={3000} />);
     await typeExact('9999');
-    expect(screen.getByRole('button', { name: /Type an exact amount/ })).toHaveTextContent('Rp 3000 jt');
+    expect(screen.getByRole('button', { name: /Type an exact amount/ })).toHaveTextContent('Rp 3000 Jt');
   });
 
   it('P18.11-T5 UI-016 without them, a typed amount is clamped to the track, as before', async () => {
     render(<Slider />);
     await typeExact('9999');
-    expect(screen.getByRole('button', { name: /Type an exact amount/ })).toHaveTextContent('Rp 1000 jt');
+    expect(screen.getByRole('button', { name: /Type an exact amount/ })).toHaveTextContent('Rp 1000 Jt');
   });
 });

@@ -78,18 +78,23 @@ function watchSaves() {
 }
 
 /** A row of the server's preview, as `GET …/roster/preview` answers it (A3). */
-const result = (agentCode: string, fullName: string, outcome: 'imported' | 'updated' | 'skipped', messages: string[] = [], over: Record<string, unknown> = {}) => ({
-  line: 2, agentCode, fullName, role: 'Agent', leaderAgentCode: '70045001', email: '', outcome, messages, ...over,
+const result = (
+  agentCode: string, fullName: string, outcome: 'imported' | 'updated' | 'invited' | 'skipped', messages: string[] = [],
+  over: Record<string, unknown> = {},
+) => ({
+  line: 2, agentCode, fullName, role: 'Agent', leaderAgentCode: '70045001', email: '', outcome, messages, warnings: [], ...over,
 });
 const SKIPPED_CSV = `${HEADER},Alasan\n70045005,Fikri Ramadhan,Agent,70049999,,,,,,,,Kode upline 70049999 tidak ada di file atau di KPM ini.\n`;
 /** A3's sample, as the server would answer it: three rows imported, one updated, two skipped. */
 const PREVIEW = {
   issues: [], header: HEADER.split(','),
-  counts: { imported: 3, updated: 1, skipped: 2 },
+  counts: { imported: 3, updated: 1, invited: 0, skipped: 2 },
   rows: [
     result('70045001', 'Rahmat Hidayat', 'imported', [], { line: 2, role: 'AB', leaderAgentCode: '' }),
     result('70045002', 'Sari Wulandari', 'imported', [], { line: 3, role: 'AAB' }),
-    result('70045009', 'Nadia Kusuma', 'imported', ['No WhatsApp number: imported, but cannot be reminded on WhatsApp yet.'], { line: 4 }),
+    result('70045009', 'Nadia Kusuma', 'imported', [], {
+      line: 4, warnings: ['No WhatsApp number: imported, but cannot be reminded on WhatsApp yet.'],
+    }),
     result('70013099', 'Indah Permatasari', 'updated', ['Already here; details updated.'], { line: 5 }),
     result('70045005', 'Fikri Ramadhan', 'skipped', ['Upline code 70049999 is in neither the file nor this KPM.'], { line: 6, leaderAgentCode: '70049999' }),
     result('70045006', 'Desi Anggraeni', 'skipped', ['Role "Agen Senior" does not exist. Use: Agent, AAB, AB.'], { line: 7, role: 'Agen Senior' }),
@@ -187,7 +192,7 @@ describe('P19.3-T4 importing members under A3', () => {
   it('P19.3-T4 AC-10 offers no download when nothing is skipped, and no import when nothing can be written', async () => {
     render({
       '/admin/tenants/kpm-1/roster/file/preview': {
-        body: { ...PREVIEW, counts: { imported: 0, updated: 0, skipped: 1 }, rows: [PREVIEW.rows[4]] },
+        body: { ...PREVIEW, counts: { imported: 0, updated: 0, invited: 0, skipped: 1 }, rows: [PREVIEW.rows[4]] },
       },
     });
     await upload();
@@ -207,7 +212,8 @@ describe('P19.3-T4 importing members under A3', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Check the file' }));
     const box = await screen.findByRole('checkbox', { name: 'Send an email invitation to 3 new people' });
     expect(box).toBeChecked();
-    expect(box).toHaveAccessibleDescription('Each gets a one-time link to choose their password. Nothing is sent by WhatsApp.');
+    // P19.12-T7: the hint names email, and no longer says nothing goes by WhatsApp — an Agent with no email may (ADR-0250 §4).
+    expect(box).toHaveAccessibleDescription('Each gets a one-time link by email to choose their password.');
     await userEvent.click(box);
     await userEvent.click(screen.getByRole('button', { name: 'Import 4 people' }));
     await screen.findByRole('heading', { name: '3 members imported, 1 updated' });
@@ -263,7 +269,7 @@ describe('P19.3-T4 importing members under A3', () => {
       '/admin/tenants/kpm-1/roster/file/preview': {
         body: {
           issues: [{ line: 1, column: 'file', message: 'The file has no Kode agen, Peran column. Download the template and use its header.' }],
-          header: [], counts: { imported: 0, updated: 0, skipped: 0 }, rows: [], skippedCsv: null,
+          header: [], counts: { imported: 0, updated: 0, invited: 0, skipped: 0 }, rows: [], skippedCsv: null,
         },
       },
     });
@@ -347,6 +353,90 @@ describe('P19.3-T4 importing members under A3', () => {
  * developer for the product owner, 2026-11-01: *"pisahkan guideline template dengan isian templatenya agar rapih dan
  * mudah digunakan oleh user, berikan juga dukungan untuk template excel dan upload excel"*.
  */
+/*
+ * **The client's import test of 11 November** (P19.12-T7; ADR-0250): a bad optional cell left empty and said in the
+ * warning tone, what a row leaves out, and an Agent with no email invited on WhatsApp, sent from their row.
+ */
+describe('P19.12-T7 the import forgives, says what is missing, and invites by WhatsApp', () => {
+  afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+
+  const BLANKED = 'No. WhatsApp: "nomor saya" is not a WhatsApp number. Left empty; the rest of the row is imported.';
+  const MISSING = 'Incomplete: no Tanggal lahir, Jenis kelamin. Import the row again with them to fill them in.';
+  const INVITED = 'No email: invited on WhatsApp instead. They register through the link with their own email and password.';
+  const LINK = 'https://app.agencyboost.test/register?invite=kpm-1.secret';
+  const TES = {
+    issues: [], header: HEADER.split(','),
+    counts: { imported: 1, updated: 1, invited: 1, skipped: 0 },
+    rows: [
+      result('99311205', 'Tes Lima', 'imported', [], { line: 2, warnings: [BLANKED, MISSING] }),
+      result('99311201', 'Tes Satu', 'updated', ['Already here; details updated.'], { line: 3, warnings: [MISSING] }),
+      result('99311203', 'Tes Tiga', 'invited', [INVITED], { line: 4 }),
+    ],
+    skippedCsv: null,
+  };
+  const checked = async () => {
+    await paste('99311205');
+    await userEvent.click(screen.getByRole('button', { name: 'Check the file' }));
+    return screen.findByRole('table', { name: 'Each row of the file, and what it comes to' });
+  };
+
+  it('P19.12-T7 AC-2 AC-3 shows what a row leaves out on its imported and updated rows, in the warning tone', async () => {
+    render({ '/admin/tenants/kpm-1/roster/preview': { body: TES } });
+    const table = await checked();
+    const blanked = within(table).getByText(`${BLANKED} ${MISSING}`);
+    expect(blanked).toHaveClass('text-pill-amber-ink');
+    expect(within(table).getByText(MISSING)).toHaveClass('text-pill-amber-ink');
+    // The notes stay muted, apart from the warnings.
+    expect(within(table).getByText('Already here; details updated.')).toHaveClass('text-muted');
+  });
+
+  it('P19.12-T7 AC-4 counts the row invited on WhatsApp in the line and in the import, its chip in words', async () => {
+    render({ '/admin/tenants/kpm-1/roster/preview': { body: TES } });
+    const table = await checked();
+    expect(screen.getByText('1 new person ready to import, 1 updated, 1 invited on WhatsApp.')).toHaveAttribute('role', 'status');
+    const [, , , invited] = within(table).getAllByRole('row');
+    expect(within(invited).getAllByRole('cell')[4]).toHaveTextContent(`Invited on WhatsApp${INVITED}`);
+    // Nothing to send yet: the link is made by the import.
+    expect(within(invited).queryByRole('link')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Import 3 people' })).toBeEnabled();
+    // The email box counts only the new people with an address.
+    expect(screen.getByLabelText('Send an email invitation to 1 new person')).toBeChecked();
+  });
+
+  it('P19.12-T7 AC-4 imports a file whose only row is invited on WhatsApp', async () => {
+    const only = { ...TES, counts: { imported: 0, updated: 0, invited: 1, skipped: 0 }, rows: [TES.rows[2]] };
+    render({ '/admin/tenants/kpm-1/roster/preview': { body: only } });
+    await checked();
+    expect(screen.getByRole('button', { name: 'Import 1 person' })).toBeEnabled();
+    expect(screen.queryByLabelText(/Send an email invitation/)).toBeNull();
+  });
+
+  it.each([[375], [1280]])('P19.12-T7 AC-4 at %ipx: once imported, each invited row sends its link on WhatsApp', async (width) => {
+    atWidth(width);
+    const done = {
+      ...TES, invited: 1,
+      rows: TES.rows.map((row) => (row.outcome === 'invited' ? { ...row, invite: { link: LINK, phone: '+6281211003300' } } : row)),
+    };
+    render({ '/admin/tenants/kpm-1/roster/preview': { body: TES }, 'POST /admin/tenants/kpm-1/roster': { body: done } });
+    await checked();
+    await userEvent.click(screen.getByRole('button', { name: 'Import 3 people' }));
+
+    expect(await screen.findByRole('heading', { name: '1 member imported, 1 updated, 1 invited on WhatsApp' })).toBeInTheDocument();
+    expect(screen.getByText('1 member imported, 1 updated, 1 invited on WhatsApp. Invitations sent by email.')).toBeInTheDocument();
+    expect(screen.getByText(/Send each person invited on WhatsApp their link with the WhatsApp button on their row/))
+      .toHaveTextContent('or later from New Hires › Waiting to join.');
+    const send = screen.getByRole('link', { name: 'Send Tes Tiga their invitation on WhatsApp' });
+    expect(send).toHaveAttribute('title', 'Send Tes Tiga their invitation on WhatsApp');
+    expect(send).toHaveAttribute('target', '_blank');
+    const href = new URL(send.getAttribute('href')!);
+    expect(`${href.origin}${href.pathname}`).toBe('https://wa.me/6281211003300');
+    expect(href.searchParams.get('text')).toContain(LINK);
+    expect(href.searchParams.get('text')).toContain('Tes Tiga');
+    // Only the invited row has one.
+    expect(screen.getAllByRole('link', { name: /their invitation on WhatsApp/ })).toHaveLength(1);
+  });
+});
+
 describe('ADR-0184 Excel beside CSV', () => {
   beforeEach(() => setAccessToken('token-in-memory'));
   afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); setAccessToken(null); });
@@ -415,7 +505,8 @@ describe('ADR-0184 Excel beside CSV', () => {
       'Kode agen, Nama and Peran are required. Leave any other cell empty when you do not know it.',
       'One person per row.',
       'Rows can come in any order: an upline is matched in the file and among the people already in the KPM.',
-      'A row with a problem is skipped with its reason, and the rest are imported together.',
+      'An optional cell written wrongly is left empty, with a warning, and the person is still imported. A row with a '
+        + 'problem in a required cell is skipped with its reason, and the rest are imported together.',
     ]);
     // Nothing to fill in is inside it.
     expect(within(guide).queryByRole('textbox')).toBeNull();

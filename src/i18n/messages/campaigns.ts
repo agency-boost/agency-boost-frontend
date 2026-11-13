@@ -86,7 +86,7 @@ const en = {
   /** The card's requirements, ***Needs:*** — the client's word (P18.7-T10 AC-3), where the prototype wrote *Requirements:*. */
   needs: 'Needs:',
   /**
-   * **One requirement in words** (P18.7-T10 AC-3): *Rp 16 jt APE*, *3 new hires*, *more than 2 new active agents* — the
+   * **One requirement in words** (P18.7-T10 AC-3): *Rp 16 Jt APE*, *3 new hires*, *more than 2 new active agents* — the
    * comparison said (*at least* is the plain figure), the target written by the caller, then what it counts, one and
    * many as the figure is. `noun` is the metric's code where it has one; without, the prototype's `{name} {target}`.
    */

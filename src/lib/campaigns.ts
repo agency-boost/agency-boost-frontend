@@ -274,7 +274,7 @@ export const OWN_COPY = {
  * writes it, or a count — in `figures`, the reader's figures (Indonesian when none is passed); a balance's *points* in
  * `words`, the words' language (English when none is passed).
  *
- * **Compact and lossless** (ADR-0167 §1, ADR-0174 §3, §4): *Rp 500 jt*; but a requirement is a rule, and *Rp 2,5
+ * **Compact and lossless** (ADR-0167 §1, ADR-0174 §3, §4): *Rp 500 Jt*; but a requirement is a rule, and *Rp 2,5
  * M* for 2.450.000.000 would state a different one — so a figure that compact writing would round is written in
  * full. A percentage with the places a threshold was set to and no *,0* — *30%*, *75,55%* — and a figure read
  * against it with every place it has, so *74,96% / 75%* can never read *75% / 75%*. **A ratio in `ratioUnit`**, the
@@ -310,7 +310,7 @@ export function ratioUnitsOf(
 }
 
 /**
- * One requirement in the card's words: ***Rp 16 jt APE***, ***3 new hires***, *more than 2 new active agents* — the
+ * One requirement in the card's words: ***Rp 16 Jt APE***, ***3 new hires***, *more than 2 new active agents* — the
  * target compact only where that loses nothing (`figureWords`), then what it counts (P18.7-T10 AC-3; the client's
  * UI-024), one and many as the figure is one or not, keyed by the metric's code, never its name (invariant §4). The
  * campaign-evaluable set (`CAMPAIGN_METRICS`, D-evaluable) less the ratios, whose name is the rate itself: those, the
@@ -341,7 +341,7 @@ const NOUN_KEYS: Readonly<Record<string, true>> = {
 
 /**
  * The card's line after *Needs:*, every requirement in its words **joined by *" + "*** (P18.7-T10 AC-3), where the
- * prototype joined them by *" | "* (`:8032`): *Rp 16 jt APE + 3 new hires*.
+ * prototype joined them by *" | "* (`:8032`): *Rp 16 Jt APE + 3 new hires*.
  */
 export const requirementsLine = (
   requirements: readonly CampaignRequirement[], ratioUnits?: RatioUnits,

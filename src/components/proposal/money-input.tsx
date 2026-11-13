@@ -16,12 +16,12 @@ const textOf = (minor: number | null | undefined) =>
 
 /**
  * **A money field: the number keypad, the item's currency, and its quick amounts** (AC-7; the spec's *"number keypad
- * field, optional quick buttons (100 jt · 250 jt · 500 jt · 1 M)"*; ADR-0225 §2, §8).
+ * field, optional quick buttons (100 Jt · 250 Jt · 500 Jt · 1 M)"*; ADR-0225 §2, §8).
  *
  * - **Whole units of the item's currency** are typed (`inputMode="numeric"`), stored as minor units — the server's
  *   `amountMinor`, a sen or a cent. A USD item's box says *USD*, and has no quick amounts: they are rupiah (§2).
  * - **Saved as it is typed**, half a second after the last digit, and at once on leaving the box — so nothing typed is
- *   lost (Acc. 18). A sum below the field's `minMinor` (*min 100 jt*) is not sent: the box says *Minimal …* under it, as
+ *   lost (Acc. 18). A sum below the field's `minMinor` (*min 100 Jt*) is not sent: the box says *Minimal …* under it, as
  *   the server would refuse it (`400`).
  * - **It keeps what was typed** when a save fails; it takes the server's figure again only while it is not being typed in.
  */

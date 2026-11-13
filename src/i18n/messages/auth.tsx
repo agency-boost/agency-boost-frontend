@@ -77,10 +77,13 @@ const en = {
   register: {
     title: 'Create your account',
     line: 'Your office is added separately. This is just your login.',
-    /** `email` the address typed, drawn bold. */
-    sent: ({ email }: { email: ReactNode }) => <>If {email} can be registered, a verification link is on its way.</>,
-    sentLine: 'Open it to finish setting up your account. The link lasts 24 hours and works once.',
-    backToSignIn: 'Back to sign in',
+    /**
+     * **The screen for an address that already had an account** (P19.12-T2 AC-3; ADR-0245 §3): a new account is signed
+     * in and leaves this page, so this is said only when nothing was made. Neutral, and no word of verifying: signing in
+     * never waited on it (ADR-0190 §4). `email` the address typed, drawn bold.
+     */
+    sent: ({ email }: { email: ReactNode }) => <>{email} may already have an account.</>,
+    sentLine: 'Sign in with it, or set a new password if you have forgotten it.',
     fullName: 'Full name',
     dateOfBirth: 'Date of birth',
     gender: 'Gender',
@@ -115,8 +118,16 @@ const en = {
       existing: 'This invite is for an account that already exists. Sign in to accept it.',
       signInToAccept: 'Sign in to accept',
       withoutInvite: 'Create an account without an invite',
-      doneLine: ({ leader }: { leader: string }) => `Once you have verified it and signed in, you are in ${leader}'s team.`,
       checking: 'Checking your invite…',
+    },
+    /**
+     * **On a leader's link** (`?code=…`, P19.10-T2 AC-2; ADR-0236 §1): the code the link carries, and that the account
+     * joins the team of whoever shared it. No leader is named: who holds a code is read signed in, never by a visitor.
+     */
+    code: {
+      banner: ({ code }: { code: string }) => `You're joining with invite code ${code}`,
+      bannerLine: 'Once your account is made, you are in the team of the leader who shared this code. Nobody has to approve it.',
+      withoutCode: 'Create an account without a code',
     },
   },
   /** `/forgot-password`. */
@@ -161,12 +172,14 @@ const en = {
     resent: 'A new link is on its way. Check your inbox.',
   },
   /**
-   * **The shells' reminder while the address is not verified** (P19-T1 AC-4; UI-163, ADR-0190 §4): *"Verifikasi email
-   * Anda · Kirim ulang"*, the owner's words, in every shell until it is (`VerifyEmailBanner`).
+   * **The shells' reminder while the address is not verified** (P19-T1 AC-4; UI-163, ADR-0190 §4): in every shell until
+   * it is (`VerifyEmailBanner`). *Changed 11 November 2026 (P19.12-T2 AC-4; ADR-0245 §5):* a muted line, *"Email Anda
+   * belum diverifikasi · Kirim ulang tautan"* — it was the owner's *"Verifikasi email Anda · Kirim ulang"*, which read as
+   * a step still required.
    */
   banner: {
-    line: 'Verify your email',
-    resend: 'Send again',
+    line: "Your email isn't verified yet",
+    resend: 'Resend link',
     sending: 'Sending…',
     sent: 'Sent. Check your inbox.',
   },
@@ -228,9 +241,8 @@ const id: MessagesOf<typeof en> = {
   register: {
     title: 'Buat akun Anda',
     line: `${kept('KPM')} Anda ditambahkan secara terpisah. Ini hanya akun untuk masuk.`,
-    sent: ({ email }) => <>Jika {email} dapat didaftarkan, tautan verifikasi sedang dikirim.</>,
-    sentLine: 'Buka tautan itu untuk menyelesaikan pembuatan akun Anda. Tautan berlaku 24 jam dan hanya bisa dipakai sekali.',
-    backToSignIn: 'Kembali ke halaman masuk',
+    sent: ({ email }) => <>{email} mungkin sudah punya akun.</>,
+    sentLine: 'Masuk dengan akun itu, atau buat kata sandi baru jika Anda lupa.',
     fullName: 'Nama lengkap',
     dateOfBirth: 'Tanggal lahir',
     gender: 'Jenis kelamin',
@@ -262,8 +274,13 @@ const id: MessagesOf<typeof en> = {
       existing: 'Undangan ini untuk akun yang sudah ada. Masuk untuk menerimanya.',
       signInToAccept: 'Masuk untuk menerima',
       withoutInvite: 'Buat akun tanpa undangan',
-      doneLine: ({ leader }) => `Setelah Anda memverifikasinya dan masuk, Anda sudah berada di tim ${leader}.`,
       checking: 'Memeriksa undangan Anda…',
+    },
+    code: {
+      banner: ({ code }) => `Anda bergabung dengan kode undangan ${code}`,
+      bannerLine: `Setelah akun dibuat, Anda langsung masuk tim ${kept('leader')} yang membagikan kode ini. Tidak perlu `
+        + 'persetujuan siapa pun.',
+      withoutCode: 'Buat akun tanpa kode',
     },
   },
   forgot: {
@@ -299,8 +316,8 @@ const id: MessagesOf<typeof en> = {
     resent: 'Tautan baru sedang dikirim. Periksa kotak masuk email Anda.',
   },
   banner: {
-    line: 'Verifikasi email Anda',
-    resend: 'Kirim ulang',
+    line: 'Email Anda belum diverifikasi',
+    resend: 'Kirim ulang tautan',
     sending: 'Mengirim…',
     sent: 'Terkirim. Periksa kotak masuk email Anda.',
   },

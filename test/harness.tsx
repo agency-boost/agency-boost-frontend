@@ -142,8 +142,8 @@ export function makeMe(overrides: Partial<Me> = {}): Me {
 }
 
 /**
- * A session as a screen sees it. `signIn` resolves to the session's own `me`, as the provider's resolves
- * to whoever it just read; a login spec about *who* signed in passes a `signIn` of its own.
+ * A session as a screen sees it. `signIn` and `adopt` resolve to the session's own `me`, as the provider's resolve
+ * to whoever they just read; a login or register spec about *who* signed in passes its own.
  */
 export function makeSession(overrides: Partial<SessionValue> = {}): SessionValue {
   const me = 'me' in overrides ? overrides.me ?? null : makeMe();
@@ -153,6 +153,8 @@ export function makeSession(overrides: Partial<SessionValue> = {}): SessionValue
     signedOut: false,
     expired: false,
     signIn: vi.fn(async () => me),
+    // P19.12-T2 (ADR-0245 §3): registering takes up the session its answer started; resolves as `signIn` does.
+    adopt: vi.fn(async () => me),
     signOut: vi.fn(async () => undefined),
     reload: vi.fn(async () => undefined),
     ...overrides,

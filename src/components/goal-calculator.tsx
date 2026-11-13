@@ -28,7 +28,7 @@ import { goalWordMessages, voiceOf } from '@/i18n/messages/goal-words';
 import { goalsMessages } from '@/i18n/messages/goals';
 import { uiV1Messages } from '@/i18n/messages/ui-v1';
 import {
-  formatDay, formatDayLong, formatDecimalInput, formatMonth, formatNumber, formatRupiah, formatRupiahCompact, moneyPrefix,
+  formatDay, formatDayLong, formatDecimalInput, formatMonth, formatNumber, formatRupiahCompact, moneyPrefix,
   parseDecimal,
 } from '@/lib/format';
 import {
@@ -58,11 +58,12 @@ import { useTenantConfig, type TenantConfig } from '@/lib/tenant-config-cache';
  *   switched and back, or a value changed and changed back, reads *Tersimpan* again.
  * - **Step 2's two prefilled figures are one field, drawn alike** (UI-020 + UI-122, *Conflicts* row 146): a white 48px
  *   pill in normal ink, the same width, **no ✎** — the whole pill is the input — each with its line under its name.
- *   The months read *2,1 bulan*; **the APE produced the full rupiah figure, *Rp 67.000.000*, grouped as it is typed**
- *   (P19.8-T5; MOB UI-190, ADR-0230 §2). On a laptop the two side by side, then the two tiles (UI-114).
+ *   The months read *2,1 bulan*; **the APE produced reads compact, *Rp 400 Jt*, and is typed in full, *400.000.000*,
+ *   grouped as it is typed** (P19.11-T4, UX-7 and UXQ7's default, reversing ADR-0230 §2's full figure at rest). On a
+ *   laptop the two side by side, then the two tiles (UI-114).
  * - **The member types over the automatic APE** (P19.8-T5; D-36, MOB UI-190, ADR-0230): prefilled with the office's
  *   figure, *⚡ Otomatis · per Okt 2026* — also when the office uploaded it — and, typed over, *Diubah oleh Anda* with
- *   *↶ Pakai otomatis (Rp 67 jt)*, which puts the office's figure back. On a phone the label takes the free width and
+ *   *↶ Pakai otomatis (Rp 67 Jt)*, which puts the office's figure back. On a phone the label takes the free width and
  *   the pill is 150px (MOB UI-191).
  * - **No description pill under *Sales meeting*** (UI-021): on a tablet and a desktop an ⓘ beside a result tile says
  *   which of the office's activities it counts, where that differs from its name; on a phone nothing.
@@ -295,7 +296,7 @@ export function GoalCalculator({
       {t.automatic({ month: formatMonth(automatic.month, figures) })}
     </FigureLine>
   ) : null;
-  /** *↶ Pakai otomatis (Rp 67 jt)* (ADR-0230 §4): back to the office's figure; none without one. */
+  /** *↶ Pakai otomatis (Rp 67 Jt)* (ADR-0230 §4): back to the office's figure; none without one. */
   const useAutomatic = producedTypable && typedShown && automatic ? (
     <button
       type="button"
@@ -335,7 +336,7 @@ export function GoalCalculator({
     <PillReadOnly
       label={t.produced}
       line={producedLine}
-      value={formatRupiah(producedValue, figures)}
+      value={formatRupiahCompact(producedValue, {}, figures)}
       layout={below ? 'row' : 'stacked'}
     />
   );
@@ -759,7 +760,7 @@ function GoalTile({ label, value, unit, variant = 'plain', className }: {
 
 /**
  * Money on a slider (UI-016), in **rupiah** on the track and **sen** to the server — the one place the conversion
- * happens, whole rupiah either way. The value reads compact, *Rp 500 jt*; an exact amount is typed past the track's end
+ * happens, whole rupiah either way. The value reads compact, *Rp 500 Jt*; an exact amount is typed past the track's end
  * if it must be.
  */
 function RupiahSlider({ label, track, value, onChange, info }: {
@@ -893,16 +894,24 @@ function useSelectAll() {
  * mockup's).
  */
 const PILL_WIDTH = 'w-40 max-md:w-[9.375rem]';
+/**
+ * **A row's pill while a long figure is typed in it** (P19.11-T4, UX-7: *nothing is ever clipped*): at least the row's
+ * width, and as wide as the figure needs past it — `400.000.000` and `1.200.000.000` whole beside their *Rp*, the label
+ * beside it taking what is left — then `PILL_WIDTH` again once it is left.
+ */
+const PILL_MIN_WIDTH = 'min-w-40 max-md:min-w-[9.375rem] justify-end';
 
-function PillField({ id, layout, edited = false, children }: {
-  id: string; layout: 'row' | 'stacked'; edited?: boolean; children: ReactNode;
+function PillField({ id, layout, edited = false, grow = false, children }: {
+  id: string; layout: 'row' | 'stacked'; edited?: boolean; grow?: boolean; children: ReactNode;
 }) {
   return (
     <label
       htmlFor={id}
       data-pill=""
       data-edited={edited ? 'true' : undefined}
-      className={cn(PILL, 'cursor-text', edited && 'border-secondary', layout === 'row' ? PILL_WIDTH : 'w-full')}
+      className={cn(
+        PILL, 'cursor-text', edited && 'border-secondary', layout === 'row' ? (grow ? PILL_MIN_WIDTH : PILL_WIDTH) : 'w-full',
+      )}
     >
       {children}
     </label>
@@ -959,10 +968,13 @@ function PillDecimal({ id, label, line, value, unit, onValueChange, layout }: {
 }
 
 /**
- * **The APE produced, typed** (UI-020; P19.8-T5 AC-2, MOB UI-190, ADR-0230 §2): **the full rupiah figure, never
- * *jt*** — *Rp 67.000.000*, the currency mark beside the digits — and **grouped while it is typed**, the caret kept
- * after the digit it followed (`caretAfterDigits`). Digits only, in either language's grouping; the number keypad.
- * Emptied, or 0, it is no typed figure (`null`): the automatic one again once the field is left.
+ * **The APE produced, typed** (UI-020; P19.8-T5 AC-2, MOB UI-190; P19.11-T4, UX-7 and UXQ7's default): **compact at
+ * rest** — *Rp 400 Jt*, *Rp 1,2 M* above the *Jt* range (`formatRupiahCompact`, the one formatter), so it never clips
+ * (the screenshot's *Rp 400.000.00…*) — and **the full figure while it is focused**, *400.000.000* beside the currency
+ * mark, **grouped while it is typed**, the caret kept after the digit it followed (`caretAfterDigits`); in a row the
+ * pill grows while it is, so a long figure is whole (`PILL_MIN_WIDTH`). The stored value is the exact sum typed. Digits
+ * only, in either language's grouping; the number keypad. Emptied, or 0, it is no typed figure (`null`): the automatic
+ * one again once the field is left.
  */
 function PillMoney({ id, label, line, after, edited, value, onChange, layout }: {
   id: string; label: string; line: ReactNode; after?: ReactNode; edited: boolean; value: number;
@@ -977,6 +989,11 @@ function PillMoney({ id, label, line, after, edited, value, onChange, layout }: 
   const nameId = useId();
   const lineId = useId();
   const grouped = (minor: number) => groupDigits(toMajor(minor), figures);
+  /** Focused: the full figure being typed. Left: the compact one, with its own currency mark. */
+  const focused = typing !== null;
+  const shown = typing ?? formatRupiahCompact(value, {}, figures);
+  /** In a row, the field is as wide as the figure while it is typed, so the pill around it grows to fit (UX-7). */
+  const fitted = focused && layout === 'row';
 
   useLayoutEffect(() => {
     const at = caret.current;
@@ -993,8 +1010,8 @@ function PillMoney({ id, label, line, after, edited, value, onChange, layout }: 
       line={line && <span id={lineId}>{line}</span>}
       after={after}
     >
-      <PillField id={id} layout={layout} edited={edited}>
-        <span aria-hidden="true" className="shrink-0 font-bold text-ink">{moneyPrefix(figures)}</span>
+      <PillField id={id} layout={layout} edited={edited} grow={focused}>
+        {focused && <span aria-hidden="true" className="shrink-0 font-bold text-ink">{moneyPrefix(figures)}</span>}
         <input
           ref={input}
           id={id}
@@ -1003,7 +1020,8 @@ function PillMoney({ id, label, line, after, edited, value, onChange, layout }: 
           autoComplete="off"
           aria-labelledby={nameId}
           aria-describedby={line ? lineId : undefined}
-          value={typing ?? grouped(value)}
+          value={shown}
+          style={fitted ? { width: `${Math.max(shown.length, 1) + 1}ch` } : undefined}
           {...selectAll}
           onFocus={(e) => {
             setTyping(grouped(value));
@@ -1034,7 +1052,7 @@ function PillMoney({ id, label, line, after, edited, value, onChange, layout }: 
             setTyping(next);
             onChange(toMinor(major));
           }}
-          className="w-full min-w-0 bg-transparent text-right font-bold text-ink outline-none [font-size:16px]"
+          className={cn('min-w-0 bg-transparent text-right font-bold text-ink outline-none [font-size:16px]', fitted ? 'flex-none' : 'w-full')}
         />
       </PillField>
     </PillLine>
@@ -1044,8 +1062,8 @@ function PillMoney({ id, label, line, after, edited, value, onChange, layout }: 
 /**
  * **The office's figure, on a coachee's tab** (P9-T6; ADR-0183, kept by ADR-0230 §7): nothing a coach types over it would
  * be read, so it is **plain figures, not a pill** — no frame, no fill, no ✎ — and does not look tappable; the line under
- * its name says whose it is. The full rupiah figure, as the member's own pill shows it (ADR-0230 §2). A `<dl>`, so the
- * label names the figure.
+ * its name says whose it is. Compact, *Rp 400 Jt*, as the member's own pill shows it at rest (P19.11-T4, UX-7). A
+ * `<dl>`, so the label names the figure.
  */
 function PillReadOnly({ label, line, value, layout }: {
   label: string; line: ReactNode; value: string; layout: 'row' | 'stacked';

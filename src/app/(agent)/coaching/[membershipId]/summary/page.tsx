@@ -70,6 +70,8 @@ function CoacheeSummary({ coachee, address }: { coachee: Coachee; address: Summa
   const [ratios, setRatios] = useState<ActivityRatios | null>(null);
   const [ratiosError, setRatiosError] = useState<ApiError | null>(null);
   const { membershipId, pronoun } = coachee;
+  // P19.11-T5 AC-1: read again after a lead of theirs is saved, closed or deleted from the leads section's sheet.
+  const [round, setRound] = useState(0);
 
   useEffect(() => {
     let live = true;
@@ -80,7 +82,7 @@ function CoacheeSummary({ coachee, address }: { coachee: Coachee; address: Summa
     return () => { live = false; };
     // `key` is the period, said once.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [membershipId, key]);
+  }, [membershipId, key, round]);
 
   useEffect(() => {
     let live = true;
@@ -120,6 +122,7 @@ function CoacheeSummary({ coachee, address }: { coachee: Coachee; address: Summa
               view={view}
               pulse={{ ratios, error: ratiosError }}
               subject={{ membershipId, pronoun }}
+              onLeadsChanged={() => setRound((n) => n + 1)}
             />
           ) : !error && waiting}
         </>

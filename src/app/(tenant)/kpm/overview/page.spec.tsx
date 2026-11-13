@@ -892,7 +892,7 @@ describe('P18.10-T4 the KPM Overview in Indonesian', () => {
     expect(production.getByRole('link', { name: 'Okt 2026 belum diunggah ›' })).toBeInTheDocument();
     const units = within(section('Units furthest behind target'));
     expect(units.getByRole('button', { name: 'Ketuk baris untuk membuka Unit Dashboard AB itu' })).toBeInTheDocument();
-    expect(units.getByText('Hendra Wibowo').closest('li')).toHaveTextContent('Rp 620 jt / 1,5 M target unit');
+    expect(units.getByText('Hendra Wibowo').closest('li')).toHaveTextContent('Rp 620 Jt / 1,5 M target unit');
     expect(units.getByRole('button', { name: 'Semua 6 ›' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Pengaturan KPM' })).toBeInTheDocument();
     expect(englishOnly(kpmOverviewMessages).length).toBeGreaterThan(20);

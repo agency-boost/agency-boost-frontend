@@ -99,7 +99,8 @@ const en = {
     `${type}: ${title}${time ? `, ${time}` : ''}${owes ? OWES_EN[owes] : ''}`,
   /** What the reader owes, after an entry's name: a pending invitation, and time placed on them. */
   owes: OWES_EN,
-  untitled: '(untitled event)',
+  /** An entry or a joined event with no title (P19.11-T1 AC-6; UX-6): was the prototype's *(untitled event)*. */
+  untitled: '(Untitled)',
 
   /** The detail dialog (`:422-449`, `:817-853`). */
   when: 'When',
@@ -205,6 +206,11 @@ const en = {
   tasksTitle: ({ day, count }: { day: string; count: string }) => `Tasks · ${day} (${count})`,
   /** A count pill's name: what it opens. */
   tasksOn: ({ day, count }: { day: string; count: string }) => `Tasks on ${day}: ${count}`,
+  /**
+   * A day whose *Tugas* are all ticked (P19.11-T1 AC-1; UX-1): its muted ✓ in the count row or the Month, which opens the
+   * day's tasks. `count` is how many were done; the open count stays 0 (UXQ8).
+   */
+  allTasksDone: ({ day, count }: { day: string; count: string }) => `All tasks done (${count}), ${day}`,
   /** A compared person's tasks in the Agenda: *INDAH PERMATASARI · Tasks 2*. */
   personTasks: ({ name, count }: { name: string; count: string }) => `${name} · Tasks ${count}`,
   /** A coaching task's top line: who coached the person. */
@@ -282,7 +288,7 @@ const id: MessagesOf<typeof en> = {
   entryName: ({ type, title, time, owes }) => `${type}: ${title}${time ? `, ${time}` : ''}${owes ? OWES_ID[owes] : ''}`,
   lineName: ({ type, time, title, owes }) => `${type}: ${title}${time ? `, ${time}` : ''}${owes ? OWES_ID[owes] : ''}`,
   owes: OWES_ID,
-  untitled: `(${kept('event')} tanpa judul)`,
+  untitled: '(Tanpa judul)',
 
   when: 'Kapan',
   where: 'Lokasi / catatan',
@@ -365,6 +371,7 @@ const id: MessagesOf<typeof en> = {
   tasksCount: ({ count }) => `Tugas · ${count}`,
   tasksTitle: ({ day, count }) => `Tugas · ${day} (${count})`,
   tasksOn: ({ day, count }) => `Tugas pada ${day}: ${count}`,
+  allTasksDone: ({ day, count }) => `Semua tugas selesai (${count}), ${day}`,
   personTasks: ({ name, count }) => `${name} · Tugas ${count}`,
   from: ({ name }) => `Dari: ${name}`,
   markDone: ({ name }) => `Selesai: ${name}`,

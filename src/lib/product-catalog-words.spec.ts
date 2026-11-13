@@ -50,7 +50,7 @@ describe('P18.10-T4 sales tools’ words, language by language', () => {
 
   it('P18.10-T3 figures: a budget band’s sums in the figures’ language, its words in the words’ — four combinations', () => {
     expect(budgetChoices('id', 'id').map((c) => c.label)).toEqual([
-      '< Rp 500 rb', 'Rp 500 rb–Rp 2 jt', 'Rp 2 jt–Rp 5 jt', 'Rp 5 jt–Rp 10 jt', 'Rp 10 jt–Rp 20 jt', '> Rp 20 jt', 'Sekaligus',
+      '< Rp 500 rb', 'Rp 500 rb–Rp 2 Jt', 'Rp 2 Jt–Rp 5 Jt', 'Rp 5 Jt–Rp 10 Jt', 'Rp 10 Jt–Rp 20 Jt', '> Rp 20 Jt', 'Sekaligus',
     ]);
     expect(budgetChoices('en', 'en').map((c) => c.label)).toEqual([
       '< IDR 500K', 'IDR 500K–IDR 2M', 'IDR 2M–IDR 5M', 'IDR 5M–IDR 10M', 'IDR 10M–IDR 20M', '> IDR 20M', 'Lump-sum',
@@ -58,7 +58,7 @@ describe('P18.10-T4 sales tools’ words, language by language', () => {
     // A reader with no choice before the switch is live: English words, Indonesian figures — the backend's labels.
     expect(budgetChoices('id', 'en')).toEqual(BUDGET_CHOICES);
     expect(budgetChoices('en', 'id').map((c) => c.label).slice(5)).toEqual(['> IDR 20M', 'Sekaligus']);
-    expect([budgetLabel(2), budgetLabel(7), budgetLabel(9)]).toEqual(['Rp 500 rb–Rp 2 jt', 'Lump-sum', undefined]);
+    expect([budgetLabel(2), budgetLabel(7), budgetLabel(9)]).toEqual(['Rp 500 rb–Rp 2 Jt', 'Lump-sum', undefined]);
   });
 
   it('invariant §7 the bands’ sums, written in Indonesian figures, are the backend’s labels to the character', () => {

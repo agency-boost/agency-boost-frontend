@@ -116,7 +116,9 @@ describe('P18.10-T4 the pages before a session in Indonesian', () => {
     noEnglishLeft();
   });
 
-  it('AC-1, AC-4 registration done: the address as typed, bold, in one Indonesian sentence', async () => {
+  // P19.12-T2 AC-3 (ADR-0245 §3): an account made is signed in and leaves the page; this screen is for an address that
+  // already had one — neutral, no word of verifying, with *Masuk* and *Lupa kata sandi?*.
+  it('AC-1, AC-4, P19.12-T2 AC-3 an address that already had an account: the address as typed, bold, in Indonesian', async () => {
     stubFetch({ '/companies': { body: INSURERS }, '/auth/register': { status: 201, body: { status: 'verification_sent' } } });
     renderInIndonesian(<RegisterPage />, { me: null });
     await userEvent.type(screen.getByLabelText('Nama lengkap'), 'Rina Wijaya');
@@ -132,11 +134,12 @@ describe('P18.10-T4 the pages before a session in Indonesian', () => {
     await userEvent.selectOptions(screen.getByLabelText('Jenis kelamin'), 'female');
     await userEvent.click(screen.getByRole('button', { name: 'Buat akun' }));
 
-    const sent = await screen.findByText(/tautan verifikasi sedang dikirim/);
-    expect(sent).toHaveTextContent(/^Jika rina@kpm0417\.test dapat didaftarkan, tautan verifikasi sedang dikirim\.$/);
+    const sent = await screen.findByText(/mungkin sudah punya akun/);
+    expect(sent).toHaveTextContent(/^rina@kpm0417\.test mungkin sudah punya akun\.$/);
     expect(screen.getByText('rina@kpm0417.test').tagName).toBe('STRONG');
-    expect(screen.getByText(/berlaku 24 jam dan hanya bisa dipakai sekali/)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Kembali ke halaman masuk' })).toHaveAttribute('href', '/login');
+    expect(screen.getByText('Masuk dengan akun itu, atau buat kata sandi baru jika Anda lupa.')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Masuk' })).toHaveAttribute('href', '/login');
+    expect(screen.getByRole('link', { name: 'Lupa kata sandi?' })).toHaveAttribute('href', '/forgot-password');
     noEnglishLeft();
   });
 

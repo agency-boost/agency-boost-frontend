@@ -137,6 +137,12 @@ const HELD_BACK: readonly [page: string, modules: readonly string[]][] = [
     'components/leader-forum/print-layout.tsx', 'lib/goals.ts', 'lib/use-inbox.ts',
   ]],
   ['app/profile/page.tsx', ['lib/calendar.ts', 'components/session-list.tsx', 'lib/tenant-config.ts']],
+  // P19.11 (the bundle, 2026-11-10): *Aksi hari ini* draws the Calendar's rows, whose coaching link took `lib/coaching.ts`
+  // and whose lead read took `lib/leads.ts` — `/home` at 204 kB. The lead and the entry open in what loads on the tap.
+  ['app/(agent)/home/page.tsx', [
+    'lib/leads.ts', 'lib/coaching.ts', 'components/lead-sheet.tsx', 'components/calendar/detail-dialog.tsx',
+    'components/calendar/entry-dialog.tsx',
+  ]],
   ['app/(agent)/summary/page.tsx', ['lib/leads.ts', 'components/ui/modal.tsx']],
   ['app/(agent)/coaching/[membershipId]/summary/page.tsx', ['lib/leads.ts', 'components/ui/modal.tsx']],
   ['app/(agent)/coaching/[membershipId]/session/page.tsx', [

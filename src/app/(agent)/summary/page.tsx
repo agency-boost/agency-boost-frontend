@@ -106,7 +106,8 @@ function PersonalSummary() {
   useEffect(() => restorePrintTitle, []);
   const [pulseError, setPulseError] = useState<ApiError | null>(null);
 
-  // The period's Summary: read again whenever the period changes — and after the reader's estimate is saved (UI-157).
+  // The period's Summary: read again whenever the period changes — and after the reader's estimate is saved (UI-157), or a
+  // lead from its leads section (P19.11-T5).
   const [round, setRound] = useState(0);
   useEffect(() => {
     let live = true;
@@ -177,6 +178,8 @@ function PersonalSummary() {
                   pulse={{ ratios: pulse, error: pulseError }}
                   // P19.1-T4 (UI-157 item 4): the card's estimate, saved or deleted, is read back with the rest.
                   onChanged={() => setRound((n) => n + 1)}
+                  // P19.11-T5 AC-1: a lead saved, closed or deleted from the leads section's sheet is read back the same way.
+                  onLeadsChanged={() => setRound((n) => n + 1)}
                 />
               )
               : !error && <SkeletonCards count={2} label={t.loading} />}

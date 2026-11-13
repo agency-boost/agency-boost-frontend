@@ -660,8 +660,11 @@ export interface RosterIssue {
   message: string;
 }
 
-/** **Skipped, updated or imported** (A3): what one row of the file comes to. */
-export type RosterOutcome = 'imported' | 'updated' | 'skipped';
+/**
+ * **Skipped, updated or imported** (A3): what one row of the file comes to — or **invited** (ADR-0250 §4): a new Agent
+ * with no email, invited on WhatsApp as *+ Tambah agent* invites, who registers through the link.
+ */
+export type RosterOutcome = 'imported' | 'updated' | 'invited' | 'skipped';
 
 export interface RosterPreviewRow {
   line: number;
@@ -675,6 +678,13 @@ export interface RosterPreviewRow {
   outcome: RosterOutcome;
   /** A3's words for the row, in the reader's language: why it is skipped, or what importing or updating it notes. */
   messages: string[];
+  /**
+   * **What the row leaves out** (ADR-0250 §2, §3), in the reader's language: an optional cell left empty for its shape,
+   * no WhatsApp number, the details neither the row nor the record holds. Empty for a skipped row.
+   */
+  warnings: string[];
+  /** On the import's answer only, for an `invited` row: the link to share on WhatsApp, and the number it goes to. */
+  invite?: { link: string; phone: string };
 }
 
 export interface RosterPreview {
@@ -682,8 +692,8 @@ export interface RosterPreview {
   issues: RosterIssue[];
   /** The file's header, as it reads. */
   header: string[];
-  /** *"N orang baru siap diimpor, M diperbarui, K baris dilewati"* (A3). */
-  counts: { imported: number; updated: number; skipped: number };
+  /** *"N orang baru siap diimpor, M diperbarui, K baris dilewati"* (A3), and *J diundang lewat WhatsApp* (ADR-0250 §4). */
+  counts: { imported: number; updated: number; invited: number; skipped: number };
   rows: RosterPreviewRow[];
   /** The skipped rows as a CSV — the file's columns and `Alasan` — or `null` when none is skipped (A3). */
   skippedCsv: string | null;
@@ -691,7 +701,7 @@ export interface RosterPreview {
 
 /** What the import did: the same rows, now done. **No password** — new people are invited to choose their own. */
 export interface RosterImportResult extends RosterPreview {
-  /** How many new people were emailed an invitation. */
+  /** How many new people were emailed an invitation. Those invited on WhatsApp are `counts.invited`. */
   invited: number;
 }
 

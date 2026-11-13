@@ -1,4 +1,4 @@
-import type { CalendarEntry } from '@/lib/calendar';
+import type { CalendarEntry, CalendarTask } from '@/lib/calendar';
 import type { HomeTeamPerson, HomeView } from '@/lib/home';
 import { makeMe } from './harness';
 
@@ -60,8 +60,33 @@ export const TEAM: HomeTeamPerson[] = [
   person('Novi Andriani', { inUnit: false, yesterday: 4, today: 6 }),
 ];
 
+/**
+ * The entry *Aksi hari ini*'s third row opens over Home (P19.8-T2 AC-7): Agus organises it, with nobody invited — **today**,
+ * 15:00 to 16:00 (P19.11-T1 AC-3: Home lists today's alone; it was the next day's).
+ */
+export const HUDDLE_ENTRY: CalendarEntry = {
+  entryId: 'e-1', type: 'meeting', title: 'Weekly unit huddle', notes: 'Kantor — Ruang Rapat A',
+  date: '2026-10-30', start: '15:00', end: '16:00', startsOn: null, endsOn: null, allDay: false,
+  startsAt: '2026-10-30T08:00:00.000Z', endsAt: '2026-10-30T09:00:00.000Z',
+  organiser: { membershipId: 'mem-agus', name: 'Agus Prasetyo' }, invitees: [], readerIs: 'organiser',
+  myAnswer: null, version: 3,
+};
+
+/** Today's coaching action item, from Wilson — *Dari: WILSON TANOTO* — as the Calendar's task (P19.11-T1 AC-3). */
+export const WILSON_TASK: CalendarTask = {
+  taskId: 'coaching:s-1:i-1', source: 'coaching', date: '2026-10-30', ownerMembershipId: 'mem-agus', name: 'Wilson Tanoto',
+  note: 'Siapkan daftar 20 prospek baru', phone: '+6281299990000', lead: null,
+  coaching: { sessionId: 's-1', itemId: 'i-1', coachMembershipId: 'm-wilson' }, done: false,
+};
+
+/** Today's lead next action, *Ibu Wiwik Setyaningsih*'s, as the Calendar's task, at version 2. */
+export const WIWIK_TASK: CalendarTask = {
+  taskId: 'lead:l-1', source: 'lead', date: '2026-10-30', ownerMembershipId: 'mem-agus', name: 'Ibu Wiwik Setyaningsih',
+  note: 'Invite BOP', phone: '+6281211112222', lead: { leadId: 'l-1', version: 2 }, coaching: null, done: false,
+};
+
 export const LEADER: HomeView = {
-  today: '2026-10-30', yesterday: '2026-10-29', month: '2026-10', now: { minute: 9 * 60 + 5 },
+  today: '2026-10-30', yesterday: '2026-10-29', month: '2026-10', now: { minute: 9 * 60 + 5, at: '2026-10-30T02:05:00.000Z' },
   quote: { index: 2, text: 'Success is the sum of small efforts, repeated day in and day out.', person: 'Robert Collier', pose: 'thinking' },
   activity: {
     today: 0, yesterday: 5, total: 18,
@@ -72,16 +97,11 @@ export const LEADER: HomeView = {
     ],
   },
   schedule: { meetings: 2, tasks: 3 },
+  // P19.11-T1 AC-3: today's alone, in the Calendar's own shapes — a coaching item, a lead's next action, then the huddle.
   actions: [
-    {
-      kind: 'coaching', sessionId: 's-1', itemId: 'i-1', text: 'Siapkan daftar 20 prospek baru',
-      from: { membershipId: 'm-wilson', name: 'Wilson Tanoto', phone: '+6281299990000' },
-    },
-    {
-      kind: 'lead', leadId: 'l-1', name: 'Ibu Wiwik Setyaningsih', type: 'sales', note: 'Invite BOP',
-      contact: { phone: '+6281211112222', email: null }, version: 2,
-    },
-    { kind: 'agenda', source: 'entry', id: 'e-1', type: 'meeting', title: 'Weekly unit huddle', date: '2026-10-31', start: '15:00' },
+    { kind: 'task', task: WILSON_TASK },
+    { kind: 'task', task: WIWIK_TASK },
+    { kind: 'entry', entry: HUDDLE_ENTRY },
   ],
   leads: 16,
   newHires: 3,
@@ -108,15 +128,6 @@ export const NEW_LEADER: HomeView = {
     coached7d: { count: 0, of: 0, unit: { count: 0, of: 0 }, aab: { count: 0, of: 0 } },
     team: [],
   },
-};
-
-/** The entry *Aksi hari ini*'s third row opens over Home (P19.8-T2 AC-7): Agus organises it, with nobody invited. */
-export const HUDDLE_ENTRY: CalendarEntry = {
-  entryId: 'e-1', type: 'meeting', title: 'Weekly unit huddle', notes: 'Kantor — Ruang Rapat A',
-  date: '2026-10-31', start: '15:00', end: '16:00', startsOn: null, endsOn: null, allDay: false,
-  startsAt: '2026-10-31T08:00:00.000Z', endsAt: '2026-10-31T09:00:00.000Z',
-  organiser: { membershipId: 'mem-agus', name: 'Agus Prasetyo' }, invitees: [], readerIs: 'organiser',
-  myAnswer: null, version: 3,
 };
 
 export const AGENT_VIEW: HomeView = {

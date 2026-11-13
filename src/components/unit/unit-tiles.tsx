@@ -20,7 +20,7 @@ import {
  * | Tile | Number | Extra | Chips |
  * |---|---|---|---|
  * | *Tim Anda* | 12 agent | — | 4 langsung · 8 AAB |
- * | *Produksi Group* | Rp 333,5 jt | *54%* badge, the bar, *dari Rp 612,3 jt* | — |
+ * | *Produksi Group* | Rp 333,5 Jt | *54%* badge, the bar, *dari Rp 612,3 Jt* | — |
  * | *Active Agent {Bulan}* | 4 dari 12 | the ring, *33%* (UI-013: out of manpower) | Unit 1/4 · AAB 3/8 |
  * | *Recruitment {Bulan}* | 2 kandidat | — | Unit 1 · AAB 1 |
  *
@@ -32,6 +32,10 @@ import {
  *
  * **An empty unit** (P19.8-T4 AC-11, MOB UI-181; ADR-0229 §9): *Active Agent* reads ***0 dari –*** as Home does, with *–*
  * in its ring and its chips (*Unit 0/–*, *AAB 0/–*), where it read *0 dari 0*.
+ *
+ * **An AB below is never an AAB** (the client's message of 11 November 2026, item 5; ADR-0249 §3): the *AAB* chips count
+ * the head's *Grup langsung* only, and while the view holds anybody outside it — *Grup informal*, *Semua downline* — a
+ * third chip, ***AB***, counts them, on all three tiles. The chips add up to each tile's number.
  */
 export function UnitTiles({ view, period }: { view: UnitDashboardView; period: UnitPeriod }) {
   const language = useLanguage();
@@ -54,7 +58,9 @@ export function UnitTiles({ view, period }: { view: UnitDashboardView; period: U
     : target === null ? t.own.noGoal
       : target === 0 ? t.own.targetMade
         : t.v1.of({ of: formatRupiahCompact(target, {}, figures) });
-  const recruits = potentialRecruits.yourUnit + potentialRecruits.aabs;
+  const recruits = potentialRecruits.yourUnit + potentialRecruits.aabs + potentialRecruits.abs;
+  // ADR-0249 §3: the *AB* chip, while the view holds somebody outside the head's *Grup langsung*.
+  const withAb = team.ab > 0;
   // Nobody to count (MOB UI-181): *–*, never a denominator of 0.
   const of = (n: number) => (view.empty ? '–' : number(n));
   const short = formatMonthName(view.month, figures);
@@ -89,6 +95,7 @@ export function UnitTiles({ view, period }: { view: UnitDashboardView; period: U
         chips={[
           { key: 'unit', label: <>{t.v1.scope.unit} <b>{number(active.unit.count)}</b>/{of(active.unit.of)}</> },
           { key: 'aab', label: <>{AAB} <b>{number(active.aab.count)}</b>/{of(active.aab.of)}</> },
+          ...(withAb ? [{ key: 'ab', label: <>{AB} <b>{number(active.ab.count)}</b>/{of(active.ab.of)}</> }] : []),
         ]}
       />
       <StatTile
@@ -98,6 +105,7 @@ export function UnitTiles({ view, period }: { view: UnitDashboardView; period: U
         chips={[
           { key: 'unit', label: <>{t.v1.scope.unit} <b>{number(potentialRecruits.yourUnit)}</b></> },
           { key: 'aab', label: <>{AAB} <b>{number(potentialRecruits.aabs)}</b></> },
+          ...(withAb ? [{ key: 'ab', label: <>{AB} <b>{number(potentialRecruits.abs)}</b></> }] : []),
         ]}
       />
     </div>
@@ -121,15 +129,17 @@ function MonthLabel({ short, month, long }: { short: string; month: string; long
   );
 }
 
-/** *AAB*, a role, kept in both languages (§A.5). */
+/** *AAB* and *AB*, roles, kept in both languages (§A.5). */
 const AAB = kept('AAB');
+const AB = kept('AB');
 
 /**
  * *Tim Anda*'s chips (UI-003; P18.7-T7 AC-1's line, row 19): *4 langsung · 8 AAB* — the head's own unit, the head
- * included, then every AAB unit with everybody in it, so the two add up to the number.
+ * included, then the rest of their *Grup langsung* — and ***· 3 AB*** while the view holds anybody outside it (ADR-0249
+ * §3): an AB below and their people. **An AB is never counted as an AAB.** The chips add up to the number.
  */
 export function teamChips(
-  team: { direct: number; units: number; underUnits: number },
+  team: { direct: number; aab: number; ab: number },
   language: Language = SOURCE_LANGUAGE,
   figures: Language = language,
 ) {
@@ -137,10 +147,11 @@ export function teamChips(
   const number = (n: number) => formatNumber(n, {}, figures);
   return [
     { key: 'direct', label: <><b>{number(team.direct)}</b> {t.v1.direct}</> },
-    { key: 'aab', label: <><b>{number(team.units + team.underUnits)}</b> {AAB}</> },
+    { key: 'aab', label: <><b>{number(team.aab)}</b> {AAB}</> },
+    ...(team.ab > 0 ? [{ key: 'ab', label: <><b>{number(team.ab)}</b> {AB}</> }] : []),
   ];
 }
 
-/** *4 direct · 8 under AABs*: the head's own unit, then every AAB unit beneath it, heads included (row 19). */
-export const teamLine = (team: { direct: number; units: number; underUnits: number }, language: Language = SOURCE_LANGUAGE) =>
-  messagesIn(unitDashboardMessages, language).teamLine({ direct: team.direct, under: team.units + team.underUnits });
+/** *4 direct · 8 under AABs*: the head's own unit, then the rest of their *Grup langsung*, heads included (row 19). */
+export const teamLine = (team: { direct: number; aab: number }, language: Language = SOURCE_LANGUAGE) =>
+  messagesIn(unitDashboardMessages, language).teamLine({ direct: team.direct, under: team.aab });

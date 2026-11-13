@@ -153,7 +153,7 @@ const SEEDED: readonly DemoGroup[] = [
         role: 'Email not verified yet',
         email: 'unverified@agencyboost.test',
         password: FIELD,
-        lands: 'Every page says Verifikasi email Anda · Kirim ulang until the link is pressed',
+        lands: 'Every page says Email Anda belum diverifikasi · Kirim ulang tautan until the link is pressed',
       },
       {
         role: 'Office suspended',

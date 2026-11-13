@@ -29,12 +29,14 @@ vi.mock('next/navigation', () => ({
  * Home's markup from `LEADER`, read with `AGUS_AB` — his writes draw the button row (`digestAt`). *Re-recorded 2026-11-07 (P19.8-T2):* the order, the removal
  * of *Tim saya*, the 64px *Aksi hari ini* rows, *Laporan aktivitas tim* and the header-control *Unit | Group* change it at
  * every size, as MOB UI-164 (*content order All sizes*), UI-163 and UI-169 are scoped; it was the build before P19.1-T5,
- * recorded 2026-11-05.
+ * recorded 2026-11-05. *Re-recorded 2026-11-10 (P19.11-T1 AC-3; UX-2):* *Aksi hari ini* draws the Calendar's own rows —
+ * `TaskRow` and the Agenda's `AgendaItem`, today's alone — at every size, where it drew Home's 64px rows; recorded with
+ * the working tree of Phase 19.11 as it stood (its *Laporan aktivitas tim* without level tags, P19.11-T6).
  */
 const BEFORE_T5: Record<375 | 1024 | 1280, string> = {
-  375: '898129a8326899a954946a4f9ee97455c3c10d1f0f812e0fbf3377e320f36554',
-  1024: '76bb13413b4b72b76676a69537a3328ba49a213c6c324da6be0cc8c06e5b934b',
-  1280: '76bb13413b4b72b76676a69537a3328ba49a213c6c324da6be0cc8c06e5b934b',
+  375: '361aaffdcdcdd54fe7320b36690809c5ce9c82fe8767835582d2fffe689195b4',
+  1024: '6f4cdc5d0712e46c57e4f41e749cc372d55980c220e20e0e51186d2a47debda7',
+  1280: '6f4cdc5d0712e46c57e4f41e749cc372d55980c220e20e0e51186d2a47debda7',
 };
 
 const BLOCKS = ['quote', 'buttons', 'tiles', 'actions', 'team', 'chart'] as const;

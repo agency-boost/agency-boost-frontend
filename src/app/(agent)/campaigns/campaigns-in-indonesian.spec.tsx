@@ -80,7 +80,7 @@ describe('P18.10-T4 the Campaign List in Indonesian', () => {
     expect(within(sprint).getByText('1 Okt – 31 Des 2026')).toBeInTheDocument();
     expect(sprint).toHaveTextContent('Top 10 unit-wide: 3D2N Bali trip · All qualifiers: Rp 5.000.000 cash bonus');
     expect(sprint).toHaveTextContent(/HadiahTop 10 unit-wide/);
-    expect(sprint).toHaveTextContent(/SyaratRp 500 jt APE.* \+ 1 new hire/);
+    expect(sprint).toHaveTextContent(/SyaratRp 500 Jt APE.* \+ 1 new hire/);
     expect(within(sprint).getByRole('button', { name: 'Kejar Q4 APE Sprint' })).toHaveAttribute('aria-pressed', 'true');
     expect(within(cardOf('October New Hire Blitz')).getByRole('button', { name: /Kejar/ })).toBeInTheDocument();
     noEnglishLeft();
@@ -123,7 +123,7 @@ describe('P18.10-T4 a campaign’s dialog in Indonesian', () => {
     expect(within(box).getByRole('heading', { level: 3 })).toHaveTextContent('SyaratOkt – Des 2026');
     const rows = within(box).getAllByRole('listitem').map((r) => r.textContent);
     // The metric's name as served (§A.4), the figures Indonesian, *dari* between them, *terpenuhi* read after the ✓.
-    expect(rows).toEqual(['APE achievedRp 620 jt dari Rp 500 jt ✓, terpenuhi', 'New Hire1Belum diunggah']);
+    expect(rows).toEqual(['APE achievedRp 620 Jt dari Rp 500 Jt ✓, terpenuhi', 'New Hire1Belum diunggah']);
     expect(within(box).getByRole('button', { name: 'Tutup' })).toBeInTheDocument();
     expect(within(box).getByText(/Office-wide APE sprint for Q4\./)).toBeInTheDocument();
     noEnglishLeft();
@@ -163,14 +163,14 @@ describe('P18.10-T4 what a person is chasing, in Indonesian', () => {
 
 describe('P18.10-T4 lib/campaigns.ts in each language', () => {
   it('writes its words in the language passed and its figures in the figures’, English and Indonesian when none is', () => {
-    expect(requirementsLine([APE(16), NEW_HIRE(3)], undefined, 'id')).toBe('Rp 16 jt APE + 3 new hires');
+    expect(requirementsLine([APE(16), NEW_HIRE(3)], undefined, 'id')).toBe('Rp 16 Jt APE + 3 new hires');
     expect(requirementsLine([APE(16), NEW_HIRE(3)], undefined, 'en', 'en')).toBe('IDR 16M APE + 3 new hires');
-    expect(requirementWords({ ...APE(500), comparator: 'lte' }, undefined, 'id')).toBe('maksimal Rp 500 jt APE');
+    expect(requirementWords({ ...APE(500), comparator: 'lte' }, undefined, 'id')).toBe('maksimal Rp 500 Jt APE');
     expect(requirementWords({ ...NEW_HIRE(1), comparator: 'gt' }, undefined, 'id')).toBe('lebih dari 1 new hire');
     expect(requirementWords(PERSISTENCY, undefined, 'id')).toBe('90% Rolling persistency');
     expect(requirementWords({ ...APE(600), metricKey: 'NET_APE', metricName: 'Net APE' }, undefined, 'id', 'en')).toBe('Net APE IDR 600M');
     const row = { metricKey: 'APE_ACHIEVED', current: APE(620).value, target: APE(500).value, unit: 'idr_minor', state: 'met' as const };
-    expect(progressWords(row, undefined, 'id')?.text).toBe('Rp 620 jt dari Rp 500 jt');
+    expect(progressWords(row, undefined, 'id')?.text).toBe('Rp 620 Jt dari Rp 500 Jt');
     expect(progressWords({ ...row, state: 'nothing_logged' }, undefined, 'id')?.text).toBe('Belum ada yang tercatat');
     expect(seasonalSections(LIST.campaigns, 'all', 'id').map((s) => s.heading)).toEqual(['Berjalan', 'Akan datang', 'Berakhir']);
     expect(structuralSections(LIST.campaigns, 'id').map((s) => s.heading)).toEqual(['Kriteria promosi', 'Klub produksi']);

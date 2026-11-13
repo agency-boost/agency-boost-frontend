@@ -12,9 +12,9 @@ describe('GoalHeroCard (UI V1, UI-054)', () => {
       <GoalHeroCard
         title="Target vs. realisasi (APE)"
         percent={percent}
-        achieved="Rp 29 jt"
-        target="dari target Rp 94,7 jt"
-        facts={[{ label: 'Sisa bulan ini', value: 'Rp 65,7 jt' }, { label: 'Polis yang dibutuhkan', value: '± 4 polis' }]}
+        achieved="Rp 29 Jt"
+        target="dari target Rp 94,7 Jt"
+        facts={[{ label: 'Sisa bulan ini', value: 'Rp 65,7 Jt' }, { label: 'Polis yang dibutuhkan', value: '± 4 polis' }]}
       />
     </InLanguage>
   );
@@ -24,8 +24,8 @@ describe('GoalHeroCard (UI V1, UI-054)', () => {
     const hero = document.querySelector('[data-goal-hero]')!;
     expect(hero).toHaveClass('bg-primary', 'rounded-lg', 'text-primary-contrast');
     expect(screen.getByText('31%')).toHaveClass('bg-card', 'text-primary-ink');
-    expect(screen.getByText('Rp 29 jt')).toHaveClass('font-extrabold');
-    expect(screen.getByText('dari target Rp 94,7 jt')).toBeInTheDocument();
+    expect(screen.getByText('Rp 29 Jt')).toHaveClass('font-extrabold');
+    expect(screen.getByText('dari target Rp 94,7 Jt')).toBeInTheDocument();
     const bar = screen.getByRole('progressbar');
     expect(bar).toHaveAttribute('aria-valuenow', '31');
     expect(bar).toHaveAttribute('aria-valuetext', '31% dari target');
@@ -42,6 +42,19 @@ describe('GoalHeroCard (UI V1, UI-054)', () => {
     expect(screen.getByText('140%')).toBeInTheDocument();
     rerender(card(null));
     expect(screen.getByText('–')).toBeInTheDocument();
+  });
+
+  it('P19.11-T4 AC-2 no note, no row for one: the bar follows the figure, no leftover spacing; a note sits between the two', () => {
+    const { rerender } = render(card(31));
+    expect(document.querySelector('[data-goal-note]')).toBeNull();
+    rerender(
+      <InLanguage language="id">
+        <GoalHeroCard title="Target vs. realisasi (APE)" percent={31} achieved="Rp 29 Jt" note={<button type="button">Kembalikan ke data unggahan</button>} />
+      </InLanguage>,
+    );
+    const note = document.querySelector('[data-goal-note]')!;
+    expect(note).toHaveTextContent('Kembalikan ke data unggahan');
+    expect(note.nextElementSibling).toHaveAttribute('role', 'progressbar');
   });
 });
 

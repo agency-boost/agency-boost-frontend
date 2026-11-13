@@ -6,7 +6,7 @@ import { uiV1Messages } from '@/i18n/messages/ui-v1';
 import { cn } from '@/lib/cn';
 import { formatPercent } from '@/lib/format';
 
-/** One half of the card's foot: *Sisa bulan ini* · *Rp 65,7 jt*. */
+/** One half of the card's foot: *Sisa bulan ini* · *Rp 65,7 Jt*. */
 export interface GoalHeroFact {
   label: ReactNode;
   value: ReactNode;
@@ -14,8 +14,8 @@ export interface GoalHeroFact {
 
 /**
  * **The goal hero card** (UI V1, UI-054 — Personal Summary's *Target vs. realisasi (APE)*): one orange card, 16px
- * corners — the title and a **% badge**; the achieved figure large (*Rp 29 jt*) and the target beside it (*dari target
- * Rp 94,7 jt*); the bar; and a **foot split in two** by a thin divider (*Sisa bulan ini* | *Polis yang dibutuhkan*),
+ * corners — the title and a **% badge**; the achieved figure large (*Rp 29 Jt*) and the target beside it (*dari target
+ * Rp 94,7 Jt*); the bar; and a **foot split in two** by a thin divider (*Sisa bulan ini* | *Polis yang dibutuhkan*),
  * 12px labels over 20px/700 values. No *Kurang 4 polis · 1 minggu lagi* line, no week count (UI-054).
  *
  * - **Navy words on the accent** (5.9:1) rather than the mockup's white (2.38:1, under AA at every size); the bar is
@@ -39,17 +39,18 @@ export function GoalHeroCard({
   /** *Target vs. realisasi (APE)*. */
   title: ReactNode;
   percent: number | null;
-  /** *Rp 29 jt*. */
+  /** *Rp 29 Jt*. */
   achieved: ReactNode;
-  /** *dari target Rp 94,7 jt*. */
+  /** *dari target Rp 94,7 Jt*. */
   target?: ReactNode;
   /** The foot: two facts, side by side. */
   facts?: readonly [GoalHeroFact, GoalHeroFact];
   aside?: ReactNode;
   /**
-   * **What the reader can do about the figure** (P19.1-T4, UI-157; rule R2), under it and above the bar: who uploads it,
-   * *Isi produksi sementara* and its *Ubah* · *Hapus*, *Unggah produksi →*, *Diganti data produksi resmi (…)*. The
-   * page's to compose; nothing when it has nothing to say.
+   * **What the reader can do about the figure** (P19.1-T4, UI-157; rule R2), under it and above the bar: *Kembalikan ke
+   * data unggahan* or *Hapus angka manual* for a month's figure typed over the upload (P19.11-T4, UX-12), *Isi produksi
+   * sementara* and its *Ubah* · *Hapus* for the year's, *Unggah produksi →*, *Diganti data produksi resmi (…)*. The
+   * page's to compose; nothing when it has nothing to say, so no empty row is left (UX-12).
    */
   note?: ReactNode;
   className?: string;

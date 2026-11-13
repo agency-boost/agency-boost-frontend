@@ -750,9 +750,8 @@ export interface MySessions {
 
 export const readMySessions = () => api<MySessions>('/coaching/me/sessions');
 
-/** The reader's own coaching, on one session: the finalize notice's address (P11-T10 AC-8). */
-export const myCoachingHref = (sessionId?: string) =>
-  (sessionId ? `/coaching/me?session=${encodeURIComponent(sessionId)}` : '/coaching/me');
+/** The reader's own coaching, on one session: in `lib/hrefs.ts`, so a task row can link here without this module. */
+export { myCoachingHref } from './hrefs';
 
 /** A first name, for *Coaching tips from Wilson* (`Overall.html:4532`). */
 export const firstName = (name: string) => name.trim().split(/\s+/)[0] ?? '';

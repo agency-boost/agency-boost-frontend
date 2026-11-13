@@ -455,7 +455,7 @@ describe('P18.1-T2 the tabs’ copy', () => {
     const keys = Object.keys(TABS_COPY.rows) as (keyof typeof TABS_COPY.rows)[];
     expect(keys.map((key) => rowName(key, 'id'))).toEqual([
       'APE (Rp M)', 'Manpower', 'FLC (avg. monthly)', 'Annual Active Agents', '3M new agent %', 'Avg. monthly AA',
-      'Case submission', 'Cases/producing agents', 'Avg. Case Size (Rp jt)',
+      'Case submission', 'Cases/producing agents', 'Avg. Case Size (Rp Jt)',
     ]);
     expect(keys.map((key) => rowName(key, 'en'))).toEqual([
       'APE (IDR B)', 'Manpower', 'FLC (avg. monthly)', 'Annual Active Agents', '3M new agent %', 'Avg. monthly AA',

@@ -236,7 +236,7 @@ const MONTHLY_BUDGET_SPANS: Readonly<Record<number, { readonly from?: number; re
 
 /**
  * **A budget band as its chip and the brief's summary write it** — its sums **compact**, as a chip's money is (ADR-0167
- * §1, ADR-0174 §4; parity I-394), in the reader's `figures` (P18.10-T3): *< Rp 500 rb*, *Rp 500 rb–Rp 2 jt* in Indonesian,
+ * §1, ADR-0174 §4; parity I-394), in the reader's `figures` (P18.10-T3): *< Rp 500 rb*, *Rp 500 rb–Rp 2 Jt* in Indonesian,
  * *< IDR 500K*, *IDR 500K–IDR 2M* in English — the prototype's *Rp500K–Rp2M* wrote a million *M*, which in Indonesian is
  * *miliar*. Band 7 is words, *Lump-sum*, in the reader's `words`. Indonesian figures and English words when none is
  * passed: the backend's labels, as before. `undefined` for a band that does not exist.

@@ -61,33 +61,37 @@ const openSheet = async (name: string) => {
 
 afterEach(() => vi.unstubAllGlobals());
 
+/*
+ * *Changed by P19.11-T3 AC-5 (UX-10):* the sheet shows no *Umur* any more — the proposal's step 1 asks it — and
+ * *Jenis kelamin* is *Detail*'s last field. A save never sends the age, so the stored one and its day stay put.
+ */
 describe('P19.7-T1 AC-1 the lead’s age and gender, in the sheet and the pane', () => {
   it('P19.7-T1 AC-1 holds the API’s bounds, 1 to 100', () => {
     expect([LEAD_AGE_MIN, LEAD_AGE_MAX]).toEqual([1, 100]);
   });
 
-  it('P19.7-T1 AC-1 the sheet shows the lead’s age and gender, below the details and above History', async () => {
+  it('P19.11-T3 AC-5 the sheet shows the gender, not the age: no Umur box, no stepper, and the gender above History', async () => {
     render(360, [lead()]);
     const sheet = await openSheet('Ibu Rosa Damayanti');
-    const age = sheet.getByRole('textbox', { name: 'Age at next birthday' });
-    expect(age).toHaveValue('42');
-    expect(age).toHaveAttribute('inputmode', 'numeric');
-    expect(sheet.getByRole('radio', { name: 'Female' })).toHaveAttribute('aria-checked', 'true');
+    expect(sheet.queryByRole('textbox', { name: 'Age at next birthday' })).not.toBeInTheDocument();
+    expect(sheet.queryByRole('button', { name: 'One year more' })).not.toBeInTheDocument();
+    expect(sheet.queryByText('Age at next birthday')).not.toBeInTheDocument();
+    const female = sheet.getByRole('radio', { name: 'Female' });
+    expect(female).toHaveAttribute('aria-checked', 'true');
     expect(sheet.getByRole('radio', { name: 'Male' })).toHaveAttribute('aria-checked', 'false');
     const history = await sheet.findByRole('heading', { name: 'History' });
-    expect(age.compareDocumentPosition(history) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(female.compareDocumentPosition(history) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     // No birth date, no slider.
     expect(sheet.queryByRole('slider')).not.toBeInTheDocument();
     expect(sheet.queryByText(/birth date|tanggal lahir/i)).not.toBeInTheDocument();
   });
 
-  it('P19.7-T1 AC-1 − and + move a year and save only the age that changed', async () => {
+  it('P19.11-T3 AC-5 a gender changed is saved alone: the stored age is never sent, so it and its day stay', async () => {
     const stub = render(360, [lead()]);
     const sheet = await openSheet('Ibu Rosa Damayanti');
-    await userEvent.click(sheet.getByRole('button', { name: 'One year more' }));
-    expect(sheet.getByRole('textbox', { name: 'Age at next birthday' })).toHaveValue('43');
+    await userEvent.click(sheet.getByRole('radio', { name: 'Male' }));
     await userEvent.click(sheet.getByRole('button', { name: 'Save' }));
-    await waitFor(() => expect(writes(stub.calls)).toEqual([{ call: 'PATCH /leads/l1', body: { age: 43, version: 2 } }]));
+    await waitFor(() => expect(writes(stub.calls)).toEqual([{ call: 'PATCH /leads/l1', body: { gender: 'male', version: 2 } }]));
   });
 
   it('P19.7-T1 AC-1 saving another field leaves the age unsent, so its day does not move', async () => {
@@ -100,40 +104,28 @@ describe('P19.7-T1 AC-1 the lead’s age and gender, in the sheet and the pane',
     expect(writes(stub.calls)[0].body).not.toHaveProperty('gender');
   });
 
-  it('P19.7-T1 AC-1 tapping the chosen gender again clears it; an emptied box clears the age', async () => {
+  it('P19.7-T1 AC-1 tapping the chosen gender again clears it (empty is a value), the age unsent', async () => {
     const stub = render(360, [lead()]);
     const sheet = await openSheet('Ibu Rosa Damayanti');
     await userEvent.click(sheet.getByRole('radio', { name: 'Female' }));
-    await userEvent.clear(sheet.getByRole('textbox', { name: 'Age at next birthday' }));
     await userEvent.click(sheet.getByRole('button', { name: 'Save' }));
-    await waitFor(() => expect(writes(stub.calls)).toEqual([{ call: 'PATCH /leads/l1', body: { age: null, gender: null, version: 2 } }]));
+    await waitFor(() => expect(writes(stub.calls)).toEqual([{ call: 'PATCH /leads/l1', body: { gender: null, version: 2 } }]));
   });
 
-  it('P19.7-T1 AC-1 an age outside 1–100 is said under the box and nothing is sent', async () => {
-    const stub = render(360, [lead()]);
-    const sheet = await openSheet('Ibu Rosa Damayanti');
-    const age = sheet.getByRole('textbox', { name: 'Age at next birthday' });
-    await userEvent.clear(age);
-    await userEvent.type(age, '101');
-    expect(sheet.getByText('Age must be 1–100.')).toBeInTheDocument();
-    expect(age).toHaveAttribute('aria-invalid', 'true');
-    await userEvent.click(sheet.getByRole('button', { name: 'Save' }));
-    expect(writes(stub.calls)).toEqual([]);
-    expect(age).toHaveFocus();
-  });
-
-  it('P19.7-T1 AC-1 + Tambah lead offers both, and sends them with the new lead', async () => {
+  it('P19.11-T3 AC-5 + Tambah lead offers the gender, empty by default, and sends it — never an age', async () => {
     const stub = render(360, [lead()]);
     await screen.findByRole('list', { name: 'Your leads' });
     await userEvent.click(screen.getByRole('button', { name: 'Add lead' }));
     const sheet = within(await screen.findByRole('dialog', { name: 'New lead' }));
+    expect(sheet.queryByRole('textbox', { name: 'Age at next birthday' })).not.toBeInTheDocument();
+    for (const gender of ['Male', 'Female']) expect(sheet.getByRole('radio', { name: gender })).toHaveAttribute('aria-checked', 'false');
     await userEvent.type(sheet.getByRole('textbox', { name: 'Name' }), 'Pak Hendro Gunawan');
-    await userEvent.type(sheet.getByRole('textbox', { name: 'Age at next birthday' }), '51');
     await userEvent.click(sheet.getByRole('radio', { name: 'Male' }));
     await userEvent.click(sheet.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(writes(stub.calls)[0]).toMatchObject({
-      call: 'POST /leads', body: { name: 'Pak Hendro Gunawan', age: 51, gender: 'male' },
+      call: 'POST /leads', body: { name: 'Pak Hendro Gunawan', gender: 'male' },
     }));
+    expect(writes(stub.calls)[0].body).not.toHaveProperty('age');
   });
 
   it('P19.7-T1 AC-1 a new lead with neither sends neither', async () => {
@@ -148,14 +140,13 @@ describe('P19.7-T1 AC-1 the lead’s age and gender, in the sheet and the pane',
     expect(writes(stub.calls)[0].body).not.toHaveProperty('gender');
   });
 
-  it('P19.7-T1 AC-1 the laptop’s pane carries the same two fields, and saves them', async () => {
+  it('P19.11-T3 AC-5 the laptop’s pane carries the same Detail: the gender, no age, and saves it', async () => {
     const stub = render(1280, [lead({ age: null, ageRecordedOn: null, gender: null })]);
     const pane = within(await screen.findByRole('region', { name: 'Ibu Rosa Damayanti' }));
-    expect(pane.getByRole('textbox', { name: 'Age at next birthday' })).toHaveValue('');
-    await userEvent.type(pane.getByRole('textbox', { name: 'Age at next birthday' }), '42');
+    expect(pane.queryByRole('textbox', { name: 'Age at next birthday' })).not.toBeInTheDocument();
     await userEvent.click(pane.getByRole('radio', { name: 'Female' }));
     await userEvent.click(pane.getByRole('button', { name: 'Save' }));
-    await waitFor(() => expect(writes(stub.calls)).toEqual([{ call: 'PATCH /leads/l1', body: { age: 42, gender: 'female', version: 2 } }]));
+    await waitFor(() => expect(writes(stub.calls)).toEqual([{ call: 'PATCH /leads/l1', body: { gender: 'female', version: 2 } }]));
   });
 });
 

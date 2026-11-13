@@ -571,7 +571,7 @@ export function markerAt(projectionMinor: number | null, targetMinor: number | n
 }
 
 /**
- * A unit's line (`:1107`, `:1121`): *"Rp 620 jt / 1,5 M unit target"* on an agency, *"Rp 210 jt / 500 jt"* on
+ * A unit's line (`:1107`, `:1121`): *"Rp 620 Jt / 1,5 M unit target"* on an agency, *"Rp 210 Jt / 500 Jt"* on
  * an AAB unit — compact, one `Rp` for the pair (UI-030, ADR-0167 §1). No figure becomes 0: a missing one says so.
  */
 export function unitNums(

@@ -2,7 +2,7 @@
 
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useState, type ReactNode } from 'react';
 import { stageTone } from '@/components/lead-card';
 import { Button, ErrorBanner } from '@/components/ui/field';
 import { LineIcon } from '@/components/ui/line-icon';
@@ -10,7 +10,7 @@ import { Avatar, initialsFor } from '@/components/ui/avatar';
 import { PickerMenu } from '@/components/ui/picker-menu';
 import { ResponsiveSheet } from '@/components/ui/responsive-sheet';
 import { rungShort } from '@/components/ui/role-badge';
-import { RungTag } from '@/components/ui/rung-tag';
+import { RungTag, useIsLeaderRung } from '@/components/ui/rung-tag';
 import { Skeleton, SkeletonBar } from '@/components/ui/skeleton';
 import { TonePill } from '@/components/ui/tone-pill';
 import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
@@ -28,7 +28,7 @@ import { useOpenedOnce } from '@/lib/use-opened-once';
 import {
   cardCounts, marksOf, pastCounts, potensiMonths, readPotensiPerson, readUnitPotensi,
   type PotensiKandidat, type PotensiPerson, type PotensiUnit, type PotensiView, type UnitPotensiPersonView,
-  type UnitPotensiView,
+  type UnitPotensiView, type UnitView,
 } from '@/lib/unit-dashboard';
 
 /** *+ Add agent*'s form, downloaded when *Tambahkan ke unit ›* is first pressed. */
@@ -70,11 +70,25 @@ const firstName = (name: string) => name.split(' ')[0] ?? name;
  *
  * Tablet and laptop lay the same cards out two to a row (no mockup draws them; the parity row says so).
  */
-export function UnitPotensi({ forId, onHead, readOnly = false }: {
+export function UnitPotensi({
+  forId, onHead, readOnly = false, scope = null, reload = 0, onAnswered, viewPicker, informalLine,
+}: {
   forId?: string;
   onHead?: (head: { name: string }) => void;
   /** The office's read-only view of another leader's unit (P19.3-T3 AC-3): *Tambahkan ke unit ›* is not drawn. */
   readOnly?: boolean;
+  /**
+   * **The view** (ADR-0249): the Overview's, chosen on the dashboard — `null` asks for the reader's default. The read
+   * answers which it is, and the views offered, through `onAnswered`, so the dashboard draws one picker for both tabs.
+   */
+  scope?: UnitView | null;
+  /** Bumped by the dashboard to read again — after *+ Tambah ke grup* (ADR-0249 §4). */
+  reload?: number;
+  onAnswered?: (answer: Pick<UnitPotensiView, 'scope' | 'scopes' | 'informal'>) => void;
+  /** The view picker, drawn beside the month picker; nothing when only one view is offered. */
+  viewPicker?: ReactNode;
+  /** *Grup informal*'s line, under the pickers (ADR-0249 §4); the dashboard's, the same on both tabs. */
+  informalLine?: ReactNode;
 }) {
   const t = useMessages(unitPotensiMessages);
   const figures = useFigureLanguage();
@@ -84,20 +98,21 @@ export function UnitPotensi({ forId, onHead, readOnly = false }: {
   const [error, setError] = useState<ApiError | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [person, setPerson] = useState<PotensiPerson | null>(null);
-  const key = `${forId ?? ''}|${month ?? ''}`;
+  const key = `${forId ?? ''}|${month ?? ''}|${scope ?? ''}`;
 
   useEffect(() => {
     let live = true;
     setError(null);
-    readUnitPotensi({ month: month ?? undefined, for: forId })
+    readUnitPotensi({ month: month ?? undefined, for: forId, scope })
       .then((data) => {
         if (!live) return;
         setHeld({ key, data });
         onHead?.(data.head);
+        onAnswered?.({ scope: data.scope, scopes: data.scopes, informal: data.informal });
       })
       .catch((err) => { if (live) setError(toDisplayError(err)); });
     return () => { live = false; };
-  }, [key, month, forId, attempt, onHead]);
+  }, [key, month, forId, scope, attempt, reload, onHead, onAnswered]);
 
   const data = held?.key === key ? held.data : held?.data ?? null;
   const past = !!data && data.month < data.currentMonth;
@@ -113,18 +128,23 @@ export function UnitPotensi({ forId, onHead, readOnly = false }: {
       {!data && !error && <PotensiSkeleton />}
       {data && (
         <>
-          <PickerMenu
-            label={t.month}
-            value={data.month}
-            options={potensiMonths(data.currentMonth).map((m) => ({ value: m, label: monthTitle(m, figures) }))}
-            onChange={(m) => { setMonth(m === data.currentMonth ? null : m); setPerson(null); }}
-          />
+          {/* The month and — the client's item 7 — the view beside it, on one row (ADR-0249). */}
+          <div className="flex flex-wrap items-center gap-2">
+            <PickerMenu
+              label={t.month}
+              value={data.month}
+              options={potensiMonths(data.currentMonth).map((m) => ({ value: m, label: monthTitle(m, figures) }))}
+              onChange={(m) => { setMonth(m === data.currentMonth ? null : m); setPerson(null); }}
+            />
+            {viewPicker}
+          </div>
+          {informalLine}
 
           <Tiles data={data} view={view} onView={setView} />
 
           <div className="mt-2 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {data.units.map((unit) => (
-              <UnitCard key={`${unit.kind}:${unit.leader.membershipId}`} unit={unit} head={data.head} view={view} past={past} onOpen={setPerson} />
+              <UnitCard key={`${unit.kind}:${unit.leader?.membershipId ?? ''}`} unit={unit} head={data.head} view={view} past={past} onOpen={setPerson} />
             ))}
           </div>
 
@@ -237,6 +257,8 @@ function NumberMark({ n, small = false }: { n: number; small?: boolean }) {
  * ***Unit {AAB name}*** for each unit below, in sentence case, as the Overview names them.
  */
 function cardTitle(unit: PotensiUnit, head: UnitPotensiView['head'], words: DashboardWords): string {
+  // ADR-0249 §2: the office-wide view's people with no leader, one card with no leader, last.
+  if (unit.kind === 'unled' || unit.leader === null) return words.views.unled;
   if (unit.kind === 'direct') return head.isReader ? words.prototype.yourUnitGroup : words.unitOf({ name: unit.leader.name });
   return words.unitOf({ name: unit.leader.name });
 }
@@ -271,6 +293,7 @@ function UnitCard({
 /** One person's row: avatar, the role tag for a leader, the name in full (two lines at most, never cut), the marks, ›. */
 function PersonRow({ person, view, onOpen }: { person: PotensiPerson; view: PotensiView; onOpen: (p: PotensiPerson) => void }) {
   const t = useMessages(unitPotensiMessages);
+  const isLeader = useIsLeaderRung();
   const { potensi, done, none } = marksOf(person, view);
   const said = [
     potensi > 0 ? t.potensi({ n: potensi }) : null,
@@ -281,8 +304,11 @@ function PersonRow({ person, view, onOpen }: { person: PotensiPerson; view: Pote
     <>
       <Avatar name={person.name} photoUrl={person.photoUrl} seed={person.membershipId} size={36} />
       <span data-potensi-name="" className="min-w-0 flex-1 text-base font-bold uppercase leading-snug text-ink [overflow-wrap:anywhere]">
-        {/* The shared level tag (P19.9-T4 AC-1), which the Overview's roster wears on every row. */}
-        {person.isLeader && <RungTag rung={person.rung} className="mr-1.5" />}
+        {/*
+          * The shared level tag (P19.9-T4 AC-1), on the card's leader — and, one rule with the Overview's roster, only
+          * where their rung is a leader's (P19.11-T6 AC-4; UXQ10): a card led by somebody on an Agent's rung draws none.
+          */}
+        {person.isLeader && isLeader(person.rung) && <RungTag rung={person.rung} className="mr-1.5" />}
         {person.name}
       </span>
       <span data-potensi-marks="" className="flex shrink-0 items-center gap-1.5">

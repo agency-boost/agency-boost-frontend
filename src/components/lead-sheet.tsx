@@ -9,6 +9,7 @@ import { DateField } from '@/components/ui/date-field';
 import { Dialog } from '@/components/ui/dialog';
 import { ErrorBanner, TextInput } from '@/components/ui/field';
 import { LineIcon } from '@/components/ui/line-icon';
+import { PhoneField } from '@/components/ui/phone-field';
 import { Avatar } from '@/components/ui/avatar';
 import { TonePill } from '@/components/ui/tone-pill';
 import { ResponsiveSheet } from '@/components/ui/responsive-sheet';
@@ -20,15 +21,16 @@ import { leadsMessages } from '@/i18n/messages/leads';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import { dayInZone, formatMoneyInFull, formatShortDay, OFFICE_TIME_ZONE } from '@/lib/format';
+import { looksLikeEmail } from '@/lib/email-address';
 import {
-  ageOfText, createLead, deleteLead, finalStageOf, readLead, setLeadOutcome, setLeadStatus, updateLead, LEAD_AGE_MAX,
-  LEAD_AGE_MIN, LEAD_NAME_MIN, type Lead, type LeadGender, type LeadHistoryEntry, type LeadOutcome, type LeadType,
+  createLead, deleteLead, finalStageOf, readLead, setLeadOutcome, setLeadStatus, updateLead, LEAD_NAME_MIN, type Lead,
+  type LeadGender, type LeadHistoryEntry, type LeadOutcome, type LeadType,
 } from '@/lib/leads';
 import { listProposals, newProposalHref, proposalHref, type ProposalRow } from '@/lib/proposals';
 import { LeadPills } from '@/components/lead-card';
-import { AgeStepper, GenderButtons } from '@/components/client-age-gender';
+import { GenderButtons } from '@/components/client-age-gender';
 import { PotensiSwitch } from '@/components/potensi-switch';
-import { saveLeadPhone } from '@/lib/phone-number';
+import { normalisedPhone, phoneFieldValue, saveLeadPhone } from '@/lib/phone-number';
 import { useCan, useSession } from '@/lib/session';
 import type { LeadStatusRow } from '@/lib/tenant-config';
 import { useTenantConfig } from '@/lib/tenant-config-cache';
@@ -43,12 +45,22 @@ interface LeadForm {
   nextActionNote: string;
   remarks: string;
   email: string;
-  source: string;
-  /** *Umur ulang tahun berikutnya*, as the box holds it: digits, or empty (P19.7-T1 AC-1). */
-  age: string;
+  /**
+   * ***WhatsApp***, as the field after its fixed `+62` holds it (P19.11-T3 AC-5; UX-10): **the same `contact.phone` as the
+   * number at the sheet's top** — its national digits, or, for a number saved before the rule that does not read as one,
+   * the number as it was saved, so the field never shows empty over a number the lead holds.
+   */
+  phone: string;
   gender: LeadGender | null;
 }
 
+/** A saved number as the *WhatsApp* field shows it: `81211002200` for `+6281211002200`; an unreadable one as saved. */
+const phoneText = (saved: string | null | undefined) => phoneFieldValue(saved) || (saved ?? '');
+
+/*
+ * *Umur* and *Sumber lead* are not here since P19.11-T3 AC-5 (UX-10): the sheet neither shows nor sends them, so a save
+ * leaves both as stored. The proposal's step 1 still asks the age (ADR-0224).
+ */
 const formOf = (lead: Lead | null): LeadForm => ({
   name: lead?.name ?? '',
   type: lead?.type ?? null,
@@ -58,17 +70,9 @@ const formOf = (lead: Lead | null): LeadForm => ({
   nextActionNote: lead?.nextActionNote ?? '',
   remarks: lead?.remarks ?? '',
   email: lead?.contact.email ?? '',
-  source: lead?.source ?? '',
-  // The server's reading of today's age (ADR-0224 §2): saving it unchanged moves nothing.
-  age: lead?.age == null ? '' : String(lead.age),
+  phone: phoneText(lead?.contact.phone),
   gender: lead?.gender ?? null,
 });
-
-/** Whether a typed age is one the API takes: empty, or a whole number from 1 to 100. */
-const ageAllowed = (text: string) => {
-  const age = ageOfText(text);
-  return age === null || (Number.isInteger(age) && age >= LEAD_AGE_MIN && age <= LEAD_AGE_MAX);
-};
 
 /** A box's text as the server keeps it: trimmed, and nothing as `null`. */
 const stored = (text: string): string | null => (text.trim() === '' ? null : text.trim());
@@ -98,10 +102,18 @@ const shortDayOf = (iso: string, figures: Parameters<typeof formatShortDay>[2]) 
  *   (P19.1-T2, UI-153): *Potensi closing / rekrut bulan ini*, the lead's own commitment for the month, a 44px switch card.
  * - **Tindakan berikutnya**: a date pill and the note, side by side. **Keterangan** here only — never on the card.
  * - **Hasil** for an open lead (P19.1-T2, UI-160): *Tandai berhasil* and *Tandai tidak berhasil* side by side, always —
- *   the first at the office's final stage, the second below it, each held otherwise with the reason; each asks first. **Detail**: the name, the email and where the lead came from (`LeadDetailsDialog`'s fields, D-10's sheet).
- * - **Proposal** (P19.7-T2 AC-12; ADR-0221 §6), above *Riwayat*, on the reader's own lead alone: each of its proposals
- *   — the day, the products with their plan, the premium per currency, *Draf* or *Selesai* — a tap opening it at its
- *   step 3, and ***+ Buat proposal*** with this lead chosen. A leader reading a downline's lead sees none (decision 4).
+ *   the first at the office's final stage, the second below it, each held otherwise; each asks first. *Tandai
+ *   berhasil*'s reason — *Aktif setelah status …* — is its accessible description only since P19.11-T3 AC-4 (UX-10).
+ * - **Detail** (P19.11-T3 AC-5; UX-10): labelled fields, in order — ***Nama*** (the only one required: an inline error,
+ *   and nothing saved, under 2 characters), ***WhatsApp*** (a fixed *+62* and the number: `contact.phone`, the number at
+ *   the top, one field — each follows the other's save), ***Email*** (checked only when filled) and ***Jenis
+ *   kelamin*** (*Laki-laki / Perempuan*, neither by default). *Umur* and *Sumber lead* are not shown, and a save leaves
+ *   them as stored. A new lead's *Nama* stays at the top, where the sheet opens on it.
+ * - **Proposal** (P19.7-T2 AC-12; P19.11-T3 AC-7; UX-11), above *Riwayat*, on the reader's own lead alone: **the latest
+ *   finished proposal and nothing else** (`status=done`, newest `doneAt`) — the day, the products with their plan, the
+ *   premium per currency, *Selesai* — a tap opening it at its step 3, and ***+ Buat proposal*** below it, always; with
+ *   none finished, the button alone. Drafts are never shown here and never deleted: *Riwayat proposal* (`/proposal`)
+ *   holds them, and every older finished one, and resumes them. A leader reading a downline's lead sees none (decision 4).
  * - **Riwayat**: the stage moves the server kept (`GET /leads/:id`'s `history`) and the day the lead was added — and,
  *   on the owner's own lead, *"Proposal dibuat · {produk}"* for each proposal first saved as a PDF (AC-11), linked
  *   while that proposal exists.
@@ -212,6 +224,9 @@ function LeadEditor({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const [nameError, setNameError] = useState(false);
+  /** *Detail*'s two checked fields (P19.11-T3 AC-5): a changed number that is not one, an email that is not whole. */
+  const [phoneError, setPhoneError] = useState(false);
+  const [emailError, setEmailError] = useState(false);
   const [editingPhone, setEditingPhone] = useState(false);
   const [askingClose, setAskingClose] = useState(false);
   const [askingOutcome, setAskingOutcome] = useState<LeadOutcome | null>(null);
@@ -239,6 +254,8 @@ function LeadEditor({
     setHistory(null);
     setError(null);
     setNameError(false);
+    setPhoneError(false);
+    setEmailError(false);
     // A new lead opens on its name box (the modal's own focus, run first, lands on its ✕); *Isi tindakan* on the note.
     if (!lead) {
       document.getElementById(`${uid}-name`)?.focus();
@@ -276,8 +293,10 @@ function LeadEditor({
   const isNew = current === null;
   const mine = current ? current.ownerMembershipId === me?.membership?.membershipId : true;
   /*
-   * **The lead's proposals, on the reader's own lead** (P19.7-T2 AC-12; ADR-0221 §6): `GET /proposals?leadId=`, read when
-   * the sheet opens on it. Never on somebody else's — the server answers none to a leader, and the section is not drawn.
+   * **The lead's latest finished proposal, on the reader's own lead** (P19.7-T2 AC-12; P19.11-T3 AC-7; UX-11):
+   * `GET /proposals?leadId=&status=done&pageSize=1`, which the server orders by the last *Simpan PDF* — so a draft is never
+   * read here at all. Read when the sheet opens on it; never on somebody else's — the server answers none to a leader,
+   * and the section is not drawn.
    */
   const proposalLeadId = current !== null && mine && canReadProposals ? current.id : null;
   useEffect(() => {
@@ -285,7 +304,7 @@ function LeadEditor({
     setProposalsError(null);
     if (!open || proposalLeadId === null) return undefined;
     let live = true;
-    listProposals({ leadId: proposalLeadId, pageSize: 50 })
+    listProposals({ leadId: proposalLeadId, status: 'done', pageSize: 1 })
       .then((page) => { if (live) setProposals(page.rows); })
       .catch((err) => { if (live) setProposalsError(toDisplayError(err)); });
     return () => { live = false; };
@@ -302,6 +321,16 @@ function LeadEditor({
   }) : undefined;
 
   const change = (next: Partial<LeadForm>) => setForm((was) => ({ ...was, ...next }));
+
+  /**
+   * **A number saved elsewhere in the sheet** — the pencil at the top, or WhatsApp's *Isi nomor WhatsApp* — lands, and
+   * *Detail*'s *WhatsApp* follows it (P19.11-T3 AC-5: one field, two places). What else is typed stays typed.
+   */
+  const followPhone = (next: Lead) => {
+    setCurrent(next);
+    setForm((typed) => ({ ...typed, phone: phoneText(next.contact.phone) }));
+    setPhoneError(false);
+  };
 
   /** The type switched: that ladder's stages, its first chosen; no commitment until it is saved again. */
   const switchType = (type: LeadType) => {
@@ -322,17 +351,28 @@ function LeadEditor({
 
   async function save() {
     if (saving || readOnly) return;
-    if (form.name.trim().length < LEAD_NAME_MIN) {
-      setNameError(true);
-      document.getElementById(`${uid}-name`)?.focus();
+    /*
+     * *Detail*'s rules before anything is sent (P19.11-T3 AC-5): the name (required), then a **changed** number that is
+     * not one — an unchanged one, however it was saved, is the lead's and is not this save's business (the API holds the
+     * same line) — then an email that is filled and not whole. Each said under its field; the first one wrong takes the
+     * focus.
+     */
+    const phoneChanged = form.phone.trim() !== base.phone.trim();
+    const phone = phoneChanged ? (form.phone.trim() === '' ? null : normalisedPhone(form.phone)) : current?.contact.phone ?? null;
+    const email = stored(form.email);
+    const wrong = {
+      name: form.name.trim().length < LEAD_NAME_MIN,
+      phone: phoneChanged && form.phone.trim() !== '' && phone === null,
+      email: email !== stored(base.email) && email !== null && !looksLikeEmail(email),
+    };
+    setNameError(wrong.name);
+    setPhoneError(wrong.phone);
+    setEmailError(wrong.email);
+    const first = (['name', 'phone', 'email'] as const).find((field) => wrong[field]);
+    if (first) {
+      document.getElementById(`${uid}-${first}`)?.focus();
       return;
     }
-    // An age outside 1–100 is said under the box, and the API would refuse it too (P19.7-T1 AC-1).
-    if (!ageAllowed(form.age)) {
-      document.getElementById(`${uid}-age`)?.focus();
-      return;
-    }
-    setNameError(false);
     setSaving(true);
     setError(null);
     try {
@@ -344,10 +384,8 @@ function LeadEditor({
           remarks: stored(form.remarks),
           nextActionDate: form.nextActionDate || null,
           nextActionNote: stored(form.nextActionNote),
-          contact: { phone: null, email: stored(form.email) },
-          source: stored(form.source),
+          contact: { phone, email },
           ...(form.type ? { thisMonth: form.thisMonth } : {}),
-          ...(ageOfText(form.age) !== null ? { age: ageOfText(form.age) } : {}),
           ...(form.gender ? { gender: form.gender } : {}),
         }, owner);
         if (form.statusCode) saved = await setLeadStatus(saved.id, form.statusCode, saved.version);
@@ -362,11 +400,9 @@ function LeadEditor({
         if (stored(form.remarks) !== saved.remarks) patch.remarks = stored(form.remarks);
         if ((form.nextActionDate || null) !== saved.nextActionDate) patch.nextActionDate = form.nextActionDate || null;
         if (stored(form.nextActionNote) !== saved.nextActionNote) patch.nextActionNote = stored(form.nextActionNote);
-        if (stored(form.email) !== saved.contact.email) patch.contact = { phone: saved.contact.phone, email: stored(form.email) };
-        if (stored(form.source) !== saved.source) patch.source = stored(form.source);
+        // The pair travels together (the API's rule): a changed number, a changed email, or both.
+        if (phone !== saved.contact.phone || email !== saved.contact.email) patch.contact = { phone, email };
         if (form.type && form.thisMonth !== saved.thisMonth) patch.thisMonth = form.thisMonth;
-        // Sent only when changed from today's reading, so the day it was recorded stays put (ADR-0224 §3).
-        if (ageOfText(form.age) !== (saved.age ?? null)) patch.age = ageOfText(form.age);
         if (form.gender !== (saved.gender ?? null)) patch.gender = form.gender;
         if (Object.keys(patch).length > 0) saved = await updateLead(saved.id, patch, saved.version);
       }
@@ -466,7 +502,17 @@ function LeadEditor({
     else onClose();
   };
 
-  const LABEL = 'mb-1.5 mt-4 block text-xs font-bold text-muted';
+  /*
+   * **One section gap** (P19.11-T3 AC-9; UX-17): every section — *Jenis*, *Status*, *Tindakan berikutnya*, *Keterangan*,
+   * *Hasil*, *Detail*, *Proposal*, *Riwayat* — is a box wearing `SECTION`, its label at its top wearing `LABEL`. The gap
+   * is the box's, never the label's: a rendered `<legend>` ignores its own top margin, which is why exactly the four
+   * fieldsets' labels sat tight under what came before (the *Potensi* card's gap above *Tindakan berikutnya* among them).
+   * The label-to-field gap is the label's `mb-1.5`, as it was.
+   */
+  const SECTION = 'mt-4';
+  const LABEL = 'mb-1.5 block text-xs font-bold text-muted';
+  /** A field's own label inside *Detail* (P19.11-T3 AC-5): visible, never a placeholder — as the proposal's step 1 labels. */
+  const FIELD_LABEL = 'mb-1.5 block text-sm font-semibold text-navy';
   const PILL = 'min-h-12 w-full rounded-pill border-0 bg-hover-row px-4 text-md text-ink';
 
   /*
@@ -532,14 +578,16 @@ function LeadEditor({
   ];
 
   /**
-   * ***Proposal***, above *Riwayat* (P19.7-T2 AC-12): on the reader's own lead, a Sales lead or one that has a proposal.
-   * Each row the day, the products with their plan, the premium per currency — never added across two — and *Draf* or
-   * *Selesai* in their fixed colours; a tap opens the proposal at step 3. *+ Buat proposal* starts one with this lead
-   * chosen, on a Sales lead.
+   * ***Proposal***, above *Riwayat* (P19.7-T2 AC-12; P19.11-T3 AC-7; UX-11): on the reader's own lead, a Sales lead or
+   * one that has a proposal. **At most one row: the latest finished proposal** — the day it was saved, the products
+   * with their plan, the premium per currency (never added across two), *Selesai* in its fixed colour; a tap opens it at
+   * step 3. Never a draft: those, and the older finished ones, are *Riwayat proposal*'s. *+ Buat proposal*, always below
+   * it on a Sales lead, starts one with this lead chosen — the server answers the lead's empty draft rather than another
+   * (AC-8) — and with nothing finished it is the section's only control.
    */
   const proposalSection = proposalLeadId !== null && current !== null
     && (current.type === 'sales' || (current.proposals ?? null) !== null || (proposals?.length ?? 0) > 0) ? (
-      <section aria-labelledby={`${uid}-proposals`} data-lead-proposals="">
+      <section aria-labelledby={`${uid}-proposals`} data-lead-proposals="" data-lead-section="proposals" className={SECTION}>
         <h3 id={`${uid}-proposals`} className={LABEL}>{t.sheet.proposals}</h3>
         {proposalsError ? <ErrorBanner {...proposalsError} /> : proposals === null ? (
           <p className="text-base text-muted">{t.sheet.proposalsLoading}</p>
@@ -576,7 +624,11 @@ function LeadEditor({
           <Link
             href={newProposalHref(current.id)}
             data-new-proposal=""
-            className="mt-2 inline-flex min-h-11 items-center gap-1.5 rounded-pill border-[1.5px] border-line bg-card px-4 text-md font-semibold text-navy hover:bg-hover-row"
+            className={cn(
+              'inline-flex min-h-11 items-center gap-1.5 rounded-pill border-[1.5px] border-line bg-card px-4 text-md font-semibold text-navy hover:bg-hover-row',
+              // Under a row, a row's gap; alone, the label's own gap above it, as every field's.
+              (proposalsError || proposals === null || proposals.length > 0) && 'mt-2',
+            )}
           >
             <LineIcon name="plus" className="h-4 w-4" />
             {t.sheet.newProposal}
@@ -609,7 +661,7 @@ function LeadEditor({
     <LeadContactButtons
       lead={current}
       channels={['whatsapp']}
-      onSaved={(next) => { setCurrent(next); onSaved?.(next); }}
+      onSaved={(next) => { followPhone(next); onSaved?.(next); }}
     />
   );
   /**
@@ -624,11 +676,12 @@ function LeadEditor({
     <>
           {isNew && (
             <>
-              <label htmlFor={`${uid}-name`} className={cn(LABEL, 'mt-0')}>{t.sheet.name}</label>
+              <label htmlFor={`${uid}-name`} className={LABEL}>{t.sheet.name}</label>
               <TextInput
                 id={`${uid}-name`}
                 value={form.name}
                 maxLength={120}
+                required
                 invalid={nameError}
                 aria-describedby={nameError ? `${uid}-name-error` : undefined}
                 placeholder={t.namePlaceholder}
@@ -641,7 +694,7 @@ function LeadEditor({
             </>
           )}
 
-          <fieldset disabled={!editable || saving}>
+          <fieldset disabled={!editable || saving} data-lead-section="type" className={SECTION}>
             <legend className={LABEL}>{t.sheet.type}</legend>
             <div role="radiogroup" aria-label={t.sheet.type} className="flex h-11 rounded-pill bg-hover-row p-[3px]">
               {(['sales', 'recruitment'] as const).map((type) => (
@@ -662,7 +715,7 @@ function LeadEditor({
             </div>
           </fieldset>
 
-          <fieldset disabled={!editable || saving}>
+          <fieldset disabled={!editable || saving} data-lead-section="status" className={SECTION}>
             <legend className={LABEL}>{t.sheet.status}</legend>
             {form.type === null ? (
               <p className="text-base text-muted">{t.sheet.chooseTypeFirst}</p>
@@ -712,7 +765,7 @@ function LeadEditor({
             </div>
           )}
 
-          <fieldset disabled={!editable || saving}>
+          <fieldset disabled={!editable || saving} data-lead-section="next-action" className={SECTION}>
             <legend className={LABEL}>{t.sheet.nextAction}</legend>
             <div className="flex gap-2">
               <DateField
@@ -737,25 +790,28 @@ function LeadEditor({
             </div>
           </fieldset>
 
-          <label htmlFor={`${uid}-remarks`} className={LABEL}>{t.sheet.remarks}</label>
-          <AutoGrowTextarea
-            id={`${uid}-remarks`}
-            value={form.remarks}
-            maxLength={2000}
-            disabled={!editable || saving}
-            onChange={(e) => change({ remarks: e.target.value })}
-            className="min-h-12 w-full rounded-row border-0 bg-hover-row px-4 py-3 text-md text-ink"
-          />
+          <div data-lead-section="remarks" className={SECTION}>
+            <label htmlFor={`${uid}-remarks`} className={LABEL}>{t.sheet.remarks}</label>
+            <AutoGrowTextarea
+              id={`${uid}-remarks`}
+              value={form.remarks}
+              maxLength={2000}
+              disabled={!editable || saving}
+              onChange={(e) => change({ remarks: e.target.value })}
+              className="min-h-12 w-full rounded-row border-0 bg-hover-row px-4 py-3 text-md text-ink"
+            />
+          </div>
 
           {/*
            * **Hasil: two buttons, always, side by side and the same size** (P19.1-T2 AC-9; UI-160 items 1–3; ADR-0194;
            * rule R5). At the office's final stage *Tandai berhasil* is the next step — the action amber, navy words
-           * (ADR-0137) — and *Tandai tidak berhasil* is held with why; below it, the mirror: *Tandai berhasil* held with
-           * *Aktif setelah status {the office's final stage}*. The API refuses the same two (`LEAD_STATUS_NOT_FINAL`,
-           * `LEAD_STATUS_FINAL`). Both wait for the sheet's own changes to be saved first.
+           * (ADR-0137) — and *Tandai tidak berhasil* is held with why; below it, the mirror: *Tandai berhasil* held, with
+           * *Aktif setelah status {the office's final stage}* as **its accessible description only** — out of sight since
+           * P19.11-T3 AC-4 (UX-10: the line removed), still read with the button (WCAG 2.1 AA). The API refuses the same two
+           * (`LEAD_STATUS_NOT_FINAL`, `LEAD_STATUS_FINAL`). Both wait for the sheet's own changes to be saved first.
            */}
           {offerOutcome && current && (
-            <>
+            <div data-lead-section="outcome" className={SECTION}>
               <p className={LABEL}>{t.sheet.outcome}</p>
               <div className="grid grid-cols-2 items-start gap-2" data-outcome-buttons="">
                 <div>
@@ -772,7 +828,7 @@ function LeadEditor({
                     {t.menu.markWon}
                   </button>
                   {!savedTerminal && (
-                    <p id={`${uid}-won-held`} className="mt-1 text-xs text-muted">
+                    <p id={`${uid}-won-held`} className="sr-only">
                       {t.menu.wonHeld({ stage: finalStageOf(ladderFor(current.type))?.label ?? '' })}
                     </p>
                   )}
@@ -792,74 +848,87 @@ function LeadEditor({
                   )}
                 </div>
               </div>
-            </>
+            </div>
           )}
 
-          <fieldset disabled={!editable || saving}>
+          {/*
+           * ***Detail*** (P19.11-T3 AC-5; UX-10), labelled fields in the brief's order: *Nama* (required), *WhatsApp* (the
+           * shared `+62` field — `contact.phone`, the number at the top), *Email* (checked only when filled) and *Jenis
+           * kelamin* (*Laki-laki / Perempuan*, neither by default; the proposal's step 1 reads it, ADR-0224). A new lead's
+           * *Nama* is the box at the top, where the sheet opens.
+           */}
+          <fieldset disabled={!editable || saving} data-lead-section="details" className={SECTION}>
             <legend className={LABEL}>{t.sheet.details}</legend>
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-3">
               {!isNew && (
-                <>
+                <div>
+                  <label htmlFor={`${uid}-name`} className={FIELD_LABEL}>{t.sheet.name}</label>
                   <TextInput
                     id={`${uid}-name`}
-                    aria-label={t.sheet.name}
                     value={form.name}
                     maxLength={120}
+                    required
                     invalid={nameError}
                     aria-describedby={nameError ? `${uid}-name-error` : undefined}
-                    onChange={(e) => change({ name: e.target.value })}
+                    onChange={(e) => {
+                      change({ name: e.target.value });
+                      if (nameError && e.target.value.trim().length >= LEAD_NAME_MIN) setNameError(false);
+                    }}
                     className={PILL}
                   />
                   {nameError && (
-                    <p id={`${uid}-name-error`} className="text-sm text-signal-red">{t.shortName({ min: LEAD_NAME_MIN })}</p>
+                    <p id={`${uid}-name-error`} className="mt-1 text-sm text-signal-red">{t.shortName({ min: LEAD_NAME_MIN })}</p>
                   )}
-                </>
+                </div>
               )}
-              <TextInput
-                type="email"
-                aria-label={t.sheet.email}
-                placeholder={t.sheet.email}
-                value={form.email}
-                onChange={(e) => change({ email: e.target.value })}
-                className={PILL}
-              />
-              <TextInput
-                aria-label={t.sheet.source}
-                placeholder={t.details.sourcePlaceholder}
-                value={form.source}
-                onChange={(e) => change({ source: e.target.value })}
-                className={PILL}
-              />
+              <div>
+                <label htmlFor={`${uid}-phone`} className={FIELD_LABEL}>{t.sheet.whatsApp}</label>
+                <PhoneField
+                  id={`${uid}-phone`}
+                  look="pill"
+                  value={form.phone}
+                  invalid={phoneError}
+                  onChange={(phone) => {
+                    change({ phone });
+                    if (phoneError && (phone.trim() === '' || normalisedPhone(phone) !== null)) setPhoneError(false);
+                  }}
+                />
+              </div>
+              <div>
+                <label htmlFor={`${uid}-email`} className={FIELD_LABEL}>{t.sheet.email}</label>
+                <TextInput
+                  id={`${uid}-email`}
+                  type="email"
+                  inputMode="email"
+                  value={form.email}
+                  invalid={emailError}
+                  aria-describedby={emailError ? `${uid}-email-error` : undefined}
+                  onChange={(e) => {
+                    change({ email: e.target.value });
+                    if (emailError && (e.target.value.trim() === '' || looksLikeEmail(e.target.value))) setEmailError(false);
+                  }}
+                  className={PILL}
+                />
+                {emailError && (
+                  <p id={`${uid}-email-error`} className="mt-1 text-sm text-signal-red">{t.sheet.emailInvalid}</p>
+                )}
+              </div>
+              <div>
+                <p id={`${uid}-gender-label`} className={FIELD_LABEL}>{t.sheet.gender}</p>
+                <GenderButtons
+                  labelledBy={`${uid}-gender-label`}
+                  value={form.gender}
+                  disabled={!editable || saving}
+                  onChange={(gender) => change({ gender })}
+                />
+              </div>
             </div>
           </fieldset>
-
-          {/*
-           * **The client's age and gender** (P19.7-T1 AC-1; the proposal spec's step 1; ADR-0224): optional, below the
-           * details and above *Riwayat*, in *+ Tambah lead* and on a lead — so an agent can fill them early, and the
-           * proposal does not ask again. *Umur ulang tahun berikutnya* with − / + and the number keypad; *Laki-laki /
-           * Perempuan* as two buttons. No birth date (minimisation).
-           */}
-          <div data-client-fields="">
-            <label id={`${uid}-age-label`} htmlFor={`${uid}-age`} className={LABEL}>{t.sheet.age}</label>
-            <AgeStepper
-              id={`${uid}-age`}
-              value={form.age}
-              disabled={!editable || saving}
-              onChange={(age) => change({ age })}
-            />
-            <p id={`${uid}-gender-label`} className={LABEL}>{t.sheet.gender}</p>
-            <GenderButtons
-              labelledBy={`${uid}-gender-label`}
-              value={form.gender}
-              disabled={!editable || saving}
-              onChange={(gender) => change({ gender })}
-            />
-          </div>
 
           {proposalSection}
 
           {!isNew && (
-            <section aria-labelledby={`${uid}-history`}>
+            <section aria-labelledby={`${uid}-history`} data-lead-section="history" className={SECTION}>
               <h3 id={`${uid}-history`} className={LABEL}>{t.sheet.history}</h3>
               {history === null ? (
                 <p className="text-base text-muted">{t.sheet.historyLoading}</p>
@@ -895,7 +964,8 @@ function LeadEditor({
           onClose={() => setEditingPhone(false)}
           onSave={async (phone) => {
             const next = await saveLeadPhone(current, phone);
-            setCurrent(next);
+            // *Detail*'s *WhatsApp* follows (P19.11-T3 AC-5).
+            followPhone(next);
             onSaved?.(next);
             return next.contact.phone ?? phone;
           }}

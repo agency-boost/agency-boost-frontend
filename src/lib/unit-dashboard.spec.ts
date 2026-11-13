@@ -9,9 +9,12 @@ import {
   PROTOTYPE_COPY, provenanceWords, readUnitDashboard, readerName, recruitLine, regroup, rowName, salesLine, STATUS_TOOLTIP,
   totalNote, totalRecruitLine, touchesWords, UNIT_PERIODS, unitPeriods, updateUnitProduction,
   goalMet, marksOf, matchesFilter, readUnitActivities, rowHref, sectionCount, splitMoney, statusShown, statusTally, tabFrom,
+  addGroupMembers, keepView, readUnitPotensi, storedView, UNIT_VIEWS, unitViews, viewFrom,
   type UnitRow,
 } from './unit-dashboard';
 import { formatMonthLong } from './format';
+import { messagesIn } from '@/i18n/catalogue';
+import { unitDashboardMessages } from '@/i18n/messages/unit-dashboard';
 
 describe('the Unit Dashboard’s client', () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -55,32 +58,32 @@ describe('the words a row is drawn in', () => {
   });
 
   it('P15-T2 AC-3, P18.9-T3 AC-1 writes the goal line over or short — the percentage whole — over its achieved-of-target, compact, one Rp (UI-030)', () => {
-    expect(goalWords(goalCell())).toEqual({ tone: 'short', line: '82% · Rp 14,4 jt short', sub: 'Rp 65,6 jt of 80 jt' });
+    expect(goalWords(goalCell())).toEqual({ tone: 'short', line: '82% · Rp 14,4 Jt short', sub: 'Rp 65,6 Jt of 80 Jt' });
     expect(goalWords(goalCell({ actualMinor: rp(108), attainmentPct: 135, targetMet: true, overMinor: rp(28) })))
-      .toEqual({ tone: 'over', line: '135% · +Rp 28 jt over', sub: 'Rp 108 jt of 80 jt' });
+      .toEqual({ tone: 'over', line: '135% · +Rp 28 Jt over', sub: 'Rp 108 Jt of 80 Jt' });
     // The client's own example (UI-030): it wrapped as *Rp 357.500.000 of Rp 712.666.667*.
-    expect(goalWords({ targetMinor: rp(712.666667), actualMinor: rp(357.5), attainmentPct: 50 }).sub).toBe('Rp 357,5 jt of 712,7 jt');
+    expect(goalWords({ targetMinor: rp(712.666667), actualMinor: rp(357.5), attainmentPct: 50 }).sub).toBe('Rp 357,5 Jt of 712,7 Jt');
   });
 
   it('P15-T2 AC-3 never shows a missing figure as 0: Not uploaded yet, and No goal set', () => {
     expect(goalWords(goalCell({ actualMinor: null, attainmentPct: null })))
-      .toEqual({ tone: 'missing', line: 'Not uploaded yet', sub: 'of Rp 80 jt target' });
+      .toEqual({ tone: 'missing', line: 'Not uploaded yet', sub: 'of Rp 80 Jt target' });
     // The figure alone is labelled (P18.7-T3 AC-2; UI-030), which it was not until 2026-10-26.
     expect(goalWords(goalCell({ set: false, targetMinor: null, attainmentPct: null })))
-      .toEqual({ tone: 'none', line: 'No goal set', sub: 'produced Rp 65,6 jt' });
+      .toEqual({ tone: 'none', line: 'No goal set', sub: 'produced Rp 65,6 Jt' });
     expect(goalWords({ targetMinor: null, actualMinor: null, attainmentPct: null }))
       .toEqual({ tone: 'none', line: 'No goal set', sub: null });
   });
 
-  it('P18.7-T3 AC-2 labels a figure that stands without a target: produced Rp 29 jt, on every row and total', () => {
+  it('P18.7-T3 AC-2 labels a figure that stands without a target: produced Rp 29 Jt, on every row and total', () => {
     // The client's own row (UI-030): *"You (Agus): No goal set · Rp 29.000.000"*, an unlabelled number.
     const agus = goalWords({ set: false, targetMinor: null, actualMinor: rp(29), attainmentPct: null });
-    expect(agus).toEqual({ tone: 'none', line: 'No goal set', sub: 'produced Rp 29 jt' });
-    expect(OWN_COPY.produced('Rp 29 jt')).toBe('produced Rp 29 jt');
+    expect(agus).toEqual({ tone: 'none', line: 'No goal set', sub: 'produced Rp 29 Jt' });
+    expect(OWN_COPY.produced('Rp 29 Jt')).toBe('produced Rp 29 Jt');
     // A total of nobody's targets says it the same way, and a figure beside its target needs no label.
-    expect(goalWords({ targetMinor: null, actualMinor: rp(131.2), attainmentPct: null }).sub).toBe('produced Rp 131,2 jt');
-    expect(goalWords(goalCell()).sub).toBe('Rp 65,6 jt of 80 jt');
-    expect(goalWords(goalCell({ actualMinor: null, attainmentPct: null })).sub).toBe('of Rp 80 jt target');
+    expect(goalWords({ targetMinor: null, actualMinor: rp(131.2), attainmentPct: null }).sub).toBe('produced Rp 131,2 Jt');
+    expect(goalWords(goalCell()).sub).toBe('Rp 65,6 Jt of 80 Jt');
+    expect(goalWords(goalCell({ actualMinor: null, attainmentPct: null })).sub).toBe('of Rp 80 Jt target');
   });
 
   it('P18.7-T3 AC-1 draws a phone card’s goal bar from the server’s percentage, capped, and none without a figure or a target', () => {
@@ -99,7 +102,7 @@ describe('the words a row is drawn in', () => {
 
   it('P15-T2 AC-3 says a month made before it began is made, never 0% of Rp 0 (ADR-0047)', () => {
     const made = goalCell({ targetMinor: 0, actualMinor: rp(12), attainmentPct: null, gapMinor: 0, overMinor: rp(12), policiesNeeded: 0, targetMet: true });
-    expect(goalWords(made)).toEqual({ tone: 'over', line: 'Year’s target made', sub: 'produced Rp 12 jt' });
+    expect(goalWords(made)).toEqual({ tone: 'over', line: 'Year’s target made', sub: 'produced Rp 12 Jt' });
     expect(goalWords({ ...made, actualMinor: null })).toEqual({ tone: 'over', line: 'Year’s target made', sub: 'Not uploaded yet' });
     // A total whose target-holding rows were all made sums to a target of 0, and says the same.
     expect(goalWords({ targetMinor: 0, actualMinor: rp(30), attainmentPct: null }).line).toBe('Year’s target made');
@@ -110,10 +113,10 @@ describe('the words a row is drawn in', () => {
   });
 
   it('P15-T2 AC-4 works a total’s over and short from its two sums, when the server sends no gap', () => {
-    expect(goalWords({ targetMinor: rp(100), actualMinor: rp(120), attainmentPct: 120 }).line).toBe('120% · +Rp 20 jt over');
-    expect(goalWords({ targetMinor: rp(100), actualMinor: rp(40), attainmentPct: 40 }).line).toBe('40% · Rp 60 jt short');
+    expect(goalWords({ targetMinor: rp(100), actualMinor: rp(120), attainmentPct: 120 }).line).toBe('120% · +Rp 20 Jt over');
+    expect(goalWords({ targetMinor: rp(100), actualMinor: rp(40), attainmentPct: 40 }).line).toBe('40% · Rp 60 Jt short');
     // A percentage with nothing to show is the cell's own zero, not a missing one.
-    expect(goalWords({ targetMinor: rp(100), actualMinor: rp(40), attainmentPct: null }).line).toBe('0% · Rp 60 jt short');
+    expect(goalWords({ targetMinor: rp(100), actualMinor: rp(40), attainmentPct: null }).line).toBe('0% · Rp 60 Jt short');
   });
 
   it('P15-T2 AC-3 writes the leads lines, the recruit line a dash when there is nothing to recruit', () => {
@@ -157,9 +160,9 @@ describe('the words a row is drawn in', () => {
 
   it('P15-T2 AC-5 writes the gap and the policies it needs, singular at one', () => {
     expect(gapWords(goalCell())).toEqual({
-      value: 'Rp 14,4 jt remaining', note: '≈ 1 policy needed at their avg case size of Rp 18 jt.',
+      value: 'Rp 14,4 Jt remaining', note: '≈ 1 policy needed at their avg case size of Rp 18 Jt.',
     });
-    expect(gapWords(goalCell({ policiesNeeded: 3 })).note).toBe('≈ 3 policies needed at their avg case size of Rp 18 jt.');
+    expect(gapWords(goalCell({ policiesNeeded: 3 })).note).toBe('≈ 3 policies needed at their avg case size of Rp 18 Jt.');
     expect(gapWords(goalCell({ policiesNeeded: null })).note).toBeNull();
     expect(gapWords(goalCell({ set: false }))).toEqual({ value: 'No goal set', note: null });
     expect(gapWords(goalCell({ gapMinor: null }))).toEqual({ value: 'Not uploaded yet', note: null });
@@ -342,16 +345,16 @@ describe('P18.10-T4 the Unit Dashboard’s words in Indonesian', () => {
   });
 
   it('writes the goal line over and short, Not uploaded yet and No goal set, the figures in theirs', () => {
-    expect(goalWords(goalCell(), 'id')).toEqual({ tone: 'short', line: '82% · kurang Rp 14,4 jt', sub: 'Rp 65,6 jt dari 80 jt' });
+    expect(goalWords(goalCell(), 'id')).toEqual({ tone: 'short', line: '82% · kurang Rp 14,4 Jt', sub: 'Rp 65,6 Jt dari 80 Jt' });
     expect(goalWords(goalCell({ actualMinor: rp(108), attainmentPct: 135, targetMet: true, overMinor: rp(28) }), 'id').line)
-      .toBe('135% · lebih Rp 28 jt');
+      .toBe('135% · lebih Rp 28 Jt');
     expect(goalWords(goalCell({ actualMinor: null, attainmentPct: null }), 'id'))
-      .toEqual({ tone: 'missing', line: 'Belum diunggah', sub: 'dari target Rp 80 jt' });
+      .toEqual({ tone: 'missing', line: 'Belum diunggah', sub: 'dari target Rp 80 Jt' });
     expect(goalWords(goalCell({ set: false, targetMinor: null, attainmentPct: null }), 'id'))
-      .toEqual({ tone: 'none', line: 'Goal belum diatur', sub: 'produksi Rp 65,6 jt' });
+      .toEqual({ tone: 'none', line: 'Goal belum diatur', sub: 'produksi Rp 65,6 Jt' });
     expect(goalWords({ targetMinor: 0, actualMinor: rp(12), attainmentPct: null }, 'id').line).toBe('Target tahun ini tercapai');
     // The words' language and the figures' are apart: English words, Indonesian figures, as a reader with no choice reads.
-    expect(goalWords(goalCell())).toEqual({ tone: 'short', line: '82% · Rp 14,4 jt short', sub: 'Rp 65,6 jt of 80 jt' });
+    expect(goalWords(goalCell())).toEqual({ tone: 'short', line: '82% · Rp 14,4 Jt short', sub: 'Rp 65,6 Jt of 80 Jt' });
     expect(goalWords(goalCell(), 'en', 'en')).toEqual({ tone: 'short', line: '82% · IDR 14.4M short', sub: 'IDR 65.6M of 80M' });
   });
 
@@ -366,7 +369,7 @@ describe('P18.10-T4 the Unit Dashboard’s words in Indonesian', () => {
   });
 
   it('writes the gap, the provenance, the totals’ marks and the lock', () => {
-    expect(gapWords(goalCell(), 'id')).toEqual({ value: 'Sisa Rp 14,4 jt', note: '≈ perlu 1 polis lagi, dengan rata-rata ukuran case-nya Rp 18 jt.' });
+    expect(gapWords(goalCell(), 'id')).toEqual({ value: 'Sisa Rp 14,4 Jt', note: '≈ perlu 1 polis lagi, dengan rata-rata ukuran case-nya Rp 18 Jt.' });
     const corrected = {
       provenance: 'corrected' as const, month: '2026-10',
       correctedBy: { membershipId: 'mem-owner', name: 'Ibu Ratna' }, correctedAt: '2026-10-05T18:00:00.000Z',
@@ -462,7 +465,7 @@ describe('UI V1 (Phase 18.11 T4): the page’s small rules', () => {
   });
 
   it('UI-003 a tile’s sum splits into its figure and its unit, in either language', () => {
-    expect(splitMoney('Rp 333,5 jt')).toEqual({ value: 'Rp 333,5', unit: 'jt' });
+    expect(splitMoney('Rp 333,5 Jt')).toEqual({ value: 'Rp 333,5', unit: 'Jt' });
     expect(splitMoney('IDR 333.5M')).toEqual({ value: 'IDR 333.5', unit: 'M' });
     expect(splitMoney('Rp 750')).toEqual({ value: 'Rp 750', unit: null });
   });
@@ -492,5 +495,79 @@ describe('UI-001 the Activities read', () => {
       // P19.8-T4 AC-7 (MOB UI-184): one person's ratios.
       'http://api.test/api/v1/unit/dashboard/activities?for=mem-sari&ratioFor=mem-budi',
     ]);
+  });
+});
+
+/**
+ * **The three views** (P19.12-T6; the client's message of 11 November 2026, item 7; ADR-0249): the address's word, the
+ * picker's names in both languages, the choice kept per membership, and the office-wide view's people with no leader on
+ * the roster and in *Perbarui produksi*.
+ */
+describe('P19.12-T6 the views', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    try { window.localStorage.clear(); } catch { /* none */ }
+  });
+
+  it('P19.12-T6 AC-3 reads ?scope= as one of the three, anything else as none', () => {
+    expect(UNIT_VIEWS).toEqual(['direct', 'informal', 'downline']);
+    expect(viewFrom('informal')).toBe('informal');
+    expect(viewFrom(['downline', 'direct'])).toBe('downline');
+    for (const other of ['', 'all', 'Direct', undefined, null]) expect(viewFrom(other)).toBeNull();
+  });
+
+  it('P19.12-T6 AC-2 names the views in the client’s words, and in English', () => {
+    expect(unitViews('id').map((v) => v.label)).toEqual(['Grup langsung', 'Grup informal', 'Semua downline']);
+    expect(unitViews().map((v) => v.label)).toEqual(['Direct group', 'Informal group', 'All downline']);
+  });
+
+  it('P19.12-T6 AC-3 keeps the last view per membership, and nothing when storage is refused', () => {
+    keepView('mem-agus', 'informal');
+    expect(window.localStorage.getItem('ab.unit.scope.mem-agus')).toBe('informal');
+    expect(storedView('mem-agus')).toBe('informal');
+    expect(storedView('mem-sari')).toBeNull();
+    expect(storedView(null)).toBeNull();
+    window.localStorage.setItem('ab.unit.scope.mem-agus', 'everything');
+    expect(storedView('mem-agus')).toBeNull();
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('blocked'); });
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('blocked'); });
+    expect(storedView('mem-agus')).toBeNull();
+    expect(() => keepView('mem-agus', 'direct')).not.toThrow();
+  });
+
+  it('P19.12-T6 AC-2 the people with no leader come last on the roster and in the production dialog', () => {
+    const nora = { ...dashboard().yourUnit.rows[1], membershipId: 'mem-nora', name: 'Nora Siregar', depth: 1 };
+    const view = dashboard({ unled: { rows: [nora], total: dashboard().yourUnit.total } });
+    expect(everyRow(view).at(-1)?.membershipId).toBe('mem-nora');
+    expect(dialogGroups(view, 'id').at(-1)).toEqual({ label: 'Belum punya leader', rows: [{ row: nora, indent: 0 }] });
+    expect(dialogGroups(dashboard()).map((g) => g.label)).not.toContain('No leader yet');
+  });
+
+  it('P19.12-T6 AC-4 says the informal line in both languages, the head named in a view of a unit below', () => {
+    expect(messagesIn(unitDashboardMessages, 'id').views.absNotInGroup({ n: 3, name: null })).toBe('3 AB di bawah Anda belum masuk grup');
+    expect(messagesIn(unitDashboardMessages, 'id').views.absNotInGroup({ n: 1, name: 'Agus Santoso' }))
+      .toBe('1 AB di bawah Agus Santoso belum masuk grup');
+    expect(messagesIn(unitDashboardMessages, 'en').views.absNotInGroup({ n: 1, name: null })).toBe('1 AB below you is not in a group yet');
+  });
+
+  it('P19.12-T6 AC-4 the add is one POST naming the group and the people', async () => {
+    const { calls } = stubFetch({ 'POST /members/groups/g-1/members': { body: { groupId: 'g-1', name: 'G', added: 2, memberCount: 2 } } });
+    expect(await addGroupMembers('g-1', ['m-1', 'm-2'])).toMatchObject({ added: 2 });
+    expect(calls[0].url).toBe('http://api.test/api/v1/members/groups/g-1/members');
+    expect(JSON.parse(calls[0].init.body as string)).toEqual({ membershipIds: ['m-1', 'm-2'] });
+    vi.unstubAllGlobals();
+  });
+
+  it('P19.12-T6 AC-3 sends the view asked for, and none when there is none', async () => {
+    const { calls } = stubFetch({ 'GET /unit/dashboard': { body: dashboard() }, 'GET /unit/dashboard/potensi': { body: {} } });
+    await readUnitDashboard({ period: 'month', scope: 'informal' });
+    await readUnitDashboard({ period: 'month', scope: null });
+    await readUnitPotensi({ scope: 'downline' });
+    expect(calls.map((c) => c.url)).toEqual([
+      'http://api.test/api/v1/unit/dashboard?period=month&scope=informal',
+      'http://api.test/api/v1/unit/dashboard?period=month',
+      'http://api.test/api/v1/unit/dashboard/potensi?scope=downline',
+    ]);
+    vi.unstubAllGlobals();
   });
 });

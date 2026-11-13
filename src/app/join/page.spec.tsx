@@ -99,13 +99,47 @@ describe('redeeming an invite (P3-T4)', () => {
     expect(screen.queryByRole('button', { name: /Check/ })).not.toBeInTheDocument();
   });
 
-  it('sends somebody signed out to sign in first, keeping the link usable', async () => {
+  it('P19.10-T2 AC-1 signed out, the code goes with them: sign-in comes back here, and creating an account registers on it', async () => {
     query = new URLSearchParams('code=JOR417');
     stubFetch({ '/join/invite': { body: PREVIEW } });
     renderWithSession(<JoinPage />, { me: null });
 
+    expect(await screen.findByText('Sign in first — you will come back to this invite.')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Sign in' })).toHaveAttribute('href', `/login?next=${encodeURIComponent('/join?code=JOR417')}`);
+    expect(screen.getByRole('link', { name: 'Create one' })).toHaveAttribute('href', '/register?code=JOR417');
+  });
+
+  it('P19.10-T2 AC-1 signed out with no code yet, sign-in and sign-up are the plain ones', async () => {
+    stubFetch({});
+    renderWithSession(<JoinPage />, { me: null });
+
     expect(await screen.findByRole('link', { name: 'Sign in' })).toHaveAttribute('href', '/login');
     expect(screen.getByRole('link', { name: 'Create one' })).toHaveAttribute('href', '/register');
+  });
+
+  it('P19.10-T2 AC-3 somebody still waiting for approval gets the invite and joins with it, no longer told they are in an office', async () => {
+    query = new URLSearchParams('code=JOR417');
+    const { calls } = stubFetch({
+      '/join/invite': { body: PREVIEW },
+      '/join/redeem': { body: { kpmId: 'kpm-1', leaderName: 'Wilson Tanoto' } },
+    });
+    const waiting = makeMe({
+      membership: {
+        membershipId: 'mem-1', kpmId: 'kpm-1', orgLevelCode: 'AGENT', hierarchyRole: 'agent', status: 'pending',
+        isKpmOwner: false, isKpmAdmin: false, directCount: 0,
+      },
+      permissions: ['join_via_code_link_qr'],
+    });
+    const { session } = renderWithSession(<JoinPage />, { me: waiting });
+
+    expect(await screen.findByText('Wilson Tanoto')).toBeInTheDocument();
+    expect(screen.queryByText(/already in an office/)).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Accept and join' }));
+    const post = calls.find((c) => c.init.method === 'POST')!;
+    expect(post.url).toContain('/join/redeem');
+    expect(JSON.parse(post.init.body as string)).toEqual({ code: 'JOR417' });
+    await vi.waitFor(() => expect(session.reload).toHaveBeenCalled());
+    expect(replace).toHaveBeenCalledWith('/');
   });
 
   it('shows the refusal a bad code gets, without inventing a reason of its own', async () => {

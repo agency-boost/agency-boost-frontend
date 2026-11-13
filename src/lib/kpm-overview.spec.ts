@@ -137,13 +137,13 @@ describe('KPM Overview words (P18-T1)', () => {
     });
 
     it('AC-7: a unit’s line, *"Rp {a} / {t} unit target"* on an agency and without the words on an AAB unit — one Rp (UI-030)', () => {
-      expect(unitNums({ achievedMinor: rp(620), targetMinor: rp(1500) }, true)).toBe('Rp 620 jt / 1,5 M unit target');
-      expect(unitNums({ achievedMinor: rp(210), targetMinor: rp(500) }, false)).toBe('Rp 210 jt / 500 jt');
+      expect(unitNums({ achievedMinor: rp(620), targetMinor: rp(1500) }, true)).toBe('Rp 620 Jt / 1,5 M unit target');
+      expect(unitNums({ achievedMinor: rp(210), targetMinor: rp(500) }, false)).toBe('Rp 210 Jt / 500 Jt');
     });
 
     it('AC-9: a unit with no file or no goal says so, never 0', () => {
-      expect(unitNums({ achievedMinor: null, targetMinor: rp(600) }, true)).toBe('Not uploaded yet / Rp 600 jt unit target');
-      expect(unitNums({ achievedMinor: rp(10), targetMinor: null }, true)).toBe('Rp 10 jt · No goal set');
+      expect(unitNums({ achievedMinor: null, targetMinor: rp(600) }, true)).toBe('Not uploaded yet / Rp 600 Jt unit target');
+      expect(unitNums({ achievedMinor: rp(10), targetMinor: null }, true)).toBe('Rp 10 Jt · No goal set');
       expect(unitNums({ achievedMinor: null, targetMinor: null }, false)).toBe('Not uploaded yet · No goal set');
     });
 

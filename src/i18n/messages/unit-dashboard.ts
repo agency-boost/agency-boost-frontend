@@ -155,7 +155,7 @@ const en = {
     short: ({ pct, sum }: { pct: string; sum: string }) => `${pct} · ${sum} short`,
     /** The Summary's own phrase beside its figure, under a missing one. */
     ofTarget: ({ sum }: { sum: string }) => `of ${sum} target`,
-    /** The pair's joiner: *Rp 65,6 jt of 80 jt* (UI-030). */
+    /** The pair's joiner: *Rp 65,6 Jt of 80 Jt* (UI-030). */
     of: 'of',
   },
   /** The *Leads* column (`:7399`, `:7371-7373`, `:7443-7445`). */
@@ -220,7 +220,7 @@ const en = {
     agentUnit: ({ n }: { n: number }): string => (n === 1 ? 'agent' : 'agents'),
     candidateUnit: ({ n }: { n: number }): string => (n === 1 ? 'candidate' : 'candidates'),
     direct: 'direct',
-    /** *dari Rp 612,3 jt*, *dari 12*: `of` the figure, written by the caller. */
+    /** *dari Rp 612,3 Jt*, *dari 12*: `of` the figure, written by the caller. */
     of: ({ of }: { of: string }) => `of ${of}`,
     /** UI-028: `day` written by the caller, *28 Okt 26*. */
     lastUpdated: ({ day }: { day: string }) => `${kept('Last updated')} ${day}`,
@@ -268,6 +268,40 @@ const en = {
     /** The phone's month chip on a tile's label (the Unit mockup's *Active Agent Nov*): `month` the month short. */
     activeAgentShort: kept('Active Agent'),
     recruitmentShort: kept('Recruitment'),
+  },
+  /**
+   * **The three views** (the client's message of 11 November 2026, item 7; ADR-0249; glossary *Grup langsung*, *Grup
+   * informal*, *Semua downline*): the picker beside the period on *Overview* and the month on *Potensi*, *Grup informal*'s
+   * line and its sheet, the tiles' *AB* chip, and the office-wide view's *Belum punya leader*. The Indonesian is the
+   * client's own words.
+   */
+  views: {
+    label: 'View',
+    direct: 'Direct group',
+    informal: 'Informal group',
+    downline: `All ${kept('downline')}`,
+    /** The tiles' third chip (ADR-0249 §3), a role, kept. */
+    ab: kept('AB'),
+    /** The office-wide view's people with no leader: a section of the roster, a card on *Potensi*. */
+    unled: 'No leader yet',
+    /** `n` the ABs below the head in no group of theirs; `name` the head's, in a view of a leader below the reader. */
+    absNotInGroup: ({ n, name }: { n: number; name: string | null }) =>
+      `${n} ${kept('AB')} below ${name ?? 'you'} ${n === 1 ? 'is' : 'are'} not in a group yet`,
+    addToGroup: '+ Add to group',
+    sheet: {
+      title: 'Add to group',
+      /** `name` the head's: whose group the ABs join. */
+      line: ({ name }: { name: string }) => `Tag the ${kept('AB')}s below ${name} into a group of theirs. A group is a label: nobody sees more for it.`,
+      people: `${kept('AB')} not in a group yet`,
+      group: 'Group',
+      /** The group made when the head owns none: `first` their first name. */
+      newGroupName: ({ first }: { first: string }) => `Group ${first}`,
+      newGroup: ({ head, name }: { head: string; name: string }) => `${head} has no group yet. Adding makes one: “${name}”.`,
+      add: ({ n }: { n: number }) => (n === 0 ? 'Add' : `Add ${n}`),
+      chooseOne: `Choose at least one ${kept('AB')}.`,
+      added: ({ n, group }: { n: number; group: string }) => `${n} ${kept('AB')} added to ${group}`,
+      failed: 'Nothing was added.',
+    },
   },
 };
 
@@ -442,6 +476,29 @@ const id: MessagesOf<typeof en> = {
     lastUpdatedLabel: kept('Last updated'),
     activeAgentShort: kept('Active Agent'),
     recruitmentShort: kept('Recruitment'),
+  },
+  // The client's words, verbatim (11 November 2026, item 7).
+  views: {
+    label: 'Tampilan',
+    direct: 'Grup langsung',
+    informal: 'Grup informal',
+    downline: `Semua ${kept('downline')}`,
+    ab: kept('AB'),
+    unled: `Belum punya ${kept('leader')}`,
+    absNotInGroup: ({ n, name }) => `${n} ${kept('AB')} di bawah ${name ?? 'Anda'} belum masuk grup`,
+    addToGroup: '+ Tambah ke grup',
+    sheet: {
+      title: 'Tambah ke grup',
+      line: ({ name }) => `Tandai ${kept('AB')} di bawah ${name} ke grupnya. Grup hanya label: tidak ada yang melihat lebih banyak karenanya.`,
+      people: `${kept('AB')} yang belum masuk grup`,
+      group: 'Grup',
+      newGroupName: ({ first }) => `Grup ${first}`,
+      newGroup: ({ head, name }) => `${head} belum punya grup. Menambahkan akan membuatnya: “${name}”.`,
+      add: ({ n }) => (n === 0 ? 'Tambahkan' : `Tambahkan ${n}`),
+      chooseOne: `Pilih setidaknya satu ${kept('AB')}.`,
+      added: ({ n, group }) => `${n} ${kept('AB')} ditambahkan ke ${group}`,
+      failed: 'Tidak ada yang ditambahkan.',
+    },
   },
 };
 

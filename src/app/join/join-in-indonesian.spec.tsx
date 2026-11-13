@@ -53,7 +53,8 @@ describe('P18.10-T4 /join in Indonesian', () => {
     stubFetch({});
     renderInIndonesian(<JoinPage />, { me: null });
     // Signed out there is no shell, so no title: the card alone (`RoleShell`'s `allowSignedOut`).
-    expect(screen.getByText('Masuk terlebih dahulu, lalu buka tautan ini lagi.')).toBeInTheDocument();
+    // P19.10-T2 AC-1: sign-in comes back to the invite, so nothing has to be opened again.
+    expect(screen.getByText('Masuk terlebih dahulu — Anda akan kembali ke undangan ini.')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Masuk' })).toHaveAttribute('href', '/login');
     const create = screen.getByRole('link', { name: 'Buat akun' });
     expect(create).toHaveAttribute('href', '/register');

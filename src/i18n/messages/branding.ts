@@ -4,8 +4,9 @@ import { kept } from '@/i18n/kept';
 /**
  * ***Tampilan KPM*** (`/kpm/settings/branding`, P19.6-T1; ADR-0218; §B7) and the template's *Tampilan* section. §B7's
  * own Indonesian words are kept as given: *Logo*, *Logo (persegi, opsional)*, *Warna utama*, *Warna kedua*, *Maskot*,
- * *Simpan*, *Kembalikan ke default* and *"Warna terlalu terang/gelap untuk teks"*. **Kept English** (§A): *KPM*,
- * *AgencyBoost* and *Boost*.
+ * *Simpan* and *Kembalikan ke default*. §B7's *"Warna terlalu terang/gelap untuk teks"* went with the refusal it named
+ * (P19.12-T3; ADR-0246): every colour is accepted, and the field says when it was adjusted. **Kept English** (§A):
+ * *KPM*, *AgencyBoost* and *Boost*.
  *
  * @moved app/(tenant)/kpm/settings/branding/
  */
@@ -34,7 +35,8 @@ const en = {
   notSet: 'Not set',
   contrast: (o: { ratio: string; side: 'light' | 'dark' }) =>
     `Text ${o.side === 'light' ? 'white' : 'dark'} reads ${o.ratio}:1 on it.`,
-  unreadable: 'Colour too light/dark for text',
+  adjusted: (o: { fill: string; ratio: string; side: 'light' | 'dark' }) =>
+    `Adjusted to ${o.fill} so ${o.side === 'light' ? 'white' : 'dark'} text reads ${o.ratio}:1.`,
   preview: 'Live preview',
   phone: 'Phone',
   laptop: 'Laptop',
@@ -81,7 +83,7 @@ const id: MessagesOf<typeof en> = {
   set: 'Terpasang',
   notSet: 'Belum diatur',
   contrast: (o) => `Teks ${o.side === 'light' ? 'putih' : 'gelap'} terbaca ${o.ratio}:1 di atasnya.`,
-  unreadable: 'Warna terlalu terang/gelap untuk teks',
+  adjusted: (o) => `Disesuaikan ke ${o.fill} agar teks ${o.side === 'light' ? 'putih' : 'gelap'} terbaca ${o.ratio}:1.`,
   preview: 'Pratinjau langsung',
   phone: 'Ponsel',
   laptop: 'Laptop',

@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { atWidth, makeMe, renderWithSession, stubFetch, wears, type StubReply } from '@test/harness';
 import { detail, NONE_CHASED, RINA_CHASING, serverError, SPRINT } from '@test/campaigns-fixtures';
+import { TenantConfigProvider } from '@/lib/tenant-config-cache';
 import PersonalSummaryPage from './page';
 
 const nav = vi.hoisted(() => ({ replace: vi.fn(), search: '' }));
@@ -43,14 +44,21 @@ const summary = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
+/** One of the reader's own open leads, in `GET /leads`' row shape (P19.11-T5 AC-4): what the shared card draws. */
 const openLead = (over: Record<string, unknown>) => ({
-  id: 'l-1', name: 'Pak Hendro Gunawan', type: 'sales', statusCode: 'FOLLOW_UP', statusLabel: 'Follow-up',
-  thisMonth: false, flags: [], overdueDays: null, nextActionDate: '2026-09-20', nextActionNote: null, ...over,
+  id: 'l-1', ownerMembershipId: 'mem-1', owner: { membershipId: 'mem-1', name: 'Rina Wijaya' }, type: 'sales',
+  name: 'Pak Hendro Gunawan', contact: { phone: null, email: null }, statusCode: 'FOLLOW_UP', thisMonth: false,
+  committedMonths: [], closedThisMonth: false, lastEditedBy: null, remarks: null, nextActionDate: '2026-09-20',
+  nextActionNote: null, outcome: null, source: null, dateRegistered: '2026-09-01T03:00:00.000Z', version: 1, flags: [],
+  overdueDays: null, proposals: null, ...over,
 });
 const LEADS = [
-  openLead({ id: 'l-1', thisMonth: true, flags: ['overdue'], overdueDays: 6, nextActionDate: '2026-09-08', nextActionNote: 'Chase the illustration.' }),
-  openLead({ id: 'l-2', name: 'Ibu Wulan Sari', statusLabel: 'Policy submitted', nextActionDate: '2026-09-16' }),
-  openLead({ id: 'l-3', name: 'Pak Bambang', type: null, statusCode: null, statusLabel: null, flags: ['no-next-action'], nextActionDate: null }),
+  openLead({
+    id: 'l-1', thisMonth: true, committedMonths: ['2026-09'], flags: ['overdue'], overdueDays: 6, nextActionDate: '2026-09-08',
+    nextActionNote: 'Chase the illustration.',
+  }),
+  openLead({ id: 'l-2', name: 'Ibu Wulan Sari', statusCode: 'POLICY_SUBMITTED', nextActionDate: '2026-09-16' }),
+  openLead({ id: 'l-3', name: 'Pak Bambang', type: null, statusCode: null, flags: ['no-next-action', 'no-remarks'], nextActionDate: null }),
 ];
 
 const chip = (key: string, code: string, logged: number, target: number | null, attainmentPct: number | null) =>
@@ -355,7 +363,7 @@ describe('the Personal Summary — Target aktivitas, one card (P10-T5; UI-050, U
     expect(shown.reduce((a, b) => a + b, 0)).toBe(41);
   });
 
-  it('UI-052 (a), P19.1-T4 AC-7: the heading’s ⓘ says where the policies come from; where APE comes from moved to the goal card’s', async () => {
+  it('UI-052 (a), P19.11-T4 AC-2: the heading’s ⓘ says where the policies come from; where APE comes from, and who uploads it, the goal card’s', async () => {
     show(summary());
     const targets = await card('Your sales activity targets');
     const source = 'Submission polis counts the policies you log in Log Activity.';
@@ -364,7 +372,10 @@ describe('the Personal Summary — Target aktivitas, one card (P10-T5; UI-050, U
     const goal = await card('Goal vs. actual (APE)');
     const info = within(goal).getByRole('button', { name: 'What is APE?' });
     await userEvent.click(info);
-    expect(await screen.findByRole('tooltip')).toHaveTextContent(/APE comes from the production upload\.$/);
+    // P19.11-T4 AC-2 (UX-12): and on the reader's own page who uploads it, the sentence that was under the figure.
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      /APE comes from the production upload\. Production is uploaded by your KPM admin, usually every month\. Not there yet\? Contact your KPM admin\.$/,
+    );
     // Beside the heading, not inside it: the region's name stays its words.
     expect(within(targets).getByRole('heading', { level: 2 })).toHaveTextContent(/^Your sales activity targets$/);
   });
@@ -504,38 +515,123 @@ describe('the Personal Summary — the ratio card (P10-T5; UI-053)', () => {
   });
 });
 
-describe('the Personal Summary — leads that need you (P10-T6; UI-055)', () => {
+describe('the Personal Summary — leads that need you (P10-T6; UI-055; P19.11-T5)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('AC-1: your open leads in the server’s order — the date and note, or no date set', async () => {
-    show(summary());
-    const leads = await card('Leads that need you');
-    const rows = within(leads).getAllByRole('listitem');
+  /** The office's two ladders, as the agent layout's configuration hands them to the shared card (`LeadPills`). */
+  const PIPELINES = [
+    {
+      pipeline: 'sales',
+      statuses: [
+        { id: 's1', pipeline: 'sales', code: 'FOLLOW_UP', label: 'Follow-up', rank: 1, isTerminal: false, isLateStage: false, version: 1, status: 'active' },
+        { id: 's2', pipeline: 'sales', code: 'POLICY_SUBMITTED', label: 'Policy submitted', rank: 2, isTerminal: false, isLateStage: true, version: 1, status: 'active' },
+      ],
+    },
+  ];
+  /** A reader who works their own leads: the sheet is theirs to edit. */
+  const WORKER = makeMe({ permissions: ['personal_summary:read', 'lead:read', 'lead:update'] });
+  /** The page as the agent layout hands it over: inside the office's configuration, which names each stage. */
+  const showInOffice = (body: unknown, routes: Record<string, StubReply | StubReply[]> = {}, me = AGENT) => {
+    const stub = stubFetch({
+      '/summary': { body }, '/activity/ratios': { body: AGENT_RATIOS }, 'GET /campaigns/chasing': { body: NONE_CHASED },
+      '/kpm/config': { body: { activity: [], ratios: [], leadPipelines: PIPELINES, version: 1 } }, '/kpm/org-levels': { body: [] },
+      ...routes,
+    });
+    renderWithSession(<TenantConfigProvider><PersonalSummaryPage /></TenantConfigProvider>, { me });
+    return stub;
+  };
+  const cards = (section: HTMLElement) => within(section).getAllByRole('listitem');
 
-    expect(rows.map((row) => within(row).getByText(/^(Pak|Ibu)/).textContent)).toEqual(['Pak Hendro Gunawan', 'Ibu Wulan Sari', 'Pak Bambang']);
-    expect(rows[0]).toHaveTextContent('Sales · Follow-up');
-    expect(rows[0]).toHaveTextContent('8 Sep — Chase the illustration.');
-    expect(rows[1]).toHaveTextContent('Sales · Policy submitted');
-    expect(rows[2]).toHaveTextContent('Unassigned · No status yet');
-    expect(rows[2]).toHaveTextContent('No date set');
+  it('P19.11-T5 AC-1 each lead is the Leads screen’s own card, in the server’s order — its stage pill, its next-action line, the Potensi badge', async () => {
+    showInOffice(summary());
+    const leads = await card('Leads that need you');
+    await waitFor(() => expect(within(leads).getAllByText('Follow-up')).toHaveLength(1));
+    const [late, dated, undated] = cards(leads);
+
+    expect(cards(leads).map((c) => c.getAttribute('data-lead-card'))).toEqual(['l-1', 'l-2', 'l-3']);
+    // The card's button is the lead's name, and opens the sheet.
+    expect(within(late).getByRole('button', { name: 'Pak Hendro Gunawan' })).toHaveAttribute('aria-haspopup', 'dialog');
+    // Its next-action line: the date and the note, red while late; *Add an action* where there is none.
+    expect(late.querySelector('[data-next-action="overdue"]')).toHaveTextContent('8 Sep, overdueChase the illustration.');
+    expect(dated.querySelector('[data-next-action]')).toHaveTextContent('16 Sep');
+    expect(undated.querySelector('[data-next-action="missing"]')).toHaveTextContent('Add an action');
+    // The stage in its ladder's words, and *No type yet* for the lead with none — the Leads screen's.
+    expect(within(dated).getByText('Policy submitted')).toBeInTheDocument();
+    expect(within(undated).getByText('No type yet')).toBeInTheDocument();
+    // *Closes this month* is the card's Potensi badge on the avatar (UXQ4's default), on the promised lead alone.
+    expect(within(late).getByRole('img', { name: 'Potential this month' })).toBeInTheDocument();
+    expect(within(dated).queryByRole('img', { name: /Potential/ })).not.toBeInTheDocument();
+    // WhatsApp, the card's own target.
+    expect(late.querySelector('[data-channel="whatsapp"]')).not.toBeNull();
   });
 
-  it('AC-1: the Leads screen’s flags, and a promise for this month hides none of them (I-103)', async () => {
+  it('P19.11-T5 AC-1 no red chips and no “No date set”: the card’s own line says both (UX-13)', async () => {
     show(summary());
-    const [late, , undated] = within(await card('Leads that need you')).getAllByRole('listitem');
-
-    expect(within(late).getByText('Closes this month')).toBeInTheDocument();
-    expect(within(late).getByText('Overdue 6 days')).toBeInTheDocument();
-    expect(within(undated).getByText('No next action')).toBeInTheDocument();
-  });
-
-  it('AC-1, P10.1-T6 AC-4: lists the rows the server sent — its ten — and no more', async () => {
-    const ten = Array.from({ length: 10 }, (_, i) => openLead({ id: `l-${i}`, name: `Pak Lead ${i}`, flags: i === 0 ? ['overdue'] : [], overdueDays: i === 0 ? 3 : null }));
-    show(summary({ leads: { rows: ten, total: 12 } }));
     const leads = await card('Leads that need you');
 
-    expect(within(leads).getAllByRole('listitem')).toHaveLength(10);
-    expect(within(leads).getByText('Overdue 3 days')).toBeInTheDocument();
+    for (const gone of ['Overdue 6 days', 'No next action', 'No remarks', 'No date set', 'Closes this month']) {
+      expect(leads).not.toHaveTextContent(gone);
+    }
+  });
+
+  it('P19.11-T5 AC-1 a tap opens the shared lead sheet over the Summary, and a save reads the Summary again', async () => {
+    const saved = { ...LEADS[0], nextActionNote: 'Call him on Monday.', version: 2 };
+    const { calls } = showInOffice(summary(), {
+      '/leads/l-1': { body: { ...LEADS[0], history: [] } },
+      'PATCH /leads/l-1': { body: saved },
+    }, WORKER);
+    const leads = await card('Leads that need you');
+
+    await userEvent.click(within(cards(leads)[0]).getByRole('button', { name: 'Pak Hendro Gunawan' }));
+    const sheet = within(await screen.findByRole('dialog', { name: 'Pak Hendro Gunawan' }));
+    const note = await sheet.findByLabelText('Next action note');
+    await userEvent.clear(note);
+    await userEvent.type(note, 'Call him on Monday.');
+    await userEvent.click(sheet.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(calls.filter((c) => c.init.method === 'PATCH').map((c) => [c.url.replace(/^.*\/api\/v1/, ''), c.init.body]))
+      .toEqual([['/leads/l-1', JSON.stringify({ nextActionNote: 'Call him on Monday.', version: 1 })]]));
+    // Read back: the order and the insights follow the lead.
+    await waitFor(() => expect(calls.filter((c) => c.url.endsWith('/summary'))).toHaveLength(2));
+  });
+
+  it('P19.11-T5 AC-1 a reader the server grants no `lead:update` reads the sheet and saves nothing', async () => {
+    showInOffice(summary(), { '/leads/l-1': { body: { ...LEADS[0], history: [] } } });
+    const leads = await card('Leads that need you');
+
+    await userEvent.click(within(cards(leads)[0]).getByRole('button', { name: 'Pak Hendro Gunawan' }));
+    const sheet = within(await screen.findByRole('dialog', { name: 'Pak Hendro Gunawan' }));
+    expect(await sheet.findByLabelText('Next action note')).toBeDisabled();
+    expect(sheet.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
+  });
+
+  it('P19.11-T5 AC-2 the top five; *See all (7)* draws the rest in place, and *Show less* puts them away again', async () => {
+    const seven = Array.from({ length: 7 }, (_, i) => openLead({ id: `l-${i}`, name: `Pak Lead ${i}` }));
+    show(summary({ leads: { rows: seven, total: 7, shown: 5 } }));
+    const leads = await card('Leads that need you');
+
+    expect(cards(leads).map((c) => c.getAttribute('data-lead-card'))).toEqual(['l-0', 'l-1', 'l-2', 'l-3', 'l-4']);
+    const more = within(leads).getByRole('button', { name: 'See all (7)' });
+    expect(more).toHaveAttribute('aria-expanded', 'false');
+
+    await userEvent.click(more);
+    expect(cards(leads)).toHaveLength(7);
+    const less = within(leads).getByRole('button', { name: 'Show less' });
+    expect(less).toHaveAttribute('aria-expanded', 'true');
+    expect(less).toHaveAttribute('aria-controls', within(leads).getByRole('list').id);
+
+    await userEvent.click(less);
+    expect(cards(leads)).toHaveLength(5);
+    expect(within(leads).getByRole('button', { name: 'See all (7)' })).toBeInTheDocument();
+  });
+
+  it('P19.11-T5 AC-2 five or fewer: every one, and no control', async () => {
+    const five = Array.from({ length: 5 }, (_, i) => openLead({ id: `l-${i}`, name: `Pak Lead ${i}` }));
+    show(summary({ leads: { rows: five, total: 5, shown: 5 } }));
+    const leads = await card('Leads that need you');
+
+    expect(cards(leads)).toHaveLength(5);
+    expect(within(leads).queryByRole('button', { name: /See all|Show less/ })).not.toBeInTheDocument();
   });
 
   it('UI-055 with open leads the card shows at every size; its tag on a desktop only (Appendix A)', async () => {
@@ -1259,17 +1355,22 @@ describe('the Personal Summary — an earlier month or year (P18.5-T11; UI-051)'
 
 /*
  * **P19.1-T4 — UI-157: *Belum diunggah* is no dead end** (the 6 November handover, improvement 5; the cloud findings'
- * rule R2; ADR-0195). Who uploads production and what to do meanwhile; the helpers counted with 0 achieved; the Owner's
- * and an Admin's way to the upload; the reader's own estimate, entered, changed and deleted here, and replaced by the
- * office's figure.
+ * rule R2; ADR-0195), **as P19.11-T4 cleaned it up** (UX-12): who uploads production is the card's ⓘ now, not a
+ * paragraph; *Bulanan* draws no *(no production data yet)* and no year-to-date estimate row — the year's estimate,
+ * entered, changed and deleted, and replaced by the office's figure, is *Tahunan*'s; the Owner's and an Admin's way to
+ * the upload stays.
  */
-describe('P19.1-T4 the goal card when production is not uploaded (UI-157)', () => {
+describe('P19.1-T4, P19.11-T4 the goal card when production is not uploaded (UI-157, UX-12)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   const NOTHING = { ...figures({ actualMinor: null, attainmentPct: null, gapMinor: null, overMinor: null, policiesNeeded: null }) };
+  const NONE_MONTH = { source: 'none', uploaded: false, manual: null };
+  const NOT_UPLOADED_MONTH = {
+    ...NOTHING, source: null, production: 'none', withoutProduction: { gapMinor: 75 * M, policiesNeeded: 5 }, realised: NONE_MONTH,
+  };
   /** This month not uploaded, and nothing for the year: the office's YTD is none, nothing typed. */
   const notUploaded = (over: Record<string, unknown> = {}) => summary({
-    monthly: { ...NOTHING, source: null, production: 'none', withoutProduction: { gapMinor: 75 * M, policiesNeeded: 5 } },
+    monthly: NOT_UPLOADED_MONTH,
     yearly: {
       ...figures({ targetMinor: 500 * M, actualMinor: 0, attainmentPct: 0, gapMinor: 500 * M, policiesNeeded: 28 }),
       source: { provenance: 'self_reported', month: null }, production: 'none',
@@ -1278,7 +1379,7 @@ describe('P19.1-T4 the goal card when production is not uploaded (UI-157)', () =
     uploadedOn: { month: null, year: null },
     ...over,
   });
-  /** The same, with the reader's estimate of Rp 120 jt for the year. */
+  /** The same, with the reader's estimate of Rp 120 Jt for the year. */
   const withEstimate = () => notUploaded({
     yearly: {
       ...figures({ targetMinor: 500 * M, actualMinor: 120 * M, attainmentPct: 24, gapMinor: 380 * M, policiesNeeded: 22 }),
@@ -1292,13 +1393,30 @@ describe('P19.1-T4 the goal card when production is not uploaded (UI-157)', () =
   };
   const goalCard = () => card('Goal vs. actual (APE)');
 
-  it('P19.1-T4 AC-7 under Not uploaded yet the card says who uploads production and what to do', async () => {
+  it('P19.11-T4 AC-2 Monthly, nothing uploaded: Not uploaded yet — no who-uploads paragraph, no estimate row, no marker, no empty row', async () => {
     showAs(AGENT, { '/summary': { body: notUploaded() } });
     const goal = await goalCard();
     expect(goal).toHaveTextContent('Not uploaded yet');
-    expect(goal.querySelector('[data-who-uploads]')).toHaveTextContent(
-      'Production is uploaded by your KPM admin, usually every month. Not there yet? Contact your KPM admin.',
-    );
+    // The sentence is the card's ⓘ now (AC-2), not a paragraph under the figure.
+    expect(goal.querySelector('[data-who-uploads]')).toBeNull();
+    expect(goal.querySelector('[data-estimate-row]')).toBeNull();
+    expect(within(goal).queryByRole('button', { name: 'Enter interim production' })).not.toBeInTheDocument();
+    // The helpers still count 0 achieved — the sums alone, no *(no production data yet)* under them.
+    expect(goal.querySelector('dl')).toHaveTextContent(/^Remaining this monthIDR 75MPolicies needed± 5 policies$/);
+    expect(goal.querySelector('[data-no-production]')).toBeNull();
+    // Nothing to say under the figure, so no row is left for it (UX-12: *the leftover spacing*).
+    expect(goal.querySelector('[data-goal-note]')).toBeNull();
+  });
+
+  it('P19.1-T4 AC-8 on Yearly the helpers still count 0 achieved — the whole target and its policies — each marked, no dash', async () => {
+    showAs(AGENT, { '/summary': { body: notUploaded() } });
+    await goalCard();
+    await yearly();
+    const foot = (await goalCard()).querySelector('dl')!;
+    expect(foot).toHaveTextContent('Remaining this yearIDR 500M(no production data yet)');
+    expect(foot).toHaveTextContent('Policies needed± 28 policies(no production data yet)');
+    expect(foot.querySelectorAll('[data-no-production]')).toHaveLength(2);
+    expect(foot).not.toHaveTextContent('—');
   });
 
   it('P19.1-T4 AC-7 an uploaded month says nothing of the kind', async () => {
@@ -1306,19 +1424,6 @@ describe('P19.1-T4 the goal card when production is not uploaded (UI-157)', () =
     const goal = await goalCard();
     expect(goal.querySelector('[data-who-uploads]')).toBeNull();
     expect(goal.querySelector('[data-goal-note]')).toBeNull();
-  });
-
-  it('P19.1-T4 AC-8 the helpers count 0 achieved — the whole target and its policies — each marked, and no dash', async () => {
-    showAs(AGENT, { '/summary': { body: notUploaded() } });
-    const goal = await goalCard();
-    const foot = goal.querySelector('dl')!;
-    expect(foot).toHaveTextContent('Remaining this monthIDR 75M(no production data yet)');
-    expect(foot).toHaveTextContent('Policies needed± 5 policies(no production data yet)');
-    expect(foot.querySelectorAll('[data-no-production]')).toHaveLength(2);
-    expect(foot).not.toHaveTextContent('—');
-
-    await yearly();
-    expect((await goalCard()).querySelector('dl')).toHaveTextContent('Remaining this yearIDR 500M(no production data yet)');
   });
 
   it('P19.1-T4 AC-9 the Owner or an Admin in their field view sees Upload production →, to Data upload', async () => {
@@ -1333,11 +1438,13 @@ describe('P19.1-T4 the goal card when production is not uploaded (UI-157)', () =
     expect(within(await goalCard()).queryByRole('link', { name: 'Upload production →' })).not.toBeInTheDocument();
   });
 
-  it('P19.1-T4 AC-10 Enter interim production: the estimate is typed, saved through its route, and read back as yours', async () => {
+  it('P19.1-T4 AC-10, P19.11-T4 AC-2 on Yearly, Enter interim production: typed, saved through its route, read back as yours', async () => {
     const { calls } = showAs(AGENT, {
       '/summary': [{ body: notUploaded() }, { body: withEstimate() }],
       'PUT /goals/2026/ape-estimate': { body: {} },
     });
+    await goalCard();
+    await yearly();
     const goal = await goalCard();
     await userEvent.click(within(goal).getByRole('button', { name: 'Enter interim production' }));
     const field = within(goal).getByRole('textbox', { name: 'APE already produced this year' });
@@ -1350,13 +1457,13 @@ describe('P19.1-T4 the goal card when production is not uploaded (UI-157)', () =
     const put = calls.find((c) => c.init.method === 'PUT')!;
     expect(put.url).toBe('http://api.test/api/v1/goals/2026/ape-estimate');
     expect(JSON.parse(String(put.init.body))).toEqual({ apeAchievedMinor: 120_000_000_00 });
-    // Read back: on *Monthly* the estimate is the year's, said as such, with Edit and Delete.
+    // Read back on *Yearly*: the year's figure is the estimate, said as such, with Edit and Delete.
     const row = await waitFor(() => {
       const found = document.querySelector('[data-estimate-row]');
       expect(found).not.toBeNull();
       return found as HTMLElement;
     });
-    expect(row).toHaveTextContent('APE already produced this year: IDR 120M · your estimate');
+    expect(document.querySelector('[data-estimate]')).toHaveTextContent('IDR 120M · your estimate');
     expect(within(row).getByRole('button', { name: 'Edit' })).toBeInTheDocument();
     expect(within(row).getByRole('button', { name: 'Delete' })).toBeInTheDocument();
   });
@@ -1376,14 +1483,18 @@ describe('P19.1-T4 the goal card when production is not uploaded (UI-157)', () =
     expect(JSON.parse(String(calls.find((c) => c.init.method === 'PUT')!.init.body))).toEqual({ apeAchievedMinor: null });
   });
 
-  it('P19.1-T4 AC-10 Edit opens the field on the figure held; Cancel puts the row back unchanged', async () => {
+  it('P19.1-T4 AC-10, P19.11-T4 AC-2 Edit opens the field on the figure held; Cancel puts the row back — on Yearly, never on Monthly', async () => {
     showAs(AGENT, { '/summary': { body: withEstimate() } });
+    // *Bulanan* draws the month: no year-to-date estimate row, no separate Edit and Delete.
+    expect((await goalCard()).querySelector('[data-estimate-row]')).toBeNull();
+    await yearly();
     const goal = await goalCard();
     await userEvent.click(within(goal).getByRole('button', { name: 'Edit' }));
     expect(within(goal).getByRole('textbox', { name: 'APE already produced this year' })).toHaveValue('120,000,000');
     await userEvent.click(within(goal).getByRole('button', { name: 'Cancel' }));
     expect(within(goal).queryByRole('textbox')).not.toBeInTheDocument();
-    expect(goal.querySelector('[data-estimate-row]')).toHaveTextContent('IDR 120M · your estimate');
+    expect(goal.querySelector('[data-estimate-row]')).not.toBeNull();
+    expect(goal.querySelector('[data-estimate]')).toHaveTextContent('IDR 120M · your estimate');
   });
 
   it('P19.1-T4 AC-10 a refused save says why in the card and keeps the field', async () => {
@@ -1391,6 +1502,8 @@ describe('P19.1-T4 the goal card when production is not uploaded (UI-157)', () =
       '/summary': { body: notUploaded() },
       'PUT /goals/2026/ape-estimate': { status: 404, body: { error: { code: 'NOT_FOUND', message: 'Goal not found.', requestId: 'r' } } },
     });
+    await goalCard();
+    await yearly();
     const goal = await goalCard();
     await userEvent.click(within(goal).getByRole('button', { name: 'Enter interim production' }));
     await userEvent.type(within(goal).getByRole('textbox', { name: 'APE already produced this year' }), '5');
@@ -1400,22 +1513,18 @@ describe('P19.1-T4 the goal card when production is not uploaded (UI-157)', () =
   });
 
   it('P19.1-T4 AC-10 once the office holds the year, nothing offers an estimate', async () => {
-    showAs(AGENT, {
-      '/summary': {
-        body: summary({ monthly: { ...NOTHING, source: null, production: 'none', withoutProduction: { gapMinor: 75 * M, policiesNeeded: 5 } } }),
-      },
-    });
-    const goal = await goalCard();
-    expect(goal.querySelector('[data-who-uploads]')).not.toBeNull();
-    expect(within(goal).queryByRole('button', { name: 'Enter interim production' })).not.toBeInTheDocument();
+    showAs(AGENT, { '/summary': { body: summary({ monthly: NOT_UPLOADED_MONTH }) } });
+    await goalCard();
+    await yearly();
+    expect(within(await goalCard()).queryByRole('button', { name: 'Enter interim production' })).not.toBeInTheDocument();
   });
 
   /*
    * **P19.8-T5 AC-5 (ADR-0230 §6; OD-279's default): typed after the upload, the estimate is the year's figure** — the
-   * month's own APE still the office's — labelled *your estimate* here as on any estimate (the Summary keeps *perkiraan
-   * Anda*, §4), with Edit and Delete; no *Replaced by* note.
+   * month's own APE still the office's — labelled *your estimate* (the Summary keeps *perkiraan Anda*, §4), with Edit
+   * and Delete, on *Yearly* (P19.11-T4: a year's figure, the year's view); no *Replaced by* note.
    */
-  it('P19.8-T5 AC-5 a figure typed over the upload: the year reads it, your estimate, Edit and Delete; the month the office’s', async () => {
+  it('P19.8-T5 AC-5, P19.11-T4 AC-2 a figure typed over the upload: the year reads it, your estimate, Edit and Delete; the month the office’s', async () => {
     showAs(AGENT, {
       '/summary': {
         body: summary({
@@ -1428,22 +1537,242 @@ describe('P19.1-T4 the goal card when production is not uploaded (UI-157)', () =
       },
     });
     const goal = await goalCard();
-    // *Monthly*: the office's own month, and the year's estimate named as such under it.
+    // *Monthly*: the office's own month, and nothing of the year's estimate under it.
     expect(within(goal).getByText('IDR 30M')).toBeInTheDocument();
-    expect(goal.querySelector('[data-estimate-row]')).toHaveTextContent('APE already produced this year: IDR 120M · your estimate');
-    expect(within(goal).getByRole('button', { name: 'Delete' })).toBeInTheDocument();
-    expect(goal.querySelector('[data-estimate-replaced]')).toBeNull();
+    expect(goal.querySelector('[data-estimate-row]')).toBeNull();
     await yearly();
-    expect((await goalCard()).querySelector('[data-estimate]')).toHaveTextContent('IDR 120M · your estimate');
+    const year = await goalCard();
+    expect(year.querySelector('[data-estimate]')).toHaveTextContent('IDR 120M · your estimate');
+    expect(within(year).getByRole('button', { name: 'Delete' })).toBeInTheDocument();
+    expect(year.querySelector('[data-estimate-replaced]')).toBeNull();
   });
 
-  it('P19.1-T4 AC-11 the office’s figure replaced the estimate: the figure is the office’s, and the card says when', async () => {
+  it('P19.1-T4 AC-11, P19.11-T4 AC-2 the office’s figure replaced the estimate: on Yearly the card says when; Monthly says nothing of the year', async () => {
     showAs(AGENT, {
       '/summary': { body: summary({ estimateReplaced: { uploadedOn: '2026-09-12' } }) },
     });
+    expect((await goalCard()).querySelector('[data-estimate-replaced]')).toBeNull();
+    await yearly();
     const goal = await goalCard();
     expect(goal.querySelector('[data-estimate]')).toBeNull();
     expect(goal).not.toHaveTextContent('your estimate');
     expect(goal.querySelector('[data-estimate-replaced]')).toHaveTextContent(/^Replaced by official production data \(uploaded 12 Sep\)$/);
+  });
+});
+
+/*
+ * **P19.11-T4 — the realised APE, the reader's to correct** (UX-12; UXQ2's default, decided by the project lead until
+ * the owner answers): on *Bulanan* the headline is the month's realised APE, compact — the reader's own figure over the
+ * upload, then the upload, then *Not uploaded yet* — and on their own page a tap edits it in place, in millions: Enter
+ * or leaving it saves, Escape cancels, a figure that is no number is said under it. *Changed manually* while their own
+ * is in force; *Back to uploaded data*, or with nothing uploaded *Clear manual figure*. The gap, the policies and the
+ * bar are the server's, from the figure in force.
+ */
+describe('P19.11-T4 UX-12 the realised APE, edited in place on Monthly', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const TYPED_AT = '2026-09-14T05:00:00.000Z';
+  /** The month's own target is Rp 216,5 Jt (the screenshot's): uploaded Rp 55 Jt — 161,5 left, ⌈161,5 ÷ 18⌉ = 9. */
+  const uploaded = () => summary({
+    monthly: {
+      ...figures({ targetMinor: 216.5 * M, actualMinor: 55 * M, attainmentPct: 25, gapMinor: 161.5 * M, policiesNeeded: 9 }),
+      source: { provenance: 'imported', month: '2026-09' }, production: 'official', withoutProduction: null,
+      realised: { source: 'uploaded', uploaded: true, manual: null },
+    },
+  });
+  /** The reader's own Rp 100 Jt over it: 116,5 left, 7 policies. */
+  const manual = (over: Record<string, unknown> = {}, uploadedToo = true) => summary({
+    monthly: {
+      ...figures({ targetMinor: 216.5 * M, actualMinor: 100 * M, attainmentPct: 46, gapMinor: 116.5 * M, policiesNeeded: 7, ...over }),
+      source: { provenance: 'self_reported', month: '2026-09' }, production: 'estimate', withoutProduction: null,
+      realised: { source: 'manual', uploaded: uploadedToo, manual: { minor: (over.actualMinor as number | undefined) ?? 100 * M, typedAt: TYPED_AT } },
+    },
+  });
+  const nothing = () => summary({
+    monthly: {
+      ...figures({ targetMinor: 216.5 * M, actualMinor: null, attainmentPct: null, gapMinor: null, overMinor: null, policiesNeeded: null }),
+      source: null, production: 'none', withoutProduction: { gapMinor: 216.5 * M, policiesNeeded: 13 },
+      realised: { source: 'none', uploaded: false, manual: null },
+    },
+    uploadedOn: { month: null, year: null },
+  });
+  const showWith = (routes: Record<string, StubReply | StubReply[]>) => stubFetch({
+    '/activity/ratios': { body: AGENT_RATIOS }, 'GET /campaigns/chasing': { body: NONE_CHASED }, ...routes,
+  });
+  const goalCard = () => card('Goal vs. actual (APE)');
+  const puts = (calls: { url: string; init: RequestInit }[]) => calls.filter((c) => c.init.method === 'PUT');
+  const field = () => screen.getByRole('textbox', { name: 'Realised APE this month, in millions' }) as HTMLInputElement;
+
+  it('P19.11-T4 AC-5 the headline is the month’s APE, compact, a button on the reader’s own page — the upload’s ⓘ beside it', async () => {
+    showWith({ '/summary': { body: uploaded() } });
+    renderWithSession(<PersonalSummaryPage />, { me: AGENT });
+    const goal = await goalCard();
+    const headline = within(goal).getByRole('button', { name: 'IDR 55M, change the realised APE' });
+    expect(headline).toHaveTextContent('IDR 55M');
+    expect(within(goal).getByRole('button', { name: /^From your office’s upload/ })).toBeInTheDocument();
+    expect(goal.querySelector('[data-month-ape-manual]')).toBeNull();
+    expect(goal).toHaveTextContent('of IDR 216.5M target');
+  });
+
+  it('P19.11-T4 AC-6 a support session reads the month’s figure and its marker, and is offered no way to type or clear it', async () => {
+    showWith({ '/summary': { body: manual() } });
+    renderWithSession(<PersonalSummaryPage />, { me: { ...AGENT, isImpersonating: true, impersonationReadOnly: false } });
+    const goal = await goalCard();
+    expect(goal).toHaveTextContent('IDR 100M');
+    expect(goal.querySelector('[data-month-ape-manual]')).not.toBeNull();
+    expect(within(goal).queryByRole('button', { name: /change the realised APE/ })).toBeNull();
+    expect(within(goal).queryByRole('button', { name: 'Back to uploaded data' })).toBeNull();
+  });
+
+  it('P19.11-T4 AC-5 a tap opens the field on the figure, in millions; Enter saves it through its route, and the page reads it back', async () => {
+    const { calls } = showWith({
+      '/summary': [{ body: uploaded() }, { body: manual({ actualMinor: 216.5 * M, attainmentPct: 100, gapMinor: 0, policiesNeeded: 0, targetMet: true }) }],
+      'PUT /goals/2026/ape-month': { body: { period: '2026', month: '2026-09', manual: { minor: 216.5 * M, typedAt: TYPED_AT } } },
+    });
+    renderWithSession(<PersonalSummaryPage />, { me: AGENT });
+    await userEvent.click(within(await goalCard()).getByRole('button', { name: 'IDR 55M, change the realised APE' }));
+    expect(field()).toHaveFocus();
+    expect(field()).toHaveValue('55');
+    expect(field()).toHaveAttribute('inputmode', 'decimal');
+    // The currency's mark before it, the million's after it.
+    expect(field().closest('span')).toHaveTextContent(/^IDRM$/);
+    await userEvent.clear(field());
+    await userEvent.type(field(), '216.5{Enter}');
+
+    await waitFor(() => expect(puts(calls)).toHaveLength(1));
+    expect(puts(calls)[0].url).toBe('http://api.test/api/v1/goals/2026/ape-month');
+    expect(JSON.parse(String(puts(calls)[0].init.body))).toEqual({ month: '2026-09', apeAchievedMinor: 216_500_000_00 });
+    const goal = await goalCard();
+    await waitFor(() => expect(within(goal).getByRole('button', { name: 'IDR 216.5M, change the realised APE' })).toBeInTheDocument());
+    expect(goal.querySelector('[data-month-ape-manual]')).toHaveTextContent('Changed manually');
+    expect(within(goal).getByRole('button', { name: 'Back to uploaded data' })).toBeInTheDocument();
+  });
+
+  it('P19.11-T4 AC-5 leaving the field saves too; a decimal comma is a decimal', async () => {
+    const { calls } = showWith({ '/summary': [{ body: uploaded() }, { body: manual() }], 'PUT /goals/2026/ape-month': { body: {} } });
+    renderWithSession(<PersonalSummaryPage />, { me: AGENT });
+    await userEvent.click(within(await goalCard()).getByRole('button', { name: 'IDR 55M, change the realised APE' }));
+    await userEvent.clear(field());
+    await userEvent.type(field(), '100,25');
+    await userEvent.tab();
+    await waitFor(() => expect(puts(calls)).toHaveLength(1));
+    expect(JSON.parse(String(puts(calls)[0].init.body))).toEqual({ month: '2026-09', apeAchievedMinor: 100_250_000_00 });
+  });
+
+  it('P19.11-T4 AC-5 Escape cancels: nothing sent, the headline back as it was', async () => {
+    const { calls } = showWith({ '/summary': { body: uploaded() } });
+    renderWithSession(<PersonalSummaryPage />, { me: AGENT });
+    await userEvent.click(within(await goalCard()).getByRole('button', { name: 'IDR 55M, change the realised APE' }));
+    await userEvent.type(field(), '999{Escape}');
+    expect(screen.queryByRole('textbox', { name: 'Realised APE this month, in millions' })).not.toBeInTheDocument();
+    expect(within(await goalCard()).getByRole('button', { name: 'IDR 55M, change the realised APE' })).toBeInTheDocument();
+    expect(puts(calls)).toHaveLength(0);
+  });
+
+  it('P19.11-T4 AC-5 a figure that is no number is said under the field, which stays; nothing is sent', async () => {
+    const { calls } = showWith({ '/summary': { body: uploaded() } });
+    renderWithSession(<PersonalSummaryPage />, { me: AGENT });
+    await userEvent.click(within(await goalCard()).getByRole('button', { name: 'IDR 55M, change the realised APE' }));
+    await userEvent.clear(field());
+    await userEvent.type(field(), '1,2,3{Enter}');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Type the APE in millions, such as 216.5.');
+    expect(field()).toHaveAttribute('aria-invalid', 'true');
+    expect(field()).toHaveAccessibleDescription('Type the APE in millions, such as 216.5.');
+    // Typing again clears the message.
+    await userEvent.type(field(), '{Backspace}');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(puts(calls)).toHaveLength(0);
+  });
+
+  it('P19.11-T4 AC-5 nothing typed, or the figure already in force, changes nothing', async () => {
+    const { calls } = showWith({ '/summary': { body: uploaded() } });
+    renderWithSession(<PersonalSummaryPage />, { me: AGENT });
+    const goal = await goalCard();
+    await userEvent.click(within(goal).getByRole('button', { name: 'IDR 55M, change the realised APE' }));
+    await userEvent.type(field(), '{Enter}');
+    expect(screen.queryByRole('textbox', { name: 'Realised APE this month, in millions' })).not.toBeInTheDocument();
+    await userEvent.click(within(goal).getByRole('button', { name: 'IDR 55M, change the realised APE' }));
+    await userEvent.clear(field());
+    await userEvent.type(field(), '{Enter}');
+    expect(puts(calls)).toHaveLength(0);
+  });
+
+  it('P19.11-T4 AC-5 a refused save says why in the card and keeps the field, to be sent again', async () => {
+    const { calls } = showWith({
+      '/summary': { body: uploaded() },
+      'PUT /goals/2026/ape-month': { status: 404, body: { error: { code: 'NOT_FOUND', message: 'Goal not found.', requestId: 'r' } } },
+    });
+    renderWithSession(<PersonalSummaryPage />, { me: AGENT });
+    const goal = await goalCard();
+    await userEvent.click(within(goal).getByRole('button', { name: 'IDR 55M, change the realised APE' }));
+    await userEvent.clear(field());
+    await userEvent.type(field(), '70{Enter}');
+    expect(await within(goal).findByText('Goal not found.')).toBeInTheDocument();
+    expect(field()).toBeInTheDocument();
+    await userEvent.type(field(), '{Enter}');
+    await waitFor(() => expect(puts(calls)).toHaveLength(2));
+  });
+
+  it('P19.11-T4 AC-5 Back to uploaded data clears the reader’s own figure — null — and the upload is read again', async () => {
+    const { calls } = showWith({ '/summary': [{ body: manual() }, { body: uploaded() }], 'PUT /goals/2026/ape-month': { body: {} } });
+    renderWithSession(<PersonalSummaryPage />, { me: AGENT });
+    const goal = await goalCard();
+    expect(within(goal).getByRole('button', { name: 'IDR 100M, change the realised APE' })).toBeInTheDocument();
+    expect(goal.querySelector('[data-month-ape-manual]')).toHaveTextContent('Changed manually');
+    // The upload's ⓘ is not the figure's while the reader's own is in force.
+    expect(within(goal).queryByRole('button', { name: /^From your office’s upload/ })).not.toBeInTheDocument();
+    expect(within(goal).queryByRole('button', { name: 'Clear manual figure' })).not.toBeInTheDocument();
+    await userEvent.click(within(goal).getByRole('button', { name: 'Back to uploaded data' }));
+    await waitFor(() => expect(puts(calls)).toHaveLength(1));
+    expect(JSON.parse(String(puts(calls)[0].init.body))).toEqual({ month: '2026-09', apeAchievedMinor: null });
+    await waitFor(() => expect(within(goal).getByRole('button', { name: 'IDR 55M, change the realised APE' })).toBeInTheDocument());
+    expect(goal.querySelector('[data-month-ape-manual]')).toBeNull();
+  });
+
+  it('P19.11-T4 AC-5 with nothing uploaded the way back is Clear manual figure — to Not uploaded yet', async () => {
+    const { calls } = showWith({ '/summary': [{ body: manual({}, false) }, { body: nothing() }], 'PUT /goals/2026/ape-month': { body: {} } });
+    renderWithSession(<PersonalSummaryPage />, { me: AGENT });
+    const goal = await goalCard();
+    expect(within(goal).queryByRole('button', { name: 'Back to uploaded data' })).not.toBeInTheDocument();
+    await userEvent.click(within(goal).getByRole('button', { name: 'Clear manual figure' }));
+    await waitFor(() => expect(puts(calls)).toHaveLength(1));
+    expect(JSON.parse(String(puts(calls)[0].init.body))).toEqual({ month: '2026-09', apeAchievedMinor: null });
+    await waitFor(() => expect(within(goal).getByRole('button', { name: 'Not uploaded yet, change the realised APE' })).toBeInTheDocument());
+  });
+
+  it('P19.11-T4 AC-5 Not uploaded yet is the reader’s to fill: the field opens empty', async () => {
+    const { calls } = showWith({ '/summary': { body: nothing() }, 'PUT /goals/2026/ape-month': { body: {} } });
+    renderWithSession(<PersonalSummaryPage />, { me: AGENT });
+    await userEvent.click(within(await goalCard()).getByRole('button', { name: 'Not uploaded yet, change the realised APE' }));
+    expect(field()).toHaveValue('');
+    await userEvent.type(field(), '18.5{Enter}');
+    await waitFor(() => expect(puts(calls)).toHaveLength(1));
+    expect(JSON.parse(String(puts(calls)[0].init.body))).toEqual({ month: '2026-09', apeAchievedMinor: 18_500_000_00 });
+  });
+
+  it('P19.11-T4 AC-4 the gap and the policies are the server’s, from the figure in force — past the target, Reached and None, the bar full', async () => {
+    showWith({ '/summary': { body: manual({ actualMinor: 250 * M, attainmentPct: 115, gapMinor: 0, overMinor: 33.5 * M, policiesNeeded: 0, targetMet: true }) } });
+    renderWithSession(<PersonalSummaryPage />, { me: AGENT });
+    const goal = await goalCard();
+    expect(goal.querySelector('dl')).toHaveTextContent(/^Remaining this monthReached — IDR 33.5M overPolicies neededNone$/);
+    expect(within(goal).getByRole('progressbar')).toHaveAttribute('aria-valuenow', '100');
+  });
+
+  it('P19.11-T4 AC-5 a month of a year that has ended is read, not edited', async () => {
+    showWith({
+      '/summary': {
+        body: summary({
+          ...{ year: '2025', month: '2025-11' },
+          period: { firstMonth: '2025-01', thisMonth: '2026-09', currentMonth: false, currentYear: false },
+          monthly: (manual().monthly as Record<string, unknown>),
+        }),
+      },
+    });
+    renderWithSession(<PersonalSummaryPage />, { me: AGENT });
+    const goal = await goalCard();
+    expect(goal).toHaveTextContent('IDR 100M');
+    expect(within(goal).queryByRole('button', { name: /change the realised APE$/ })).not.toBeInTheDocument();
+    expect(within(goal).queryByRole('button', { name: 'Back to uploaded data' })).not.toBeInTheDocument();
+    expect(goal.querySelector('[data-month-ape-manual]')).toHaveTextContent('Changed manually');
   });
 });

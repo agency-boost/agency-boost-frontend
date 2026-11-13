@@ -226,9 +226,12 @@ describe('P19.2-T1 AC-4 after signing in, an Owner or an Admin is on their own H
 
   it('P19.2-T1 AC-4 sign-in and sign-out forget the tab’s view, so the next session starts on Akun saya', () => {
     const provider = readFileSync(join(SRC, 'components', 'session-provider.tsx'), 'utf8');
+    // Signing in adopts the session it was given (P19.12-T2: registering too), and adopting is where the view is forgotten.
+    const adopt = provider.slice(provider.indexOf('const adopt = useCallback'), provider.indexOf('const signIn = useCallback'));
     const signIn = provider.slice(provider.indexOf('const signIn = useCallback'), provider.indexOf('const signOut = useCallback'));
     const signOut = provider.slice(provider.indexOf('const signOut = useCallback'), provider.indexOf('const endSupportSession'));
-    expect(signIn).toContain('forgetView();');
+    expect(adopt).toContain('forgetView();');
+    expect(signIn).toContain('return adopt(accessToken);');
     expect(signOut).toContain('forgetView();');
   });
 });
@@ -252,7 +255,8 @@ describe('P19.2-T1 AC-5 the views in the avatar menu, on every page (UI-169 item
     nav.path = '/home';
     renderInIndonesian(page('Home'), { me: ADMIN });
     const menu = await openViews();
-    expect(menu.getAllByRole('button').map((b) => b.textContent)).toEqual(['Akun saya', 'KPM Admin · Cempaka Putih']);
+    // The views, then *Keluar* last (P19.11-T6 AC-1).
+    expect(menu.getAllByRole('button').map((b) => b.textContent)).toEqual(['Akun saya', 'KPM Admin · Cempaka Putih', 'Keluar']);
   });
 
   it.each([375, 768, 1024, 1280])('P19.2-T1 AC-5 at %ipx the header names the active view beside the avatar, and in its name', (px) => {
@@ -541,7 +545,8 @@ describe('P19.2-T1 AC-13 the support banner and the bell keep their places, for 
     expect(banner.compareDocumentPosition(frame()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(tabBar()).not.toBeNull();
     const menu = await openViews();
-    expect(menu.getAllByRole('button').map((b) => b.textContent)).toEqual(['My account', 'KPM Owner · Cempaka Putih']);
+    // The views, then *Sign out* last (P19.11-T6 AC-1): signing out is always available, support session or not.
+    expect(menu.getAllByRole('button').map((b) => b.textContent)).toEqual(['My account', 'KPM Owner · Cempaka Putih', 'Sign out']);
     // The root layout mounts the banner once, outside every shell, so the one shell cannot drop it.
     expect(readFileSync(join(SRC, 'app', 'layout.tsx'), 'utf8').match(/<ImpersonationBanner \/>/g)).toHaveLength(1);
   });
@@ -616,5 +621,97 @@ describe('P19.2-T1 AC-9 the Super Admin’s queue count keeps its place in Lainn
     const sheet = within(await screen.findByRole('dialog', { name: 'More' }));
     await waitFor(() => expect(document.querySelector('[data-tile="leaderLimit"]')).toHaveTextContent('2'));
     expect(sheet.getByRole('link', { name: 'Leaders past the limit, 2' })).toHaveAttribute('href', '/admin/leader-limit-requests');
+  });
+});
+
+/*
+ * **P19.11-T6 AC-1 — *Keluar* in the account dropdown** (UX-8, UXQ5; the owner's screenshot of 9 November): the last row,
+ * under *Profil saya* with a divider above it, red as *Lainnya*'s, busy while it runs; one tap ends the session — no
+ * confirmation — and `/login` replaces the page. Wherever the dropdown is: at 375, 768 and 1280px. A single-view account
+ * has no dropdown, and keeps *Keluar* in *Lainnya*, the sidebar and *Profil*. That the session itself ends — both logins,
+ * the token, the cached reads — is `linked-logins.spec.tsx`'s, with the real session provider.
+ */
+describe('P19.11-T6 AC-1 Keluar in the account dropdown (UX-8)', () => {
+  const panel = () => document.querySelector<HTMLElement>('[data-view-menu]')!;
+
+  it.each([375, 768, 1280])('P19.11-T6 AC-1 at %ipx the dropdown ends with Keluar, under Profil saya, a divider above it, red as Lainnya’s', async (px) => {
+    atWidth(px);
+    nav.path = '/home';
+    renderInIndonesian(page('Home'), { me: OWNER });
+    const menu = await openViews();
+    const out = menu.getByRole('button', { name: 'Keluar' });
+    const profile = menu.getByRole('link', { name: 'Profil saya' });
+    // The last thing in the panel, and right after *Profil saya*.
+    const focusable = [...panel().querySelectorAll('a[href], button')];
+    expect(focusable.at(-1)).toBe(out);
+    expect(profile.nextElementSibling).toBe(out);
+    expect(out).toHaveAttribute('data-sign-out');
+    // The divider above it, as above *Profil saya*; *Lainnya*'s red; a 44px row.
+    expect(out).toHaveClass('border-t', 'border-divider', 'text-pill-red-ink', 'min-h-11', 'font-semibold');
+    expect(profile).toHaveClass('border-t', 'border-divider');
+    expect(out).not.toHaveAttribute('aria-busy');
+    expect(out).toBeEnabled();
+  });
+
+  it('P19.11-T6 AC-1 in English it reads Sign out', async () => {
+    nav.path = '/home';
+    renderWithSession(page('Home'), { me: OWNER });
+    const menu = await openViews();
+    expect([...panel().querySelectorAll('a[href], button')].at(-1)).toBe(menu.getByRole('button', { name: 'Sign out' }));
+  });
+
+  it('P19.11-T6 AC-1 one tap signs out at once — no confirmation — and /login replaces the page', async () => {
+    nav.path = '/kpm/overview';
+    const signOut = vi.fn(async () => undefined);
+    renderInIndonesian(page(), { me: OWNER, signOut });
+    const menu = await openViews();
+    await userEvent.click(menu.getByRole('button', { name: 'Keluar' }));
+    expect(signOut).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('/login'));
+    // Replaced, never pushed: Back does not return to the page the session was on.
+    expect(nav.push).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+  });
+
+  it('P19.11-T6 AC-1 busy while it runs: Sedang keluar…, aria-busy, not pressed twice', async () => {
+    nav.path = '/home';
+    let finish: () => void = () => undefined;
+    const signOut = vi.fn(() => new Promise<void>((resolve) => { finish = resolve; }));
+    renderInIndonesian(page('Home'), { me: OWNER, signOut });
+    const menu = await openViews();
+    await userEvent.click(menu.getByRole('button', { name: 'Keluar' }));
+    const busy = await within(panel()).findByRole('button', { name: 'Sedang keluar…' });
+    expect(busy).toHaveAttribute('aria-busy', 'true');
+    expect(busy).toBeDisabled();
+    await userEvent.click(busy);
+    expect(signOut).toHaveBeenCalledTimes(1);
+    expect(nav.replace).not.toHaveBeenCalled();
+    await act(async () => finish());
+    await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('/login'));
+  });
+
+  it.each([375, 1280])('P19.11-T6 AC-1 at %ipx a single-view account has no dropdown: the avatar is its link to Profil, Keluar where it was', async (px) => {
+    atWidth(px);
+    nav.path = '/home';
+    renderInIndonesian(page('Home'), { me: AGENT });
+    expect(titleAvatar().tagName).toBe('A');
+    expect(titleAvatar()).toHaveAttribute('href', '/profile');
+    expect(document.querySelector('[data-sign-out]')).toBeNull();
+    if (px < 1024) {
+      await userEvent.click(screen.getByRole('button', { name: 'Lainnya' }));
+      expect(within(await screen.findByRole('dialog', { name: 'Lainnya' })).getByRole('button', { name: 'Keluar' })).toBeInTheDocument();
+    } else {
+      await userEvent.click(document.querySelector<HTMLElement>('[aria-controls="sidebar-user-actions"]')!);
+      expect(screen.getByRole('button', { name: 'Keluar' })).toBeInTheDocument();
+    }
+  });
+
+  it('P19.11-T6 AC-1 axe on the dropdown with Keluar, at 375px', async () => {
+    atWidth(375);
+    nav.path = '/home';
+    const { container } = renderInIndonesian(page('Home'), { me: OWNER });
+    await openViews();
+    expect((await axe(container, { rules: { 'color-contrast': { enabled: false } } })).violations).toEqual([]);
   });
 });

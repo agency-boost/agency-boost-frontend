@@ -202,7 +202,7 @@ describe('/campaigns, the list (P18.2-T7)', () => {
       expect(card).not.toHaveTextContent('🏆');
     });
 
-    it('P18.7-T10 AC-3, P18.7-T9 AC-3 the client’s example: Rp 16 jt APE + 3 new hires, APE’s ⓘ where the list first names it', async () => {
+    it('P18.7-T10 AC-3, P18.7-T9 AC-3 the client’s example: Rp 16 Jt APE + 3 new hires, APE’s ⓘ where the list first names it', async () => {
       const sixteen = campaign({ code: 'SIXTEEN', title: 'Sixteen', requirements: [APE(16), NEW_HIRE(3)] });
       list({ 'GET /campaigns': { body: { campaigns: [sixteen, PROMO_AGENT], can: { chase: true } } } });
       await listReady();

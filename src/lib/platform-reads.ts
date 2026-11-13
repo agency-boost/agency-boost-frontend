@@ -3,9 +3,10 @@
 import { api } from './api-client';
 
 /**
- * **The Super Admin's reads across KPMs** (ADR-0207; P19.4-T3): *All members*, the KPM comparison, *Lihat sebagai KPM*,
- * *Data bulanan* and the company's *KPM & data*. Every one is a `GET`, the Super Admin's alone, and audited by the server
- * per read — nothing here writes. The fields are ADR-0207 §2's, and nothing else: never an email or a phone.
+ * **The Super Admin's reads across KPMs** (ADR-0207; P19.4-T3): *All members* and its *Akun terdaftar* (P19.12-T2), the
+ * KPM comparison, *Lihat sebagai KPM*, *Data bulanan* and the company's *KPM & data*. Every one is a `GET`, the Super
+ * Admin's alone, and audited by the server per read — nothing here writes. The fields are ADR-0207 §2's, and nothing
+ * else: never a phone, and an email on *Akun terdaftar*'s rows alone (ADR-0245 §2).
  *
  * *Lihat sebagai KPM*'s two reads are beside the Owner's own, in `kpm-analytics.ts` and `kpm-compliance.ts` (the bundle,
  * 2026-11-06): they build their queries there, and importing those modules here put both, their words and the campaigns'
@@ -61,6 +62,43 @@ export function membersQuery(filters: MembersFilters): string {
 }
 
 export const readMembers = (filters: MembersFilters = {}) => api<PlatformMembersPage>(`/admin/members?${membersQuery(filters)}`);
+
+/** *Akun terdaftar*'s KPM filter (ADR-0245 §1): *Tanpa KPM* — no active or pending membership — or *Punya KPM*. */
+export type AccountKpmFilter = 'none' | 'some';
+
+/**
+ * **One row of *Akun terdaftar*** (`GET /admin/users`, P19.12-T2; ADR-0245 §1, §2): a registered account, with or without
+ * a KPM. The one platform read that returns an email, the account's own; never a phone, a birth date or a gender.
+ */
+export interface PlatformAccountRow {
+  userId: string;
+  fullName: string;
+  email: string;
+  company: CompanyRef | null;
+  /** `YYYY-MM-DD`, in Asia/Jakarta. */
+  registeredOn: string;
+  emailVerified: boolean;
+  /** `null`: *"Belum pernah"*. */
+  lastSignInOn: string | null;
+  /** Active or pending memberships in any KPM; `0` is *Belum punya KPM*. */
+  kpmCount: number;
+}
+
+export interface PlatformAccountsPage {
+  rows: PlatformAccountRow[];
+  page: number;
+  pageSize: number;
+  total: number;
+}
+
+export interface AccountsFilters {
+  q?: string;
+  kpm?: AccountKpmFilter;
+  page?: number;
+}
+
+export const readAccounts = (filters: AccountsFilters = {}) =>
+  api<PlatformAccountsPage>(`/admin/users?${membersQuery(filters as MembersFilters)}`);
 
 /** A rate as the Overview serves it. */
 export interface Rate { count: number; of: number; pct: number | null }

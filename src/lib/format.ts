@@ -23,7 +23,7 @@ import { DEFAULT_LANGUAGE, type Language } from '@/i18n/language';
  * | a time · a date and a time | `13.05` · `26 Okt 2026, 13.05` | `13:05` · `26 Oct 2026, 13:05` (24-hour) |
  * | a number · a decimal | `1.250` · `17,6` | `1,250` · `17.6` |
  * | a percentage · a ratio beside its benchmark | `96%` · `29,6%` | `96%` · `29.6%` |
- * | money compact · in full | `Rp 5,8 M`, `Rp 150 jt`, `Rp 750 rb` · `Rp 45.000.000` | `IDR 5.8B`, `IDR 150M`, `IDR 750K` · `IDR 45,000,000` |
+ * | money compact · in full | `Rp 5,8 M`, `Rp 150 Jt`, `Rp 750 rb` · `Rp 45.000.000` | `IDR 5.8B`, `IDR 150M`, `IDR 750K` · `IDR 45,000,000` |
  *
  * **One rounding** (ADR-0174 §1, AC-2): a figure is computed once, and the language changes only its characters —
  * the separators, a month's or a weekday's name, the currency's mark and a unit's — never the figure. The week starts
@@ -35,7 +35,7 @@ import { DEFAULT_LANGUAGE, type Language } from '@/i18n/language';
  *
  * - a percentage **whole**, rounded half up, with no *,0* — `96%` — but a ratio compared with its benchmark keeps
  *   its tenth (`29,6%`), and a figure stated as a rule or a record keeps the places it has (`7,25%`);
- * - money **compact** everywhere — a card, a tile, a sentence **and a table** — `Rp 357,5 jt`, and **in full**
+ * - money **compact** everywhere — a card, a tile, a sentence **and a table** — `Rp 357,5 Jt`, and **in full**
  *   only in Data upload's cells and correction panel, an input and what it echoes, and a price — `Rp 357.500.000`.
  *
  * **Figures, not words.** The words around a figure — *points*, *of*, *Not tracked* — are the catalogue's
@@ -638,7 +638,7 @@ export function formatDecimalInput(value: number | null, language: Language = DE
  * **Integer minor units, IDR sen, everywhere** (invariant §9). A screen holds sen and writes rupiah
  * through one of two formatters, and which one is a rule, not a taste:
  *
- * - **`formatRupiahCompact`** — `Rp 500 jt`, `Rp 5,8 M` — **everywhere**: a card, a KPI tile, a summary, a chip,
+ * - **`formatRupiahCompact`** — `Rp 500 Jt`, `Rp 5,8 M` — **everywhere**: a card, a KPI tile, a summary, a chip,
  *   a pill, a sentence and its tooltip, a print **and a table's cell** (the analytics' `Rp 5.672.500.000` reads
  *   `Rp 5,7 M`). *M* is *miliar* and *jt* is *juta* on every screen.
  * - **`formatRupiah`, in full** — `Rp 500.000.000` — **only where precision matters**: Data upload's cells and
@@ -720,7 +720,7 @@ export function formatMoneyInFull(minor: number, currency: string, language: Lan
 /**
  * **Rupiah in each compact unit, by the mark a screen writes after it** (ADR-0174 §4; `metrics-and-definitions.md`
  * §B.25): `M` a *miliar*, `jt` a *juta*, `rb` a *ribu*. Held once, here — a screen that writes a figure in a header's
- * unit, the forum's *APE (Rp M)* and *Avg. Case Size (Rp jt)*, reads its size from this, never a second `1e9`.
+ * unit, the forum's *APE (Rp M)* and *Avg. Case Size (Rp Jt)*, reads its size from this, never a second `1e9`.
  *
  * **The key is the unit's code, its Indonesian mark**; what each language writes after a figure is
  * `formatMoneyUnit`'s and `formatRupiahCompact`'s (*M* is English's *B*: a *miliar* is a billion).
@@ -731,7 +731,7 @@ export type CompactUnit = keyof typeof RUPIAH_PER_UNIT;
 /** Each compact unit's mark in each language (§E): a *miliar* is *M* and *B*, a *juta* *jt* and *M*, a *ribu* *rb* and *K*. */
 const UNIT_MARKS: Readonly<Record<CompactUnit, Readonly<Record<Language, string>>>> = {
   M: { id: 'M', en: 'B' },
-  jt: { id: 'jt', en: 'M' },
+  jt: { id: 'Jt', en: 'M' },
   rb: { id: 'rb', en: 'K' },
 };
 /** Between a compact figure and its unit: a space in Indonesian, `Rp 5,8 M`; none in English, `IDR 5.8B` (§E). */
@@ -742,8 +742,8 @@ const COMPACT_UNITS: readonly CompactUnit[] = ['M', 'jt', 'rb'];
 
 /**
  * **A header's money unit** (P18.10-T3 AC-1; ADR-0174 §5): what goes in the brackets of a column or a row whose
- * figures are written in one unit — *Rp M* and *Rp jt* in Indonesian, *IDR B* and *IDR M* in English, so the forum's
- * *APE (Rp M)* reads *APE (IDR B)* and its *Avg. Case Size (Rp jt)* reads *Avg. Case Size (IDR M)*. The name before
+ * figures are written in one unit — *Rp M* and *Rp Jt* in Indonesian, *IDR B* and *IDR M* in English, so the forum's
+ * *APE (Rp M)* reads *APE (IDR B)* and its *Avg. Case Size (Rp Jt)* reads *Avg. Case Size (IDR M)*. The name before
  * the brackets is a kept-English term (§A.4); the unit is a format. **Not for a file's header**: the production file's
  * *APE (Rp M)* is the carrier's million and the import's contract (AC-4), written by the template, in no language.
  */
@@ -753,16 +753,16 @@ export function formatMoneyUnit(unit: CompactUnit, language: Language = DEFAULT_
 
 /**
  * A sum **compact**, for every figure but those `formatRupiah` keeps — a card, a tile, a summary, a chip, a
- * sentence and a table: `Rp 750 rb`, `Rp 500 jt`, `Rp 357,5 jt`, `Rp 1,2 M` (ADR-0174 §4; the thresholds and the
+ * sentence and a table: `Rp 750 rb`, `Rp 500 Jt`, `Rp 357,5 Jt`, `Rp 1,2 M` (ADR-0174 §4; the thresholds and the
  * rounding are `metrics-and-definitions.md` §B.25, stated once) — `IDR 750K`, `IDR 500M`, `IDR 357.5M`, `IDR 1.2B` in
  * English, at the same thresholds and to the same figure:
  *
  * - 1.000.000.000 and over in *M* (miliar), 1.000.000 in *jt* (juta), 1.000 in *rb* (ribu); below, in full.
  *   There is no *triliun*: a thousand *miliar* and more stays in *M*, grouped, `Rp 1.500 M` (`IDR 1,500B`);
- * - **at most one decimal**, a comma, and no trailing *,0* — `Rp 500 jt`, never `Rp 500,0 jt`;
+ * - **at most one decimal**, a comma, and no trailing *,0* — `Rp 500 Jt`, never `Rp 500,0 Jt`;
  * - **rounded half up on the digit shown, in integers** — `1.150` is `Rp 1,2 rb`, which `1.15 × 10` in floating
  *   point would make `Rp 1,1 rb` — and a figure that rounds up to a thousand of its unit is written in the next:
- *   `999.950.000` is `Rp 1 M`, not `Rp 1.000 jt`;
+ *   `999.950.000` is `Rp 1 M`, not `Rp 1.000 Jt`;
  * - a negative keeps its minus in front, `-Rp 750 rb`.
  *
  * **`lossless`** writes the full figure instead whenever the compact one would round: for a threshold in a
@@ -781,7 +781,7 @@ export function formatRupiahCompact(
     const step = RUPIAH_PER_UNIT[unit] / 10;
     let tenths = Math.floor(rupiah / step);
     if (2 * (rupiah - tenths * step) >= step) tenths += 1;
-    // A thousand of this unit is one of the next: `999.950.000` is `Rp 1 M`, never `Rp 1.000 jt`.
+    // A thousand of this unit is one of the next: `999.950.000` is `Rp 1 M`, never `Rp 1.000 Jt`.
     if (tenths >= 10_000 && index > 0) { index -= 1; continue; }
     if (lossless && tenths * step !== rupiah) break;
     const [whole, tenth] = [Math.floor(tenths / 10), tenths % 10];
@@ -792,7 +792,7 @@ export function formatRupiahCompact(
 }
 
 /**
- * Two compact sums read as one figure, **one `Rp` between them**: `Rp 357,5 jt / 712,7 jt` (UI-030, ADR-0167 §1, ADR-0174 §4);
+ * Two compact sums read as one figure, **one `Rp` between them**: `Rp 357,5 Jt / 712,7 Jt` (UI-030, ADR-0167 §1, ADR-0174 §4);
  * `IDR 357.5M / 712.7M` in English, one `IDR`. The client's example for the Unit Dashboard's *Direct Group
  * production*, which wrapped as *Rp 357.500.000 / Rp 712.666.667*; `joiner` is the word the screen already uses —
  * `/` on a tile, `of` in a sentence — and the caller's, in the reader's language.

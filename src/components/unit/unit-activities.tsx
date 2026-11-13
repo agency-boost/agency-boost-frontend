@@ -37,6 +37,8 @@ import {
  *   category row is a subtotal row** (MOB UI-183): its *Total* and one bold count per person (*·* for 0), open or closed;
  *   **activity cells are plain numbers, with no tint** (the heat map, D-17, is gone); the navy *Total* row at the foot.
  *   Counts only, never points; **every figure the server's**, a category's subtotal the sum of its types' counts.
+ *   **The two sticky columns are one solid block at every scroll position** (P19.11-T6 AC-2; UX-5): the fixed layout at
+ *   every width, the columns sized by a `<colgroup>` and *Total*'s `left` the *Aktivitas* width itself (`STICKY_WIDTHS`).
  * - **The ratio card below** (UI-053's shared card): *Ratio · 30 hari terakhir* at the section titles' size (MOB UI-185),
  *   always the last 30 days, with **one picker, *Unit ⌄*** (MOB UI-184): *Unit*, *Group*, then *PER ORANG* and every
  *   person of the Group. A person is read again with `ratioFor`, and the card shows **their own five ratios** — the table
@@ -239,11 +241,26 @@ function Controls({
 }
 
 /**
- * The sticky columns: *Aktivitas* at the left edge — 132px on a phone, the mockup's, so a short name fits on its line —
- * and *Total* right of it.
+ * **The two sticky columns' widths, said once** (P19.11-T6 AC-2; UX-5): *Aktivitas* `--act` — 132px on a phone, the
+ * mockup's, so a short name fits on its line; 120px from 768px; 200px from 1024px — and *Total* `--tot`, 44px, 64px from
+ * 1024px. The table wears them; its `<colgroup>` sizes the two columns by them, and *Total*'s `left` **is** `--act`, so
+ * the two meet at every breakpoint by construction. A person's column is at least `PERSON_REM` (56px): the table's
+ * `min-width` is the sum, so once the people overflow, the table scrolls and each person's column is exactly that.
+ *
+ * *Changed 2026-11-10 (P19.11-T6 AC-2; UX-5, the owner's screenshot of 9 Nov):* the table was **auto layout below
+ * 1024px**, where a cell's width is only a preference. Once the people overflowed, the two sticky columns shrank to their
+ * content while *Total* stayed pinned at `left: 8.25rem`, and the people scrolling by showed through the gap between
+ * them. Now the **fixed layout at every width**: the columns are the `<colgroup>`'s, never the content's.
  */
-const ACTIVITY_COL = 'sticky left-0 z-[1] w-[8.25rem] bg-card md:w-[7.5rem] lg:w-[12.5rem]';
-const TOTAL_COL = 'sticky left-[8.25rem] z-[1] w-11 bg-hover-row text-center font-semibold md:left-[7.5rem] lg:left-[12.5rem] lg:w-16';
+const STICKY_WIDTHS = '[--act:8.25rem] [--tot:2.75rem] md:[--act:7.5rem] lg:[--act:12.5rem] lg:[--tot:4rem]';
+/** A person's column, at least: the mockup's 56px. */
+const PERSON_REM = 3.5;
+/**
+ * The sticky columns, every row type alike. *Aktivitas*'s words are clipped inside its cell by the words themselves
+ * (`truncate`, a phone's face `overflow-hidden`), never by the cell: a phone's tap bubble rises out of it.
+ */
+const ACTIVITY_COL = 'sticky left-0 z-[1] bg-card';
+const TOTAL_COL = 'sticky left-[var(--act)] z-[1] bg-hover-row text-center font-semibold';
 
 /** A count: the number plain, or a light *·* a screen reader hears as 0. `strong` for a category's subtotal. */
 function Count({ n, strong = false }: { n: number; strong?: boolean }) {
@@ -254,11 +271,17 @@ function Count({ n, strong = false }: { n: number; strong?: boolean }) {
   return <span className={strong ? 'font-extrabold text-ink' : 'text-ink'}>{formatNumber(n, {}, figures)}</span>;
 }
 
-function ActivityTable({ view, scope }: { view: UnitActivitiesView; scope: UnitScope }) {
+/**
+ * **The activity table** — exported for `unit-activities.browser.spec.ts` (P19.11-T6 AC-2), which draws it in a real
+ * Chrome. `phone` stands in for the width where there is no window to ask (`renderToStaticMarkup`); the screen passes
+ * nothing and the table asks `useMediaQuery`.
+ */
+export function ActivityTable({ view, scope, phone: drawnAsPhone }: { view: UnitActivitiesView; scope: UnitScope; phone?: boolean }) {
   const t = useMessages(unitDashboardMessages);
   const figures = useFigureLanguage();
   const captionId = useId();
-  const phone = useMediaQuery('phone');
+  const phoneNow = useMediaQuery('phone');
+  const phone = drawnAsPhone ?? phoneNow;
   const people = scopePeople(view, scope);
   const totals: ScopeTotals = view.totals[scope];
   const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set(view.sections.slice(0, 2).map((s) => s.code)));
@@ -273,14 +296,24 @@ function ActivityTable({ view, scope }: { view: UnitActivitiesView; scope: UnitS
   return (
     <div className="overflow-clip rounded-lg bg-card">
       <div className="overflow-x-auto" data-activity-scroll="">
-        <table aria-labelledby={captionId} className="relative w-full border-collapse text-base lg:table-fixed">
+        <table
+          aria-labelledby={captionId}
+          className={cn('relative w-full table-fixed border-collapse text-base', STICKY_WIDTHS)}
+          style={{ minWidth: `calc(var(--act) + var(--tot) + ${people.length * PERSON_REM}rem)` }}
+        >
           <caption id={captionId} className="sr-only">{`${t.v1.tabs.activities} · ${t.v1.scope[scope]}`}</caption>
+          {/* The columns' widths are these, never the cells' content (P19.11-T6 AC-2): a person's column takes its share. */}
+          <colgroup>
+            <col data-col="activity" className="w-[var(--act)]" />
+            <col data-col="total" className="w-[var(--tot)]" />
+            {people.map((person) => <col key={person.membershipId} data-col="person" />)}
+          </colgroup>
           <thead>
             <tr className="h-14">
-              <th scope="col" className={cn(ACTIVITY_COL, 'px-2.5 text-left text-xs font-semibold text-muted')}>{t.columns.activity}</th>
+              <th scope="col" className={cn(ACTIVITY_COL, 'truncate px-2.5 text-left text-xs font-semibold text-muted')}>{t.columns.activity}</th>
               <th scope="col" className={cn(TOTAL_COL, 'text-xs text-muted')}>{t.v1.total}</th>
               {people.map((person) => (
-                <th key={person.membershipId} scope="col" className="w-14 min-w-14 px-0.5 align-middle text-xs font-semibold text-ink">
+                <th key={person.membershipId} scope="col" className="px-0.5 align-middle text-xs font-semibold text-ink">
                   <span className="flex flex-col items-center gap-0.5">
                     <Avatar name={person.name} seed={person.membershipId} photoUrl={person.photoUrl ?? null} size={28} />
                     <span aria-hidden="true" className="block max-w-full truncate uppercase">{firstName(person.name)}</span>
@@ -303,7 +336,7 @@ function ActivityTable({ view, scope }: { view: UnitActivitiesView; scope: UnitS
           ))}
           <tfoot>
             <tr className="h-10 bg-secondary text-secondary-contrast">
-              <th scope="row" className={cn(ACTIVITY_COL, 'bg-secondary px-2.5 text-left font-semibold')}>{t.v1.total}</th>
+              <th scope="row" className={cn(ACTIVITY_COL, 'truncate bg-secondary px-2.5 text-left font-semibold')}>{t.v1.total}</th>
               <td className={cn(TOTAL_COL, 'bg-secondary font-semibold')}>{n(totals.total)}</td>
               {people.map((person) => (
                 <td key={person.membershipId} className="text-center tabular-nums">{n(person.total)}</td>
@@ -357,7 +390,7 @@ function SectionRows({
         <tr key={type.code} className="h-11 border-t border-divider" data-type={type.code}>
           <th scope="row" className={cn(ACTIVITY_COL, 'px-2.5 text-left font-normal text-ink')}>
             {phone ? <ShortName type={type} /> : (
-              <span title={type.label} className="block max-w-[7.5rem] truncate lg:max-w-[12.5rem]">{type.label}</span>
+              <span title={type.label} className="block truncate">{type.label}</span>
             )}
           </th>
           <td className={cn(TOTAL_COL, 'tabular-nums')}>{n(countOf(totals.counts, type.code))}</td>
@@ -386,7 +419,8 @@ function ShortName({ type }: { type: ActivitiesType }) {
       align="fit"
       className="max-w-full"
       face={cn(
-        'h-auto min-h-0 w-auto min-w-0 justify-start rounded-none p-0 text-left text-base font-medium leading-snug text-ink',
+        // `max-w-full overflow-hidden`: clipped inside the column, the bubble beside the face untouched (P19.11-T6 AC-2).
+        'h-auto min-h-0 w-auto min-w-0 max-w-full justify-start overflow-hidden rounded-none p-0 text-left text-base font-medium leading-snug text-ink',
         short ? 'whitespace-nowrap' : 'line-clamp-2 whitespace-normal [overflow-wrap:anywhere]',
       )}
     />

@@ -4,13 +4,14 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { Boost } from '@/components/boost';
 import { Button, ColorInput, Field } from '@/components/ui/field';
 import { kept } from '@/i18n/kept';
-import { useMessages } from '@/i18n/language-provider';
+import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
 import { brandingMessages } from '@/i18n/messages/branding';
-import { ApiRequestError, toDisplayError } from '@/lib/api-client';
+import { toDisplayError } from '@/lib/api-client';
 import {
   brandingApi, paletteStyle, uploadBrandingImage, type BrandingOwner, type BrandingPreview, type BrandingView, type UploadKind,
 } from '@/lib/branding';
 import { cn } from '@/lib/cn';
+import { formatNumber } from '@/lib/format';
 import type { BrandingPalette } from '@/lib/session';
 
 /** One picture of a draft: its folder, a preview link where the page has one, and the wide logo's size. */
@@ -55,11 +56,13 @@ function tokenValue(name: string): string | null {
   return HEX.test(value) ? value : null;
 }
 
-/** What the preview answered for the two colours: the palette, or which one no text reads on (acceptance 2). */
+/**
+ * What the preview answered for the two colours: the palette, with each colour's fill. No colour is refused
+ * (P19.12-T3; ADR-0246): `invalid` is a colour that is not `#rrggbb`, or one set without the other.
+ */
 export type ColourCheck =
   | { state: 'idle' }
   | { state: 'ok'; preview: BrandingPreview }
-  | { state: 'unreadable'; field: 'primary' | 'secondary' }
   | { state: 'invalid' };
 
 /**
@@ -94,27 +97,23 @@ export function BrandingEditor({ owner, draft, onChange, disabled, onCheck }: {
     const timer = setTimeout(() => {
       brandingApi.preview(JSON.parse(ownerKey) as BrandingOwner, primary, secondary)
         .then((preview) => { if (live) setCheck({ state: 'ok', preview }); })
-        .catch((err: unknown) => {
-          if (!live) return;
-          const field = err instanceof ApiRequestError && err.error.code === 'BRANDING_COLOUR_UNREADABLE'
-            ? ((err.error.details as { field?: 'primary' | 'secondary' } | undefined)?.field ?? 'primary')
-            : null;
-          setCheck(field ? { state: 'unreadable', field } : { state: 'invalid' });
-        });
+        // A preview that did not arrive paints nothing and blocks nothing: *Simpan* answers for itself.
+        .catch(() => { if (live) setCheck({ state: 'idle' }); });
     }, 250);
     return () => { live = false; clearTimeout(timer); };
   }, [draft, ownerKey]);
 
   useEffect(() => { onCheck?.(check); }, [check, onCheck]);
 
+  const figures = useFigureLanguage();
   const palette = check.state === 'ok' ? check.preview.palette : null;
+  // The field's one note: how its words read, and — where the colour was moved to a shade they read on — to which
+  // (P19.12-T3 AC-3; ADR-0246 §5).
   const colourNote = (field: 'primary' | 'secondary') => {
-    if (check.state === 'unreadable' && check.field === field) return { tone: 'alert' as const, text: t.unreadable };
-    if (check.state === 'ok') {
-      const c = check.preview[field];
-      return { tone: 'muted' as const, text: t.contrast({ ratio: c.ratio.toFixed(2), side: c.contrast }) };
-    }
-    return null;
+    if (check.state !== 'ok') return null;
+    const c = check.preview[field];
+    const ratio = formatNumber(c.ratio, { decimals: 2 }, figures);
+    return c.adjusted ? t.adjusted({ fill: c.fill, ratio, side: c.contrast }) : t.contrast({ ratio, side: c.contrast });
   };
   const setColour = (field: 'primary' | 'secondary', value: string) => {
     const next = { ...draft, [field]: value.trim() === '' ? null : value.trim() };
@@ -174,7 +173,7 @@ export function BrandingEditor({ owner, draft, onChange, disabled, onCheck }: {
 
 function ColourField({ label, hint, value, disabled, note, onChange }: {
   label: string; hint: string; value: string | null; disabled: boolean;
-  note: { tone: 'alert' | 'muted'; text: string } | null; onChange: (value: string) => void;
+  note: string | null; onChange: (value: string) => void;
 }) {
   const id = useId();
   const t = useMessages(brandingMessages);
@@ -182,9 +181,8 @@ function ColourField({ label, hint, value, disabled, note, onChange }: {
     <Field label={label} hint={hint} htmlFor={id}>
       <ColorInput id={id} value={value ?? ''} disabled={disabled} onChange={onChange} aria-describedby={`${id}-note`} />
       <span className="sr-only">{t.hex({ field: label })}</span>
-      <p id={`${id}-note`} role={note?.tone === 'alert' ? 'alert' : undefined}
-        className={cn('mt-1 min-h-5 text-sm', note?.tone === 'alert' ? 'font-semibold text-alert' : 'text-muted')}>
-        {note?.text ?? ''}
+      <p id={`${id}-note`} className="mt-1 min-h-5 text-sm text-muted">
+        {note ?? ''}
       </p>
     </Field>
   );

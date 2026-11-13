@@ -91,8 +91,8 @@ export const MEDICAL = product({
   productId: 'prod-medical', code: 'PRUWELL_MEDICAL', name: 'PRUWell Medical', fields: MEDICAL_FIELDS,
   plans: [
     { name: 'Bronze', popular: false, highlights: [{ label: 'Kamar per hari', value: 'Rp 500 rb' }] },
-    { name: 'Silver', popular: false, highlights: [{ label: 'Kamar per hari', value: 'Rp 1 jt' }] },
-    { name: 'Gold', popular: true, highlights: [{ label: 'Kamar per hari', value: 'Rp 1,5 jt' }, { label: 'Wilayah', value: 'Asia' }] },
+    { name: 'Silver', popular: false, highlights: [{ label: 'Kamar per hari', value: 'Rp 1 Jt' }] },
+    { name: 'Gold', popular: true, highlights: [{ label: 'Kamar per hari', value: 'Rp 1,5 Jt' }, { label: 'Wilayah', value: 'Asia' }] },
   ],
   faq: [{ question: 'Apakah ada masa tunggu?', answer: 'Ada, 30 hari untuk sakit biasa.' }],
   riders: [{ code: 'PRU_PA', name: 'PRUPersonal Accident' }],

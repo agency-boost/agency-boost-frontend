@@ -17,8 +17,9 @@ export interface Me {
     platformRole: 'super_admin' | 'none';
     /**
      * **Whether their address is verified** (P19-T1 AC-4; UI-163, ADR-0190 §4): an account signs in before it is, and
-     * every shell shows *"Verifikasi email Anda · Kirim ulang"* while this is `false` (`VerifyEmailBanner`). The API
-     * always sends it; optional so a fixture that is about something else need not — absent reads as verified.
+     * every shell shows *"Email Anda belum diverifikasi · Kirim ulang tautan"* while this is `false`
+     * (`VerifyEmailBanner`). The API always sends it; optional so a fixture that is about something else need not —
+     * absent reads as verified.
      */
     emailVerified?: boolean;
     /*
@@ -196,6 +197,12 @@ export interface SessionValue {
    * not be read — so the login page can ask whether *that* person can open the page it came from.
    */
   signIn: (email: string, password: string) => Promise<Me | null>;
+  /**
+   * **Takes up a session the server just started** (P19.12-T2 AC-3; ADR-0245 §3): an access token answered by a route
+   * that also set the refresh cookie — `POST /auth/register` for an account it made. Held in memory as `signIn` holds
+   * login's, and resolving, as it does, to who is now signed in.
+   */
+  adopt: (accessToken: string) => Promise<Me | null>;
   signOut: () => Promise<void>;
   reload: () => Promise<void>;
 }

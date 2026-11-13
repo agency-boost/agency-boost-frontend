@@ -14,12 +14,11 @@ import { calendarMessages } from '@/i18n/messages/calendar';
 import { confirmationMessages } from '@/i18n/messages/confirmations';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import {
-  COMPARE_MAX, DISPLAYS, entryDate, initialsOf, isHiddenTask, peopleOn, readCalendar, readDownline, readEntry,
-  setCoachingItemDone, setLeadActionDone, viewOf,
-  type CalendarDisplay, type CalendarDownlinePerson, type CalendarEntry, type CalendarNow, type CalendarRead,
-  type CalendarTask, type CalendarView,
+  COMPARE_MAX, DISPLAYS, entryDate, initialsOf, isHiddenTask, peopleOn, readCalendar, readDownline, readEntry, viewOf,
+  type CalendarDisplay, type CalendarDownlinePerson, type CalendarEntry, type CalendarRead, type CalendarTask,
+  type CalendarView,
 } from '@/lib/calendar';
-import { readLead, type Lead } from '@/lib/leads';
+import type { Lead } from '@/lib/leads';
 import { HOUR_PX, nextHalfHour, OPEN_AT_HOUR, openingHour } from '@/lib/calendar-layout';
 import { DEFAULT_END, DEFAULT_START, type Slot } from '@/lib/calendar-form';
 import { formatDayRange, formatMonth } from '@/lib/format';
@@ -27,18 +26,19 @@ import { joinInFlight } from '@/lib/in-flight';
 import { announceInboxChanged } from '@/lib/notifications';
 import { useCan, useSession } from '@/lib/session';
 import { useMediaQuery } from '@/lib/use-media-query';
+import { useOfficeMinute } from '@/lib/use-office-minute';
 import { usePhone } from '@/lib/use-phone';
 import { cn } from '@/lib/cn';
 import { AgendaPane, AgendaSkeleton, type AgendaPerson } from './agenda';
 import { type PaneHead } from './calendar-parts';
 import {
-  CalendarTasksContext, filterRead, TaskPopup, TypeChips, type CalendarTasks, type ComparedTasks, type FilterKind,
-  type TaskPerson,
+  CalendarTasksContext, filterRead, TaskPopup, TypeChips, type ComparedTasks, type FilterKind, type TaskPerson,
 } from './calendar-tasks';
 import { CompareBar } from './compare-bar';
 import type { EditorState } from './entry-dialog';
 import { MonthGrid, MonthSkeleton } from './month-grid';
 import { ThreeDays } from './three-days';
+import { useTaskTicks } from './task-ticks';
 import { WeekPane, WeekSkeleton, type ScrollGroup } from './week-pane';
 
 /** The lead's details from a task's › (UI-104 point 4; D-19), loaded when a lead is opened. */
@@ -149,6 +149,13 @@ function keepView(view: CalendarDisplay) {
  *   UI-175). The Agenda still draws theirs among the reader's own.
  * - **A phone's *Filter* holds *Melihat* alone** (the brief's Calendar 3); a tablet and a laptop keep *Jenis* (ADR-0226
  *   §4).
+ *
+ * **Phase 19.11 (P19.11-T1; UX-1, UX-6; UXQ8)**:
+ *
+ * - **A ticked task stays on its due date**, read back `done` from the server, in the one completed style a fresh tap
+ *   draws (`TaskRow`); unticking restores it. The ticks are `useTaskTicks`'s, which Home's *Aksi hari ini* shares.
+ * - **Every *Tugas* count counts open tasks alone** (`openTasks`): *Tugas · n*, the popup, the count rows, the badge.
+ * - **Every Week block shows its title** — one line on a phone's narrow Week, two or three on a tall block elsewhere.
  */
 export function CalendarScreen({
   initialView,
@@ -839,80 +846,6 @@ function taskPersonOf(person: CalendarDownlinePerson, read: CalendarRead | null)
 }
 
 /**
- * **Ticking a task, at its source** (UI V1, UI-104 point 4): a lead's next action (`PUT /leads/:id/next-action/done`,
- * pinned to the version the task carried) or a coaching action item (`PUT /coaching/sessions/…/done`). Ticked, the row
- * is struck through and every count drops at once; the toast says *Selesai* and offers *Urungkan*, which — or the
- * checkbox again — takes the tick back and reads the calendar again. One write per task at a time; a refusal is said
- * above the calendar and the row is left as it was.
- */
-function useTaskTicks({
-  canTick, canTickCoaching, show, onChanged, onLead,
-}: {
-  canTick: boolean;
-  canTickCoaching: boolean;
-  show: ReturnType<typeof useToast>['show'];
-  onChanged: () => void;
-  onLead: (lead: Lead) => void;
-}): { value: CalendarTasks; error: ApiError | null } {
-  const t = useMessages(calendarMessages);
-  const [struck, setStruck] = useState<ReadonlyMap<string, number | undefined>>(new Map());
-  const [error, setError] = useState<ApiError | null>(null);
-  const busy = useRef(new Set<string>());
-
-  const value = useMemo<CalendarTasks>(() => {
-    const write = async (task: CalendarTask, done: boolean, version?: number): Promise<number | undefined> => {
-      if (task.source === 'lead' && task.lead) {
-        return (await setLeadActionDone(task.lead.leadId, done, version ?? task.lead.version)).version;
-      }
-      if (task.coaching) await setCoachingItemDone(task.coaching.sessionId, task.coaching.itemId, done);
-      return undefined;
-    };
-    const undo = async (task: CalendarTask, version: number | undefined) => {
-      await write(task, false, version);
-      setStruck((now) => {
-        const next = new Map(now);
-        next.delete(task.taskId);
-        return next;
-      });
-      onChanged();
-    };
-    const toggle = (task: CalendarTask) => {
-      if (!canTick || (task.source === 'coaching' && !canTickCoaching) || busy.current.has(task.taskId)) return;
-      busy.current.add(task.taskId);
-      setError(null);
-      const ticked = struck.has(task.taskId);
-      const run = ticked
-        ? undo(task, struck.get(task.taskId))
-        : write(task, true).then((version) => {
-          setStruck((now) => new Map(now).set(task.taskId, version));
-          show(t.done, {
-            action: {
-              label: t.undo,
-              onAction: () => { undo(task, version).catch((err) => setError(toDisplayError(err))); },
-            },
-          });
-        });
-      run
-        .catch((err) => setError(toDisplayError(err)))
-        .finally(() => { busy.current.delete(task.taskId); });
-    };
-    return {
-      struck: new Set(struck.keys()),
-      toggle,
-      openLead: (task) => {
-        if (!task.lead) return;
-        readLead(task.lead.leadId).then(onLead).catch((err) => setError(toDisplayError(err)));
-      },
-      canTick,
-      canTickCoaching,
-      onPhoneSaved: onChanged,
-    };
-  }, [canTick, canTickCoaching, struck, show, onChanged, onLead, t]);
-
-  return { value, error };
-}
-
-/**
  * **One compared person's read** (D-audit): read once for each period, and again only after a write that touched
  * them (`touched`). The page keeps the last answer per person and kind of period (`reads`), so drawing the same
  * period again asks for nothing, and an identical read already out is joined rather than sent twice. A read the
@@ -1101,32 +1034,4 @@ function useScrollGroup(): ScrollGroup & { reset: (hour?: number) => void } {
       for (const el of boxes.current) el.scrollTop = hour * HOUR_PX;
     },
   }), []);
-}
-
-/**
- * The office's minute of the day, from the read, moved on each minute (P12-T2 AC-3). The browser's
- * clock is used only to count the minutes since the read answered, never to say what day or what time
- * it is; past midnight the page reads again (`onMidnight`) and the server says what today is.
- */
-function useOfficeMinute(now: CalendarNow | undefined, onMidnight: () => void): number | null {
-  const [elapsed, setElapsed] = useState(0);
-  const at = now?.at;
-  const midnight = useRef(onMidnight);
-  midnight.current = onMidnight;
-
-  useEffect(() => {
-    setElapsed(0);
-    if (!at) return undefined;
-    const started = Date.now();
-    const seconds = Number.isNaN(Date.parse(at)) ? 0 : new Date(at).getUTCSeconds() * 1000;
-    const timer = setInterval(() => setElapsed(Math.floor((Date.now() - started + seconds) / 60_000)), 15_000);
-    return () => clearInterval(timer);
-  }, [at]);
-
-  const minute = now ? now.minute + elapsed : null;
-  const past = minute !== null && minute >= 24 * 60;
-  useEffect(() => {
-    if (past) midnight.current();
-  }, [past]);
-  return minute === null ? null : Math.min(minute, 24 * 60 - 1);
 }

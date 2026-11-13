@@ -940,6 +940,40 @@ describe('P18.9-T4 AC-3 the directory says who came back, on one line each', () 
   });
 });
 
+/**
+ * **P19.12-T5 AC-4 — *Diundang* until the first sign-in** (ADR-0248 §4; the client's TI-1: *"Status langsung AKTIF walau
+ * belum membuat kata sandi"*). Each row carries the server's `invitation`: an active member who never signed in reads
+ * *Invited* (*Diundang*) when an invitation went and *Not invited* (*Belum diundang*) when none did, both grey; one who
+ * has signed in, *Active*.
+ */
+describe('P19.12-T5 AC-4 the directory says who has not signed in yet', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('P19.12-T5 AC-4 Invited, Not invited and Active, each by the server’s invitation', async () => {
+    stubFetch({
+      '/members': {
+        body: {
+          members: [
+            member({ membershipId: 'a', fullName: 'Tes Impor Dua', preferredName: null, invitation: 'invited' }),
+            member({ membershipId: 'b', fullName: 'Tes Impor Tiga', preferredName: null, invitation: 'not_invited' }),
+            member({ membershipId: 'c', fullName: 'Rina Wijaya', invitation: 'signed_in' }),
+          ],
+          nextCursor: null,
+          counts: { directory: 3, pending: 0, removed: 0 },
+        },
+      },
+    });
+    renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
+    const table = await screen.findByRole('table');
+    const statusOf = (name: RegExp) => within(table).getByRole('row', { name }).querySelectorAll('td');
+    const last = (name: RegExp) => [...statusOf(name)].at(-1)!;
+    expect(last(/Tes Impor Dua/)).toHaveTextContent(/^Invited$/);
+    expect(within(last(/Tes Impor Dua/)).getByText('Invited').className).toContain('text-muted');
+    expect(last(/Tes Impor Tiga/)).toHaveTextContent(/^Not invited$/);
+    expect(last(/Rina/)).toHaveTextContent(/^Active$/);
+  });
+});
+
 describe('P18.9-T6 AC-4 below 1024px the members’ tabs are one row that scrolls sideways', () => {
   afterEach(() => vi.unstubAllGlobals());
 

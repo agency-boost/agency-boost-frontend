@@ -148,6 +148,8 @@ export const KEPT_ENGLISH = {
     'Proposals made',
     // P19.8-T2 (ADR-0228 §4, OD-283): Home's *Leads* tile (`metrics-and-definitions.md` §A.17).
     'Your open leads',
+    // P19.12-T6 (ADR-0249 §4): *Grup informal*'s line (`metrics-and-definitions.md` §A.18).
+    'ABs not in your group',
     // P19.5-T3 (ADR-0215): the *Advanced analytics* page's nineteen (`metrics-and-definitions.md` §A.15) — Demographics, the
     // events' NPS for a period, Quant's seven, the peers' two and Sub-group's eight.
     'Demographics', 'Event NPS, for a period', 'A1 Recruitment per leader', 'A2 Net growth in annual active agents',
@@ -158,14 +160,14 @@ export const KEPT_ENGLISH = {
   ],
   /**
    * §A.4 — the KPI labels the Owner's and the AB's screens draw, screen by screen. *APE (Rp M)* and *Avg. Case Size
-   * (Rp jt)* keep their names; the unit in brackets is a format, which P18.10-T3 writes in each language (§E).
+   * (Rp Jt)* keep their names; the unit in brackets is a format, which P18.10-T3 writes in each language (§E).
    */
   kpis: [
     // The forum's *Overview & Stats*.
     'Manpower', '# of agents', '# of units', '# of AB', '# of AAB', 'Metrics', 'Full Year & YTD View', 'Monthly View',
     'Full Year', 'YTD', 'This Month, Last Year', 'Last Month', 'This Month', 'Monthly Target', 'APE (Rp M)',
     'FLC (avg. monthly)', 'Annual Active Agents', '3M new agent %', 'Avg. monthly AA', 'Case submission',
-    'Cases/producing agents', 'Avg. Case Size (Rp jt)', 'AS OF', 'TBD',
+    'Cases/producing agents', 'Avg. Case Size (Rp Jt)', 'AS OF', 'TBD',
     // The Overview (`/kpm/overview`).
     'Team composition', 'Total members', 'Engagement', 'Agents who logged activity this month',
     'Activity logging — this week', 'Coaching coverage', 'Coached in last 7 days', 'Coached in last 30 days',

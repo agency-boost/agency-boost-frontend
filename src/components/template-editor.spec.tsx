@@ -1051,7 +1051,7 @@ describe('CampaignKindsEditor (P5-T9)', () => {
     />);
 
     // A rule in words, compact where that loses nothing (ADR-0167 §1) — in the reader's figures since P18.10-T6,
-    // English here as every spec reads (*Rp 600 jt*, *1.200* in Indonesian).
+    // English here as every spec reads (*Rp 600 Jt*, *1.200* in Indonesian).
     expect(screen.getByText(/APE achieved/).closest('p')).toHaveTextContent(/IDR 600M$/);
     expect(screen.getByText(/APE achieved/).closest('p')).not.toHaveTextContent('60,000,000,000');
     expect(screen.getByText(/New active agents/).closest('p')).toHaveTextContent(/1,200$/);

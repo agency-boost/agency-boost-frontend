@@ -37,7 +37,18 @@ const OWN = {
   },
   version: 3,
 };
-const PREVIEW = { palette: PALETTE, primary: { contrast: 'light', ratio: 6.21 }, secondary: { contrast: 'light', ratio: 14.06 } };
+const PREVIEW = {
+  palette: PALETTE,
+  primary: { contrast: 'light', ratio: 6.21, fill: '#0a6e5c', adjusted: false },
+  secondary: { contrast: 'light', ratio: 14.06, fill: '#1b2b4b', adjusted: false },
+};
+/** The client's `#a96800`, as the API answers it since P19.12-T3 (ADR-0246): painted `#a66600`, white text at 4.64:1. */
+const ADJUSTED = {
+  palette: { ...PALETTE, primary: '#a66600', primaryHover: '#925a00', primaryInk: '#a66600', primaryDeep: '#a66600', focusRing: '#a66600' },
+  primary: { contrast: 'light', ratio: 4.64, fill: '#a66600', adjusted: true },
+  secondary: PREVIEW.secondary,
+};
+const OWN_A96800 = { ...OWN, own: { ...OWN.own, primary: '#a96800' } };
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -66,18 +77,50 @@ describe('P19.6-T1 /kpm/settings/branding — Tampilan KPM', () => {
     expect(screen.getAllByText(/reads 6\.21:1/).length).toBe(1);
   });
 
-  it('B7-AC2 P19.6-T1 AC-7 says “Warna terlalu terang/gelap untuk teks” under the colour and blocks Simpan', async () => {
+  it('P19.12-T3 AC-1, AC-3 #a96800 is accepted: its field says to which shade it was adjusted, and Simpan stays enabled', async () => {
+    stubFetch({ '/kpm/settings/branding': { body: OWN_A96800 }, 'POST /kpm/settings/branding/preview': { body: ADJUSTED } });
+    renderWithSession(<InLanguage language="id"><BrandingPage /></InLanguage>, { me: OWNER });
+    // The note under *Warna utama*, muted, in the slot the contrast line uses; the ratio written the Indonesian way.
+    expect(await screen.findByText('Disesuaikan ke #a66600 agar teks putih terbaca 4,64:1.', {}, { timeout: 4000 })).toHaveClass('text-muted');
+    expect(screen.getByText('Teks putih terbaca 14,06:1 di atasnya.')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Warna terlalu terang\/gelap/)).not.toBeInTheDocument();
+    // The field keeps the colour chosen; the preview paints the shade.
+    expect(screen.getAllByDisplayValue('#a96800').length).toBeGreaterThan(0);
+    expect(document.querySelector('[data-preview-frame="phone"] > div')?.getAttribute('style')).toContain('--color-primary: #a66600');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Simpan' })).toBeEnabled(), { timeout: 4000 });
+  });
+
+  it('P19.12-T3 AC-3 writes the adjusted note in English too, dark text where the shade is lighter', async () => {
+    const lighter = { ...ADJUSTED, primary: { contrast: 'dark', ratio: 4.57, fill: '#05a95b', adjusted: true } };
+    stubFetch({ '/kpm/settings/branding': { body: OWN }, 'POST /kpm/settings/branding/preview': { body: lighter } });
+    renderWithSession(<BrandingPage />, { me: OWNER });
+    expect(await screen.findByText('Adjusted to #05a95b so dark text reads 4.57:1.', {}, { timeout: 4000 })).toBeInTheDocument();
+  });
+
+  it('P19.12-T3 AC-1 blocks Simpan only while a colour is not #rrggbb', async () => {
+    stubFetch({ '/kpm/settings/branding': { body: OWN }, 'POST /kpm/settings/branding/preview': { body: PREVIEW } });
+    renderWithSession(<InLanguage language="id"><BrandingPage /></InLanguage>, { me: OWNER });
+    const save = await screen.findByRole('button', { name: 'Simpan' });
+    await waitFor(() => expect(save).toBeEnabled(), { timeout: 4000 });
+    const primary = screen.getByLabelText('Warna utama');
+    await userEvent.clear(primary);
+    await userEvent.type(primary, '#a968');
+    await waitFor(() => expect(save).toBeDisabled(), { timeout: 4000 });
+    await userEvent.type(primary, '00');
+    await waitFor(() => expect(save).toBeEnabled(), { timeout: 4000 });
+  });
+
+  it('P19.12-T3 AC-1 a preview that did not arrive blocks nothing: Simpan answers for itself', async () => {
     stubFetch({
       '/kpm/settings/branding': { body: OWN },
-      'POST /kpm/settings/branding/preview': {
-        status: 422, body: { error: { code: 'BRANDING_COLOUR_UNREADABLE', message: 'x', details: { field: 'secondary' } } },
-      },
+      'POST /kpm/settings/branding/preview': { status: 500, body: { error: { code: 'INTERNAL', message: 'x' } } },
     });
     renderWithSession(<InLanguage language="id"><BrandingPage /></InLanguage>, { me: OWNER });
-    expect(await screen.findByRole('alert', {}, { timeout: 4000 })).toHaveTextContent('Warna terlalu terang/gelap untuk teks');
-    // The editor draws the note in its own render and tells the page through an effect (`onCheck`), so *Simpan* is
-    // blocked one commit later: wait for it, as the enabled checks below do — under load the two commits come apart.
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Simpan' })).toBeDisabled(), { timeout: 4000 });
+    const save = await screen.findByRole('button', { name: 'Simpan' });
+    await new Promise((resolve) => { setTimeout(resolve, 400); });
+    expect(save).toBeEnabled();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
   it('P19.6-T1 AC-5 Simpan sends the groups whole by their folders, with the version read', async () => {

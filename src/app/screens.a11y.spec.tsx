@@ -40,6 +40,7 @@ import TenantsPage from './(admin)/admin/tenants/page';
 import NewTenantPage from './(admin)/admin/tenants/new/page';
 import CompaniesPage from './(admin)/admin/companies/page';
 import AuditPage from './(admin)/admin/audit/page';
+import AllMembersPage from './(admin)/admin/members/page';
 import PlatformAnalyticsPage from './(admin)/admin/analytics/page';
 import MembersPage from './(tenant)/people/members/page';
 import MemberPage from './(tenant)/people/members/[membershipId]/page';
@@ -247,6 +248,27 @@ const MEMBER_PERFORMANCE = {
   lastOneOnOne: { date: '2026-10-21' }, leads: { month: '2026-11', open: 9, closing: 2 },
 };
 
+/** One open lead in `GET /leads`' row shape — the Summary's leads since P19.11-T5, drawn on the shared lead card. */
+const summaryLead = (over: Record<string, unknown>) => ({
+  id: 'l-1', ownerMembershipId: 'mem-1', owner: { membershipId: 'mem-1', name: 'Rina Wijaya' }, type: 'sales', name: 'Pak Hendro',
+  contact: { phone: null, email: null }, statusCode: 'FOLLOW_UP', thisMonth: false, committedMonths: [], closedThisMonth: false,
+  lastEditedBy: null, remarks: null, nextActionDate: null, nextActionNote: null, outcome: null, source: null,
+  dateRegistered: '2026-09-01T03:00:00.000Z', version: 1, flags: [], overdueDays: null, proposals: null, ...over,
+});
+/** The reader's own Summary leads: more than five, so *See all (7)* is drawn too (P19.11-T5 AC-2). */
+const SUMMARY_LEADS = {
+  total: 7,
+  shown: 5,
+  rows: [
+    summaryLead({
+      thisMonth: true, committedMonths: ['2026-09'], flags: ['overdue', 'no-remarks'], overdueDays: 6,
+      nextActionDate: '2026-09-08', nextActionNote: 'Chase the illustration.',
+    }),
+    summaryLead({ id: 'l-2', name: 'Pak Bambang', type: null, statusCode: null, flags: ['no-next-action'] }),
+    ...[3, 4, 5, 6, 7].map((n) => summaryLead({ id: `l-${n}`, name: `Pak Lead ${n}`, nextActionDate: `2026-09-2${n}` })),
+  ],
+};
+
 const treeNode = (over: Record<string, unknown>) => ({
   fullName: 'Somebody', preferredName: null, initials: 'SB', agentCode: 'KPM0417-000',
   role: 'agent', depth: 0, layer: 1, leaderId: null, directCount: 0, directCounts: { ab: 0, aab: 0, agent: 0, total: 0 }, subtreeCount: 0,
@@ -432,6 +454,35 @@ describe('screens have no axe violations', () => {
     renderInLayout(AdminLayout, <TenantsPage />, { me: SUPER_ADMIN });
     await screen.findByRole('table');
     await expectClean('admin/tenants');
+  });
+
+  // P19.12-T2 AC-2 (ADR-0245 §1): *All members* › *Akun terdaftar*, every registered account, a KPM or none.
+  it('all members, the registered accounts tab', async () => {
+    atWidth(1280);
+    nav.pathname = '/admin/members';
+    nav.search = 'tab=accounts';
+    stubFetch({
+      '/admin/users': {
+        body: {
+          rows: [
+            {
+              userId: 'u-1', fullName: 'Hadi Santoso', email: 'hadi.leader@contoh.test', company: { id: 'co-1', name: 'Prudential' },
+              registeredOn: '2026-11-09', emailVerified: true, lastSignInOn: '2026-11-10', kpmCount: 0,
+            },
+            {
+              userId: 'u-2', fullName: 'Dua Kantor', email: 'dua@kpm0417.test', company: null, registeredOn: '2026-10-01',
+              emailVerified: false, lastSignInOn: null, kpmCount: 2,
+            },
+          ],
+          page: 1, pageSize: 50, total: 2,
+        },
+      },
+    });
+    renderInLayout(AdminLayout, <AllMembersPage />, {
+      me: { ...SUPER_ADMIN, permissions: [...SUPER_ADMIN.permissions, 'platform_members:read'] },
+    });
+    await screen.findByRole('table', { name: 'Every registered account' });
+    await expectClean('admin/members?tab=accounts');
   });
 
   it('new tenant', async () => {
@@ -1342,7 +1393,11 @@ describe('screens have no axe violations', () => {
             pace: { closingTarget: 5, closingsLast30Days: 4, dayOfMonth: 14, daysInMonth: 30, weeksLeft: 3, policiesNeeded: 3, neededPerWeek: 1, targetMet: false },
             activity: { monthly: activity, yearly: activity },
             leads: {
-              rows: [{ id: 'l-1', name: 'Desi Pratama', type: 'sales', statusCode: 'FOLLOW_UP', statusLabel: 'Follow-up', thisMonth: true, flags: ['overdue'], overdueDays: 6, nextActionDate: '2026-09-08', nextActionNote: 'Confirm paperwork' }],
+              // P19.11-T5: hers, in `GET /leads`' row shape — the shared card's not-mine form.
+              rows: [summaryLead({
+                name: 'Desi Pratama', ownerMembershipId: 'mem-rina', owner: { membershipId: 'mem-rina', name: 'Rina Wijaya' }, thisMonth: true,
+                committedMonths: ['2026-09'], flags: ['overdue'], overdueDays: 6, nextActionDate: '2026-09-08', nextActionNote: 'Confirm paperwork',
+              })],
               total: 1,
             },
             insights: [{ rule: 'LEAD_OVERDUE', kind: 'action', facts: { leadId: 'l-1', name: 'Desi Pratama', overdueDays: 6, others: 0 } }],
@@ -1814,19 +1869,8 @@ describe('screens have no axe violations', () => {
           yearly: { ...figures, targetMinor: 500 * M, source: { provenance: 'self_reported', month: null } },
           pace: { closingTarget: 6, closingsLast30Days: 4, dayOfMonth: 14, daysInMonth: 30, weeksLeft: 3, policiesNeeded: 5, neededPerWeek: 2, targetMet: false },
           activity: { monthly: activity, yearly: activity },
-          leads: {
-            total: 12,
-            rows: [
-              {
-                id: 'l-1', name: 'Pak Hendro', type: 'sales', statusCode: 'FOLLOW_UP', statusLabel: 'Follow-up', thisMonth: true,
-                flags: ['overdue', 'no-remarks'], overdueDays: 6, nextActionDate: '2026-09-08', nextActionNote: 'Chase the illustration.',
-              },
-              {
-                id: 'l-2', name: 'Pak Bambang', type: null, statusCode: null, statusLabel: null, thisMonth: false,
-                flags: ['no-next-action'], overdueDays: null, nextActionDate: null, nextActionNote: null,
-              },
-            ],
-          },
+          // P19.11-T5: the shared lead card, the top five and *See all (7)*.
+          leads: SUMMARY_LEADS,
           // Both insight cards: a numbered action list and a bulleted improvement list.
           insights: [
             { rule: 'LEAD_OVERDUE', kind: 'action', facts: { leadId: 'l-1', name: 'Pak Hendro', overdueDays: 6, others: 0 } },
@@ -1857,7 +1901,7 @@ describe('screens have no axe violations', () => {
     await expectClean('summary (a tile’s activities)');
   });
 
-  it('Personal Summary, P19.1-T4 not uploaded: who uploads, the helpers marked, Upload production →, the estimate field open', async () => {
+  it('Personal Summary, P19.1-T4, P19.11-T4 not uploaded: Upload production →, the month’s field open, then the year’s estimate field', async () => {
     const M = 1_000_000 * 100;
     const nothing = { targetMinor: 75 * M, actualMinor: null, attainmentPct: null, gapMinor: null, overMinor: null, policiesNeeded: null, targetMet: false };
     const activity = { from: '2026-09-01', to: '2026-09-14', total: 0, targets: [], sections: [] };
@@ -1870,7 +1914,10 @@ describe('screens have no axe violations', () => {
           year: '2026', month: '2026-09', today: '2026-09-14', goal: { set: true, savedAt: '2026-09-01T02:00:00.000Z' },
           period: { firstMonth: '2026-01', thisMonth: '2026-09', currentMonth: true, currentYear: true },
           caseSizeMinor: 18 * M,
-          monthly: { ...nothing, source: null, production: 'none', withoutProduction: { gapMinor: 75 * M, policiesNeeded: 5 } },
+          monthly: {
+            ...nothing, source: null, production: 'none', withoutProduction: { gapMinor: 75 * M, policiesNeeded: 5 },
+            realised: { source: 'none', uploaded: false, manual: null },
+          },
           yearly: {
             ...nothing, targetMinor: 500 * M, actualMinor: 0, source: { provenance: 'self_reported', month: null }, production: 'none',
             withoutProduction: { gapMinor: 500 * M, policiesNeeded: 28 },
@@ -1889,8 +1936,18 @@ describe('screens have no axe violations', () => {
     const goal = await screen.findByRole('region', { name: 'Goal vs. actual (APE)' });
     await within(goal).findByRole('link', { name: 'Upload production →' });
     await expectClean('summary (not uploaded)');
-    await userEvent.click(within(goal).getByRole('button', { name: 'Enter interim production' }));
-    await within(goal).findByRole('textbox', { name: 'APE already produced this year' });
+    // P19.11-T4 (UX-12): the month's realised APE, edited in place in millions — and a figure that is no number, said.
+    await userEvent.click(within(goal).getByRole('button', { name: 'Not uploaded yet, change the realised APE' }));
+    const month = await within(goal).findByRole('textbox', { name: 'Realised APE this month, in millions' });
+    await userEvent.type(month, '1,2,3{Enter}');
+    await within(goal).findByRole('alert');
+    await expectClean('summary (the month’s field, refused)');
+    await userEvent.type(month, '{Escape}');
+    // The year's estimate is *Tahunan*'s since P19.11-T4.
+    await userEvent.click(screen.getByRole('button', { name: 'Yearly' }));
+    const year = await screen.findByRole('region', { name: 'Goal vs. actual (APE)' });
+    await userEvent.click(within(year).getByRole('button', { name: 'Enter interim production' }));
+    await within(year).findByRole('textbox', { name: 'APE already produced this year' });
     await expectClean('summary (the estimate field)');
   });
 
@@ -2289,7 +2346,7 @@ describe('screens have no axe violations', () => {
 
     const produced = await screen.findByRole('textbox', { name: 'APE yang sudah dicapai tahun ini' });
     expect(produced).toHaveAccessibleDescription('Diubah oleh Anda');
-    expect(screen.getByRole('button', { name: 'Pakai otomatis (Rp 67 jt)' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Pakai otomatis (Rp 67 Jt)' })).toBeInTheDocument();
     await expectClean(`goals typed over the office’s figure (${px})`);
   });
 
@@ -2429,6 +2486,55 @@ describe('screens have no axe violations', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Remove' }));
     await screen.findByLabelText('Type REMOVE to confirm');
     await expectClean('user-management/add (removal)');
+  });
+
+  it('P19.12-T4 Tim Anda with a move waiting, and the leader picker open on both groups and a choice', async () => {
+    // ADR-0247: the waiting row's *Batalkan*, the picker's two headed groups of 64px rows, its search, and the chosen
+    // leader's confirmation with the reason field — inside the shared sheet.
+    const leader = makeMe({
+      membership: {
+        membershipId: 'mem-ab', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab', status: 'active',
+        isKpmOwner: false, isKpmAdmin: false, directCount: 2,
+      },
+      permissions: [
+        'member:invite', 'member:search_untagged_pool', 'member:change_role', 'member:remove_from_team',
+        'member:reassign_leader', 'member:transfer_request',
+      ],
+    });
+    const member = (over: Record<string, unknown>) => ({
+      membershipId: 'mem-t1', fullName: 'Rina Wijaya', initials: 'RW', agentCode: '88003', role: 'agent',
+      orgLevelCode: 'AGENT', directCount: 0, subtreeCount: 0, canChangeRole: true, roleChoices: ['AGENT', 'AAB', 'AB'],
+      canChangeLeader: true, pendingTransfer: null, ...over,
+    });
+    stubFetch({
+      '/join/my-code': { body: { code: 'JOR417', url: 'https://agencyboost.app/join?code=JOR417' } },
+      '/join/untagged': { body: [] },
+      '/members/my-team': {
+        body: [
+          member({}),
+          member({
+            membershipId: 'mem-t2', fullName: 'Dimas Pratama', initials: 'DP',
+            pendingTransfer: { transferId: 'tr-9', toName: 'Yosef Tambunan', requestedAt: '2026-11-11T03:00:00.000Z' },
+          }),
+        ],
+      },
+      '/leader-choices': {
+        body: [
+          { membershipId: 'mem-sari', fullName: 'Sari Puspita', agentCode: '10004', orgLevelCode: 'AAB', role: 'aab', unitSize: 3, direct: true },
+          { membershipId: 'mem-yosef', fullName: 'Yosef Tambunan', agentCode: '87001', orgLevelCode: 'AB', role: 'ab', unitSize: 9, direct: false },
+        ],
+      },
+    });
+    renderInLayout(AgentLayout, <AddAgentsPage />, { me: leader });
+    await screen.findAllByText('Waiting for approval to move to Yosef Tambunan');
+    await expectClean('user-management/add (a move waiting)');
+    await userEvent.click((await screen.findAllByRole('button', { name: 'Change Rina Wijaya’s role, now Agent' }))[0]);
+    await userEvent.click(screen.getByRole('button', { name: 'Move to another leader' }));
+    await screen.findByRole('heading', { name: 'In your team' });
+    await expectClean('user-management/add (the leader picker)');
+    await userEvent.click(screen.getByRole('button', { name: 'Yosef Tambunan' }));
+    await screen.findByLabelText('Why? (optional)');
+    await expectClean('user-management/add (a move asked of the office)');
   });
 
   it('the removed list, populated', async () => {
@@ -2667,13 +2773,13 @@ describe('screens have no axe violations', () => {
     await expectClean('people/members (groups)');
   });
 
-  it('the person page with the tag panel open', async () => {
+  it('the person page with its data opened and the informal groups’ form open (P19.12-T5)', async () => {
     const owner = makeMe({
       membership: {
         membershipId: 'mem-owner', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab',
         isKpmOwner: true, isKpmAdmin: false, status: 'active', directCount: 0,
       },
-      permissions: ['member:read_profile'],
+      permissions: ['member:read_profile', 'member:complete_personal'],
     });
     stubFetch({
       '/members/mem-1/reports': { body: [] },
@@ -2694,16 +2800,27 @@ describe('screens have no axe violations', () => {
           initials: 'RW', leaderId: null, leaderName: 'Wilson Tanoto', depth: 1,
           directCount: 0, directCounts: { ab: 0, aab: 0, agent: 0, total: 0 }, subtreeCount: 0, isLeader: false, isKpmOwner: false,
           isKpmAdmin: false, joinedAt: '2026-03-01T00:00:00.000Z', removedAt: null,
-          canChangeRole: true, canPromoteToAb: true, canRemove: true,
-          // P18.5-T4: what the person records, one of them not recorded.
-          personal: { dateOfBirth: '1990-03-15', gender: 'female', companyJoinMonth: null, workStatus: 'full_time' },
+          canChangeRole: true, canPromoteToAb: true, canRemove: true, canChangeLeader: true, invitation: 'invited',
+          // P18.5-T4: what the person records, one of them not recorded; P19.12-T5: their WhatsApp number.
+          personal: {
+            dateOfBirth: '1990-03-15', gender: 'female', companyJoinMonth: null, workStatus: 'full_time',
+            phone: '+6281211002200', companyName: 'Prudential',
+          },
         },
       },
     });
     renderInLayout(TenantLayout, <MemberPage params={routeParams({ membershipId: 'mem-1' })} />, { me: owner });
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit tags' }));
+    const data = await screen.findByRole('heading', { name: 'Personal data' });
+    await userEvent.click(data.closest('summary')!);
+    await screen.findByRole('link', { name: '+6281211002200' });
+    await expectClean('people/members/[id] (populated, its data opened)');
+    await userEvent.click(screen.getByRole('button', { name: 'Edit informal groups' }));
     await screen.findByLabelText('Core Leader');
-    await expectClean('people/members/[id] (tags)');
+    await expectClean('people/members/[id] (informal groups)');
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Complete details' }));
+    await screen.findByRole('dialog', { name: 'Complete Rina’s details' });
+    await expectClean('people/members/[id] (complete details)');
   });
 
   it('the person page with its role change and removal open (P3.1-T13)', async () => {
@@ -2734,10 +2851,14 @@ describe('screens have no axe violations', () => {
     });
     renderInLayout(TenantLayout, <MemberPage params={routeParams({ membershipId: 'mem-1' })} />, { me: owner });
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Remove Rina' }));
-    await screen.findByLabelText('Type REMOVE to confirm');
+    // P19.12-T5: each in its own form, opened from the card and from the foot of the page.
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit role' }));
     await userEvent.selectOptions(screen.getByLabelText('New role'), 'ab');
-    await expectClean('people/members/[id] (role change and removal)');
+    await expectClean('people/members/[id] (role change)');
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Remove from the office' }));
+    await screen.findByLabelText('Type REMOVE to confirm');
+    await expectClean('people/members/[id] (removal)');
   });
 
   it('manage KPM admins, populated and with a revoke waiting', async () => {
@@ -2929,6 +3050,16 @@ describe('screens have no axe violations', () => {
   });
 
   it('the roster import, the Owner’s, with the paste box and its worked examples (P19.4-T2: not the console’s)', async () => {
+    // P19.12-T7 (ADR-0250 §2–§4): a row's warnings in the warning tone, and a row invited on WhatsApp.
+    const ROSTER_ROWS = [
+      { line: 2, agentCode: '88001', fullName: 'Agus Prasetyo', role: 'AB', leaderAgentCode: '', email: 'agus@example.test', outcome: 'imported', messages: [],
+        warnings: ['Tanggal lahir: A date of birth must be at least 18 years ago. Left empty; the rest of the row is imported.'] },
+      { line: 3, agentCode: '88002', fullName: 'Sari', role: 'AAB', leaderAgentCode: '88001', email: '', outcome: 'updated', messages: ['Already here; details updated.'],
+        warnings: ['Incomplete: no Jenis kelamin. Import the row again with them to fill them in.'] },
+      { line: 4, agentCode: '88003', fullName: 'Rina', role: 'Agen Senior', leaderAgentCode: '88002', email: '', outcome: 'skipped', messages: ['Role "Agen Senior" does not exist. Use: Agent, AAB, AB.'], warnings: [] },
+      { line: 5, agentCode: '88004', fullName: 'Tono', role: 'Agent', leaderAgentCode: '88001', email: '', outcome: 'invited',
+        messages: ['No email: invited on WhatsApp instead. They register through the link with their own email and password.'], warnings: [] },
+    ];
     // The placeholder is three lines of tab-separated text in a `font-mono` box — worth
     // running axe over precisely because it is doing more than a placeholder usually does.
     stubFetch({
@@ -2947,13 +3078,18 @@ describe('screens have no axe violations', () => {
       // P19.3-T4: the check's result per row (A3), the invitation, the skipped rows' download.
       '/admin/tenants/kpm-1/roster/preview': {
         body: {
-          issues: [], header: ['Kode agen', 'Nama', 'Peran'], counts: { imported: 1, updated: 1, skipped: 1 },
-          rows: [
-            { line: 2, agentCode: '88001', fullName: 'Agus Prasetyo', role: 'AB', leaderAgentCode: '', email: 'agus@example.test', outcome: 'imported', messages: [] },
-            { line: 3, agentCode: '88002', fullName: 'Sari', role: 'AAB', leaderAgentCode: '88001', email: '', outcome: 'updated', messages: ['Already here; details updated.'] },
-            { line: 4, agentCode: '88003', fullName: 'Rina', role: 'Agen Senior', leaderAgentCode: '88002', email: '', outcome: 'skipped', messages: ['Role "Agen Senior" does not exist. Use: Agent, AAB, AB.'] },
-          ],
+          issues: [], header: ['Kode agen', 'Nama', 'Peran'], counts: { imported: 1, updated: 1, invited: 1, skipped: 1 },
+          rows: ROSTER_ROWS,
           skippedCsv: 'Kode agen,Nama,Peran,Alasan\n',
+        },
+      },
+      // P19.12-T7 (ADR-0250 §4): the import's answer, the invited row's WhatsApp button on it.
+      'POST /admin/tenants/kpm-1/roster': {
+        body: {
+          issues: [], header: ['Kode agen', 'Nama', 'Peran'], counts: { imported: 1, updated: 1, invited: 1, skipped: 1 },
+          rows: ROSTER_ROWS.map((row) => (row.outcome === 'invited'
+            ? { ...row, invite: { link: 'https://app.agencyboost.test/register?invite=kpm-1.s', phone: '+6281211003300' } } : row)),
+          skippedCsv: 'Kode agen,Nama,Peran,Alasan\n', invited: 1,
         },
       },
     });
@@ -2975,6 +3111,9 @@ describe('screens have no axe violations', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Check the file' }));
     await screen.findByRole('table', { name: 'Each row of the file, and what it comes to' });
     await expectClean('people/import (checked)');
+    await userEvent.click(screen.getByRole('button', { name: 'Import 3 people' }));
+    await screen.findByRole('link', { name: 'Send Tono their invitation on WhatsApp' });
+    await expectClean('people/import (done, an invitation on WhatsApp)');
   });
 
   it('choosing your own password, which wears no chrome at all', async () => {
@@ -5580,10 +5719,15 @@ describe('P18.10-T4 the forum and the people screens in Indonesian', () => {
       '/members/mem-1': { body: person({ joinDate: '2026-03-02', canChangeRole: true, canPromoteToAb: true, canRemove: true }) },
     });
     inIndonesian('/people/members/mem-1', <TenantLayout><MemberPage params={routeParams({ membershipId: 'mem-1' })} /></TenantLayout>);
-    await screen.findByRole('heading', { name: 'Pribadi' });
-    await userEvent.selectOptions(screen.getByLabelText('Peran baru'), 'aab');
-    await userEvent.click(screen.getByRole('button', { name: 'Keluarkan Rina' }));
+    const data = await screen.findByRole('heading', { name: 'Data pribadi' });
+    await userEvent.click(data.closest('summary')!);
     await expectClean('people/members/[membershipId] (id)');
+    await userEvent.click(screen.getByRole('button', { name: 'Ubah peran' }));
+    await userEvent.selectOptions(screen.getByLabelText('Peran baru'), 'aab');
+    await expectClean('people/members/[membershipId] (id, role change)');
+    await userEvent.click(screen.getByRole('button', { name: 'Batal' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Keluarkan dari KPM' }));
+    await expectClean('people/members/[membershipId] (id, removal)');
   });
 
   it('people/admins, a revoke asked', async () => {
@@ -5625,7 +5769,7 @@ describe('P18.10-T4 the forum and the people screens in Indonesian', () => {
       '/admin/tenants/kpm-1/roster/preview': {
         body: {
           issues: [{ line: 2, column: 'email', message: '"x" is not an email address.' }], header: HEADER.split(','),
-          counts: { imported: 0, updated: 0, skipped: 0 }, rows: [], skippedCsv: null,
+          counts: { imported: 0, updated: 0, invited: 0, skipped: 0 }, rows: [], skippedCsv: null,
         },
       },
     });
@@ -6122,19 +6266,8 @@ describe('P18.10-T4 the field’s selling screens in Indonesian', () => {
           yearly: { ...figures, targetMinor: 500 * M, source: { provenance: 'self_reported', month: null } },
           pace: { closingTarget: 6, closingsLast30Days: 4, dayOfMonth: 14, daysInMonth: 30, weeksLeft: 3, policiesNeeded: 5, neededPerWeek: 2, targetMet: false },
           activity: { monthly: activity, yearly: activity },
-          leads: {
-            total: 12,
-            rows: [
-              {
-                id: 'l-1', name: 'Pak Hendro', type: 'sales', statusCode: 'FOLLOW_UP', statusLabel: 'Follow-up', thisMonth: true,
-                flags: ['overdue', 'no-remarks'], overdueDays: 6, nextActionDate: '2026-09-08', nextActionNote: 'Chase the illustration.',
-              },
-              {
-                id: 'l-2', name: 'Pak Bambang', type: null, statusCode: null, statusLabel: null, thisMonth: false,
-                flags: ['no-next-action'], overdueDays: null, nextActionDate: null, nextActionNote: null,
-              },
-            ],
-          },
+          // P19.11-T5: the shared lead card, the top five and *See all (7)*.
+          leads: SUMMARY_LEADS,
           // Both insight cards: a numbered action list and a bulleted improvement list.
           insights: [
             { rule: 'LEAD_OVERDUE', kind: 'action', facts: { leadId: 'l-1', name: 'Pak Hendro', overdueDays: 6, others: 0 } },
@@ -6466,7 +6599,7 @@ describe('P18.10-T4 coaching and the Unit Dashboard in Indonesian', () => {
   it('coaching/[membershipId]/session: a draft with the Activity drill open', async () => {
     stubFetch(sessionRoutes({ sessionId: 's-1', status: 'draft' }));
     inPerson('/coaching/mem-rina/session', <CoachingSessionTabPage />);
-    await screen.findByText(/Rp 620 jt/);
+    await screen.findByText(/Rp 620 Jt/);
     const drill = await screen.findByRole('button', { name: '7 hari terakhir' });
     await waitFor(() => expect(drill).toBeEnabled());
     await expectClean('coaching/[membershipId]/session (id, a draft)');
@@ -7640,9 +7773,9 @@ describe('UI V1 the shared components (Phase 18.11 T2)', () => {
         <GoalHeroCard
           title="Target vs. realisasi (APE)"
           percent={31}
-          achieved="Rp 29 jt"
-          target="dari target Rp 94,7 jt"
-          facts={[{ label: 'Sisa bulan ini', value: 'Rp 65,7 jt' }, { label: 'Polis yang dibutuhkan', value: '± 4 polis' }]}
+          achieved="Rp 29 Jt"
+          target="dari target Rp 94,7 Jt"
+          facts={[{ label: 'Sisa bulan ini', value: 'Rp 65,7 Jt' }, { label: 'Polis yang dibutuhkan', value: '± 4 polis' }]}
         />
         <div className="divide-y divide-divider">
           <ActionRow date="2026-10-30" text="Ambil SPAJ yang sudah ditandatangani." person="Ibu Melati" control={{ kind: 'check', checked: false, onChange: () => {} }} />
@@ -7654,7 +7787,7 @@ describe('UI V1 the shared components (Phase 18.11 T2)', () => {
             control={{ kind: 'lead', name: 'Ibu Shinta', href: '/leads' }}
           />
         </div>
-        <SliderWithValue label="Target APE tahunan" value={500} onChange={() => {}} min={0} max={2000} format={(v) => `Rp ${v} jt`} />
+        <SliderWithValue label="Target APE tahunan" value={500} onChange={() => {}} min={0} max={2000} format={(v) => `Rp ${v} Jt`} />
         <StepperRow label="Rasio penutupan" value={30} onChange={() => {}} />
         <SaveStateLabel state="unsaved" />
         <ContactButtons name="Ibu Melati" phone="0812-1100-2200" onSave={async (p) => p} />

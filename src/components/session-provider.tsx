@@ -9,7 +9,7 @@ import {
 } from '@/lib/api-client';
 import { Me, SessionContext } from '@/lib/session';
 import { OfficeUnavailable } from './office-unavailable';
-import { forgetView } from '@/lib/views';
+import { clearCachedReads, forgetView } from '@/lib/views';
 import { applySessionBranding, clearBranding } from '@/lib/branding';
 
 export function SessionProvider({ children }: { children: React.ReactNode }) {
@@ -128,18 +128,30 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     })();
   }, [reload]);
 
-  const signIn = useCallback(
-    async (email: string, password: string) => {
-      const { accessToken } = await api<{ accessToken: string }>('/auth/login', {
-        method: 'POST',
-        body: { email, password },
-      });
+  /*
+   * **A session the server has just started, taken up** (P19.12-T2 AC-3; ADR-0245 §3): its access token held in memory,
+   * the refresh cookie already set by the answer that carried it. What signing in does after the password, and what
+   * registering does with the token `POST /auth/register` answers — so a new account starts as a signed-in one does.
+   */
+  const adopt = useCallback(
+    async (accessToken: string) => {
       setAccessToken(accessToken);
       // Signing in starts on *Akun saya* (P19.2-T1 AC-4; ADR-0198 §5), whatever view this tab was last in.
       forgetView();
       return load();
     },
     [load],
+  );
+
+  const signIn = useCallback(
+    async (email: string, password: string) => {
+      const { accessToken } = await api<{ accessToken: string }>('/auth/login', {
+        method: 'POST',
+        body: { email, password },
+      });
+      return adopt(accessToken);
+    },
+    [adopt],
   );
 
   // Signing out never fails. The server call revokes the refresh-token family, but if
@@ -157,6 +169,9 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     remember(null);
     // The tab's view goes with the session (ADR-0198 §5): the next person to sign in here starts on *Akun saya*.
     forgetView();
+    // So do the cached reads (P19.11-T6 AC-1; UX-8): a read still out for this session is let go, so whoever signs in
+    // next in this tab is never handed its answer (`clearCachedReads`, ADR-0198 §6).
+    clearCachedReads();
     // The KPM's colours and its boot cache go too (P19.6-T1; ADR-0218 §8): the sign-in page is AgencyBoost's again.
     clearBranding();
     setSignedOut(true);
@@ -196,8 +211,8 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   }, [me]);
 
   const value = useMemo(
-    () => ({ me, loading, signedOut, expired, signIn, signOut, reload }),
-    [me, loading, signedOut, expired, signIn, signOut, reload],
+    () => ({ me, loading, signedOut, expired, signIn, adopt, signOut, reload }),
+    [me, loading, signedOut, expired, signIn, adopt, signOut, reload],
   );
 
   return (

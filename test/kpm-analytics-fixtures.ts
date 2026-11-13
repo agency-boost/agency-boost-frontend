@@ -180,8 +180,8 @@ export function analyticsView(period: AnalyticsPeriod = 'this_month', over: Part
     thresholds: { statusSplitPct: 70 },
     // What the server composes from the seeded MOC rules (the prototype's numbers, `KPM_Owner.html:1248`).
     mocRulesText: [
-      'AAB: APE ≥ Rp 200 jt AND Monthly2 AA ≥ 2 AND Rolling Persistency DU ≥ 75%.',
-      'AB: (APE ≥ Rp 600 jt AND Monthly2 AA DU ≥ 4 / DG ≥ 6 AND Rolling Persistency DU/DG ≥ 75%) OR Direct AB (AB on AB) ≥ 5.',
+      'AAB: APE ≥ Rp 200 Jt AND Monthly2 AA ≥ 2 AND Rolling Persistency DU ≥ 75%.',
+      'AB: (APE ≥ Rp 600 Jt AND Monthly2 AA DU ≥ 4 / DG ≥ 6 AND Rolling Persistency DU/DG ≥ 75%) OR Direct AB (AB on AB) ≥ 5.',
     ].join('\n'),
     agencies: agencies(period),
     total: {

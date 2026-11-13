@@ -154,7 +154,7 @@ const ROW_MONEY_UNIT: Partial<Record<RowKey, CompactUnit>> = { ape: 'M', average
 
 /**
  * **A row's name as the table heads it** (P18.10-T3 AC-1; the glossary's §E): a money row's unit in the reader's
- * language — *APE (Rp M)* and *Avg. Case Size (Rp jt)* in Indonesian, *APE (IDR B)* and *Avg. Case Size (IDR M)* in
+ * language — *APE (Rp M)* and *Avg. Case Size (Rp Jt)* in Indonesian, *APE (IDR B)* and *Avg. Case Size (IDR M)* in
  * English, as the client's slide writes it. The name is a kept-English term (§A.4); the unit is a format
  * (`formatMoneyUnit`). Every other row reads its name.
  */

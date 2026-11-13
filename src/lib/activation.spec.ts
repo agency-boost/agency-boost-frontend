@@ -5,7 +5,7 @@ import { stubFetch } from '@test/harness';
 import { activationView, item, LINKS, RINA, ROSTER, SARI } from '@test/activation-fixtures';
 import {
   ACTIVATION_3M_LABEL, ACTIVATION_NOTE_MAX, aspectTitle, attributionOf, autoBadge, byHandBadge, correctionOf, correctStartDate,
-  dayShown, earliestStart, fromDataWords, inFilter, newHireCounts, newHireGroups,
+  dayShown, earliestStart, fromDataWords, inFilter, missedThreeMonths, newHireCounts, newHireGroups,
   FIRST_CASE_CLOSED, graduateMyActivation, groupTitle, isComplete, isDataBacked, isManual, isTickedByHandLink, isWholeDate, ITEM_NOTE_MAX,
   isEmptyActivation, newHireHref, newHiresHref, newHireYearFrom, OWN_COPY, PROTOTYPE_COPY, readHireClosings, readMyActivation,
   readMyClosings, readNewHire, readNewHires, recordHref,
@@ -98,9 +98,9 @@ describe('the small readings', () => {
 
   it('names the roster’s cards: Direct Unit, or AAB: {name}', () => {
     expect(groupTitle({ kind: 'direct', leader: null })).toBe('Direct Unit');
-    expect(groupTitle({ kind: 'aab', leader: SARI })).toBe('AAB: Sari Puspita');
+    expect(groupTitle({ kind: 'aab', leader: { ...SARI, photoUrl: null } })).toBe('AAB: Sari Puspita');
     // D-group's Fix: an AB under the reader names its rung.
-    expect(groupTitle({ kind: 'ab', leader: SARI })).toBe('AB: Sari Puspita');
+    expect(groupTitle({ kind: 'ab', leader: { ...SARI, photoUrl: null } })).toBe('AB: Sari Puspita');
     expect(groupTitle({ kind: 'aab', leader: null })).toBe('Direct Unit');
     expect(newHireHref('mem 1')).toBe('/new-hires/mem%201');
   });
@@ -325,8 +325,8 @@ describe('P18.10-T4 the activation’s words in Indonesian', () => {
   it('names a unit: Direct Unit and the rungs kept, in both languages', () => {
     for (const language of ['en', 'id'] as const) {
       expect(groupTitle({ kind: 'direct', leader: null }, language)).toBe('Direct Unit');
-      expect(groupTitle({ kind: 'aab', leader: SARI }, language)).toBe('AAB: Sari Puspita');
-      expect(groupTitle({ kind: 'ab', leader: SARI }, language)).toBe('AB: Sari Puspita');
+      expect(groupTitle({ kind: 'aab', leader: { ...SARI, photoUrl: null } }, language)).toBe('AAB: Sari Puspita');
+      expect(groupTitle({ kind: 'ab', leader: { ...SARI, photoUrl: null } }, language)).toBe('AB: Sari Puspita');
     }
   });
 
@@ -401,8 +401,16 @@ describe('UI V1 — the roster as a tree (UI-024, D-24)', () => {
       ['Tari Wulandari', 'Novi Lestari'],
       ['Rina Wijaya', 'Budi Hartono'],
     ]);
-    // Each group's share is the server's, never worked out here.
-    expect(groups.map((g) => g.unit.activation3M.all.pct)).toEqual([67, 100, 100]);
+    // Each group's share is the server's, never worked out here. P19.11-T2 AC-2: Agus's own unit 2 of 4 due, 50%.
+    expect(groups.map((g) => g.unit.activation3M.all.pct)).toEqual([50, 100, 100]);
+  });
+
+  it('P19.11-T2 AC-3 missed is past day 90 with no first sale — the server’s not_activated, no sale since; a late sale is not missed', () => {
+    const rows = newHireGroups(ROSTER).flatMap((g) => g.rows);
+    expect(rows.filter(missedThreeMonths).map((r) => r.hire.name)).toEqual(['Kemal Pratama']);
+    expect(missedThreeMonths({ status: 'not_yet', activation3M: 'in_progress' })).toBe(false);
+    expect(missedThreeMonths({ status: 'activated_late', activation3M: 'not_activated' })).toBe(false);
+    expect(missedThreeMonths({ status: 'not_yet', activation3M: 'not_activated' })).toBe(true);
   });
 
   it('UI-024 counts and filters: Teraktivasi is a first sale, late ones included; Belum is everybody without one', () => {

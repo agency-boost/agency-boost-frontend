@@ -53,6 +53,66 @@ export function periodFrom(value: string | string[] | null | undefined): UnitPer
   return UNIT_PERIODS.some((p) => p.id === one) ? (one as UnitPeriod) : DEFAULT_PERIOD;
 }
 
+/**
+ * **The three views** (the client's message of 11 November 2026, item 7; ADR-0249): *Grup langsung*, *Grup informal*,
+ * *Semua downline* — the API's `scope` enum, in the picker's order, which the screen puts in its address. The views
+ * offered and the default are the server's (`scopes`); the screen never decides them.
+ */
+export type UnitView = 'direct' | 'informal' | 'downline';
+export const UNIT_VIEWS: readonly UnitView[] = ['direct', 'informal', 'downline'];
+
+/** `?scope=` as the address carries it: one of the three, or `null` — the reader's stored choice, then the default. */
+export function viewFrom(value: string | string[] | null | undefined): UnitView | null {
+  const one = Array.isArray(value) ? value[0] : value;
+  return UNIT_VIEWS.includes(one as UnitView) ? (one as UnitView) : null;
+}
+
+/** Each view named in a language, in the picker's order. */
+export const unitViews = (language: Language = SOURCE_LANGUAGE): readonly { id: UnitView; label: string }[] => {
+  const t = wordsIn(language).views;
+  return UNIT_VIEWS.map((id) => ({ id, label: t[id] }));
+};
+
+/**
+ * **The last view chosen, remembered on this browser** (the client: *"Pilihan terakhir diinget"*): per membership, on the
+ * reader's own dashboard only — never in a view of another leader's unit. A preference, not a secret; storage refused (a
+ * private window) remembers nothing, and the server's default stands.
+ */
+export const viewKey = (membershipId: string) => `ab.unit.scope.${membershipId}`;
+
+export function storedView(membershipId: string | null | undefined): UnitView | null {
+  if (!membershipId) return null;
+  try {
+    return viewFrom(window.localStorage.getItem(viewKey(membershipId)));
+  } catch {
+    return null;
+  }
+}
+
+export function keepView(membershipId: string | null | undefined, scope: UnitView) {
+  if (!membershipId) return;
+  try {
+    window.localStorage.setItem(viewKey(membershipId), scope);
+  } catch {
+    // No storage: the choice lasts as long as the address.
+  }
+}
+
+/** The views a head is offered and the reader's default (`scopes`); the picker hides with one or none. */
+export interface UnitViews {
+  offered: UnitView[];
+  default: UnitView;
+}
+
+/** *Grup informal*'s line (ADR-0249 §4): the ABs below the head in no group of theirs, and what the sheet needs. */
+export interface UnitInformal {
+  groups: { groupId: string; name: string }[];
+  absNotInGroup: number;
+  /** Named only to a reader who may tag (`member:tag_group`); `null` otherwise. */
+  abs: { membershipId: string; name: string }[] | null;
+  canTag: boolean;
+}
+
 export interface UnitPerson {
   membershipId: string;
   name: string;
@@ -218,10 +278,14 @@ export interface PotentialActive {
   of: number;
 }
 
-/** *Active Agent*'s tile (UI-013): out of manpower, with its *Unit* (head + direct agents) and *AAB* split. */
+/**
+ * *Active Agent*'s tile (UI-013): out of manpower, with its *Unit* (head + direct agents), *AAB* (the rest of the head's
+ * *Grup langsung*) and *AB* (everybody outside it; none in *Grup langsung* — ADR-0249 §3) split.
+ */
 export interface ActiveAgentTile extends PotentialActive {
   unit: PotentialActive;
   aab: PotentialActive;
+  ab: PotentialActive;
 }
 
 export interface UnitTotal {
@@ -251,6 +315,10 @@ export interface TeamTile {
   direct: number;
   units: number;
   underUnits: number;
+  /** *n AAB*: the head's *Grup langsung* outside *Your Unit* (ADR-0249 §3). */
+  aab: number;
+  /** *n AB*, drawn while above 0: the rows outside the head's *Grup langsung*. `direct + aab + ab = total`. */
+  ab: number;
   /** Of `total`, the new hires before a first sale: in the team, out of production, in *Active Agent*'s `of` (UI-013). */
   newHires: number;
 }
@@ -263,6 +331,8 @@ export interface GroupProductionTile extends UnitTotalGoal {
 export interface RecruitsTile {
   yourUnit: number;
   aabs: number;
+  /** The rows outside the head's *Grup langsung*; 0 there. */
+  abs: number;
 }
 
 export interface UnitTiles {
@@ -322,6 +392,12 @@ export interface UnitDashboardView {
   tiles: UnitTiles;
   yourUnit: YourUnit;
   units: UnitGroup[];
+  /** *Belum punya leader*: the Owner's or an Admin's own *Semua downline* only; `null` otherwise (ADR-0249 §2). */
+  unled: YourUnit | null;
+  /** The view answered, the views offered and *Grup informal*'s line (ADR-0249). */
+  scope: UnitView;
+  scopes: UnitViews;
+  informal: UnitInformal | null;
   production: UnitProductionState;
   mdrt: MdrtHeader;
   /** *Last updated* (UI-028): the office's day of its newest standing production import; `null` while it has none. */
@@ -345,8 +421,23 @@ const query = (params: Record<string, string | undefined>) => {
  * an empty unit, never a refusal, to a reader who leads nobody. Each read of somebody else's figures is
  * audited (D-audit).
  */
-export const readUnitDashboard = (params: { period?: UnitPeriod; for?: string } = {}) =>
-  api<UnitDashboardView>('/unit/dashboard' + query({ period: params.period, for: params.for }));
+export const readUnitDashboard = (params: { period?: UnitPeriod; for?: string; scope?: UnitView | null } = {}) =>
+  api<UnitDashboardView>('/unit/dashboard' + query({ period: params.period, for: params.for, scope: params.scope ?? undefined }));
+
+/** *+ Tambah ke grup*'s answer: the group, how many were tagged now, and its members today. */
+export interface GroupMembersAdded {
+  groupId: string;
+  name: string;
+  added: number;
+  memberCount: number;
+}
+
+/**
+ * ***+ Tambah ke grup*** (ADR-0249 §4): tag the ABs ticked into one group at once. The server checks every id, and the
+ * group, before it writes anything; `member:tag_group`, the Owner's and an Admin's.
+ */
+export const addGroupMembers = (groupId: string, membershipIds: readonly string[]) =>
+  api<GroupMembersAdded>(`/members/groups/${groupId}/members`, { method: 'POST', body: { membershipIds } });
 
 /**
  * One row of *Update production*: this month's APE, when it changed. *Since P19.5-T2* (R4; ADR-0214 §10) the year to
@@ -405,7 +496,7 @@ export const STATUS_TOOLTIP: Record<RosterStatus, string> = EN.statusTooltip;
  */
 export const OWN_COPY = {
   ...EN.own,
-  /** *produced Rp 29 jt*: `sum` written by the caller (P18.7-T3 AC-2). */
+  /** *produced Rp 29 Jt*: `sum` written by the caller (P18.7-T3 AC-2). */
   produced: (sum: string) => EN.own.produced({ sum }),
 };
 
@@ -455,9 +546,9 @@ export interface GoalWords {
  * {short} short"* over *"{achieved} of {target}"*. **No figure is shown as 0** (D-figures): no target is
  * *No goal set* (ADR-0080), and no actual *Not uploaded yet*.
  *
- * **Compact, by the client's own example** (UI-030, ADR-0167 §1): *"Rp 357,5 jt of 712,7 jt"*, one `Rp` for the
+ * **Compact, by the client's own example** (UI-030, ADR-0167 §1): *"Rp 357,5 Jt of 712,7 Jt"*, one `Rp` for the
  * pair, where *"Rp 357.500.000 of Rp 712.666.667"* wrapped in the cell — as every table's money is since ADR-0174
- * §4; the percentage whole (§1), *50% · Rp 355,2 jt short*.
+ * §4; the percentage whole (§1), *50% · Rp 355,2 Jt short*.
  */
 export function goalWords(
   cell: {
@@ -475,7 +566,7 @@ export function goalWords(
   const t = wordsIn(language);
   const { targetMinor: target, actualMinor: actual } = cell;
   const money = (minor: number) => formatRupiahCompact(minor, {}, figures);
-  // The production alone, with no target beside it, is labelled (P18.7-T3 AC-2): *produced Rp 29 jt*.
+  // The production alone, with no target beside it, is labelled (P18.7-T3 AC-2): *produced Rp 29 Jt*.
   const produced = (sum: number) => t.own.produced({ sum: money(sum) });
   if (cell.set === false || target === null) {
     return { tone: 'none', line: t.own.noGoal, sub: actual === null ? null : produced(actual) };
@@ -626,9 +717,9 @@ export function rowsOf(group: UnitGroup): UnitRow[] {
   return [group.head, ...group.members, ...group.units.flatMap(rowsOf)];
 }
 
-/** Everybody on the roster, as the coaching roster orders them (D-groups). */
-export function everyRow(view: Pick<UnitDashboardView, 'yourUnit' | 'units'>): UnitRow[] {
-  return [...view.yourUnit.rows, ...view.units.flatMap(rowsOf)];
+/** Everybody on the roster, as the coaching roster orders them (D-groups) — *Belum punya leader* last (ADR-0249 §2). */
+export function everyRow(view: Pick<UnitDashboardView, 'yourUnit' | 'units'> & { unled?: YourUnit | null }): UnitRow[] {
+  return [...view.yourUnit.rows, ...view.units.flatMap(rowsOf), ...(view.unled?.rows ?? [])];
 }
 
 /**
@@ -654,7 +745,7 @@ export interface DialogGroup {
  * On a unit below the reader the first group is *"{name}'s direct agents"* (data honesty).
  */
 export function dialogGroups(
-  view: Pick<UnitDashboardView, 'yourUnit' | 'units' | 'head'>, language: Language = SOURCE_LANGUAGE,
+  view: Pick<UnitDashboardView, 'yourUnit' | 'units' | 'head'> & { unled?: YourUnit | null }, language: Language = SOURCE_LANGUAGE,
 ): DialogGroup[] {
   const t = wordsIn(language);
   const first = view.head.isReader ? t.prototype.yourDirectAgents : t.directAgentsOf({ name: view.head.name });
@@ -664,6 +755,10 @@ export function dialogGroups(
       label: t.unitLower({ name: unit.head.name }),
       rows: rowsOf(unit).map((row) => ({ row, indent: Math.max(0, row.depth - unit.head.depth) })),
     })),
+    // ADR-0249 §2: the office-wide view's people with no leader, last.
+    ...(view.unled && view.unled.rows.length > 0
+      ? [{ label: t.views.unled, rows: view.unled.rows.map((row) => ({ row, indent: 0 })) }]
+      : []),
   ];
 }
 
@@ -893,7 +988,7 @@ export function rowHref(row: Pick<UnitRow, 'membershipId' | 'isReader' | 'coache
 
 /**
  * A compact sum split into its figure and its unit, for a tile's big number with the unit small beside it (UI-003):
- * *Rp 333,5* and *jt*; *IDR 333.5* and *M*. A sum with no unit (under a thousand) is all figure.
+ * *Rp 333,5* and *Jt*; *IDR 333.5* and *M*. A sum with no unit (under a thousand) is all figure.
  */
 export function splitMoney(text: string): { value: string; unit: string | null } {
   const match = /^(.*\d)\s?([A-Za-z]+)$/.exec(text);
@@ -978,8 +1073,9 @@ export interface PotensiLeader {
 
 /** One card: a unit below the head (`unit`), or the head and their direct agents (`direct`), last. */
 export interface PotensiUnit {
-  kind: 'unit' | 'direct';
-  leader: PotensiLeader;
+  /** `unled`: *Belum punya leader*, last — the office-wide *Semua downline* only (ADR-0249 §2); it has no leader. */
+  kind: 'unit' | 'direct' | 'unled';
+  leader: PotensiLeader | null;
   people: PotensiPerson[];
   totals: PotensiTotals;
 }
@@ -1011,6 +1107,10 @@ export interface UnitPotensiView {
   head: PotensiHead;
   tiles: PotensiTiles;
   units: PotensiUnit[];
+  /** The Overview's view, read the same way (ADR-0249). */
+  scope: UnitView;
+  scopes: UnitViews;
+  informal: UnitInformal | null;
 }
 
 /** A switched-on sales lead on the AA sheet: the client's name (Q-2), its next step and its stage. */
@@ -1056,8 +1156,8 @@ export interface UnitPotensiPersonView {
 }
 
 /** The tab's read: a month (the office's current one when none) for the reader's unit or `for` a leader's below them. */
-export const readUnitPotensi = (params: { month?: string; for?: string } = {}) =>
-  api<UnitPotensiView>('/unit/dashboard/potensi' + query({ month: params.month, for: params.for }));
+export const readUnitPotensi = (params: { month?: string; for?: string; scope?: UnitView | null } = {}) =>
+  api<UnitPotensiView>('/unit/dashboard/potensi' + query({ month: params.month, for: params.for, scope: params.scope ?? undefined }));
 
 /** A person's sheet for a month. A read of their leads, recorded by the server. */
 export const readPotensiPerson = (membershipId: string, params: { month?: string } = {}) =>

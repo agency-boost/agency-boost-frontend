@@ -137,11 +137,11 @@ describe('P18.9-T1 the forum’s stats table, the client’s reference slide (AD
     expect(cells('Avg. Case Size (IDR M)').slice(0, 2)).toEqual(['19.8', '17.6']);
   });
 
-  it('P18.10-T3 AC-1 in Indonesian: APE (Rp M) and Avg. Case Size (Rp jt), each figure with a comma, the months Indonesian', () => {
+  it('P18.10-T3 AC-1 in Indonesian: APE (Rp M) and Avg. Case Size (Rp Jt), each figure with a comma, the months Indonesian', () => {
     renderTab(Scorecard, makeMeetingView(), {}, 'id');
     // The table's own words in Indonesian too since P18.10-T4 moved them into the catalogue.
     expect(cells('APE (Rp M)')).toEqual(['12,1', '7,9', '8,4*, hanya mencakup sebagian periodenya; lihat catatan di bawah', '0,8', 'menunggu data', 'menunggu data']);
-    expect(cells('Avg. Case Size (Rp jt)').slice(0, 2)).toEqual(['19,8', '17,6']);
+    expect(cells('Avg. Case Size (Rp Jt)').slice(0, 2)).toEqual(['19,8', '17,6']);
     expect(cells('Cases/producing agents').slice(0, 2)).toEqual(['4,4', '3,8']);
     expect(screen.queryByText(/IDR/)).toBeNull();
     expect(screen.getByRole('columnheader', { name: 'Last Month (Agu-26)' })).toBeInTheDocument();
@@ -620,7 +620,7 @@ describe('P18.10-T3 figures on the forum’s scorecard', () => {
     renderTab(Scorecard, makeMeetingView(), {}, { live: false });
 
     expect(cells('APE (Rp M)')).toEqual(INDONESIAN_APE);
-    expect(cells('Avg. Case Size (Rp jt)').slice(0, 2)).toEqual(['19,8', '17,6']);
+    expect(cells('Avg. Case Size (Rp Jt)').slice(0, 2)).toEqual(['19,8', '17,6']);
     expect(cells('Cases/producing agents').slice(0, 2)).toEqual(['4,4', '3,8']);
     expect(screen.getByRole('columnheader', { name: 'Last Month (Agu-26)' })).toBeInTheDocument();
     expect(screen.queryByText(/IDR/)).toBeNull();

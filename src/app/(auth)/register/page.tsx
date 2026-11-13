@@ -1,10 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
 import { api, toDisplayError, type ApiError } from '@/lib/api-client';
 import { inviteTokenOf, readInviteBanner, type InviteBanner } from '@/lib/invites';
+import { landingFor } from '@/lib/landing';
+import { useSession } from '@/lib/session';
 import { signInPathFrom } from '@/lib/return-path';
 import { listInsurers, type Insurer } from '@/lib/companies';
 import { genderLabels, workStatusLabels, type Gender, type WorkStatus } from '@/lib/personal';
@@ -39,7 +41,19 @@ import { LinkBranding } from '@/components/branding/link-branding';
  * insurer — the label names it, *Joined Prudential*, once one is chosen — whether they work full-time
  * or part-time, and their gender. All four required. Whether the birth date is 18 years ago and the
  * month not still to come is the server's to say, and its sentence is shown under the field it names.
+ *
+ * **_Buat akun_ signs you in** (P19.12-T2 AC-3; ADR-0245 §3; the client's message of 11 November 2026, item 6): the
+ * answer carries the session — its refresh cookie set, its access token taken up here as signing in takes login's — and
+ * the page goes where signing in would land (`landingFor`): a person in no KPM to find one, somebody who joined on an
+ * invite or a leader's code to Home. The verification email is still sent, and optional (ADR-0190 §4). An address that
+ * already had an account is signed in to nothing, and reads a neutral screen with *Masuk* and *Lupa kata sandi?*.
  */
+
+/** What `POST /auth/register` answers (ADR-0245 §3): a session for an account made, or nothing for one that existed. */
+interface RegisterAnswer {
+  status: 'signed_in' | 'verification_sent';
+  accessToken?: string;
+}
 
 /** The four `POST /auth/register` refuses by name (`details.field`), shown under their own field. */
 const PERSONAL_FIELDS = ['dateOfBirth', 'companyJoinMonth', 'workStatus', 'gender'] as const;
@@ -59,15 +73,25 @@ export default function RegisterPage() {
  * agent code and the join date filled in from the invite and read-only — the server takes the invite's whatever
  * arrives — and the name filled in and the person's to correct. *Register KPM* and *Find Your Leader* never come:
  * the account joins the leader's unit as it is made. A link that opens nothing says why, in the server's words.
+ *
+ * **On a leader's link** (`?code=…`, P19.10-T2 AC-2; ADR-0236 §1): the code, said in a banner, and sent with the form —
+ * the account joins the code's leader's unit as it is made, with nobody to approve it. The form is the ordinary one:
+ * who holds a code is read signed in, never by a visitor, so no leader or office is named here, and the server takes
+ * the code's office's insurer whatever is chosen. A code that opens nothing is refused in the server's words, with the
+ * way to make an account without one. An invite's token wins over a code: it names its own leader.
  */
 function Register() {
-  const token = inviteTokenOf(useSearchParams());
+  const params = useSearchParams();
+  const token = inviteTokenOf(params);
+  const leaderCode = token ? null : (params.get('code')?.trim() || null);
   // The personal details' labels in the reader's language (`lib/personal.ts`, P18.10-T4).
   const language = useLanguage();
   const genders = genderLabels(language);
   const workStatuses = workStatusLabels(language);
   const all = useMessages(authMessages);
   const t = all.register;
+  const { adopt } = useSession();
+  const router = useRouter();
   const rules = all.password;
   const [invite, setInvite] = useState<InviteBanner | null>(null);
   const [inviteError, setInviteError] = useState<ApiError | null>(null);
@@ -93,6 +117,9 @@ function Register() {
       .catch((err) => { if (live) setInviteError(toDisplayError(err)); });
     return () => { live = false; };
   }, [token]);
+
+  // *Create an account without a code* stays on this page: the refusal about the code goes with the code.
+  useEffect(() => { setError(null); }, [leaderCode]);
 
   useEffect(() => {
     let live = true;
@@ -145,21 +172,38 @@ function Register() {
     event.preventDefault();
     setBusy(true);
     setError(null);
+    let leaving = false;
     try {
       // The confirmation never leaves the screen. `RegisterDto` has no field for it, and
       // global validation rejects an unknown one — so sending the whole form object would
       // turn a correctly filled form into a 400.
       const { confirmPassword: _confirm, ...body } = form;
-      await api('/auth/register', { method: 'POST', body: invite && token ? { ...body, inviteToken: token } : body });
+      const answer = await api<RegisterAnswer>('/auth/register', {
+        method: 'POST',
+        body: invite && token ? { ...body, inviteToken: token } : leaderCode ? { ...body, leaderCode } : body,
+      });
+      // An account made here is signed in (ADR-0245 §3): its session taken up, and on to where signing in lands.
+      const signedIn = answer?.status === 'signed_in' && answer.accessToken ? await adopt(answer.accessToken) : null;
+      if (signedIn) {
+        leaving = true;
+        router.push(landingFor(signedIn));
+        return;
+      }
       setDone(true);
     } catch (err) {
       setError(toDisplayError(err));
     } finally {
-      setBusy(false);
+      // Still busy while the page leaves, so the form is never offered twice.
+      if (!leaving) setBusy(false);
     }
   }
 
-  const signIn = token ? signInPathFrom({ pathname: '/join', search: `?invite=${encodeURIComponent(token)}` }) : '/login';
+  // An account that exists signs in and comes back to the invite, or to the code's page, to join from there.
+  const signIn = token
+    ? signInPathFrom({ pathname: '/join', search: `?invite=${encodeURIComponent(token)}` })
+    : leaderCode
+      ? signInPathFrom({ pathname: '/join', search: `?code=${encodeURIComponent(leaderCode)}` })
+      : '/login';
 
   if (token && !invite) {
     return (
@@ -197,9 +241,10 @@ function Register() {
         * the line would contradict the banner under it. The title keeps its gap at every size then.
         */}
       <PublicTitle>
-        <h1 className={cn('font-display text-3xl font-bold text-navy', invite ? 'mb-6' : 'max-md:mb-6')}>{t.title}</h1>
+        <h1 className={cn('font-display text-3xl font-bold text-navy', invite || leaderCode ? 'mb-6' : 'max-md:mb-6')}>{t.title}</h1>
       </PublicTitle>
-      {!invite && (
+      {/* Nor on a leader's link (P19.10-T2 AC-2): the code places them in the leader's office as the account is made. */}
+      {!invite && !leaderCode && (
         <p className={cn('mb-6 mt-1 text-md text-muted', REMOVED_ON_PHONE)}>
           {t.line}
         </p>
@@ -212,6 +257,13 @@ function Register() {
         </Card>
       )}
 
+      {leaderCode && (
+        <Card className="mb-4 border-l-4 border-l-primary" density="compact">
+          <p className="font-display text-lg font-bold text-navy">{t.code.banner({ code: leaderCode.toUpperCase() })}</p>
+          <p className="mt-1 text-md text-muted">{t.code.bannerLine}</p>
+        </Card>
+      )}
+
       <Card>
         {invite?.existingAccount ? (
           <div className="flex flex-col gap-3">
@@ -219,20 +271,28 @@ function Register() {
             <ButtonLink href={signIn} className="self-start">{t.invite.signInToAccept}</ButtonLink>
           </div>
         ) : done ? (
-          <div>
-            {/* The API answers the same way for an address that already exists, so this
-                screen must too — saying "already registered" would let anyone test
-                addresses against it. */}
+          /*
+           * **Nothing was made** (ADR-0245 §3): the address already had an account, or the session could not be read
+           * back. Neutral — no word of verifying, which signing in never waits on — with the two ways on: signing in
+           * (back to the invite or the code's page, to join from there) and a new password.
+           */
+          <div className="flex flex-col gap-3">
             <p className="text-md text-navy">{t.sent({ email: <strong>{form.email}</strong> })}</p>
-            <p className="mt-2 text-sm text-muted">{t.sentLine}</p>
-            {invite && <p className="mt-2 text-sm text-muted">{t.invite.doneLine({ leader: invite.leaderName })}</p>}
-            <Link href="/login" className="mt-4 inline-block text-sm text-muted underline">
-              {t.backToSignIn}
-            </Link>
+            <p className="text-sm text-muted">{t.sentLine}</p>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+              <ButtonLink href={signIn}>{t.signIn}</ButtonLink>
+              <Link href="/forgot-password" className="inline-flex min-h-11 items-center text-sm text-muted underline">
+                {all.signIn.forgot}
+              </Link>
+            </div>
           </div>
         ) : (
           <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
             {error && !refusedField && <ErrorBanner {...error} />}
+            {/* A code that opens nothing (410): the way on without it, the ordinary sign-up. */}
+            {leaderCode && error?.code === 'ORG_INVITE_EXPIRED' && (
+              <ButtonLink href="/register" variant="secondary" className="self-start">{t.code.withoutCode}</ButtonLink>
+            )}
 
             <Field label={t.fullName} htmlFor="fullName">
               <TextInput

@@ -19,6 +19,14 @@ export const coachingSessionHref = (membershipId: string, from?: string) =>
   `/coaching/${encodeURIComponent(membershipId)}/session` + (from ? `?from=${encodeURIComponent(from)}` : '');
 
 /**
+ * The reader's own coaching, on one session: the finalize notice's address (P11-T10 AC-8), and a coaching task row's on
+ * the Calendar and Home. *Moved here 2026-11-10 (P19.11, the bundle):* Home's *Aksi hari ini* draws the Calendar's
+ * `TaskRow`, and this link took `lib/coaching.ts` and Coaching's catalogue into `/home`'s first load.
+ */
+export const myCoachingHref = (sessionId?: string) =>
+  (sessionId ? `/coaching/me?session=${encodeURIComponent(sessionId)}` : '/coaching/me');
+
+/**
  * **A 1:1 with somebody, on the calendar** (P18.8-T6 AC-4; ADR-0173 §3): the address `/new-hires`' *Schedule 1:1*
  * opens — the calendar's new-entry dialog as a *1:1 coaching* entry with them invited. By membership id alone, so no
  * name rides in the address: the calendar finds it in the reader's own downline (`GET /calendar/downline`).

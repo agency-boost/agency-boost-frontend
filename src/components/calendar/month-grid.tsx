@@ -9,12 +9,12 @@ import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-pro
 import { calendarMessages } from '@/i18n/messages/calendar';
 import { itemsOnDay, MONTH_LINES, tasksPerDay } from '@/lib/calendar-layout';
 import {
-  isBusy, isHiddenTask, owesOf, titleOf, type CalendarEntry, type CalendarItem, type CalendarJoinedItem, type CalendarRead,
+  isBusy, owesOf, titleOf, type CalendarEntry, type CalendarItem, type CalendarJoinedItem, type CalendarRead,
 } from '@/lib/calendar';
 import { formatMonthSpan, formatNumber, formatWeekdayDay, weekdayHeadings } from '@/lib/format';
 import { cn } from '@/lib/cn';
 import { MONTH_BORDER, PaneHeadBar, type PaneHead } from './calendar-parts';
-import { dayShort, useCalendarTasks } from './calendar-tasks';
+import { ALL_DONE_TONE, dayShort, doneTasks, openTasks, useCalendarTasks } from './calendar-tasks';
 
 /** A cell's line: an entry, a busy block, or an event joined (UI-104). */
 type MonthItem = CalendarItem | CalendarJoinedItem;
@@ -89,8 +89,11 @@ export function MonthGrid({
   const t = useMessages(calendarMessages);
   const words = useLanguage();
   const language = useFigureLanguage();
-  const { struck } = useCalendarTasks();
-  const counts = tasksPerDay(read.tasks.filter((task) => isHiddenTask(task) || !struck.has(task.taskId)));
+  const { isDone } = useCalendarTasks();
+  // The open ones (P19.11-T1 AC-2): the badge counts what is left to do.
+  const counts = tasksPerDay(openTasks(read.tasks, isDone));
+  // A day with every task ticked keeps a muted ✓ (P19.11-T1 AC-1), so its completed tasks are still a tap away.
+  const doneCounts = tasksPerDay(doneTasks(read.tasks, isDone));
   const lines: MonthItem[] = [...read.entries, ...read.events];
   const grid = (
     <div className={cn('grid grid-cols-7', !head && !phone && FRAME)}>
@@ -105,6 +108,8 @@ export function MonthGrid({
         const today = date === read.today;
         const tasks = counts.get(date) ?? 0;
         const tasksName = t.tasksOn({ day: dayShort(date, language), count: formatNumber(tasks, {}, language) });
+        const allDone = tasks === 0 ? doneCounts.get(date) ?? 0 : 0;
+        const allDoneName = t.allTasksDone({ day: dayShort(date, language), count: formatNumber(allDone, {}, language) });
         return (
           <div
             key={date}
@@ -122,6 +127,7 @@ export function MonthGrid({
                 formatWeekdayDay(date, language),
                 ...(phone && items.length > 0 ? [t.eventCount({ n: items.length, count: formatNumber(items.length, {}, language) })] : []),
                 ...(phone && tasks > 0 ? [tasksName] : []),
+                ...(phone && allDone > 0 ? [allDoneName] : []),
               ].join(', ')}
               aria-current={today ? 'date' : undefined}
               onClick={() => (phone ? onAgenda(date) : onWeek(date))}
@@ -160,6 +166,23 @@ export function MonthGrid({
                   {formatNumber(tasks, {}, language)}
                 </button>
               ))}
+              {allDone > 0 && (phone ? (
+                // The cell itself opens the day in the Agenda, and says so in its name.
+                <span aria-hidden="true" data-task-badge={date} data-all-done="" className={cn(MONTH_PILL, ALL_DONE_TONE)}>
+                  <LineIcon name="check" className="h-3 w-3" />
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  data-task-badge={date}
+                  data-all-done=""
+                  aria-label={allDoneName}
+                  onClick={() => onAgenda(date)}
+                  className={cn(MONTH_PILL, ALL_DONE_TONE, 'pointer-events-auto leading-5 hover:brightness-95')}
+                >
+                  <LineIcon name="check" className="h-3 w-3" />
+                </button>
+              ))}
             </span>
             {!phone && items.length > 0 && (
               <ul className="pointer-events-none relative mt-1.5 flex flex-col gap-[3px]">
@@ -169,10 +192,10 @@ export function MonthGrid({
                       <Link
                         href={`/events/${encodeURIComponent(item.eventId)}`}
                         data-event=""
-                        aria-label={t.joinedName({ title: item.title, type: item.type.label, time: formatMonthSpan(item.start ?? '', item.end ?? '', language) })}
+                        aria-label={t.joinedName({ title: titleOf(item, words), type: item.type.label, time: formatMonthSpan(item.start ?? '', item.end ?? '', language) })}
                         className="pointer-events-auto block w-full truncate rounded-sm border-l-[2.5px] border-lavender bg-lavender/[0.14] px-[5px] py-0.5 text-left text-2xs font-semibold leading-tight text-navy"
                       >
-                        <span className="font-bold">{item.title}</span>
+                        <span className="font-bold">{titleOf(item, words)}</span>
                         <span className="ml-1 text-navy-soft">{formatMonthSpan(item.start ?? '', item.end ?? '', language)}</span>
                       </Link>
                     ) : (

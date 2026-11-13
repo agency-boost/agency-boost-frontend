@@ -12,7 +12,7 @@ import { leadsMessages } from '@/i18n/messages/leads';
 import { cn } from '@/lib/cn';
 import { dayInZone, formatShortDay, OFFICE_TIME_ZONE } from '@/lib/format';
 import { nextActionState, type Lead } from '@/lib/leads';
-import { newProposalHref, productsPill } from '@/lib/proposals';
+import { proposalHref } from '@/lib/proposals';
 import { useCan, useSession } from '@/lib/session';
 import type { LeadStatusRow } from '@/lib/tenant-config';
 import { useTenantConfig } from '@/lib/tenant-config-cache';
@@ -40,11 +40,12 @@ export function stageTone(ladder: readonly LeadStatusRow[], code: string | null)
  * accent (`selected`, `aria-current`). There, on the reader's own lead while the list is in their saved order, the drag
  * handle stands before the avatar (`order`; I-295, the client's request of 2026-10-26, which the table carried).
  *
- * **The lead's proposal** (P19.7-T2 AC-1, AC-12; ADR-0221 §6, §8; the proposal spec, *Proposals on the Leads page*): a
- * document icon and the latest proposal's first product, with *+n* for the rest (*"PRUWell Medical +1"*), as a third pill
- * beside the type and the stage — only where the server sends `proposals`, which it does on the reader's own leads
- * alone; nothing extra on a lead with none. And ***Buat proposal*** on the reader's own Sales lead: the document icon as
- * a round link beside WhatsApp, named and tipped, to step 1 with this lead chosen (`newProposalHref`).
+ * **The lead's proposal** (P19.11-T3 AC-1, AC-2; UX-9; UXQ3): the document icon as a round link left of WhatsApp,
+ * **only on a lead with a finished proposal** (`proposals.done` ≥ 1, counted by the server) — drafts never count — and it
+ * opens the one saved last (`proposals.latestDone`) at its step 3, named and tipped. The server sends `proposals` on the
+ * reader's own leads alone, so a downline's card never has it. WhatsApp keeps its place at the right edge either way.
+ * No product chip any more (the *"PRUMapan"* pill, P19.7-T2 AC-12, went with UX-9); `proposals.latest` stays in the
+ * payload. *Buat proposal* lives in the lead's sheet, under its *Proposal*.
  */
 export function LeadCard({
   lead, ladder: given, today = dayInZone(OFFICE_TIME_ZONE, new Date()), onOpen, onSaved, inPane = false, selected = false, order,
@@ -78,11 +79,11 @@ export function LeadCard({
   const figures = useFigureLanguage();
   const { config } = useTenantConfig();
   const { me } = useSession();
-  const canPropose = useCan('proposal:create');
+  const canReadProposals = useCan('proposal:read');
   const ladder = given ?? config?.leadPipelines.find((p) => p.pipeline === lead.type)?.statuses ?? [];
   const mine = lead.ownerMembershipId === me?.membership?.membershipId;
-  // *Buat proposal* on the reader's own Sales lead (ADR-0221 §3: a proposal is for one of the owner's own Sales leads).
-  const proposable = canPropose && lead.type === 'sales' && mine;
+  // The finished proposal saved last (UX-9): `null` on a lead with drafts only, with none, or somebody else's.
+  const finished = canReadProposals && (lead.proposals?.done ?? 0) > 0 ? lead.proposals?.latestDone ?? null : null;
   const state = nextActionState(lead, today);
   const late = state === 'overdue';
   const day = lead.nextActionDate
@@ -123,7 +124,6 @@ export function LeadCard({
         <LeadPills
           lead={lead}
           ladder={ladder}
-          proposals
           // *Milik Rina Wijaya* on a lead that is not the reader's (P19.9-T1 AC-4): a leader's card under *Tim*.
           owner={!mine && lead.owner?.name ? t.list.ownedBy({ name: lead.owner.name }) : null}
           className="mt-1"
@@ -147,12 +147,12 @@ export function LeadCard({
           )}
         </p>
       </div>
-      {proposable && (
+      {finished && (
         <Link
-          href={newProposalHref(lead.id)}
-          aria-label={t.list.makeProposalFor({ who: lead.name })}
-          title={t.list.makeProposal}
-          data-make-proposal={lead.id}
+          href={proposalHref(finished.id, 3)}
+          aria-label={t.list.openProposalFor({ who: lead.name })}
+          title={t.list.openProposal}
+          data-open-proposal={finished.id}
           className="relative z-[1] flex h-11 w-11 shrink-0 items-center justify-center rounded-full"
         >
           <span className="flex h-9 w-9 items-center justify-center rounded-full bg-hover-row text-navy">
@@ -170,12 +170,14 @@ export function LeadCard({
  * and the stage in its ladder's tone (`stageTone`), a stage the office retired by its code. The card's line, and the
  * pane's head under the NAME (UI-116). **On the card, whose lead it is** when it is not the reader's (P19.9-T1 AC-4;
  * ADR-0232): *Milik Rina Wijaya*, in grey words at the line's end — no pill, so it is never read as a status.
+ *
+ * **A small muted *›* between the two** (P19.11-T3 AC-3; UX-9: *Sales › Approved, not paid*), hidden from a screen
+ * reader, and only where both are drawn. It travels with the stage: the two are one unit of the line, so a stage that
+ * wraps takes its *›* to the next line rather than leaving it at the end of this one.
  */
-export function LeadPills({ lead, ladder, proposals = false, owner = null, className }: {
-  lead: Pick<Lead, 'type' | 'statusCode' | 'proposals'>;
+export function LeadPills({ lead, ladder, owner = null, className }: {
+  lead: Pick<Lead, 'type' | 'statusCode'>;
   ladder: readonly LeadStatusRow[];
-  /** The card's third pill, the lead's proposal (P19.7-T2 AC-12). The pane's head leaves it to its *Proposal* section. */
-  proposals?: boolean;
   /** *Milik {nama}* (P19.9-T1 AC-4), the card's, on a lead that is not the reader's; `null` draws nothing. */
   owner?: string | null;
   className?: string;
@@ -183,7 +185,7 @@ export function LeadPills({ lead, ladder, proposals = false, owner = null, class
   const t = useMessages(leadsMessages);
   const stage = ladder.find((s) => s.code === lead.statusCode)?.label ?? (lead.statusCode ? t.retired({ code: lead.statusCode }) : null);
   return (
-    <div className={cn(className, 'flex flex-wrap gap-1.5')}>
+    <div className={cn(className, 'flex flex-wrap items-center gap-1.5')}>
       {lead.type ? (
         <span
           className={cn(
@@ -196,32 +198,13 @@ export function LeadPills({ lead, ladder, proposals = false, owner = null, class
       ) : (
         <TonePill tone="grey">{t.noType}</TonePill>
       )}
-      {stage && <TonePill tone={stageTone(ladder, lead.statusCode)} className="max-w-full truncate">{stage}</TonePill>}
-      {proposals && lead.proposals && <ProposalPill proposals={lead.proposals} />}
+      {stage && (
+        <span data-lead-stage="" className="inline-flex min-w-0 max-w-full items-center gap-1.5">
+          <span aria-hidden="true" data-pill-separator="" className="shrink-0 text-xs font-semibold leading-5 text-muted">›</span>
+          <TonePill tone={stageTone(ladder, lead.statusCode)} className="min-w-0 max-w-full shrink truncate">{stage}</TonePill>
+        </span>
+      )}
       {owner && <span data-lead-owner="" className="min-w-0 max-w-full truncate text-xs font-semibold leading-5 text-muted">{owner}</span>}
     </div>
-  );
-}
-
-/**
- * ***"PRUWell Medical +1"*** (P19.7-T2 AC-12; Acc. 4): the document icon and the latest proposal's first product, then how
- * many more it holds. A lead whose proposals are all still empty drafts has no name to show: the icon alone, named by
- * the count. In the neutral grey of a pill, never a status colour (the spec's fixed colours are *Draf* and *Selesai*'s).
- */
-function ProposalPill({ proposals }: { proposals: NonNullable<Lead['proposals']> }) {
-  const t = useMessages(leadsMessages);
-  const text = productsPill(proposals.latest.products);
-  return (
-    <span data-proposal-pill="" className="inline-flex max-w-full items-center gap-1 rounded-pill bg-hover-row px-2 py-px text-xs font-semibold text-navy">
-      <LineIcon name="document" className="h-3.5 w-3.5 shrink-0" />
-      {text ? (
-        <>
-          <span className="sr-only">{t.list.filters.proposal}: </span>
-          <span className="truncate">{text}</span>
-        </>
-      ) : (
-        <span className="sr-only">{t.list.proposalCount({ n: proposals.count })}</span>
-      )}
-    </span>
   );
 }

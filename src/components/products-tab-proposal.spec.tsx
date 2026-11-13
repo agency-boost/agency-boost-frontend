@@ -32,7 +32,7 @@ const product = (over: Record<string, unknown> = {}) => ({
   defaultAttackPlan: { goodFit: '', opening: '', benefits: [], fullScript: '', objections: [], nextAction: '' },
   commissionSchedule: [], lifecycle: 'active', replacedByProductId: null, activeByDefault: true, sortOrder: 1, version: 3,
   proposalFields: [PLAN, UP],
-  planOptions: [{ name: 'Gold', highlights: [{ label: 'Kamar', value: 'Rp 1,5 jt' }], popular: true }],
+  planOptions: [{ name: 'Gold', highlights: [{ label: 'Kamar', value: 'Rp 1,5 Jt' }], popular: true }],
   faq: [{ question: 'Ada masa tunggu?', answer: 'Ya, 30 hari.' }],
   pdfDetail: [], syariahName: null, defaultInsured: null, proposalTypeLabel: null,
   ...over,
@@ -115,7 +115,7 @@ describe('P19.7-T1 AC-3 the Proposal section', () => {
     const body = patched(stub);
     expect((body.proposalFields as ProposalField[])[2]).toMatchObject({ key: 'saver', type: 'chips', default: 'Tidak' });
     expect(body.planOptions).toEqual([
-      { name: 'Gold', highlights: [{ label: 'Kamar', value: 'Rp 1,5 jt' }], popular: true },
+      { name: 'Gold', highlights: [{ label: 'Kamar', value: 'Rp 1,5 Jt' }], popular: true },
       { name: 'Silver', highlights: [{ label: '', value: '' }], popular: false },
     ]);
     expect(body.faq).toEqual([{ question: 'Bisa di luar negeri?', answer: 'Bisa, plan Asia.' }]);

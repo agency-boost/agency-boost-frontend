@@ -206,6 +206,9 @@ const PAIRS: ReadonlyArray<[file: string, ours: string, theirs: string]> = [
   // P13.1-T5: *The gap*'s sentence reads its four numbers straight off `GET /summary`'s pace (ADR-0109).
   ['summary.ts', 'Pace', 'PaceDto'],
   ['summary.ts', 'PeriodFigures', 'MonthlyFiguresDto'],
+  // P19.11-T4 (UX-12): *Bulanan*'s headline reads which figure is in force, and whether an upload lies beneath it.
+  ['summary.ts', 'MonthRealised', 'MonthRealisedDto'],
+  ['goals.ts', 'GoalMonthApe', 'GoalMonthApeResponseDto'],
   // P13.1-T4: `/leads` and the coaching session's *Leads* card read a lead straight off `/leads`.
   ['leads.ts', 'Lead', 'LeadResponseDto'],
   ['leads.ts', 'LeadContact', 'LeadContactDto'],
@@ -215,6 +218,8 @@ const PAIRS: ReadonlyArray<[file: string, ours: string, theirs: string]> = [
   // P19.7-T2 AC-12 (ADR-0221 §6): a lead's proposals on the card — how many, and the latest one's products.
   ['leads.ts', 'LeadProposals', 'LeadProposalsDto'],
   ['leads.ts', 'LeadLatestProposal', 'LeadLatestProposalDto'],
+  // P19.11-T3 AC-1 (UX-9): the finished count and the one the card's proposal icon opens.
+  ['leads.ts', 'LeadLatestDoneProposal', 'LeadLatestDoneProposalDto'],
   // Phase 14: the Product Catalog, its drawer and the Sales Attack Plan read every one of these straight
   // off the field reads; a field renamed on the server would draw a blank card, block or verdict.
   ['product-catalog.ts', 'CatalogList', 'CatalogListDto'],
@@ -819,6 +824,8 @@ const ACTIVATION_PAIRS: ReadonlyArray<[file: string, ours: string, theirs: strin
   ['activation.ts', 'NewHiresRoster', 'NewHiresRosterDto'],
   // P18.8-T6: the year of new hires by their 3M result and its figures (*Mark left* retired with UI-025).
   ['activation.ts', 'NewHireRow', 'NewHireRowDto'],
+  // P19.11-T2 AC-4 (UX-14): the row's person carries their photo, for the circle of a hire not activated yet.
+  ['activation.ts', 'NewHirePerson', 'NewHirePersonDto'],
   ['activation.ts', 'NewHireUnitRef', 'NewHireUnitRefDto'],
   ['activation.ts', 'NewHireUnit', 'NewHireUnitDto'],
   ['activation.ts', 'NewHireChecklist', 'NewHireChecklistDto'],
@@ -1446,11 +1453,10 @@ const HOME_PAIRS: ReadonlyArray<[file: string, ours: string, theirs: string]> = 
   ['home.ts', 'HomeDay', 'HomeDayDto'],
   ['home.ts', 'HomeActivity', 'HomeActivityDto'],
   ['home.ts', 'HomeSchedule', 'HomeScheduleDto'],
-  ['home.ts', 'HomePerson', 'HomePersonDto'],
-  ['home.ts', 'HomeCoachingAction', 'HomeCoachingActionDto'],
-  ['home.ts', 'HomeLeadAction', 'HomeLeadActionDto'],
-  ['home.ts', 'HomeLeadContact', 'HomeLeadContactDto'],
-  ['home.ts', 'HomeAgendaAction', 'HomeAgendaActionDto'],
+  // P19.11-T1 AC-3: *Aksi hari ini*'s rows carry the Calendar's own task, entry and joined event (`CALENDAR_PAIRS`).
+  ['home.ts', 'HomeTaskAction', 'HomeTaskActionDto'],
+  ['home.ts', 'HomeEntryAction', 'HomeEntryActionDto'],
+  ['home.ts', 'HomeEventAction', 'HomeEventActionDto'],
   ['home.ts', 'HomeCountOf', 'HomeCountOfDto'],
   ['home.ts', 'HomeSplit', 'HomeSplitDto'],
   ['home.ts', 'HomeTeamPerson', 'HomeTeamPersonDto'],
@@ -1465,5 +1471,28 @@ describe('UI V1 Home’s read matches the API document (Phase 18.11 T11)', () =>
 
   it('UI-100 the client reads GET /home, which the document has', () => {
     expect(doc.paths['/api/v1/home']?.get).toBeDefined();
+  });
+});
+
+/*
+ * **P19.11-T5 (UX-13): the Summary's leads are `/leads`' rows** — the shared lead card draws them and its sheet opens them,
+ * so each row is the list's own shape, and `shown` is the server's top five (`SUMMARY.LEADS_SHOWN`), never re-declared
+ * here. `Summary.leads` is declared inline, so its fields are held to `SummaryLeadsDto` by name.
+ */
+describe('P19.11-T5 the Summary’s leads match the API document', () => {
+  const leads = () => doc.components.schemas.SummaryLeadsDto;
+
+  it('P19.11-T5 AC-4 each row is GET /leads’ row, LeadResponseDto', () => {
+    expect(leads()?.properties?.rows?.items?.$ref).toBe('#/components/schemas/LeadResponseDto');
+  });
+
+  it('P19.11-T5 AC-2 AC-4 Summary.leads › rows, total, shown, unitOpen ⊆ SummaryLeadsDto', () => {
+    const src = readFileSync(join(__dirname, 'summary.ts'), 'utf8');
+    const inline = /^\s{2}leads: \{ ([^}]*) \};/m.exec(src);
+    expect(inline).not.toBeNull();
+    const fields = [...inline![1].matchAll(/(\w+)\??:/g)].map((m) => m[1]);
+    expect(fields).toEqual(['rows', 'total', 'shown', 'unitOpen']);
+    const documented = new Set(propertiesOf('SummaryLeadsDto'));
+    expect(fields.filter((f) => !documented.has(f))).toEqual([]);
   });
 });

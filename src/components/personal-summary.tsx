@@ -1,7 +1,8 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
-import { useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { Boost } from '@/components/boost';
 import { ChasingCampaigns } from '@/components/campaigns/chasing-card';
 import { ComingInPhaseSection } from '@/components/coming-in-phase';
@@ -10,7 +11,6 @@ import { RatioCard } from '@/components/ratio-card';
 import { LineIcon } from '@/components/ui/line-icon';
 import { TEXT_TAP } from '@/components/ui/phone';
 import { LazyResponsiveSheet } from '@/components/ui/lazy-responsive-sheet';
-import { StatusPill } from '@/components/ui/status-pill';
 import { TermTip } from '@/components/ui/term-tip';
 import { goalWordMessages } from '@/i18n/messages/goal-words';
 import { TippedGlyph } from '@/components/ui/tipped-glyph';
@@ -24,19 +24,31 @@ import type { ActivityRatios } from '@/lib/activity';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import { coachingTabHref, PRONOUN_FORMS, type CoacheeSubject } from '@/lib/coaching';
-import { formatCalendarDay, formatMonth, formatNumber, formatRupiahCompact, formatShortDay, moneyPrefix } from '@/lib/format';
-import { groupDigits, parseDigits, producedFrom, saveApeEstimate, toMajor, toMinor } from '@/lib/goals';
-import { flagLabel } from '@/lib/lead-flags';
+import {
+  formatCalendarDay, formatDecimalInput, formatMoneyUnit, formatMonth, formatNumber, formatRupiahCompact, formatShortDay, moneyPrefix,
+  parseDecimal,
+} from '@/lib/format';
+import {
+  groupDigits, millionsToMinor, minorToMillions, parseDigits, producedFrom, saveApeEstimate, saveMonthApe, toMajor, toMinor,
+} from '@/lib/goals';
 import { formatBenchmark, formatRatioForStatus } from '@/lib/ratio-format';
 import {
   daysLeftIn,
-  type ActivityTarget, type FigureSource, type Insight, type OpenLead, type PeriodFigures, type ProductionHeld, type SectionChip,
+  type ActivityTarget, type FigureSource, type Insight, type MonthRealised, type PeriodFigures, type ProductionHeld,
+  type SectionChip,
   type Summary, type SummaryActivity,
 } from '@/lib/summary';
 import { useMediaQuery } from '@/lib/use-media-query';
-import { useCan } from '@/lib/session';
+import { useCan, useSession } from '@/lib/session';
 import { termDefinition, termQuestion } from '@/lib/terms';
-import { ErrorBanner } from '@/components/ui/field';
+import { ErrorBanner, TextInput } from '@/components/ui/field';
+
+/**
+ * The leads section, downloaded beside the Summary's read (P19.11-T5): its cards are the Leads screen's (`LeadCard`),
+ * which bring the leads client with them, and it sits below the fold — so the route's first paint stays without it
+ * (`first-load.spec.ts`, P18.11-T16).
+ */
+const SummaryLeads = dynamic(() => import('@/components/summary-leads').then((m) => m.SummaryLeads), { ssr: false });
 
 /**
  * The Personal Summary's cards (P10-T4 to P10-T7), drawn for whoever the page is about.
@@ -139,7 +151,7 @@ const goalHref = (voice: PageVoice) =>
   (voice.coachee ? coachingTabHref(voice.coachee.membershipId, 'goal-setting') : '/goals');
 
 export function SummaryCards({
-  summary, view, pulse, subject, onChanged,
+  summary, view, pulse, subject, onChanged, onLeadsChanged,
 }: {
   summary: Summary;
   view: SummaryView;
@@ -156,6 +168,11 @@ export function SummaryCards({
    * from the goal card. The reader's own `/summary` passes it; without it the card offers no estimate.
    */
   onChanged?: () => void;
+  /**
+   * **The page reads the Summary again after a lead changes** (P19.11-T5 AC-1): saved, closed or deleted from the lead
+   * sheet the leads section opens, or a number saved through WhatsApp — on the reader's own page and a coachee's alike.
+   */
+  onLeadsChanged?: () => void;
 }) {
   const t = useMessages(summaryMessages);
   // *From the Campaign list*: the campaigns' words (`campaign-chasing.ts`), in the reader's language.
@@ -240,7 +257,16 @@ export function SummaryCards({
    * setelah ratio*); last in the right column on a laptop (UI-121). Left out on a phone while empty (UI-055), and on a
    * tablet too, whose blocks are the phone's (UI-121).
    */
-  const leads = <LeadsSection leads={summary.leads} voice={voice} hideWhenEmpty={arrangement === 'tablet'} />;
+  const leads = (
+    // P19.11-T5 (UX-13): the shared lead card, the top five and *Lihat semua (N)*, the sheet over the page.
+    <SummaryLeads
+      leads={summary.leads}
+      voice={voice}
+      today={summary.today}
+      hideWhenEmpty={arrangement === 'tablet'}
+      onChanged={onLeadsChanged}
+    />
+  );
 
   /*
    * *Campaign yang Anda kejar* (P18.2-T7 AC-6; UI-006): the chases from the Campaign list that have not ended, each
@@ -367,17 +393,26 @@ function Section({
  * - **Boost celebrating** beside the figure when the goal is reached (UI-102: goal ≥ 100%).
  *
  * **Where the figure came from is a marker, not a sentence** (ADR-0063 §5): the ⓘ beside it says whose figure it is and
- * for which month. Read-only (ADR-0058).
+ * for which month.
+ *
+ * **On *Bulanan* the headline is the month's realised APE, the reader's to correct** (P19.11-T4; UX-12, UXQ2's
+ * default): `Rp 216,5 Jt` — the member's own figure typed over the upload, then the upload, then *Belum diunggah*
+ * (`monthly.realised`) — and on their own page, for a month of a year not ended, **a tap edits it in place, in
+ * millions** (`MonthApeField`); *Diubah manual* beside it while their own is in force, and under it *Kembalikan ke data
+ * unggahan* — or, with nothing uploaded, *Hapus angka manual*, back to *Belum diunggah*. *Sisa bulan ini*, *Polis yang
+ * dibutuhkan* and the bar are the server's, from whichever figure is in force. A coach reads the figure and the marker,
+ * and changes nothing. No *Produksi diunggah…* paragraph (its sentence is in the ⓘ), no year-to-date estimate row and no
+ * *(belum ada data produksi)* on *Bulanan* (UX-12); *Tahunan* keeps its year-to-date estimate, *Ubah* and *Hapus*.
  */
 function GoalSection({
   summary, numbers, month, voice, when, onChanged,
 }: {
   summary: Summary;
-  numbers: PeriodFigures & { source: FigureSource | null } & ProductionHeld;
+  numbers: PeriodFigures & { source: FigureSource | null } & ProductionHeld & { realised?: MonthRealised };
   month: boolean;
   voice: PageVoice;
   when: PeriodWords;
-  /** The reader's own page re-reads after an estimate is saved (UI-157 item 4); absent, no estimate is offered. */
+  /** The reader's own page re-reads after an estimate or a month's figure is saved (UI-157 item 4); absent, no editing. */
   onChanged?: () => void;
 }) {
   const t = useMessages(summaryMessages);
@@ -387,6 +422,7 @@ function GoalSection({
   // UI-157 item 3: the Owner's and an Admin's way to the upload, which the API refuses anybody else.
   const canUpload = useCan('data_upload:upload_and_preview');
   const [editing, setEditing] = useState(false);
+  const [editingMonth, setEditingMonth] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const pct = numbers.attainmentPct;
@@ -395,22 +431,35 @@ function GoalSection({
   const money = (minor: number) => formatRupiahCompact(minor, {}, figures);
   const source = numbers.source;
   const own = voice.coachee === null;
+  /** *Bulanan*'s realised APE (P19.11-T4): which figure is in force, and whether an upload lies beneath it. */
+  const realised = month ? numbers.realised ?? null : null;
+  const manual = realised?.source === 'manual';
   /*
    * **Whose figure the APE produced is** (UI-157, ADR-0195): the office's file, the member's own estimate (the year only),
-   * or nothing yet — the server's `production`, read from the figures where a reply predates it.
+   * or nothing yet — the server's `production`, read from the figures where a reply predates it. On *Bulanan*, the
+   * realised APE's own source (P19.11-T4).
    */
   const production = numbers.production
     ?? (numbers.actualMinor === null ? 'none' : source?.provenance === 'self_reported' ? 'estimate' : 'official');
-  const none = production === 'none';
-  /** The estimate the plan holds, the year to date — shown on either view while the office holds none (OD-250). */
+  const none = realised ? realised.source === 'none' : production === 'none';
+  /** The estimate the plan holds, the year to date — *Tahunan*'s, while the office holds none (OD-250). */
   const estimate = summary.yearly.production === 'estimate' ? summary.yearly.actualMinor : null;
 
   /**
    * **The estimate is the reader's to enter** (UI-157 item 4): their own page, the current year, and no office figure
-   * for it yet — once one is held, every screen reads that instead (ADR-0195 §3).
+   * for it yet — once one is held, every screen reads that instead (ADR-0195 §3). **On *Tahunan* only** since P19.11-T4
+   * (UX-12): it is a year's figure, and *Bulanan*'s headline is the month's own.
    */
-  const estimable = own && onChanged !== undefined && summary.period.currentYear
+  const estimable = !month && own && onChanged !== undefined && summary.period.currentYear
     && summary.yearly.source.provenance === 'self_reported';
+  /**
+   * **The month's figure is the reader's to correct** (P19.11-T4; UX-12): their own page, a month of a year that has not
+   * ended — the server refuses a locked plan (`GOAL_PERIOD_LOCKED`) and a month the office has not reached.
+   */
+  const { me } = useSession();
+  // A support session types no month for the member (the route is `@RefuseInSupportSession`): it reads the figure only.
+  const supporting = !!me?.isImpersonating;
+  const monthEditable = realised !== null && own && onChanged !== undefined && summary.period.currentYear && !supporting;
 
   async function store(minor: number | null) {
     setBusy(true);
@@ -426,13 +475,31 @@ function GoalSection({
     }
   }
 
-  /** UI-157 item 2: a helper with nothing produced counts 0 achieved, and says so. */
-  const counted = (value: string) => (
+  /** P19.11-T4: the month's figure, typed (sen) or cleared (`null`), then the page reads the Summary again. */
+  async function storeMonth(minor: number | null) {
+    setBusy(true);
+    setError(null);
+    try {
+      await saveMonthApe(summary.year, summary.month, minor);
+      setEditingMonth(false);
+      onChanged?.();
+    } catch (err) {
+      setError(toDisplayError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /**
+   * UI-157 item 2: a helper with nothing produced counts 0 achieved, and says so — on *Tahunan*. *Bulanan* says the sum
+   * alone (UX-12: no *(belum ada data produksi)*).
+   */
+  const counted = (value: string) => (month ? value : (
     <>
       {value}
       <span data-no-production="" className="block text-xs font-normal">{t.goal.noProduction}</span>
     </>
-  );
+  ));
   const helpers = numbers.withoutProduction ?? null;
 
   // *The gap*, inside the card, **for the current period only** (P18.5-T11, ADR-0161 §4): about a closed one it is false.
@@ -456,14 +523,15 @@ function GoalSection({
   /*
    * **The card's ⓘ** (UI-157 item 1): what APE is — *APE*'s first appearance on the page, so its ⓘ follows the heading
    * (P18.7-T9 AC-3; UI-028) — and where it comes from, *APE berasal dari unggahan produksi*, which moved here from the
-   * sales targets' heading.
+   * sales targets' heading; on the reader's own page, who uploads it and what to do while it is late, which moved here
+   * from under the figure (P19.11-T4, UX-12). A coachee's page names no office (ADR-0084), so it says the first two.
    */
-  const apeTip = `${termDefinition('APE', language)} ${t.goal.source}`;
+  const apeTip = [termDefinition('APE', language), t.goal.source, ...(own ? [t.goal.whoUploads] : [])].join(' ');
   const info = (
     <TippedGlyph glyph="ⓘ" name={termQuestion('APE', language)} tip={apeTip} align="fit" className="-my-1.5 ml-0.5 align-middle" />
   );
 
-  /** *Rp 120 jt · perkiraan Anda* (UI-157 item 4): lighter than the office's figure, and said to be theirs. */
+  /** *Rp 120 Jt · perkiraan Anda* (UI-157 item 4): lighter than the office's figure, and said to be theirs. */
   const estimated = (minor: number, from: FigureSource | null) => (
     <span data-estimate="">
       <span className="font-semibold text-navy/75">{money(minor)}</span>
@@ -487,8 +555,6 @@ function GoalSection({
       />
     ) : estimate !== null ? (
       <span data-estimate-row="" className="flex flex-wrap items-center gap-x-3">
-        {/* On *Bulanan* the estimate is the year's, so it says which figure it is (OD-250). */}
-        {month && <span>{t.goal.estimate.label}: {estimated(estimate, summary.yearly.source)}</span>}
         <button type="button" className={textButton} disabled={busy} onClick={() => setEditing(true)}>{t.goal.estimate.edit}</button>
         <button type="button" className={textButton} disabled={busy} onClick={() => void store(null)}>{t.goal.estimate.remove}</button>
       </span>
@@ -497,26 +563,86 @@ function GoalSection({
     )
   ) : null;
 
-  const replaced = own && production === 'official' && summary.estimateReplaced
+  // The year-to-date estimate the office's figure replaced: *Tahunan*'s, beside the year it is about (P19.11-T4).
+  const replaced = own && !month && production === 'official' && summary.estimateReplaced
     ? <p data-estimate-replaced="" className="text-xs">{t.goal.estimate.replaced({ date: formatShortDay(summary.estimateReplaced.uploadedOn, {}, figures) })}</p>
     : null;
 
   /*
-   * **What the reader can do about it** (UI-157 items 1, 3 and 4; rule R2), on their own page: who uploads production and
-   * what to do while it is late; the estimate; the Owner's and an Admin's way to the upload. A coachee's page says none
-   * of it — its words name no office (ADR-0084), and the estimate is the member's to enter.
+   * **The way back from the reader's own month** (P19.11-T4; UX-12): to the office's upload, *↶ Kembalikan ke data
+   * unggahan*; or, with none for the month, *Hapus angka manual*, back to *Belum diunggah*. The goal calculator's
+   * *↶ Pakai otomatis* is the pattern.
    */
-  const note = own && (none || estimateRow || replaced) ? (
+  const monthBack = monthEditable && manual && !editingMonth ? (
+    <button
+      type="button"
+      data-month-ape-back={realised!.uploaded ? 'uploaded' : 'none'}
+      className={cn(textButton, 'gap-1')}
+      disabled={busy}
+      onClick={() => void storeMonth(null)}
+    >
+      {realised!.uploaded && <LineIcon name="undo" className="h-4 w-4 shrink-0" />}
+      {realised!.uploaded ? t.goal.month.revert : t.goal.month.clear}
+    </button>
+  ) : null;
+
+  /*
+   * **What the reader can do about it** (UI-157 items 3 and 4; rule R2; UX-12), on their own page: the way back from
+   * their own month; *Tahunan*'s estimate; the Owner's and an Admin's way to the upload. Nothing at all when there is
+   * nothing to say, so no empty row is left under the figure. A coachee's page says none of it — its words name no
+   * office (ADR-0084), and the figures are the member's to enter.
+   */
+  const uploadLink = none && canUpload ? (
+    <Link href="/kpm/data-upload" className="inline-flex min-h-11 items-center font-semibold text-navy underline lg:min-h-8">{t.goal.upload}</Link>
+  ) : null;
+  const note = own && (monthBack || estimateRow || uploadLink || replaced || error) ? (
     <>
-      {none && <p data-who-uploads="">{t.goal.whoUploads}</p>}
+      {monthBack}
       {estimateRow}
-      {none && canUpload && (
-        <Link href="/kpm/data-upload" className="inline-flex min-h-11 items-center font-semibold text-navy underline lg:min-h-8">{t.goal.upload}</Link>
-      )}
+      {uploadLink}
       {replaced}
       {error && <ErrorBanner {...error} />}
     </>
   ) : null;
+
+  /** *Bulanan*'s headline (P19.11-T4): the realised APE, or *Belum diunggah*; on the reader's own page, a button. */
+  const monthFigure = none || numbers.actualMinor === null
+    ? <span className="text-2xl font-bold">{t.goal.notUploaded}</span>
+    : money(numbers.actualMinor);
+  const monthAchieved = editingMonth ? (
+    <MonthApeField
+      initialMinor={none ? null : numbers.actualMinor}
+      label={t.goal.month.field({ when: when.inline })}
+      busy={busy}
+      onSave={(minor) => {
+        // The figure already in force, typed again, is no correction: nothing is written.
+        if (minor === numbers.actualMinor && !none) setEditingMonth(false);
+        else void storeMonth(minor);
+      }}
+      onCancel={() => { setEditingMonth(false); setError(null); }}
+    />
+  ) : (
+    <>
+      {monthEditable ? (
+        <button
+          type="button"
+          data-month-ape=""
+          aria-label={t.goal.month.edit({ sum: none || numbers.actualMinor === null ? t.goal.notUploaded : money(numbers.actualMinor) })}
+          disabled={busy}
+          onClick={() => { setError(null); setEditingMonth(true); }}
+          className="inline-flex items-center gap-1.5 rounded-row text-left hover:bg-secondary/10 disabled:opacity-60"
+        >
+          {monthFigure}
+          <LineIcon name="pencil" className="h-5 w-5 shrink-0" />
+        </button>
+      ) : monthFigure}
+      {/* *Diubah manual* (UX-12): a subtle marker while the member's own figure is in force — a coach reads it too. */}
+      {manual && <span data-month-ape-manual="" className="ml-1.5 align-middle text-sm font-semibold text-navy">{t.goal.month.manual}</span>}
+      {!manual && !none && source && (
+        <ProducedMarker words={producedFrom(source, 'month', voice.coachee?.pronoun, figures, language)} />
+      )}
+    </>
+  );
 
   return (
     <section aria-labelledby="summary-goal" data-summary-goal="" className="min-w-0 print:break-inside-avoid">
@@ -531,17 +657,18 @@ function GoalSection({
           </>
         )}
         percent={pct}
-        achieved={production === 'estimate' && numbers.actualMinor !== null ? estimated(numbers.actualMinor, source)
-          : none || numbers.actualMinor === null ? (
-            <span className="text-2xl font-bold">{t.goal.notUploaded}</span>
-          ) : (
-            <>
-              {money(numbers.actualMinor)}
-              {source && (
-                <ProducedMarker words={producedFrom(source, month ? 'month' : 'year', voice.coachee?.pronoun, figures, language)} />
-              )}
-            </>
-          )}
+        achieved={realised ? monthAchieved
+          : production === 'estimate' && numbers.actualMinor !== null ? estimated(numbers.actualMinor, source)
+            : none || numbers.actualMinor === null ? (
+              <span className="text-2xl font-bold">{t.goal.notUploaded}</span>
+            ) : (
+              <>
+                {money(numbers.actualMinor)}
+                {source && (
+                  <ProducedMarker words={producedFrom(source, month ? 'month' : 'year', voice.coachee?.pronoun, figures, language)} />
+                )}
+              </>
+            )}
         target={madeAlready
           ? <span className="block text-base">{when.current ? t.goal.madeAlready({ who: voice }) : t.goal.madeBefore({ who: voice, named: when.named })}</span>
           : numbers.targetMinor !== null ? t.goal.ofTarget({ sum: money(numbers.targetMinor) }) : undefined}
@@ -600,6 +727,73 @@ function EstimateEditor({ initial, busy, onSave, onCancel }: {
         {t.goal.estimate.cancel}
       </button>
     </form>
+  );
+}
+
+/**
+ * **The month's realised APE, edited in place in millions** (P19.11-T4; UX-12, UXQ2's default): the headline becomes one
+ * field — the currency's mark before it, the *juta*'s after it, the figure in force already in it (*216,5*) and selected
+ * — that takes a comma or a point (`parseDecimal`, as every decimal field does). **Enter or leaving it saves; Escape
+ * puts the headline back**; nothing typed is no change. A figure that is no number, or below 0, is said under it and the
+ * field stays. 16px, so iOS does not zoom; the decimal keypad.
+ */
+function MonthApeField({ initialMinor, label, busy, onSave, onCancel }: {
+  initialMinor: number | null; label: string; busy: boolean; onSave: (minor: number) => void; onCancel: () => void;
+}) {
+  const t = useMessages(summaryMessages);
+  const figures = useFigureLanguage();
+  const [typed, setTyped] = useState(initialMinor === null ? '' : formatDecimalInput(minorToMillions(initialMinor), figures));
+  const [invalid, setInvalid] = useState(false);
+  // Enter, Escape or a save already answered this field: the blur that follows says nothing more.
+  const settled = useRef(false);
+  // A save the server refused leaves the field open: it may be sent again.
+  useEffect(() => { if (!busy) settled.current = false; }, [busy]);
+  const errorId = useId();
+  // The *juta*'s mark in the figures' language — *Jt*, *M* — read off the compact formatter's own header unit.
+  const unit = formatMoneyUnit('jt', figures).replace(`${moneyPrefix(figures)} `, '');
+
+  function commit() {
+    if (settled.current || busy) return;
+    if (typed.trim() === '') { settled.current = true; onCancel(); return; }
+    const millions = parseDecimal(typed);
+    if (!Number.isFinite(millions) || millions < 0) { setInvalid(true); return; }
+    settled.current = true;
+    onSave(millionsToMinor(millions));
+  }
+
+  return (
+    <span data-month-ape-field="" className="inline-block align-middle">
+      <TextInput
+        type="text"
+        inputMode="decimal"
+        autoComplete="off"
+        autoFocus
+        aria-label={label}
+        aria-describedby={invalid ? errorId : undefined}
+        invalid={invalid}
+        readOnly={busy}
+        prefix={moneyPrefix(figures)}
+        suffix={unit}
+        value={typed}
+        className="w-44 max-w-full text-base font-bold"
+        onFocus={(e) => e.currentTarget.select()}
+        onChange={(e) => {
+          settled.current = false;
+          setInvalid(false);
+          setTyped(e.target.value.replace(/[^\d.,]/g, ''));
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') { e.preventDefault(); commit(); }
+          if (e.key === 'Escape') { e.preventDefault(); settled.current = true; onCancel(); }
+        }}
+        onBlur={commit}
+      />
+      {invalid && (
+        <span id={errorId} role="alert" className="mt-1 block text-sm font-semibold">
+          {t.goal.month.invalid({ example: formatDecimalInput(216.5, figures) })}
+        </span>
+      )}
+    </span>
   );
 }
 
@@ -769,101 +963,6 @@ function TargetColumn({ target, when }: { target: ActivityTarget; when: PeriodWo
         )}
       </div>
     </div>
-  );
-}
-
-/**
- * *Leads that need you* (`Overall.html:3210-3217`, `:6151-6218`, P10-T6), and *Leads that need her*
- * about a coachee (`:4115-4116`, *All active leads, nearest date first*): the member's **own** open
- * leads, nearest next action first, undated last.
- *
- * **The flags are the Leads screen's**, from the server's one definition, and *Closes this month* hides
- * none of them (I-103). The nearest ten are listed.
- *
- * **UI V1** (UI-050, UI-055, UI-056): the heading outside the card, directly after the ratio card (the staging review
- * of 2026-10-31 moved it up from last on the page); its tag, *Leads terbuka Anda, tanggal terdekat lebih dulu*, on a desktop only (Appendix A). **On a
- * phone it is not drawn while there is no open lead** (UI-055); from 768px the empty card says so, as before.
- */
-function LeadsSection({ leads, voice, hideWhenEmpty = false }: {
-  leads: Summary['leads']; voice: PageVoice;
-  /** UI-121: a tablet draws the phone's blocks, so its empty card is left out too. */
-  hideWhenEmpty?: boolean;
-}) {
-  const t = useMessages(summaryMessages);
-  /*
-   * **A leader's empty card says whose leads it counts** (P18.5-T15 AC-4, the client's UI review, UI-002). The card is
-   * the reader's own leads only, while Leads Management shows a leader their unit's too, so an AB with 71 there read
-   * *No active leads yet* here. A reader with none of their own whose unit holds some — `unitOpen`, the server's count
-   * of what Leads Management lists them besides their own — is told where those are; anybody else keeps the
-   * prototype's sentence.
-   */
-  const unitHasSome = voice.self && (leads.unitOpen ?? 0) > 0;
-  const leadsLink = (words: string) => <Link href="/leads" className="font-semibold text-navy underline">{words}</Link>;
-  const empty = leads.total === 0;
-  return (
-    <Section
-      id="summary-leads"
-      title={t.leads.title({ who: voice })}
-      meta={<span className="max-lg:hidden">{voice.self ? t.leads.tagOwn : t.leads.tagTheirs}</span>}
-      className={cn(empty && (hideWhenEmpty ? 'hidden' : 'max-md:hidden'))}
-    >
-      <div className={cn(CARD, 'px-3.5', empty ? 'py-3' : 'py-1')}>
-        {empty ? (
-          voice.self ? (
-            <p className="text-sm text-muted">
-              {unitHasSome ? t.leads.unitHasSome({ link: leadsLink }) : t.leads.noneYet({ link: leadsLink })}
-            </p>
-          ) : (
-            // The prototype's own empty line on a coachee's card (`Overall.html:10498`).
-            <p className="text-sm text-muted">{t.leads.noneTheirs}</p>
-          )
-        ) : (
-          <ul>
-            {leads.rows.map((lead) => <LeadRow key={lead.id} lead={lead} voice={voice} />)}
-          </ul>
-        )}
-      </div>
-    </Section>
-  );
-}
-
-function LeadRow({ lead, voice }: { lead: OpenLead; voice: PageVoice }) {
-  const t = useMessages(summaryMessages);
-  const language = useLanguage();
-  const figures = useFigureLanguage();
-  // A lead with no type yet is said without one on a coachee's page, whose words carry none of
-  // ADR-0084's six; the reader's own keeps the Leads screen's word for it. The two types are the Leads screen's,
-  // *Recruit*, not *Recruitment*, since 2026-10-26 (ADR-0161 §2).
-  const type = lead.type ? t.leads.types[lead.type] : voice.self ? t.leads.unassigned : null;
-  // The stage's name is the office's, as typed.
-  const status = lead.statusLabel ?? t.leads.noStatus;
-  return (
-    // Side by side from `sm`; on a phone the date goes under the name, which a 240px column would squeeze.
-    <li className="flex flex-col gap-1.5 border-b border-hairline py-3 last:border-b-0 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
-      <div className="flex min-w-0 flex-col gap-1">
-        <span className="text-sm font-semibold text-navy">{lead.name || t.leads.unnamed}</span>
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs text-muted">
-            {type === null ? status : <>{type} · {status}</>}
-          </span>
-          {lead.thisMonth && <StatusPill status="success" label={t.leads.closesThisMonth} className="whitespace-nowrap" />}
-          {lead.flags.map((flag) => (
-            <StatusPill key={flag} status="alert" label={flagLabel(flag, lead.overdueDays, language)} className="whitespace-nowrap" />
-          ))}
-        </div>
-      </div>
-      <div className="leading-normal sm:max-w-[240px] sm:shrink-0 sm:pt-px sm:text-right">
-        {lead.nextActionDate ? (
-          <>
-            {/* Navy, not the prototype's amber: small amber text clears no contrast floor (`tokens.md`). */}
-            <span className="text-xs font-bold text-navy">{formatShortDay(lead.nextActionDate, {}, figures)}</span>
-            {lead.nextActionNote && <span className="text-xs text-navy-soft"> — {lead.nextActionNote}</span>}
-          </>
-        ) : (
-          <span className="text-xs font-semibold text-muted">{t.leads.noDate}</span>
-        )}
-      </div>
-    </li>
   );
 }
 

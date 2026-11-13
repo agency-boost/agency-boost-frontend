@@ -131,8 +131,9 @@ describe('P18.10-T4 User Management in Indonesian', () => {
     inIndonesian(<FindLeaderPage />, JOINER);
     expect(await screen.findByText('Wilson Tanoto')).toBeInTheDocument();
     expect(screen.getByText('Cari leader di KPM Anda dan minta untuk di-tag.')).toBeInTheDocument();
-    // UI-086 (T16): no invite for somebody already in an office, with a leader or without — `/join` refuses them.
-    expect(screen.queryByText(/^Punya kode, tautan, atau QR/)).not.toBeInTheDocument();
+    // P19.10-T2 AC-3 (ADR-0236 §2): the invite again for somebody in an office with no leader — a code from it places
+    // them. T16 had taken it away while `/join` refused any member.
+    expect(screen.getByRole('heading', { name: /^Punya kode, tautan, atau QR dari leader\?/ })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 2, name: 'Cari leader' })).toBeInTheDocument();
     expect(screen.getByText('Dia perlu menyetujuinya.')).toBeInTheDocument();
     expect(screen.getByLabelText('Cari berdasarkan nama')).toHaveAttribute('placeholder', 'Nama');
@@ -248,6 +249,35 @@ describe('P18.10-T4 User Management in Indonesian', () => {
     expect(screen.getByText(/^Rina Wijaya akan berubah dari Agent menjadi AAB\. Dia tetap melapor kepada Anda/)).toBeInTheDocument();
     expect(screen.getByLabelText('Alasan')).toHaveAccessibleDescription('Disimpan di Role change log, satu-satunya tempat ini dapat dibaca kembali.');
     expect(screen.getByRole('button', { name: 'Konfirmasi perubahan' })).toBeInTheDocument();
+    noEnglishLeft();
+  });
+
+  it('P19.12-T4 AC-8 Tim Anda: Maya’s AB checked, Pindahkan ke leader lain, a waiting move and Batalkan, in Indonesian', async () => {
+    stubFetch({
+      '/join/my-code': { body: { code: 'JOR417', url: 'https://agencyboost.app/join?code=JOR417' } },
+      '/members/my-team': {
+        body: [
+          {
+            membershipId: 'mem-maya', fullName: 'Maya Halim', initials: 'MH', agentCode: '80002', role: 'ab', orgLevelCode: 'AB',
+            directCount: 0, subtreeCount: 0, canChangeRole: true, roleChoices: ['AGENT', 'AAB', 'AB'], canChangeLeader: true, pendingTransfer: null,
+          },
+          {
+            membershipId: 'mem-d', fullName: 'Dimas Pratama', initials: 'DP', agentCode: '80102', role: 'agent', orgLevelCode: 'AGENT',
+            directCount: 0, subtreeCount: 0, canChangeRole: true, roleChoices: ['AGENT', 'AAB', 'AB'], canChangeLeader: true,
+            pendingTransfer: { transferId: 'tr-9', toName: 'Yosef Tambunan', requestedAt: '2026-11-11T03:00:00.000Z' },
+          },
+        ],
+      },
+      '/join/untagged': { body: [] },
+    });
+    const mover = makeMe({ membership: LEADER.membership, permissions: [...LEADER.permissions, 'member:reassign_leader', 'member:transfer_request'] });
+    inIndonesian(<AddAgentsPage />, mover);
+    expect((await screen.findAllByText('Menunggu persetujuan pemindahan ke Yosef Tambunan')).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('button', { name: 'Batalkan pemindahan Dimas Pratama' }).length).toBeGreaterThan(0);
+    await userEvent.click((await screen.findAllByRole('button', { name: 'Ubah peran Maya Halim, sekarang AB' }))[0]);
+    const sheet = screen.getByRole('dialog', { name: 'Maya Halim' });
+    expect((within(sheet).getByRole('radio', { name: 'AB' }) as HTMLInputElement).checked).toBe(true);
+    expect(within(sheet).getByRole('button', { name: 'Pindahkan ke leader lain' })).toBeInTheDocument();
     noEnglishLeft();
   });
 
