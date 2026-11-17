@@ -120,7 +120,7 @@ export const KEPT_ENGLISH = {
     'Appointments to hold this month', 'Leads to contact this month', 'On-track / pace status',
     'Selling vs Recruitment balance', 'Selling success rate', 'Recruitment success rate', 'Leads per activity',
     'Set appointment to meeting', 'Your logged leads-to-appointment rate', 'Your logged closing rate',
-    'This month’s APE target', 'Closings over the last 30 days', 'Closings needed per week',
+    'APE target per month', 'Closings over the last 30 days', 'Closings needed per week',
     'Activity target for the period', 'Logged against the activity target',
     'Activity target for the last 7 days, pro-rated', 'Activation completion', 'Activation day', 'Training completion',
     'Event attendance status', 'Event attendance rate', 'Event NPS', 'Campaign qualification',
@@ -397,4 +397,7 @@ export const KEPT_ELSEWHERE = [
   // two of the template editor's *Ambang & benchmark* labels, translated as the template mockup writes them — *Demografi*,
   // *Target aktivitas mingguan* (P19.5-T1).
   'Demographics', 'Weekly activity target',
+  // P19.16-T3 (ADR-0262 §3; the client's request of 17 November): *APE target per month* is `MONTHLY_APE_TARGET`'s name
+  // (§A.4) and Goal Settings' tile, which the client asked to read *Target APE per bulan*.
+  'APE target per month',
 ] as const;

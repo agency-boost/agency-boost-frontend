@@ -238,13 +238,27 @@ describe('KPM Overview (P18-T1)', () => {
       const whatsApp = within(card).getByRole('link', { name: /WhatsApp.*Sinta Halim/i });
       expect(whatsApp.getAttribute('href')).toMatch(/^https:\/\/wa\.me\/6281211110001\?text=/);
       expect(decodeURIComponent(whatsApp.getAttribute('href')!)).toContain('Hi Sinta 👋');
-      // Dedy has no number on file, and the Owner and an Admin may not save one: no reminder the API would refuse.
+      // Dedy has no number on file, and this reader may not save one: no reminder the API would refuse.
       expect(within(card).queryByRole('link', { name: /WhatsApp.*Dedy Pranata/i })).not.toBeInTheDocument();
+      expect(within(card).queryByRole('button', { name: /WhatsApp.*Dedy Pranata/i })).not.toBeInTheDocument();
       // The Owner's own row (Wilson, the third silent) says *You* and has no reminder.
       const own = within(card).getAllByRole('listitem')[2];
       expect(own).toHaveTextContent('AB · You · 16 days ago');
       expect(within(own).queryByRole('link', { name: /WhatsApp/i })).not.toBeInTheDocument();
     });
+
+    it.each([['the Owner', OWNER], ['an Admin', ADMIN]])(
+      'P19.16-T1 AC-3 %s who may save a number gets WhatsApp on a row with none, which asks for the number',
+      async (_, who) => {
+        render({ ...who, permissions: [...(who.permissions ?? []), 'member:update_phone'] });
+        await loaded();
+        const card = await screen.findByRole('region', { name: 'Not logged · 7 days' });
+        await within(card).findAllByRole('listitem');
+        // No number on file: a button, not a link — pressing it opens *Isi nomor WhatsApp*.
+        expect(within(card).getByRole('button', { name: /WhatsApp.*Dedy Pranata/i })).toBeInTheDocument();
+        expect(within(card).getByRole('link', { name: /WhatsApp.*Sinta Halim/i })).toBeInTheDocument();
+      },
+    );
 
     it('P19.3-T2 AC-2 on a desktop the pill moves the keyboard to the card, and reads nothing more', async () => {
       const { calls } = render();

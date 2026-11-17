@@ -321,7 +321,7 @@ describe('Goal Settings (P8-T3) as UI V1 draws it (P18.11-T5)', () => {
       render({ '/goals': { body: goal() } });
       await resultCard();
 
-      const monthly = screen.getByText("This month's APE target").closest('[data-variant]')!;
+      const monthly = screen.getByText('APE target per month').closest('[data-variant]')!;
       expect(monthly).toHaveAttribute('data-variant', 'insight');
       expect(monthly).toHaveTextContent('IDR 100M');
       expect(monthly.lastElementChild).toHaveClass('text-[1.375rem]', 'font-extrabold', 'text-primary-deep');
@@ -469,7 +469,7 @@ describe('Goal Settings (P8-T3) as UI V1 draws it (P18.11-T5)', () => {
         const tiles = document.querySelector('[data-step-two="tiles"]')!;
         expect(tiles).toHaveClass('grid-cols-2');
         expect(tiles).toHaveTextContent('Remaining needed');
-        expect(tiles).toHaveTextContent("This month's APE target");
+        expect(tiles).toHaveTextContent('APE target per month');
         expect(document.querySelector('[data-step-three="tiles"]')).toHaveClass('grid-cols-2');
         expect(screen.getByRole('group', { name: 'Closing rate' }).parentElement).not.toHaveClass('grid-cols-2');
         cleanup();
@@ -1106,7 +1106,7 @@ describe('P19.8-T5 MOB UI-190 the member types over the automatic APE (ADR-0230)
     // The server's preview, asked of the figure as it is typed, in sen.
     await waitFor(() => expect(sent(calls, 'POST').at(-1)).toMatchObject({ apeAchievedMinor: 120_000_000_00 }));
     await waitFor(() => expect(tileValue('Remaining needed')).toContain('IDR 380M'));
-    expect(tileValue("This month's APE target")).toContain('IDR 211.1M');
+    expect(tileValue('APE target per month')).toContain('IDR 211.1M');
     expect(tile(card, 'Set appointment')).toHaveTextContent('80');
     expect(tile(card, 'Sales meeting')).toHaveTextContent('40');
     expect(tile(card, 'Submission polis')).toHaveTextContent('12');
@@ -1202,7 +1202,7 @@ describe('P19.8-T5 MOB UI-190 the member types over the automatic APE (ADR-0230)
       expect(produced).toHaveValue('120.000.000');
       // Everything recalculated, and not saved yet.
       await waitFor(() => expect(screen.getByText('Sisa yang dibutuhkan').closest('[data-variant]')).toHaveTextContent('Rp 380 Jt'));
-      expect(screen.getByText('Target APE bulan ini').closest('[data-variant]')).toHaveTextContent('Rp 211,1 Jt');
+      expect(screen.getByText('Target APE per bulan').closest('[data-variant]')).toHaveTextContent('Rp 211,1 Jt');
       expect(within(document.querySelector('[data-floating-save]') as HTMLElement).getByRole('status')).toHaveTextContent('Belum disimpan');
       expect(screen.getByRole('button', { name: 'Simpan goal' })).toBeInTheDocument();
       await userEvent.tab();

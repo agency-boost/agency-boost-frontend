@@ -17,7 +17,7 @@ import type { Voice } from './goal-words';
  * **English is the source** of the keys, the prototype's words as built (`Overall.html:2860-3070`, the coaching tool's
  * `:5854-6104`); the Indonesian is the approved glossary's (OD-237; §B.0's voice), with the words it lacked added to the
  * glossary for approval's §B.10. **Kept English in both** (§A): the title; §A.4's Goal Settings KPI labels — *Annual APE
- * target*, *Annual savings target*, *APE already produced this year*, *This month's APE target*, *Policies per month*,
+ * target*, *Annual savings target*, *APE already produced this year*, *APE target per month*, *Policies per month*,
  * *Policies per week*, *Monthly activity target*, *Conversion assumptions*, *Closing rate*, *Commission rate* — and
  * *Appointment to Sales meeting* beside *Closing rate* (for approval); the cascade's three stages (§A.6); *APE*,
  * *goal*, *target*, *lead*, *closing*, *case size*, *leader*; *Activity Management*, *Personal Summary* and *Coaching
@@ -76,7 +76,7 @@ const en = {
   /** Puts the automatic figure back (ADR-0230 §4, the findings' words): `amount` written short by the caller, *IDR 67M*. */
   useAutomatic: ({ amount }: { amount: string }) => `Use automatic (${amount})`,
   remaining: 'Remaining needed',
-  monthlyTarget: "This month's APE target",
+  monthlyTarget: 'APE target per month',
 
   /** Step 3. */
   toPolicies: 'From APE to policy count',
@@ -167,7 +167,7 @@ const id: MessagesOf<typeof en> = {
   edited: 'Diubah oleh Anda',
   useAutomatic: ({ amount }) => `Pakai otomatis (${amount})`,
   remaining: 'Sisa yang dibutuhkan',
-  monthlyTarget: 'Target APE bulan ini',
+  monthlyTarget: 'Target APE per bulan',
 
   toPolicies: `Dari ${kept('APE')} ke jumlah polis`,
   caseSize: `Rata-rata ${kept('case size')} (${kept('APE')} per polis)`,

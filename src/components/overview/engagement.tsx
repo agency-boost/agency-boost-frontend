@@ -19,7 +19,7 @@ import { firstNameOf, logLink } from '@/lib/home';
 import {
   readNotLogged, silentMeta, SILENT_SHOWN, type NotLoggedList, type NotLoggedMember, type OverviewEngagement,
 } from '@/lib/kpm-overview';
-import { useSession } from '@/lib/session';
+import { useCan, useSession } from '@/lib/session';
 import { MEDIA_RANGES } from '@/lib/use-media-query';
 import { PctPill } from './parts';
 
@@ -242,11 +242,16 @@ function SilentBody({
 /**
  * **One silent member: a 56px row** (UI-148; UI-059's person row): the NAME, *"role · leader · last log"*, the D-22
  * WhatsApp reminder, and **the row opens their member page** (Overview R1). **The reader's own row has no reminder** —
- * one does not remind oneself — and reads *Anda*. A member with no number on file has none either: the Owner and an
- * Admin may not save somebody's number (`member:update_phone` is a leader's), so no sheet the API would refuse.
+ * one does not remind oneself — and reads *Anda*. **A member with no number on file** (P19.16-T1 AC-3; ADR-0263) shows
+ * the same green circle, which opens *Isi nomor WhatsApp* and saves it on their account, for a reader who may
+ * (`member:update_phone`: the Owner and the Admins for the office); a reader who may not is offered nothing the API would
+ * refuse.
  */
 function SilentRow({ member }: { member: NotLoggedMember }) {
   const language = useLanguage();
+  const canSavePhone = useCan('member:update_phone');
+  const [saved, setSaved] = useState<string | null>(null);
+  const phone = saved ?? member.phone;
   const team = useMessages(homeMessages).team;
   const { me } = useSession();
   const self = me?.membership?.membershipId === member.membershipId;
@@ -262,11 +267,12 @@ function SilentRow({ member }: { member: NotLoggedMember }) {
         chevron
         height={56}
         className="gap-2 rounded-none bg-transparent px-0 lg:hover:bg-transparent"
-        trailing={!self && member.phone ? (
+        trailing={!self && (phone || canSavePhone) ? (
           <MemberContactButtons
             membershipId={member.membershipId}
             name={member.name}
-            phone={member.phone}
+            phone={phone}
+            onSaved={setSaved}
             channels={['whatsapp']}
             size={36}
             // The D-22 reminder (UI-101), word for word: *"Halo Budi 👋 Aktivitas kemarin & hari ini belum diisi …"*.

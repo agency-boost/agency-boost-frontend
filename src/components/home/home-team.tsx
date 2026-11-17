@@ -37,8 +37,9 @@ import { useCan } from '@/lib/session';
  *   agent* is (MOB UI-166: the next step lives here, never in a tile).
  * - **The reminder** (`MemberContactButtons`, WhatsApp only), unchanged (D-22): *Halo {first name} 👋 Aktivitas hari ini
  *   belum diisi …* — *kemarin & hari ini* when they reported neither day — with the link to today's Log Activity, signed
- *   by the reader's first name. **No number**: *Isi nomor WhatsApp*, saved on their account; a reader who may not save
- *   one (`member:update_phone`, the AB's and the AAB's) gets no button on a row with none.
+ *   by the reader's first name. **No number**: *Isi nomor WhatsApp*, saved on their account (`member:update_phone`:
+ *   every leader for their own people, the Owner and the Admins for the office — ADR-0263, the client's request of 17
+ *   November); a reader who may not save one gets no button on a row with none.
  */
 export function HomeTeam({
   team, leaderName, className,
@@ -53,8 +54,8 @@ export function HomeTeam({
   const listId = useId();
   const host = typeof window === 'undefined' ? '' : window.location.host;
   const leader = firstNameOf(leaderName);
-  // Saving somebody's number is an AB's and an AAB's, for their downline (`member:update_phone`): a leader on another
-  // rung reminds those whose number is on file, and is offered no sheet the API would refuse.
+  // Saving somebody's missing number (`member:update_phone`): every leader for their downline, the Owner and the Admins for
+  // the office (ADR-0263). A reader without it reminds those whose number is on file, offered no sheet the API would refuse.
   const canSavePhone = useCan('member:update_phone');
 
   return (

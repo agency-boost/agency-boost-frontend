@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Boost } from '@/components/boost';
 import { LeadCard } from '@/components/lead-card';
+import { LeadSearch, LeadTypeChips } from '@/components/lead-list-controls';
 import { LeadPane, LeadSheet } from '@/components/lead-sheet';
 import { ClosedLeads, loadClosed, SORT_CHOICES, type List, type Sort } from '@/components/leads-table';
 import { Dialog } from '@/components/ui/dialog';
@@ -359,55 +360,26 @@ export function LeadsList({ split = false, addRequest = 0 }: {
   } : undefined);
 
   const search = (
-    <div role="search" className="flex gap-2" aria-label={t.searchAndFilter}>
-      <label className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-pill bg-card px-3.5 text-muted focus-within:outline focus-within:outline-2 focus-within:outline-focus-ring">
-        <LineIcon name="search" className="h-[18px] w-[18px] shrink-0" />
-        <span className="sr-only">{t.list.search}</span>
-        <input
-          type="search"
-          value={term}
-          placeholder={t.list.search}
-          onChange={(e) => { setTerm(e.target.value); setExpanded(false); }}
-          className="min-w-0 flex-1 bg-transparent text-md text-ink outline-none placeholder:text-signal-grey"
-        />
-      </label>
-      <button
-        type="button"
-        onClick={() => setFiltersOpen(true)}
-        aria-label={filterOn ? t.list.filterOn : t.list.filter}
-        aria-haspopup="dialog"
-        className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-card text-navy hover:bg-hover-row"
-      >
-        <LineIcon name="adjust" className="h-5 w-5" />
-        {filterOn && <span aria-hidden="true" className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-primary" />}
-      </button>
-    </div>
+    <LeadSearch
+      value={term}
+      onChange={(next) => { setTerm(next); setExpanded(false); }}
+      filter={(
+        <button
+          type="button"
+          onClick={() => setFiltersOpen(true)}
+          aria-label={filterOn ? t.list.filterOn : t.list.filter}
+          aria-haspopup="dialog"
+          className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-card text-navy hover:bg-hover-row"
+        >
+          <LineIcon name="adjust" className="h-5 w-5" />
+          {filterOn && <span aria-hidden="true" className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-primary" />}
+        </button>
+      )}
+    />
   );
 
-  const chips = (
-    <div role="group" aria-label={t.list.chips} className="my-2.5 flex gap-1.5">
-      {(['all', 'sales', 'recruitment'] as const).map((type) => (
-        <button
-          key={type}
-          type="button"
-          aria-pressed={chip === type}
-          aria-label={t.list.chipSaid({ label: typeName(type), n: counts[type] })}
-          onClick={() => chooseChip(type)}
-          className={cn(
-            // Already a header control — 13px / 600 / 44px (P19.8-T1 AC-1; R6, MOB UI-171: *Semua · Sales · Recruit*, ok) —
-            // and written as it was, so the phone's list is drawn to the byte as before (`HEADER_CONTROL`'s three in it).
-            'flex min-h-11 items-center gap-1.5 rounded-pill px-3.5 text-base font-semibold',
-            chip === type ? 'bg-secondary text-secondary-contrast' : 'bg-card text-navy hover:bg-hover-row',
-          )}
-        >
-          {typeName(type)}
-          <span className={cn('text-xs font-semibold', chip === type ? 'text-secondary-muted' : 'text-muted')}>
-            {open ? counts[type] : ''}
-          </span>
-        </button>
-      ))}
-    </div>
-  );
+  // The search pill and the chips are `lead-list-controls.tsx`'s (P19.16-T4 AC-2): a coachee's *Leads* tab draws them too.
+  const chips = <LeadTypeChips chip={chip} onChip={chooseChip} counts={counts} counted={open !== null} />;
 
   const strip = chip !== 'all' && ladder.length > 0 && (
     <div

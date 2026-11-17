@@ -49,6 +49,7 @@ export function stageTone(ladder: readonly LeadStatusRow[], code: string | null)
  */
 export function LeadCard({
   lead, ladder: given, today = dayInZone(OFFICE_TIME_ZONE, new Date()), onOpen, onSaved, inPane = false, selected = false, order,
+  nameOwner = true,
 }: {
   lead: Lead;
   /** The lead's own ladder; the office's, from the published configuration, where none is given. */
@@ -62,6 +63,11 @@ export function LeadCard({
   inPane?: boolean;
   /** The lead open in the pane: the accent's 2px outline (UI-116). */
   selected?: boolean;
+  /**
+   * *Milik Rina Wijaya* on a lead that is not the reader's (P19.9-T1 AC-4). `false` on a list that is one person's leads,
+   * whose page already names them: a coachee's *Leads* tab (P19.16-T4 AC-1), where every card would say it.
+   */
+  nameOwner?: boolean;
   /** The reader's own order (I-295): the handle, and the card as a place to drop a dragged one. */
   order?: {
     handle: ReactNode;
@@ -129,7 +135,7 @@ export function LeadCard({
           lead={lead}
           ladder={ladder}
           // *Milik Rina Wijaya* on a lead that is not the reader's (P19.9-T1 AC-4): a leader's card under *Tim*.
-          owner={!mine && lead.owner?.name ? t.list.ownedBy({ name: lead.owner.name }) : null}
+          owner={nameOwner && !mine && lead.owner?.name ? t.list.ownedBy({ name: lead.owner.name }) : null}
           proposal={pill}
           className="mt-1"
         />

@@ -378,7 +378,8 @@ function phoneMarksOf(row: UnitRow): ReactNode {
 /**
  * **A row's WhatsApp** (P19.9-T4 AC-1; R6, ADR-0235, OD-291) — Home's *Laporan aktivitas tim* rule (`home-team.tsx`):
  * the 36px green circle straight to WhatsApp with a number on file; without one, *Isi nomor WhatsApp* for a reader who
- * may save it on the person's account (`member:update_phone`, an AB's and an AAB's) — and nothing for one who may not.
+ * may save it on the person's account (`member:update_phone`: every leader, the Owner and the Admins since ADR-0263) —
+ * and nothing for one who may not.
  * **Never on the reader's own row, and never in the office's read-only view** (P19.3-T3 AC-3), whose rows carry no
  * number. Where a row has none, an equal blank keeps the column straight — none at all in the read-only view.
  */

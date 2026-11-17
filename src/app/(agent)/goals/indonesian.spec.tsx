@@ -129,7 +129,7 @@ describe('P18.10-T4 Goal Settings in Indonesian', () => {
     const produced = screen.getByRole('textbox', { name: 'APE yang sudah dicapai tahun ini' });
     expect(produced).toHaveValue('Rp 0');
     expect(screen.getByText('Sisa yang dibutuhkan').closest('[data-variant]')).toHaveTextContent('Rp 500 Jt');
-    expect(screen.getByText('Target APE bulan ini').closest('[data-variant]')).toHaveTextContent('Rp 100 Jt');
+    expect(screen.getByText('Target APE per bulan').closest('[data-variant]')).toHaveTextContent('Rp 100 Jt');
     expect(screen.getByText('Polis per bulan').closest('[data-variant]')).toHaveTextContent('6polis');
     expect(screen.getByText('Polis per minggu').closest('[data-variant]')).toHaveTextContent('≈ 1,4');
     expect(screen.getByRole('button', {
