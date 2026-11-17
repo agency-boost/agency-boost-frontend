@@ -31,10 +31,14 @@ import { clearCachedReads } from '@/lib/views';
  * - **the four layouts** — Home's and Summary's dashboard grid, Leads' list + detail, Coaching's and Billing's table,
  *   Branch info's form — at 1440 and 1920px: every child of `main` starts on Home's left edge (±4px), and ends on Home's
  *   right edge (±4px), a form's content at most 720px from the left; the avatar's circle ends on the frame's edge; at
- *   1920 the space left and right of the frame differs by at most 4px;
+ *   1920 the space left and right of the frame differs by at most 4px — the space on the right measured to the
+ *   document's own right edge, where the scrollbar's room begins, not to the window's;
  * - **the gutter** (UI-193): from 1024px the document keeps its scrollbar's room (`scrollbar-gutter: stable`), below it
- *   not; the avatar's right edge on a short page and a long one is the same (±1px). Headless Chrome draws no scrollbar,
- *   so the gutter is read from the computed style, and the edges from the layout;
+ *   not; the avatar's right edge on a short page and a long one is the same (±1px). Headless Chrome paints no scrollbar
+ *   (`--hide-scrollbars`), so the gutter is read from the computed style, and the edges from the layout. **The room
+ *   itself is the platform's** (2026-11-17): none on macOS, whose scrollbars overlay the page, and 15px on Linux — CI's
+ *   runner — where Chrome keeps the track's width out of the document although it paints nothing there and `innerWidth`
+ *   and the root's `clientWidth` still count it;
  * - **the sidebar** (UI-196): at 1280 × 800 and 1440 × 900, for an AB and an Agent on Home, an Owner on the office's
  *   Overview and the Super Admin on theirs, the nav holds what it draws without scrolling, and *Panduan* and the account
  *   card are inside the window;
@@ -155,6 +159,8 @@ const PAGES: { name: string; layout: 'dashboard' | 'list' | 'table' | 'form'; at
 interface Box { left: number; right: number; top: number; bottom: number; width: number }
 interface Frame {
   width: number;
+  /** The document's right edge: the window's, less the scrollbar's room where the platform keeps one (Linux 15px). */
+  room: number;
   main: Box;
   frame: { left: number; right: number };
   asideRight: number;
@@ -173,6 +179,7 @@ const FRAME = `(() => {
   const circle = document.querySelector('[data-title-row] [data-title-avatar] > :last-child');
   return {
     width: innerWidth,
+    room: document.documentElement.getBoundingClientRect().right,
     main: box(main),
     frame: { left: box(main).left + parseFloat(style.paddingLeft), right: box(main).right - parseFloat(style.paddingRight) },
     asideRight: box(document.querySelector('aside')).right,
@@ -208,11 +215,13 @@ describe.skipIf(!CHROME)('P19.13 the desktop page frame, measured in a real brow
 
   it.each([1440, 1920])('P19.13-T5 AC-1, T1 AC-1 at %ipx every layout’s edges are Home’s (±4px), and the avatar ends on them', async (width) => {
     const at = await measure(await home(width), width);
-    // The frame: at most 1320px, its 32px sides inside it, centred in the room beside the panel.
+    // The frame: at most 1320px, its 32px sides inside it, centred in the room beside the panel — between the panel and
+    // the scrollbar's room, which a reader on Windows or Linux sees as the track and a Mac reader not at all.
     expect(at.main.width).toBeLessThanOrEqual(1320);
     expect(Math.round(at.frame.left - at.main.left)).toBe(32);
+    expect(at.width - at.room).toBeLessThanOrEqual(20);
     const spaceLeft = at.main.left - at.asideRight;
-    const spaceRight = at.width - at.main.right;
+    const spaceRight = at.room - at.main.right;
     expect(Math.abs(spaceLeft - spaceRight)).toBeLessThanOrEqual(4);
     if (width === 1920) expect(at.main.width).toBe(1320);
     for (const kid of at.kids) {
