@@ -30,6 +30,8 @@ jobs:
           BACKEND_REPOSITORY: ${{ vars.BACKEND_REPOSITORY || format('{0}/agency-boost-backend', github.repository_owner) }}
           HEAD_REF: ${{ github.head_ref }}
           BASE_REF: ${{ github.base_ref || github.ref_name }}
+          # Its call to api.github.com/meta counts against this repository's limit, not the runner's address.
+          GITHUB_TOKEN: ${{ github.token }}
         run: bash .github/ci/backend-beside.sh
       # Pinned rather than the runner's own copy, whose version moves with the runner image.
       - name: shellcheck
