@@ -41,8 +41,8 @@ export type FieldDestinationId =
   // The office view's (P19.2-T1 AC-6): *KPM* · *Pengaturan* · *People*.
   | 'kpmOverview' | 'dataUpload'
   | 'activityTypes' | 'leadStatuses' | 'activationChecklist' | 'trainingSettings' | 'capabilityMapping'
-  | 'eventsSettings' | 'campaignsSettings' | 'products' | 'recruitmentPitch' | 'branchInfo' | 'branding'
-  | 'allMembers' | 'importPeople' | 'orgTree' | 'manageAdmins'
+  | 'eventsSettings' | 'campaignsSettings' | 'products' | 'productData' | 'recruitmentPitch' | 'branchInfo' | 'branding'
+  | 'allMembers' | 'importPeople' | 'orgTree' | 'manageAdmins' | 'coreLeaders'
   // The Super Admin's (P19.2-T1 AC-9).
   | 'adminOverview' | 'manageCompanies' | 'orgRoleLadder' | 'allKpms' | 'allMembers' | 'kpmRequests' | 'leaderLimit' | 'billing'
   | 'tenantAdmins' | 'audit' | 'crossPlatformAnalytics';
@@ -94,10 +94,17 @@ export interface FieldNav {
    */
   readonly tabs: readonly [FieldDestination, FieldDestination, FieldDestination, FieldDestination];
   /**
-   * The desktop sidebar's first section, with no heading: Home · Activity · Calendar, and *Search agent* for a leader.
-   * *Unit Dashboard* is *Tim saya*'s first since UI-159 (*same order in the desktop sidebar*), so it is listed once.
+   * The desktop sidebar's first section, with no heading: **Home · Activity · Calendar · Unit Dashboard**, the last for a
+   * leader (P19.13-T2 AC-4; UI-196, D-20: the report's *Conflicts resolved*). The sidebar lists a destination of `top`
+   * once, so *Unit Dashboard* is not drawn again under *Tim saya* there; the *Lainnya* sheet, which draws `groups`, keeps
+   * it as *Tim saya*'s first tile (UI-159), unchanged.
    */
   readonly top: readonly FieldDestination[];
+  /**
+   * ***Search agent*** (UI-012, D-14), for a leader by role, or `null`: since P19.13-T2 (UI-196, D-33) **a field under the
+   * sidebar's logo**, not a row of the top section. Not a page: it opens the agent picker.
+   */
+  readonly search: FieldDestination | null;
   /** Saya · Aktivitas · Tim saya · Program · KPM, each with the reader's items; a group with none is left out. */
   readonly groups: readonly FieldGroup[];
   /** The reader is on a page the sheet holds and the bar does not: *Lainnya* is then the bar's current tab. */
@@ -132,8 +139,11 @@ export function isUnder(pathname: string, href: string): boolean {
  */
 export function fieldNav(
   me: Me | null | undefined, pathname: string, view: ViewKind = 'self',
-  /** The items whose names are the reader's words, not kept terms: *Survei* (EN *Surveys*), *Tampilan KPM*. */
-  words: { surveys: string; branding?: string } = { surveys: 'Survei' },
+  /**
+   * The items whose names are the reader's words, not kept terms: *Survei* (EN *Surveys*), *Tampilan KPM*, *Data produk*
+   * (EN *Product data*).
+   */
+  words: { surveys: string; branding?: string; productData?: string } = { surveys: 'Survei' },
 ): FieldNav {
   const on = (href: string) => isUnder(pathname, href);
   const membership = me?.membership;
@@ -264,6 +274,14 @@ export function fieldNav(
     dest('eventsSettings', '/kpm/settings/events', 'calendar', kept('Events')),
     dest('campaignsSettings', '/kpm/settings/campaigns', 'trophy', kept('Campaigns')),
     dest('products', '/kpm/settings/products', 'box', kept('Products')),
+    /*
+     * ***Data produk*** (P19.15-T4 AC-2; ADR-0260 §5; the P1b spec's *Giving access*): after *Products*, for a reader whose
+     * *Kelola data produk* ticks at least one insurer — `GET /auth/me`'s `productDataCompanyIds`, resolved on each read of
+     * the session — and for nobody else. An Owner or Admin without it reaches the same page read-only from *Products*.
+     */
+    ...((me?.productDataCompanyIds?.length ?? 0) > 0
+      ? [dest('productData', '/kpm/data-produk', 'document', words.productData ?? 'Data produk')]
+      : []),
     dest('recruitmentPitch', '/kpm/settings/recruitment-pitch', 'chat', kept('Recruitment pitch')),
     dest('branchInfo', '/kpm/settings/branch-info', 'sliders', kept('Branch info')),
     // P19.6-T1 AC-2 (ADR-0218 §1): *Pengaturan → Tampilan KPM*, after *Branch info* — the Owner's and the Admins'.
@@ -274,6 +292,8 @@ export function fieldNav(
     dest('importPeople', '/people/import', 'userPlus', kept('Import people')),
     dest('orgTree', '/people/org-tree', 'tree', kept('Org tree')),
     ...(membership?.isKpmOwner ? [dest('manageAdmins', '/people/admins', 'shield', kept('Manage KPM admins'))] : []),
+    // P19.13-T3 (UI-199, ADR-0253 §8): the fifth, last — the Owner's and an Admin's alike.
+    dest('coreLeaders', '/people/core-leaders', 'star', kept('Core leaders & groups')),
   ];
 
   const groups: FieldGroup[] = (
@@ -299,7 +319,9 @@ export function fieldNav(
 
   return {
     tabs,
-    top: [home, activity, calendar, ...(leader ? [searchAgent] : [])],
+    // P19.13-T2 AC-4 (UI-196, D-20): *Unit Dashboard* fourth for a leader; *Search agent* is the field above (`search`).
+    top: [home, activity, calendar, ...(leader ? [{ ...unit, short: kept('Unit Dashboard') }] : [])],
+    search: leader ? searchAgent : null,
     groups,
     inSheet,
   };
@@ -364,6 +386,8 @@ export function adminNav(pathname: string, words: AdminWords, { leaderLimitPendi
   return {
     tabs,
     top: [overview],
+    // No agent picker on the platform (UI-196: *for a role without the picker there is no field*).
+    search: null,
     groups,
     inSheet: !onBar && groups.some((group) => group.items.some((item) => item.active)),
   };

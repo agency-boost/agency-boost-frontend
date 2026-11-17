@@ -42,6 +42,9 @@ export const KEPT_ENGLISH = {
     'Companies', 'KPMs', 'Platform admin',
     'Manage companies', 'Org role ladder', 'All KPMs', 'Pending KPM requests', 'Leaders past the limit',
     'Billing & subscription', 'KPM Owners & Admins', 'Audit / role change log', 'Cross-platform analytics',
+    // P19.13-T3 (UI-199, ADR-0253 §8; `glossary.md`): People's fifth item, and the page's title — the report's own words,
+    // the same in the Indonesian UI (Appendix A: *Menu/title "Core leaders & groups"*).
+    'Core leaders & groups',
     // The Super Admin's bottom bar (P19.2-T1 AC-9; UI-127, the owner's of 2026-11-02, *Overview · KPMs · Perusahaan ·
     // Analytics · Lainnya*): its fourth item, which the owner gives in English inside the Indonesian bar.
     'Analytics',
@@ -274,6 +277,10 @@ export const KEPT_ENGLISH = {
     // P19.5-T1 (the glossary's *MAPA driver*, OD-266 Q1: never expanded): a section of *Advanced analytics*, the same in
     // both languages as the template mockup writes it. *Sub-group* and *Power user*, the spec's own words in the ID UI.
     'MAPA driver', 'Sub-group', 'Power user',
+    // P19.13-T3 (UI-199, Appendix A; ADR-0253; `glossary.md`): *Core leaders & groups*' words that the report writes in
+    // English inside the Indonesian UI — a group's ★ *Group leader*, the row's ★ *Core* button, and Perbaikan sub-group's
+    // *Grouping* entry.
+    'Group leader', 'Core', 'Grouping',
   ],
   /**
    * For approval (§B.10, P18.10-T4, public and account): *Your account*'s *Pronoun* options — English pronouns, which only

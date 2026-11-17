@@ -40,7 +40,7 @@ const lead = (over: Partial<Lead> = {}): Lead => ({
   statusCode: 'FOLLOW_UP', thisMonth: false, committedMonths: [], closedThisMonth: false, lastEditedBy: null,
   remarks: null, nextActionDate: '2099-11-03', nextActionNote: 'Kopi.', outcome: null, source: 'Referensi dari Desi',
   dateRegistered: '2026-10-20T03:00:00.000Z', version: 2, flags: [], overdueDays: null,
-  age: 42, ageRecordedOn: '2026-11-05', gender: null, ...over,
+  ...over,
 });
 const page = (rows: unknown[]) => ({ rows, total: rows.length, page: 1, pageSize: 200 });
 
@@ -72,12 +72,12 @@ const details = (sheet: ReturnType<typeof within>) => within(sheet.getByRole('gr
 afterEach(() => vi.unstubAllGlobals());
 
 describe('P19.11-T3 AC-5 Detail: labelled fields, in the brief’s order', () => {
-  it('P19.11-T3 AC-5 Nama, WhatsApp, Email, Jenis kelamin — each with a visible label, in that order', async () => {
+  it('P19.14-T1 AC-4 Nama, WhatsApp, Email — each with a visible label, in that order; no Jenis kelamin since P19.14', async () => {
     render(360, [lead()]);
     const sheet = await openSheet();
     const group = sheet.getByRole('group', { name: 'Details' });
     const labels = [...group.querySelectorAll('label, p[id$="-gender-label"]')].map((el) => el.textContent);
-    expect(labels).toEqual(['Name', 'WhatsApp', 'Email', 'Gender']);
+    expect(labels).toEqual(['Name', 'WhatsApp', 'Email']);
     const box = details(sheet);
     expect(box.getByLabelText('Name')).toHaveValue('Ibu Rosa Damayanti');
     // The fixed +62, then the national digits of the stored number: one field with the number at the top.
@@ -87,14 +87,7 @@ describe('P19.11-T3 AC-5 Detail: labelled fields, in the brief’s order', () =>
     expect(phone.closest('[data-phone-field]')).toHaveTextContent('+62');
     expect(box.getByLabelText('Email')).toHaveValue('');
     expect(box.getByLabelText('Email')).not.toHaveAttribute('placeholder');
-    expect(box.getByRole('radiogroup', { name: 'Gender' })).toBeInTheDocument();
-  });
-
-  it('P19.11-T3 AC-5 Jenis kelamin is two options and empty by default', async () => {
-    render(360, [lead()]);
-    const box = details(await openSheet());
-    const options = within(box.getByRole('radiogroup', { name: 'Gender' })).getAllByRole('radio');
-    expect(options.map((o) => [o.textContent, o.getAttribute('aria-checked')])).toEqual([['Male', 'false'], ['Female', 'false']]);
+    expect(box.queryByRole('radiogroup', { name: 'Gender' })).not.toBeInTheDocument();
   });
 
   it('P19.11-T3 AC-5 Umur and Sumber lead are gone from the sheet, and a save leaves both as stored', async () => {
@@ -275,7 +268,7 @@ describe('P19.11-T3 AC-4 Hasil: Aktif setelah status … out of sight, still Tan
     // Detail's labels, as the brief writes them.
     const group = within(sheet.getByRole('group', { name: 'Detail' }));
     for (const label of ['Nama', 'WhatsApp', 'Email']) expect(group.getByLabelText(label)).toBeInTheDocument();
-    expect(group.getByRole('radiogroup', { name: 'Jenis kelamin' })).toBeInTheDocument();
+    expect(group.queryByRole('radiogroup', { name: 'Jenis kelamin' })).not.toBeInTheDocument();
   });
 });
 

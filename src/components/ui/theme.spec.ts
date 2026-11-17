@@ -222,6 +222,8 @@ describe('on a phone', () => {
       '--radius-row': '14px',
       // P19.1-T1 AC-4 (UI-114): the field shell's icon rail is 64px.
       '--sidebar-rail-width': '64px',
+      // P19.13-T2 AC-1 (UI-196): the floating panel is 240px, 12px off the window's edge.
+      '--sidebar-width': '240px',
     });
   });
 
@@ -255,7 +257,8 @@ describe('on a phone', () => {
     );
     const titleIn = (query: string) => media(query).flatMap(rulesIn).map(decls).filter((d) => '--text-title' in d);
     expect(titleIn('(min-width: 768px)')).toEqual([]);
-    expect(titleIn('(min-width: 1024px)')).toEqual([{ '--text-title': '1.5rem' }]);
+    // The same block sets a wide list's card gap from 1024px (P19.13-T1 AC-4, UI-194).
+    expect(titleIn('(min-width: 1024px)')).toEqual([{ '--text-title': '1.5rem', '--wide-card-gap': 'var(--space-cards)' }]);
     expect(await compile('text-title')).toContain('font-size: var(--text-title)');
   });
 

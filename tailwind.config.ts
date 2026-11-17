@@ -171,9 +171,24 @@ const config: Config = {
         title: ['var(--text-title)', '1.2'],
       },
       // `lg` is a card's corner: 12px, and 16px on a V1 surface; `row` a row's or a tile's inside one, 14px there (UI-008).
-      borderRadius: { sm: '4px', md: '8px', lg: 'var(--radius-card)', row: 'var(--radius-row)', pill: '999px' },
+      // `sidebar` the floating panel's 20px corners (P19.13-T2, UI-196).
+      borderRadius: {
+        sm: '4px', md: '8px', lg: 'var(--radius-card)', row: 'var(--radius-row)', pill: '999px', sidebar: 'var(--radius-sidebar)',
+      },
       boxShadow: { modal: 'var(--shadow-modal)', bar: 'var(--shadow-bar)' },
-      spacing: { sidebar: 'var(--sidebar-width)' },
+      /*
+       * **The desktop frame's spacing scale** (P19.13-T1 AC-1, AC-4; UI-192, UI-194; ADR-0252): `gap-cards` 16px between
+       * sibling cards, `gap-section` / `mb-section` 24px between sections and under the title row, `px-frame` the frame's
+       * 32px sides. Used behind `lg:` only: the phone keeps its own spacing.
+       */
+      spacing: {
+        sidebar: 'var(--sidebar-width)',
+        cards: 'var(--space-cards)',
+        section: 'var(--space-section)',
+        frame: 'var(--page-frame-gutter)',
+      },
+      // The frame's 1320px and a form's or a reading column's 720px (UI-192, UI-198): `lg:max-w-frame`, `lg:max-w-form`.
+      maxWidth: { frame: 'var(--page-frame-max)', form: 'var(--form-max)' },
     },
   },
   plugins: [],

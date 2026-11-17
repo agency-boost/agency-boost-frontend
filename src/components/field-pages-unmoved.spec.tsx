@@ -79,6 +79,13 @@ const WHO = {
 } as const;
 
 /**
+ * *Re-recorded 2026-11-12 by P19.13-T1 and T2, the change meant to move them (UI-192, UI-194, UI-196; ADR-0252):* **1024
+ * and 1280 only** — `main` the page frame (`lg:mx-auto lg:max-w-frame lg:px-frame`), the title row's 24px under it, and
+ * the floating sidebar: the app icon and the branch's name, *Search agent* a field under the logo, the top section Home ·
+ * Activity · Calendar · Unit Dashboard, the white pill, only the current page's group open, one line, the account card.
+ * **Every 360, 375 and 768 digest, the *Lainnya* sheet's and the account menu's are unchanged** (P19.13-T1 AC-6, T2
+ * AC-9): the phone and the tablet are drawn as they were, to the byte.
+ *
  * *Re-recorded 2026-11-06 by P19.6-T5, the change meant to move them (AC-1; ADR-0219 §5):* **1024 and 1280, the sheet and
  * the account menu** — *📘 Panduan*, the sidebar's last item from 1024px, the *Lainnya* sheet's line above *Keluar* and
  * the account menu's item between *Your account* and *Sign out*. The Agent's menu now differs from the leaders' by its
@@ -99,22 +106,22 @@ const BEFORE: Record<keyof typeof WHO, Record<number, string>> = {
     360: '1e89a233bda38fd35ed3c9409c9d4015a2b0cc6602e19d5168cdd28f9c795f39',
     375: '1e89a233bda38fd35ed3c9409c9d4015a2b0cc6602e19d5168cdd28f9c795f39',
     768: '0fe9d12836bbe531446d48a6af5fc7b1d3622a234272b687e1607e50610aa23b',
-    1024: 'e74114b695d2d48b71ae3bd069927bbc7b1495878f28eb435e6a65dc0780c613',
-    1280: 'ed2d0acc997c71121f96be9b53e50b865140d0e27d4973953458aa4e834ca85f',
+    1024: 'b82afb90cddf0aa1a458e5e0d3fa119ade72aa87a104e09cbe8df6addf406ae9',
+    1280: '77184cd8f0dfde69c5383b8b40b1ea778183cb5b3a2da0701aee6f7ed179cdc4',
   },
   AAB: {
     360: '1e89a233bda38fd35ed3c9409c9d4015a2b0cc6602e19d5168cdd28f9c795f39',
     375: '1e89a233bda38fd35ed3c9409c9d4015a2b0cc6602e19d5168cdd28f9c795f39',
     768: '0fe9d12836bbe531446d48a6af5fc7b1d3622a234272b687e1607e50610aa23b',
-    1024: 'd42ba6f9f47ca9a95e0fd05236f4ebf44361477285dce415195c8f3ecd65a281',
-    1280: '72a641d0b388f28addaa46ca6b20d4b80122f793568c23d4193f3364e76ef8c7',
+    1024: 'd6f344868c1d35b818e9a9349336bf8e10c7008c3c0ffcfda7f36ae81f321279',
+    1280: '145ca702103d13389273b9c441b4a0432bf026801c2aecdc9f12e641c107bad3',
   },
   Agent: {
     360: '5f393d37c40729b86dfda3332f2fbc43d7f4703fec45d0d70cfcdbfd6c339c91',
     375: '5f393d37c40729b86dfda3332f2fbc43d7f4703fec45d0d70cfcdbfd6c339c91',
     768: '57e87f13b08420e52a2bf2a57924db131e9b1fda6dea80dac762e88d69b39925',
-    1024: 'e9fdc028d8243d16591f47ff1e8c98a6cbde29f97a053eabaa30e98a4f1fe845',
-    1280: 'eaf2e025c6ce524deebfd8ff63a1d07128a4fcf7773a4d5a9d68ee35602f47dd',
+    1024: '857ba12321b2f75aaefb8c1bd2a23e0eee8bc559b0e941ff8c701688f659c271',
+    1280: 'f1234fc5cfbaa9824f62247d0dc61d06b0646d42e61d1d936742a1fa071ba857',
   },
 };
 

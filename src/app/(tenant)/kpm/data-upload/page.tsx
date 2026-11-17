@@ -117,23 +117,26 @@ export default function DataUploadPage() {
         />
       )}
     >
-      <MonthTable
-        month={month}
-        onPick={(next) => {
-          picked.current = true;
-          setMonth(next);
-        }}
-        onZoneMonth={(next) => {
-          zoneMonth.current = next;
-          if (!picked.current) setMonth(next);
-        }}
-        onLocked={(locked) => {
-          if (locked !== fromAddress.current) return;
-          fromAddress.current = null;
-          picked.current = false;
-          setMonth(zoneMonth.current ?? utcMonth());
-        }}
-      />
+      {/* P19.13-T4 AC-3 (UI-198): from 1024px the form layout, at most 720px from the frame's left edge. */}
+      <div className="lg:max-w-form">
+        <MonthTable
+          month={month}
+          onPick={(next) => {
+            picked.current = true;
+            setMonth(next);
+          }}
+          onZoneMonth={(next) => {
+            zoneMonth.current = next;
+            if (!picked.current) setMonth(next);
+          }}
+          onLocked={(locked) => {
+            if (locked !== fromAddress.current) return;
+            fromAddress.current = null;
+            picked.current = false;
+            setMonth(zoneMonth.current ?? utcMonth());
+          }}
+        />
+      </div>
     </Page>
   );
 }

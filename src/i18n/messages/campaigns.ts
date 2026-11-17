@@ -30,7 +30,7 @@ type Comparator = 'gte' | 'gt' | 'lte' | 'lt' | 'eq';
 
 const en = {
   /** The page (`:10411`): the nav item's words (§A.2), and its line — *Tap*, never *click* (P18.7-T9 AC-5). */
-  title: kept('Campaign List'),
+  title: kept('Campaign'),
   subtitle: "Company and KPM campaigns — mark the ones you're chasing, tap any card for full requirements.",
   /** The two tabs (`:3667-3670`), named for a screen reader, and the status filter (`:3674-3679`). */
   types: 'Campaign types',
@@ -110,7 +110,7 @@ const en = {
 };
 
 const id: MessagesOf<typeof en> = {
-  title: kept('Campaign List'),
+  title: kept('Campaign'),
   subtitle: `${kept('Campaign')} perusahaan dan ${kept('KPM')} — tandai yang Anda kejar, ketuk kartu mana pun untuk melihat syarat lengkapnya.`,
   types: `Jenis ${kept('campaign')}`,
   seasonal: 'Musiman',

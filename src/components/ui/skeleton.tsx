@@ -220,8 +220,13 @@ export function SkeletonTree({
  * previous-page-frozen behaviour it replaces.
  */
 export function PageSkeleton({ label, sessionWait = false }: { label?: string; sessionWait?: boolean }) {
+  /*
+   * *Changed 2026-11-12 (P19.13-T1 AC-2; UI-192):* **inside the shell, from 1024px, no padding of its own** — the page
+   * frame's sides are the page's, so the bars start on the frame's left edge as the page will. The session's wait is
+   * drawn before any shell, and keeps its padding.
+   */
   return (
-    <Skeleton label={label} className="px-5 py-6" sessionWait={sessionWait}>
+    <Skeleton label={label} className={cn('px-5 py-6', !sessionWait && 'lg:px-0 lg:py-0')} sessionWait={sessionWait}>
       <SkeletonBar className="h-6 w-56" />
       <SkeletonBar className="mt-2 h-3 w-80" />
       <div className="mt-8 rounded-lg border border-card-edge bg-card p-4">

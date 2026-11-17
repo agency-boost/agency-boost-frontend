@@ -241,8 +241,12 @@ const en = {
     add: 'Add lead',
     open: ({ who }: { who: string }) => `Open ${who}`,
     noneOfType: 'No leads here yet.',
-    /** From 1024px, the pane beside the list with no lead open in it (UI-116; P19.1-T2, the *Fill* of an empty pane). */
-    choose: 'Choose a lead to open it here.',
+    /**
+     * From 1024px, the pane beside the list with no lead open in it (UI-116; P19.1-T2, the *Fill* of an empty pane): since
+     * P19.13-T1 AC-5 O-2's two lines (OD-321), a heading and the line under it.
+     */
+    choose: 'Choose a lead to see its details',
+    chosenHere: 'The lead you choose shows here.',
     filters: {
       title: 'Filter and sort',
       type: 'Type',
@@ -266,11 +270,13 @@ const en = {
     /** A card whose lead is not the reader's (P19.9-T1 AC-4): whose it is, on the line under the name. */
     ownedBy: ({ name }: { name: string }) => `${name}’s`,
     /**
-     * **The card's proposal icon** (P19.11-T3 AC-1; UX-9): on a lead with a finished proposal only, opening the one saved
-     * last. Its tip, and its name with the lead's.
+     * **The card's *Buat proposal*** (P19.14-T4 AC-1; ADR-0257 §2): on every Sales lead of the reader's own, left of
+     * WhatsApp. Its tip, and its name with the lead's. *Replaced P19.11-T3's "Buka proposal" icon (UX-9).*
      */
-    openProposal: 'Open the proposal',
-    openProposalFor: ({ who }: { who: string }) => `Open the proposal for ${who}`,
+    makeProposal: 'Make a proposal',
+    makeProposalFor: ({ who }: { who: string }) => `Make a proposal for ${who}`,
+    /** The pill's name for a screen reader: *"Proposal: PRUWell Medical +1"*. */
+    proposalPill: 'Proposal',
   },
 
   /**
@@ -521,7 +527,8 @@ const id: MessagesOf<typeof en> = {
     add: `Tambah ${kept('lead')}`,
     open: ({ who }) => `Buka ${who}`,
     noneOfType: `Belum ada ${kept('leads')} di sini.`,
-    choose: `Pilih ${kept('lead')} untuk membukanya di sini.`,
+    choose: `Pilih ${kept('lead')} untuk melihat detailnya`,
+    chosenHere: `${kept('Lead')} yang dipilih tampil di sini.`,
     filters: {
       title: 'Filter dan urutan',
       type: 'Jenis',
@@ -539,8 +546,9 @@ const id: MessagesOf<typeof en> = {
       team: 'Tim',
     },
     ownedBy: ({ name }) => `Milik ${name}`,
-    openProposal: 'Buka proposal',
-    openProposalFor: ({ who }) => `Buka proposal ${who}`,
+    makeProposal: 'Buat proposal',
+    makeProposalFor: ({ who }) => `Buat proposal untuk ${who}`,
+    proposalPill: 'Proposal',
   },
 
   stageShort: {

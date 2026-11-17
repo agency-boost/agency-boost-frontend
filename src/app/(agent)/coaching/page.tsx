@@ -93,7 +93,9 @@ function RosterBody() {
   const leader = leadsByRole(useSession().me?.membership);
 
   return (
-    <div className="mx-auto max-w-[980px]">
+    // P19.13-T1 AC-2 (UI-192, the report's *Conflicts resolved*: *tables use the full frame*): from 1024px the frame's whole
+    // width, on its left edge, where it was 980px centred inside the room. Below 1024px as it was.
+    <div className="mx-auto max-w-[980px] lg:mx-0 lg:max-w-none">
       {error && <ErrorBanner {...error} />}
       {!roster && !error && <SkeletonCards count={4} label={t.loading} />}
       {nobody && (

@@ -580,7 +580,8 @@ export default function AddAgentsPage() {
 
         {/* From 1024px: a compact table — Nama · Kode · Status · Peran ⌄ · ⋮, *Keluarkan* in the ⋮ (UI-083). */}
         {team && team.length > 0 && (
-          <div className="mt-2 max-w-[880px] max-lg:hidden" data-testid="team-table">
+          // P19.13-T1 AC-2 (UI-192): the frame's full width, a table layout, where it was capped at 880px.
+          <div className="mt-2 max-lg:hidden" data-testid="team-table">
             <div aria-hidden="true" className="grid h-9 grid-cols-[minmax(0,300px)_90px_minmax(0,1fr)_120px_44px] items-center text-sm text-muted">
               <span>{t.columns.name}</span>
               <span>{t.columns.code}</span>

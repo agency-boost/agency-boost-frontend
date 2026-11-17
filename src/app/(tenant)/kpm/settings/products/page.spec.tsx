@@ -769,9 +769,21 @@ describe('P18.9-T7 AC-6 the products’ targets on a phone (UI-040)', () => {
     atWidth(px);
     render(SHELF);
     await screen.findByText('PRULink');
-    // The whole screen: the tabs, the publish bar, the count and every row (`main` is the shell's, which this spec has not).
+    /*
+     * The whole screen: the tabs, the publish bar, the count and every row (`main` is the shell's, which this spec has not).
+     *
+     * *Amended 2026-11-12 (P19.13-T4 AC-3; UI-198, ADR-0252):* from 1024px the shelf is the form layout, at most 720px
+     * (`lg:max-w-form` on its column). That class is the only change: lifted out, the screen still matches, at 768 and 1280.
+     */
+    const asBeforeP1913 = (el: Element) => {
+      const copy = el.cloneNode(true) as Element;
+      const shelf = [...copy.querySelectorAll('[class]')].filter((node) => node.classList.contains('lg:max-w-form'));
+      expect(shelf).toHaveLength(1);
+      shelf[0].classList.remove('lg:max-w-form');
+      return copy;
+    };
     const page = () => document.body.firstElementChild!;
-    expect(digestAt(page(), px)).toBe(BEFORE_T7.rest[px]);
+    expect(digestAt(asBeforeP1913(page()), px)).toBe(BEFORE_T7.rest[px]);
     await userEvent.click(screen.getAllByRole('button', { name: 'Customize' })[0]);
     await screen.findByLabelText('What your office calls it');
     /*
@@ -779,7 +791,7 @@ describe('P18.9-T7 AC-6 the products’ targets on a phone (UI-040)', () => {
      * office's *Tanya-jawab* and plan highlights above *Documents* (`[data-office-proposal]`). Everything else is drawn
      * as before: the digest is taken with that block lifted out, and still matches.
      */
-    const open = page().cloneNode(true) as Element;
+    const open = asBeforeP1913(page());
     expect(open.querySelector('[data-office-proposal]')).not.toBeNull();
     open.querySelector('[data-office-proposal]')!.remove();
     /*
@@ -972,5 +984,25 @@ describe('P19.2-T3 AC-4 the products’ targets (UI-142)', () => {
     await userEvent.click(screen.getAllByRole('button', { name: 'Customize' })[0]);
     await screen.findByLabelText('What your office calls it');
     expect(smallTargets(document.body, px)).toEqual([]);
+  });
+});
+
+/**
+ * **P19.15-T4 AC-3 — *Lihat data proposal*** (ADR-0260 §5): the Owner's and the Admins' one way to their company's
+ * *Proposal* tab, read-only, since *Data produk* is in the menu only with *Kelola data produk*. Shown to whoever holds
+ * `product_data:read`, and to nobody else.
+ */
+describe('P19.15-T4 AC-3 Lihat data proposal on Products', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('P19.15-T4 AC-3 links an Owner to /kpm/data-produk', async () => {
+    render([product()], makeMe({ membership: member, permissions: [...OWNER.permissions, 'product_data:read'] }));
+    expect(await screen.findByRole('link', { name: 'View proposal data' })).toHaveAttribute('href', '/kpm/data-produk');
+  });
+
+  it('P19.15-T4 AC-3 offers no link without product_data:read', async () => {
+    render();
+    await screen.findByText(/Allianz Life/);
+    expect(screen.queryByRole('link', { name: 'View proposal data' })).toBeNull();
   });
 });

@@ -54,7 +54,8 @@ export function HomeActions({
           <LineIcon name="chevronRight" className="h-4 w-4" />
         </Link>
       </SectionHead>
-      <div className="overflow-hidden rounded-lg bg-card">
+      {/* From 1024px the card fills its column's last space, so Home's two columns end level (P19.13-T4 AC-2; UI-195). */}
+      <div className="overflow-hidden rounded-lg bg-card lg:flex-1">
         {actions.length === 0 && <p data-actions-empty="" className="px-3.5 py-4 text-md text-muted">{t.empty}</p>}
         {tasks.length > 0 && (
           <ul aria-label={t.tasks} data-home-tasks="" className="divide-y divide-divider">

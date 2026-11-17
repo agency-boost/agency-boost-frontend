@@ -103,6 +103,8 @@ const PATHS: Record<string, React.ReactNode> = {
   /** Personal Summary — a report with a line chart. */
   report: <><rect x="4" y="3" width="16" height="18" rx="2" /><path d="m8 15 3-3 2 2 3-4" /><path d="M8 7h5" /></>,
   /** User Management — a group of people. */
+  // P19.13-T3 (UI-199): *Core leaders & groups* — the mockup's star over three heads.
+  star: <><path d="M12 2.5l2 4.2 4.6.7-3.3 3.2.8 4.6L12 13l-4.1 2.2.8-4.6-3.3-3.2 4.6-.7z" /><circle cx="6" cy="19" r="2" /><circle cx="12" cy="19.5" r="2" /><circle cx="18" cy="19" r="2" /></>,
   usersGroup: <><circle cx="12" cy="8" r="3" /><path d="M6.5 19a5.5 5.5 0 0 1 11 0" /><circle cx="5" cy="10" r="2" /><path d="M2 18a3.5 3.5 0 0 1 4-3.4" /><circle cx="19" cy="10" r="2" /><path d="M22 18a3.5 3.5 0 0 0-4-3.4" /></>,
   /** Keluar — a door and an arrow out. */
   logout: <><path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4" /><path d="M10 8l-4 4 4 4" /><path d="M6 12h10" /></>,

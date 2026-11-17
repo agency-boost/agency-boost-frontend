@@ -43,6 +43,8 @@ const PAGES: Readonly<Record<RouteFamily, readonly string[]>> = {
     '/admin/companies/[companyId]', '/admin/companies/[companyId]/settings', '/admin/companies/[companyId]/template',
     // P19.4-T3 (ADR-0207): *KPM & data*, *All members* and *Lihat sebagai KPM*.
     '/admin/companies/[companyId]/kpms', '/admin/members', '/admin/tenants/[kpmId]/analytics',
+    // P19.15-T1, T4 AC-1 (ADR-0258 §8): a company's *Proposal* tab.
+    '/admin/companies/[companyId]/proposal',
     '/admin/companies/[companyId]/templates/[templateId]', '/admin/companies/[companyId]/templates/[templateId]/[section]',
     '/admin/impersonate/[userId]', '/admin/impersonation/[sessionId]',
     '/admin/kpm-requests', '/admin/leader-limit-requests', '/admin/org-levels', '/admin/tenant-admins', '/admin/tenants', '/admin/tenants/new',
@@ -51,6 +53,8 @@ const PAGES: Readonly<Record<RouteFamily, readonly string[]>> = {
     '/admin/tenants/[kpmId]', '/admin/tenants/[kpmId]/owner', '/admin/tenants/[kpmId]/roster',
   ],
   tenant: [
+    // P19.15-T4 (ADR-0260 §5): *Data produk*, the insurers' proposal data — a holder's in full, an Owner's or Admin's read-only.
+    '/kpm/data-produk',
     '/kpm/data-upload', '/kpm/overview',
     '/kpm/settings/activation-checklist', '/kpm/settings/activity-types', '/kpm/settings/branch-info',
     // P19.6-T1 (ADR-0218 §1): *Tampilan KPM*.
@@ -59,6 +63,8 @@ const PAGES: Readonly<Record<RouteFamily, readonly string[]>> = {
     '/kpm/settings/lead-statuses', '/kpm/settings/products', '/kpm/settings/ratio-benchmarks',
     '/kpm/settings/recruitment-pitch', '/kpm/settings/training', '/kpm/settings/training/[moduleId]',
     '/people/admins', '/people/import', '/people/members', '/people/members/[membershipId]', '/people/org-tree',
+    // P19.13-T3 (UI-199, ADR-0253 §8; OD-324): *Core leaders & groups*.
+    '/people/core-leaders',
   ],
   agent: [
     '/activation', '/activity', '/activity/dashboard', '/activity/log', '/activity/ratio', '/attack-plan',
@@ -121,6 +127,8 @@ export const GATES: readonly RouteGate[] = [
   { route: '/admin/companies/[companyId]/settings', on: 'page', permission: 'company_template:read' },
   // P19.4-T3 (ADR-0207 §1): the Super Admin's reads across KPMs.
   { route: '/admin/companies/[companyId]/kpms', on: 'page', permission: 'platform_kpm_figures:read' },
+  // P19.15-T1, T4 AC-1 (ADR-0258 §8): the company's proposal data; the API asks which company the reader may read.
+  { route: '/admin/companies/[companyId]/proposal', on: 'page', permission: 'product_data:read' },
   { route: '/admin/members', on: 'page', permission: 'platform_members:read' },
   { route: '/admin/tenants/[kpmId]/analytics', on: 'page', permission: 'platform_kpm_figures:read' },
   { route: '/admin/companies/[companyId]/templates/[templateId]', on: 'page', permission: 'company_template:read' },
@@ -133,6 +141,8 @@ export const GATES: readonly RouteGate[] = [
   // P19.4-T2 (ADR-0206 §3, §6): `/admin/impersonation/[sessionId]` and `/admin/tenants/[kpmId]/roster` only redirect, under
   // the console's own gate — the approval's and the import's grants are gone from the Super Admin with them.
   // The office console.
+  // P19.15-T4 (ADR-0260 §3, §5): every Owner and Admin reads their company's; agents and leaders hold nothing here.
+  { route: '/kpm/data-produk', on: 'page', permission: 'product_data:read' },
   { route: '/kpm/data-upload', on: 'page', permission: 'data_upload:read' },
   { route: '/kpm/overview', on: 'page', permission: 'kpm_overview:read' },
   { route: '/kpm/settings/activation-checklist', on: 'page', permission: 'activation_settings:read' },
@@ -149,6 +159,8 @@ export const GATES: readonly RouteGate[] = [
   { route: '/kpm/settings/training', on: 'page', permission: 'training_settings:read' },
   { route: '/kpm/settings/training/[moduleId]', on: 'page', permission: 'training_settings:read' },
   { route: '/people/admins', on: 'page', permission: 'kpm_admin:grant' },
+  // P19.13-T3 (ADR-0253 §7): read-like, so the Super Admin's view-as opens it; the writes are refused in the API.
+  { route: '/people/core-leaders', on: 'page', permission: 'member:read_tags' },
   { route: '/people/import', on: 'page', permission: 'kpm:import_roster' },
   { route: '/people/org-tree', on: 'page', permission: 'org_tree:read' },
   // The field view.

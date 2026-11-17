@@ -42,6 +42,8 @@ const TIM_SAYA = ['unit', 'coaching', 'newHires', 'userManagement', 'groupTree']
 const AGENT_NAV = {
   tabs: ['activity', 'calendar', 'home', 'summary'],
   top: ['home', 'activity', 'calendar'],
+  // No agent picker: no *Search agent* field (P19.13-T2 AC-3).
+  search: null as string | null,
   groups: {
     // *Survei* since P19.5-T4 (C-R2; OD-267, D-37): every field role's, at all times.
     saya: ['leads', 'goals', 'summary', 'training', 'surveys'],
@@ -53,13 +55,16 @@ const AGENT_NAV = {
 /** Every item a leader has who is no Core Leader. */
 const LEADER_NAV = {
   tabs: ['activity', 'calendar', 'home', 'unit'],
-  top: ['home', 'activity', 'calendar', 'searchAgent'],
+  // P19.13-T2 AC-4 (UI-196, D-20): Unit Dashboard fourth in the sidebar's top section; Search agent the field above it.
+  top: ['home', 'activity', 'calendar', 'unit'],
+  search: 'searchAgent' as string | null,
   groups: { ...AGENT_NAV.groups, timSaya: TIM_SAYA },
 };
 
 const ids = (nav: ReturnType<typeof fieldNav>) => ({
   tabs: nav.tabs.map((t) => t.id),
   top: nav.top.map((t) => t.id),
+  search: nav.search?.id ?? null,
   groups: Object.fromEntries(nav.groups.map((g) => [g.id, g.items.map((i) => i.id)])),
 });
 
@@ -91,10 +96,11 @@ describe('UI-004 fieldNav: the tab bar, the Lainnya sheet and the sidebar, from 
     expect(nav.groups.find((g) => g.id === 'timSaya')?.items.map((i) => i.id)).toEqual(TIM_SAYA);
   });
 
-  it('D-20 gives a Core Leader every group, in the owner’s order, and the desktop’s first section with Search agent', () => {
+  it('P19.13-T2 AC-4 D-20 gives a Core Leader every group, in the owner’s order, the first section Home · Activity · Calendar · Unit Dashboard, and Search agent', () => {
     expect(ids(fieldNav(CORE_LEADER, '/goals'))).toEqual({
       tabs: ['activity', 'calendar', 'home', 'unit'],
-      top: ['home', 'activity', 'calendar', 'searchAgent'],
+      top: ['home', 'activity', 'calendar', 'unit'],
+      search: 'searchAgent',
       groups: {
         saya: ['leads', 'goals', 'summary', 'training', 'surveys'],
         aktivitas: ['sales', 'recruitment'],
@@ -133,7 +139,8 @@ describe('UI-004 fieldNav: the tab bar, the Lainnya sheet and the sidebar, from 
   it('P19-T4 AC-1 gives an AAB who leads somebody the Unit tab, Search agent and Tim saya’s five', () => {
     const nav = ids(fieldNav(AAB, '/goals'));
     expect(nav.tabs[3]).toBe('unit');
-    expect(nav.top).toEqual(['home', 'activity', 'calendar', 'searchAgent']);
+    expect(nav.top).toEqual(['home', 'activity', 'calendar', 'unit']);
+    expect(nav.search).toBe('searchAgent');
     expect(nav.groups.timSaya).toEqual(TIM_SAYA);
     expect(nav.groups.kpm).toBeUndefined();
   });
@@ -323,7 +330,8 @@ describe('P19.2-T1 AC-6 the office view’s menu (UI-147; ADR-0198 §2)', () => 
       // P19.6-T1 (ADR-0218 §1; §B7): *Pengaturan → Tampilan KPM*, after *Branch info*.
       'Tampilan KPM',
     ]);
-    expect(itemsOf(nav, 'people')).toEqual(['All members', 'Import people', 'Org tree', 'Manage KPM admins']);
+    // P19.13-T3 AC-1 (UI-199): *Core leaders & groups* fifth, last.
+    expect(itemsOf(nav, 'people')).toEqual(['All members', 'Import people', 'Org tree', 'Manage KPM admins', 'Core leaders & groups']);
     // P19.5-T3 AC-1: Advanced analytics opens the page's index (no longer *Segera hadir*, nor the survey tabs alone).
     const advanced = nav.groups.flatMap((g) => g.items).find((d) => d.id === 'advancedAnalytics')!;
     expect(advanced).toMatchObject({ href: '/kpm/advanced-analytics', active: false });
@@ -332,7 +340,38 @@ describe('P19.2-T1 AC-6 the office view’s menu (UI-147; ADR-0198 §2)', () => 
   it('P19.2-T1 AC-6 gives an Admin KPM · Pengaturan · People without Manage KPM admins (§1.6)', () => {
     const nav = fieldNav(ADMIN, '/kpm/overview', 'kpm_admin');
     expect(groupsOf(nav)).toEqual(['saya', 'aktivitas', 'timSaya', 'program', 'kpm', 'pengaturan', 'people']);
-    expect(itemsOf(nav, 'people')).toEqual(['All members', 'Import people', 'Org tree']);
+    // P19.13-T3 AC-1: an Admin has *Core leaders & groups* too, with the Owner's rights.
+    expect(itemsOf(nav, 'people')).toEqual(['All members', 'Import people', 'Org tree', 'Core leaders & groups']);
+  });
+
+  /*
+   * P19.15-T4 AC-2 (ADR-0260 §5; the P1b spec's *Giving access*): ***Data produk*** after *Products*, for an Owner or an
+   * Admin whose *Kelola data produk* ticks an insurer — `productDataCompanyIds` on the session — and for nobody else; on a
+   * phone it is in *Lainnya*, the sheet holding the office's groups.
+   */
+  it('P19.15-T4 AC-2 gives a holder of Kelola data produk Data produk after Products, current on /kpm/data-produk', () => {
+    const holder = member({ isKpmAdmin: true, directCount: 0 }, { productDataCompanyIds: ['co-pru'] });
+    const nav = fieldNav(holder, '/kpm/data-produk', 'kpm_admin', { surveys: 'Survei', productData: 'Data produk' });
+    expect(itemsOf(nav, 'pengaturan').slice(7, 9)).toEqual(['Products', 'Data produk']);
+    expect(nav.groups.flatMap((g) => g.items).find((d) => d.id === 'productData'))
+      .toMatchObject({ href: '/kpm/data-produk', active: true, icon: 'document' });
+    expect(nav.inSheet).toBe(true);
+    expect(itemsOf(fieldNav(member({ isKpmOwner: true, hierarchyRole: 'ab' }, { productDataCompanyIds: ['co-pru'] }),
+      '/home', 'kpm_owner'), 'pengaturan')).toContain('Data produk');
+  });
+
+  it('P19.15-T4 AC-3 offers Data produk to no Owner or Admin without it, and to nobody in the field view', () => {
+    expect(itemsOf(fieldNav(OWNER, '/kpm/overview', 'kpm_owner'), 'pengaturan')).not.toContain('Data produk');
+    expect(itemsOf(fieldNav(ADMIN, '/kpm/overview', 'kpm_admin'), 'pengaturan')).not.toContain('Data produk');
+    const holder = member({ isKpmAdmin: true, directCount: 0 }, { productDataCompanyIds: ['co-pru'] });
+    expect(fieldNav(holder, '/home').groups.flatMap((g) => g.items).some((d) => d.id === 'productData')).toBe(false);
+  });
+
+  it('P19.13-T3 AC-1 Core leaders & groups opens /people/core-leaders, current there, from Lainnya (the sheet holds it)', () => {
+    const nav = fieldNav(OWNER, '/people/core-leaders', 'kpm_owner');
+    const item = nav.groups.flatMap((g) => g.items).find((d) => d.id === 'coreLeaders')!;
+    expect(item).toMatchObject({ href: '/people/core-leaders', active: true, icon: 'star' });
+    expect(nav.inSheet).toBe(true);
   });
 
   it('P19.2-T1 AC-6 keeps the leader bar in the office view: Activity · Calendar · Home · Unit, and Lainnya current on an office page', () => {
@@ -399,6 +438,8 @@ describe('P19.2-T1 AC-9 the Super Admin’s menu (UI-127; ADR-0197 §3)', () => 
   it('P19.2-T1 AC-9 the sheet and the laptop sidebar: the sidebar’s groups unchanged, Overview alone at its top', () => {
     const nav = adminNav('/admin', WORDS, { leaderLimitPending: 2 });
     expect(nav.top.map((d) => d.label)).toEqual(['Overview']);
+    // P19.13-T2 AC-3 (UI-196): no agent picker on the platform, so no *Search agent* field.
+    expect(nav.search).toBeNull();
     expect(nav.groups.map((g) => [g.id, g.items.map((d) => d.label)])).toEqual([
       ['companies', ['Manage companies', 'Org role ladder']],
       // P19.4-T3 AC-1 (SA UI-010): *All members* after *All KPMs*.

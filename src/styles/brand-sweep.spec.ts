@@ -81,10 +81,8 @@ const KEPT: Record<string, { tokens: string[]; why: string }> = {
     tokens: ['text-amber'],
     why: 'the action word on the toast’s fixed ink, where it reads 6.9:1; a KPM’s colour could not be read there',
   },
-  'components/app-shell.tsx': {
-    tokens: ['fill-amber'],
-    why: 'AgencyBoost’s own mark, drawn only where no KPM logo is (ADR-0086, ADR-0218 §10)',
-  },
+  // *Removed 2026-11-12 (P19.13-T2; UI-196):* `components/app-shell.tsx`'s `fill-amber`, the org-chart mark's node — the
+  // sidebar draws the app's icon now, and the wordmark's *Boost* reads `text-primary-on-secondary`, readable on any panel.
 };
 
 const HEX = /#(?:1b2b4b|e8954a|f2994a|d97f30|b5651d|a85e1b|2e4370)\b/i;

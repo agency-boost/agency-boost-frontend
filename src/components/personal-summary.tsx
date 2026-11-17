@@ -317,12 +317,17 @@ export function SummaryCards({
      * aktivitas* and the ratio card on the left; *Langkah berikutnya*, *Cara meningkatkan*, the campaigns and the leads
      * on the right — so the two columns end at about the same height (row 147). The right column keeps 300px at 1024
      * beside the rail (UI-114). Not centred: the cards' edge is the title's (UI-056).
+     *
+     * *Changed 2026-11-12 (P19.13-T4 AC-2, T1 AC-4; UI-195, UI-194, ADR-0252):* **the leads close the left column**, after
+     * the ratio card, as they follow it on the phone — the right column was the longer by some 370px (731 beside 1,098 at
+     * 1920), and UI-195 asks the two to end within about 120px; **16px between the columns** (`gap-cards`), as between
+     * the cards. Drawn from 1024px only.
      */
     return (
-      <div data-summary-layout="desktop" className="grid grid-cols-[minmax(0,1.4fr)_minmax(300px,1fr)] items-start gap-5">
+      <div data-summary-layout="desktop" className="grid grid-cols-[minmax(0,1.4fr)_minmax(300px,1fr)] items-start gap-cards">
         {printed}
-        <div data-summary-column="left" className="grid min-w-0 gap-4">{goal}{targets}{ratio}</div>
-        <div data-summary-column="right" className="grid min-w-0 gap-4">{next}{improving}{campaigns}{leads}</div>
+        <div data-summary-column="left" className="grid min-w-0 gap-cards">{goal}{targets}{ratio}{leads}</div>
+        <div data-summary-column="right" className="grid min-w-0 gap-cards">{next}{improving}{campaigns}</div>
       </div>
     );
   }
@@ -335,7 +340,8 @@ export function SummaryCards({
      */
     <div
       data-summary-layout={arrangement}
-      className={cn('grid gap-4', arrangement === 'coachee' && 'lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-start lg:gap-5')}
+      // P19.13-T1 AC-4 (UI-194): a coachee's two columns 16px apart from 1024px, as between the cards.
+      className={cn('grid gap-4', arrangement === 'coachee' && 'lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-start lg:gap-cards')}
     >
       {printed}
       <div className="grid min-w-0 gap-4">{goal}{targets}</div>

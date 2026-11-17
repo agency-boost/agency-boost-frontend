@@ -13,12 +13,12 @@ import { Button } from '@/components/ui/field';
 import type { ProposalSaveState } from './use-proposal';
 
 /**
- * **The progress bar and *Kembali*** (AC-2; Acc. 18): *1 Klien · 2 Produk · 3 PDF* over every step — the plan's own
- * step pills (`StepPills`, the Sales Attack Plan's), the current one in the accent, the ones behind it ticked — and
- * *Kembali*, which always works: step 1 back to *Riwayat*, every later step to the one before it. The steps carry these
- * instead of the Sales tools strip (ADR-0221 §8).
+ * **The step pills and *Kembali*** (P19.14-T1 AC-1; Acc. 18): ***1 Untuk siapa · 2 Produk*** — the plan's own step pills
+ * (`StepPills`, the Sales Attack Plan's), the current one in the accent, the ones behind it ticked — and *Kembali*, which
+ * always works: step 1 back to *Riwayat*, step 2 to step 1, the result to step 2. **The PDF is the result, not a step**:
+ * on it both pills are ticked. The steps carry these instead of the Sales tools strip (ADR-0221 §8).
  */
-export function ProposalSteps({ current, backHref }: { current: 1 | 2 | 3; backHref: string }) {
+export function ProposalSteps({ current, backHref }: { current: 1 | 2 | 'pdf'; backHref: string }) {
   const t = useMessages(proposalMessages);
   return (
     <div data-proposal-steps="" className="mb-2 flex flex-col gap-1">
@@ -29,7 +29,7 @@ export function ProposalSteps({ current, backHref }: { current: 1 | 2 | 3; backH
         <LineIcon name="chevronLeft" className="h-4 w-4" />
         {t.back}
       </Link>
-      <StepPills label={t.steps.label} steps={[t.steps.client, t.steps.products, t.steps.pdf]} current={current - 1} />
+      <StepPills label={t.steps.label} steps={[t.steps.client, t.steps.products]} current={current === 'pdf' ? 2 : current - 1} />
     </div>
   );
 }

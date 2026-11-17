@@ -378,8 +378,9 @@ export const readOrgTree = (forId?: string) =>
 export interface GroupSummary {
   groupId: string;
   name: string;
-  ownerMembershipId: string;
-  ownerName: string;
+  /** The ★ group leader (P19.13-T3; ADR-0253 §2), or `null` — *Belum ada group leader*. */
+  ownerMembershipId: string | null;
+  ownerName: string | null;
   /** They have been removed from the office, so the group has nobody running it. */
   ownerHasLeft: boolean;
   memberCount: number;
@@ -421,10 +422,15 @@ export const revokeAdmin = (membershipId: string) =>
 
 export const listGroups = () => api<GroupSummary[]>('/members/groups');
 
-export const createGroup = (name: string, ownerMembershipId: string) =>
+/**
+ * A group, with no ★ (`null`) or one appointed — an AB or an AAB, placed in it (ADR-0253 §2). *Core leaders & groups*'
+ * *+ Group baru* and *All members → Groups*.
+ */
+export const createGroup = (name: string, ownerMembershipId: string | null) =>
   api<GroupSummary[]>('/members/groups', { method: 'POST', body: { name, ownerMembershipId } });
 
-export const updateGroup = (groupId: string, name: string, ownerMembershipId: string) =>
+/** Rename a group, and appoint its ★ (`null` clears it; the members follow a rename). */
+export const updateGroup = (groupId: string, name: string, ownerMembershipId: string | null) =>
   api<GroupSummary[]>(`/members/groups/${groupId}`, {
     method: 'PUT',
     body: { name, ownerMembershipId },

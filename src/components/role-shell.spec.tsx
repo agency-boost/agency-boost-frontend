@@ -2,6 +2,7 @@ import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { makeMe, renderWithSession, stubFetch } from '@test/harness';
+import { openEveryGroup } from '@test/sidebar';
 import { RoleShell } from './role-shell';
 import { landingFor } from '@/lib/landing';
 
@@ -45,6 +46,9 @@ describe('RoleShell', () => {
     renderWithSession(<RoleShell title="Notifications">body</RoleShell>, { me: SUPER_ADMIN });
 
     expect(await screen.findByText('SUPERADMIN')).toBeInTheDocument();
+    // Only the current page's group is open (P19.13-T2 AC-5): *Companies* is a heading to open.
+    expect(screen.getByRole('button', { name: /Companies/ })).toHaveAttribute('aria-expanded', 'false');
+    openEveryGroup();
     expect(screen.getByRole('link', { name: 'Manage companies' })).toBeInTheDocument();
     // The failure this exists for: the agent nav has no way back to /admin.
     expect(screen.queryByRole('link', { name: 'Activity management' })).toBeNull();
@@ -73,6 +77,9 @@ describe('RoleShell', () => {
     renderWithSession(<RoleShell title="Notifications">body</RoleShell>, {
       me: member({ isKpmAdmin: true }),
     });
+    // *People* is a heading to open, since only the current page's group is (P19.13-T2 AC-5).
+    await screen.findByRole('button', { name: 'People' });
+    openEveryGroup();
     expect(await screen.findByRole('link', { name: 'All members' })).toBeInTheDocument();
   });
 

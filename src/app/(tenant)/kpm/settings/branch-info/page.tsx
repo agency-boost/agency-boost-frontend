@@ -94,7 +94,8 @@ export default function BranchInfoPage() {
       error={error}
     >
 
-      <Card>
+      {/* P19.13-T4 AC-3 (UI-198): from 1024px the form layout, at most 720px from the frame's left edge. */}
+      <Card className="lg:max-w-form">
         {office === null ? (
           <SkeletonText lines={6} />
         ) : (

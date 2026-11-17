@@ -203,7 +203,7 @@ export function CampaignList({ children }: { children?: ReactNode }) {
           ))}
           {list && !phone && phoneSections.length > 0 && (
             // A tablet and a laptop (P19.1-T5 AC-4; UI-123): the groups side by side while they fit, each as wide as its cards.
-            <div data-campaign-groups="" className="flex flex-wrap gap-x-2.5">
+            <div data-campaign-groups="" className="flex flex-wrap gap-x-2.5 lg:gap-x-cards">
               {phoneSections.map((section) => (
                 <PhoneSection key={section.id} section={section} style={shareOf(section.items.length)} wide>
                   {section.items.map((card) => (card.kind === 'seasonal' && card.phase === 'ended'
@@ -340,10 +340,14 @@ function PhoneSection({ section, wide = false, style, children }: {
   );
 }
 
-/** A card's narrowest on a tablet and a laptop (UI-123: `minmax(300px, 1fr)`), and the gap between two. */
+/**
+ * A card's narrowest on a tablet and a laptop (UI-123: `minmax(300px, 1fr)`), and the gap between two: 10px on a tablet
+ * and **16px from 1024px** (P19.13-T1 AC-4; UI-194: *one spacing scale*), the grid's `gap-2.5 lg:gap-cards` and the
+ * group's width read from the one property, `--wide-card-gap` (`globals.css`), so the two cannot disagree.
+ */
 const CARD_MIN_PX = 300;
-const CARD_GAP = '0.625rem';
-const WIDE_GRID = 'grid grid-cols-[repeat(auto-fill,minmax(min(100%,300px),1fr))] items-start gap-2.5';
+const CARD_GAP = 'var(--wide-card-gap)';
+const WIDE_GRID = 'grid grid-cols-[repeat(auto-fill,minmax(min(100%,300px),1fr))] items-start gap-2.5 lg:gap-cards';
 
 /**
  * **How wide a group stands** (UI-123: *sections with only one or two cards share a row (Berjalan | Akan datang side by

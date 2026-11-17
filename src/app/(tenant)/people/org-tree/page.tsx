@@ -68,7 +68,7 @@ export default function OrgTreePage() {
 
   return (
     <Page
-      title={kept('Org Tree')}
+      title={kept('Org tree')}
       subtitle={t.subtitle}
       // A 44px pill on a phone too (UI-142: no target under 44px on `/people/*`), where Group Tree's is 40px (UI-059).
       control={populated ? <TreeSearch value={query} onChange={setQuery} className="w-[140px] max-md:h-11 md:max-lg:w-[300px]" /> : null}

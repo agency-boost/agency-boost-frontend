@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { axe } from 'vitest-axe';
 import { SRC } from '@test/copy-scan';
 import { atWidth, makeMe, renderInIndonesian, renderLive, renderWithSession, resetLanguage, wears } from '@test/harness';
+import { openEveryGroup } from '@test/sidebar';
 import AdminLayout from '@/app/(admin)/layout';
 import TenantLayout from '@/app/(tenant)/layout';
 import { shellMessages } from '@/i18n/messages/shell';
@@ -120,16 +121,18 @@ describe('P19.2-T1 AC-1 every role in the one shell (UI-146)', () => {
     expect(tabBar()).not.toBeNull();
   });
 
-  it.each(ROLES)('P19.2-T1 AC-1 %s at 1280px: the sidebar’s headings sentence case, 12px grey — none upper case', (_, me, path) => {
+  // *Changed 2026-11-12 (P19.13-T2 AC-5; UI-196):* 13px headings, 36px rows, white while open and 65% white while closed.
+  it.each(ROLES)('P19.2-T1 AC-1, P19.13-T2 AC-5 %s at 1280px: the sidebar’s headings sentence case, 13px — none upper case', (_, me, path) => {
     atWidth(1280);
     nav.path = path;
     renderWithSession(page(), { me });
     const sidebar = screen.getByRole('navigation', { name: 'Main' });
-    const headings = within(sidebar).getAllByRole('button', { expanded: true });
+    const headings = Array.from(sidebar.querySelectorAll<HTMLElement>('[aria-controls^="nav-group"]'));
     expect(headings.length).toBeGreaterThan(0);
     for (const heading of headings) {
       expect(heading.className).not.toContain('uppercase');
-      expect(heading).toHaveClass('text-xs', 'text-secondary-contrast/65');
+      expect(heading).toHaveClass('h-9', 'text-base');
+      expect(heading).toHaveClass(heading.getAttribute('aria-expanded') === 'true' ? 'text-secondary-contrast' : 'text-secondary-contrast/65');
     }
     expect(tabBar()).toBeNull();
   });
@@ -346,6 +349,9 @@ describe('P19.2-T1 AC-6 the office view’s menu (UI-147)', () => {
     first.unmount();
     nav.path = '/calendar';
     renderWithSession(page('Calendar'), { me: OWNER });
+    // *KPM* is a heading to open on a field page (P19.13-T2 AC-5), and *Data upload* is in it: the office view's menu.
+    expect(screen.getByRole('button', { name: 'KPM' })).toHaveAttribute('aria-expanded', 'false');
+    openEveryGroup();
     expect(screen.getByRole('link', { name: 'Data upload' })).toBeInTheDocument();
     expect(titleAvatar()).toHaveAccessibleName('Your account: KPM Owner');
   });
@@ -461,7 +467,9 @@ describe('P19.2-T1 AC-10 /admin on a tablet uses the phone’s navigation; the l
     renderWithSession(page('Manage Companies'), { me: SUPER_ADMIN });
     expect(screen.getByRole('button', { name: 'Collapse the sidebar' })).toBeInTheDocument();
     const sidebar = within(screen.getByRole('navigation', { name: 'Main' }));
-    expect(sidebar.getAllByRole('button', { expanded: true }).map((b) => b.textContent)).toEqual(['Companies', 'KPMs', 'Platform admin', 'Reporting']);
+    // The groups as today; only the current page's open (P19.13-T2 AC-5).
+    expect(sidebar.getAllByRole('button', { expanded: true }).map((b) => b.textContent)).toEqual(['Companies']);
+    expect(sidebar.getAllByRole('button', { expanded: false }).map((b) => b.textContent)).toEqual(['KPMs', 'Platform admin', 'Reporting']);
     expect(sidebar.getByRole('link', { name: 'Manage companies' })).toHaveAttribute('aria-current', 'page');
     expect(screen.getByText('SUPERADMIN')).toBeInTheDocument();
   });
@@ -519,7 +527,7 @@ describe('P19.2-T1 AC-12 the /admin menu and titles come from the catalogue (UI-
     nav.path = '/admin';
     renderInIndonesian(page(), { me: SUPER_ADMIN });
     const words = new Set(Object.values(shellMessages.id.admin) as string[]);
-    const drawn = Array.from(screen.getByRole('navigation', { name: 'Utama' }).querySelectorAll('a')).map((a) => a.textContent ?? '');
+    const drawn = Array.from(openEveryGroup(screen.getByRole('navigation', { name: 'Utama' })).querySelectorAll('a')).map((a) => a.textContent ?? '');
     // Ten until P19.4-T3 added *All members* (SA UI-010).
     expect(drawn.length).toBe(11);
     for (const label of drawn) expect(words).toContain(label);
@@ -531,7 +539,8 @@ describe('P19.2-T1 AC-13 the support banner and the bell keep their places, for 
     atWidth(1280);
     nav.path = path;
     renderWithSession(page(), { me });
-    const foot = document.querySelector('[aria-controls="sidebar-user-actions"]')!.closest('div.ml-auto')!;
+    // The account card since P19.13-T2 AC-6 (UI-196): the avatar, the name, the role line and the bell.
+    const foot = document.querySelector('[aria-controls="sidebar-user-actions"]')!.closest('[data-account-card]')!;
     expect(within(foot as HTMLElement).getByRole('button', { name: 'Notifications' })).toBeInTheDocument();
   });
 

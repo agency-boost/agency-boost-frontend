@@ -38,7 +38,7 @@ const cap = (word: string) => word.charAt(0).toUpperCase() + word.slice(1);
 
 const en = {
   /** The page (`Overall.html:10405`): its title, kept (§A.2), and the prototype's line, verbatim. */
-  title: kept('Goal Settings'),
+  title: kept('Goal Setting'),
   subtitle: "Turn your annual target into this month's activity numbers.",
   /** While the plan is read: *Loading your plan…*, *Loading her plan…*. */
   loading: ({ who }: { who: Voice }) => `Loading ${who.possessive} plan…`,
@@ -134,7 +134,7 @@ const en = {
 };
 
 const id: MessagesOf<typeof en> = {
-  title: kept('Goal Settings'),
+  title: kept('Goal Setting'),
   subtitle: `Ubah ${kept('target')} tahunan Anda menjadi angka aktivitas bulan ini.`,
   loading: ({ who }) => (who.self ? 'Memuat rencana Anda…' : 'Memuat rencananya…'),
   setByLeader: ({ strong, date }) => (

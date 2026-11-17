@@ -235,7 +235,9 @@ function AvatarViewMenu({ chrome, views }: { chrome: FieldChrome; views: ViewSwi
 
   const close = () => setOpen(false);
   return (
-    <div ref={box} className="relative -mr-1 shrink-0">
+    // From 1024px the circle ends on the page frame's right edge, as the single-view avatar's does (P19.13-T1 AC-1; UI-192):
+    // the trigger ends at the circle, so the 4px it reached past the row below 1024px is not taken there.
+    <div ref={box} className="relative -mr-1 shrink-0 lg:mr-0">
       <button
         ref={trigger}
         type="button"

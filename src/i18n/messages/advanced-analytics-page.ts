@@ -98,7 +98,7 @@ const en = {
     },
   },
   subgroup: {
-    head: 'Head of group',
+    head: kept('Group'),
     manpower: kept('Manpower'),
     leaders: 'Leaders',
     maa: 'Active agents (MAA)',
@@ -119,11 +119,11 @@ const en = {
     recYtd: ({ year }: { year: string }) => `${year} so far`,
     met: ({ pct }: { pct: string }) => `${pct} met`,
     edit: 'Change targets',
-    save: 'Save',
-    cancel: 'Cancel',
-    saved: 'Targets saved',
-    targetsTitle: ({ name }: { name: string }) => `Targets for ${name}`,
-    invalid: 'Each target is a whole number from 0 to 1000.',
+    /** P19.13-T3 (UI-199; ADR-0253 §5): the row of the people no grouped leader leads, and a group with no ★. */
+    noGroup: 'No group',
+    noHead: 'No group leader yet',
+    /** The entry that opens *Core leaders & groups* (UI-199: *the "Grouping" view there opens this page*). */
+    grouping: kept('Grouping'),
   },
   events: {
     kpm: 'KPM score',
@@ -222,7 +222,7 @@ const id: MessagesOf<typeof en> = {
     },
   },
   subgroup: {
-    head: 'Kepala grup',
+    head: kept('Group'),
     manpower: kept('Manpower'),
     leaders: 'Jumlah leader',
     maa: 'Agen aktif (MAA)',
@@ -243,11 +243,9 @@ const id: MessagesOf<typeof en> = {
     recYtd: ({ year }) => `${year} sejauh ini`,
     met: ({ pct }) => `${pct} tercapai`,
     edit: 'Ubah target',
-    save: 'Simpan',
-    cancel: 'Batal',
-    saved: 'Target tersimpan',
-    targetsTitle: ({ name }) => `Target untuk ${name}`,
-    invalid: 'Setiap target bilangan bulat dari 0 sampai 1000.',
+    noGroup: 'Tidak ada group',
+    noHead: 'Belum ada group leader',
+    grouping: kept('Grouping'),
   },
   events: {
     kpm: 'Skor KPM',

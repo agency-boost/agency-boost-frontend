@@ -6,6 +6,7 @@ import { RequireSession } from '@/components/require-session';
 import { NoDataLine, SamplePreview } from '@/components/sample-preview';
 import { Button } from '@/components/ui/field';
 import { makeMe, renderInIndonesian, renderInLayout, renderWithSession, stubFetch } from '@test/harness';
+import { openEveryGroup } from '@test/sidebar';
 
 const nav = vi.hoisted(() => ({ pathname: '/leads' }));
 vi.mock('next/navigation', () => ({
@@ -104,7 +105,9 @@ describe('P19-T4 the no-office card', () => {
       renderInLayout(AgentLayout, <p>the page</p>, { me: NO_KPM });
       expect(await screen.findByText('Register with a KPM or ask your leader to accept you first')).toBeInTheDocument();
       expect(screen.queryByText('the page')).not.toBeInTheDocument();
-      // The chrome is there — the menu with every Agent item — and no office's endpoint was asked.
+      // The chrome is there — the menu with every Agent item, its groups opened (only the current page's starts open
+      // since P19.13-T2, UI-196) — and no office's endpoint was asked.
+      openEveryGroup();
       expect(screen.getAllByRole('link', { name: /Leads/ }).length).toBeGreaterThan(0);
       await waitFor(() => expect(calls.some((c) => /\/kpm\/|\/home|\/leads|\/calendar/.test(c.url))).toBe(false));
     },

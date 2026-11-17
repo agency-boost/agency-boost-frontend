@@ -4,9 +4,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { atWidth, makeMe, renderWithSession, stubFetch } from '@test/harness';
 import AuditPage from './page';
 
+/** The address's query: empty unless a test names one (P19.15-T4's link from *Perubahan oleh pengelola*). */
+const address = vi.hoisted(() => ({ search: '' }));
+
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
   usePathname: () => '/admin/audit',
+  useSearchParams: () => new URLSearchParams(address.search),
 }));
 
 const SUPER_ADMIN = makeMe({
@@ -57,7 +61,23 @@ async function choose(chip: RegExp, option: string | RegExp) {
 }
 
 describe('audit log', () => {
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    address.search = '';
+  });
+
+  it('P19.15-T4 AC-2 opens narrowed to the scope, actor and action an address names, and drops what is not one', async () => {
+    const KPM = '66f0000000000000000000a1';
+    const MAYA = '66f0000000000000000000e2';
+    address.search = `kpmId=${KPM}&actorUserId=${MAYA}&action=rate_table.activated&companyId=nope`;
+    const stub = show(page([ENTRY]));
+    await screen.findByText('Root Operator');
+    const [first] = auditCalls(stub.calls);
+    expect(first).toContain(`kpmId=${KPM}`);
+    expect(first).toContain(`actorUserId=${MAYA}`);
+    expect(first).toContain('action=rate_table.activated');
+    expect(first).not.toContain('companyId=');
+  });
 
   it('defaults to the platform log — where provisioning is actually recorded', async () => {
     // A Super Admin has no tenant, so their own events carry a null kpmId. Defaulting

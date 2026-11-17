@@ -2,6 +2,7 @@ import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { makeMe, renderWithSession } from '@test/harness';
+import { openEveryGroup } from '@test/sidebar';
 import type { Me } from '@/lib/session';
 import { PHONE_QUERY } from '@/lib/use-phone';
 import { AgentShell } from './agent-shell';
@@ -137,9 +138,10 @@ describe('the profile line under the name (P18.5-T6 AC-2, ADR-0159 §5)', () => 
  */
 describe('UI-004 Sales and Recruitment under Aktivitas (P18.5-T12 AC-1, P17-T3 AC-1)', () => {
   afterEach(() => { route.path = '/coaching'; });
-  const sidebar = () => within(screen.getByRole('navigation', { name: 'Main' }));
+  // Every group opened first: only the current page's starts open since P19.13-T2 (UI-196).
+  const sidebar = () => within(openEveryGroup());
   /** The nav's group headings and items, in order, by their text. */
-  const navOrder = () => Array.from(screen.getByRole('navigation', { name: 'Main' })
+  const navOrder = () => Array.from(openEveryGroup()
     .querySelectorAll('[aria-controls^="nav-group"], a, button[data-nav-control]'))
     .map((el) => (el.textContent ?? '').trim());
 

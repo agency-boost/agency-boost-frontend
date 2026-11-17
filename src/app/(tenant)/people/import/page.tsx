@@ -27,11 +27,14 @@ export default function PeopleImportPage() {
       subtitle={t.importSubtitle}
       permission="kpm:import_roster"
     >
-      {kpmId ? (
-        <RosterImport kpmId={kpmId} backHref="/people/members" touchTargets />
-      ) : (
-        <p className="text-md text-muted">{t.notInOffice}</p>
-      )}
+      {/* P19.13-T4 AC-3 (UI-198): from 1024px the form layout, at most 720px from the frame's left edge. */}
+      <div className="lg:max-w-form">
+        {kpmId ? (
+          <RosterImport kpmId={kpmId} backHref="/people/members" touchTargets />
+        ) : (
+          <p className="text-md text-muted">{t.notInOffice}</p>
+        )}
+      </div>
     </Page>
   );
 }

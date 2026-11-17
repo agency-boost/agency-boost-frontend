@@ -2,6 +2,8 @@ import { cleanup, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeMe, renderWithSession, routeParams } from '@test/harness';
+import { openEveryGroup } from '@test/sidebar';
+import { fieldNav } from '@/lib/field-nav';
 import { LEARNER, progressView, SALES } from '@test/training-fixtures';
 import AdminAnalyticsPage from '@/app/(admin)/admin/analytics/page';
 import AuditPage from '@/app/(admin)/admin/audit/page';
@@ -48,6 +50,7 @@ import ProductsPage from '@/app/(tenant)/kpm/settings/products/page';
 import RecruitmentPitchPage from '@/app/(tenant)/kpm/settings/recruitment-pitch/page';
 import TrainingSettingsPage from '@/app/(tenant)/kpm/settings/training/page';
 import KpmAdminsPage from '@/app/(tenant)/people/admins/page';
+import CoreLeadersPage from '@/app/(tenant)/people/core-leaders/page';
 import ImportPeoplePage from '@/app/(tenant)/people/import/page';
 import MembersPage from '@/app/(tenant)/people/members/page';
 import OrgTreePage from '@/app/(tenant)/people/org-tree/page';
@@ -160,6 +163,7 @@ const PAGES: Record<string, Screen> = {
   '/people/import': { ui: () => <ImportPeoplePage />, me: OWNER },
   '/people/org-tree': { ui: () => <OrgTreePage />, me: OWNER },
   '/people/admins': { ui: () => <KpmAdminsPage />, me: OWNER },
+  '/people/core-leaders': { ui: () => <CoreLeadersPage />, me: OWNER },
   // The platform console's.
   '/admin': { ui: () => <PlatformOverviewPage />, me: ADMIN },
   '/admin/companies': { ui: () => <CompaniesPage />, me: ADMIN },
@@ -183,7 +187,8 @@ function navItems(
 ): { label: string; href: string }[] {
   nav.pathname = path;
   renderWithSession(<>{shell}</>, { me });
-  const main = screen.getByRole('navigation', { name: 'Main' });
+  // Only the current page's group starts open since P19.13-T2 (UI-196): every group is opened to read the whole nav.
+  const main = openEveryGroup(screen.getByRole('navigation', { name: 'Main' }));
   const items = [...main.querySelectorAll<HTMLAnchorElement>('a[href]')].map((a) => ({
     label: (a.querySelector('[data-nav-label]')?.textContent ?? a.textContent ?? '').replace(/\s+/g, ' ').trim(),
     href: a.getAttribute('href')!,
@@ -244,9 +249,33 @@ describe('P18.7-T9 AC-2 each menu label is its page’s title', () => {
     });
   });
 
-  it('P18.7-T9 AC-2 the client’s two pairs: Training modules and User management are their pages’ titles now', async () => {
-    expect(await titleOf('/training')).toBe('Training Modules');
+  it('P18.7-T9 AC-2 the client’s two pairs: Training and User management are their pages’ titles now', async () => {
+    // *Training Modules* until P19.13-T4 (UI-197): the menu's *Training* since.
+    expect(await titleOf('/training')).toBe('Training');
     cleanup();
     expect(await titleOf('/user-management/kpm')).toBe('User Management');
+  });
+});
+
+/**
+ * **P19.13-T4 AC-1: the nine titles of UI-197 are their menu labels, to the letter** (D-36: *the page title equals the
+ * menu name*; the report's Appendix A). The label is read from the menu's own model (`fieldNav`), so the two cannot drift
+ * apart again; case included — *All members*, not *All Members*.
+ */
+describe('P19.13-T4 AC-1 UI-197: a page’s title is its menu label', () => {
+  beforeEach(() => { nav.pathname = '/'; });
+  afterEach(() => vi.unstubAllGlobals());
+
+  const officeMenu = fieldNav(OWNER, '/kpm/overview', 'kpm_owner');
+  const label = (href: string) => [...officeMenu.top, ...officeMenu.groups.flatMap((g) => g.items)].find((d) => d.href === href)!.label;
+  const NINE = [
+    ['/goals', 'Goal Setting'], ['/attack-plan', 'Sales'], ['/training', 'Training'], ['/coaching', 'Coaching'],
+    ['/campaigns', 'Campaign'], ['/events', 'Event'], ['/people/members', 'All members'], ['/people/org-tree', 'Org tree'],
+    ['/people/admins', 'Manage KPM admins'],
+  ] as const;
+
+  it.each(NINE)('P19.13-T4 AC-1 %s is titled “%s”, its menu label', async (href, words) => {
+    expect(label(href)).toBe(words);
+    expect(await titleOf(href)).toBe(words);
   });
 });

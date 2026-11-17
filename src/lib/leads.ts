@@ -90,21 +90,15 @@ export interface Lead {
   outcome: LeadOutcome | null;
   source: string | null;
   dateRegistered: string | null;
-  /**
-   * **The client's age at the next birthday, today** (P19.7-T1 AC-1; ADR-0224 §2): the server's reading — the age written
-   * plus the whole years since `ageRecordedOn` — never computed here. `null` when none was given. Optional, as
-   * `closedThisMonth` is, so an older answer reads as no age.
+  /*
+   * *Removed 2026-11-12 (P19.14-T1 AC-4; ADR-0254):* `age`, `ageRecordedOn` and `gender`. A lead carries no client data
+   * beyond its name and contact; the age and gender are each proposal's, entered at its step 1.
    */
-  age?: number | null;
-  /** The office's day the age was last written; the server's alone. */
-  ageRecordedOn?: string | null;
-  /** *Laki-laki* or *Perempuan*, or `null` (ADR-0224 §1). */
-  gender?: LeadGender | null;
   /**
-   * **The lead's proposals, for its owner only** (P19.7-T2 AC-12; ADR-0221 §6): how many live ones, and the products of
-   * the one updated last — the card's *"PRUWell Medical +1"*. `null` on a lead with none **and on every lead the reader
-   * does not own**: a leader never learns what was proposed on a downline's lead (decision 4). Optional, as `age` is, so
-   * an older answer reads as none.
+   * **The lead's proposals, for its owner only** (P19.7-T2 AC-12; ADR-0221 §6; P19.14-T4, ADR-0257): how many live ones,
+   * the products of the latest that has one — the card's pill, *"PRUWell Medical +1"* — and the last client entered, for
+   * the next proposal's step 1. `null` on a lead with none **and on every lead the reader does not own**: a leader never
+   * learns what was proposed on a downline's lead (decision 4). Optional, so an older answer reads as none.
    */
   proposals?: LeadProposals | null;
   version: number;
@@ -113,31 +107,48 @@ export interface Lead {
   overdueDays: number | null;
 }
 
-/** `Lead.proposals`: the lead's live proposals, drafts included, and the latest one's products (ADR-0221 §6). */
+/** `Lead.proposals`: the lead's live proposals, drafts included, the latest one's products, the last client (ADR-0257). */
 export interface LeadProposals {
   count: number;
-  /** Kept in the payload; no longer drawn on the card since P19.11-T3 AC-2 (UX-9: the *"PRUMapan"* chip went). */
+  /** **The pill** (P19.14-T4 AC-1; ADR-0257 §1): the latest proposal with a product, a draft included. */
   latest: LeadLatestProposal;
-  /**
-   * **The finished ones among them** (P19.11-T3 AC-1; UX-9; UXQ3): `status: 'done'`, counted by the server. The card
-   * draws its proposal icon only when this is 1 or more; drafts never count.
-   */
+  /** **The finished ones among them** (P19.11-T3 AC-1): `status: 'done'`, counted by the server. */
   done: number;
-  /** The finished one saved last (by `doneAt`): what the card's icon opens. `null` when none is finished. */
+  /** The finished one saved last (by `doneAt`). `null` when none is finished. */
   latestDone: LeadLatestDoneProposal | null;
+  /** **What step 1 starts from for this lead** (P19.14-T1 AC-5; ADR-0254 §4): the last client, the age moved up. */
+  client: LeadProposalClient | null;
 }
 
-/** `LeadProposals.latestDone`: the proposal the card's icon opens, at its step 3 (P19.11-T3 AC-1). */
+/** `LeadProposals.latestDone`. */
 export interface LeadLatestDoneProposal {
   id: string;
 }
 
 /**
- * The proposal updated last that has a product: its item names as the proposal shows them, in order. Empty when every
- * live proposal of the lead is still an empty draft — the card then draws the document icon alone.
+ * The proposal updated last that has a product: its id and its item names as the proposal shows them, in order. `id:
+ * null` and no names when every live proposal of the lead is still empty — the card then draws no pill.
  */
 export interface LeadLatestProposal {
+  id: string | null;
   products: string[];
+}
+
+/** The last client entered on the lead's proposals, the age moved up by the years since (ADR-0254 §4). */
+export interface LeadProposalClient {
+  age: number | null;
+  gender: LeadGender | null;
+  details: LeadProposalClientDetails;
+}
+
+/** The details of `LeadProposalClient`, as `ProposalClientDetails` (`proposals.ts`) holds them. */
+export interface LeadProposalClientDetails {
+  status: 'single' | 'married' | null;
+  dependants: string | null;
+  occupation: string | null;
+  city: string | null;
+  needs: ('HOSPITAL' | 'CRITICAL_INCOME' | 'FAMILY' | 'EDUCATION' | 'FUTURE' | 'OTHER')[];
+  needsOther: string | null;
 }
 
 /**

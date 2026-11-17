@@ -109,7 +109,9 @@ function Billing() {
   ];
 
   return (
-    <div className="max-w-[68.75rem]">
+    // P19.13-T1 AC-2 (UI-192): from 1024px the frame's full width — a table page, as every Super Admin list — where it
+    // was capped at 1100px and stuck to the left. Below 1024px the cap is wider than the screen and draws nothing.
+    <div className="max-w-[68.75rem] lg:max-w-none">
       <LaunchLine />
       {/* The reference strip (ADR-0211 §3): the five tiers, no *"Your tier"*, no *Talk to us*. */}
       {prices ? (

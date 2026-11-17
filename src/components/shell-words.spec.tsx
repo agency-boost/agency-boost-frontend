@@ -2,6 +2,7 @@ import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { atWidth, InLanguage, makeMe, renderInIndonesian, renderWithSession, stubFetch } from '@test/harness';
+import { openEveryGroup } from '@test/sidebar';
 import { messagesIn } from '@/i18n/catalogue';
 import { KEPT_ENGLISH } from '@/i18n/glossary';
 import { shellMessages } from '@/i18n/messages/shell';
@@ -55,7 +56,8 @@ describe('P18.10-T1 the shells in Indonesian', () => {
     renderInIndonesian(<AgentShell title="Coaching Session">body</AgentShell>, {
       me: member({ directCount: 2, isCoreLeader: true }),
     });
-    const nav = screen.getByRole('navigation', { name: 'Utama' });
+    // Every group opened: only the current page's starts open since P19.13-T2 (UI-196).
+    const nav = openEveryGroup(screen.getByRole('navigation', { name: 'Utama' }));
 
     for (const item of ['Activity', 'Leads', 'Unit Dashboard', 'Strategic Leader Forum', 'Goal Setting', 'User Management']) {
       expect(within(nav).getByRole('link', { name: item })).toBeInTheDocument();
@@ -128,6 +130,7 @@ describe('P18.10-T1 the shells in Indonesian', () => {
     });
 
     expect(screen.queryByText('KPM OWNER')).not.toBeInTheDocument();
+    openEveryGroup(screen.getByRole('navigation', { name: 'Utama' }));
     expect(screen.getByRole('link', { name: 'Manage KPM admins' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Pengaturan' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'People' })).toBeInTheDocument();
@@ -145,6 +148,7 @@ describe('P18.10-T1 the shells in Indonesian', () => {
 
     expect(screen.getByText('SUPERADMIN')).toBeInTheDocument();
     expect(chip()).toHaveTextContent('Superadmin');
+    openEveryGroup(screen.getByRole('navigation', { name: 'Utama' }));
     expect(screen.getByRole('link', { name: messagesIn(shellMessages, 'id').admin.manageCompanies })).toBeInTheDocument();
   });
 
@@ -176,9 +180,10 @@ describe('P18.10-T1 AC-7 every heading and item of the three shells is a kept te
 
   /** The nav's own words: each group's heading, and each item's name before any pill or count. */
   function navWords(): string[] {
-    const nav = screen.getByRole('navigation', { name: 'Main' });
+    const nav = openEveryGroup(screen.getByRole('navigation', { name: 'Main' }));
     const headings = within(nav).queryAllByRole('button').map((b) => b.textContent ?? '');
-    const items = [...nav.querySelectorAll('li > a')].map((a) => a.childNodes[1]?.textContent ?? '');
+    // The item's words, beside its glyph or alone (a group's rows carry none since P19.13-T2, UI-196).
+    const items = [...nav.querySelectorAll('li > a')].map((a) => a.querySelector('span.truncate')?.textContent ?? '');
     return [...headings, ...items].map((w) => w.trim()).filter((w) => w !== '');
   }
 

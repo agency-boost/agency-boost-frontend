@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Page } from '@/components/page';
 import { kept } from '@/i18n/kept';
 import { DateField } from '@/components/ui/date-field';
@@ -22,6 +22,7 @@ import {
   dayInZone, formatCalendarDay, formatDateTime, formatDayRange, formatOfficeTime, OFFICE_TIME_ZONE,
 } from '@/lib/format';
 import { useMediaQuery } from '@/lib/use-media-query';
+import { useQuery, type Query } from '@/lib/use-query';
 import { ADMIN_TARGET, ChoicePill, type ChoiceOption } from '@/components/ui/rows-and-sheets';
 
 /**
@@ -78,7 +79,45 @@ const NO_FILTERS: Filters = { kpmId: ANY, companyId: ANY, action: ANY, actorUser
  */
 export default function AuditPage() {
   const t = useMessages(adminAuditMessages);
+  // The nav item's words (P18.7-T9 AC-2; UI-027): *Audit / role change log* (`Superadmin.html:197`). No sub-line (UI-136).
+  return (
+    <Page title={t.title}>
+      {/* `useSearchParams` needs a boundary (`lib/use-query.ts`). */}
+      <Suspense fallback={null}>
+        <AuditLog />
+      </Suspense>
+    </Page>
+  );
+}
+
+/** An id as the API writes one: 24 hex characters. Anything else in the address narrows nothing. */
+const OBJECT_ID = /^[0-9a-f]{24}$/i;
+/** An action as the log records one: `rate_table.activated`. */
+const ACTION = /^[a-z_]+\.[a-z_]+$/;
+
+/**
+ * **The filters an address names** (P19.15-T4 AC-2; ADR-0260 §6): *Perubahan oleh pengelola* links each change to its
+ * line here — `?kpmId=&actorUserId=&action=`, the scope it was written in, its actor and its action — so the page opens
+ * narrowed to them, the change the newest line. A value that is not one is dropped, never sent.
+ */
+function filtersFrom(query: Query): Filters {
+  const one = (key: string, shape: RegExp) => {
+    const value = query[key];
+    return typeof value === 'string' && shape.test(value) ? value : ANY;
+  };
+  return {
+    ...NO_FILTERS,
+    kpmId: one('kpmId', OBJECT_ID),
+    companyId: one('companyId', OBJECT_ID),
+    actorUserId: one('actorUserId', OBJECT_ID),
+    action: one('action', ACTION),
+  };
+}
+
+function AuditLog() {
+  const t = useMessages(adminAuditMessages);
   const layout = useMessages(adminLayoutMessages);
+  const address = useQuery();
   const figures = useFigureLanguage();
   const rows = useMediaQuery(['phone', 'tablet']);
   const COLUMNS = [t.columns.when, t.columns.action, t.columns.target, t.columns.actor];
@@ -88,7 +127,7 @@ export default function AuditPage() {
   const [facets, setFacets] = useState<AuditFacets | null>(null);
   const [tenants, setTenants] = useState<Kpm[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
-  const [filters, setFilters] = useState<Filters>(NO_FILTERS);
+  const [filters, setFilters] = useState<Filters>(() => filtersFrom(address));
   const [error, setError] = useState<{ code: string; message: string; requestId: string } | null>(null);
   /** The read the page is on, so a slower answer to filters since changed never overwrites a newer one. */
   const reading = useRef(0);
@@ -159,8 +198,7 @@ export default function AuditPage() {
   ];
 
   return (
-    // The nav item's words (P18.7-T9 AC-2; UI-027): *Audit / role change log* (`Superadmin.html:197`). No sub-line (UI-136).
-    <Page title={t.title}>
+    <>
       <div role="group" aria-label={t.filters} className="mb-3 flex flex-wrap gap-1.5">
         {/* Cakupan reads as chosen at every value: the platform's own log is a scope too, not an absence of one. */}
         <ChoicePill name={t.scope} options={scopeOptions} value={filters.kpmId} onChange={set('kpmId')} narrows />
@@ -272,7 +310,7 @@ export default function AuditPage() {
           )}
         </div>
       )}
-    </Page>
+    </>
   );
 }
 

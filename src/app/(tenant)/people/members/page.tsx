@@ -264,8 +264,10 @@ export default function MembersPage() {
         try {
           const [mine, office] = await Promise.all([listGroups(), readOrgTree()]);
           setGroups(mine);
+          // A group's ★ is a leader (P19.13-T3; ADR-0253 §2): an AB or an AAB, never an Agent.
           setCandidates(
             office.nodes
+              .filter((n) => n.role === 'ab' || n.role === 'aab')
               .map((n) => ({ membershipId: n.membershipId, fullName: displayName(n) }))
               .sort((a, b) => a.fullName.localeCompare(b.fullName)),
           );
@@ -379,8 +381,8 @@ export default function MembersPage() {
     try {
       setGroups(
         editing.groupId === null
-          ? await createGroup(editing.name, editing.owner)
-          : await updateGroup(editing.groupId, editing.name, editing.owner),
+          ? await createGroup(editing.name, editing.owner || null)
+          : await updateGroup(editing.groupId, editing.name, editing.owner || null),
       );
       setEditing(null);
     } catch (err) {
@@ -456,7 +458,7 @@ export default function MembersPage() {
 
   return (
     <Page
-      title={kept('All Members')}
+      title={kept('All members')}
       subtitle={t.subtitle}
     >
       {/* The prototype's metrics: 24px between tabs, the underline on the hairline, and
@@ -766,7 +768,7 @@ export default function MembersPage() {
                     value={editing.owner}
                     onChange={(e) => setEditing({ ...editing, owner: e.target.value })}
                   >
-                    <option value="">{t.groups.chooseSomebody}</option>
+                    <option value="">{t.groups.notAppointed}</option>
                     {candidates.map((m) => (
                       <option key={m.membershipId} value={m.membershipId}>
                         {m.fullName}
@@ -777,7 +779,7 @@ export default function MembersPage() {
               </FieldRow>
               <div className="mt-3 flex flex-wrap gap-2">
                 <Button
-                  disabled={busy || editing.name.trim() === '' || editing.owner === ''}
+                  disabled={busy || editing.name.trim() === ''}
                   onClick={() => void saveGroup()}
                 >
                   {busy ? t.groups.saving : t.groups.save}
@@ -827,7 +829,7 @@ export default function MembersPage() {
                 <Row key={group.groupId}>
                   <Cell className="font-semibold">{group.name}</Cell>
                   <Cell className="text-muted">
-                    {group.ownerName}
+                    {group.ownerName ?? t.groups.noHead}
                     {group.ownerHasLeft && (
                       <span className="block text-sm text-alert">
                         {t.groups.ownerLeft}
@@ -847,7 +849,7 @@ export default function MembersPage() {
                           setEditing({
                             groupId: group.groupId,
                             name: group.name,
-                            owner: group.ownerMembershipId,
+                            owner: group.ownerMembershipId ?? '',
                           });
                         }}
                       >

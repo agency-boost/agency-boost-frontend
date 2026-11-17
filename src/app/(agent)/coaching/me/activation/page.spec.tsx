@@ -66,7 +66,7 @@ describe('/coaching/me/activation, the reader’s own Activation tab (P13-T9 AC-
     show({ 'GET /activation/me': notFound }, { ...SARI_ME, activation: null });
     expect(await screen.findByText('You have no 90-day activation.')).toBeInTheDocument();
     // A leader has the way back to the roster.
-    expect(screen.getByRole('link', { name: '← Back to Coaching Session' })).toHaveAttribute('href', '/coaching');
+    expect(screen.getByRole('link', { name: '← Back to Coaching' })).toHaveAttribute('href', '/coaching');
   });
 
   it('is refused, with no read, to a reader without coaching_session:read', async () => {

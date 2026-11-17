@@ -58,7 +58,7 @@ const TEMPLATES = [{
 }];
 
 const show = (body: unknown[] = [PRUDENTIAL], extra: Record<string, unknown> = {}) => {
-  const stub = stubFetch({ '/admin/companies': { body }, ...extra });
+  const stub = stubFetch({ '/admin/companies': { body }, '/product-data/intakes': { body: { aiReading: true, intakes: [] } }, ...extra });
   renderInLayout(AdminLayout, <CompaniesPage />, { me: SUPER_ADMIN });
   return stub;
 };

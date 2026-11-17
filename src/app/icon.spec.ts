@@ -36,15 +36,19 @@ describe('the favicon (P11-T8 AC-13, ADR-0086)', () => {
       expect(markup).toMatch(new RegExp(`<circle cx="20" cy="19" r="4" fill="${AMBER}"`, 'i'));
     });
 
-    it('P11-T8 AC-13 is the shell’s mark, node for node and line for line', () => {
-      const shell = readFileSync(join(APP, '../components/app-shell.tsx'), 'utf8');
-      const mark = shell.slice(shell.indexOf('function BrandMark'), shell.indexOf('function NavLink'));
+    /*
+     * *Changed 2026-11-12 (P19.13-T2 AC-2; UI-196, ADR-0252):* the sidebar draws the app's icon (Boost holding a phone,
+     * `/icons/icon-192.png`) where it drew this mark, so the mark is pinned here by its own five shapes — the prototype's
+     * (`Overall.html:2612-2617`) — rather than read from the shell. The favicon keeps it (ADR-0086); nothing asked to move it.
+     */
+    it('P11-T8 AC-13 is the prototype’s mark, node for node and line for line', () => {
       const shapes = (text: string) => [
         ...[...text.matchAll(/<circle cx="([\d.]+)" cy="([\d.]+)" r="([\d.]+)"/g)].map((m) => `circle ${m[1]} ${m[2]} ${m[3]}`),
         ...[...text.matchAll(/<line x1="([\d.]+)" y1="([\d.]+)" x2="([\d.]+)" y2="([\d.]+)"/g)].map((m) => `line ${m.slice(1, 5).join(' ')}`),
       ];
-      expect(shapes(mark)).toHaveLength(5);
-      expect(shapes(markup)).toEqual(shapes(mark));
+      expect(shapes(markup)).toEqual([
+        'circle 13 5.5 4', 'circle 6 19 4', 'circle 20 19 4', 'line 13 9 6.5 15.5', 'line 13 9 19.5 15.5',
+      ]);
     });
   });
 

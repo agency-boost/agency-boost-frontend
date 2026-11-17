@@ -17,7 +17,8 @@ import { LEAD_AGE_MAX, LEAD_AGE_MIN, type LeadGender } from '@/lib/leads';
  *   server refuses it too (`422 LEAD_AGE_OUT_OF_RANGE`).
  * - **48px targets** (the spec's *buttons at least 48px high*), the box a pill, the selection colour the field's own.
  *
- * The lead sheet uses it in *+ Tambah lead* and on a lead; P19.7-T2's step 1 uses it for *Klien baru*.
+ * *Since P19.14-T1 (ADR-0254):* the proposal's step 1 alone uses it, for the client's age on the proposal — a lead carries
+ * no age any more, and the lead sheet asks none.
  */
 export function AgeStepper({
   id,
@@ -103,7 +104,8 @@ export function AgeStepper({
 }
 
 /**
- * ***Laki-laki* / *Perempuan***, two large buttons (P19.7-T1 AC-1; the spec's step 1; ADR-0224 §1). Optional: the chosen
+ * ***Laki-laki* / *Perempuan***, two large buttons (P19.7-T1 AC-1; the spec's step 1; *since P19.14-T1, ADR-0254:* the
+ * proposal's client, never the lead's). The chosen
  * one, tapped again, clears it. A radio group, so a screen reader hears one choice of two.
  */
 export function GenderButtons({

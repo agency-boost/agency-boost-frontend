@@ -5,21 +5,22 @@ import { TonePill } from '@/components/ui/tone-pill';
 import { useMessages } from '@/i18n/language-provider';
 import { proposalMessages } from '@/i18n/messages/proposal';
 import { cn } from '@/lib/cn';
-import type { CatalogFaq, CatalogPlan, ProposalChannel } from '@/lib/proposals';
+import type { CatalogFaq, CatalogPlan } from '@/lib/proposals';
 
 /**
  * ***Lihat semua plan*** (AC-8; Acc. 13): one card per plan, **stacked** — never a wide table, so nothing scrolls sideways
  * at 375 px — in the catalogue's order, cheapest to richest. Each: the plan's name, its three or four highlights (the
  * office's approved ones, else the company's; ADR-0225 §5), *"Premi: lihat ilustrasi resmi"* (*Kontribusi* on a
- * *Syariah* proposal), and *Paling banyak dipilih* on the one the owner marked. A tap chooses it.
+ * syariah product), and *Paling banyak dipilih* on the one the owner marked. A tap chooses it — but a plan derived from
+ * other fields (ADR-0255 §3) is compared here and never chosen (`readOnly`).
  */
 export function PlanSheet({
-  open, product, plans, channel, chosen, readOnly, onChoose, onClose,
+  open, product, plans, syariah, chosen, readOnly, onChoose, onClose,
 }: {
   open: boolean;
   product: string;
   plans: readonly CatalogPlan[];
-  channel: ProposalChannel;
+  syariah: boolean;
   chosen: string | null;
   readOnly: boolean;
   onChoose: (name: string) => void;
@@ -56,7 +57,7 @@ export function PlanSheet({
                     </span>
                   ))}
                 </span>
-                <span className="text-sm text-muted">{channel === 'syariah' ? t.contribution : t.premium}</span>
+                <span className="text-sm text-muted">{syariah ? t.contribution : t.premium}</span>
               </button>
             </li>
           );

@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { Boost } from '@/components/boost';
 import { LeadCard } from '@/components/lead-card';
 import { LeadPane, LeadSheet } from '@/components/lead-sheet';
 import { ClosedLeads, loadClosed, SORT_CHOICES, type List, type Sort } from '@/components/leads-table';
@@ -28,12 +29,15 @@ import { useTenantConfig } from '@/lib/tenant-config-cache';
 const ORDERS = SORT_CHOICES.filter((choice) => choice.sort?.key !== 'type');
 
 /**
- * **The list beside the pane, from 1024px** (P19.1-T2 AC-3; UI-116; `leads-tablet-desktop` frames 1 and 1b), in px: the
- * list 360 from 1024 to 1279 beside the 64px rail and 420 from 1280, a 16px gap, and the page's 20px gutter
- * (`app/(agent)/leads/page.tsx`). So the pane is 1024 − 64 − 2×20 − 360 − 16 = **544px** at 1024 and 1280 − 252 − 2×20 −
- * 420 − 16 = **552px** at 1280: never under the report's ~540. The classes below are these numbers in rem.
+ * **The list beside the pane, from 1024px** (P19.1-T2 AC-3; UI-116; `leads-tablet-desktop` frames 1 and 1b), in px.
+ *
+ * *Changed 2026-11-12 (P19.13-T1 AC-1, AC-2; UI-192, the report's token *List + detail*; ADR-0252):* **the list 360 at
+ * every desktop width, a 16px gap, inside the page frame's 32px sides** — where it was 360 then 420 from 1280, with a
+ * 20px gutter of the page's own (`lg:-mx-5`). So the pane is 1280 − 252 − 2×32 − 360 − 16 = **588px** at 1280 and grows
+ * with the frame to 880px; beside the floating 64px rail at 1024 it is 1024 − 76 − 2×32 − 360 − 16 = **508px**, under
+ * the report's ~540 — the frame's sides are every page's now, and the pane is the phone's sheet, drawn for 375px.
  */
-export const SPLIT = { listLaptop: 360, listWide: 420, gap: 16, gutter: 20, paneMin: 540 } as const;
+export const SPLIT = { list: 360, gap: 16, gutter: 32, rail: 76, paneMin: 508 } as const;
 
 /** The pane's lead: one of the list's, a new one, or none. */
 type Selection = { id: string } | 'new' | null;
@@ -521,7 +525,8 @@ export function LeadsList({ split = false, addRequest = 0 }: {
         data-leads-split=""
         className={cn(
           'grid h-[calc(100dvh-7.5rem)] min-h-[28rem] gap-4 -mb-8',
-          'grid-cols-[22.5rem_minmax(0,1fr)] xl:grid-cols-[26.25rem_minmax(0,1fr)]',
+          // P19.13-T1 (UI-192): the token's 360px list (`--list-pane`) at every desktop width, the pane the rest.
+          'grid-cols-[var(--list-pane)_minmax(0,1fr)]',
         )}
       >
         <div className="flex min-h-0 min-w-0 flex-col" data-leads-column="">
@@ -555,8 +560,17 @@ export function LeadsList({ split = false, addRequest = 0 }: {
               onDirtyChange={onPaneDirty}
             />
           ) : open && held.length > 0 ? (
-            <div className="flex h-full items-center justify-center rounded-lg bg-card px-6 text-center text-md text-muted" data-lead-pane-empty="">
-              {t.list.choose}
+            /*
+             * *Changed 2026-11-12 (P19.13-T1 AC-5; O-2, OD-321's default; the approved mockup's `.det`):* thinking Boost,
+             * *Pilih lead untuk melihat detailnya* in the ink and *Lead yang dipilih tampil di sini.* in grey, centred.
+             */
+            <div
+              className="flex h-full flex-col items-center justify-center gap-2.5 rounded-lg bg-card px-6 text-center text-md text-muted"
+              data-lead-pane-empty=""
+            >
+              <Boost pose="thinking" size={120} />
+              <b className="font-bold text-ink">{t.list.choose}</b>
+              <span>{t.list.chosenHere}</span>
             </div>
           ) : null}
         </div>

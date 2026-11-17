@@ -73,7 +73,8 @@ describe('P18.10-T4 the Sales Attack Plan in Indonesian', () => {
     it('AC-2 the steps, the card, the four questions and their chips in Indonesian; the title and the plan’s name kept', async () => {
       show();
       await briefHeading();
-      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Sales Attack Plan$/);
+      // The title is the menu's *Sales* since P19.13-T4 (UI-197); the tab keeps the plan's name.
+      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Sales$/);
       expect(within(screen.getByRole('navigation', { name: 'Sales tools' })).getAllByRole('link').map((l) => l.textContent))
         .toEqual(['Sales Attack Plan', 'Product Catalog', 'Proposal']);
       expect(within(screen.getByRole('list', { name: 'Langkah' })).getAllByRole('listitem').map((s) => s.textContent))

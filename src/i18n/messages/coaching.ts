@@ -43,7 +43,7 @@ const f = (pronoun: Pronoun) => ENGLISH_PRONOUNS[pronoun];
 
 const en = {
   /** The prototype's title for every coaching view (`Overall.html:10407`), and the person's tab (§A.2, §A.3). */
-  title: kept('Coaching Session'),
+  title: kept('Coaching'),
   /** `GOAL_PACE_STATUS`'s pill, verbatim (`Overall.html:10624`), and ADR-0080's *No goal set*. */
   status: {
     on_track: 'On track',
@@ -182,7 +182,7 @@ const en = {
 };
 
 const id: MessagesOf<typeof en> = {
-  title: kept('Coaching Session'),
+  title: kept('Coaching'),
   status: {
     on_track: `Sesuai ${kept('target')}`,
     watch_closely: 'Perlu dipantau',

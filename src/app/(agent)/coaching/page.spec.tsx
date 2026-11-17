@@ -102,7 +102,8 @@ describe('Coaching Session — the roster (P11-T6; UI V1, UI-033, UI-034)', () =
 
   it('UI-033, UI-034 offers the reader’s own coaching as a pill on the title row, the card gone', async () => {
     render();
-    const title = await screen.findByRole('heading', { level: 1, name: 'Coaching Session' });
+    // P19.13-T4 AC-1 (UI-197): the menu's *Coaching*, where the title was *Coaching Session*.
+    const title = await screen.findByRole('heading', { level: 1, name: 'Coaching' });
     const pill = screen.getByRole('link', { name: 'My Coaching Notes' });
     expect(pill).toHaveAttribute('href', '/coaching/me');
     expect(pill).toHaveClass('rounded-pill', 'border-primary', 'min-h-11');

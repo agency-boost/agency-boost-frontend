@@ -9,7 +9,8 @@ import { PDF_MAX_BYTES } from './recruitment-pitch';
 import { ALLOWED as TRAINING_ALLOWED } from '@/components/module-content';
 import { COMMISSION_MAX_YEARS, OBJECTIONS_MAX, PRODUCT_CURRENCIES, PROPOSAL_LIMITS } from './admin';
 import { LEAD_AGE_MAX, LEAD_AGE_MIN } from './leads';
-import { PROPOSAL_ITEMS_MAX } from './proposals';
+import { PROPOSAL_ITEMS_MAX, PROPOSAL_RECALC_MS } from './proposals';
+import { RATE_TEST_PROFILES } from './product-data';
 import { INBOX_PAGE_SIZE, POPOVER_PAGE_SIZE } from './notifications';
 import { INVITE_NAME_MAX } from './invites';
 import { DEFAULT_LANGUAGE, LANGUAGE_LIVE, LANGUAGES } from '@/i18n/language';
@@ -103,6 +104,12 @@ const PAIRS: ReadonlyArray<[file: string, ours: string, theirs: string]> = [
   // ADR-0157: a leader past the office's limit, read by the office and by AgencyBoost's queue alike.
   ['leader-limit-requests.ts', 'LeaderLimitRequestRow', 'LeaderLimitRequestRowDto'],
   ['admin.ts', 'PlatformAdminRow', 'PlatformAdminRowDto'],
+  // P19.15-T4 (ADR-0260): *Kelola data produk*, *Perubahan oleh pengelola*, and the companies *Data produk* opens.
+  ['product-data-grants.ts', 'ProductDataGrantRow', 'ProductDataGrantRowDto'],
+  ['product-data-grants.ts', 'GrantCompany', 'GrantCompanyDto'],
+  ['product-data-grants.ts', 'ProductDataChange', 'ProductDataChangeRowDto'],
+  ['product-data-grants.ts', 'ProductDataChangesPage', 'ProductDataChangesPageDto'],
+  ['product-data-grants.ts', 'ReadableCompany', 'ReadableCompanyDto'],
   // P19.2-T2 AC-6: the audit page — a group is its newest row with its count, and the page carries the cursor and the
   // chips' options. `AuditEntry`'s fields are the group's (`AuditGroupDto` extends the row).
   ['admin.ts', 'AuditEntry', 'AuditGroupDto'],
@@ -220,6 +227,9 @@ const PAIRS: ReadonlyArray<[file: string, ours: string, theirs: string]> = [
   ['leads.ts', 'LeadLatestProposal', 'LeadLatestProposalDto'],
   // P19.11-T3 AC-1 (UX-9): the finished count and the one the card's proposal icon opens.
   ['leads.ts', 'LeadLatestDoneProposal', 'LeadLatestDoneProposalDto'],
+  // P19.14-T1 AC-5 (ADR-0254 §4): the last client entered on the lead's proposals, what step 1 starts from.
+  ['leads.ts', 'LeadProposalClient', 'LeadProposalClientDto'],
+  ['leads.ts', 'LeadProposalClientDetails', 'ProposalClientDetailsDto'],
   // Phase 14: the Product Catalog, its drawer and the Sales Attack Plan read every one of these straight
   // off the field reads; a field renamed on the server would draw a blank card, block or verdict.
   ['product-catalog.ts', 'CatalogList', 'CatalogListDto'],
@@ -254,6 +264,15 @@ const PAIRS: ReadonlyArray<[file: string, ours: string, theirs: string]> = [
   ['proposals.ts', 'ProposalRow', 'ProposalRowDto'],
   ['proposals.ts', 'ProposalPage', 'ProposalPageDto'],
   ['proposals.ts', 'CatalogProduct', 'ProposalCatalogProductDto'],
+  // P19.14 (ADR-0254, ADR-0255): the client on the proposal, its details, a pay term, the totals per Cara bayar.
+  ['proposals.ts', 'ProposalClient', 'ProposalClientDto'],
+  ['proposals.ts', 'ProposalClientDetails', 'ProposalClientDetailsDto'],
+  ['proposals.ts', 'ProposalInsured', 'ProposalInsuredDto'],
+  ['proposals.ts', 'PayTermView', 'PayTermDto'],
+  ['proposals.ts', 'ProposalTotal', 'ProposalTotalDto'],
+  ['proposals.ts', 'SnapshotLimits', 'ProposalSnapshotLimitsDto'],
+  ['admin.ts', 'ProductPayTerm', 'PayTermDto'],
+  ['admin.ts', 'ProductEntryAge', 'EntryAgeDto'],
   ['product-catalog.ts', 'AttackPlan', 'AttackPlanDto'],
   ['product-catalog.ts', 'AttackPlanBrief', 'AttackPlanBriefDto'],
   ['product-catalog.ts', 'AttackPlanAlternative', 'AttackPlanAlternativeDto'],
@@ -414,12 +433,26 @@ describe('the frontend types match the API document (P3.1-T11 AC-4)', () => {
     expect(doc.components.schemas.SaveProductOverridesDto.properties?.objections.maxItems).toBe(OBJECTIONS_MAX);
   });
 
-  it('P19.7-T1 AC-1 the age stepper stops where the API stops taking an age (LEAD_AGE, 1 to 100)', () => {
-    for (const dto of ['CreateLeadDto', 'UpdateLeadDto']) {
+  it('P19.14-T1 AC-3 the age stepper stops where the API stops taking a client’s age (LEAD_AGE, 1 to 100)', () => {
+    for (const dto of ['ProposalClientInputDto', 'ProposalClientDto', 'ProposalInsuredDto']) {
       expect(doc.components.schemas[dto].properties?.age).toMatchObject({ minimum: LEAD_AGE_MIN, maximum: LEAD_AGE_MAX });
     }
-    expect(propertiesOf('LeadResponseDto')).toEqual(expect.arrayContaining(['age', 'ageRecordedOn', 'gender']));
-    expect(propertiesOf('CreateLeadDto')).not.toContain('birthDate');
+  });
+
+  it('P19.14-T1 AC-4 a lead carries no age and no gender: neither taken nor answered, and no birth date ever', () => {
+    for (const dto of ['CreateLeadDto', 'UpdateLeadDto', 'LeadResponseDto']) {
+      for (const key of ['age', 'ageRecordedOn', 'gender', 'birthDate']) expect(propertiesOf(dto)).not.toContain(key);
+    }
+    expect(propertiesOf('ProposalClientDetailsInputDto')).not.toContain('birthDate');
+    expect(propertiesOf('LeadProposalsDto')).toEqual(expect.arrayContaining(['client', 'latest']));
+  });
+
+  it('P19.14-T2 AC-1 no channel and no proposal-wide cara bayar: each item carries its own', () => {
+    expect(propertiesOf('ProposalResponseDto')).not.toEqual(expect.arrayContaining(['channel']));
+    expect(propertiesOf('ProposalResponseDto')).not.toContain('payFrequency');
+    expect(propertiesOf('UpdateProposalDto')).not.toContain('channel');
+    expect(propertiesOf('ProposalItemDto')).toEqual(expect.arrayContaining(['payFrequency', 'payTerm', 'smoker', 'up', 'fixedField']));
+    expect((doc.paths['/api/v1/proposals/catalog'].get.parameters ?? []).map((p) => p.name)).toEqual(['age']);
   });
 
   it('P19.7-T1 AC-3 the Proposal editor stops at the API’s counts (PROPOSAL, §B.34)', () => {
@@ -1494,5 +1527,25 @@ describe('P19.11-T5 the Summary’s leads match the API document', () => {
     expect(fields).toEqual(['rows', 'total', 'shown', 'unitOpen']);
     const documented = new Set(propertiesOf('SummaryLeadsDto'));
     expect(fields.filter((f) => !documented.has(f))).toEqual([]);
+  });
+});
+
+/**
+ * **P19.15-T1: the two numbers the frontend mirrors of the premium tables are the backend's** (invariant §7): the card's
+ * wait before it saves, so before the server calculates (`RECALC_DEBOUNCE_MS`), and how many test profiles activation
+ * asks for (`TEST_PROFILES`). Read out of the constants module, as the languages are above; a change in one repository
+ * and not the other fails here.
+ */
+describe('the premium tables’ mirrored constants are the backend’s (P19.15-T1)', () => {
+  const backend = readFileSync(
+    join(__dirname, '..', '..', '..', 'backend', 'src', 'domain', 'constants', 'product-data.ts'), 'utf8',
+  );
+
+  it('PROPOSAL_RECALC_MS is PRODUCT_DATA.RECALC_DEBOUNCE_MS', () => {
+    expect(Number(/^\s*RECALC_DEBOUNCE_MS: (\d+),$/m.exec(backend)?.[1])).toBe(PROPOSAL_RECALC_MS);
+  });
+
+  it('RATE_TEST_PROFILES is PRODUCT_DATA.TEST_PROFILES', () => {
+    expect(Number(/^\s*TEST_PROFILES: (\d+),$/m.exec(backend)?.[1])).toBe(RATE_TEST_PROFILES);
   });
 });

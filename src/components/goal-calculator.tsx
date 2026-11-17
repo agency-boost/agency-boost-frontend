@@ -632,24 +632,29 @@ export function GoalCalculator({
         </div>
       ) : (
         /*
-         * **A desktop** (UI-022): the four steps on the left (~60%), and on the right (~40%) the result, the 🔗 line,
+         * **A desktop** (UI-022): the steps on the left (~60%), and on the right (~40%) the result, the 🔗 line,
          * the commitment and the save, sticky 24px from the top while the left column scrolls. The title's left edge is
          * the cards' (the page's own column, no centred measure).
+         *
+         * *Changed 2026-11-12 (P19.13-T4 AC-2, T1 AC-4; UI-195, UI-194, ADR-0252):* **step ④ opens the right column**, so
+         * the two columns end within about 120px of each other (the steps were 868px beside 385px), the reading order
+         * still ①②③ then ④ at the top of the next column; **16px between cards** (`gap-cards`), where it was 10, 12 and
+         * 16. Drawn from 1024px only, so its classes need no `lg:`.
          */
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-cards">
           {banners}
-          <div className="grid grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] items-start gap-4">
-            <div className="flex min-w-0 flex-col gap-2.5">
+          <div className="grid grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] items-start gap-cards">
+            <div className="flex min-w-0 flex-col gap-cards" data-goal-steps="">
               {stepOne}
               {stepTwo}
               {stepThree}
-              {stepFour}
             </div>
-            <div className="sticky top-6 flex min-w-0 flex-col gap-2.5" data-goal-aside="">
+            <div className="sticky top-6 flex min-w-0 flex-col gap-cards" data-goal-aside="">
+              {stepFour}
               {result}
               {mapsTo}
               {commitment}
-              <div className="flex items-center justify-between gap-3 rounded-lg bg-card px-4 py-2.5">
+              <div className="flex items-center justify-between gap-3 rounded-lg bg-card px-4 py-2.5" data-goal-save="">
                 <SaveStateLabel state={state} />
                 <Button
                   className="h-12 rounded-pill px-5 font-bold"

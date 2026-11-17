@@ -101,8 +101,9 @@ function CoacheeSummary({ coachee, address }: { coachee: Coachee; address: Summa
   const waiting = <SkeletonCards count={2} label={t.puttingTogether({ pronoun })} />;
 
   return (
-    // Not centred: the cards' edge is the tab row's (UI-056). Two columns from 1024px, as `/summary`'s.
-    <div className="max-w-[1200px]">
+    // Not centred: the cards' edge is the tab row's (UI-056). Two columns from 1024px, as `/summary`'s. From 1024px the
+    // frame's width, no cap of its own (P19.13-T1 AC-2; UI-192): the 1200px stays below it, where it draws nothing.
+    <div className="max-w-[1200px] lg:max-w-none">
       {error && <ErrorBanner {...error} />}
       {!frame && !error && waiting}
       {frame && (

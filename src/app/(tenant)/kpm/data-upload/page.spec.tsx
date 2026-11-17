@@ -1496,9 +1496,13 @@ describe('P18.9-T7 AC-2 Data upload on a phone (UI-034, UI-040)', () => {
    * reader's language (*Rolling persistency (%)*, *# of policy (case issued)*); the banner says how many columns and what
    * a greyed YTD is; the history names the template version; the intro is the template's. The tests above pin each.
    */
+  /*
+   * *Re-recorded 2026-11-12 (P19.13-T4 AC-3; UI-198, ADR-0252):* the month table and its controls in the form layout from
+   * 1024px — one wrapper, `lg:max-w-form`, at most 720px from the frame's left edge. Nothing below 1024px is pinned here.
+   */
   const AS_BUILT_T3: Record<1024 | 1280, string> = {
-    1024: '512cea5e7231e682821a3ee4a9ea3b131bc9ac0900dcdf221760d5d1973ebe9a',
-    1280: '512cea5e7231e682821a3ee4a9ea3b131bc9ac0900dcdf221760d5d1973ebe9a',
+    1024: '1dc923502979e4359c8ba079fb9a0f026d559ca028d41112f9c922bfba134f51',
+    1280: '1dc923502979e4359c8ba079fb9a0f026d559ca028d41112f9c922bfba134f51',
   };
 
   it.each([1024, 1280] as const)('P19.2-T3 AC-1 at %ipx draws the month table and its controls as built, to the byte', async (px) => {

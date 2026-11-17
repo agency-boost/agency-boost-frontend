@@ -127,6 +127,8 @@ const en = {
   surveys: 'Surveys',
   /** P19.6-T1 (ADR-0218 §1; §B7's *Pengaturan → Tampilan KPM*): the office's branding page, in *Pengaturan*. */
   branding: 'KPM branding',
+  /** P19.15-T4 (ADR-0260 §5): *Pengaturan → Data produk*, a holder of *Kelola data produk*'s alone. */
+  productData: 'Product data',
   surveyWaiting: ', a survey needs filling',
   closeSheet: 'Close',
   changePhoto: 'Change photo',
@@ -191,6 +193,7 @@ const id: MessagesOf<typeof en> = {
   more: 'Lainnya',
   surveys: 'Survei',
   branding: 'Tampilan KPM',
+  productData: 'Data produk',
   surveyWaiting: ', ada survei yang perlu diisi',
   closeSheet: 'Tutup',
   changePhoto: 'Ubah foto',

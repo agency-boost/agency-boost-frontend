@@ -24,11 +24,11 @@ import { dayInZone, formatMoneyInFull, formatShortDay, OFFICE_TIME_ZONE } from '
 import { looksLikeEmail } from '@/lib/email-address';
 import {
   createLead, deleteLead, finalStageOf, readLead, setLeadOutcome, setLeadStatus, updateLead, LEAD_NAME_MIN, type Lead,
-  type LeadGender, type LeadHistoryEntry, type LeadOutcome, type LeadType,
+  type LeadHistoryEntry, type LeadOutcome, type LeadType,
 } from '@/lib/leads';
-import { listProposals, newProposalHref, proposalHref, type ProposalRow } from '@/lib/proposals';
+import { listProposals, newProposalHref, proposalHref, proposalRowHref, type ProposalRow } from '@/lib/proposals';
+import { proposalMessages } from '@/i18n/messages/proposal';
 import { LeadPills } from '@/components/lead-card';
-import { GenderButtons } from '@/components/client-age-gender';
 import { PotensiSwitch } from '@/components/potensi-switch';
 import { normalisedPhone, phoneFieldValue, saveLeadPhone } from '@/lib/phone-number';
 import { useCan, useSession } from '@/lib/session';
@@ -51,15 +51,14 @@ interface LeadForm {
    * the number as it was saved, so the field never shows empty over a number the lead holds.
    */
   phone: string;
-  gender: LeadGender | null;
 }
 
 /** A saved number as the *WhatsApp* field shows it: `81211002200` for `+6281211002200`; an unreadable one as saved. */
 const phoneText = (saved: string | null | undefined) => phoneFieldValue(saved) || (saved ?? '');
 
 /*
- * *Umur* and *Sumber lead* are not here since P19.11-T3 AC-5 (UX-10): the sheet neither shows nor sends them, so a save
- * leaves both as stored. The proposal's step 1 still asks the age (ADR-0224).
+ * *Umur* and *Sumber lead* are not here since P19.11-T3 AC-5 (UX-10), and *Jenis kelamin* since P19.14-T1 AC-4
+ * (ADR-0254, superseding ADR-0224): a lead carries no client data; the proposal's step 1 asks the age and the gender.
  */
 const formOf = (lead: Lead | null): LeadForm => ({
   name: lead?.name ?? '',
@@ -71,7 +70,6 @@ const formOf = (lead: Lead | null): LeadForm => ({
   remarks: lead?.remarks ?? '',
   email: lead?.contact.email ?? '',
   phone: phoneText(lead?.contact.phone),
-  gender: lead?.gender ?? null,
 });
 
 /** A box's text as the server keeps it: trimmed, and nothing as `null`. */
@@ -106,14 +104,13 @@ const shortDayOf = (iso: string, figures: Parameters<typeof formatShortDay>[2]) 
  *   berhasil*'s reason — *Aktif setelah status …* — is its accessible description only since P19.11-T3 AC-4 (UX-10).
  * - **Detail** (P19.11-T3 AC-5; UX-10): labelled fields, in order — ***Nama*** (the only one required: an inline error,
  *   and nothing saved, under 2 characters), ***WhatsApp*** (a fixed *+62* and the number: `contact.phone`, the number at
- *   the top, one field — each follows the other's save), ***Email*** (checked only when filled) and ***Jenis
- *   kelamin*** (*Laki-laki / Perempuan*, neither by default). *Umur* and *Sumber lead* are not shown, and a save leaves
- *   them as stored. A new lead's *Nama* stays at the top, where the sheet opens on it.
- * - **Proposal** (P19.7-T2 AC-12; P19.11-T3 AC-7; UX-11), above *Riwayat*, on the reader's own lead alone: **the latest
- *   finished proposal and nothing else** (`status=done`, newest `doneAt`) — the day, the products with their plan, the
- *   premium per currency, *Selesai* — a tap opening it at its step 3, and ***+ Buat proposal*** below it, always; with
- *   none finished, the button alone. Drafts are never shown here and never deleted: *Riwayat proposal* (`/proposal`)
- *   holds them, and every older finished one, and resumes them. A leader reading a downline's lead sees none (decision 4).
+ *   the top, one field — each follows the other's save) and ***Email*** (checked only when filled). *Umur*, *Sumber
+ *   lead* and — since P19.14-T1 AC-4 — *Jenis kelamin* are not shown: a lead carries no client data (ADR-0254). A new
+ *   lead's *Nama* stays at the top, where the sheet opens on it.
+ * - **Proposal** (P19.14-T4 AC-3; ADR-0257 §3, amending ADR-0241 §3), above *Riwayat*, on the reader's own lead alone:
+ *   **one row per proposal**, newest change first, drafts included — the day, the products with their plan, the total
+ *   per *Cara bayar*, *Draf* or *Selesai*; a *Selesai* row opens the PDF, a *Draf* row its products — and ***+ Buat
+ *   proposal*** below them, always, on a Sales lead. A leader reading a downline's lead sees none (decision 4).
  * - **Riwayat**: the stage moves the server kept (`GET /leads/:id`'s `history`) and the day the lead was added — and,
  *   on the owner's own lead, *"Proposal dibuat · {produk}"* for each proposal first saved as a PDF (AC-11), linked
  *   while that proposal exists.
@@ -203,6 +200,7 @@ function LeadEditor({
 }: LeadEditorProps & { variant: 'sheet' | 'pane'; onDirtyChange?: (dirty: boolean) => void }) {
   const pane = variant === 'pane';
   const t = useMessages(leadsMessages);
+  const proposalWords = useMessages(proposalMessages);
   const figures = useFigureLanguage();
   const { config } = useTenantConfig();
   const { me } = useSession();
@@ -293,10 +291,9 @@ function LeadEditor({
   const isNew = current === null;
   const mine = current ? current.ownerMembershipId === me?.membership?.membershipId : true;
   /*
-   * **The lead's latest finished proposal, on the reader's own lead** (P19.7-T2 AC-12; P19.11-T3 AC-7; UX-11):
-   * `GET /proposals?leadId=&status=done&pageSize=1`, which the server orders by the last *Simpan PDF* — so a draft is never
-   * read here at all. Read when the sheet opens on it; never on somebody else's — the server answers none to a leader,
-   * and the section is not drawn.
+   * **The lead's proposals, on the reader's own lead** (P19.14-T4 AC-3; ADR-0257 §3): `GET /proposals?leadId=`, newest
+   * change first, drafts included, at most a page (50). Read when the sheet opens on it; never on somebody else's — the
+   * server answers none to a leader, and the section is not drawn.
    */
   const proposalLeadId = current !== null && mine && canReadProposals ? current.id : null;
   useEffect(() => {
@@ -304,7 +301,7 @@ function LeadEditor({
     setProposalsError(null);
     if (!open || proposalLeadId === null) return undefined;
     let live = true;
-    listProposals({ leadId: proposalLeadId, status: 'done', pageSize: 1 })
+    listProposals({ leadId: proposalLeadId, pageSize: 50 })
       .then((page) => { if (live) setProposals(page.rows); })
       .catch((err) => { if (live) setProposalsError(toDisplayError(err)); });
     return () => { live = false; };
@@ -386,7 +383,6 @@ function LeadEditor({
           nextActionNote: stored(form.nextActionNote),
           contact: { phone, email },
           ...(form.type ? { thisMonth: form.thisMonth } : {}),
-          ...(form.gender ? { gender: form.gender } : {}),
         }, owner);
         if (form.statusCode) saved = await setLeadStatus(saved.id, form.statusCode, saved.version);
       } else {
@@ -403,7 +399,6 @@ function LeadEditor({
         // The pair travels together (the API's rule): a changed number, a changed email, or both.
         if (phone !== saved.contact.phone || email !== saved.contact.email) patch.contact = { phone, email };
         if (form.type && form.thisMonth !== saved.thisMonth) patch.thisMonth = form.thisMonth;
-        if (form.gender !== (saved.gender ?? null)) patch.gender = form.gender;
         if (Object.keys(patch).length > 0) saved = await updateLead(saved.id, patch, saved.version);
       }
       setCurrent(saved);
@@ -562,7 +557,7 @@ function LeadEditor({
       day: shortDayOf(entry.at, figures),
       at: entry.at,
       text: t.sheet.proposalMade({ products: entry.products.join(', ') }),
-      href: entry.proposalId ? proposalHref(entry.proposalId, 3) : undefined,
+      href: entry.proposalId ? proposalHref(entry.proposalId, 'pdf') : undefined,
     } : {
       key: `${entry.at}-${entry.toStatusCode}`,
       day: shortDayOf(entry.at, figures),
@@ -578,12 +573,11 @@ function LeadEditor({
   ];
 
   /**
-   * ***Proposal***, above *Riwayat* (P19.7-T2 AC-12; P19.11-T3 AC-7; UX-11): on the reader's own lead, a Sales lead or
-   * one that has a proposal. **At most one row: the latest finished proposal** — the day it was saved, the products
-   * with their plan, the premium per currency (never added across two), *Selesai* in its fixed colour; a tap opens it at
-   * step 3. Never a draft: those, and the older finished ones, are *Riwayat proposal*'s. *+ Buat proposal*, always below
-   * it on a Sales lead, starts one with this lead chosen — the server answers the lead's empty draft rather than another
-   * (AC-8) — and with nothing finished it is the section's only control.
+   * ***Proposal***, above *Riwayat* (P19.14-T4 AC-3; ADR-0257 §3): on the reader's own lead, a Sales lead or one that has
+   * a proposal. **One row per proposal**, drafts included — the day, the products with their plan, the total per *Cara
+   * bayar* and currency (never added across two), *Draf* grey or *Selesai* green in their fixed colours; a *Selesai* row
+   * opens the PDF, a *Draf* row its products. *+ Buat proposal*, always below them on a Sales lead, starts one with this
+   * lead chosen — the server answers the lead's empty draft rather than another (P19.11-T3 AC-8).
    */
   const proposalSection = proposalLeadId !== null && current !== null
     && (current.type === 'sales' || (current.proposals ?? null) !== null || (proposals?.length ?? 0) > 0) ? (
@@ -594,11 +588,13 @@ function LeadEditor({
         ) : proposals.length > 0 && (
           <ul role="list" className="flex flex-col gap-1.5">
             {proposals.map((row) => {
-              const total = row.totals.map((sum) => formatMoneyInFull(sum.amountMinor, sum.currency, figures)).join(' · ');
+              const total = row.totals
+                .map((sum) => `${formatMoneyInFull(sum.amountMinor, sum.currency, figures)} ${proposalWords.panel.pay[sum.payFrequency].toLowerCase()}`)
+                .join(' · ');
               return (
                 <li key={row.id}>
                   <Link
-                    href={proposalHref(row.id, 3)}
+                    href={proposalRowHref(row)}
                     data-proposal-row={row.id}
                     className="flex min-h-11 items-center gap-2.5 rounded-row bg-hover-row px-3 py-2 hover:bg-divider"
                   >
@@ -853,9 +849,9 @@ function LeadEditor({
 
           {/*
            * ***Detail*** (P19.11-T3 AC-5; UX-10), labelled fields in the brief's order: *Nama* (required), *WhatsApp* (the
-           * shared `+62` field — `contact.phone`, the number at the top), *Email* (checked only when filled) and *Jenis
-           * kelamin* (*Laki-laki / Perempuan*, neither by default; the proposal's step 1 reads it, ADR-0224). A new lead's
-           * *Nama* is the box at the top, where the sheet opens.
+           * shared `+62` field — `contact.phone`, the number at the top) and *Email* (checked only when filled). No *Jenis
+           * kelamin* since P19.14-T1 AC-4: a lead carries no client data (ADR-0254). A new lead's *Nama* is the box at the
+           * top, where the sheet opens.
            */}
           <fieldset disabled={!editable || saving} data-lead-section="details" className={SECTION}>
             <legend className={LABEL}>{t.sheet.details}</legend>
@@ -912,15 +908,6 @@ function LeadEditor({
                 {emailError && (
                   <p id={`${uid}-email-error`} className="mt-1 text-sm text-signal-red">{t.sheet.emailInvalid}</p>
                 )}
-              </div>
-              <div>
-                <p id={`${uid}-gender-label`} className={FIELD_LABEL}>{t.sheet.gender}</p>
-                <GenderButtons
-                  labelledBy={`${uid}-gender-label`}
-                  value={form.gender}
-                  disabled={!editable || saving}
-                  onChange={(gender) => change({ gender })}
-                />
               </div>
             </div>
           </fieldset>

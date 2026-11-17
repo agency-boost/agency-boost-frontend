@@ -124,9 +124,14 @@ export function PageHeader({
      * *Changed 2026-11-04 (P19.1-T1 AC-1, ADR-0196; UI-112: one title-row component at every size, the avatar on the
      * right):* **the avatar at every size**, to *Profil saya* as on a phone — it was below 1024px only. The sidebar's foot
      * keeps the account menu and the bell from 1024px, where *ID | EN* now is; no page header carries the switch.
+     *
+     * *Changed 2026-11-12 (P19.13-T1 AC-1, AC-4; UI-192, UI-194, ADR-0252):* **from 1024px the row stands inside the page
+     * frame** (`main`, `app-shell.tsx`) — the title on its left edge, the avatar's circle on its right — **44px tall
+     * at least, and 24px above the content** (`lg:mb-section`, where it was 20px). `mb-5` is kept for the markup below
+     * 1024px, where `max-lg:mb-3` already overrides it: the phone's row is byte for byte what it was.
      */
     return (
-      <div className="mb-5 flex items-start gap-4 max-lg:mb-3 max-lg:min-h-11 max-lg:items-center max-lg:gap-2" data-title-row="">
+      <div className="mb-5 flex items-start gap-4 max-lg:mb-3 max-lg:min-h-11 max-lg:items-center max-lg:gap-2 lg:mb-section lg:min-h-11" data-title-row="">
         <div className="flex min-w-0 flex-1 flex-wrap items-start justify-between gap-4 max-lg:items-center max-lg:gap-2">
           {heading}
           {rowControl}

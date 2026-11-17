@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { PublishBar } from '@/components/publish-bar';
 import { PdfUploadNotice, usePdfUpload } from '@/components/recruitment/pdf-upload';
@@ -10,7 +11,7 @@ import { BelowDesktopTip } from '@/components/ui/below-desktop-tip';
 import { ConfigBadge } from '@/components/ui/config-badge';
 import { EmptyState } from '@/components/ui/empty-state';
 import {
-  Button, Card, CodeField, Field, Switch, Textarea, TextInput,
+  Button, buttonClass, Card, CodeField, Field, Switch, Textarea, TextInput,
 } from '@/components/ui/field';
 import { InlineSaveStatus, useInlineSave } from '@/components/ui/inline-save-status';
 import { FilterChips, ListCard, ListRow, SearchPill } from '@/components/ui/list-rows';
@@ -22,6 +23,7 @@ import { TonePill, type PillTone } from '@/components/ui/tone-pill';
 import { useLanguage, useMessages } from '@/i18n/language-provider';
 import { settingsMessages } from '@/i18n/messages/settings';
 import { settingsProductsMessages } from '@/i18n/messages/settings-products';
+import { productDataAccessMessages } from '@/i18n/messages/product-data-access';
 import { adminProductProposalMessages } from '@/i18n/messages/admin-product-proposal';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
@@ -220,6 +222,8 @@ export default function KpmProductsPage() {
    * approve it the day that grant moves.
    */
   const canApprove = useCan('sales_script:approve');
+  const canReadProductData = useCan('product_data:read');
+  const access = useMessages(productDataAccessMessages);
   const [tab, setTab] = useHashTab(TABS);
   /**
    * The product whose *Review* was chosen on the shelf (P18.9-T4 AC-7, ADR-0176 §7; UI-028): its card on *Script
@@ -374,7 +378,9 @@ export default function KpmProductsPage() {
     if (phone) return phoneShelf(countCard, refusal);
 
     return (
-      <div className="flex flex-col gap-4">
+      // P19.13-T4 AC-3 (UI-198): from 1024px at most 720px from the frame's left edge, each switch within that width of
+      // its product's name, where a row ran the frame's width with the switch at its far end.
+      <div className="flex flex-col gap-4 lg:max-w-form">
         {countCard}
 
         {refusal}
@@ -1110,7 +1116,18 @@ export default function KpmProductsPage() {
       title={t.title}
       subtitle={t.subtitle({ company })}
       // P19.3-T2 AC-5 (UI-149): *Sudah sesuai*, step 4 of the KPM setup card.
-      actions={<SettingsReviewed page="products" />}
+      actions={(
+        <>
+          {/*
+           * P19.15-T4 AC-3 (ADR-0260 §5): ***Lihat data proposal***, the Owner's and the Admins' one way to their company's
+           * *Proposal* tab, read-only — they have no *Data produk* in the menu unless *Kelola data produk* gives it.
+           */}
+          {canReadProductData && (
+            <Link href="/kpm/data-produk" className={buttonClass('secondary', 'max-lg:h-11')}>{access.productsLink}</Link>
+          )}
+          <SettingsReviewed page="products" />
+        </>
+      )}
       /*
        * The office's drafts and review state live here (ADR-0037), so its read is the Owner's and the
        * Admin's alone — `product_settings:read`, not `tenant_config:read`, which every member holds

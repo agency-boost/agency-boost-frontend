@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { axe } from 'vitest-axe';
 import { atWidth, makeMe, renderLive, renderWithSession, resetLanguage, wears } from '@test/harness';
+import { openEveryGroup } from '@test/sidebar';
 import type { Me } from '@/lib/session';
 import { AgentShell } from './agent-shell';
 import { PageHeader } from './page-header';
@@ -251,30 +252,42 @@ describe('UI-004 the field shell from 1024px: the sidebar, regrouped as the shee
     expect(screen.getByRole('navigation', { name: 'Main' })).toBeInTheDocument();
   });
 
-  it('UI-004 at 1280px lists the sidebar regrouped as the sheet, in its order', () => {
+  /*
+   * *Changed 2026-11-12 (P19.13-T2 AC-3, AC-4, AC-5; UI-196, D-20, ADR-0252):* the top section is **Home · Activity ·
+   * Calendar · Unit Dashboard**, *Search agent* is the field under the logo, and only the current page's group is open —
+   * *Saya*, on `/goals`; the others are opened here to read the whole order, which is otherwise unchanged (AC-9).
+   */
+  it('P19.13-T2 AC-4, AC-9 at 1280px lists the sidebar: the top section, then the groups in the sheet’s order', () => {
     atWidth(1280);
     renderWithSession(screenWith(), { me: CORE_LEADER });
     const nav = screen.getByRole('navigation', { name: 'Main' });
+    const headings = () => Array.from(nav.querySelectorAll('[aria-controls^="nav-group"]'));
+    expect(headings().map((h) => [h.textContent?.trim(), h.getAttribute('aria-expanded')])).toEqual([
+      ['Me', 'true'], ['Activities', 'false'], ['My team', 'false'], ['Programs', 'false'], ['KPM', 'false'],
+    ]);
+    openEveryGroup(nav);
     const order = Array.from(nav.querySelectorAll('[aria-controls^="nav-group"], li > a, li > button'))
       .map((el) => (el.textContent ?? '').trim());
-    // P19-T4 AC-1 (UI-159 item 1, *same order in the desktop sidebar*): Unit Dashboard heads My team, listed once.
+    // Unit Dashboard heads the sidebar's top section and is listed once; the sheet keeps it as *My team*'s first.
     expect(order).toEqual([
-      'Home', 'Activity', 'Calendar', 'Search agent',
+      'Home', 'Activity', 'Calendar', 'Unit Dashboard',
       'Me', 'Leads', 'Goal Setting', 'Personal Summary', 'Training', 'Surveys',
       'Activities', 'Sales', 'Recruitment',
-      'My team', 'Unit Dashboard', 'Coaching', 'New Hires', 'User Management', 'Group Tree',
+      'My team', 'Coaching', 'New Hires', 'User Management', 'Group Tree',
       'Programs', 'Campaign', 'Event',
       'KPM', 'Strategic Leader Forum', 'KPM Analytics', 'Advanced analytics',
     ]);
   });
 
-  it('UI-004 writes the group headings 12px grey in sentence case — no UNIT TOOLS', () => {
+  it('UI-004 writes the group headings in sentence case — no UNIT TOOLS; P19.13-T2 AC-5 36px rows, 65% white while closed', () => {
     atWidth(1280);
     renderWithSession(screenWith(), { me: AB });
     const heading = screen.getByRole('button', { name: 'My team' });
-    expect(heading).toHaveClass('text-xs', 'text-secondary-contrast/65');
+    expect(heading).toHaveClass('h-9', 'text-base', 'font-semibold', 'text-secondary-contrast/65');
+    expect(heading).toHaveAttribute('aria-expanded', 'false');
     expect(heading).not.toHaveClass('uppercase');
     expect(screen.queryByText(/unit tools/i)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Me' })).toHaveClass('text-secondary-contrast');
   });
 
   it('UI-004, UI-012 Search agent opens the agent search picker over the page, focused, and Escape closes it', async () => {
@@ -292,10 +305,15 @@ describe('UI-004 the field shell from 1024px: the sidebar, regrouped as the shee
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Search agent' })).not.toBeInTheDocument());
   });
 
-  it('UI-004 Search agent sits after Unit Dashboard, for a leader only', () => {
+  it('P19.13-T2 AC-3 Search agent is a 40px field under the logo, for a leader only', () => {
     atWidth(1280);
     const leader = renderWithSession(screenWith(), { me: AB });
-    expect(screen.getByText('Search agent')).toBeInTheDocument();
+    const field = screen.getByRole('button', { name: 'Search agent' });
+    expect(field).toHaveAttribute('data-search-agent');
+    expect(field).toHaveClass('h-10', 'rounded-xl', 'bg-secondary-contrast/[0.08]');
+    // Under the logo row, above the nav.
+    expect(field.compareDocumentPosition(screen.getByRole('navigation', { name: 'Main' }))).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(within(screen.getByRole('navigation', { name: 'Main' })).queryByText('Search agent')).not.toBeInTheDocument();
     leader.unmount();
     renderWithSession(screenWith(), { me: AGENT });
     expect(screen.queryByText('Search agent')).not.toBeInTheDocument();

@@ -5,7 +5,7 @@ import { axe } from 'vitest-axe';
 import AgentLayout from '@/app/(agent)/layout';
 import { renderInIndonesian, renderInLayout, routeParams, stubFetch } from '@test/harness';
 import { englishOnly, englishShown } from '@test/english-left';
-import { CATALOG, CERAH, itemOf, MEDICAL, proposal, RINA, ROSA, row, SHELL, WULAN } from '@test/proposal-fixtures';
+import { CATALOG, CERAH, itemOf, MEDICAL, PCB, proposal, RINA, ROSA, row, SHELL, WULAN } from '@test/proposal-fixtures';
 import { leadsMessages } from '@/i18n/messages/leads';
 import { productCatalogMessages } from '@/i18n/messages/product-catalog';
 import { proposalMessages } from '@/i18n/messages/proposal';
@@ -43,19 +43,22 @@ const stubs = () => stubFetch({
   'GET /proposals?': { body: { rows: [row(), row({ id: 'p-2', status: 'draft', client: { name: 'Pak Hendro' } })], total: 2, page: 1, pageSize: 20 } },
   'GET /leads?': { body: { rows: [ROSA, WULAN], total: 2, page: 1, pageSize: 50 } },
   'GET /proposals/p-1': {
-    body: proposal({ items: [itemOf(MEDICAL, { itemId: 'i-med', plan: 'Gold' }), itemOf(CERAH, { itemId: 'i-cerah' })] }),
+    body: proposal({
+      items: [itemOf(MEDICAL, { itemId: 'i-med', plan: 'Gold' }), itemOf(CERAH, { itemId: 'i-cerah' }), itemOf(PCB, { itemId: 'i-pcb' })],
+    }),
   },
   'GET /proposals/catalog': { body: { products: CATALOG } },
   'GET /proposals/p-1/pdf': { body: new Blob(['%PDF-1.3'], { type: 'application/pdf' }) },
 });
 
 /**
- * **P19.7-T2 the proposal in Indonesian** (P18.10-T7 AC-1; the spec's words verbatim): *Riwayat*, step 1 and step 2 read
- * in the approved Indonesian — *Buat proposal*, *Untuk siapa?*, *Klien baru*, *Umur belum ada*, *Konvensional / Syariah*,
- * *Cara bayar*, *Tertanggung*, *Premi per bulan*, *Lihat di ilustrasi resmi*, *Lihat semua plan*, *Tanya-jawab* — with no
- * English of ours left, and each clean under axe. In English: each page's own spec.
+ * **P19.14 the proposal in Indonesian** (P18.10-T7 AC-1; the 11 Nov spec's words verbatim): *Riwayat*, step 1 *Untuk
+ * siapa?* and step 2 *Produk* read in the approved Indonesian — *+ Lead baru*, *Umur ulang tahun berikutnya* and its
+ * helper, *+ Detail klien (opsional)*, *Yang dibahas*, *ada di Leads*, *Tertanggung*, *Masa bayar*, *Merokok?*, *Cara
+ * bayar*, *Uang pertanggungan*, *Premi per bulan*, *Lihat di ilustrasi resmi*, *Lihat proposal*, *Lihat semua plan*,
+ * *Tampilkan total* — with no English of ours left, and each clean under axe. In English: each page's own spec.
  */
-describe('P19.7-T2 the proposal in Indonesian', () => {
+describe('P19.14 the proposal in Indonesian', () => {
   beforeEach(() => {
     nav.push.mockReset();
     nav.replace.mockReset();
@@ -89,30 +92,40 @@ describe('P19.7-T2 the proposal in Indonesian', () => {
     await clean();
   });
 
-  it('/proposal/new (id): Untuk siapa?, Klien baru, Umur belum ada and its card, Lanjut', async () => {
+  it('P19.14-T1 /proposal/new (id): Untuk siapa?, + Lead baru, the client box with its helper and details, Lanjut', async () => {
     nav.pathname = '/proposal/new';
     nav.search = '';
     stubs();
     renderInIndonesian(<AgentLayout><NewProposalPage /></AgentLayout>, { me: RINA });
     expect(await screen.findByRole('heading', { level: 2, name: 'Untuk siapa?' })).toBeInTheDocument();
     const steps = screen.getByRole('list', { name: 'Langkah' });
-    expect(within(steps).getAllByRole('listitem').map((s) => s.textContent)).toEqual(['11 Klien', '22 Produk', '33 PDF']);
-    await userEvent.click(await screen.findByRole('radio', { name: /Ibu Wulan Sari/ }));
-    expect(screen.getByText('Umur belum ada')).toBeInTheDocument();
-    expect(screen.getByText('Umur dan jenis kelamin belum ada di lead ini. Isi sekali, nanti tersimpan di lead.')).toBeInTheDocument();
-    expect(screen.getByRole('textbox', { name: 'Umur ulang tahun berikutnya' })).toBeInTheDocument();
-    expect(screen.getByRole('radio', { name: 'Laki-laki' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Lanjut' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Kembali' })).toBeInTheDocument();
+    expect(within(steps).getAllByRole('listitem').map((s) => s.textContent)).toEqual(['11 Untuk siapa', '22 Produk']);
+    await userEvent.type(await screen.findByRole('searchbox', { name: 'Cari lead Anda' }), 'Pak Budi');
+    expect(await screen.findByRole('button', { name: '+ Lead baru “Pak Budi”' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: '+ Lead baru “Pak Budi”' }));
+    expect(screen.getByRole('textbox', { name: 'No. HP (opsional)' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Simpan lead' })).toBeInTheDocument();
     noEnglishLeft();
     await clean();
-    await userEvent.click(screen.getByRole('button', { name: 'Klien baru' }));
-    expect(screen.getByRole('textbox', { name: 'Nama' })).toBeInTheDocument();
+    await userEvent.clear(screen.getByRole('searchbox', { name: 'Cari lead Anda' }));
+    await userEvent.click(await screen.findByRole('button', { name: /Ibu Wulan Sari/ }));
+    expect(screen.getByRole('heading', { level: 3, name: 'Data klien untuk proposal' })).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Umur ulang tahun berikutnya' })).toHaveAccessibleDescription('Lahir Mei 1991 → sekarang 35 → isi 36');
+    expect(screen.getByRole('radio', { name: 'Laki-laki' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: '+ Detail klien (opsional)' }));
+    expect(screen.getByRole('textbox', { name: 'Tanggungan' })).toHaveAttribute('placeholder', 'mis. Istri, 2 anak');
+    expect(screen.getByText('Yang dibahas')).toBeInTheDocument();
+    for (const need of ['Biaya rumah sakit', 'Penghasilan saat sakit kritis', 'Santunan keluarga', 'Dana pendidikan', 'Dana masa depan / pensiun', 'Lainnya']) {
+      expect(screen.getByRole('button', { name: need })).toBeInTheDocument();
+    }
+    expect(screen.getByRole('button', { name: 'Lajang' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Lanjut' })).toHaveAccessibleDescription('Isi umur dan jenis kelamin untuk lanjut.');
+    expect(screen.getByRole('link', { name: 'Kembali' })).toBeInTheDocument();
     noEnglishLeft();
     await clean();
   });
 
-  it('/proposal/[proposalId] (id): Pilih produk, the settings, the cards and a panel in Indonesian', async () => {
+  it('P19.14-T2 /proposal/[proposalId] (id): Produk, the client line, the chips and a card in Indonesian', async () => {
     nav.pathname = '/proposal/p-1';
     nav.search = 'step=2';
     stubs();
@@ -120,13 +133,20 @@ describe('P19.7-T2 the proposal in Indonesian', () => {
       <AgentLayout><ProposalStepsPage params={routeParams({ proposalId: 'p-1' })} /></AgentLayout>,
       { me: RINA },
     );
-    expect(await screen.findByRole('heading', { level: 2, name: 'Pilih produk' })).toBeInTheDocument();
-    expect(screen.getByRole('group', { name: 'Konvensional atau Syariah' })).toHaveTextContent('KonvensionalSyariah');
-    expect(within(screen.getByRole('group', { name: 'Cara bayar' })).getAllByRole('button').map((b) => b.textContent))
-      .toEqual(['Bulanan', 'Kuartalan', 'Semesteran', 'Tahunan']);
-    expect(await screen.findByRole('group', { name: 'Tertanggung' })).toHaveTextContent('KlienPasanganAnakOrang lain');
-    expect(screen.getByRole('textbox', { name: 'Premi per bulan' })).toBeInTheDocument();
-    expect(screen.getByText('Lihat di ilustrasi resmi')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 2, name: 'Produk' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /✓ Ibu Rosa Damayanti · 42 th · Perempuan · ada di Leads/ })).toBeInTheDocument();
+    expect(await screen.findByRole('group', { name: 'Kategori' })).toHaveTextContent(/^Semua/);
+    expect(screen.getByRole('button', { name: /PRUSenja/ })).toHaveTextContent('Usia 42 di luar batas (50–70)');
+    expect((await screen.findAllByRole('group', { name: 'Tertanggung' }))[0]).toHaveTextContent('RosaPasanganAnakOrang lain');
+    expect(within(document.querySelector('[data-proposal-item="PRUWELL_MEDICAL"]') as HTMLElement).getByRole('group', { name: 'Cara bayar' }))
+      .toHaveTextContent('BulananKuartalanSemesteranTahunan');
+    const pcb = document.querySelector('[data-proposal-item="PRUCRITICAL_BENEFIT_88"]') as HTMLElement;
+    expect(within(pcb).getByRole('group', { name: 'Masa bayar' })).toHaveTextContent('5 tahun10 tahun15 tahunSekali bayar');
+    expect(within(pcb).getByRole('group', { name: 'Merokok?' })).toHaveTextContent('TidakYa');
+    expect(within(pcb).getByRole('textbox', { name: 'Uang pertanggungan' })).toBeInTheDocument();
+    expect(screen.getAllByRole('textbox', { name: 'Premi per bulan' })).toHaveLength(3);
+    expect(screen.getAllByText('Lihat di ilustrasi resmi').length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: 'Lihat proposal' })).toHaveAccessibleDescription('Isi premi dulu untuk melihat proposal.');
     noEnglishLeft();
     await clean();
   });
@@ -151,20 +171,20 @@ describe('P19.7-T2 the proposal in Indonesian', () => {
     await clean();
   });
 
-  it('/proposal/[proposalId] (id, step 3): Lihat PDF, its pages, Simpan PDF, Ubah and Tampilkan total premi (P19.7-T3)', async () => {
+  it('/proposal/[proposalId] (id, the result): Proposal, its pages, Simpan PDF, Ubah and Tampilkan total (P19.7-T3, P19.14-T1)', async () => {
     nav.pathname = '/proposal/p-1';
-    nav.search = 'step=3';
+    nav.search = 'step=pdf';
     stubs();
     renderInIndonesian(
       <AgentLayout><ProposalStepsPage params={routeParams({ proposalId: 'p-1' })} /></AgentLayout>,
       { me: RINA },
     );
-    expect(await screen.findByRole('heading', { level: 2, name: 'Lihat PDF' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 2, name: 'Proposal' })).toBeInTheDocument();
     expect(await screen.findByRole('img', { name: 'Halaman 1 dari 2' })).toBeInTheDocument();
     expect(screen.getByRole('group', { name: 'Halaman proposal' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Ubah' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Simpan PDF' })).toBeInTheDocument();
-    expect(screen.getByRole('switch', { name: 'Tampilkan total premi' })).not.toBeChecked();
+    expect(screen.getByRole('switch', { name: 'Tampilkan total' })).not.toBeChecked();
     noEnglishLeft();
     await clean();
   });
@@ -180,7 +200,7 @@ describe('P19.7-T2 the proposal in Indonesian', () => {
     nav.pathname = '/proposal/p-1';
     nav.search = 'step=2';
     renderInLayout(AgentLayout, <ProposalStepsPage params={routeParams({ proposalId: 'p-1' })} />, { me: RINA });
-    await screen.findByRole('group', { name: 'Insured' });
+    await screen.findAllByRole('group', { name: 'Insured' });
     await clean();
   });
 });

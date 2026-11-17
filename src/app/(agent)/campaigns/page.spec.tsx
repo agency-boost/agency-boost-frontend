@@ -93,8 +93,8 @@ describe('/campaigns, the list (P18.2-T7)', () => {
     it('P18.2-T7 AC-2, P18.7-T9 AC-2 and AC-5 is titled as its nav item, sub-titled as drawn, and reads the list once', async () => {
       const { calls } = list();
       await listReady();
-      // P18.7-T9 AC-2: the nav item's words, *Campaign list* — the prototype titled the page *Campaigns*.
-      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Campaign List$/);
+      // P18.7-T9 AC-2, P19.13-T4 AC-1 (UI-197): the nav item's words, *Campaign* — the prototype titled the page *Campaigns*.
+      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Campaign$/);
       // P18.7-T9 AC-5: *tap*, where the prototype said *click into*.
       expect(screen.getByText(
         "Company and KPM campaigns — mark the ones you're chasing, tap any card for full requirements.",
@@ -571,7 +571,7 @@ describe('/campaigns/[campaignCode], the dialog (P18.2-T7 AC-4, P18.2-T8 AC-6)',
     dialogAt('GADING_PUSH', { 'GET /campaigns/GADING_PUSH': notFound });
     expect(await screen.findByText('This campaign isn’t on your list.')).toBeInTheDocument();
     expect(screen.getByText('It may have been withdrawn, or the address may be mistyped.')).toBeInTheDocument();
-    expect(screen.getByRole('dialog', { name: 'Campaign List' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Campaign' })).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Close' }));
     expect(nav.replace).toHaveBeenCalledWith('/campaigns', { scroll: false });
   });
@@ -607,7 +607,7 @@ describe('/campaigns/[campaignCode], the dialog (P18.2-T7 AC-4, P18.2-T8 AC-6)',
   it('a skeleton while the campaign loads, and an error with a retry', async () => {
     dialogAt('APE_SPRINT', { 'GET /campaigns/APE_SPRINT': [serverError, { body: detail() }] });
     expect((await screen.findByText('Loading the campaign…')).closest('[role="status"]')).not.toBeNull();
-    const box = screen.getByRole('dialog', { name: 'Campaign List' });
+    const box = screen.getByRole('dialog', { name: 'Campaign' });
     expect(await within(box).findByRole('alert')).toHaveTextContent('Something went wrong.');
     await userEvent.click(within(box).getByRole('button', { name: 'Try again' }));
     await dialog();

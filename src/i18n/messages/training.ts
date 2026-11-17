@@ -25,7 +25,7 @@ import type { TrainingItemKind, TrainingStatus } from '@/lib/training';
  */
 const en = {
   /** Every learner page's title, the nav item's words (P18.7-T9 AC-2), and the not-found card's way back (the item). */
-  title: kept('Training Modules'),
+  title: kept('Training'),
   trainingModules: kept('Training modules'),
   /** The subtabs' `nav`, named. */
   tab: kept('Training'),
@@ -85,7 +85,7 @@ const en = {
 };
 
 const id: MessagesOf<typeof en> = {
-  title: kept('Training Modules'),
+  title: kept('Training'),
   trainingModules: kept('Training modules'),
   tab: kept('Training'),
   // *Format* and *Status* are Indonesian already (`SAME_IN_INDONESIAN`).

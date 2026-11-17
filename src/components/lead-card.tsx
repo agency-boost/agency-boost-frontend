@@ -12,7 +12,7 @@ import { leadsMessages } from '@/i18n/messages/leads';
 import { cn } from '@/lib/cn';
 import { dayInZone, formatShortDay, OFFICE_TIME_ZONE } from '@/lib/format';
 import { nextActionState, type Lead } from '@/lib/leads';
-import { proposalHref } from '@/lib/proposals';
+import { newProposalHref } from '@/lib/proposals';
 import { useCan, useSession } from '@/lib/session';
 import type { LeadStatusRow } from '@/lib/tenant-config';
 import { useTenantConfig } from '@/lib/tenant-config-cache';
@@ -40,12 +40,12 @@ export function stageTone(ladder: readonly LeadStatusRow[], code: string | null)
  * accent (`selected`, `aria-current`). There, on the reader's own lead while the list is in their saved order, the drag
  * handle stands before the avatar (`order`; I-295, the client's request of 2026-10-26, which the table carried).
  *
- * **The lead's proposal** (P19.11-T3 AC-1, AC-2; UX-9; UXQ3): the document icon as a round link left of WhatsApp,
- * **only on a lead with a finished proposal** (`proposals.done` ≥ 1, counted by the server) — drafts never count — and it
- * opens the one saved last (`proposals.latestDone`) at its step 3, named and tipped. The server sends `proposals` on the
- * reader's own leads alone, so a downline's card never has it. WhatsApp keeps its place at the right edge either way.
- * No product chip any more (the *"PRUMapan"* pill, P19.7-T2 AC-12, went with UX-9); `proposals.latest` stays in the
- * payload. *Buat proposal* lives in the lead's sheet, under its *Proposal*.
+ * **The lead's proposals** (P19.14-T4 AC-1; ADR-0257 §1, §2, which amends ADR-0241 §2): on the reader's own **Sales**
+ * lead, **the pill** — the latest proposal's first product and how many more it holds, *"PRUWell Medical +1"*, a draft
+ * included (OD-333, OD-334) — at the end of the type and stage line, and ***Buat proposal***, a round button left of
+ * WhatsApp, to `/proposal/new?leadId=`. The pill is a label: the card still opens the sheet, whose *Proposal* section
+ * lists each proposal. The server sends `proposals` on the reader's own leads alone, so a downline's card has neither.
+ * WhatsApp keeps its place at the right edge.
  */
 export function LeadCard({
   lead, ladder: given, today = dayInZone(OFFICE_TIME_ZONE, new Date()), onOpen, onSaved, inPane = false, selected = false, order,
@@ -80,10 +80,14 @@ export function LeadCard({
   const { config } = useTenantConfig();
   const { me } = useSession();
   const canReadProposals = useCan('proposal:read');
+  const canCreateProposal = useCan('proposal:create');
   const ladder = given ?? config?.leadPipelines.find((p) => p.pipeline === lead.type)?.statuses ?? [];
   const mine = lead.ownerMembershipId === me?.membership?.membershipId;
-  // The finished proposal saved last (UX-9): `null` on a lead with drafts only, with none, or somebody else's.
-  const finished = canReadProposals && (lead.proposals?.done ?? 0) > 0 ? lead.proposals?.latestDone ?? null : null;
+  // The pill (ADR-0257 §1): the latest proposal with a product, a draft included; nothing on somebody else's lead.
+  const products = canReadProposals && mine ? lead.proposals?.latest.products ?? [] : [];
+  const pill = products.length > 0 ? (products.length > 1 ? `${products[0]} +${products.length - 1}` : products[0]) : null;
+  // *Buat proposal* (ADR-0257 §2): on every Sales lead of the reader's own, where they may make one.
+  const offerProposal = canCreateProposal && mine && lead.type === 'sales';
   const state = nextActionState(lead, today);
   const late = state === 'overdue';
   const day = lead.nextActionDate
@@ -126,6 +130,7 @@ export function LeadCard({
           ladder={ladder}
           // *Milik Rina Wijaya* on a lead that is not the reader's (P19.9-T1 AC-4): a leader's card under *Tim*.
           owner={!mine && lead.owner?.name ? t.list.ownedBy({ name: lead.owner.name }) : null}
+          proposal={pill}
           className="mt-1"
         />
         <p
@@ -147,12 +152,12 @@ export function LeadCard({
           )}
         </p>
       </div>
-      {finished && (
+      {offerProposal && (
         <Link
-          href={proposalHref(finished.id, 3)}
-          aria-label={t.list.openProposalFor({ who: lead.name })}
-          title={t.list.openProposal}
-          data-open-proposal={finished.id}
+          href={newProposalHref(lead.id)}
+          aria-label={t.list.makeProposalFor({ who: lead.name })}
+          title={t.list.makeProposal}
+          data-make-proposal={lead.id}
           className="relative z-[1] flex h-11 w-11 shrink-0 items-center justify-center rounded-full"
         >
           <span className="flex h-9 w-9 items-center justify-center rounded-full bg-hover-row text-navy">
@@ -175,11 +180,13 @@ export function LeadCard({
  * reader, and only where both are drawn. It travels with the stage: the two are one unit of the line, so a stage that
  * wraps takes its *›* to the next line rather than leaving it at the end of this one.
  */
-export function LeadPills({ lead, ladder, owner = null, className }: {
+export function LeadPills({ lead, ladder, owner = null, proposal = null, className }: {
   lead: Pick<Lead, 'type' | 'statusCode'>;
   ladder: readonly LeadStatusRow[];
   /** *Milik {nama}* (P19.9-T1 AC-4), the card's, on a lead that is not the reader's; `null` draws nothing. */
   owner?: string | null;
+  /** The card's proposal pill, *"PRUWell Medical +1"* (P19.14-T4 AC-1; ADR-0257 §1); `null` draws nothing. */
+  proposal?: string | null;
   className?: string;
 }) {
   const t = useMessages(leadsMessages);
@@ -202,6 +209,13 @@ export function LeadPills({ lead, ladder, owner = null, className }: {
         <span data-lead-stage="" className="inline-flex min-w-0 max-w-full items-center gap-1.5">
           <span aria-hidden="true" data-pill-separator="" className="shrink-0 text-xs font-semibold leading-5 text-muted">›</span>
           <TonePill tone={stageTone(ladder, lead.statusCode)} className="min-w-0 max-w-full shrink truncate">{stage}</TonePill>
+        </span>
+      )}
+      {proposal && (
+        <span data-lead-proposal="" className="inline-flex min-w-0 max-w-full items-center gap-1 rounded-pill bg-hover-row px-2 py-px text-xs font-semibold text-navy">
+          <LineIcon name="document" className="h-3 w-3 shrink-0" />
+          <span className="sr-only">{t.list.proposalPill}: </span>
+          <span className="min-w-0 truncate">{proposal}</span>
         </span>
       )}
       {owner && <span data-lead-owner="" className="min-w-0 max-w-full truncate text-xs font-semibold leading-5 text-muted">{owner}</span>}

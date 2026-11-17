@@ -1,16 +1,18 @@
 'use client';
 
-import { useEffect, useId, useState } from 'react';
+import Link from 'next/link';
+import { useEffect, useState } from 'react';
 import { YtdFigure } from '@/components/ytd-cell';
 import { DataTable, Row, Cell } from '@/components/ui/data-table';
-import { Button, TextInput } from '@/components/ui/field';
-import { Modal } from '@/components/ui/modal';
+import { buttonClass } from '@/components/ui/field';
 import { TonePill } from '@/components/ui/tone-pill';
 import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
 import type { Language } from '@/i18n/language';
 import { advancedAnalyticsPageMessages } from '@/i18n/messages/advanced-analytics-page';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
-import { readSubgroup, saveSubgroupTarget, type Subgroup, type SubgroupRow } from '@/lib/advanced-analytics-page';
+import { readSubgroup, type Subgroup } from '@/lib/advanced-analytics-page';
+import { useCan } from '@/lib/session';
+import { cn } from '@/lib/cn';
 import { formatCalendarDay, formatNumber, formatPercent } from '@/lib/format';
 import { NoData, SectionError, SectionLoading } from './shared';
 
@@ -25,72 +27,25 @@ function Attainment({ pct, ok }: { pct: number | null; ok: boolean | null }) {
   return <TonePill tone={ok ? 'green' : 'grey'}>{t.met({ pct: formatPercent(pct, {}, language) })}</TonePill>;
 }
 
-/** *Ubah target*: a head's AA and recruitment targets, whole numbers from 0 to 1000; audited by the server. */
-function TargetsDialog({ row, onClose, onSaved }: { row: SubgroupRow; onClose: () => void; onSaved: () => void }) {
-  const t = useMessages(advancedAnalyticsPageMessages).subgroup;
-  const aaId = useId();
-  const recId = useId();
-  const [aa, setAa] = useState(String(row.targets.aa));
-  const [rec, setRec] = useState(String(row.targets.rec));
-  const [invalid, setInvalid] = useState(false);
-  const [error, setError] = useState<ApiError | null>(null);
-  const [saving, setSaving] = useState(false);
-  const whole = (text: string) => (/^\d{1,4}$/.test(text.trim()) && Number(text) <= 1000 ? Number(text) : null);
-  const save = async () => {
-    const [a, r] = [whole(aa), whole(rec)];
-    if (a === null || r === null) { setInvalid(true); return; }
-    setSaving(true);
-    try {
-      await saveSubgroupTarget(row.head.membershipId, a, r);
-      onSaved();
-    } catch (err) {
-      setError(toDisplayError(err));
-      setSaving(false);
-    }
-  };
-  return (
-    <Modal
-      open
-      title={t.targetsTitle({ name: row.head.name })}
-      onClose={onClose}
-      footer={(
-        <div className="flex justify-end gap-2">
-          <Button variant="secondary" onClick={onClose}>{t.cancel}</Button>
-          <Button onClick={() => { void save(); }} disabled={saving}>{t.save}</Button>
-        </div>
-      )}
-    >
-      <div className="space-y-3">
-        <label htmlFor={aaId} className="flex flex-col gap-1 text-sm font-semibold text-navy">
-          {t.aaTarget}
-          <TextInput id={aaId} inputMode="numeric" value={aa} invalid={invalid} onChange={(e) => setAa(e.target.value)} />
-        </label>
-        <label htmlFor={recId} className="flex flex-col gap-1 text-sm font-semibold text-navy">
-          {t.recTarget}
-          <TextInput id={recId} inputMode="numeric" value={rec} invalid={invalid} onChange={(e) => setRec(e.target.value)} />
-        </label>
-        {invalid && <p role="alert" className="text-sm text-alert">{t.invalid}</p>}
-        {error && <p role="alert" className="text-sm text-alert">{error.message}</p>}
-      </div>
-    </Modal>
-  );
-}
-
 /**
- * ***Perbaikan sub-group*** (P19.5-T3 AC-10; ADR-0215 §7; the data sources' Sub-group rows): **one row per AB's agency**
- * — the AB and everybody below down to the next AB, so the rows sum to the office — with its manpower and leaders, MAA
- * as last year's average, last month and this month as of its upload (D8), the AA and recruitment targets (the
- * template's 3 and 6 until the KPM sets its own, *Ubah target* for the Owner and the Admins), adoption, power users,
- * one-on-ones a week, the weekly activity target, and recruitment last year and this year — the year the shared *Belum
- * lengkap* cell. A target met to the template's share is green. **Built without the KPM-side mockup** (OD-268).
+ * ***Perbaikan sub-group*** (P19.5-T3 AC-10; ADR-0215 §7; the data sources' Sub-group rows) — **one row per informal
+ * group, then *Tidak ada group*** since P19.13-T3 (UI-199; ADR-0253 §5): each group's name with its ★ group leader (or
+ * *Belum ada group leader*), every person in the row of their nearest leader, so the rows sum to the office. Manpower and
+ * leaders, MAA as last year's average, last month and this month as of its upload (D8), the AA and recruitment targets —
+ * **the sum of the row's leaders' targets**, the template's 3 and 6 each until set — adoption, power users, one-on-ones a
+ * week, the weekly activity target, and recruitment last year and this year. A target met to the template's share is
+ * green.
+ *
+ * **The targets are a leader's, edited on *Core leaders & groups*** (the report's *Conflicts resolved*): *Ubah target* on
+ * a row opens that page on the row's group, where each leader's edit holds theirs, and ***Grouping*** above the table
+ * opens the page itself — for the Owner and the Admins (`member:read_tags`), never a Super Admin's platform read.
  */
 export function SubgroupSection({ platformKpmId, canUpload }: { platformKpmId?: string; canUpload: boolean }) {
   const t = useMessages(advancedAnalyticsPageMessages);
   const language = useFigureLanguage();
   const [view, setView] = useState<Subgroup | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
-  const [editing, setEditing] = useState<SubgroupRow | null>(null);
-  const [attempt, setAttempt] = useState(0);
+  const grouping = useCan('member:read_tags') && platformKpmId === undefined;
 
   useEffect(() => {
     let live = true;
@@ -99,7 +54,7 @@ export function SubgroupSection({ platformKpmId, canUpload }: { platformKpmId?: 
       .then((answer) => { if (live) setView(answer); })
       .catch((err) => { if (live) setError(toDisplayError(err)); });
     return () => { live = false; };
-  }, [platformKpmId, attempt]);
+  }, [platformKpmId]);
 
   if (error) return <SectionError error={error} />;
   if (!view) return <SectionLoading />;
@@ -110,6 +65,11 @@ export function SubgroupSection({ platformKpmId, canUpload }: { platformKpmId?: 
 
   return (
     <div data-section="subgroup">
+      {grouping && (
+        <div className="mb-3 flex justify-end">
+          <Link href="/people/core-leaders" className={buttonClass('secondary')}>{s.grouping} ›</Link>
+        </div>
+      )}
       {view.rows.length === 0 ? (
         <NoData canUpload={canUpload} />
       ) : (
@@ -118,12 +78,22 @@ export function SubgroupSection({ platformKpmId, canUpload }: { platformKpmId?: 
           columns={[s.head, s.manpower, s.maa, s.aaTarget, s.adoption, s.powerUsers, s.oneOnOnes, s.weeklyTarget, s.recruitment]}
         >
           {view.rows.map((row) => (
-            <Row key={row.head.membershipId} data-row={row.head.membershipId}>
+            <Row key={row.group?.groupId ?? 'none'} data-row={row.group?.groupId ?? 'none'}>
               <Cell className="min-w-[10rem] align-top font-semibold">
-                {row.head.name}
+                {row.group?.name ?? s.noGroup}
+                {row.group && (
+                  <div className={cn('text-sm font-normal', row.head ? 'text-muted' : 'text-pill-amber-ink')}>
+                    {row.head ? `★ ${row.head.name}` : s.noHead}
+                  </div>
+                )}
                 {write && (
                   <div className="mt-1">
-                    <Button variant="secondary" className="min-h-9 px-2.5 text-sm" onClick={() => setEditing(row)}>{s.edit}</Button>
+                    <Link
+                      href={`/people/core-leaders?group=${encodeURIComponent(row.group?.groupId ?? 'none')}`}
+                      className={cn(buttonClass('secondary'), 'min-h-9 px-2.5 text-sm')}
+                    >
+                      {s.edit}
+                    </Link>
                   </div>
                 )}
               </Cell>
@@ -148,7 +118,7 @@ export function SubgroupSection({ platformKpmId, canUpload }: { platformKpmId?: 
                 </div>
               </Cell>
               <Cell className="min-w-[9rem] align-top text-sm">
-                <div>{s.headDays({ n: row.adoption.headDays })}</div>
+                {row.adoption.headDays !== null && <div>{s.headDays({ n: row.adoption.headDays })}</div>}
                 <div>{s.downline({ pct: row.adoption.downlinePct === null ? '—' : formatPercent(row.adoption.downlinePct, {}, language) })}</div>
               </Cell>
               <Cell className="align-top tabular-nums">{figure(row.powerUsers, language)}</Cell>
@@ -169,13 +139,6 @@ export function SubgroupSection({ platformKpmId, canUpload }: { platformKpmId?: 
             </Row>
           ))}
         </DataTable>
-      )}
-      {editing && (
-        <TargetsDialog
-          row={editing}
-          onClose={() => setEditing(null)}
-          onSaved={() => { setEditing(null); setAttempt((n) => n + 1); }}
-        />
       )}
     </div>
   );

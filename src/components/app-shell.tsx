@@ -25,6 +25,11 @@ import { useMediaQuery } from '@/lib/use-media-query';
  * the view, decide only which items appear (`shell.tsx`, `lib/field-nav.ts`). The consoles' dark bar, their ☰ drawer
  * (ADR-0167 §3), their tablet rail (ADR-0178 §1) and *ID | EN* on a page (ADR-0197 §5) are gone with them.
  *
+ * **From 1024px, since P19.13** (UI-192 to UI-196; ADR-0252): the sidebar is **a floating navy panel** 12px off the
+ * window's edges — the app icon, *Search agent*, the top section, the groups closed but the current page's, *Panduan*
+ * and the account card — or the 64px rail in the same style; and `main` is **the page frame**, at most 1320px, centred
+ * beside it, 32px each side, so every page stands on the same two edges.
+ *
  * Nav items are grouped by section label, and a disabled item keeps an "Upcoming" pill
  * rather than disappearing — the prototype does this deliberately, so the roadmap stays
  * visible to the user rather than being a surprise.
@@ -73,36 +78,30 @@ export interface NavSection {
  * reading order, and not navigable.
  */
 /**
- * The product mark: three nodes of an org chart, the lower-right one amber.
- *
- * Identical in all fifteen prototype files (`Overall.html:2612-2617`), and the one piece
- * of the shell we never drew — the sidebar carried a bare wordmark.
+ * **The app's icon, the sidebar's logo** (P19.13-T2 AC-2; UI-196): Boost holding a phone — the PWA's own icon, so the
+ * sidebar, the Home Screen and the browser's tab show one picture. It replaced the org-chart mark of the fifteen
+ * prototype files (`Overall.html:2612-2617`).
  */
-function BrandMark() {
-  return (
-    <svg width="26" height="26" viewBox="0 0 26 26" fill="none" aria-hidden="true" className="shrink-0">
-      <circle cx="13" cy="5.5" r="4" className="fill-sidebar-text" />
-      <circle cx="6" cy="19" r="4" className="fill-sidebar-text" />
-      <circle cx="20" cy="19" r="4" className="fill-amber" />
-      <line x1="13" y1="9" x2="6.5" y2="15.5" strokeWidth="1.4" className="stroke-sidebar-text" />
-      <line x1="13" y1="9" x2="19.5" y2="15.5" strokeWidth="1.4" className="stroke-sidebar-text" />
-    </svg>
-  );
-}
+const APP_ICON = '/icons/icon-192.png';
 
 /**
- * The wordmark, and the amber line under it naming which app this is — the sidebar's and the phone's drawer's.
- * The product's name is kept English (§A.5); the shells' other words are `shellMessages` (P18.10-T1).
+ * **The wordmark, *Agency**Boost***, and the line under it** (P19.13-T2 AC-2; UI-196: 16px / 800, *Boost* in the accent,
+ * the branch's name under it at 12px and 70% white). The Super Admin's line is the amber *SUPERADMIN* naming the app,
+ * as `admin-desktop` draws it. The product's name is kept English (§A.5); the shells' other words are `shellMessages`.
  */
-function Wordmark({ brandTag, className }: { brandTag?: string; className?: string }) {
+function Wordmark({ brandTag, branch }: { brandTag?: string; branch?: string | null }) {
+  const name = kept('AgencyBoost');
   return (
-    <span className={cn('font-display text-lg font-extrabold leading-tight tracking-tight text-secondary-contrast', className)}>
-      {kept('AgencyBoost')}
-      {brandTag && (
-        <span className="block text-2xs font-semibold uppercase tracking-wide text-primary-on-secondary">
-          {brandTag}
-        </span>
-      )}
+    <span className="flex min-w-0 flex-col leading-tight">
+      <span className="font-display text-lg font-extrabold tracking-tight text-secondary-contrast">
+        {name.slice(0, 6)}
+        <span className="text-primary-on-secondary">{name.slice(6)}</span>
+      </span>
+      {brandTag ? (
+        <span className="block text-2xs font-semibold uppercase tracking-wide text-primary-on-secondary">{brandTag}</span>
+      ) : branch ? (
+        <span className="block truncate text-xs font-medium text-secondary-contrast/70" data-branch-name="">{branch}</span>
+      ) : null}
     </span>
   );
 }
@@ -194,37 +193,48 @@ function useRailTip(on: boolean, name: string) {
   return { handlers, tip };
 }
 
-function NavLink({ item, pill, rail, tip = false }: { item: NavItem; pill: string; rail: boolean; tip?: boolean }) {
+function NavLink({
+  item, pill, rail, tip = false, sub = false,
+}: { item: NavItem; pill: string; rail: boolean; tip?: boolean; sub?: boolean }) {
   /** What the amber check says to a screen reader, after the item's own name (WCAG 2.5.3: the words on screen first). */
   const { doneSuffix } = useMessages(shellMessages);
   // No hover state. There is no `.nav a:hover` rule in any of the fifteen prototype
   // files — resting, active and disabled are the only three. A hover that lightens an
   // inactive item makes it read as nearly-active, which is exactly the confusion the
-  // amber tint plus amber dot exist to avoid.
+  // current page's mark exists to avoid.
+  /*
+   * *Changed 2026-11-12 (P19.13-T2 AC-4; UI-196, ADR-0252):* **the current page is a white pill with navy bold words and
+   * an orange glyph** (it was the amber tint): 40px rows rounded 12px in the top section, **36px rows indented under
+   * their group's heading, words alone** (`sub`, the approved mockup's `.side a.sub`); 44px squares on the rail. The pill's
+   * words are the secondary's ink and its glyph the primary, so a KPM's colours carry it (ADR-0218 §6).
+   */
   const className = cn(
-    'flex items-center rounded-md py-1.5 text-md font-medium',
-    rail ? 'justify-center px-0' : 'gap-2.5 px-2',
-    item.active ? 'bg-primary/15 font-semibold text-secondary-contrast' : 'text-secondary-contrast/[0.78]',
+    'flex items-center rounded-xl font-medium',
+    rail ? 'h-11 w-11 justify-center px-0' : sub ? 'h-9 gap-3 pl-[2.6875rem] pr-3 text-base' : 'h-10 gap-3 px-3 text-md',
+    item.active ? 'bg-card font-bold text-secondary-ink' : 'text-secondary-contrast/[0.86]',
     item.upcoming && 'cursor-default text-secondary-contrast/30',
   );
   const body = (
     <>
       {/*
         * The glyph replaces the prototype's dot rather than joining it. Two marks in front of
-        * one label is one too many, and the dot said only *active or not* — which the amber
-        * tint behind the row already says, and which an icon can say by colour as well.
+        * one label is one too many, and the dot said only *active or not* — which the pill
+        * behind the row already says, and which an icon can say by colour as well. A group's
+        * rows carry no glyph beside their words (UI-196); on the rail every row is its glyph.
         */}
-      <span className={cn('relative shrink-0', item.active ? 'text-primary-on-secondary' : undefined)}>
-        <NavIcon name={item.icon} />
-        {/*
-          * Collapsed, a count has nowhere to sit at the end of a row — so it rides the glyph,
-          * as a dot rather than a number. The number is still in the accessible name.
-          */}
-        {rail && item.badge !== undefined && item.badge > 0 && (
-          <span aria-hidden className="absolute -right-1 -top-0.5 h-2 w-2 rounded-pill bg-alert" />
-        )}
-      </span>
-      {!rail && item.label}
+      {(rail || !sub) && (
+        <span className={cn('relative shrink-0', item.active ? 'text-primary' : undefined)}>
+          <NavIcon name={item.icon} />
+          {/*
+            * Collapsed, a count has nowhere to sit at the end of a row — so it rides the glyph,
+            * as a dot rather than a number. The number is still in the accessible name.
+            */}
+          {rail && item.badge !== undefined && item.badge > 0 && (
+            <span aria-hidden className="absolute -right-1 -top-0.5 h-2 w-2 rounded-pill bg-alert" />
+          )}
+        </span>
+      )}
+      {!rail && <span className="min-w-0 truncate">{item.label}</span>}
       {!rail && item.badge !== undefined && item.badge > 0 && (
         <span className="ml-auto inline-flex h-[17px] min-w-[17px] items-center justify-center rounded-pill bg-alert px-1.5 text-2xs font-bold text-white">
           {item.badge}
@@ -334,9 +344,10 @@ function GuideItem({ href, rail }: { href: string; rail: boolean }) {
       data-panduan=""
       // The new tab is in the name, never in the text: a sentence in the text is read as words on the page (P19.6-T5).
       aria-label={`${t.guide}${t.opensInNewTab}`}
+      // *Changed 2026-11-12 (P19.13-T2 AC-6; UI-196):* a 40px row as the top section's, above the account card.
       className={cn(
-        'mb-2 hidden items-center rounded-md py-1.5 text-md font-medium text-secondary-contrast/[0.78] md:flex',
-        rail ? 'select-none justify-center px-0 [-webkit-touch-callout:none]' : 'gap-2.5 px-2',
+        'mt-1 flex h-10 shrink-0 items-center rounded-xl text-md font-medium text-secondary-contrast/[0.86]',
+        rail ? 'w-11 select-none justify-center px-0 [-webkit-touch-callout:none]' : 'gap-3 px-3',
       )}
       {...railTip.handlers}
     >
@@ -344,6 +355,33 @@ function GuideItem({ href, rail }: { href: string; rail: boolean }) {
       {!rail && t.guide}
       {railTip.tip}
     </a>
+  );
+}
+
+/**
+ * ***Search agent*, a field under the logo** (P19.13-T2 AC-3; UI-196, D-14, D-33): 40px, 12px corners, an 8% white
+ * ground, the search glyph and *Search agent* — a button that opens the existing agent picker (`AgentSearchDialog`), as
+ * the top section's item did until now. On the rail its glyph alone, named as every rail item is (`useRailTip`).
+ */
+function SearchField({ label, onSelect, rail }: { label: string; onSelect: () => void; rail: boolean }) {
+  const railTip = useRailTip(rail, label);
+  return (
+    <button
+      type="button"
+      aria-haspopup="dialog"
+      data-search-agent=""
+      onClick={onSelect}
+      aria-label={rail ? label : undefined}
+      className={cn(
+        'mb-2 mt-4 flex h-10 shrink-0 items-center rounded-xl bg-secondary-contrast/[0.08] text-base text-secondary-muted hover:bg-secondary-contrast/[0.12]',
+        rail ? 'w-11 select-none justify-center [-webkit-touch-callout:none]' : 'w-full gap-2 px-3',
+      )}
+      {...railTip.handlers}
+    >
+      <NavIcon name="search" className="h-4 w-4 shrink-0" />
+      {!rail && label}
+      {railTip.tip}
+    </button>
   );
 }
 
@@ -453,14 +491,17 @@ function SidebarFoot({
   const bell = notifications ? <NotificationBell {...notifications} /> : null;
 
   /*
-   * From 768px it is the sidebar's foot, which must not shrink under a long nav; the classes below 768px stayed from the
-   * phone's bar, where nothing draws the sidebar any more, so the foot is drawn as it always was from 1024px.
+   * *Changed 2026-11-12 (P19.13-T2 AC-6; UI-196, ADR-0252):* **an account card** — the avatar, the name, the role · the
+   * KPM's code (the profile line), the bell — on a 6% white ground with 14px corners, where it was a row under a rule. On
+   * the rail the avatar and the bell alone, with no ground (the mockup's `.rail .side .acc`). The sidebar is a desktop's
+   * alone, so nothing here is drawn below 1024px.
    */
   return (
     <div
+      data-account-card=""
       className={cn(
-        'ml-auto flex min-w-0 shrink items-center gap-1 md:ml-0 md:shrink-0 md:border-t md:border-secondary-contrast/10 md:pt-3',
-        rail && 'md:flex-col md:gap-1.5',
+        'mt-2 flex shrink-0 items-center',
+        rail ? 'flex-col gap-1.5' : 'min-w-0 gap-1 rounded-[14px] bg-secondary-contrast/[0.06] px-1.5 py-1',
       )}
     >
       {rail ? <>{bell}{chip}</> : <>{chip}{bell}</>}
@@ -486,6 +527,9 @@ const LAPTOP_RAIL_KEY = 'ab.sidebar.rail.laptop';
 /** Before the browser paints, with the width (`useMediaQuery`'s `beforePaint`), so a tablet's first frame is the rail. */
 const useBeforePaint = typeof window === 'undefined' ? useEffect : useLayoutEffect;
 
+/** The groups the reader opened by hand, remembered for the tab's session (P19.13-T2 AC-5): a JSON list of headings. */
+const OPEN_GROUPS_KEY = 'ab.sidebar.open';
+
 /**
  * The nav's groups, each a heading that opens and closes it and the items beneath — rendered by the
  * sidebar, and on a phone by the drawer the bar's ☰ opens (P18.7-T2), so the two cannot differ in order,
@@ -494,22 +538,17 @@ const useBeforePaint = typeof window === 'undefined' ? useEffect : useLayoutEffe
 function NavGroups({
   sections,
   rail,
-  closed,
+  isOpen,
   onToggle,
   pill,
-  sentenceCase = false,
   railTips = false,
 }: {
   sections: readonly NavSection[];
   rail: boolean;
-  closed: ReadonlySet<string>;
+  /** Whether a headed group is open (P19.13-T2 AC-5): the current page's, and any the reader opened this session. */
+  isOpen: (label: string) => boolean;
   onToggle: (label: string) => void;
   pill: string;
-  /**
-   * **The headings: 12px grey, sentence case** (UI V1, UI-004; D-20: *Old "UNIT TOOLS" etc. go away*) — the *Lainnya*
-   * sheet's groups, as the sheet writes them; every role's since P19.2-T1 (UI-146: *no sidebar heading is uppercase*).
-   */
-  sentenceCase?: boolean;
   /** **The field rail's drawn names** (P19.1-T1 AC-4, `useRailTip`): on hover, focus and a long press. */
   railTips?: boolean;
 }) {
@@ -523,7 +562,7 @@ function NavGroups({
          * collapse and nothing gained by hiding them.
          */
         const collapsible = Boolean(section.label) && !rail;
-        const open = !collapsible || !closed.has(section.label ?? '');
+        const open = !collapsible || isOpen(section.label ?? '');
 
         return (
           <div key={id}>
@@ -535,7 +574,7 @@ function NavGroups({
               * the structure here; `aria-expanded` and `aria-controls` are the semantics.
               */}
             {section.label && !rail && (
-              <div className="mx-1 mt-2">
+              <div className="mt-0.5">
                 <button
                   type="button"
                   aria-expanded={open}
@@ -544,11 +583,15 @@ function NavGroups({
                   /*
                    * **Readable, not decorative.** It was `text-2xs` at 40% white — 10px of
                    * uppercase at that contrast is a smudge, and this is the control that
-                   * decides what the whole menu shows. `xs` at 65%, semibold.
+                   * decides what the whole menu shows. Sentence case (UI V1, UI-004; D-20).
+                   *
+                   * *Changed 2026-11-12 (P19.13-T2 AC-5; UI-196):* **a 36px heading row, 13px**, at 65% white while
+                   * closed and white while open, its ▸ turning to ▾ — the approved mockup's `.side .gh`.
                    */
-                  className={sentenceCase
-                    ? 'flex w-full items-center gap-2 rounded-md px-1.5 py-1.5 text-xs font-semibold text-secondary-contrast/65 hover:bg-secondary-contrast/[0.06] hover:text-secondary-contrast'
-                    : 'flex w-full items-center gap-2 rounded-md px-1.5 py-1.5 text-xs font-semibold uppercase tracking-wider text-secondary-contrast/65 hover:bg-secondary-contrast/[0.06] hover:text-secondary-contrast'}
+                  className={cn(
+                    'flex h-9 w-full items-center gap-2 rounded-xl px-3 text-base font-semibold hover:bg-secondary-contrast/[0.06] hover:text-secondary-contrast',
+                    open ? 'text-secondary-contrast' : 'text-secondary-contrast/65',
+                  )}
                 >
                   {section.label}
                   {/*
@@ -581,18 +624,19 @@ function NavGroups({
             {open && (
               <ul
                 id={`nav-group-${sectionIndex}`}
-                className={cn('flex flex-col gap-px', rail ? 'mb-1.5' : 'mb-2.5 mt-1')}
+                className={cn('flex flex-col', rail ? 'mb-1.5 items-center gap-px' : 'gap-0')}
               >
                 {section.items.map((item) => (
                   <li key={item.href}>
-                    <NavLink item={item} pill={pill} rail={rail} tip={railTips} />
+                    <NavLink item={item} pill={pill} rail={rail} tip={railTips} sub={Boolean(section.label) && !rail} />
                   </li>
                 ))}
               </ul>
             )}
             {/* A `separator`, so the rule between groups is a thing a test and a screen reader can
-                both find, rather than a styled `div` only the eye can (parity I-144). */}
-            {section.divider && <div role="separator" className="mx-1 my-2 h-px bg-secondary-contrast/10" />}
+                both find, rather than a styled `div` only the eye can (parity I-144). Since P19.13-T2
+                (UI-196) one, under the top section: the closed headings are the groups' edges. */}
+            {section.divider && <div role="separator" className="mx-1.5 my-2 h-px bg-secondary-contrast/[0.08]" />}
           </div>
         );
       })}
@@ -614,6 +658,7 @@ export function AppShell({
   officeTitle = false,
   labelledFrom1024 = false,
   guideHref,
+  search,
   children,
 }: {
   sections: readonly NavSection[];
@@ -668,6 +713,11 @@ export function AppShell({
    */
   guideHref?: string;
   /**
+   * ***Search agent*, the 40px field under the logo** (P19.13-T2 AC-3; UI-196, D-14): its words and what opens the
+   * agent picker. Omitted for a reader without the picker, who has no field.
+   */
+  search?: { label: string; onSelect: () => void };
+  /**
    * The page's own heading, when the shell is rendered by a page.
    *
    * Optional because a **group layout** renders this shell without knowing any page's
@@ -685,41 +735,47 @@ export function AppShell({
   const branding = useBranding();
   const officeName = useOfficeName();
   /**
-   * **Every group starts open, and each heading toggles its own** (P10.1-T3, client item 3).
+   * **Only the group holding the current page is open; a heading opens its own, and a group the reader opened stays
+   * open for the session** (P19.13-T2 AC-5; UI-196, ADR-0252 §4).
    *
-   * The client asked on 2026-09-24 for one group open at a time, and on 2026-09-29 for every group
-   * to open on its own, all open by default; the later request wins (ADR-0062). The prototype has
-   * no toggles at all — every group is static and open (`Overall.html:2610-2691`) — so all-open is
-   * also the page the prototype draws, with the client's toggles kept on top of it.
+   * *Changed 2026-11-12 — it reversed P10.1-T3's* every group open by default (the client's request of 2026-09-29, ADR-0062's
+   * own example): the owner's later request of 9 November wins (ADR-0062 §1). All open, the Owner's office menu was
+   * 1,634px in a 797px column.
    *
-   * **The closed groups are the state, and the set starts empty.** The server render and the first
-   * client render therefore agree with nothing to reconcile, and nothing is remembered across a
-   * reload: *all open by default* is the ask, and the rail stays the one remembered preference.
+   * - **The current page's group** (`activeGroup`) is open, and closes when the reader closes it, until the route moves
+   *   to another group — `activeGroup` in the effect's list is what clears that.
+   * - **A group the reader opened** is remembered for the tab's session (`sessionStorage`, `OPEN_GROUPS_KEY`), across
+   *   pages and a reload; closing it forgets it. The server and the first client render both draw the current page's
+   *   group alone, so they agree. **Read after the paint, and only when something is kept**, as `compact` is: a state
+   *   change in a layout effect re-renders the page under the shell inside the commit, and a page reading its route's
+   *   params through `use()` suspends there and never comes back (the unit below the reader's did).
    */
   const activeGroup = sections.find((s) => s.items.some((i) => i.active))?.label ?? null;
-  const [closed, setClosed] = useState<ReadonlySet<string>>(() => new Set());
-  /*
-   * **Arriving inside a closed group opens that group, and only that one.** A group the reader
-   * closed stays closed while they stay inside it; the route moving into it from elsewhere is what
-   * reopens it — `activeGroup` in the dependency list is what makes that happen without overriding
-   * the reader on every render. Returning the same set when there is nothing to open keeps the
-   * effect from re-rendering the shell on every navigation.
-   */
+  const [opened, setOpened] = useState<ReadonlySet<string>>(() => new Set());
+  const [activeShut, setActiveShut] = useState(false);
   useEffect(() => {
-    if (!activeGroup) return;
-    setClosed((now) => {
-      if (!now.has(activeGroup)) return now;
-      const next = new Set(now);
-      next.delete(activeGroup);
-      return next;
-    });
-  }, [activeGroup]);
+    try {
+      const stored = JSON.parse(window.sessionStorage.getItem(OPEN_GROUPS_KEY) ?? '[]') as unknown;
+      const names = Array.isArray(stored) ? stored.filter((x): x is string => typeof x === 'string') : [];
+      if (names.length > 0) setOpened(new Set(names));
+    } catch {
+      // Storage refused or unreadable: the current page's group alone, as on a first visit.
+    }
+  }, []);
+  useEffect(() => setActiveShut(false), [activeGroup]);
+  const isOpen = (label: string) => (label === activeGroup && !activeShut) || opened.has(label);
   const toggleGroup = (label: string) => {
-    setClosed((now) => {
-      const next = new Set(now);
-      if (!next.delete(label)) next.add(label);
-      return next;
-    });
+    const wasOpen = isOpen(label);
+    if (label === activeGroup) setActiveShut(wasOpen);
+    const next = new Set(opened);
+    if (wasOpen) next.delete(label);
+    else next.add(label);
+    setOpened(next);
+    try {
+      window.sessionStorage.setItem(OPEN_GROUPS_KEY, JSON.stringify([...next]));
+    } catch {
+      // Not remembered past this page; the heading still opens.
+    }
   };
 
   /**
@@ -768,10 +824,9 @@ export function AppShell({
     <NavGroups
       sections={sections}
       rail={rail}
-      closed={closed}
+      isOpen={isOpen}
       onToggle={toggleGroup}
       pill={pill}
-      sentenceCase
       railTips
     />
   );
@@ -785,42 +840,53 @@ export function AppShell({
       {/* Below 1024px no sidebar at all, for any role: the title rows and the tab bar stand in (UI-004, UI-146). */}
       {!compact && (
         <aside
+          data-sidebar={rail ? 'rail' : 'panel'}
           className={cn(
             // `print:hidden`: a printed page is the page, not the app around it (`Overall.html:1022`, ADR-0061).
-            // Its navy runs up under the clock and its content starts below it: the top inset is added to its 14px (20px as
-            // the sidebar), so a Home Screen app's status bar never sits over the brand (staging review, 2026-10-31).
-            'sticky top-0 z-10 flex w-full shrink-0 flex-row items-center bg-secondary px-4 pb-3.5 pt-[calc(0.875rem+env(safe-area-inset-top))] text-sidebar-text print:hidden '
-              + 'md:h-screen md:flex-col md:items-stretch md:pb-5 md:pt-[calc(1.25rem+env(safe-area-inset-top))]',
+            'sticky z-10 flex shrink-0 flex-col self-start bg-secondary pb-3 pt-4 text-sidebar-text print:hidden',
             // A desktop's alone: below 1024px the pages' title rows and the tab bar stand in (UI-004).
             'max-lg:hidden',
             /*
-             * **An arbitrary value, not a theme key.** `w-sidebar-rail` would need a new entry in
+             * **A floating panel** (P19.13-T2 AC-1, AC-8; UI-196, ADR-0252): 12px off the window's top, bottom and left,
+             * 20px corners, the page's ground around it — it was a flat navy column from the top of the window to the
+             * bottom. **Never under the clock** (staging review, 2026-10-31): on a Home Screen app the panel starts below
+             * the top inset when that is more than its 12px.
+             */
+            'ml-[var(--sidebar-inset)] mt-[max(var(--sidebar-inset),env(safe-area-inset-top))] top-[max(var(--sidebar-inset),env(safe-area-inset-top))]',
+            'h-[calc(100vh_-_var(--sidebar-inset)_-_max(var(--sidebar-inset),env(safe-area-inset-top)))] rounded-sidebar',
+            /*
+             * **An arbitrary value, not a theme key**, for the rail. `w-sidebar-rail` would need a new entry in
              * `tailwind.config.ts`, and Tailwind's JIT does not pick a config change up without a
              * dev-server restart — so the class silently did not exist, the `w-full` underneath it
              * won, and collapsing the sidebar covered the page. A width that can vanish is a bad
              * width for the one class that decides whether anything else is visible.
              */
-            rail ? 'md:w-[var(--sidebar-rail-width)] md:px-2' : 'md:w-sidebar',
+            rail ? 'w-[var(--sidebar-rail-width)] items-center px-2' : 'w-sidebar px-3',
           )}
         >
-          <div
-            className={cn(
-              'flex items-center gap-2 px-1 md:mb-3 md:border-b md:border-secondary-contrast/10 md:pb-4',
-              rail && 'md:flex-col md:gap-2 md:px-0',
-            )}
-          >
+          <div className={cn('flex shrink-0 items-center', rail ? 'flex-col gap-2' : 'min-w-0 gap-2.5 px-1.5 pt-0.5')}>
             {/*
               * **The KPM's logo in place of AgencyBoost's mark and wordmark** (P19.6-T1 AC-3, AC-4; ADR-0218 §2): the wide
-              * logo in the sidebar, the square one (or the wide one centred) in the rail. Without one, as before.
+              * logo in the sidebar, the square one (or the wide one centred) in the rail. Without one, the app's icon.
+              *
+              * *Changed 2026-11-12 (P19.13-T2 AC-2; UI-196):* **the app icon** — Boost holding a phone, the PWA's own
+              * `/icons/icon-192.png` — 36px with 10px corners, where the org-chart mark was; beside it *Agency**Boost*** and
+              * the branch's name. On the rail the icon alone.
               */}
             {branding?.logo ? (
               <KpmLogo branding={branding} rail={rail} name={officeName} />
             ) : (
               <>
-                <BrandMark />
-                {/* The wordmark goes, the mark stays: it is the thing that says which product this
-                    is, and the rail has room for exactly one of them. */}
-                <Wordmark brandTag={brandTag} className={cn(rail && 'md:hidden') || undefined} />
+                {/* eslint-disable-next-line @next/next/no-img-element -- the PWA's own static icon, drawn at its 36px */}
+                <img
+                  src={APP_ICON}
+                  alt=""
+                  width={36}
+                  height={36}
+                  data-app-icon=""
+                  className="h-9 w-9 shrink-0 rounded-[10px] shadow-sm"
+                />
+                {!rail && <Wordmark brandTag={brandTag} branch={officeName} />}
               </>
             )}
 
@@ -838,8 +904,8 @@ export function AppShell({
               aria-label={rail ? t.expandSidebar : t.collapseSidebar}
               title={rail ? t.expandSidebar : t.collapseSidebar}
               className={cn(
-                'hidden h-8 w-8 shrink-0 items-center justify-center rounded-md text-secondary-contrast/[0.55] hover:bg-secondary-contrast/[0.06] hover:text-secondary-contrast md:flex',
-                !rail && 'md:ml-auto',
+                'flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-secondary-contrast/[0.55] hover:bg-secondary-contrast/[0.06] hover:text-secondary-contrast',
+                !rail && 'ml-auto',
               )}
             >
               <svg
@@ -859,7 +925,19 @@ export function AppShell({
             </button>
           </div>
 
-          <nav id="sidebar-nav" className="hidden min-h-0 flex-1 overflow-y-auto pr-0.5 md:block" aria-label={t.mainNav}>
+          {/* P19.13-T2 AC-3 (UI-196): *Search agent* under the logo, for a reader with the picker; nothing for another. */}
+          {search && <SearchField label={search.label} onSelect={search.onSelect} rail={rail} />}
+
+          {/*
+            * **The nav never scrolls on its own** (P19.13-T2 AC-7; UI-196): with one group open it fits the panel at 1280 ×
+            * 800 and 1440 × 900. Where a long group is open on a short window it scrolls inside the panel, rather than
+            * leaving an item out of reach, while *Panduan* and the account card stay in sight below it.
+            */}
+          <nav
+            id="sidebar-nav"
+            className={cn('min-h-0 flex-1 overflow-y-auto', search ? undefined : 'mt-4', rail && 'w-full')}
+            aria-label={t.mainNav}
+          >
             {groups}
           </nav>
 
@@ -907,11 +985,16 @@ export function AppShell({
            *
            * *Changed 2026-11-04 (P19-T5 AC-4; UI-158, R3):* **the header starts 16px below the inset** on a phone and a
            * tablet — `calc(1rem + env(safe-area-inset-top))`, the owner's rule. Beside the sidebar, 32px or the inset and
-           * 16px, whichever is more: a desktop keeps its 32px. `lg:px-10` is what `/leads`' list and detail are measured
-           * against (`SPLIT.gutter`, `leads-list.tsx`): change one, change both.
+           * 16px, whichever is more: a desktop keeps its 32px.
+           *
+           * *Changed 2026-11-12 (P19.13-T1 AC-1; UI-192, D-40, ADR-0252 §1):* **from 1024px `main` is the page frame** —
+           * at most 1320px (`max-w-frame`), centred in the room beside the sidebar (`mx-auto`), 32px each side
+           * (`px-frame`), where it was the whole room with a 40px gutter. Every page's title row, cards, table and form
+           * stand on its edges; no page keeps an outer width of its own. `/leads`' list and detail are measured against
+           * it (`SPLIT`, `leads-list.tsx`).
            */
           'px-4 pb-[calc(var(--tab-bar-space)+1.5rem)] pt-[calc(1rem+env(safe-area-inset-top))] md:px-6 '
-            + 'lg:px-10 lg:pb-14 lg:pt-[max(2rem,calc(1rem+env(safe-area-inset-top)))]',
+            + 'lg:mx-auto lg:max-w-frame lg:px-frame lg:pb-14 lg:pt-[max(2rem,calc(1rem+env(safe-area-inset-top)))]',
         )}
       >
         <FieldChromeContext.Provider value={{ ...field, compact }}>

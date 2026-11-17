@@ -119,13 +119,19 @@ export function HomeScreen() {
 
   return (
     <Page title={title} bell>
-      <div data-home="" className="max-w-[1200px]">
+      {/*
+        * *Changed 2026-11-12 (P19.13-T1 AC-2, T4 AC-2; UI-192, UI-194, UI-195, ADR-0252):* **from 1024px Home is the frame's
+        * dashboard grid** — 2/3 + 1/3, both columns stretched to the row and each column's last card filling what is left,
+        * so the two end on one line; 16px between cards — where it was capped at 1200px and stuck to the left. The cap
+        * stays below 1024px, where it is wider than the screen and draws nothing: the phone's markup is as it was.
+        */}
+      <div data-home="" className="max-w-[1200px] lg:max-w-none">
         {error && <ErrorBanner {...error} />}
         {!view && !error && <HomeSkeleton label={t.loading} />}
         {view && (
-          <div className="grid grid-cols-1 gap-3.5 md:max-lg:grid-cols-2 md:max-lg:items-start md:max-lg:gap-4 lg:grid-cols-[3fr_2fr] lg:items-start lg:gap-5">
+          <div className="grid grid-cols-1 gap-3.5 md:max-lg:grid-cols-2 md:max-lg:items-start md:max-lg:gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] lg:items-stretch lg:gap-cards">
             {/* `grid-cols-1` on a phone: one `minmax(0, 1fr)` track, so the widest row cannot push the page sideways (T16). */}
-            <div className="contents lg:flex lg:min-w-0 lg:flex-col lg:gap-2.5">
+            <div className="contents lg:flex lg:min-w-0 lg:flex-col lg:gap-cards">
               <HomeQuoteCard quote={view.quote} className="md:max-lg:col-span-2" />
               {/* P19.8-T2 AC-3 (ADR-0228 §3): the slim row above the tiles, by role. */}
               <HomeButtons className="md:max-lg:col-span-2" />
@@ -142,14 +148,14 @@ export function HomeScreen() {
                   actions={view.actions}
                   today={view.today}
                   onOpenEntry={openEntry}
-                  className="mt-1.5 md:max-lg:col-span-2 lg:mt-2.5"
+                  className="mt-1.5 md:max-lg:col-span-2 lg:mt-0 lg:flex lg:flex-1 lg:flex-col"
                 />
               </CalendarTasksContext.Provider>
             </div>
-            <div className="contents lg:flex lg:min-w-0 lg:flex-col lg:gap-3.5">
+            <div className="contents lg:flex lg:min-w-0 lg:flex-col lg:gap-cards">
               {/* Every leader's by role (P19.8-T2 AC-9): with nobody, its one line *Tambah agent pertama →*. */}
               {leader && <HomeTeam team={leader.team} leaderName={me?.user.fullName ?? ''} className="mt-1.5 lg:mt-0" />}
-              <HomeChart activity={view.activity} className={cn('mt-1.5 lg:mt-0', !leader && 'md:max-lg:col-span-2')} />
+              <HomeChart activity={view.activity} className={cn('mt-1.5 lg:mt-0 lg:flex lg:flex-1 lg:flex-col', !leader && 'md:max-lg:col-span-2')} />
             </div>
           </div>
         )}
@@ -215,7 +221,8 @@ export function HomeScreen() {
 function HomeSkeleton({ label }: { label: string }) {
   return (
     <Skeleton label={label}>
-      <div className="space-y-3 lg:max-w-[60%]">
+      {/* From 1024px the grid's left column, 2/3 of the frame (P19.13-T4 AC-2). */}
+      <div className="space-y-3 lg:max-w-[66%]">
         <div className="h-[5.3rem] rounded-lg bg-card" />
         <div className="grid grid-cols-2 gap-2">
           {[0, 1].map((i) => (

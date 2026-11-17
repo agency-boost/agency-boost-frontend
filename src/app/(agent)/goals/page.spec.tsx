@@ -116,7 +116,10 @@ const tile = (card: HTMLElement, label: string) =>
 /** The desktop's right column (UI-022). */
 const aside = () => document.querySelector('[data-goal-aside]') as HTMLElement;
 /** The save status, wherever the size puts it: the right column on a desktop, the floating pill below 1024px. */
-const status = () => within((document.querySelector('[data-floating-save]') ?? aside()) as HTMLElement).getByRole('status');
+// The save's state: the floating pill below 1024px, the save card from it — step ④'s steppers share the right column
+// since P19.13-T4 (UI-195), so the card is named, not the column.
+const status = () => within((document.querySelector('[data-floating-save]') ?? document.querySelector('[data-goal-save]')) as HTMLElement)
+  .getByRole('status');
 const sent = (calls: { url: string; init: RequestInit }[], method: string) =>
   calls.filter((c) => c.init.method === method).map((c) => JSON.parse(String(c.init.body)));
 const commitmentSentence = async () => (await screen.findByText(/^This month, APE/)).closest('p')!;
@@ -365,18 +368,26 @@ describe('Goal Settings (P8-T3) as UI V1 draws it (P18.11-T5)', () => {
   });
 
   describe('UI-015, UI-018, UI-022 — where the save is, and the two columns', () => {
-    it('UI-022 a desktop: the steps left, and the result, the commitment and the save in a sticky right column', async () => {
+    /*
+     * *Changed 2026-11-12 (P19.13-T4 AC-2; UI-195, ADR-0252):* step ④ opens the right column, above the result, so the two
+     * columns end within about 120px of each other (`page-frame.browser.spec.ts` measures it); ①②③ stay on the left.
+     */
+    it('UI-022, P19.13-T4 AC-2 a desktop: steps ①–③ left; ④, the result, the commitment and the save in a sticky right column', async () => {
       render({ '/goals': { body: goal() } });
       const card = await resultCard();
 
       const right = aside();
-      expect(right).toHaveClass('sticky', 'top-6');
-      expect(right.parentElement).toHaveClass('grid', 'grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]');
+      expect(right).toHaveClass('sticky', 'top-6', 'gap-cards');
+      expect(right.parentElement).toHaveClass('grid', 'grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]', 'gap-cards');
       expect(right).toContainElement(card);
       expect(right).toContainElement(screen.getByRole('heading', { name: /My commitment/ }));
       expect(right).toContainElement(screen.getByRole('button', { name: 'Save goal' }));
-      expect(within(right).getByRole('status')).toHaveTextContent('Saved ✓');
+      expect(status()).toHaveTextContent('Saved ✓');
       expect(right).not.toContainElement(screen.getByRole('heading', { name: /APE target this year/ }));
+      const four = document.querySelector('[data-step-four]')!;
+      expect(right).toContainElement(four as HTMLElement);
+      expect(right.firstElementChild).toContainElement(four as HTMLElement);
+      expect(document.querySelector('[data-goal-steps]')).not.toContainElement(four as HTMLElement);
       // No floating pill, and no centred measure: the title's left edge is the cards'.
       expect(document.querySelector('[data-floating-save]')).toBeNull();
       expect(right.closest('.max-w-\\[51\\.25rem\\]')).toBeNull();
@@ -784,10 +795,11 @@ describe('Goal Settings (P8-T3) as UI V1 draws it (P18.11-T5)', () => {
 
   describe('UI-004 and the report’s Appendix A — the title row', () => {
     // *Changed 2026-11-04 (P19.1-T1 AC-1; UI-112, Conflicts row 150 names Goals):* the line is drawn at no size.
-    it('Appendix A, P19.1-T1 AC-1 keeps the prototype’s title; its line is drawn at no size', async () => {
+    // *Changed 2026-11-12 (P19.13-T4 AC-1; UI-197):* the title is the menu's *Goal Setting*, where it was *Goal Settings*.
+    it('Appendix A, P19.1-T1 AC-1, P19.13-T4 AC-1 is titled Goal Setting, its menu label; its line is drawn at no size', async () => {
       render({ '/goals': { body: goal() } });
 
-      expect(screen.getByRole('heading', { level: 1, name: 'Goal Settings' })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { level: 1, name: 'Goal Setting' })).toBeInTheDocument();
       const line = screen.getByText('Turn your annual target into this month\'s activity numbers.');
       for (const px of [375, 768, 1024, 1280]) expect(wears(line, px)).toContain('hidden');
       await resultCard();

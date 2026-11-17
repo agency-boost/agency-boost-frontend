@@ -122,12 +122,16 @@ export function TrainingModule({ categoryCode, moduleCode }: { categoryCode: str
 
   return (
     <Page>
-      <div className="max-w-[1000px]" data-module-page="">
+      {/*
+        * P19.13-T1 AC-2, AC-4 (UI-192, UI-194): from 1024px the frame's width — the lesson beside its 300px status card,
+        * 16px apart — where the page was capped at 1000px. The cap stays below 1024px, where it draws nothing.
+        */}
+      <div className="max-w-[1000px] lg:max-w-none" data-module-page="">
         <div className="flex items-center">
           <BackLink href={trainingCategoryHref(page.category.code)} />
           <PageLanguageSwitch className="ml-auto" />
         </div>
-        <div className="mt-2 flex flex-col gap-3 lg:mt-[18px] lg:grid lg:grid-cols-[minmax(0,1fr)_300px] lg:items-start lg:gap-5">
+        <div className="mt-2 flex flex-col gap-3 lg:mt-[18px] lg:grid lg:grid-cols-[minmax(0,1fr)_300px] lg:items-start lg:gap-cards">
           <section aria-labelledby={titleId} className="min-w-0 rounded-[20px] bg-navy p-[18px] text-white lg:px-7 lg:py-[26px]" data-lesson-card="">
             <div className="flex items-center gap-2">
               <SkillTag>{t.skillTag({ label: page.skill.label })}</SkillTag>
@@ -494,9 +498,9 @@ function StatusCard({
 function ModuleSkeleton() {
   const t = useMessages(trainingMessages);
   return (
-    <Skeleton label={t.loadingModule} className="max-w-[1000px]">
+    <Skeleton label={t.loadingModule} className="max-w-[1000px] lg:max-w-none">
       <div className="flex min-h-12 items-center lg:min-h-11"><SkeletonBar className="h-4 w-40" /></div>
-      <div className="mt-2 flex flex-col gap-3 lg:mt-[18px] lg:grid lg:grid-cols-[minmax(0,1fr)_300px] lg:items-start lg:gap-5">
+      <div className="mt-2 flex flex-col gap-3 lg:mt-[18px] lg:grid lg:grid-cols-[minmax(0,1fr)_300px] lg:items-start lg:gap-cards">
         <div className="rounded-[20px] bg-navy p-[18px] lg:px-7 lg:py-[26px]">
           <SkeletonBar className="h-6 w-36 rounded-pill bg-white/15" />
           <SkeletonBar className="mt-4 h-6 w-3/4 bg-white/15" />
@@ -519,7 +523,8 @@ function ModuleNotFound() {
   const t = useMessages(trainingMessages);
   return (
     <Page title={t.title}>
-      <div className="max-w-[820px]">
+      {/* P19.13-T1 AC-2 (UI-192): a reading column from 1024px, at most 720px on the frame's left edge. */}
+      <div className="max-w-[820px] lg:max-w-form">
         <NotFoundCard title={t.moduleNotFound} />
       </div>
     </Page>

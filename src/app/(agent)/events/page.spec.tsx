@@ -84,8 +84,8 @@ describe('/events, KPM Events (P18.2-T5, T6)', () => {
     it('P18.2-T5 AC-4 is titled and sub-titled as drawn, and reads the list once', async () => {
       const { calls } = list();
       await listReady();
-      // P18.7-T9 AC-2: the nav item's words, *Event list*, where the prototype titled it *KPM Events*.
-      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Event List$/);
+      // P18.7-T9 AC-2, P19.13-T4 AC-1 (UI-197): the nav item's words, *Event*, where the prototype titled it *KPM Events*.
+      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Event$/);
       expect(screen.getByText('Browse upcoming and past events from your KPM — join, and share feedback once they wrap up.'))
         .toBeInTheDocument();
       expect(calls.filter((c) => /\/events$/.test(c.url))).toHaveLength(1);
@@ -490,7 +490,7 @@ describe('/events, KPM Events (P18.2-T5, T6)', () => {
 
     it('P18.2-T5 AC-5 an error reading the event, with a retry', async () => {
       modal(KICKOFF, { [`GET /events/${KICKOFF.id}`]: [serverError, { body: KICKOFF }] });
-      const box = await screen.findByRole('dialog', { name: 'Event List' });
+      const box = await screen.findByRole('dialog', { name: 'Event' });
       expect(await within(box).findByRole('alert')).toHaveTextContent('Something went wrong.');
       await userEvent.click(within(box).getByRole('button', { name: 'Try again' }));
       expect(await dialog('Kickoff 2026')).toBeInTheDocument();

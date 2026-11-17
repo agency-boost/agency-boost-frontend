@@ -145,7 +145,8 @@ function PersonalSummary() {
         </Button>
       )}
     >
-      <div className="max-w-[1200px]">
+      {/* P19.13-T1 AC-2 (UI-192): the frame's width from 1024px; the 1200px cap below it draws nothing, kept for the phone's markup. */}
+      <div className="max-w-[1200px] lg:max-w-none">
         {error && <ErrorBanner {...error} />}
         {!frame && !error && <SkeletonCards count={2} label={t.loading} />}
         {frame && (

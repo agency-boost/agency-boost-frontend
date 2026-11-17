@@ -495,7 +495,7 @@ describe('screens have no axe violations', () => {
   // *Changed 2026-11-06 (P19.2-T2 AC-3; UI-133):* no form until *+* is pressed — the list, then its add sheet open.
   it('companies, the list and then the add sheet open', async () => {
     atWidth(1280);
-    stubFetch({ '/admin/companies': { body: [COMPANY] } });
+    stubFetch({ '/admin/companies': { body: [COMPANY] }, '/product-data/intakes': { body: { aiReading: true, intakes: [] } } });
     renderInLayout(AdminLayout, <CompaniesPage />, { me: SUPER_ADMIN });
     await screen.findByRole('table');
     await expectClean('admin/companies');
@@ -3642,8 +3642,9 @@ describe('screens have no axe violations', () => {
       nav.pathname = '/training/PRODUCT';
       stubFetch(SHELL);
       renderInLayout(AgentLayout, list('PRODUCT'), { me: TRAINING_LEARNER });
-      // The heading is the nav item's words (P18.7-T9 AC-2); the empty card keeps the category's own title.
-      await screen.findByRole('heading', { level: 1, name: 'Training Modules' });
+      // The heading is the nav item's words (P18.7-T9 AC-2; *Training* since P19.13-T4, UI-197); the empty card keeps the
+      // category's own title.
+      await screen.findByRole('heading', { level: 1, name: 'Training' });
       expect(screen.getByText('Product Training')).toBeInTheDocument();
       await expectClean('training/[categoryCode] (empty)');
     });
@@ -7506,6 +7507,7 @@ describe('P18.10-T6 the company templates in Indonesian', () => {
           { ...COMPANY, _id: 'co-lib', name: 'Template', slug: 'template', usesPlatformDefaults: true, kind: 'template' },
         ],
       },
+      '/product-data/intakes': { body: { aiReading: true, intakes: [] } },
     });
     inIndonesian('/admin/companies', <CompaniesPage />);
     const table = await screen.findByRole('table', { name: 'Perusahaan' });

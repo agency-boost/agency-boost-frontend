@@ -136,8 +136,11 @@ describe('P12-T2 — my calendar, week view', () => {
     // UI V1 (UI-004; D-20): Home · Activity · Calendar · Unit Dashboard · Search agent.
     const items = [...link.closest('ul')!.querySelectorAll('a')].map((a) => a.textContent?.trim());
     expect(items.slice(0, 3)).toEqual(['Home', 'Activity', 'Calendar']);
-    const eventList = screen.getByText('Event', { selector: 'a *, a' }).closest('a')!;
-    expect(link.querySelector('svg')!.innerHTML).not.toBe(eventList.querySelector('svg')!.innerHTML);
+    // A group's rows carry their words alone since P19.13-T2 (UI-196): *Event*'s glyph is the rail's, collapsed.
+    const own = link.querySelector('svg')!.innerHTML;
+    await userEvent.click(screen.getByRole('button', { name: 'Collapse the sidebar' }));
+    const eventList = screen.getByRole('link', { name: 'Event' });
+    expect(own).not.toBe(eventList.querySelector('svg')!.innerHTML);
   });
 
   it('P12-T2 AC-2 draws the page verbatim: title, toolbar, legend, the Monday-first week and its hours', async () => {

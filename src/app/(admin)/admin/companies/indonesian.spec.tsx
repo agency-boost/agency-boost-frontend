@@ -41,7 +41,7 @@ const LIBRARY = {
 };
 
 function mount(rows: unknown[], extra: Record<string, unknown> = {}) {
-  stubFetch({ '/admin/companies': { body: rows }, ...extra });
+  stubFetch({ '/admin/companies': { body: rows }, '/product-data/intakes': { body: { aiReading: true, intakes: [] } }, ...extra });
   renderWithSession(<InLanguage language="id"><AdminLayout><CompaniesPage /></AdminLayout></InLanguage>, { me: SUPER_ADMIN });
 }
 

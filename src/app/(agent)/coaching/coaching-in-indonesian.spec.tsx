@@ -128,7 +128,7 @@ describe('P18.10-T4 the coaching roster in Indonesian', () => {
     stubFetch({ ...SHELL, '/coaching/coachees': { body: ROSTER } });
     inIndonesian(<CoachingRosterPage />);
     await screen.findByRole('link', { name: 'Rina Wijaya' });
-    expect(screen.getByRole('heading', { level: 1, name: 'Coaching Session' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'Coaching' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 2, name: 'Semua orang yang Anda coaching' })).toBeInTheDocument();
     expect(screen.getByText('Terakhir di-coaching oleh').parentElement).toHaveTextContent('Nama1:1 terakhirTerakhir di-coaching olehStatus');
     expect(screen.getByRole('heading', { level: 3, name: /Agen langsung Anda/ })).toHaveTextContent('Agen langsung Anda· 2');
@@ -268,7 +268,7 @@ describe('P18.10-T4 a person and their session in Indonesian', () => {
     expect(within(tabs).getAllByRole('link').map((l) => l.textContent)).toEqual([
       'Coaching Session', 'Activity', 'Leads', 'Goal Setting', 'Personal Summary', 'Activation', 'Survei', 'Training', 'Capability mapping',
     ]);
-    expect(screen.getByRole('link', { name: '← Kembali ke Coaching Session' })).toHaveAttribute('href', '/coaching');
+    expect(screen.getByRole('link', { name: '← Kembali ke Coaching' })).toHaveAttribute('href', '/coaching');
   });
 
   it('P18.10-T4 AC-1, UI-032 before it starts: the card, its tag, the past sessions as rows and Mulai sesi coaching', async () => {

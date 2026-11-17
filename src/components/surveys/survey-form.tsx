@@ -137,7 +137,8 @@ export function SurveyFormScreen({ runId }: { runId: string }) {
 
   const done = questions.filter((q) => answered(q, answers[q.kode])).length;
   return (
-    <div data-survey-form={form.run.runId} className="mx-auto max-w-[560px] pb-28">
+    // P19.13-T1 AC-2 (UI-192, UI-198): from 1024px a form at most 720px, on the frame's left edge, where it was 560px centred.
+    <div data-survey-form={form.run.runId} className="mx-auto max-w-[560px] pb-28 lg:mx-0 lg:max-w-form">
       <div className="flex h-12 items-center justify-between">
         <button
           type="button"

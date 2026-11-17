@@ -475,7 +475,7 @@ function UnitSkeleton() {
   const t = useMessages(unitDashboardMessages).own;
   return (
     <Skeleton label={t.loading}>
-      <div className="grid grid-cols-2 gap-2 lg:grid-cols-4 lg:gap-3">
+      <div className="grid grid-cols-2 gap-2 lg:grid-cols-4 lg:gap-cards">
         {[0, 1, 2, 3].map((i) => (
           <div key={i} className="min-h-[90px] rounded-lg bg-card px-3 py-2.5">
             <SkeletonBar className="h-2.5 w-1/2" />

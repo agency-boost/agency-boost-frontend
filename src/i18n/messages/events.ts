@@ -29,7 +29,7 @@ type Scope = 'all_agents' | 'select_agents' | 'leaders' | 'select_leaders';
 
 const en = {
   /** The page (`:10413`): the nav item's words (§A.2), and its line. */
-  title: kept('Event List'),
+  title: kept('Event'),
   sub: 'Browse upcoming and past events from your KPM — join, and share feedback once they wrap up.',
   /** The filter (`:3426-3430`), named for a screen reader. */
   filterLabel: 'Show events',
@@ -112,7 +112,7 @@ const en = {
 };
 
 const id: MessagesOf<typeof en> = {
-  title: kept('Event List'),
+  title: kept('Event'),
   sub: `Lihat ${kept('event')} yang akan datang dan yang sudah lewat dari ${kept('KPM')} Anda — ikut, dan berikan ${kept('feedback')} setelah ${kept('event')} selesai.`,
   filterLabel: `Tampilkan ${kept('event')}`,
   filters: { all: 'Semua', upcoming: 'Akan datang', past: 'Sudah lewat' },

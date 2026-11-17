@@ -1,139 +1,110 @@
 'use client';
 
-import { useEffect, useId, useState } from 'react';
-import { Dialog } from '@/components/ui/dialog';
+import Link from 'next/link';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { ErrorBanner } from '@/components/ui/field';
 import { FLOATING_BAR_BUTTON, FLOATING_BAR_ROOM, FloatingBar } from '@/components/ui/floating-bar';
 import { LineIcon } from '@/components/ui/line-icon';
 import { Skeleton, SkeletonBar } from '@/components/ui/skeleton';
 import { useToast } from '@/components/ui/toast';
 import { useMessages } from '@/i18n/language-provider';
+import { leadsMessages } from '@/i18n/messages/leads';
 import { proposalMessages } from '@/i18n/messages/proposal';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import {
-  addProposalItem, PAY_FREQUENCIES, patchProposal, patchProposalItem, PROPOSAL_CHANNELS, PROPOSAL_ITEMS_MAX,
-  proposalCatalog, removeProposalItem, type CatalogProduct, type PayFrequency, type ProposalCatalog,
-  type ProposalChannel, type ProposalItemPatch,
+  addProposalItem, patchProposalItem, PROPOSAL_ITEMS_MAX, proposalCatalog, proposalHref, removeProposalItem,
+  type CatalogProduct, type ProposalCatalog, type ProposalItemPatch,
 } from '@/lib/proposals';
 import { CHIP, CHIP_OFF, CHIP_ON, ItemPanel } from './item-panel';
-import { CategoryIcon, SaveLine, StepHeading } from './proposal-frame';
+import { SaveLine, StepHeading } from './proposal-frame';
 import type { ProposalEditor } from './use-proposal';
 
 /**
- * **Step 2, *Pilih produk*** (AC-5 to AC-9; Acc. 7, 10–14, 17, 21; ADR-0221 §3, §9; ADR-0225 §7).
+ * **Step 2, *Produk*** (P19.14-T2 AC-1 to AC-6; ADR-0255; the 11 Nov spec's *Step 2*). **No proposal-wide settings**: no
+ * *Konvensional / Syariah* switch — a syariah product is a product of its own — and no proposal-wide *Cara bayar*.
  *
- * - **Two settings, once per proposal**: *Konvensional / Syariah*, two large buttons, and *Cara bayar*, four chips,
- *   *Bulanan* first. A change of channel that would leave an added product outside it asks first — *"{n} produk tidak
- *   tersedia untuk pilihan ini dan akan dihapus."* — and the server takes those out in the same write. A change of *Cara
- *   bayar* empties every premium (*"Cara bayar diubah — isi lagi preminya."*): a monthly figure is not an annual one.
- * - **The cards** are the products the server offers for this channel and this client's age (`GET /proposals/catalog`):
- *   large, with the category's icon, the type label and the name. A tap adds one and a tick shows it; a tap on a ticked
- *   card opens its panel. A sixth cannot be added. With nothing to offer: *"Belum ada produk — minta Owner
- *   menambahkannya"*, never an error.
- * - **Every change is saved** through the editor's queue, pinned; *Lanjut* goes on to the PDF.
+ * - **The client's line** at the top — *"✓ Pak Budi · 35 th · Laki-laki · ada di Leads"* — taps back to step 1.
+ * - **A search box and chips by category** (*Semua* and each product's type label), then the products as chips: a tap
+ *   adds a card, a second tap removes it. **A product the client's age cannot enter is greyed** with *"Usia 35 di luar
+ *   batas (21–70)"* and cannot be added (the server's `outOfAge`). A sixth cannot be added. With nothing to offer:
+ *   *"Belum ada produk — minta Owner menambahkannya"*, never an error.
+ * - **The cards** (`ItemPanel`) under the list, each with its own *Tertanggung*, fields, pay term, *Cara bayar* and
+ *   amounts; every change saved through the editor's queue, pinned.
+ * - ***Lihat proposal***, the floating pill, opens the result — the PDF — once a product has a premium.
  */
 export function ProductsStep({ editor, readOnly, onNext }: { editor: ProposalEditor; readOnly: boolean; onNext: () => void }) {
   const t = useMessages(proposalMessages);
+  const genders = useMessages(leadsMessages).sheet.genders;
   const { show } = useToast();
   const uid = useId();
   const proposal = editor.proposal!;
   const [catalog, setCatalog] = useState<ProposalCatalog | null>(null);
   const [catalogError, setCatalogError] = useState<ApiError | null>(null);
-  const [open, setOpen] = useState<string | null>(proposal.items.at(-1)?.itemId ?? null);
-  const [asking, setAsking] = useState<{ n: number; apply: () => void } | null>(null);
+  const [term, setTerm] = useState('');
+  const [category, setCategory] = useState<string | null>(null);
+  const clientAge = proposal.client.age;
 
   useEffect(() => {
     let live = true;
     setCatalog(null);
     setCatalogError(null);
-    proposalCatalog(proposal.channel, proposal.client.age)
+    proposalCatalog(clientAge)
       .then((next) => { if (live) setCatalog(next); })
       .catch((err) => { if (live) setCatalogError(toDisplayError(err)); });
     return () => { live = false; };
-  }, [proposal.channel, proposal.client.age]);
+  }, [clientAge]);
 
   const offered = (productId: string): CatalogProduct | null =>
     catalog?.products.find((p) => p.productId === productId) ?? null;
   const added = (productId: string) => proposal.items.find((i) => i.productId === productId) ?? null;
   const full = proposal.items.length >= PROPOSAL_ITEMS_MAX;
 
-  const changeChannel = async (next: ProposalChannel) => {
-    if (next === proposal.channel || readOnly) return;
-    const apply = () => { void editor.write((v) => patchProposal(proposal.id, v, { channel: next })); };
-    if (proposal.items.length === 0) { apply(); return; }
-    try {
-      const then = await proposalCatalog(next, proposal.client.age);
-      const unfit = proposal.items.filter((i) => !then.products.some((p) => p.productId === i.productId)).length;
-      if (unfit > 0) setAsking({ n: unfit, apply });
-      else apply();
-    } catch (err) {
-      setCatalogError(toDisplayError(err));
-    }
-  };
-
-  const changePay = async (next: PayFrequency) => {
-    if (next === proposal.payFrequency || readOnly) return;
-    const hadPremium = proposal.items.some((i) => i.premium.amountMinor !== null);
-    const answer = await editor.write((v) => patchProposal(proposal.id, v, { payFrequency: next }));
-    if (answer && hadPremium) show(t.products.payChanged);
-  };
+  const categories = useMemo(
+    () => [...new Set((catalog?.products ?? []).map((p) => p.typeLabel))],
+    [catalog],
+  );
+  const needle = term.trim().toLowerCase();
+  const shown = (catalog?.products ?? []).filter((p) =>
+    (category === null || p.typeLabel === category) && (needle === '' || p.name.toLowerCase().includes(needle)));
 
   const tap = async (product: CatalogProduct) => {
+    if (readOnly) return;
     const item = added(product.productId);
-    if (item) { setOpen(item.itemId); return; }
-    if (full || readOnly) return;
-    const answer = await editor.write((v) => addProposalItem(proposal.id, v, product.productId));
-    const last = answer?.items.at(-1);
-    if (last) setOpen(last.itemId);
+    if (item) { void editor.write((v) => removeProposalItem(proposal.id, item.itemId, v)); return; }
+    if (full || product.outOfAge) return;
+    await editor.write((v) => addProposalItem(proposal.id, v, product.productId));
   };
 
   const patchItem = (itemId: string) => (body: ProposalItemPatch) => {
-    void editor.write((v) => patchProposalItem(proposal.id, itemId, v, body));
+    const before = proposal.items.find((i) => i.itemId === itemId);
+    void editor.write((v) => patchProposalItem(proposal.id, itemId, v, body)).then((answer) => {
+      // A change of *Cara bayar* empties that card's premium (ADR-0255 §2): say so, once.
+      if (answer && body.payFrequency && before?.premium) show(t.panel.payChanged);
+    });
   };
-  const remove = (itemId: string) => {
-    void editor.write((v) => removeProposalItem(proposal.id, itemId, v));
-    if (open === itemId) setOpen(null);
-  };
+  const remove = (itemId: string) => { void editor.write((v) => removeProposalItem(proposal.id, itemId, v)); };
 
+  const ready = proposal.items.some((i) => i.premium !== null && i.premium.amountMinor > 0);
   const fullId = `${uid}-full`;
+  const waitId = `${uid}-wait`;
+  const gender = proposal.client.gender ? genders[proposal.client.gender] : '';
   return (
     <div className={FLOATING_BAR_ROOM}>
       <StepHeading>{t.products.heading}</StepHeading>
 
-      <div data-proposal-settings="" className="mb-4 flex flex-col gap-4 rounded-lg bg-card p-4">
-        <div role="group" aria-label={t.products.channelLabel} className="grid grid-cols-2 gap-2">
-          {PROPOSAL_CHANNELS.map((c) => (
-            <button
-              key={c}
-              type="button"
-              aria-pressed={proposal.channel === c}
-              disabled={readOnly}
-              onClick={() => { void changeChannel(c); }}
-              className={cn(CHIP, 'min-h-14 text-lg', proposal.channel === c ? CHIP_ON : CHIP_OFF)}
-            >
-              {t.products.channels[c]}
-            </button>
-          ))}
-        </div>
-        <div>
-          <p id={`${uid}-pay`} className="mb-2 text-sm font-semibold text-navy">{t.products.payLabel}</p>
-          <div role="group" aria-labelledby={`${uid}-pay`} className="flex flex-wrap gap-2">
-            {PAY_FREQUENCIES.map((f) => (
-              <button
-                key={f}
-                type="button"
-                aria-pressed={proposal.payFrequency === f}
-                disabled={readOnly}
-                onClick={() => { void changePay(f); }}
-                className={cn(CHIP, proposal.payFrequency === f ? CHIP_ON : CHIP_OFF)}
-              >
-                {t.products.pay[f]}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
+      <Link
+        href={proposalHref(proposal.id, 1)}
+        data-client-line=""
+        title={t.products.clientLineHint}
+        className="mb-4 flex min-h-12 items-center gap-2 rounded-lg bg-card px-4 py-2 text-md font-semibold text-navy hover:bg-secondary/[0.06]"
+      >
+        <span className="min-w-0 flex-1">
+          {t.products.clientLine({ name: proposal.client.name, age: clientAge ?? 0, gender })}
+        </span>
+        <LineIcon name="pencil" className="h-4 w-4 shrink-0 text-muted" />
+        <span className="sr-only">{t.products.clientLineHint}</span>
+      </Link>
 
       <SaveLine save={editor.save} conflict={editor.conflict} onRetry={editor.retry} />
       {editor.refusal && <div className="mb-3"><ErrorBanner {...editor.refusal} /></div>}
@@ -141,10 +112,8 @@ export function ProductsStep({ editor, readOnly, onNext }: { editor: ProposalEdi
 
       {!catalog && !catalogError && (
         <Skeleton label={t.products.loading}>
-          <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
-            {[0, 1, 2, 3].map((i) => (
-              <div key={i} className="rounded-lg bg-card p-4"><SkeletonBar className="w-2/3" /><SkeletonBar className="mt-2 w-1/2" /></div>
-            ))}
+          <div className="flex flex-wrap gap-2">
+            {[0, 1, 2, 3].map((i) => <div key={i} className="h-12 w-32 rounded-pill bg-card"><SkeletonBar className="w-2/3" /></div>)}
           </div>
         </Skeleton>
       )}
@@ -152,33 +121,63 @@ export function ProductsStep({ editor, readOnly, onNext }: { editor: ProposalEdi
         <p data-no-products="" className="rounded-lg bg-card px-4 py-8 text-center text-md text-muted">{t.products.noProducts}</p>
       )}
       {catalog && catalog.products.length > 0 && (
-        <>
-          {full && <p id={fullId} className="mb-2 text-sm text-muted">{t.products.full({ max: PROPOSAL_ITEMS_MAX })}</p>}
-          <ul aria-label={t.products.cardsLabel} className="mb-4 grid grid-cols-2 gap-2 md:grid-cols-3">
-            {catalog.products.map((product) => {
+        <div className="mb-4 flex flex-col gap-3">
+          <div className="relative">
+            <LineIcon name="search" className="pointer-events-none absolute left-4 top-1/2 h-[1.125rem] w-[1.125rem] -translate-y-1/2 text-signal-grey" />
+            <input
+              type="search"
+              aria-label={t.products.searchName}
+              placeholder={t.products.searchPlaceholder}
+              value={term}
+              onChange={(e) => setTerm(e.target.value)}
+              className="h-12 w-full rounded-pill border-0 bg-card pl-11 pr-4 text-md text-ink"
+            />
+          </div>
+          {categories.length > 1 && (
+            <div role="group" aria-label={t.products.categoriesLabel} className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+              {[null, ...categories].map((c) => (
+                <button
+                  key={c ?? 'all'}
+                  type="button"
+                  aria-pressed={category === c}
+                  onClick={() => setCategory(c)}
+                  className={cn(CHIP, 'shrink-0 whitespace-nowrap', category === c ? CHIP_ON : CHIP_OFF)}
+                >
+                  {c === null ? t.products.all : c}
+                </button>
+              ))}
+            </div>
+          )}
+          {full && <p id={fullId} className="text-sm text-muted">{t.products.full({ max: PROPOSAL_ITEMS_MAX })}</p>}
+          {shown.length === 0 && <p className="px-1 py-4 text-center text-md text-muted">{t.products.noMatch({ term: term.trim() })}</p>}
+          <ul aria-label={t.products.cardsLabel} className="flex flex-wrap gap-2">
+            {shown.map((product) => {
               const on = added(product.productId) !== null;
+              const blocked = !on && (product.outOfAge || full);
+              const reasonId = `${uid}-${product.productId}-age`;
               return (
-                <li key={product.productId} className="min-w-0">
+                <li key={product.productId} className="min-w-0 max-w-full">
                   <button
                     type="button"
-                    data-product-card={product.code}
+                    data-product-chip={product.code}
                     aria-pressed={on}
-                    aria-describedby={!on && full ? fullId : undefined}
-                    disabled={readOnly || (!on && full)}
+                    aria-describedby={product.outOfAge && !on ? reasonId : !on && full ? fullId : undefined}
+                    disabled={readOnly || blocked}
                     onClick={() => { void tap(product); }}
                     className={cn(
-                      'relative flex min-h-[7.5rem] w-full flex-col items-start gap-2 rounded-lg border-[1.5px] bg-card p-3 text-left',
-                      'disabled:cursor-not-allowed disabled:opacity-40',
-                      on ? 'border-secondary' : 'border-transparent hover:border-hairline',
+                      'flex min-h-12 max-w-full flex-col items-start justify-center rounded-lg px-4 py-2 text-left',
+                      'disabled:cursor-not-allowed disabled:opacity-50',
+                      on ? CHIP_ON : CHIP_OFF,
                     )}
                   >
-                    <CategoryIcon category={product.category} />
-                    <span className="text-xs font-bold uppercase tracking-wide text-muted">{product.typeLabel}</span>
-                    <span className="text-md font-bold leading-snug text-ink">{product.name}</span>
-                    {on && (
-                      <span className="absolute right-2.5 top-2.5 flex h-6 w-6 items-center justify-center rounded-full bg-secondary text-secondary-contrast">
-                        <LineIcon name="check" className="h-4 w-4" />
-                        <span className="sr-only">{t.products.added}</span>
+                    <span className="flex items-center gap-1.5 text-md font-semibold">
+                      {on && <LineIcon name="check" className="h-4 w-4 shrink-0" />}
+                      {product.name}
+                      {on && <span className="sr-only">, {t.products.added}</span>}
+                    </span>
+                    {product.outOfAge && product.entryAge && clientAge !== null && (
+                      <span id={reasonId} className="text-sm font-normal">
+                        {t.products.outOfAge({ age: clientAge, min: product.entryAge.min, max: product.entryAge.max })}
                       </span>
                     )}
                   </button>
@@ -186,7 +185,7 @@ export function ProductsStep({ editor, readOnly, onNext }: { editor: ProposalEdi
               );
             })}
           </ul>
-        </>
+        </div>
       )}
 
       <div className="flex flex-col gap-2.5">
@@ -196,9 +195,7 @@ export function ProductsStep({ editor, readOnly, onNext }: { editor: ProposalEdi
             proposal={proposal}
             item={item}
             offered={offered(item.productId)}
-            open={open === item.itemId}
             readOnly={readOnly}
-            onToggle={() => setOpen(open === item.itemId ? null : item.itemId)}
             onPatch={patchItem(item.itemId)}
             onRemove={() => remove(item.itemId)}
           />
@@ -206,19 +203,17 @@ export function ProductsStep({ editor, readOnly, onNext }: { editor: ProposalEdi
       </div>
 
       <FloatingBar wide="pill" pillClassName="justify-end">
-        <button type="button" className={cn(FLOATING_BAR_BUTTON, 'min-h-12 flex-1')} onClick={onNext}>
-          {t.next}
+        <button
+          type="button"
+          className={cn(FLOATING_BAR_BUTTON, 'min-h-12 flex-1')}
+          disabled={!ready}
+          aria-describedby={!ready ? waitId : undefined}
+          onClick={onNext}
+        >
+          {t.products.seeProposal}
         </button>
+        {!ready && <span id={waitId} className="sr-only">{t.products.seeProposalWait}</span>}
       </FloatingBar>
-
-      <Dialog
-        open={asking !== null}
-        message={asking ? t.products.willRemove({ n: asking.n }) : ''}
-        confirmLabel={t.products.continue}
-        cancelLabel={t.products.cancel}
-        onConfirm={() => { asking?.apply(); setAsking(null); }}
-        onCancel={() => setAsking(null)}
-      />
     </div>
   );
 }

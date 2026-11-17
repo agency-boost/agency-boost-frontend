@@ -93,6 +93,13 @@ export interface Me {
   /** What this person may do *right now* — resolved server-side on every request. */
   permissions: string[];
   /**
+   * **The insurers their *Kelola data produk* ticks** (P19.15-T4 AC-2; ADR-0260 §5): non-empty only for an active KPM
+   * Owner or KPM Admin holding a live grant — the office menu's *Data produk*. Resolved on every request, so a removed
+   * grant leaves the menu at the next session read. The API always sends it; optional so a fixture that is about
+   * something else need not — absent reads as none.
+   */
+  productDataCompanyIds?: string[];
+  /**
    * The reader's own 90-day activation, for the *New agent* section (P13-T7 AC-5): `null` when they
    * have none, `open` false once it is graduated or expired (OD-28, OD-120), `complete` at 100% — the
    * nav's amber check. Served with the session, so no page reads it again.

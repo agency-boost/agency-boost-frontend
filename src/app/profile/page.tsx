@@ -99,7 +99,8 @@ function ProfileContent() {
   const { toast, show } = useToast();
   return (
     <>
-      <div className={cn('mx-auto flex w-full max-w-[560px] flex-col', FLOATING_SAVE_ROOM)} data-profile="">
+      {/* P19.13-T1 AC-2 (UI-192, UI-198): from 1024px a form at most 720px on the frame's left edge, where it was 560px centred. */}
+      <div className={cn('mx-auto flex w-full max-w-[560px] flex-col lg:mx-0 lg:max-w-form', FLOATING_SAVE_ROOM)} data-profile="">
         <ProfileBody say={show} />
         <button
           type="button"

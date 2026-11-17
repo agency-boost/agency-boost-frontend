@@ -122,7 +122,7 @@ export default function AdminsPage() {
 
   return (
     <Page
-      title={kept('Manage KPM Admins')}
+      title={kept('Manage KPM admins')}
       subtitle={t.subtitle}
       permission="kpm_admin:grant"
     >

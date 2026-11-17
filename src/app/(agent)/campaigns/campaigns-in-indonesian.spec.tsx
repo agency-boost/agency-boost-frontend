@@ -66,7 +66,7 @@ describe('P18.10-T4 the Campaign List in Indonesian', () => {
   it('P18.10-T4 AC-1 to AC-4 the seasonal view: tabs, sections, a card’s tag, Hadiah and Syarat (no filter since P19.1-T5)', async () => {
     list();
     await screen.findByRole('region', { name: 'Berjalan' });
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Campaign List$/);
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Campaign$/);
     expect(screen.getByText('Campaign perusahaan dan KPM — tandai yang Anda kejar, ketuk kartu mana pun untuk melihat syarat lengkapnya.'))
       .toBeInTheDocument();
     const tabs = screen.getByRole('tablist', { name: 'Jenis campaign' });

@@ -231,7 +231,7 @@ const en = {
     columns: { who: 'Who', office: 'Office', access: 'Access', granted: 'Granted' },
     caption: 'Office administrators',
     empty: 'No office has an administrator yet.',
-    line: 'Granting and revoking happen inside the office, by its Owner. This is a view, not a control.',
+    line: 'Admin access is granted and revoked inside the office, by its Owner. The button on each row gives Manage product data.',
     owner: kept('Owner'),
     admin: kept('Admin'),
     /** An Owner's rights came with the office, not from a grant: no date. */
@@ -408,7 +408,7 @@ const id: MessagesOf<typeof en> = {
     columns: { who: 'Siapa', office: kept('KPM'), access: 'Akses', granted: 'Diberikan' },
     caption: `Pengelola ${kept('KPM')}`,
     empty: `Belum ada ${kept('KPM')} yang memiliki pengelola.`,
-    line: `Pemberian dan pencabutan akses dilakukan di dalam ${kept('KPM')}, oleh ${kept('Owner')}-nya. Ini hanya tampilan, bukan kontrol.`,
+    line: `Akses ${kept('Admin')} diberikan dan dicabut di dalam ${kept('KPM')}, oleh ${kept('Owner')}-nya. Tombol di tiap baris memberikan Kelola data produk.`,
     owner: kept('Owner'),
     admin: kept('Admin'),
     withOffice: `Melekat pada ${kept('KPM')}`,

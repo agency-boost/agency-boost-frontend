@@ -228,13 +228,13 @@ describe('/coaching/me, the reader’s own coaching (P11-T10 AC-4)', () => {
 
   it('P11-T10 AC-4 offers a leader the way back to the roster, and an Agent, who leads nobody, none', async () => {
     show();
-    expect(await screen.findByRole('link', { name: '← Back to Coaching Session' })).toHaveAttribute('href', '/coaching');
+    expect(await screen.findByRole('link', { name: '← Back to Coaching' })).toHaveAttribute('href', '/coaching');
     vi.unstubAllGlobals();
     document.body.innerHTML = '';
 
     show({}, AGENT);
     expect(await screen.findByText('Agent · Your own coaching')).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: '← Back to Coaching Session' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: '← Back to Coaching' })).not.toBeInTheDocument();
   });
 
   it('shows a failed read of the sessions, and of the session', async () => {

@@ -142,20 +142,21 @@ export function KpmOverview() {
                 onAllSettings={() => setSheet('settings')}
               />
             )}
-            <div data-overview="tiles" className="grid grid-cols-2 gap-2 lg:grid-cols-4 lg:gap-3">
+            {/* P19.13-T1 AC-4 (UI-194): from 1024px 16px between cards and 24px between the sections. */}
+            <div data-overview="tiles" className="grid grid-cols-2 gap-2 lg:grid-cols-4 lg:gap-cards">
               <TeamTile composition={view.composition} />
               <ActiveMonthTile engagement={view.engagement} onOpenSilent={openSilent} />
               <Coached7Tile coaching={view.coaching} />
               <ProductionTile production={view.production} />
             </div>
             {(coachingRanked || unitsRanked || silentCard) && (
-              <div data-overview="lists" className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-3 lg:items-start">
+              <div data-overview="lists" className="mt-3 grid grid-cols-1 gap-3 lg:mt-section lg:grid-cols-3 lg:items-start lg:gap-cards">
                 {coachingRanked && <CoachingList coaching={view.coaching} />}
                 {unitsRanked && <UnitsList production={view.production} />}
                 {silentCard && <NotLoggedCard silent={silent} of={headcount} headingRef={silentHeading} className="max-lg:hidden" />}
               </div>
             )}
-            <div data-overview="cards" className="mt-3 grid grid-cols-1 gap-2 lg:grid-cols-2 lg:items-start lg:gap-3">
+            <div data-overview="cards" className="mt-3 grid grid-cols-1 gap-2 lg:mt-section lg:grid-cols-2 lg:items-start lg:gap-cards">
               {!view.setup && (
                 <Recruitment
                   recruitment={view.recruitment}

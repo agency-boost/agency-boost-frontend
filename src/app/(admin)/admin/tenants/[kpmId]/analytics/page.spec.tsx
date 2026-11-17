@@ -28,7 +28,8 @@ const SHELL = {
 const SUBGROUP = {
   month: '2026-11', thresholds: { okPct: 80, powerUserDays: 10, powerUserWindow: 30 }, canWrite: false,
   rows: [{
-    head: { membershipId: 'ab-1', name: 'Agus Prasetyo' }, manpower: 12, leaders: 3,
+    group: { groupId: 'g-1', name: 'Top Producers 2026' }, head: { membershipId: 'ab-1', name: 'Agus Prasetyo' },
+    manpower: 12, leaders: 3,
     maa: { baseline: 4.5, lastMonth: 5, mtd: 3, asOf: null }, targets: { aa: 3, rec: 6, isDefault: true },
     adoption: { headDays: 18, downlinePct: 64 }, powerUsers: 4, oneOnOnesPerWeek: 1.8, weeklyActivityTarget: 6,
     recruitment: { baseline: 9, ytd: 5, missingMonths: [] }, attainment: { aaPct: 100, aaOk: true, recPct: 83, recOk: true },
@@ -49,7 +50,9 @@ describe('P19.5-T3 AC-12 the Super Admin’s Advanced analytics tab', () => {
       'GET /admin/tenants/kpm-9': { body: { id: 'kpm-9', code: '0417', branchName: 'BSD' } },
     });
     const { container } = renderInIndonesian(<LookAsKpmPage params={routeParams({ kpmId: 'kpm-9' })} />, { me: SUPER_ADMIN });
-    expect(await screen.findByText('Agus Prasetyo')).toBeInTheDocument();
+    // Rows are the KPM's informal groups with their ★ (P19.13-T3 AC-6).
+    expect(await screen.findByText('Top Producers 2026')).toBeInTheDocument();
+    expect(screen.getByText('★ Agus Prasetyo')).toBeInTheDocument();
     const outer = screen.getByRole('navigation', { name: 'Analitik KPM' });
     expect(within(outer).getByRole('link', { name: 'Advanced analytics' })).toHaveAttribute('aria-current', 'page');
     const inner = within(screen.getByRole('navigation', { name: 'Bagian Advanced analytics' })).getAllByRole('link');

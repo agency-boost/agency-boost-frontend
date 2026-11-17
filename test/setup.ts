@@ -84,6 +84,15 @@ afterEach(() => {
   } catch {
     // No storage, nothing kept.
   }
+  /*
+   * **The sidebar's opened groups stay with the test that opened them** (P19.13-T2 AC-5; UI-196): a heading the reader
+   * opens is remembered for the tab's session, in `sessionStorage`, so the next test would start with it open.
+   */
+  try {
+    window.sessionStorage.removeItem('ab.sidebar.open');
+  } catch {
+    // No storage, nothing kept.
+  }
 });
 
 /**

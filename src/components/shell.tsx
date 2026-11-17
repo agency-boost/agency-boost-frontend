@@ -16,6 +16,7 @@ import { displayName } from '@/lib/display-name';
 import { adminNav, fieldNav, isUnder, type FieldDestination } from '@/lib/field-nav';
 import { needsKpmHere } from '@/lib/no-kpm';
 import { panduanHref } from '@/lib/panduan';
+import { APP_NAME } from '@/lib/pwa';
 import { profileLine } from '@/lib/profile-line';
 import { FAMILY_GATES, type ShellFamily } from '@/lib/route-access';
 import { LINK_SIGN_IN_REQUIRED, switchLogin } from '@/lib/account-links';
@@ -138,7 +139,7 @@ function Chrome({
    * are one model's, so the sheet and the sidebar have the same groups, order and members. Who sees what is the role and
    * the view, never the data (ADR-0189 §1) — and the nav decides what is offered, never what is allowed.
    */
-  const nav = superAdmin ? adminNav(pathname, t.admin, { leaderLimitPending }) : fieldNav(me, pathname, active, { surveys: t.surveys, branding: t.branding });
+  const nav = superAdmin ? adminNav(pathname, t.admin, { leaderLimitPending }) : fieldNav(me, pathname, active, { surveys: t.surveys, branding: t.branding, productData: t.productData });
 
   /**
    * A destination as the sidebar draws it: its full name (D-20, *desktop has room*), *Segera hadir* for one with no
@@ -157,16 +158,32 @@ function Chrome({
 
   /*
    * **The sidebar, grouped as the sheet** (UI-004; D-20): a first section with no heading, then the groups, their headings
-   * 12px grey in sentence case. A line between every two groups, as before (parity I-144).
+   * in sentence case.
+   *
+   * *Changed 2026-11-12 (P19.13-T2 AC-4, AC-5; UI-196, ADR-0252 §4):* the first section is **Home · Activity · Calendar ·
+   * Unit Dashboard** (`nav.top`), so a destination there is not listed again in its group — *Unit Dashboard* leaves *Tim
+   * saya* in the sidebar alone; the sheet keeps it. **One line, under the first section**: the groups' closed headings
+   * are their edges, where a line stood between every two groups (parity I-144).
    */
+  const onTop = new Set(nav.top.map((d) => d.id));
   const sections: readonly NavSection[] = [
     { label: null, divider: true, items: nav.top.map(item) },
-    ...nav.groups.map((group, i): NavSection => ({
+    ...nav.groups.map((group): NavSection => ({
       label: t.fieldGroups[group.id],
-      items: group.items.map(item),
-      ...(i < nav.groups.length - 1 ? { divider: true } : {}),
+      items: group.items.filter((d) => !onTop.has(d.id)).map(item),
     })),
   ];
+
+  /*
+   * **The browser's tab says the page's menu name** (P19.13-T4 AC-1; UI-197: *browser tab titles follow the same names*):
+   * the name of the menu item the reader is on — the label the sidebar, the tab bar or the sheet gives it, which a page's
+   * title now equals — then *AgencyBoost*. A page no menu item holds (*Profil saya*, a notification) keeps the app's
+   * name alone. The root layout's metadata is the first paint's; the shell's pages are client pages and carry none.
+   */
+  const menuTitle = [...nav.top, ...nav.tabs, ...nav.groups.flatMap((g) => g.items)].find((d) => d.active)?.label;
+  useEffect(() => {
+    document.title = tabTitle(menuTitle);
+  }, [menuTitle]);
 
   /*
    * The rung's short form, from the company's ladder (P4-T9).
@@ -277,6 +294,8 @@ function Chrome({
       // `/admin` keeps its labelled sidebar from 1024px (UI-127, UI-128); every other view takes the rail to 1279px.
       labelledFrom1024={superAdmin}
       guideHref={guideHref}
+      // P19.13-T2 AC-3 (UI-196): the field under the logo, for a reader with the agent picker (a leader by role).
+      search={nav.search ? { label: nav.search.label, onSelect: () => setSearching(true) } : undefined}
       title={title}
       subtitle={subtitle}
       actions={actions}
@@ -306,6 +325,14 @@ function Chrome({
       )}
     </AppShell>
   );
+}
+
+/**
+ * **A browser tab's title** (P19.13-T4 AC-1; UI-197): *<menu name> · AgencyBoost* on a page a menu item holds, the app's
+ * name alone elsewhere — the root layout's own title.
+ */
+export function tabTitle(menuName: string | undefined): string {
+  return menuName ? `${menuName} · ${APP_NAME}` : APP_NAME;
 }
 
 /** The switcher's order, whichever login is active (ADR-0198 §3): *Akun saya* · the office entry · *Superadmin*. */

@@ -72,7 +72,8 @@ export function UnitTiles({ view, period }: { view: UnitDashboardView; period: U
   );
 
   return (
-    <div data-unit-tiles="" className="grid grid-cols-2 gap-2 lg:grid-cols-4 lg:gap-3">
+    // 16px between the tiles from 1024px (P19.13-T1 AC-4; UI-194: the Unit Dashboard's were 12px).
+    <div data-unit-tiles="" className="grid grid-cols-2 gap-2 lg:grid-cols-4 lg:gap-cards">
       <StatTile
         label={t.prototype.yourTeam}
         value={number(team.total)}

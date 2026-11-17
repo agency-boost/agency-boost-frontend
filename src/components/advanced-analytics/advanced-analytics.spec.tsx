@@ -24,7 +24,7 @@ const member = (over: Record<string, unknown>) => makeMe({
     isKpmOwner: false, isKpmAdmin: false, directCount: 3, ...over,
   } as never,
 });
-const OWNER: Me = member({ isKpmOwner: true });
+const OWNER: Me = { ...member({ isKpmOwner: true }), permissions: ['advanced_analytics:read', 'advanced_analytics:write', 'member:read_tags'] };
 const CORE_LEADER: Me = member({ isCoreLeader: true });
 
 const SHELL: Shell = {
@@ -91,12 +91,26 @@ const MAPA: Mapa = {
 const SUBGROUP: Subgroup = {
   month: '2026-11', thresholds: { okPct: 80, powerUserDays: 10, powerUserWindow: 30 }, canWrite: true,
   rows: [{
-    head: { membershipId: 'ab-1', name: 'Agus Prasetyo' }, manpower: 12, leaders: 3,
+    group: { groupId: 'g-1', name: 'TOP PRODUCERS' }, head: { membershipId: 'ab-1', name: 'Agus Prasetyo' }, manpower: 12, leaders: 3,
     maa: { baseline: 4.5, lastMonth: 5, mtd: 3, asOf: '2026-11-05' },
     targets: { aa: 3, rec: 6, isDefault: true }, adoption: { headDays: 18, downlinePct: 64 }, powerUsers: 4,
     oneOnOnesPerWeek: 1.8, weeklyActivityTarget: 6,
     recruitment: { baseline: 9, ytd: 5, missingMonths: ['2026-03'] },
     attainment: { aaPct: 100, aaOk: true, recPct: 83, recOk: true },
+  }, {
+    group: { groupId: 'g-2', name: 'LEADER MUDA' }, head: null, manpower: 4, leaders: 2,
+    maa: { baseline: null, lastMonth: 1, mtd: 1, asOf: '2026-11-05' },
+    targets: { aa: 4, rec: 9, isDefault: false }, adoption: { headDays: null, downlinePct: 50 }, powerUsers: 1,
+    oneOnOnesPerWeek: 0.5, weeklyActivityTarget: 8,
+    recruitment: { baseline: null, ytd: 1, missingMonths: [] },
+    attainment: { aaPct: 25, aaOk: false, recPct: 11, recOk: false },
+  }, {
+    group: null, head: null, manpower: 20, leaders: 4,
+    maa: { baseline: 2, lastMonth: 2, mtd: 2, asOf: '2026-11-05' },
+    targets: { aa: 12, rec: 24, isDefault: true }, adoption: { headDays: null, downlinePct: 40 }, powerUsers: 2,
+    oneOnOnesPerWeek: 1, weeklyActivityTarget: 24,
+    recruitment: { baseline: 3, ytd: 2, missingMonths: [] },
+    attainment: { aaPct: 17, aaOk: false, recPct: 8, recOk: false },
   }],
 };
 
@@ -221,24 +235,30 @@ describe('P19.5-T3 the KPM’s Advanced analytics page', () => {
     expect(quantText('B1', 50, 'id')).toBe('50%');
   });
 
-  it('P19.5-T3 AC-10 Sub-group: one row per head, the defaults named, Ubah target saves both', async () => {
-    const { calls } = show('subgroup', {
-      'GET /kpm/advanced-analytics/subgroup': { body: SUBGROUP },
-      'PUT /kpm/advanced-analytics/targets/subgroup/ab-1': { body: { headMembershipId: 'ab-1', aaTarget: 4, recTarget: 8 } },
-    });
-    const agus = await screen.findByText('Agus Prasetyo').then((el) => el.closest('tr')!);
-    expect(agus).toHaveTextContent('bawaan template');
-    expect(agus).toHaveTextContent('100% tercapai');
-    expect(agus.querySelector('[data-ytd="incomplete"]')).toBeTruthy();
-    await userEvent.click(within(agus).getByRole('button', { name: 'Ubah target' }));
-    const dialog = await screen.findByRole('dialog');
-    await userEvent.clear(within(dialog).getByLabelText('Target AA'));
-    await userEvent.type(within(dialog).getByLabelText('Target AA'), '4');
-    await userEvent.clear(within(dialog).getByLabelText('Target rekrutmen'));
-    await userEvent.type(within(dialog).getByLabelText('Target rekrutmen'), '8');
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Simpan' }));
-    await waitFor(() => expect(calls.find((c) => c.init.method === 'PUT')).toBeTruthy());
-    expect(JSON.parse(calls.find((c) => c.init.method === 'PUT')!.init.body as string)).toEqual({ aaTarget: 4, recTarget: 8 });
+  it('P19.13-T3 AC-6 Sub-group: one row per group with its ★, then Tidak ada group; Ubah target and Grouping open Core leaders & groups', async () => {
+    show('subgroup', { 'GET /kpm/advanced-analytics/subgroup': { body: SUBGROUP } });
+    const top = await screen.findByText('TOP PRODUCERS').then((el) => el.closest('tr')!);
+    expect(top).toHaveTextContent('★ Agus Prasetyo');
+    expect(top).toHaveTextContent('bawaan template');
+    expect(top).toHaveTextContent('100% tercapai');
+    expect(top).toHaveTextContent('Leader: 18 dari 30 hari');
+    expect(top.querySelector('[data-ytd="incomplete"]')).toBeTruthy();
+    expect(within(top).getByRole('link', { name: 'Ubah target' })).toHaveAttribute('href', '/people/core-leaders?group=g-1');
+    // A group with no ★ says so, and has no head's days.
+    const muda = screen.getByText('LEADER MUDA').closest('tr')!;
+    expect(muda).toHaveTextContent('Belum ada group leader');
+    expect(muda).not.toHaveTextContent('dari 30 hari');
+    const none = screen.getByText('Tidak ada group').closest('tr')!;
+    expect(within(none).getByRole('link', { name: 'Ubah target' })).toHaveAttribute('href', '/people/core-leaders?group=none');
+    expect(screen.getByRole('link', { name: 'Grouping ›' })).toHaveAttribute('href', '/people/core-leaders');
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('P19.13-T3 AC-6 a Core Leader reads Sub-group with no Grouping and no Ubah target: the page is the office’s', async () => {
+    show('subgroup', { 'GET /kpm/advanced-analytics/subgroup': { body: { ...SUBGROUP, canWrite: false } } }, CORE_LEADER);
+    await screen.findByText('TOP PRODUCERS');
+    expect(screen.queryByRole('link', { name: 'Grouping ›' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Ubah target' })).toBeNull();
   });
 
   it('P19.5-T3 AC-3 OWN Case 7 Event: the KPM’s score and each event, no name of anybody', async () => {
@@ -264,7 +284,7 @@ describe('P19.5-T3 the KPM’s Advanced analytics page', () => {
       'GET /kpm/advanced-analytics/subgroup': { body: SUBGROUP },
       'GET /kpm/advanced-analytics/events': { body: EVENTS },
     };
-    for (const [slug, text] of [['demographics', 'Gen Z 17–29'], ['quant', 'Rekrutmen per leader'], ['mapa', /^APE/], ['subgroup', 'Agus Prasetyo'], ['events', 'Town Hall Q3']] as const satisfies readonly (readonly [Parameters<typeof SectionBody>[0]['slug'], string | RegExp])[]) {
+    for (const [slug, text] of [['demographics', 'Gen Z 17–29'], ['quant', 'Rekrutmen per leader'], ['mapa', /^APE/], ['subgroup', 'TOP PRODUCERS'], ['events', 'Town Hall Q3']] as const satisfies readonly (readonly [Parameters<typeof SectionBody>[0]['slug'], string | RegExp])[]) {
       const { container, unmount } = show(slug, routes);
       await screen.findAllByText(text);
       expect((await axe(container, NO_CONTRAST)).violations).toEqual([]);

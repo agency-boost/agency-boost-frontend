@@ -11,6 +11,7 @@ import { isTemplateLibrary, listCompanies, type Company } from '@/lib/admin';
 import { companyHref, settingsHref } from '@/lib/template-sections';
 import { useMessages } from '@/i18n/language-provider';
 import { adminTemplateMessages } from '@/i18n/messages/admin-template';
+import { productDataMessages } from '@/i18n/messages/product-data';
 
 /**
  * **One company, as the console names it** (ADR-0185 §2): read from the companies list, the one route that has it — a
@@ -72,6 +73,8 @@ export function CompanyFrame({
   const t = useMessages(adminTemplateMessages).companyPage;
   const kpmData = useMessages(adminPlatformReadsMessages).kpmData.tab;
   const canSeeKpms = useCan('platform_kpm_figures:read');
+  const canSeeProposal = useCan('product_data:read');
+  const proposalTab = useMessages(productDataMessages).tab;
   const name = useCompanyName(company);
   return (
     // No sub-line (P19.2-T2 AC-7; UI-136, Appendix A's first row: page subtitles removed at every size).
@@ -96,6 +99,9 @@ export function CompanyFrame({
           // grant; the API refuses anybody else.
           ...(company && !isTemplateLibrary(company) && canSeeKpms
             ? [{ href: `/admin/companies/${companyId}/kpms`, label: kpmData }] : []),
+          // P19.15-T1, T4 AC-1 (ADR-0258 §8): *Proposal*, an insurer's proposal data — not the Template library's.
+          ...(company && !isTemplateLibrary(company) && canSeeProposal
+            ? [{ href: `/admin/companies/${companyId}/proposal`, label: proposalTab }] : []),
         ]}
       />
       {children}

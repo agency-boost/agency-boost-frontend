@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useState, type FormEvent } from 'react';
 import { Page } from '@/components/page';
+import { IntakeButton } from '@/components/proposal-data/intake-button';
 import { Cell, DataTable, Row } from '@/components/ui/data-table';
 import { Dialog } from '@/components/ui/dialog';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -205,6 +206,11 @@ export default function CompaniesPage() {
           <LineIcon name="chevronRight" className="h-5 w-5 shrink-0 text-navy" />
         </Link>
       )}
+
+      {/* P19.15-T3 (ADR-0259; the P1b spec §0): *Unggah file* for a file of any insurer — the files say which. */}
+      <div className="mb-4">
+        <IntakeButton companyId={null} canManage />
+      </div>
 
       {/* A failed write the open sheet does not show — a suspension, a reactivation — is said here. */}
       {error && !sheet && <ErrorBanner {...error} />}

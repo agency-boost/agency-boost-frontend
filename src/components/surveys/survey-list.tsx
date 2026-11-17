@@ -38,7 +38,8 @@ export function SurveyListScreen() {
   }
 
   return (
-    <div data-survey-list="" className="max-w-[640px] space-y-2.5">
+    // P19.13-T4 AC-3, T1 AC-2 (UI-192, UI-198): from 1024px the form/reading layout, at most 720px from the frame's left edge.
+    <div data-survey-list="" className="max-w-[640px] space-y-2.5 lg:max-w-form">
       {list.open.length === 0 ? (
         <div className="rounded-lg bg-card px-3.5 py-3">
           <b className="block text-md font-bold text-ink">{t.noneOpen}</b>

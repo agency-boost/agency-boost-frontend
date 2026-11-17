@@ -493,8 +493,10 @@ export default function MemberPage({ params }: { params: Promise<{ membershipId:
                       onChange={(e) =>
                         setDraft({
                           ...draft,
+                          // A leader has one group (P19.13-T3; ADR-0253 §1): ticking one replaces the other. An Agent
+                          // may carry several, as before.
                           groupIds: e.target.checked
-                            ? [...draft.groupIds, group.groupId]
+                            ? tags.canBeCoreLeader ? [group.groupId] : [...draft.groupIds, group.groupId]
                             : draft.groupIds.filter((id) => id !== group.groupId),
                         })
                       }

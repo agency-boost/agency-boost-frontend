@@ -31,14 +31,15 @@ async function offerShare(file: Blob, name: string): Promise<void> {
 }
 
 /**
- * **Step 3, *Lihat PDF*** (P19.7-T3 AC-1 to AC-3; Acc. 15, 19, 20; ADR-0222 §4, §5).
+ * **The result: the PDF** (P19.7-T3 AC-1 to AC-3; *since P19.14-T1 AC-1 the result, not a step*, `?step=pdf`; Acc. 15,
+ * 19, 20; ADR-0222 §4, §5).
  *
  * - **The pages are the file itself** (AC-1): `GET /proposals/:id/pdf`, fetched with the session and drawn by `pdf.js`.
  *   The step keeps that blob; *Simpan PDF* saves those very bytes and fetches nothing again.
  * - ***Simpan PDF***, the floating pill (AC-2): first `POST …/done` — refused, nothing is saved and the refusal says what
  *   is missing — then the blob saved as the proposal's `fileName`, then the share sheet where the phone has one.
- * - ***Ubah*** goes back to step 2. ***Tampilkan total premi*** is one switch, off by default: a change is saved first,
- *   and the pages are fetched again.
+ * - ***Ubah*** goes back to step 2. ***Tampilkan total*** is one switch, off by default: a change is saved first, and
+ *   the pages are fetched again. The PDF adds only items of one *Cara bayar* and one currency (ADR-0255 §7).
  * - **No send button, no WhatsApp, no link** (AC-3; decision 3): the only ways out are the phone's own save and share.
  * - **A view-only session** (the Super Admin's view-as, Acc. 22) draws no page: it says *"Pratinjau PDF tidak tersedia
  *   dalam sesi hanya melihat."*, and *Simpan PDF* is disabled with that reason. The server refuses the file too.
@@ -95,7 +96,7 @@ export function PdfStep({
   };
 
   const busy = saving || editor.save === 'saving';
-  const totalLabel = proposal.channel === 'syariah' ? t.showTotalSyariah : t.showTotal;
+  const totalLabel = t.showTotal;
   return (
     <section data-proposal-pdf={id} aria-labelledby="proposal-pdf" className={FLOATING_BAR_ROOM}>
       <StepHeading id="proposal-pdf">{t.heading}</StepHeading>

@@ -293,7 +293,8 @@ function PhoneGroups({ events, filter, timezone, can, busy, error, onOpen, onAns
           </h2>
           <ul
             className={wide
-              ? 'm-0 grid list-none grid-cols-[repeat(auto-fill,minmax(min(100%,340px),1fr))] items-start gap-2.5 p-0'
+              // 16px between cards from 1024px (P19.13-T1 AC-4; UI-194), 10px on a tablet as before.
+              ? 'm-0 grid list-none grid-cols-[repeat(auto-fill,minmax(min(100%,340px),1fr))] items-start gap-2.5 p-0 lg:gap-cards'
               : 'm-0 flex list-none flex-col gap-2 p-0'}
           >
             {group.items.map((event) => (

@@ -100,7 +100,7 @@ describe('P18.10-T4 All Members in Indonesian', () => {
   it('P18.10-T4 AC-1, AC-2 the directory: its title and tabs kept, its line, filter, columns and rows Indonesian', async () => {
     openMembers();
     const table = await screen.findByRole('table', { name: 'Roster KPM' });
-    expect(screen.getByRole('heading', { level: 1, name: 'All Members' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'All members' })).toBeInTheDocument();
     expect(screen.getByText('Direktori, permintaan yang menunggu, anggota yang dikeluarkan, dan riwayat peran')).toBeInTheDocument();
     for (const name of ['Directory (28)', 'Pending (2)', 'Removed (1)', 'Role change log', 'Groups']) {
       expect(screen.getByRole('button', { name })).toBeInTheDocument();
@@ -277,7 +277,7 @@ describe('P18.10-T4 All Members in Indonesian', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Groups' }));
     const table = await screen.findByRole('table', { name: 'Grup informal' });
     expect(screen.getByText('bukan').tagName).toBe('STRONG');
-    expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['Grup', 'Pemilik', 'Di-tag', 'Aksi']);
+    expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['Grup', 'Group leader', 'Di-tag', 'Aksi']);
     // The office's own name for it, typed in English, stays English.
     expect(within(table).getByText('Top Producers Circle')).toBeInTheDocument();
     expect(within(table).getByText('Sudah tidak di KPM ini — serahkan kepada orang lain')).toBeInTheDocument();
@@ -285,13 +285,14 @@ describe('P18.10-T4 All Members in Indonesian', () => {
 
     await userEvent.click(within(table).getByRole('button', { name: 'Nonaktifkan' }));
     expect(screen.getByRole('heading', { name: 'Nonaktifkan Top Producers Circle?' })).toBeInTheDocument();
-    expect(screen.getByText(/^Grup ini tidak lagi ditawarkan dan tidak lagi dihitung. Tidak ada yang dihapus: semua 2 orang/)).toBeInTheDocument();
+    // P19.13-T3 (ADR-0253 §3): its people become *Tanpa group*; Core leader tags stay.
+    expect(screen.getByText(/^Grup ini tidak lagi ditawarkan dan dihitung, dan semua 2 orang yang di-tag ke dalamnya jadi Tanpa group/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Nonaktifkan grup' })).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'Buat grup' }));
     expect(screen.getByLabelText('Nama grup')).toHaveAttribute('placeholder', 'Lingkar Mentoring Agen Baru');
-    expect(within(screen.getByLabelText('Pemilik')).getByRole('option', { name: 'Pilih seseorang' })).toBeInTheDocument();
-    expect(screen.getByText('Orang yang menjalankannya. Disimpan sebagai keanggotaannya, jadi mengganti namanya tidak mengubah apa pun.')).toBeInTheDocument();
+    expect(within(screen.getByLabelText('Group leader')).getByRole('option', { name: 'Belum ditunjuk' })).toBeInTheDocument();
+    expect(screen.getByText('Leader di group ini, ★-nya. Memilihnya memasukkan dia ke group ini.')).toBeInTheDocument();
     noEnglishLeft();
   });
 });
@@ -418,7 +419,7 @@ describe('P18.10-T4 Manage KPM Admins in Indonesian', () => {
     stubFetch({ '/members/admins': { body: [admin] }, '/members/tree': { body: OFFICE } });
     renderInIndonesian(<TenantLayout><AdminsPage /></TenantLayout>, { me: OWNER });
     const table = await screen.findByRole('table', { name: 'KPM Admins' });
-    expect(screen.getByRole('heading', { level: 1, name: 'Manage KPM Admins' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'Manage KPM admins' })).toBeInTheDocument();
     expect(screen.getByText('Para Admin dapat melakukan semuanya, kecuali mengelola admin.')).toBeInTheDocument();
     expect(within(screen.getByLabelText('Beri akses admin kepada')).getByRole('option', { name: 'Pilih seseorang' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Beri akses' })).toBeInTheDocument();
@@ -466,7 +467,7 @@ describe('P18.10-T4 Org Tree in Indonesian', () => {
     stubFetch({ '/members/tree': { body: OFFICE } });
     renderInIndonesian(<TenantLayout><OrgTreePage /></TenantLayout>, { me: OWNER });
     expect(await screen.findByText('Lapisan 1')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { level: 1, name: 'Org Tree' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'Org tree' })).toBeInTheDocument();
     expect(screen.getByText('Setiap AB di KPM ini beserta seluruh downline-nya')).toBeInTheDocument();
     expect(screen.getByText(/^2 orang tidak melapor kepada siapa pun\./)).toBeInTheDocument();
     expect(screen.getByText('2 di bawah Anda · 1 AB · 0 AAB · 1 Agent')).toBeInTheDocument();

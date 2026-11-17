@@ -283,6 +283,8 @@ export interface KpmRequestRow {
 
 export interface PlatformAdminRow {
   membershipId: string;
+  /** The person: what *Kelola data produk* is given to (ADR-0260 §4). */
+  userId: string;
   fullName: string;
   email: string;
   initials: string;
@@ -1261,15 +1263,67 @@ export interface Product {
   defaultInsured?: 'client' | 'child' | null;
   /** As stored: `null` reads the category's (*KESEHATAN* …). */
   proposalTypeLabel?: string | null;
+  /*
+   * **The catalogue's calculation fields** (P19.14-T2 AC-5; ADR-0255 §5): read only on the Super Admin's *Perhitungan*.
+   * Always sent since P19.14; optional here so an older answer reads as none set.
+   */
+  calcType?: ProposalCalcType;
+  entryAge?: ProductEntryAge | null;
+  payTerms?: ProductPayTerm[];
+  frequencies?: ProductPayFrequency[];
+  smokerRated?: boolean;
+  planRule?: ProductPlanRule | null;
+  upStep?: number | null;
+  upMin?: number | null;
+  upMax?: number | null;
+  premiumMin?: number | null;
+  premiumMax?: number | null;
+  rateTableId?: string | null;
+  needTag?: ProductNeedTag | null;
   sortOrder: number;
   version: number;
 }
 
+export type ProposalCalcType = 'up_premium' | 'goal' | 'premium_benefit' | 'plan_priced' | 'manual';
+export type ProductPayFrequency = 'monthly' | 'quarterly' | 'semiannual' | 'annual' | 'single';
+export type ProductNeedTag = 'HOSPITAL' | 'CRITICAL_INCOME' | 'FAMILY' | 'EDUCATION' | 'FUTURE';
+
+export interface ProductEntryAge {
+  min: number;
+  max: number;
+}
+
+/** One pay term (ADR-0255 §2): its years, the age it is paid to, or single; the oldest entry age it is offered at. */
+export interface ProductPayTerm {
+  key: string;
+  label: string;
+  years: number | null;
+  toAge: number | null;
+  single: boolean;
+  maxEntryAge: number | null;
+  default: boolean;
+}
+
+export interface ProductPlanRuleEntry {
+  when: Record<string, string>;
+  value: string;
+}
+
+/** How a `derived` field is worked out (ADR-0255 §3). */
+export interface ProductPlanRule {
+  field: string;
+  rules: ProductPlanRuleEntry[];
+}
+
 // ----------------------------------------------- a product's proposal fields (P19.7-T1; ADR-0225 §1, §2)
 
-/** How a proposal field is drawn: one-tap choices, a money box, or a sentence. */
-export type ProposalFieldType = 'chips' | 'money' | 'fixed';
-export const PROPOSAL_FIELD_TYPES: readonly ProposalFieldType[] = ['chips', 'money', 'fixed'];
+/**
+ * How a proposal field is drawn: one-tap choices, a money box, or a sentence — and, since P19.14-T2 (ADR-0255 §3),
+ * **`derived`**, worked out by the product's plan rule, which the editor shows and never offers to make.
+ */
+export type ProposalFieldType = 'chips' | 'money' | 'fixed' | 'derived';
+/** The types the editor offers a field (a `derived` one comes with its rule, from an import). */
+export const PROPOSAL_FIELD_TYPES: readonly Exclude<ProposalFieldType, 'derived'>[] = ['chips', 'money', 'fixed'];
 
 export interface ProposalOption {
   label: string;
@@ -1318,7 +1372,8 @@ export interface PdfDetailBlock {
  */
 export const PROPOSAL_LIMITS = {
   FIELDS: 8,
-  CHIP_OPTIONS: 8,
+  /** Raised from 8 by P19.14-T2 (ADR-0255 §9): PRUCerah's *Masa tunggu* has 11. */
+  CHIP_OPTIONS: 12,
   QUICK_AMOUNTS: 4,
   PLAN_OPTIONS: 8,
   PLAN_HIGHLIGHTS: 4,

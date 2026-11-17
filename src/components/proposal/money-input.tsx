@@ -33,6 +33,9 @@ export function MoneyInput({
   minMinor = null,
   quickAmounts = [],
   disabled = false,
+  saveAfterMs = TYPED_SAVE_MS,
+  fixed = false,
+  describedBy,
   onCommit,
 }: {
   id: string;
@@ -42,6 +45,15 @@ export function MoneyInput({
   minMinor?: number | null;
   quickAmounts?: readonly number[];
   disabled?: boolean;
+  /**
+   * How long after the last digit the figure is saved: `TYPED_SAVE_MS`, or — on a card that calculates —
+   * `PROPOSAL_RECALC_MS`, *"about 300 ms after any change"* (P19.15-T1 AC-5).
+   */
+  saveAfterMs?: number;
+  /** **The amount typed last**, which the calculation keeps: outlined in blue (P19.15-T1 AC-5; the token `pill-blue-ink`). */
+  fixed?: boolean;
+  /** A line under the box that describes it — the calculation's message. */
+  describedBy?: string;
   onCommit: (minor: number | null) => void;
 }) {
   const t = useMessages(proposalMessages).panel;
@@ -82,6 +94,7 @@ export function MoneyInput({
       <div
         className={cn(
           'flex h-12 w-full items-center gap-1 rounded-pill bg-hover-row pl-4 pr-2',
+          fixed && !low && 'ring-2 ring-pill-blue-ink',
           low && 'shadow-[inset_0_0_0_1.5px_var(--color-signal-red)]',
           disabled && 'opacity-40',
         )}
@@ -93,7 +106,7 @@ export function MoneyInput({
           id={id}
           type="text"
           aria-labelledby={labelledBy}
-          aria-describedby={[`${id}-currency`, low ? hintId : null].filter(Boolean).join(' ')}
+          aria-describedby={[`${id}-currency`, low ? hintId : null, describedBy ?? null].filter(Boolean).join(' ')}
           aria-invalid={low || undefined}
           inputMode="numeric"
           pattern="[0-9]*"
@@ -106,7 +119,7 @@ export function MoneyInput({
             const digits = e.target.value.replace(/\D/g, '').replace(/^0+(?=\d)/, '');
             setText(digits);
             if (timer.current) clearTimeout(timer.current);
-            timer.current = setTimeout(() => commit(digits), TYPED_SAVE_MS);
+            timer.current = setTimeout(() => commit(digits), saveAfterMs);
           }}
           onBlur={() => { typing.current = false; commit(text); }}
           className="h-12 min-w-0 flex-1 border-0 bg-transparent px-1 text-lg font-bold text-ink disabled:cursor-not-allowed"

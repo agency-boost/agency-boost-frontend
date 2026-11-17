@@ -103,12 +103,16 @@ export interface Quant {
 }
 
 export interface SubgroupRow {
-  head: AbOption;
+  /** The informal group (P19.13-T3; ADR-0253 §5), or `null`: *Tidak ada group*. */
+  group: { groupId: string; name: string } | null;
+  /** The group's ★ group leader, or `null`. */
+  head: AbOption | null;
   manpower: number;
   leaders: number;
   maa: { baseline: number | null; lastMonth: number | null; mtd: number | null; asOf: string | null };
   targets: { aa: number; rec: number; isDefault: boolean };
-  adoption: { headDays: number; downlinePct: number | null };
+  /** `headDays` `null` with no ★. */
+  adoption: { headDays: number | null; downlinePct: number | null };
   powerUsers: number;
   oneOnOnesPerWeek: number;
   weeklyActivityTarget: number;
@@ -171,9 +175,12 @@ export const readEventsNps = (query: { month?: string; ab?: string }, platformKp
 export const saveMapaTarget = (month: string, row: MapaRowKey, value: number | null) =>
   api<{ month: string; row: string; value: number | null }>('/kpm/advanced-analytics/targets/mapa', { method: 'PUT', body: { month, row, value } });
 
-/** A head of group's AA and recruitment targets. */
+/**
+ * **A leader's AA and recruitment targets for this year** (P19.13-T3; ADR-0253 §4): an AB's or an AAB's, written from
+ * *Core leaders & groups*' leader edit; Perbaikan sub-group sums each group's.
+ */
 export const saveSubgroupTarget = (headMembershipId: string, aaTarget: number, recTarget: number) =>
-  api<{ headMembershipId: string; aaTarget: number; recTarget: number }>(
+  api<{ headMembershipId: string; year: string; aaTarget: number; recTarget: number }>(
     `/kpm/advanced-analytics/targets/subgroup/${encodeURIComponent(headMembershipId)}`,
     { method: 'PUT', body: { aaTarget, recTarget } },
   );

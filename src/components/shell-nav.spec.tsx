@@ -1,6 +1,7 @@
 import { screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { makeMe, renderWithSession } from '@test/harness';
+import { everyNavLink, openEveryGroup } from '@test/sidebar';
 import { AgentShell } from './agent-shell';
 import { Shell } from './shell';
 
@@ -27,25 +28,23 @@ vi.mock('next/navigation', () => ({
  * thing that drifts, so order is the thing asserted.
  */
 function navLabels() {
-  const nav = screen.getByRole('navigation', { name: 'Main' });
   // Group headings are buttons, not paragraphs: each group opens and closes on its own
   // (client feedback, 2026-09-24 and 2026-09-29). The chevron is part of the button's text.
+  // Since P19.13-T2 (UI-196) only the current page's group starts open, so every group is opened first.
+  const nav = openEveryGroup();
   return Array.from(nav.querySelectorAll('[aria-controls^="nav-group"], a'))
     .map((el) => (el.textContent ?? '').replace('\u25b8', '').trim());
 }
 
 /**
- * Every destination in the nav, as the reader first sees it.
+ * Every destination in the nav.
  *
- * **Every group starts open** (P10.1-T3, client item 3), so the whole nav is on the first render
- * with nothing to click. This walked the groups one at a time while opening one closed the rest;
- * reading them without a click is now the assertion that they start open.
+ * *Changed 2026-11-12 (P19.13-T2 AC-5; UI-196, ADR-0252 §4):* only the current page's group starts open, so the groups
+ * are opened first, as a reader would (`openEveryGroup`). It read the nav with no click while every group started open
+ * (P10.1-T3, which UI-196 reversed).
  */
 async function everyItem() {
-  const nav = screen.getByRole('navigation', { name: 'Main' });
-  const headers = Array.from(nav.querySelectorAll('[aria-controls^="nav-group"]'));
-  expect(headers.every((b) => b.getAttribute('aria-expanded') === 'true')).toBe(true);
-  return Array.from(nav.querySelectorAll('a')).map((a) => a as HTMLAnchorElement);
+  return everyNavLink();
 }
 
 const AGENT = makeMe({
@@ -73,13 +72,25 @@ describe('the sidebar matches the prototype', () => {
     route.path = '/group-tree';
   });
 
-  it('carries the product mark, not a bare wordmark', () => {
-    // The 26x26 org-chart mark is in all fifteen prototype files; we rendered none.
-    const { container } = renderWithSession(<AgentShell title="x">body</AgentShell>, { me: AGENT });
-    const svg = container.querySelector('svg[viewBox="0 0 26 26"]');
-    expect(svg).not.toBeNull();
-    expect(svg!.querySelectorAll('circle')).toHaveLength(3);
-    expect(screen.getByText('AgencyBoost')).toBeInTheDocument();
+  /*
+   * *Changed 2026-11-12 (P19.13-T2 AC-2; UI-196, ADR-0252):* **the app's icon**, not the prototype's 26px org-chart mark —
+   * Boost holding a phone, the PWA's `/icons/icon-192.png`, 36px with 10px corners — beside *Agency**Boost*** and the
+   * branch's name.
+   */
+  it('P19.13-T2 AC-2 carries the app icon, the wordmark AgencyBoost and the branch name', () => {
+    const me = makeMe({ ...AGENT, membership: { ...AGENT.membership!, office: { code: '0417', branch: 'BSD City Branch' } } });
+    const { container } = renderWithSession(<AgentShell title="x">body</AgentShell>, { me });
+    const icon = container.querySelector('aside img[data-app-icon]');
+    expect(icon).toHaveAttribute('src', '/icons/icon-192.png');
+    expect(icon).toHaveClass('h-9', 'w-9', 'rounded-[10px]');
+    expect(container.querySelector('svg[viewBox="0 0 26 26"]')).toBeNull();
+    const word = screen.getByText('Boost');
+    expect(word).toHaveClass('text-primary-on-secondary');
+    expect(word.parentElement).toHaveTextContent(/^AgencyBoost$/);
+    expect(word.parentElement).toHaveClass('text-lg', 'font-extrabold');
+    const branch = container.querySelector('[data-branch-name]');
+    expect(branch).toHaveTextContent('BSD City Branch');
+    expect(branch).toHaveClass('text-xs', 'text-secondary-contrast/70');
   });
 
   /*
@@ -201,11 +212,14 @@ describe('the sidebar matches the prototype', () => {
     }
   });
 
-  describe('every destination carries a glyph (client feedback, 2026-09-24)', () => {
+  describe('every destination carries a glyph on the rail (client feedback, 2026-09-24)', () => {
     /*
-     * The rail collapses to 56px and the label goes with it, so a nav item without an icon
+     * The rail collapses to 64px and the label goes with it, so a nav item without an icon
      * is a blank square nobody notices until they collapse the sidebar — which is exactly
      * when they most need to know where they are. Asserted rather than trusted.
+     *
+     * *Changed 2026-11-12 (P19.13-T2 AC-4; UI-196):* the full sidebar draws a glyph beside the top section's rows and
+     * none beside a group's (the approved mockup's `.side a.sub`), so the rule is the rail's, where it always mattered.
      */
     const SUPER = makeMe({
       user: { ...makeMe().user, platformRole: 'super_admin' },
@@ -220,34 +234,52 @@ describe('the sidebar matches the prototype', () => {
       ['the Super Admin', () => <AdminShell title="x">body</AdminShell>, SUPER, '/admin'],
     ] as const;
 
-    it.each(shells)('%s draws one icon per item, from the registry', async (_name, shell, me, path) => {
+    it.each(shells)('%s draws one icon per item on the rail, from the registry', async (_name, shell, me, path) => {
+      route.path = path;
+      window.localStorage.setItem('ab.sidebar.rail', '1');
+      try {
+        renderWithSession(shell(), { me });
+        const items = Array.from(screen.getByRole('navigation', { name: 'Main' }).querySelectorAll('a'));
+        expect(items.length).toBeGreaterThan(3);
+        for (const item of items) {
+          const icon = item.querySelector('svg');
+          expect(icon, `${item.getAttribute('aria-label')} has no icon`).not.toBeNull();
+          expect(icon!.getAttribute('viewBox')).toBe('0 0 24 24');
+        }
+      } finally {
+        window.localStorage.removeItem('ab.sidebar.rail');
+      }
+    });
+
+    it.each(shells)('P19.13-T2 AC-4 %s: the top section’s rows carry a glyph, a group’s rows their words alone', async (_name, shell, me, path) => {
       route.path = path;
       renderWithSession(shell(), { me });
-
-      for (const item of await everyItem()) {
-        const icon = item.querySelector('svg');
-        expect(icon, `${item.textContent?.trim()} has no icon`).not.toBeNull();
-        expect(icon!.getAttribute('viewBox')).toBe('0 0 24 24');
+      const nav = openEveryGroup();
+      const [top, ...groups] = Array.from(nav.children);
+      for (const a of Array.from(top.querySelectorAll('a'))) expect(a.querySelector('svg')).not.toBeNull();
+      for (const a of groups.flatMap((g) => Array.from(g.querySelectorAll('a')))) {
+        expect(a.querySelector('svg:not([data-mark])'), a.textContent ?? '').toBeNull();
       }
     });
   });
 });
 
-describe('a line between every two groups, in all three shells (parity I-144)', () => {
+describe('one line, under the top section, in every shell (parity I-144; P19.13-T2)', () => {
   /*
    * The Owner's and the Super Admin's prototypes draw a line before every group; the agent's drew
    * two. Once every group became a toggle of its own (P10.1-T3), a heading with no line above it
    * read as part of the group before it, and the client asked for one rule everywhere
-   * (2026-09-30). Asserted by count and by position, so a shell that drops one, or draws one
-   * under its last group, fails.
+   * (2026-09-30).
+   *
+   * *Changed 2026-11-12 (P19.13-T2 AC-5; UI-196, the approved mockup's one `.hr`):* the groups start closed, each a 36px
+   * heading row, and the headings are the groups' edges: **one line, under the top section**, so the KPM Owner's seven
+   * groups do not cost six lines of height in a panel that must not scroll.
    */
   const SUPER = makeMe({
     user: { ...makeMe().user, platformRole: 'super_admin' }, membership: null, permissions: ['kpm:list_all'],
   });
   const SHELLS = [
     ['agent', () => renderWithSession(<AgentShell title="x">body</AgentShell>, { me: AGENT })],
-    // Seven groups, not eight: *Unit tools* is absent for a member who leads nobody (P10.1-T2
-    // AC-9), and the rule must hold for the groups that remain, with Admin still last.
     ['agent with no reports', () => renderWithSession(<AgentShell title="x">body</AgentShell>, { me: makeMe() })],
     ['KPM Owner', () => { route.path = '/kpm/overview'; return renderWithSession(<TenantShell title="x">body</TenantShell>, { me: OWNER }); }],
     ['Superadmin', () => { route.path = '/admin'; return renderWithSession(<AdminShell title="x">body</AdminShell>, { me: SUPER }); }],
@@ -255,14 +287,14 @@ describe('a line between every two groups, in all three shells (parity I-144)', 
 
   afterEach(() => { route.path = '/group-tree'; });
 
-  it.each(SHELLS)('%s: every group but the last ends with a line', (_shell, render) => {
+  it.each(SHELLS)('%s: the top section ends with the one line, and no group does', (_shell, render) => {
     render();
     const nav = screen.getByRole('navigation', { name: 'Main' });
     const sections = Array.from(nav.children);
 
-    expect(within(nav).getAllByRole('separator')).toHaveLength(sections.length - 1);
+    expect(within(nav).getAllByRole('separator')).toHaveLength(1);
     sections.forEach((section, i) => {
-      expect(section.lastElementChild?.getAttribute('role') === 'separator').toBe(i < sections.length - 1);
+      expect(section.lastElementChild?.getAttribute('role') === 'separator').toBe(i === 0);
     });
   });
 });

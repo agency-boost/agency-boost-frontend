@@ -692,12 +692,18 @@ describe('members directory (P3-T1 AC-3)', () => {
       nodes: [
         {
           membershipId: 'mem-1', fullName: 'Rina Wijaya', preferredName: 'Rina', initials: 'RW',
-          agentCode: 'KPM0417-001', role: 'agent', depth: 0, layer: 1, leaderId: null,
+          agentCode: 'KPM0417-001', role: 'aab', depth: 0, layer: 1, leaderId: null,
+          directCount: 0, subtreeCount: 0, isLeader: false, isSelf: false,
+        },
+        // An Agent is never offered: a group's ★ is a leader (P19.13-T3; ADR-0253 §2).
+        {
+          membershipId: 'mem-2', fullName: 'Budi Santoso', preferredName: null, initials: 'BS',
+          agentCode: 'KPM0417-002', role: 'agent', depth: 1, layer: 2, leaderId: 'mem-1',
           directCount: 0, subtreeCount: 0, isLeader: false, isSelf: false,
         },
       ],
       leader: null, rootIds: ['mem-1'], selfId: null,
-      counts: { ab: 0, aab: 0, agent: 1, total: 1 },
+      counts: { ab: 0, aab: 1, agent: 1, total: 2 },
     };
 
     function stub(groups: Record<string, unknown>[], extra: Record<string, unknown> = {}) {
@@ -741,7 +747,7 @@ describe('members directory (P3-T1 AC-3)', () => {
       await userEvent.click(await screen.findByRole('button', { name: 'Create group' }));
 
       await userEvent.type(screen.getByLabelText('Group name'), '  Top Producers 2026  ');
-      await userEvent.selectOptions(screen.getByLabelText('Owner'), 'mem-1');
+      await userEvent.selectOptions(screen.getByLabelText('Group leader'), 'mem-1');
       await userEvent.click(screen.getByRole('button', { name: 'Save' }));
 
       const sent = calls.find((c) => c.init.method === 'POST')!;
@@ -751,27 +757,35 @@ describe('members directory (P3-T1 AC-3)', () => {
       });
     });
 
-    it('offers the whole office as owner, not just the roster first page', async () => {
+    it('P19.13-T3 AC-2 offers every leader of the office as Group leader — never an Agent — not just the roster first page', async () => {
       // The roster pages at 25. Picking an owner from it would silently fail to offer
       // most of the office.
       const { calls } = await openTab();
       await userEvent.click(await screen.findByRole('button', { name: 'Create group' }));
 
       expect(calls.some((c) => c.url.includes('/members/tree'))).toBe(true);
-      expect(within(screen.getByLabelText('Owner')).getByRole('option', { name: 'Rina' }))
-        .toBeInTheDocument();
+      const picker = within(screen.getByLabelText('Group leader'));
+      expect(picker.getByRole('option', { name: 'Rina' })).toBeInTheDocument();
+      expect(picker.queryByRole('option', { name: 'Budi Santoso' })).toBeNull();
+      expect(picker.getByRole('option', { name: 'Not appointed' })).toBeInTheDocument();
     });
 
-    it('will not save a group with no name or no owner', async () => {
-      await openTab([]);
+    it('P19.13-T3 AC-4 will not save a group with no name; a Group leader is optional, sent as null', async () => {
+      const { calls } = await openTab([]);
       await userEvent.click(await screen.findByRole('button', { name: 'Create group' }));
       expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
 
       await userEvent.type(screen.getByLabelText('Group name'), 'Named');
-      expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
-
-      await userEvent.selectOptions(screen.getByLabelText('Owner'), 'mem-1');
       expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
+      await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+      expect(JSON.parse(calls.find((c) => c.init.method === 'POST')!.init.body as string))
+        .toEqual({ name: 'Named', ownerMembershipId: null });
+    });
+
+    it('P19.13-T3 AC-2 a group with no ★ says so', async () => {
+      await openTab([group({ ownerMembershipId: null, ownerName: null })]);
+      const row = within(await screen.findByRole('table')).getByRole('row', { name: /Mentoring/ });
+      expect(row).toHaveTextContent('No group leader yet');
     });
 
     it('edits an existing one through the same form, prefilled', async () => {
@@ -788,7 +802,8 @@ describe('members directory (P3-T1 AC-3)', () => {
       await userEvent.click(await screen.findByRole('button', { name: 'Retire' }));
 
       expect(screen.getByText(/Retire New Agent Mentoring Circle\?/)).toBeInTheDocument();
-      expect(screen.getByText(/all 2 people tagged into it keep the tag/)).toBeInTheDocument();
+      // P19.13-T3 AC-4 (ADR-0253 §3): its people lose the tag; Core leader tags stay.
+      expect(screen.getByText(/all 2 people tagged into it lose the tag. Core leader tags stay./)).toBeInTheDocument();
       expect(calls.some((c) => c.init.method === 'DELETE')).toBe(false);
 
       await userEvent.click(screen.getByRole('button', { name: 'Retire group' }));
@@ -798,7 +813,7 @@ describe('members directory (P3-T1 AC-3)', () => {
     it('counts one person in the singular', async () => {
       await openTab([group({ memberCount: 1 })]);
       await userEvent.click(await screen.findByRole('button', { name: 'Retire' }));
-      expect(screen.getByText(/the person tagged into it keep the tag/)).toBeInTheDocument();
+      expect(screen.getByText(/the person tagged into it lose the tag/)).toBeInTheDocument();
     });
 
     it('says when a group has lost its owner, and what to do about it', async () => {
@@ -834,7 +849,7 @@ describe('members directory (P3-T1 AC-3)', () => {
       });
       await userEvent.click(await screen.findByRole('button', { name: 'Create group' }));
       await userEvent.type(screen.getByLabelText('Group name'), 'Task Force');
-      await userEvent.selectOptions(screen.getByLabelText('Owner'), 'mem-1');
+      await userEvent.selectOptions(screen.getByLabelText('Group leader'), 'mem-1');
       await userEvent.click(screen.getByRole('button', { name: 'Save' }));
 
       expect(await screen.findByRole('alert')).toHaveTextContent('already has a group called');

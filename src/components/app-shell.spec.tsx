@@ -60,7 +60,8 @@ describe('AppShell', () => {
 
   it('keeps an upcoming item visible but not navigable, so the roadmap is not a surprise', async () => {
     renderShell();
-    // Every group starts open (P10.1-T3), so `Reporting`'s item is there without a click.
+    // Only the current page's group starts open (P19.13-T2 AC-5): `Reporting` is opened as a reader would.
+    await userEvent.click(screen.getByRole('button', { name: /Reporting/ }));
     const upcoming = screen.getByText('Advanced analytics').closest('a');
     expect(upcoming).toHaveAttribute('aria-disabled', 'true');
     expect(upcoming).not.toHaveAttribute('href');
@@ -117,53 +118,49 @@ describe('AppShell', () => {
     });
   });
 
-  describe('every group opens on its own, and all start open (P10.1-T3, client item 3)', () => {
+  describe('P19.13-T2 AC-5 only the current page’s group is open; a heading opens its own, remembered for the session', () => {
     /*
-     * The client asked on 2026-09-24 for one group open at a time, and on 2026-09-29 for the
-     * opposite; the later request wins (ADR-0062). The toggles stay — they were the first
-     * request's too — and only the rule that opening one closes the rest goes.
+     * The client asked on 2026-09-24 for one group open at a time, and on 2026-09-29 for every group open by default
+     * (P10.1-T3, ADR-0062's example). **The owner's request of 9 November reverses that** (UI-196; ADR-0252 §4): the
+     * Owner's office menu, every group open, was 1,634px in a 797px column. The toggles stay; opening one closes nothing.
      */
     const header = (name: RegExp) => screen.getByRole('button', { name });
 
-    it('starts with every group open (AC-1)', () => {
+    it('P19.13-T2 AC-5 starts with the current page’s group open and every other closed', () => {
       renderShell();
 
       expect(screen.getByRole('link', { name: 'Activity management' })).toBeInTheDocument();
-      expect(screen.getByText('Advanced analytics')).toBeInTheDocument();
+      expect(screen.queryByText('Advanced analytics')).toBeNull();
       expect(header(/Personal tools/)).toHaveAttribute('aria-expanded', 'true');
-      expect(header(/Reporting/)).toHaveAttribute('aria-expanded', 'true');
+      expect(header(/Reporting/)).toHaveAttribute('aria-expanded', 'false');
     });
 
-    it('starts open on the server too, so the first client render has nothing to reconcile (AC-1)', () => {
+    it('P19.13-T2 AC-5 draws the same on the server, so the first client render has nothing to reconcile', () => {
       const html = renderToString(
         <AppShell field={fieldChrome()} sections={SECTIONS} user={USER}>
           <p>content</p>
         </AppShell>,
       );
 
-      expect(html.match(/aria-expanded="true" aria-controls="nav-group-/g)).toHaveLength(2);
-      expect(html).not.toMatch(/aria-expanded="false" aria-controls="nav-group-/);
+      expect(html.match(/aria-expanded="true" aria-controls="nav-group-/g)).toHaveLength(1);
+      expect(html.match(/aria-expanded="false" aria-controls="nav-group-/g)).toHaveLength(1);
     });
 
-    it('toggles only its own group — two can be closed, and closing one opens nothing (AC-2)', async () => {
+    it('P19.13-T2 AC-5 opens a group on a click, and opening one closes nothing', async () => {
       renderShell();
 
       await userEvent.click(header(/Reporting/));
-      expect(screen.queryByText('Advanced analytics')).toBeNull();
-      expect(screen.getByRole('link', { name: 'Activity management' })).toBeInTheDocument();
+      expect(screen.getByText('Advanced analytics')).toBeInTheDocument();
+      expect(header(/Personal tools/)).toHaveAttribute('aria-expanded', 'true');
 
       await userEvent.click(header(/Personal tools/));
       expect(screen.queryByRole('link', { name: 'Activity management' })).toBeNull();
-      expect(header(/Reporting/)).toHaveAttribute('aria-expanded', 'false');
-
-      // Reopening one leaves the other as it was.
-      await userEvent.click(header(/Reporting/));
-      expect(screen.getByText('Advanced analytics')).toBeInTheDocument();
-      expect(header(/Personal tools/)).toHaveAttribute('aria-expanded', 'false');
+      expect(header(/Reporting/)).toHaveAttribute('aria-expanded', 'true');
     });
 
-    it('keeps each toggle wired to its own list (AC-2)', () => {
+    it('keeps each toggle wired to its own list (AC-2)', async () => {
       renderShell();
+      await userEvent.click(header(/Reporting/));
 
       for (const name of [/Personal tools/, /Reporting/]) {
         const list = document.getElementById(header(name).getAttribute('aria-controls')!);
@@ -171,10 +168,9 @@ describe('AppShell', () => {
       }
     });
 
-    it('reopens a closed group when the page moves into it, and leaves the others alone (AC-3)', async () => {
+    it('P19.13-T2 AC-5 opens the group the page moves into, and closes the one it left unless the reader opened it', async () => {
       const { rerender } = renderShell();
       await userEvent.click(header(/Personal tools/));
-      await userEvent.click(header(/Reporting/));
 
       // The reader follows a link into Reporting: the layout re-renders with it active.
       const inReporting: readonly NavSection[] = [
@@ -191,10 +187,11 @@ describe('AppShell', () => {
       expect(header(/Personal tools/)).toHaveAttribute('aria-expanded', 'false');
     });
 
-    it('does not remember a closed group across a reload (AC-4)', async () => {
+    it('P19.13-T2 AC-5 remembers a group the reader opened for the session — across pages and a reload — and forgets it closed', async () => {
       const { unmount } = renderShell();
       await userEvent.click(header(/Reporting/));
-      // Nothing about groups is stored: the rail is the one remembered preference.
+      expect(JSON.parse(window.sessionStorage.getItem('ab.sidebar.open') ?? '[]')).toEqual(['Reporting']);
+      // The rail stays the one preference kept across sessions; the groups are the tab's.
       expect(Object.keys(window.localStorage)).toEqual([]);
       unmount();
 
@@ -204,6 +201,9 @@ describe('AppShell', () => {
         </AppShell>,
       );
       expect(header(/Reporting/)).toHaveAttribute('aria-expanded', 'true');
+      await userEvent.click(header(/Reporting/));
+      expect(JSON.parse(window.sessionStorage.getItem('ab.sidebar.open') ?? '[]')).toEqual([]);
+      expect(header(/Reporting/)).toHaveAttribute('aria-expanded', 'false');
     });
 
     it('closes a group that was open, so the nav can be put away entirely', async () => {
@@ -228,9 +228,8 @@ describe('AppShell', () => {
 
     it('flattens the groups in the rail, so nothing is behind a heading that is not there', async () => {
       renderShell();
-      // Closed at full width first — every group starts open now (P10.1-T3), so the test makes
-      // the case it is about.
-      await userEvent.click(screen.getByRole('button', { name: /Reporting/ }));
+      // `Reporting` is closed at full width — only the current page's group starts open (P19.13-T2 AC-5).
+      expect(screen.getByRole('button', { name: /Reporting/ })).toHaveAttribute('aria-expanded', 'false');
       await userEvent.click(screen.getByRole('button', { name: 'Collapse the sidebar' }));
 
       // `Reporting` was closed at full width; collapsed, its item is reachable.
@@ -285,20 +284,20 @@ describe('AppShell', () => {
 
     it('asks for a width that needs no theme key, and drops w-sidebar', async () => {
       renderShell();
-      expect(aside().className).toContain('md:w-sidebar');
+      expect(aside().className.split(' ')).toContain('w-sidebar');
 
       await userEvent.click(screen.getByRole('button', { name: 'Collapse the sidebar' }));
 
-      expect(aside().className).toContain('md:w-[var(--sidebar-rail-width)]');
-      expect(aside().className).not.toContain('md:w-sidebar ');
+      expect(aside().className.split(' ')).toContain('w-[var(--sidebar-rail-width)]');
+      expect(aside().className.split(' ')).not.toContain('w-sidebar');
     });
 
-    it('keeps the toggle beside the brand mark, not above the nav', async () => {
+    it('keeps the toggle beside the app icon, not above the nav', async () => {
       // A window control belongs on the frame. Its own row under the brand read as the first
       // item in the menu.
       renderShell();
       const toggle = screen.getByRole('button', { name: 'Collapse the sidebar' });
-      const brand = document.querySelector('svg[viewBox="0 0 26 26"]')!;
+      const brand = document.querySelector('img[data-app-icon]')!;
 
       expect(toggle.parentElement).toBe(brand.parentElement);
       expect(toggle.compareDocumentPosition(document.querySelector('nav')!))
